@@ -452,6 +452,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .function_sig(self.free_function_at(site)?)
     }
 
+    /// The declaration `id` declares. See [`crate::defs::DefTable::def_at`].
+    pub(super) fn def_at(&self, id: crate::ast::AstId) -> crate::defs::DefId {
+        self.tysys.resolutions.defs().def_at(id)
+    }
+
     /// The declaration `module` declares under `name`, for the positions no
     /// reference site answers: `builtin::f`, a namespace member, `core:rt`'s
     /// `panic`. The module is named by the path, not searched for.
@@ -1800,7 +1805,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
-                let def = self.tysys.resolutions.defs().def_at(func.id);
+                let def = self.def_at(func.id);
                 let sig = self.record_function_sig(func);
                 function_sigs.insert(def, Rc::new(sig));
             }
@@ -2083,7 +2088,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.
-            let method_def = scope.tysys.resolutions.defs().def_at(method.id);
+            let method_def = scope.def_at(method.id);
             let recorded_sig = scope
                 .tysys
                 .signatures

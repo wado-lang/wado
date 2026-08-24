@@ -888,7 +888,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .self_type
             .expect("entering an impl frame binds Self to the target");
 
-        let impl_def = scope.tysys.resolutions.defs().def_at(impl_block.id);
+        let impl_def = scope.def_at(impl_block.id);
         scope.sem.decls.impl_sigs.insert(
             impl_def,
             super::sig::ImplSig {
@@ -1259,7 +1259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .first()
                 .map(|p| p.self_kind)
                 .unwrap_or(ast::SelfKind::None);
-            let method_def = frame_scope.tysys.resolutions.defs().def_at(method.id);
+            let method_def = frame_scope.def_at(method.id);
             frame_scope.sem.decls.method_sigs.insert(
                 method_def,
                 MethodSig {
@@ -1509,7 +1509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Operation signatures the decl pass recorded for the declaration at
     /// `decl_id`.
     fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
-        let decl = self.tysys.resolutions.defs().def_at(decl_id);
+        let decl = self.def_at(decl_id);
         self.sem
             .decls
             .effect_ops
@@ -1616,7 +1616,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut type_params = decl_slots.clone();
             type_params.extend(method_slots);
 
-            let method_def = method_scope.tysys.resolutions.defs().def_at(method.id);
+            let method_def = method_scope.def_at(method.id);
             methods.insert(
                 method.name.clone(),
                 super::sig::TraitMethod {
@@ -1659,7 +1659,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let module = scope.current_module_source.clone();
-        let trait_def = scope.tysys.resolutions.defs().def_at(trait_decl.id);
+        let trait_def = scope.def_at(trait_decl.id);
         scope
             .sem
             .decls
@@ -1830,7 +1830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 SelfKind::None
             };
-            let method_def = scope.tysys.resolutions.defs().def_at(method.id);
+            let method_def = scope.def_at(method.id);
             scope.sem.decls.method_sigs.insert(
                 method_def,
                 MethodSig {
@@ -2194,7 +2194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// re-resolution. Returns the declared return type for callers that
     /// need it (`resolve_function`'s `task_return_type`).
     fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
-        let def = self.tysys.resolutions.defs().def_at(func.id);
+        let def = self.def_at(func.id);
         let sig = self
             .sem
             .decls

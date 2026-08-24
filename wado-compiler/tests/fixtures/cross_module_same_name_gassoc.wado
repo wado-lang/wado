@@ -1,7 +1,6 @@
-// A generic impl's `type Out = …` belongs to the declaration its header names,
-// not to whichever module declares that spelling first. Module A's `Node<T>`
-// binds `Out` to slot 0 from an impl written outside A; module B's `Node<K, V>`
-// binds it to slot 1 from an impl in its own module.
+// A's `Node<T>` binds `Out` to slot 0 from an impl written outside A; B's
+// `Node<K, V>` binds it to slot 1 from an impl in its own module. A
+// build-order pick between the two spellings swaps the answers.
 
 use { Unwrap } from "./sub/cross_module_same_name_gassoc_trait.wado";
 use { Node as NodeB } from "./sub/cross_module_same_name_gassoc_b.wado";

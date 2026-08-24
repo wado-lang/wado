@@ -3660,7 +3660,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // *resource* declares names it as its own owner; one an `impl` block
         // declares owns to the block, which names no resource, so the spelling
         // answers there as it did before impl methods were identified.
-        let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
+        let defs = self.tysys.resolutions.defs();
         let cm_owner = method_ref
             .method_id
             .and_then(|method| defs.parent(method))

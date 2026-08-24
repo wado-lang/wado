@@ -636,9 +636,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The callee identity of a plain `name(…)` call, read off its own
-    /// reference site. Anything else (a variant constructor, a static path, an
-    /// effect operation) names no function there and is left to the expected
-    /// type.
+    /// reference site. A variant constructor, a static path or an effect
+    /// operation names no function there and is left to the expected type.
     fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
         if ident.name.contains("::") {
             return None;
