@@ -3517,6 +3517,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// The impl-level arguments a newtype pins for a static it forwards to its
+    /// base: `type Bytes = List<u8>` answers `[u8]` for `List`'s `T`. Empty
+    /// when the newtype declares the static itself, as
+    /// [`Self::resolve_static_method_call_from_qualified`] decides the same.
+    pub(super) fn newtype_forwarded_impl_args(
+        &self,
+        site: Option<crate::ast::AstId>,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Vec<TypeId> {
+        if self.has_static_method_direct(struct_name, method_name) {
+            return Vec::new();
+        }
+        self.newtype_static_base_at(site, struct_name)
+            .and_then(|base| self.tysys.type_table.borrow().nominal_type_args(base))
+            .unwrap_or_default()
+    }
+
     /// The type a newtype (or `flags` type) forwards its statics to:
     /// `type Headers = Fields` answers `Fields`, a `flags` type answers `u32`.
     pub(super) fn newtype_static_base_at(

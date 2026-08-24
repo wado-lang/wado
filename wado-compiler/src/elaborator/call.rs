@@ -708,16 +708,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Impl-level type args inferred from the LHS / receiver type.
                 // Only populated by `infer_static_method_type_args`; the
                 // explicit `call.type_args` only carries method-level args.
-                let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                // A newtype pins its base's impl-level arguments: `type Bytes =
-                // List<u8>` leaves `List`'s `T` nothing to infer. Seeding them
-                // here is what `resolve_static_method_call_from_qualified`
-                // does with `newtype_dispatch`; inference would report `T`
-                // uninferable for a method that never mentions it.
-                let newtype_impl_args: Vec<TypeId> = self
-                    .newtype_static_base_at(receiver_site, prefix)
-                    .and_then(|base| self.tysys.type_table.borrow().nominal_type_args(base))
-                    .unwrap_or_default();
+                // Seeded with what a newtype pins for a static it forwards:
+                // `type Bytes = List<u8>` leaves `List`'s `T` nothing to infer,
+                // and inference would report it uninferable for a method that
+                // never mentions it.
+                let mut impl_type_args_inferred: Vec<TypeId> =
+                    self.newtype_forwarded_impl_args(receiver_site, prefix, suffix);
                 // Omitted turbofish infers both levels; an explicit `_` fills
                 // only the hole slots (see `infer_static_call_type_args`).
                 if method_type_args.is_empty() {
@@ -729,11 +725,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         expected_type,
                         call.span,
                     );
-                    impl_type_args_inferred = if newtype_impl_args.is_empty() {
-                        impl_args
-                    } else {
-                        newtype_impl_args.clone()
-                    };
+                    if impl_type_args_inferred.is_empty() {
+                        impl_type_args_inferred = impl_args;
+                    }
                     method_type_args = method_args;
                 } else if turbofish_has_hole(&call.type_args) {
                     // Partial method-level turbofish (`Type::m::<_, U>(..)`):
