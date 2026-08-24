@@ -760,6 +760,7 @@ mod tests {
         let source = r#"
             pub struct Point { x: i32, y: i32 }
             pub trait Greet { fn hello(&self) -> i32; }
+            impl Point { pub fn len(&self) -> i32 { return self.x; } }
         "#;
         let (seed, modules, symbols, _) = analyze_source(source);
         let again = DefTable::build_seeded(Some(&seed), &modules, &symbols);

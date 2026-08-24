@@ -1,0 +1,22 @@
+// The caller declares a `Meters` of its own, so a conversion surveyed by the
+// written name reaches the wrong module's impl.
+
+use { Meters as M } from "./sub/cross_module_same_name_conversion_a.wado";
+
+struct Meters {
+    v: i32,
+}
+
+impl From<i32> for Meters {
+    fn from(value: i32) -> Meters {
+        return Meters { v: value + 1000 };
+    }
+}
+
+test "a conversion keys to the receiver's declaration, not the caller's same-named type" {
+    let imported = M::from(3);
+    assert imported.v == 30;
+
+    let local = Meters::from(3);
+    assert local.v == 1003;
+}

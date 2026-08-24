@@ -597,8 +597,9 @@ pub(super) struct StaticMethodEntry {
 pub(super) type StaticMethodIndex = IndexMap<ImplTargetKey, Vec<StaticMethodEntry>>;
 
 /// Pre-built index of static methods from resource declarations.
-/// Key: canonical receiver [`DefId`] → `[(method_name, ModuleSource,
-/// declaration, method_index)]`. Same disambiguation rationale as
+/// Key: canonical receiver [`DefId`] → `[(method_name, ModuleSource, owning
+/// resource declaration, method_index)]` — the resource, not the method, unlike
+/// [`StaticMethodEntry::method_id`]. Same disambiguation rationale as
 /// [`StaticMethodIndex`].
 pub(super) type ResourceStaticMethodIndex =
     IndexMap<ImplTargetKey, Vec<(String, ModuleSource, DefId, usize)>>;

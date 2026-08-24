@@ -256,7 +256,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
     /// is not at hand — a mangled name, a synthesis target. No scope is run.
-    /// Prefer [`Self::symbol_at`], which reads the answer the walk recorded.
     pub(crate) fn symbol_named(
         &self,
         module: &ModuleSource,

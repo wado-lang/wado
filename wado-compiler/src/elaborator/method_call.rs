@@ -1507,6 +1507,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 static_call.span,
                 ctx,
                 &mut param_types,
+                struct_key_for_lookup.as_ref(),
             )
         {
             return TypeTable::ERROR;
@@ -2113,11 +2114,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // its `method_id` is what the use→def edge below is recorded against.
         // A name lookup cannot stand in — two conversion impls on one type
         // declare the same `from`, and only the argument's type separates
-        // them.
+        // them. The receiver comes off the resolved type: re-deriving it from
+        // `struct_name` searches the caller's frame, which an aliased import
+        // leaves without that name at all.
+        let receiver_key =
+            self.impl_target_of(target_type_id, &crate::name::DeclName::new(&struct_name));
         let selected = self.locate_static_method_impl(
             &struct_name,
             &static_call.method,
             arg_type_hint.as_deref(),
+            Some(&receiver_key),
         );
         let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
@@ -2129,12 +2135,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // disagreement is reported here instead of ICE-ing there.
         if trait_name_opt.is_none()
             && let Some(arg_type) = arg_type_hint.as_deref()
-            && !self.has_inherent_static_method(&struct_name, &static_call.method)
+            && !self.has_inherent_static_method(
+                &struct_name,
+                &static_call.method,
+                Some(&receiver_key),
+            )
             && self.report_unmatched_conversion(
                 &struct_name,
                 &static_call.method,
                 arg_type,
                 static_call.span,
+                Some(&receiver_key),
             )
         {
             return TypeTable::ERROR;
@@ -2840,17 +2851,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Vec::new()
     }
 
-    /// Keys of the *trait* impl blocks whose target head is written
-    /// `struct_name`, current-module-first. A written name reaches two receiver
-    /// namespaces: usually a declaration, but an impl binding it as its own type
-    /// parameter (`impl<V: Bound> Trait for V`) keys under that binder instead.
-    /// Both are searched in the current module, only the declaration namespace
-    /// outside it. Consumers re-check the impl's spelling.
-    fn trait_impl_keys_current_first(&self, struct_name: &str) -> Vec<crate::defs::DefId> {
+    /// The receiver a static lookup written `struct_name` keys on: the
+    /// declaration, and the name an impl header spells it with. A call site's
+    /// alias is not that name, and an impl block never writes one.
+    fn static_receiver_target(
+        &self,
+        struct_name: &str,
+        target_hint: Option<&ImplTargetKey>,
+    ) -> (ImplTargetKey, String) {
+        let target = target_hint
+            .cloned()
+            .unwrap_or_else(|| self.impl_target(struct_name));
+        let declared = target
+            .type_name(self.tysys.resolutions.defs())
+            .unwrap_or(struct_name)
+            .to_string();
+        (target, declared)
+    }
+
+    /// Keys of the *trait* impl blocks whose target head is `target`,
+    /// current-module-first. A receiver reaches two namespaces: usually a
+    /// declaration, but an impl binding its name as its own type parameter
+    /// (`impl<V: Bound> Trait for V`) keys under that binder instead. Both are
+    /// searched in the current module, only the declaration namespace outside
+    /// it. Consumers re-check the impl's spelling against `declared_name`.
+    fn trait_impl_keys_current_first(
+        &self,
+        target: &ImplTargetKey,
+        declared_name: &str,
+    ) -> Vec<crate::defs::DefId> {
         let env = &self.tysys.trait_env;
         let defs = self.tysys.resolutions.defs();
-        let declared = env.entries_by_receiver_vec(&self.impl_target(struct_name).receiver(defs));
-        let binder = env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::binder(struct_name)));
+        let declared = env.entries_by_receiver_vec(&target.receiver(defs));
+        let binder =
+            env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::binder(declared_name)));
         let is_current = |k: &&crate::defs::DefId| *defs.module(**k) == self.current_module_source;
         let mut keys: Vec<crate::defs::DefId> = declared
             .iter()
@@ -3025,7 +3059,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<crate::name::FqTraitName> {
-        self.locate_static_method_impl(struct_name, method_name, None)
+        self.locate_static_method_impl(struct_name, method_name, None, None)
             .and_then(|r| r.trait_name)
     }
 
@@ -3054,8 +3088,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         arg_type: &str,
         span: Span,
+        target_hint: Option<&ImplTargetKey>,
     ) -> bool {
-        let (candidates, has_blanket) = self.conversion_impl_survey(struct_name, method_name);
+        let (candidates, has_blanket) =
+            self.conversion_impl_survey(struct_name, method_name, target_hint);
         if has_blanket {
             let _ = self.emit(TypeError::UnsupportedBlanketConversion {
                 trait_name: self.conversion_trait_name(method_name),
@@ -3093,14 +3129,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
         param_types: &mut Vec<TypeId>,
+        target_hint: Option<&ImplTargetKey>,
     ) -> bool {
         if (method_name != "from" && method_name != "try_from")
-            || self.has_inherent_static_method(recv_name, method_name)
+            || self.has_inherent_static_method(recv_name, method_name, target_hint)
         {
             return false;
         }
         let class = self.synthesize_arg_class(arg, ctx);
-        match self.conversion_preselect(recv_name, method_name, &class) {
+        match self.conversion_preselect(recv_name, method_name, &class, target_hint) {
             ConversionPreselect::Selected(source) => {
                 *param_types = vec![source];
                 false
@@ -3146,11 +3183,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// of this name. A conversion-call guard needs the distinction: a trait
     /// lookup returning `None` is a failure only when no inherent static can
     /// answer instead.
-    pub(super) fn has_inherent_static_method(&self, struct_name: &str, method_name: &str) -> bool {
-        let keys = self
-            .tysys
-            .trait_env
-            .inherent_impl_keys(&self.impl_target(struct_name));
+    pub(super) fn has_inherent_static_method(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        target_hint: Option<&ImplTargetKey>,
+    ) -> bool {
+        let target = target_hint
+            .cloned()
+            .unwrap_or_else(|| self.impl_target(struct_name));
+        let keys = self.tysys.trait_env.inherent_impl_keys(&target);
         self.keys_declare_static_method(&keys, method_name)
     }
 
@@ -3164,12 +3206,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
         class: &super::synth::ArgClass,
+        target_hint: Option<&ImplTargetKey>,
     ) -> ConversionPreselect {
         use super::synth::ArgClass;
         if matches!(class, ArgClass::Opaque(_)) {
             return ConversionPreselect::Pass;
         }
-        let (candidates, _has_blanket) = self.conversion_impl_survey(struct_name, method_name);
+        let (candidates, _has_blanket) =
+            self.conversion_impl_survey(struct_name, method_name, target_hint);
         let admitted: Vec<ConversionCandidate> = candidates
             .into_iter()
             .filter(|c| {
@@ -3201,6 +3245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         struct_name: &str,
         method_name: &str,
+        target_hint: Option<&ImplTargetKey>,
     ) -> (Vec<ConversionCandidate>, bool) {
         let from_trait_name = self
             .tysys
@@ -3210,14 +3255,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let mut candidates: Vec<ConversionCandidate> = Vec::new();
         let mut has_blanket = false;
-        for impl_def in self.trait_impl_keys_current_first(struct_name) {
+        let (target, declared_name) = self.static_receiver_target(struct_name, target_hint);
+        for impl_def in self.trait_impl_keys_current_first(&target, &declared_name) {
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
             let module = self.tysys.resolutions.defs().module(impl_def).clone();
             let Some(trait_type) = header.trait_type.as_ref() else {
                 continue;
             };
             let base = super::trait_env::get_type_name_static(trait_type);
-            if super::trait_env::get_type_name_static(&header.ty) != struct_name
+            if super::trait_env::get_type_name_static(&header.ty) != declared_name
                 || (base != from_trait_name && base != "TryFrom")
                 || !header.methods.iter().any(|m| m.name == method_name)
             {
@@ -3288,7 +3334,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
         arg_type_name: Option<&str>,
+        target_hint: Option<&ImplTargetKey>,
     ) -> Option<StaticMethodRef> {
+        let (target, declared_name) = self.static_receiver_target(struct_name, target_hint);
         let from_trait_name = self
             .tysys
             .type_table
@@ -3379,7 +3427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                           impl_module: &ModuleSource|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
-            if super::trait_env::get_type_name_static(&header.ty) != struct_name
+            if super::trait_env::get_type_name_static(&header.ty) != declared_name
                 || !matches_arg_type(trait_type, impl_module, &header.type_params)
             {
                 return None;
@@ -3412,7 +3460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
 
-        for impl_def in self.trait_impl_keys_current_first(struct_name) {
+        for impl_def in self.trait_impl_keys_current_first(&target, &declared_name) {
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
             let module_source = self.tysys.resolutions.defs().module(impl_def).clone();
             if let Some((trait_name, method_id)) = check_impl(header, &module_source) {
@@ -3565,7 +3613,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Type::method` must still resolve. `locate_static_method_impl`
         // applies the same fallback to find the trait name and module.
         if self
-            .locate_static_method_impl(struct_name, method_name, None)
+            .locate_static_method_impl(struct_name, method_name, None, None)
             .is_some()
         {
             return true;
@@ -3677,10 +3725,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 None
             };
+        // A newtype's static call dispatches to its base, whose name is not
+        // the caller's to resolve — that frame can hold a same-named
+        // declaration of its own.
+        let receiver_key = newtype_dispatch.as_ref().map(|(_, base_type_id, _)| {
+            self.impl_target_of(
+                *base_type_id,
+                &crate::name::DeclName::new(&actual_struct_name),
+            )
+        });
         let resolved = self.locate_static_method_impl(
             &actual_struct_name,
             method_name,
             arg_type_hint.as_deref(),
+            receiver_key.as_ref(),
         );
         // The expected type that shaped the argument came from
         // `lookup_static_method_param_types_keyed`, which keys on (receiver,
@@ -3690,8 +3748,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // disagreement is reported here instead of ICE-ing there.
         if resolved.is_none()
             && let Some(arg_type) = arg_type_hint.as_deref()
-            && !self.has_inherent_static_method(&actual_struct_name, method_name)
-            && self.report_unmatched_conversion(&actual_struct_name, method_name, arg_type, span)
+            && !self.has_inherent_static_method(
+                &actual_struct_name,
+                method_name,
+                receiver_key.as_ref(),
+            )
+            && self.report_unmatched_conversion(
+                &actual_struct_name,
+                method_name,
+                arg_type,
+                span,
+                receiver_key.as_ref(),
+            )
         {
             return placeholder(TypeTable::ERROR, span);
         }

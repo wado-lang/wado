@@ -327,6 +327,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.is_effect_or_resource_decl(def).then_some(def)
     }
 
+    /// Whether the name spells a built-in variant case (`Ok`, `Err`, `Some`,
+    /// `None`). Read from the `CompilerItem` registry, so a stdlib rename
+    /// carries here without re-editing a literal set.
+    fn names_result_or_option_case(&self, name: &str) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        let items = tt.compiler_items();
+        [
+            crate::compiler_item::CompilerItem::ResultOk,
+            crate::compiler_item::CompilerItem::ResultErr,
+            crate::compiler_item::CompilerItem::OptionSome,
+            crate::compiler_item::CompilerItem::OptionNone,
+        ]
+        .into_iter()
+        .any(|item| name == items.variant_case_name(item))
+    }
+
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -545,6 +561,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 call.span,
                 ctx,
                 &mut param_types,
+                None,
             ) {
                 return TypeTable::ERROR;
             }
@@ -661,18 +678,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // dispatches on `effective_name` (after any `Self::` / `T::`
         // prefix rewriting) while `ident` is kept around for LSP
         // segment-edge recording and other AST-id needs.
-        let is_result_or_option_case = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            [
-                crate::compiler_item::CompilerItem::ResultOk,
-                crate::compiler_item::CompilerItem::ResultErr,
-                crate::compiler_item::CompilerItem::OptionSome,
-                crate::compiler_item::CompilerItem::OptionNone,
-            ]
-            .into_iter()
-            .any(|item| effective_name == items.variant_case_name(item))
-        };
         let (callee_opt, display_name): (Option<CalleeRef>, String) = if let Some(pos) =
             effective_name.find("::")
         {
@@ -711,7 +716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         None
                     };
                     let method_def = self
-                        .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
+                        .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
                         .and_then(|r| r.method_id)
                         .or_else(|| {
                             self.static_method_decl_id(
@@ -1222,6 +1227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         type_name,
                         method_name,
                         arg_type_hint.as_deref(),
+                        None,
                     );
                     let method_ref = resolved.unwrap_or_else(|| {
                         StaticMethodRef::new(ns_source.clone(), type_name, method_name, None, None)
@@ -1431,11 +1437,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 effective_name.to_string(),
             )
         }
-        // A built-in type constructor (Ok, Err, Some, None) — a variant case,
-        // not a function, so the site above declines it. The four names flow
-        // through the `CompilerItem` registry so a stdlib rename is picked up
-        // here without re-editing the literal set.
-        else if is_result_or_option_case {
+        // A built-in type constructor — a variant case, not a function, so the
+        // site above declines it.
+        else if self.names_result_or_option_case(&effective_name) {
             self.record_item_reference_by_name(ident.id, effective_name);
             (
                 Some(CalleeRef::rendered(
