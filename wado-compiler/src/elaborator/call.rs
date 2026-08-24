@@ -654,10 +654,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let prefix = &effective_name[..pos];
             let suffix = &effective_name[pos + 2..];
 
-            // Builtin functions: resolve through core:builtin module
+            // Builtin functions: resolve through core:builtin module. The
+            // prefix names the module directly rather than an import, but it
+            // buys no extra reach — a declaration there is visible exactly as
+            // any other module's is.
             if prefix == "builtin" {
+                let builtin_source = ModuleSource::builtin();
+                if let Some(visibility) = self.symbols.visibility_barrier(
+                    &self.current_module_source,
+                    &builtin_source,
+                    suffix,
+                ) {
+                    let _ = self.emit(TypeError::PrivateNamespacedSymbol {
+                        name: suffix.to_string(),
+                        module_source: builtin_source.clone(),
+                        visibility,
+                        span: ident.span,
+                    });
+                }
                 (
-                    Some(CalleeRef::new(ModuleSource::builtin(), suffix)),
+                    Some(CalleeRef::new(builtin_source, suffix)),
                     effective_name.to_string(),
                 )
             }
@@ -1306,6 +1322,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // only the result type.
                     return return_type;
                 }
+                // `use`'s namespace form registers only the reachable members
+                // as `ns$member`; this arm looks the module up directly, so it
+                // owes the same visibility check — otherwise a path names what
+                // an import of the identical symbol is refused.
+                if let Some(visibility) =
+                    self.symbols
+                        .visibility_barrier(&self.current_module_source, &ns_source, suffix)
+                {
+                    let _ = self.emit(TypeError::PrivateNamespacedSymbol {
+                        name: suffix.to_string(),
+                        module_source: ns_source.clone(),
+                        visibility,
+                        span: ident.span,
+                    });
+                }
                 // `ns::func` — a plain free-function call through a namespace
                 // import (the `suffix.find("::")` arm above always returns for
                 // the `Type::method` / `Variant::Case` shapes). Record a use→def
@@ -1314,20 +1345,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // its declared effects. The whole-path `ident.id` is the key the
                 // effect walker resolves free calls on (`check_effects_semantic`),
                 // and the suffix segment id is the key LSP jump-to-def uses.
-                let def_key = self
+                // `lookup_in_module` follows the namespace module's own
+                // `pub use`, so a re-exported member resolves to where it is
+                // defined. The callee must name that module, not the namespace
+                // — the mangled name is keyed by the defining module, and the
+                // namespace only says which door the path came through.
+                let resolved = self
                     .symbols
                     .lookup_in_module(&ns_source, suffix)
-                    .map(|sym| sym.defined_at);
-                if let Some(def_key) = def_key {
-                    self.record_reference_to_def(ident.id, def_key);
-                    if let Some(seg) = ident.segments.get(1) {
-                        self.record_reference_to_def(seg.id, def_key);
+                    .map(|sym| {
+                        (
+                            sym.defined_at,
+                            sym.module_source().clone(),
+                            sym.name.clone(),
+                        )
+                    });
+                let callee = match &resolved {
+                    Some((def_key, module_source, name)) => {
+                        self.record_reference_to_def(ident.id, *def_key);
+                        if let Some(seg) = ident.segments.get(1) {
+                            self.record_reference_to_def(seg.id, *def_key);
+                        }
+                        CalleeRef::new(module_source.clone(), name.clone())
                     }
-                }
-                (
-                    Some(CalleeRef::new(ns_source, suffix)),
-                    effective_name.to_string(),
-                )
+                    None => CalleeRef::new(ns_source, suffix),
+                };
+                (Some(callee), effective_name.to_string())
             }
             // Effect operations - pass through to codegen. This covers
             // `Stdout::write()`, etc. Effects/resources have no static-method

@@ -381,6 +381,20 @@ impl SymbolTable {
         self.effective_visibility_with_visited(module_source, name, &mut Vec::new())
     }
 
+    /// The visibility barring `from` from naming `name` in `target`, or `None`
+    /// when it may. The one answer to "can this module reach that symbol",
+    /// asked both by `use` and by a namespace-qualified path — reaching a
+    /// symbol does not depend on which syntax names it.
+    pub fn visibility_barrier(
+        &self,
+        from: &ModuleSource,
+        target: &ModuleSource,
+        name: &str,
+    ) -> Option<Visibility> {
+        let visibility = self.effective_visibility_in_module(target, name)?;
+        (!visibility.reachable_from(target.same_package(from))).then_some(visibility)
+    }
+
     fn effective_visibility_with_visited(
         &self,
         module_source: &ModuleSource,

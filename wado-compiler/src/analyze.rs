@@ -242,7 +242,7 @@ fn reexport_widens_message(
     )
 }
 
-fn symbol_not_visible_message(
+pub(crate) fn symbol_not_visible_message(
     name: &str,
     module_source: &ModuleSource,
     visibility: crate::ast::Visibility,
@@ -944,17 +944,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         }
     }
 
-    /// Whether a symbol with `visibility` in `target_module` is reachable from
-    /// `from_module_source`.
-    fn import_reachable(
-        &self,
-        from_module_source: &ModuleSource,
-        target_module: &ModuleSource,
-        visibility: crate::ast::Visibility,
-    ) -> bool {
-        visibility.reachable_from(target_module.same_package(from_module_source))
-    }
-
     /// Emit `SymbolNotVisible` when `name` is a binding in `target_module` not
     /// reachable from `from_module_source`. A name that is neither defined nor
     /// re-exported there is left to the `ImportNotFound` path.
@@ -965,13 +954,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         name: &str,
         span: Span,
     ) -> Result<(), Bail> {
-        let Some(visibility) = self
-            .symbols
-            .effective_visibility_in_module(target_module, name)
-        else {
-            return Ok(());
-        };
-        if !self.import_reachable(from_module_source, target_module, visibility) {
+        if let Some(visibility) =
+            self.symbols
+                .visibility_barrier(from_module_source, target_module, name)
+        {
             self.logger.error_in(
                 from_module_source,
                 AnalyzeError::SymbolNotVisible {
@@ -1202,26 +1188,37 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // no symbols to register
                         }
                         UseItem::Namespace { name: ns } => {
-                            // Register each reachable symbol under its `ns$member`
+                            // Register each reachable member under its `ns$member`
                             // alias, matching how the elaborator canonicalizes
                             // `ns::member` at lookup time
-                            // (`ModuleImports::canonical_ns_ref`).
-                            let symbols: Vec<(String, crate::ast::AstId)> = self
+                            // (`ModuleImports::canonical_ns_ref`). A re-exported
+                            // name is a member too — `use { x }` reaches one, so
+                            // `ns::x` does.
+                            let members: Vec<String> = self
                                 .symbols
                                 .get_module_symbols(&module_source)
                                 .into_iter()
-                                .filter(|s| {
-                                    self.import_reachable(
-                                        from_module_source,
-                                        &module_source,
-                                        s.visibility,
-                                    )
+                                .map(|s| s.name.clone())
+                                .chain(self.symbols.reexport_names(&module_source))
+                                .collect();
+                            let symbols: Vec<(String, crate::ast::AstId)> = members
+                                .into_iter()
+                                .filter(|name| {
+                                    self.symbols
+                                        .visibility_barrier(
+                                            from_module_source,
+                                            &module_source,
+                                            name,
+                                        )
+                                        .is_none()
                                 })
-                                .map(|s| {
-                                    (
-                                        crate::name::namespace_member_alias(ns, &s.name),
-                                        s.defined_at,
-                                    )
+                                .filter_map(|name| {
+                                    let sym =
+                                        self.symbols.lookup_in_module(&module_source, &name)?;
+                                    Some((
+                                        crate::name::namespace_member_alias(ns, &name),
+                                        sym.defined_at,
+                                    ))
                                 })
                                 .collect();
                             for (alias, sym_key) in symbols {

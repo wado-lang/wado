@@ -1,0 +1,9 @@
+//! A facade's `pub use` re-export is reachable through a namespace path, not
+//! only through an import: which syntax names a symbol does not decide whether
+//! it is there. Pairs with `visibility_pub_use_facade.wado`, the import form.
+
+use facade from "./sub/visibility_facade.wado";
+
+test "pub use re-exports reach through the namespace path" {
+    assert facade::facade_value() == 42;
+}

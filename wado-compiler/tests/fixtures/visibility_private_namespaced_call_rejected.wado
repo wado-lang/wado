@@ -1,0 +1,11 @@
+//! A namespace-qualified call is subject to the same visibility as an import:
+//! `vis_private` is file-private, so naming it through the module alias is a
+//! compile error just as importing it is.
+use vis from "./sub/visibility_lib.wado";
+
+export fn run() {
+    assert vis::vis_private() == 3;
+}
+
+__DATA__
+{"compile_error": "is private to"}

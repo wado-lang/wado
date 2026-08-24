@@ -631,6 +631,18 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A module symbol named through a namespace path (`ns::item`) from
+    /// beyond its declared visibility. The `use` form of the same reach is
+    /// [`crate::analyze::AnalyzeError::SymbolNotVisible`]; both render the
+    /// same sentence, since which syntax names the symbol does not change
+    /// what bars it.
+    PrivateNamespacedSymbol {
+        name: String,
+        module_source: crate::module_source::ModuleSource,
+        visibility: crate::ast::Visibility,
+        span: Span,
+    },
+
     /// An inherent impl member (method or associated constant) reached from
     /// beyond its declared visibility.
     PrivateMemberAccess {
@@ -1419,6 +1431,16 @@ impl TypeError {
                         unreachable!("a `pub` field is reachable from every module")
                     }
                 },
+                *span,
+            ),
+            TypeError::PrivateNamespacedSymbol {
+                name,
+                module_source,
+                visibility,
+                span,
+            } => (
+                Code::PrivateSymbol,
+                crate::analyze::symbol_not_visible_message(name, module_source, *visibility),
                 *span,
             ),
             TypeError::PrivateMemberAccess {

@@ -1,0 +1,8 @@
+//! `builtin::` names `core:builtin` directly rather than through an import.
+//! The intrinsics are `pub`, so reaching one is not an error — the path is
+//! subject to the same visibility as any other, and they clear it.
+
+test "builtin intrinsics are reachable through the namespace path" {
+    assert builtin::i32_popcnt(7) == 3;
+    assert builtin::i32_and(12, 10) == 8;
+}

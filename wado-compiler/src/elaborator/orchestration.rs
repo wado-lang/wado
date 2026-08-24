@@ -1353,11 +1353,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     Some(&entry_module_source),
                                     &state.invocations,
                                 );
-                                for sym in symbols.get_module_symbols(&source) {
-                                    if matches!(sym.kind, crate::symbol::SymbolKind::Function(_)) {
-                                        imported_functions.insert(
-                                            crate::name::namespace_member_alias(ns, &sym.name),
-                                        );
+                                let members: Vec<String> = symbols
+                                    .get_module_symbols(&source)
+                                    .into_iter()
+                                    .map(|sym| sym.name.clone())
+                                    .chain(symbols.reexport_names(&source))
+                                    .collect();
+                                for name in members {
+                                    if symbols
+                                        .visibility_barrier(module_source, &source, &name)
+                                        .is_some()
+                                    {
+                                        continue;
+                                    }
+                                    let is_function = symbols
+                                        .lookup_in_module(&source, &name)
+                                        .is_some_and(|sym| {
+                                            matches!(
+                                                sym.kind,
+                                                crate::symbol::SymbolKind::Function(_)
+                                            )
+                                        });
+                                    if is_function {
+                                        imported_functions
+                                            .insert(crate::name::namespace_member_alias(ns, &name));
                                     }
                                 }
                             }
@@ -1720,7 +1739,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
                     ast::UseItem::Namespace { name: ns } => {
-                        let same_package = source.same_package(module_source);
                         let declared = state
                             .tysys
                             .signatures
@@ -1735,8 +1753,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 continue;
                             };
                             if symbols
-                                .lookup_in_module(&source, &name)
-                                .is_some_and(|s| s.visibility.reachable_from(same_package))
+                                .visibility_barrier(module_source, &source, &name)
+                                .is_none()
                             {
                                 to_import
                                     .push((crate::name::namespace_member_alias(ns, &name), entry));
