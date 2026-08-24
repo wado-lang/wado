@@ -68,6 +68,19 @@ macro_rules! keyword_registry {
                     _ => None,
                 }
             }
+
+            /// The keyword's editorial category, if this token is a keyword.
+            /// `Constant` (`true` / `false` / `null`) and `Operator`
+            /// (`matches`) are keyword *tokens* that must not be coloured as
+            /// keywords, so the highlighter reads this rather than
+            /// `as_keyword_str`.
+            #[must_use]
+            pub fn keyword_category(&self) -> Option<KeywordCategory> {
+                match self {
+                    $( TokenKind::$variant => Some(KeywordCategory::$cat), )+
+                    _ => None,
+                }
+            }
         }
     };
 }
@@ -217,12 +230,15 @@ operator_registry! {
 }
 
 /// Contextual keywords: lexed as identifiers (the parser recognises them in
-/// position) but highlighted as keywords. They have no `TokenKind`, so they
-/// live outside [`KEYWORDS`] and feed only the grammar.
+/// position) but highlighted by their category, like a real keyword. They have
+/// no `TokenKind`, so they live outside [`KEYWORDS`] and feed the editor
+/// grammars rather than the lexer.
 pub const CONTEXTUAL_KEYWORDS: &[(&str, KeywordCategory)] = &[
     ("task", KeywordCategory::Control),
     ("do", KeywordCategory::Control),
     ("resume", KeywordCategory::Control),
+    ("trap", KeywordCategory::Control),
+    ("forward", KeywordCategory::Control),
     ("test", KeywordCategory::Other),
     ("self", KeywordCategory::Constant),
 ];

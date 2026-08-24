@@ -11,7 +11,8 @@ use crate::ast::{
     IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
     MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
-    RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnStmt, SelfKind,
+    StaticMethodCallExpr,
     Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
     TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
@@ -5519,6 +5520,7 @@ impl Parser {
                         ));
                     }
                 };
+                let keyword_span = self.peek().span;
                 self.advance();
                 if self.check(&TokenKind::Semicolon) {
                     self.advance();
@@ -5529,7 +5531,7 @@ impl Parser {
                         "a rest clause must be the last item in the impl block",
                     ));
                 }
-                rest = Some(kind);
+                rest = Some(RestClauseDecl { kind, keyword_span });
                 break;
             }
 
@@ -8310,7 +8312,7 @@ line 2
         let Item::Impl(impl_block) = &module.items[0] else {
             panic!("expected impl block");
         };
-        assert_eq!(impl_block.rest, Some(RestClause::Trap));
+        assert_eq!(impl_block.rest.map(|r| r.kind), Some(RestClause::Trap));
         assert_eq!(impl_block.methods.len(), 1);
     }
 
@@ -8326,7 +8328,7 @@ line 2
         let Item::Impl(impl_block) = &module.items[0] else {
             panic!("expected impl block");
         };
-        assert_eq!(impl_block.rest, Some(RestClause::Forward));
+        assert_eq!(impl_block.rest.map(|r| r.kind), Some(RestClause::Forward));
         assert_eq!(impl_block.methods.len(), 1);
     }
 
@@ -8341,7 +8343,7 @@ line 2
         let Item::Impl(impl_block) = &module.items[0] else {
             panic!("expected impl block");
         };
-        assert_eq!(impl_block.rest, Some(RestClause::Forward));
+        assert_eq!(impl_block.rest.map(|r| r.kind), Some(RestClause::Forward));
         assert!(impl_block.methods.is_empty());
     }
 
@@ -8372,7 +8374,7 @@ line 2
         let Item::Impl(impl_block) = &module.items[0] else {
             panic!("expected impl block");
         };
-        assert_eq!(impl_block.rest, None);
+        assert_eq!(impl_block.rest.map(|r| r.kind), None);
     }
 
     #[test]

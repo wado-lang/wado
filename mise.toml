@@ -59,6 +59,10 @@ cargo check -p wado-manifest --target wasm32-unknown-unknown
 description = "Fail if Wado.g4 and the compiler's parser disagree on the stdlib + fixture corpus"
 run = "scripts/check-grammar.sh"
 
+[tasks.check-highlight-vocab]
+description = "Fail if the Gale highlight query drifts from the compiler's syntax registries"
+run = "cargo run --bin wado-dev-tools -- highlight-vocab"
+
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
 run = """

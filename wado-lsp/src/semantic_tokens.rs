@@ -4,6 +4,7 @@ use wado_compiler::lexer::lex;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::{Symbol, SymbolKind};
+use wado_compiler::syntax::KeywordCategory;
 use wado_compiler::token::{Token, TokenKind};
 
 use crate::text::{LineIndex, PositionEncoding};
@@ -64,10 +65,26 @@ pub mod token_modifier {
     pub const DECLARATION: u32 = 1 << 0;
     pub const DEFINITION: u32 = 1 << 1;
     pub const READONLY: u32 = 1 << 2;
+    pub const DEFAULT_LIBRARY: u32 = 1 << 3;
 }
 
 /// Token modifier legend for LSP capability declaration.
-pub const TOKEN_MODIFIERS: &[&str] = &["declaration", "definition", "readonly"];
+pub const TOKEN_MODIFIERS: &[&str] = &["declaration", "definition", "readonly", "defaultLibrary"];
+
+/// A language constant: `true` / `false` / `null` / `self`, the words
+/// `wado_compiler::syntax` files under [`KeywordCategory::Constant`].
+///
+/// LSP has no `constant` token type. `variable` + `readonly` +
+/// `defaultLibrary` is its standard spelling for one, and is what editors map
+/// onto a constant scope — matching the `constant.language.wado` the
+/// `TextMate` grammar gives the same words.
+const CONSTANT: (u32, u32) = (
+    token_type::VARIABLE,
+    token_modifier::READONLY | token_modifier::DEFAULT_LIBRARY,
+);
+
+/// A keyword, real or contextual.
+const KEYWORD: (u32, u32) = (token_type::KEYWORD, 0);
 
 /// A semantic token with absolute position (before delta encoding).
 #[derive(Debug, Clone)]
@@ -200,6 +217,12 @@ struct AstSpans {
     /// recovered structurally here). Declaration and use sites share the
     /// binding's definition id, so one set covers both.
     param_ids: IndexSet<AstId>,
+    /// byte start -> class for the contextual keywords, which lex as plain
+    /// identifiers: `test`, `do`, `resume`, `task`, `trap`, `forward`, and
+    /// `self`. Kept apart from `map` because it outranks symbol resolution —
+    /// `self` resolves to its parameter binding, and would otherwise colour as
+    /// a parameter rather than the constant the registry calls it.
+    contextual: IndexMap<usize, (u32, u32)>,
 }
 
 impl AstSpans {
@@ -217,6 +240,14 @@ impl AstSpans {
 
     fn is_param(&self, id: AstId) -> bool {
         self.param_ids.contains(&id)
+    }
+
+    fn mark_contextual(&mut self, start: usize, class: (u32, u32)) {
+        self.contextual.insert(start, class);
+    }
+
+    fn contextual_at(&self, start: usize) -> Option<(u32, u32)> {
+        self.contextual.get(&start).copied()
     }
 }
 
@@ -237,12 +268,26 @@ struct SpanCollector {
     spans: AstSpans,
 }
 
+impl SpanCollector {
+    /// The `self` in `fn f(&mut self)` — a receiver, not an ordinary binding.
+    fn mark_self_receiver(&mut self, param: &ast::Param) {
+        if param.self_kind != ast::SelfKind::None {
+            self.spans.mark_contextual(param.name_span.start, CONSTANT);
+        }
+    }
+}
+
 impl AstVisitor for SpanCollector {
     fn visit_item(&mut self, item: &Item) {
-        // `test` is a contextual keyword: it lexes as an identifier, so the
-        // declaration's own span is the only place it can be recognised.
+        // The contextual keywords lex as identifiers, so the declaration's own
+        // span is the only place each can be recognised.
         if let Item::Test(t) = item {
-            self.spans.insert(t.span.start, token_type::KEYWORD);
+            self.spans.mark_contextual(t.span.start, KEYWORD);
+        }
+        if let Item::Impl(b) = item
+            && let Some(rest) = b.rest
+        {
+            self.spans.mark_contextual(rest.keyword_span.start, KEYWORD);
         }
         ast::walk_item(self, item);
     }
@@ -250,8 +295,17 @@ impl AstVisitor for SpanCollector {
     fn visit_function(&mut self, func: &ast::Function) {
         for param in &func.params {
             self.spans.mark_param(param.id);
+            self.mark_self_receiver(param);
         }
         ast::walk_function(self, func);
+    }
+
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        // `task` in `task return expr;` — the statement span opens on it.
+        if let ast::Stmt::TaskReturn(t) = stmt {
+            self.spans.mark_contextual(t.span.start, KEYWORD);
+        }
+        ast::walk_stmt(self, stmt);
     }
 
     fn visit_expr(&mut self, expr: &Expr) {
@@ -260,12 +314,18 @@ impl AstVisitor for SpanCollector {
                 self.spans.mark_param(param.id);
             }
         }
-        // `resume` and `do`, the other two contextual keywords.
+        // `resume`, `do`, and `task` are the other contextual keywords; `self`
+        // is `KeywordCategory::Constant`, not the parameter its uses resolve to.
         if let Expr::Resume(r) = expr {
-            self.spans.insert(r.span.start, token_type::KEYWORD);
+            self.spans.mark_contextual(r.span.start, KEYWORD);
         }
         if let Expr::WithHandler(w) = expr {
-            self.spans.insert(w.do_span.start, token_type::KEYWORD);
+            self.spans.mark_contextual(w.do_span.start, KEYWORD);
+        }
+        if let Expr::Ident(e) = expr
+            && e.name == "self"
+        {
+            self.spans.mark_contextual(e.span.start, CONSTANT);
         }
         ast::walk_expr(self, expr);
     }
@@ -335,30 +395,39 @@ fn classify_token(
         return None;
     }
 
-    let (token_type, modifiers) = match &token.kind {
-        // Keywords
-        k if k.as_keyword_str().is_some() => (token_type::KEYWORD, 0),
+    let (token_type, modifiers) = match token.kind.keyword_category() {
+        // Keywords, coloured by their editorial category rather than by being
+        // keyword *tokens*: `true` / `false` / `null` are constants and
+        // `matches` is an operator.
+        Some(category) => classify_keyword(category),
 
-        // Identifiers: prefer the resolved symbol classification (precomputed
-        // in `sem_classes`, keyed by byte start) when available, otherwise
-        // fall back to the lexer/AST heuristics.
-        TokenKind::Ident(_) => sem_classes
-            .and_then(|classes| classes.get(&token.span.start).copied())
-            .unwrap_or_else(|| classify_ident(tokens, index, ast_spans)),
+        None => match &token.kind {
+            // Identifiers. A contextual keyword outranks the symbol it would
+            // otherwise resolve to (`self` resolves to its parameter binding);
+            // everything else prefers the resolved symbol classification
+            // (precomputed in `sem_classes`, keyed by byte start) and falls
+            // back to the lexer/AST heuristics.
+            TokenKind::Ident(_) => ast_spans
+                .contextual_at(token.span.start)
+                .or_else(|| {
+                    sem_classes.and_then(|classes| classes.get(&token.span.start).copied())
+                })
+                .unwrap_or_else(|| classify_ident(tokens, index, ast_spans)),
 
-        // Literals
-        TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
-        TokenKind::StringLit(_)
-        | TokenKind::ByteStringLit(_)
-        | TokenKind::TemplateStringLit(_)
-        | TokenKind::CharLit(_) => (token_type::STRING, 0),
+            // Literals
+            TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
+            TokenKind::StringLit(_)
+            | TokenKind::ByteStringLit(_)
+            | TokenKind::TemplateStringLit(_)
+            | TokenKind::CharLit(_) => (token_type::STRING, 0),
 
-        // Operators (the highlightable subset; the registry's
-        // `is_highlight_operator` flag excludes punctuation-like tokens).
-        k if k.is_highlight_operator() => (token_type::OPERATOR, 0),
+            // Operators (the highlightable subset; the registry's
+            // `is_highlight_operator` flag excludes punctuation-like tokens).
+            k if k.is_highlight_operator() => (token_type::OPERATOR, 0),
 
-        // Punctuation — skip (don't emit semantic tokens for brackets, commas, etc.)
-        _ => return None,
+            // Punctuation — skip (don't emit semantic tokens for brackets, commas, etc.)
+            _ => return None,
+        },
     };
 
     Some(SemanticToken {
@@ -455,6 +524,20 @@ fn classify_symbol(
 }
 
 /// Classify an identifier using AST type spans + lexer context heuristics.
+/// The class a keyword's editorial category implies. `Constant` and `Operator`
+/// exist in the registry precisely because those words must not be coloured as
+/// keywords.
+fn classify_keyword(category: KeywordCategory) -> (u32, u32) {
+    match category {
+        KeywordCategory::Control
+        | KeywordCategory::StorageType
+        | KeywordCategory::StorageModifier
+        | KeywordCategory::Other => KEYWORD,
+        KeywordCategory::Constant => CONSTANT,
+        KeywordCategory::Operator => (token_type::OPERATOR, 0),
+    }
+}
+
 fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32, u32) {
     let token = &tokens[index];
 
@@ -580,6 +663,7 @@ mod tests {
             (token_modifier::DECLARATION, "declaration"),
             (token_modifier::DEFINITION, "definition"),
             (token_modifier::READONLY, "readonly"),
+            (token_modifier::DEFAULT_LIBRARY, "defaultLibrary"),
         ];
         assert_eq!(expected.len(), TOKEN_MODIFIERS.len());
         for (bit, name) in expected {
@@ -793,6 +877,89 @@ mod tests {
         let src = "fn run() {}\ntest \"t\" {\n    let _ = 1;\n}\n";
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 1, "test"), token_type::KEYWORD);
+    }
+
+    /// Class (type + modifiers) of the token whose text is `needle` on `line`.
+    fn class_of(tokens: &[SemanticToken], src: &str, line: u32, needle: &str) -> (u32, u32) {
+        let text = src.split_inclusive('\n').nth(line as usize).expect("line");
+        let col = text.find(needle).expect("needle on line") as u32;
+        let token = tokens
+            .iter()
+            .find(|t| t.line == line && t.start_char == col)
+            .unwrap_or_else(|| panic!("no token for {needle:?} at {line}:{col}"));
+        (token.token_type, token.modifiers)
+    }
+
+    /// `true` / `false` / `null` are `KeywordCategory::Constant`: keyword
+    /// tokens the registry says must not be coloured as keywords.
+    #[test]
+    fn language_constants_are_constants_not_keywords() {
+        let src = "fn run() {\n    let a = true;\n    let b = false;\n    let c = null;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(class_of(&tokens, src, 1, "true"), CONSTANT);
+        assert_eq!(class_of(&tokens, src, 2, "false"), CONSTANT);
+        assert_eq!(class_of(&tokens, src, 3, "null"), CONSTANT);
+    }
+
+    /// `matches` lexes as a keyword but is a binary pattern-test operator.
+    #[test]
+    fn matches_is_an_operator() {
+        let src = "fn run(x: Option<i32>) -> bool {\n    return x matches { Some(_) };\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "matches"), token_type::OPERATOR);
+    }
+
+    /// `self` is `KeywordCategory::Constant`, so neither its receiver
+    /// declaration nor its uses may colour as the parameter they resolve to.
+    #[test]
+    fn self_receiver_and_uses_are_constants() {
+        let src = concat!(
+            "struct S { n: i32 }\n",
+            "impl S {\n",
+            "    fn get(&self) -> i32 { return self.n; }\n",
+            "}\n",
+            "fn run() {}\n",
+        );
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        let line = src.split_inclusive('\n').nth(2).expect("line");
+        let decl = line.find("self").expect("receiver") as u32;
+        let use_site = line.rfind("self").expect("use") as u32;
+        assert_ne!(decl, use_site, "the two `self` spans must differ");
+        for col in [decl, use_site] {
+            let token = tokens
+                .iter()
+                .find(|t| t.line == 2 && t.start_char == col)
+                .unwrap_or_else(|| panic!("no token at 2:{col}"));
+            assert_eq!((token.token_type, token.modifiers), CONSTANT);
+        }
+    }
+
+    /// `task`, `trap`, and `forward` lex as identifiers, so without an AST
+    /// span they fall through to the identifier heuristic and colour as
+    /// variables.
+    #[test]
+    fn contextual_keywords_task_trap_and_forward_are_keywords() {
+        let src = concat!(
+            "effect E {\n",
+            "    fn ask() -> i32;\n",
+            "}\n",
+            "struct H {}\n",
+            "impl E for H {\n",
+            "    ..trap\n",
+            "}\n",
+            "struct G {}\n",
+            "impl E for G {\n",
+            "    ..forward\n",
+            "}\n",
+            "export async fn run() -> i32 {\n",
+            "    task return 1;\n",
+            "}\n",
+        );
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 5, "trap"), token_type::KEYWORD);
+        assert_eq!(kind_of(&tokens, src, 9, "forward"), token_type::KEYWORD);
+        assert_eq!(kind_of(&tokens, src, 12, "task"), token_type::KEYWORD);
     }
 
     #[test]

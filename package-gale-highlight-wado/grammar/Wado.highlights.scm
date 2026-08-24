@@ -22,10 +22,15 @@
 (formatSpec (FLOAT) @comment)
 (interpolation (IDENTIFIER) @variable)
 
-; Boolean / null constants
+; Constants: `true` / `false` / `null` / `self` are `KeywordCategory::Constant`
+; in the compiler's registry, not keywords.
 "true" @constant.builtin
 "false" @constant.builtin
 "null" @constant.builtin
+"self" @constant.builtin
+
+; `matches` lexes as a keyword but is a binary pattern-test operator.
+"matches" @operator
 
 ; Keywords (inline literals)
 "as" @keyword
@@ -50,10 +55,10 @@
 "import" @keyword
 "in" @keyword
 "interface" @keyword
+"internal" @keyword
 "let" @keyword
 "loop" @keyword
 "match" @keyword
-"matches" @keyword
 "mut" @keyword
 "of" @keyword
 "pub" @keyword
@@ -61,7 +66,6 @@
 "resource" @keyword
 "resume" @keyword
 "return" @keyword
-"self" @keyword
 "stores" @keyword
 "struct" @keyword
 "task" @keyword

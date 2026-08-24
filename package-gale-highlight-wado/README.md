@@ -27,14 +27,19 @@ Public API:
 The output is a bare fragment: bring your own CSS and page shell. Classes use
 the tree-sitter capture vocabulary, so any tree-sitter theme applies:
 
-| Class              | Token                           |
-| ------------------ | ------------------------------- |
-| `comment`          | line / block / `__DATA__`       |
-| `string`           | strings, template text, `` ` `` |
-| `number`           | int / float literals            |
-| `keyword`          | `fn`, `let`, `if`, `self`, …    |
-| `variable`         | identifiers in an interpolation |
-| `constant builtin` | `true` / `false` / `null`       |
+| Class              | Token                                  |
+| ------------------ | -------------------------------------- |
+| `comment`          | line / block / `__DATA__`              |
+| `string`           | strings, template text, `` ` ``        |
+| `number`           | int / float literals                   |
+| `keyword`          | `fn`, `let`, `if`, …                   |
+| `operator`         | `matches`                              |
+| `variable`         | identifiers in an interpolation        |
+| `constant builtin` | `true` / `false` / `null` / `self`     |
+
+The vocabulary is held to `wado-compiler`'s canonical syntax registries by
+`mise run check-highlight-vocab`: every keyword the compiler defines carries
+the capture its `KeywordCategory` implies, and nothing else is captured as one.
 
 A dotted capture like `constant.builtin` becomes `class="constant builtin"`.
 See [`example/standalone.wado`](./example/standalone.wado) for a full styled

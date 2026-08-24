@@ -1386,7 +1386,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .and_then(|fq| Some((fq.module()?.clone(), fq.base_name().to_string()))),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
-            rest: impl_block.rest,
+            rest: impl_block.rest.map(|r| r.kind),
             span: impl_block.span,
         })
     }
