@@ -1,0 +1,25 @@
+// A generic static reached through a newtype: `type Name = String` forwards
+// `String::from_utf8<I: IntoIterator<Item = u8>>`. The base's declaration is
+// what the call measures against — without it the method's own `I` reported no
+// slot to infer and read as a concrete type no argument could match, and the
+// call reached WIR build unresolved.
+//
+// `type Bytes = List<u8>` covers the other half: the newtype pins `List`'s `T`,
+// so a static that never mentions it has nothing left to infer.
+
+type Name = String;
+type Bytes = List<u8>;
+
+test "a method-level type parameter is inferred through the newtype" {
+    let bytes: List<u8> = [104 as u8, 105 as u8];
+    let name = Name::from_utf8(bytes);
+    assert name.unwrap() == "hi";
+}
+
+test "the newtype pins the base's own type parameter" {
+    let buffer = Bytes::with_capacity(4);
+    assert buffer.len() == 0;
+
+    let filled = Bytes::filled(3, 255 as u8);
+    assert filled.len() == 3;
+}

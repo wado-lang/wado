@@ -2776,6 +2776,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return sig.decl.param_types[sig.first_value_param()..].to_vec();
         }
+        // A newtype forwards its base's statics (see `is_static_method_at`),
+        // so the base's parameters are the ones the call must match. Without
+        // this the arguments of `Headers::from_list` go unchecked and a
+        // mismatch reaches codegen as an invalid module.
+        if static_key_hint.is_none()
+            && let Some(base) = self.newtype_static_base_at(None, struct_name)
+        {
+            let base_name = self.tysys.get_ultimate_base_struct_name(base);
+            let base_key = self.impl_target_of(base, &crate::name::DeclName::new(&base_name));
+            if base_key != static_key {
+                let params = self.lookup_static_method_param_types_keyed(
+                    &base_name,
+                    method_name,
+                    Some(&base_key),
+                );
+                // The base's own arguments stand for its impl-level slots, as
+                // `resolve_static_method_call_from_qualified` passes them:
+                // `type ByteList = List<u8>` makes `filled`'s `value: T` a `u8`.
+                let base_args = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_type_args(base)
+                    .unwrap_or_default();
+                if base_args.is_empty() {
+                    return params;
+                }
+                return params
+                    .iter()
+                    .map(|&param| self.substitute_type_params(param, &base_args))
+                    .collect();
+            }
+        }
         Vec::new()
     }
 
@@ -3486,7 +3519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type a newtype (or `flags` type) forwards its statics to:
     /// `type Headers = Fields` answers `Fields`, a `flags` type answers `u32`.
-    fn newtype_static_base_at(
+    pub(super) fn newtype_static_base_at(
         &self,
         site: Option<crate::ast::AstId>,
         name: &str,
@@ -3583,14 +3616,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &base_key,
                 &self.tysys.fq_receiver_head(base),
                 method_name,
-            ) {
+            ) || self.synthesizes_static_method(&base_name, method_name)
+            {
                 return true;
             }
         }
 
+        self.synthesizes_static_method(struct_name, method_name)
+    }
+
+    /// Whether a static no declaration writes answers for `struct_name`: an
+    /// auto-derived `Default::default()`, or a trait's defaulted static
+    /// reached through an impl. A newtype inherits both, so its base asks the
+    /// same question.
+    fn synthesizes_static_method(&self, struct_name: &str, method_name: &str) -> bool {
         // Auto-derived `Default::default()` for structs whose fields all have
-        // default expressions. No user impl exists (previous checks would have
-        // caught it), but `synthesis::traits` will emit the body.
+        // default expressions. No user impl exists (the caller's checks would
+        // have caught it), but `synthesis::traits` will emit the body.
         if method_name == "default"
             && self
                 .tysys
@@ -3608,14 +3650,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // override a static method that the trait provides a default for,
         // `Type::method` must still resolve. `locate_static_method_impl`
         // applies the same fallback to find the trait name and module.
-        if self
-            .locate_static_method_impl(struct_name, method_name, None)
+        self.locate_static_method_impl(struct_name, method_name, None)
             .is_some()
-        {
-            return true;
-        }
-
-        false
     }
 
     /// Resolve a static method call from a qualified name like `Point::origin()`
