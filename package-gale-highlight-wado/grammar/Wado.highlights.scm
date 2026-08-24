@@ -14,19 +14,17 @@
 
 ; Template strings. Everything that is not code is string — backticks, text
 ; chunks, and the `${` / `}` that bracket an interpolation — matching what
-; the compiler's own classifier paints. A `${ ... }` holds code (identifiers
-; -> variable); its `:spec` tail is formatting metadata, so it mutes.
+; the compiler's own classifier paints. A `${ ... }` holds code; its `:spec`
+; tail is formatting metadata, so it mutes.
 (TEMPLATE_TEXT) @string
 (BACKTICK) @string
 (INTERP_OPEN) @string
 (interpolationEnd "}" @string)
-(interpolation (IDENTIFIER) @variable)
 
 ; A specifier is not code: `${x:>8.2}` must not colour `>` as an operator.
 ; A rule-context override outranks the token's default, so listing the atoms
 ; that double as operators is enough to mute them.
 (formatSpec ":" @comment)
-(formatSpec (IDENTIFIER) @comment)
 (formatSpec (INTEGER) @comment)
 (formatSpec (FLOAT) @comment)
 (formatSpec "<" @comment)
@@ -45,6 +43,28 @@
 
 ; `matches` lexes as a keyword but is a binary pattern-test operator.
 "matches" @operator
+
+; Identifiers the grammar can classify on its own, most specific first: an
+; override matches anywhere *under* its rule and the first one declared wins,
+; so a rule nested inside another has to be listed above it. `formatSpec` is
+; above these for that reason; `interpolation` is below them.
+;
+; Only a rule whose whole subtree is of one nature can carry an override.
+; `typeRef` and `genericParam` hold nothing but types, and `memberName` is a
+; leaf; the call and index forms are out, because `postfixOp` contains the
+; argument list and `@function` there would repaint every argument.
+;
+; Telling a function from a variable takes name resolution, which no
+; context-free grammar has. `mise run check-highlight` reports what stays
+; uncoloured, by the kind the compiler resolved it to.
+(formatSpec (IDENTIFIER) @comment)
+(typeRef (IDENTIFIER) @type)
+(genericParam (IDENTIFIER) @type)
+; `.field`, `.method()`, a struct literal's field names, and — the minority
+; case this over-reaches on — the `::Case` of a variant path.
+(memberName (IDENTIFIER) @property)
+; The rest of an interpolation is a name the grammar cannot place further.
+(interpolation (IDENTIFIER) @variable)
 
 ; The contextual keywords the `identifier` rule also accepts as names. In that
 ; position they are not keywords — the compiler lexes them as identifiers and

@@ -92,7 +92,10 @@ fn class_of_capture(capture: &str) -> Class {
         "keyword" => Class::Keyword,
         "constant.builtin" => Class::Constant,
         "operator" => Class::Operator,
-        "variable" => Class::Ident,
+        // Everything the grammar can say about an identifier collapses here:
+        // the compiler resolves a dozen kinds and no context-free grammar can
+        // follow, so the two are never compared for equality.
+        "variable" | "type" | "property" => Class::Ident,
         other => panic!(
             "the highlight query emits capture '{other}', which this comparison has no class for"
         ),
