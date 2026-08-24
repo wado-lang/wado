@@ -2898,8 +2898,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The receiver a static lookup written `struct_name` keys on: the
-    /// declaration, and the name an impl header spells it with. A call site's
-    /// alias is not that name, and an impl block never writes one.
+    /// declaration, and its declared name. Neither side's spelling is that
+    /// name — a call site and an impl header each write whatever their own
+    /// module imported — so a header's head is un-aliased before comparing.
     fn static_receiver_target(
         &self,
         struct_name: &str,
@@ -3300,7 +3301,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             let base = super::trait_env::get_type_name_static(trait_type);
-            if super::trait_env::get_type_name_static(&header.ty) != declared_name
+            let head = self
+                .import_original_name(&super::trait_env::get_type_name_static(&header.ty), &module);
+            if head != declared_name
                 || (base != from_trait_name && base != "TryFrom")
                 || !header.methods.iter().any(|m| m.name == method_name)
             {
@@ -3485,7 +3488,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                           impl_module: &ModuleSource|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
-            if super::trait_env::get_type_name_static(&header.ty) != declared_name
+            let head = self.import_original_name(
+                &super::trait_env::get_type_name_static(&header.ty),
+                impl_module,
+            );
+            if head != declared_name
                 || !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params)
             {
                 return None;
