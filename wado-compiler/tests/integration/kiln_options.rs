@@ -1,6 +1,7 @@
 //! Tests for [`wado_compiler::kiln::extract_options_descriptor`].
 
 use crate::common::InMemoryHost;
+use std::assert_matches;
 use wado_compiler::ModuleSource;
 use wado_compiler::kiln::{CanonicalValue, OptionsType, extract_options_descriptor};
 use wado_compiler::semantics::{Semantics, semantics};
@@ -30,15 +31,15 @@ pub fn generate() {}
     assert_eq!(desc.fields.len(), 3);
 
     assert_eq!(desc.fields[0].name, "highlight");
-    assert!(matches!(desc.fields[0].ty, OptionsType::Bool));
+    assert_matches!(desc.fields[0].ty, OptionsType::Bool);
     assert_eq!(desc.fields[0].default, Some(CanonicalValue::Bool(false)));
 
     assert_eq!(desc.fields[1].name, "depth");
-    assert!(matches!(desc.fields[1].ty, OptionsType::I32));
+    assert_matches!(desc.fields[1].ty, OptionsType::I32);
     assert_eq!(desc.fields[1].default, Some(CanonicalValue::I64(3)));
 
     assert_eq!(desc.fields[2].name, "name");
-    assert!(matches!(desc.fields[2].ty, OptionsType::String));
+    assert_matches!(desc.fields[2].ty, OptionsType::String);
     assert!(desc.fields[2].default.is_none());
 }
 
@@ -56,7 +57,7 @@ pub fn generate() {}
     let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     match &desc.fields[0].ty {
-        OptionsType::Option(inner) => assert!(matches!(inner.as_ref(), OptionsType::String)),
+        OptionsType::Option(inner) => assert_matches!(inner.as_ref(), OptionsType::String),
         other => panic!("expected Option<String>, got {other:?}"),
     }
     assert_eq!(desc.fields[0].default, Some(CanonicalValue::None));
@@ -117,7 +118,7 @@ pub fn generate() {}
     assert_eq!(name, "Inner");
     assert_eq!(descriptor.fields.len(), 2);
     assert_eq!(descriptor.fields[0].name, "flag");
-    assert!(matches!(descriptor.fields[0].ty, OptionsType::Bool));
+    assert_matches!(descriptor.fields[0].ty, OptionsType::Bool);
     assert_eq!(
         descriptor.fields[0].default,
         Some(CanonicalValue::Bool(true))

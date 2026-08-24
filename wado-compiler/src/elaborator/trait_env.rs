@@ -401,6 +401,8 @@ pub(super) struct ImplMethodHeader {
     /// Parameter count excluding `self`, so an arity check reads the digest
     /// instead of the method AST.
     pub(super) param_count: usize,
+    /// The member's declared rung; consulted only on an inherent impl.
+    pub(super) visibility: ast::Visibility,
 }
 
 /// The receiver shape of a blanket impl.
@@ -546,6 +548,10 @@ pub(super) type ResourceDeclIndex = IndexSet<DefId>;
 #[derive(Clone, Debug)]
 pub(super) struct StaticMethodEntry {
     pub(super) name: String,
+    /// The declaring module, and an inherent associated function's declared
+    /// rung; `None` on a trait impl's.
+    pub(super) module: ModuleSource,
+    pub(super) inherent_visibility: Option<ast::Visibility>,
     /// The method itself: the key into the signature digest, which carries
     /// everything a lookup needs — resolved in the impl's own frame and its
     /// own module's perspective.
@@ -1086,6 +1092,7 @@ impl TraitEnv {
                                         .iter()
                                         .filter(|p| p.self_kind == ast::SelfKind::None)
                                         .count(),
+                                    visibility: m.visibility,
                                 })
                                 .collect(),
                             assoc_types: trait_decl.associated_types.clone(),
@@ -1137,6 +1144,7 @@ impl TraitEnv {
                                     .iter()
                                     .filter(|p| p.self_kind == ast::SelfKind::None)
                                     .count(),
+                                visibility: m.visibility,
                             })
                             .collect(),
                         associated_types: impl_block.associated_types.clone(),
@@ -1209,6 +1217,8 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
+                                    module: module_source.clone(),
+                                    inherent_visibility: None,
                                     method_id: method.id,
                                 });
                         }
@@ -1228,6 +1238,8 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
+                                    module: module_source.clone(),
+                                    inherent_visibility: Some(method.visibility),
                                     method_id: method.id,
                                 });
                         }

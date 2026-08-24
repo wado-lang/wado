@@ -3,8 +3,9 @@
 //! Tests `parse_args` functions directly without spawning processes,
 //! using `lexopt::Parser::from_args` to construct parsers from argument slices.
 
-use lexopt::Parser;
+use std::assert_matches;
 
+use lexopt::Parser;
 use wado_cli::args::CliExit;
 use wado_cli::build;
 use wado_cli::check;
@@ -316,10 +317,7 @@ fn run_log_level() {
 fn run_profile_guest() {
     let parser = Parser::from_args(&["--profile", "guest", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
-    assert!(matches!(
-        opts.profile,
-        wado_cli::runtime::ProfileMode::Guest { .. }
-    ));
+    assert_matches!(opts.profile, wado_cli::runtime::ProfileMode::Guest { .. });
 }
 
 #[test]

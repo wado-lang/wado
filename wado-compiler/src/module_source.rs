@@ -122,6 +122,9 @@ pub struct ModuleSourceInterner {
     /// declared-but-unresolved entries (with reasons) for precise errors.
     /// Empty for single-file compilation.
     dependencies: crate::compiler_host::DependencyIndex,
+    /// Module path → its elected package root, so `pkg` is a function of the
+    /// path and equal modules agree on their package.
+    package_roots: crate::hashmap::IndexMap<InternedStr, InternedStr>,
 }
 
 impl ModuleSourceInterner {
@@ -129,6 +132,7 @@ impl ModuleSourceInterner {
         Self {
             strings: StringInterner::with_well_known_arcs(well_known_arcs()),
             dependencies: crate::compiler_host::DependencyIndex::default(),
+            package_roots: crate::hashmap::IndexMap::default(),
         }
     }
 
@@ -136,10 +140,36 @@ impl ModuleSourceInterner {
         self.dependencies = dependencies;
     }
 
+    /// A dependency's entry module: it is its own package root.
     pub fn dependency(&mut self, path: &str) -> ModuleSource {
-        ModuleSource::Dependency {
-            path: self.intern(path),
+        self.dependency_module(path, path)
+    }
+
+    /// A non-entry module of the dependency package rooted at `pkg`, elected
+    /// by [`Self::elect_package_root`] so one file reached two ways stays one
+    /// module in one package.
+    pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
+        let path = self.intern(path);
+        let pkg = self.elect_package_root(&path, pkg);
+        ModuleSource::Dependency { pkg, path }
+    }
+
+    /// The package root for `path`. A module is reachable under more than one
+    /// candidate — a sibling package importing it relatively offers its own —
+    /// so the one whose tree contains it wins, never whichever came first.
+    fn elect_package_root(&mut self, path: &InternedStr, candidate: &str) -> InternedStr {
+        let better = match self.package_roots.get(path) {
+            None => true,
+            Some(current) => {
+                shared_dir_len(path, candidate) > shared_dir_len(path, current.as_str())
+            }
+        };
+        if better {
+            let interned = self.intern(candidate);
+            self.package_roots.insert(path.clone(), interned.clone());
+            return interned;
         }
+        self.package_roots[path].clone()
     }
 
     /// Resolve a bare dependency name to its entry module `ModuleSource`, if
@@ -182,10 +212,17 @@ impl ModuleSourceInterner {
             path: self.intern(path),
         }
     }
+    /// A remote package's entry module: it is its own package root.
     pub fn remote(&mut self, url: &str) -> ModuleSource {
-        ModuleSource::Remote {
-            url: self.intern(url),
-        }
+        self.remote_module(url, url)
+    }
+
+    /// A non-entry module of the remote package rooted at `pkg`.
+    /// See [`Self::dependency_module`].
+    pub fn remote_module(&mut self, pkg: &str, url: &str) -> ModuleSource {
+        let url = self.intern(url);
+        let pkg = self.elect_package_root(&url, pkg);
+        ModuleSource::Remote { pkg, url }
     }
     pub fn redirected(&mut self, uri: &str) -> ModuleSource {
         ModuleSource::Redirected {
@@ -273,13 +310,20 @@ pub enum ModuleSource {
         path: InternedStr,
     },
     /// A module of a dependency package, resolved from a bare-name
-    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is the
-    /// resolved entry-module `path`, so two aliases pointing at the same package
-    /// unify. Distinct from [`ModuleSource::Local`] to carry the package boundary
-    /// — only `export` items cross it — though loaded exactly like it.
-    Dependency { path: InternedStr },
+    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is `path`,
+    /// so one file reached two ways stays one module. Distinct from
+    /// [`ModuleSource::Local`] to carry the package boundary, but loaded alike.
+    Dependency {
+        /// The package root: the dependency's resolved `[package].lib`. Shared
+        /// by every module of the package, and inherited by a relative import.
+        pkg: InternedStr,
+        path: InternedStr,
+    },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
+        /// The package root: the URL the package is entered through, a remote
+        /// package having no manifest to name one.
+        pkg: InternedStr,
         /// Full URL (e.g., "<https://example.com/lib.wado>")
         url: InternedStr,
     },
@@ -339,8 +383,8 @@ impl ModuleSource {
             | Self::EntryPoint { .. }
             | Self::Redirected { .. }
             | Self::Wasm { .. } => PackageId::Root,
-            Self::Dependency { path } => PackageId::Dependency(path.clone()),
-            Self::Remote { url } => PackageId::Remote(url.clone()),
+            Self::Dependency { pkg, .. } => PackageId::Dependency(pkg.clone()),
+            Self::Remote { pkg, .. } => PackageId::Remote(pkg.clone()),
         }
     }
 
@@ -357,8 +401,8 @@ impl PartialEq for ModuleSource {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
-            (Self::Dependency { path: a }, Self::Dependency { path: b }) => a == b,
-            (Self::Remote { url: a }, Self::Remote { url: b }) => a == b,
+            (Self::Dependency { path: a, .. }, Self::Dependency { path: b, .. }) => a == b,
+            (Self::Remote { url: a, .. }, Self::Remote { url: b, .. }) => a == b,
             (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
             (
                 Self::Wasm {
@@ -387,8 +431,8 @@ impl std::hash::Hash for ModuleSource {
             Self::Core { name } => name.hash(state),
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
-            Self::Dependency { path } => path.hash(state),
-            Self::Remote { url } => url.hash(state),
+            Self::Dependency { path, .. } => path.hash(state),
+            Self::Remote { url, .. } => url.hash(state),
             Self::Redirected { uri } => uri.hash(state),
             Self::Wasm { path, kind } => {
                 path.hash(state);
@@ -494,8 +538,8 @@ impl ModuleSource {
             Self::Core { name } => vec!["core".to_string(), name.to_string()],
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.to_string()],
             Self::Local { path } => vec![path.to_string()],
-            Self::Dependency { path } => vec!["dep".to_string(), path.to_string()],
-            Self::Remote { url } => vec![url.to_string()],
+            Self::Dependency { path, .. } => vec!["dep".to_string(), path.to_string()],
+            Self::Remote { url, .. } => vec![url.to_string()],
             Self::EntryPoint { filename } => vec![entry_basename(filename).to_string()],
             Self::Redirected { uri } => vec![uri.to_string()],
             Self::Wasm { path, .. } => vec![path.to_string()],
@@ -650,10 +694,26 @@ impl ModuleSource {
             // resolves against this, so it must be the same base-relative path
             // the module itself was loaded from, or the include would resolve
             // against the consumer's directory instead of the dependency's.
-            Self::Dependency { path } => path.to_string(),
+            Self::Dependency { path, .. } => path.to_string(),
             other => other.to_string(),
         }
     }
+}
+
+/// How many leading directory components `path` and `root` share. Comparing
+/// whole components keeps `deps/xpkg2/` from counting as a prefix of
+/// `deps/xpkg/`.
+fn shared_dir_len(path: &str, root: &str) -> usize {
+    let dirs = |s: &str| -> Vec<String> {
+        let mut parts: Vec<String> = s.split('/').map(str::to_string).collect();
+        parts.pop();
+        parts
+    };
+    dirs(path)
+        .iter()
+        .zip(dirs(root).iter())
+        .take_while(|(a, b)| a == b)
+        .count()
 }
 
 /// The portable base name of an entry-point filename: its path relative to
@@ -669,8 +729,8 @@ impl fmt::Display for ModuleSource {
             Self::Core { name } => write!(f, "core:{name}"),
             Self::Wasi { interface } => write!(f, "wasi:{interface}"),
             Self::Local { path } => write!(f, "{path}"),
-            Self::Dependency { path } => write!(f, "dep:{path}"),
-            Self::Remote { url } => write!(f, "{url}"),
+            Self::Dependency { path, .. } => write!(f, "dep:{path}"),
+            Self::Remote { url, .. } => write!(f, "{url}"),
             // Symbol identity, not a file path: the entry's qualifier is its
             // base name (its path relative to its own directory), so WIR names
             // stay stable across invocations and machines — the compile path is
@@ -686,6 +746,7 @@ impl fmt::Display for ModuleSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn dependency_identity_is_the_resolved_path() {
@@ -733,10 +794,10 @@ mod tests {
     fn test_module_source_from_path_core() {
         let mut interner = ModuleSourceInterner::new();
         let source = interner.from_path(&["core".to_string(), "prelude".to_string()]);
-        assert!(matches!(source, ModuleSource::Core { ref name } if name == "prelude"));
+        assert_matches!(source, ModuleSource::Core { ref name } if name == "prelude");
 
         let source = interner.from_path(&["core".to_string(), "cli".to_string()]);
-        assert!(matches!(source, ModuleSource::Core { ref name } if name == "cli"));
+        assert_matches!(source, ModuleSource::Core { ref name } if name == "cli");
 
         let source = interner.from_path(&["core".to_string(), "rt".to_string()]);
         assert!(source.is_core_rt());
@@ -746,7 +807,7 @@ mod tests {
     fn test_module_source_from_path_wasi() {
         let mut interner = ModuleSourceInterner::new();
         let source = interner.from_path(&["wasi".to_string(), "cli".to_string()]);
-        assert!(matches!(source, ModuleSource::Wasi { ref interface } if interface == "cli"));
+        assert_matches!(source, ModuleSource::Wasi { ref interface } if interface == "cli");
 
         let source = interner.from_path(&["wasi".to_string(), "io".to_string()]);
         assert!(source.is_wasi());
@@ -756,7 +817,7 @@ mod tests {
     fn test_module_source_from_path_local() {
         let mut interner = ModuleSourceInterner::new();
         let source = interner.from_path(&["./geometry.wado".to_string()]);
-        assert!(matches!(source, ModuleSource::Local { ref path } if path == "./geometry.wado"));
+        assert_matches!(source, ModuleSource::Local { ref path } if path == "./geometry.wado");
 
         let source = interner.from_path(&["../lib.wado".to_string()]);
         assert!(source.is_local());

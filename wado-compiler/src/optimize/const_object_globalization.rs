@@ -1555,18 +1555,17 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// Whether a write reaches local `idx`: an assignment rooted at it, a `&mut` of
 /// it or of one of its projections, or a call that mutates it as a receiver.
 fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
+    let rooted_at_idx = |e: ExprId| projection_root_of(body, e, gate) == Some(idx);
     reachable_nodes(body).into_iter().any(|node| {
         let NodeRef::Expr(e) = node else {
             return false;
         };
         match &body.exprs[e].kind {
-            ExprKind::Assign { target, .. } => projection_roots_at(body, *target, idx, gate),
+            ExprKind::Assign { target, .. } => rooted_at_idx(*target),
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
-            } => inner
-                .as_expr()
-                .is_some_and(|i| projection_roots_at(body, i, idx, gate)),
+            } => inner.as_expr().is_some_and(rooted_at_idx),
             ExprKind::Call {
                 func_id,
                 args,
@@ -1575,7 +1574,7 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
             } => args.first().is_some_and(|recv| {
                 recv.expr
                     .as_expr()
-                    .is_some_and(|r| projection_roots_at(body, strip_refs(body, r), idx, gate))
+                    .is_some_and(|r| rooted_at_idx(strip_refs(body, r)))
                     && gate.callee_mutates_self(*func_id) != Some(false)
             }),
             _ => false,
@@ -1692,61 +1691,78 @@ enum AliasRoots {
     WithReassigned,
 }
 
+/// One binding site: the locals it binds, and the roots its source can yield.
+/// Neither depends on the alias set, so the walk that finds them runs once.
+struct AliasSite {
+    yields: Vec<u32>,
+    binds: Vec<u32>,
+}
+
 fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRoots) -> Vec<u32> {
+    let mut sites: Vec<AliasSite> = Vec::new();
+    let mut site = |value: Operand, binds: Vec<u32>| {
+        if binds.is_empty() {
+            return;
+        }
+        let yields = yielded_roots(body, value, gate);
+        if !yields.is_empty() {
+            sites.push(AliasSite { yields, binds });
+        }
+    };
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        match node {
+            NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                StmtKind::Let {
+                    local_index, value, ..
+                } => site(*value, vec![*local_index]),
+                StmtKind::LetDestructure { pattern, value, .. } => {
+                    let mut binds = Vec::new();
+                    collect_pattern_bindings(body, *pattern, &mut binds);
+                    site(*value, binds);
+                }
+                StmtKind::Expr(_)
+                | StmtKind::Return { .. }
+                | StmtKind::Break { .. }
+                | StmtKind::If { .. }
+                | StmtKind::Loop { .. }
+                | StmtKind::LabeledBlock { .. }
+                | StmtKind::Continue => {}
+            },
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Match { expr, arms } => {
+                    let mut binds = Vec::new();
+                    for arm in arms {
+                        collect_pattern_bindings(body, arm.pattern, &mut binds);
+                    }
+                    site(*expr, binds);
+                }
+                // A local re-assigned from a projection names the same storage
+                // as one bound by `let` — the shape `licm` leaves when it
+                // hoists a field read out of a loop and refreshes it after each
+                // call that could have changed it.
+                ExprKind::Assign { target, value } if which == AliasRoots::WithReassigned => {
+                    let binds = assign_target_local(body, *target).into_iter().collect();
+                    site(*value, binds);
+                }
+                _ => {}
+            },
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
     let mut roots = vec![idx];
     let mut i = 0;
     while i < roots.len() {
         let root = roots[i];
-        let mut stack = vec![NodeRef::Block(body.root)];
-        while let Some(node) = stack.pop() {
-            match node {
-                NodeRef::Stmt(s) => match &body.stmts[s].kind {
-                    StmtKind::Let {
-                        local_index, value, ..
-                    } => {
-                        if yields_projection_of(body, *value, root, gate)
-                            && !roots.contains(local_index)
-                        {
-                            roots.push(*local_index);
-                        }
-                    }
-                    StmtKind::LetDestructure { pattern, value, .. } => {
-                        if yields_projection_of(body, *value, root, gate) {
-                            collect_pattern_bindings(body, *pattern, &mut roots);
-                        }
-                    }
-                    StmtKind::Expr(_)
-                    | StmtKind::Return { .. }
-                    | StmtKind::Break { .. }
-                    | StmtKind::If { .. }
-                    | StmtKind::Loop { .. }
-                    | StmtKind::LabeledBlock { .. }
-                    | StmtKind::Continue => {}
-                },
-                NodeRef::Expr(e) => {
-                    if let ExprKind::Match { expr, arms } = &body.exprs[e].kind
-                        && yields_projection_of(body, *expr, root, gate)
-                    {
-                        for arm in arms {
-                            collect_pattern_bindings(body, arm.pattern, &mut roots);
-                        }
-                    }
-                    // A local re-assigned from a projection names the same
-                    // storage as one bound by `let` — the shape `licm` leaves
-                    // when it hoists a field read out of a loop and refreshes
-                    // it after each call that could have changed it.
-                    if which == AliasRoots::WithReassigned
-                        && let ExprKind::Assign { target, value } = &body.exprs[e].kind
-                        && let Some(local) = assign_target_local(body, *target)
-                        && yields_projection_of(body, *value, root, gate)
-                        && !roots.contains(&local)
-                    {
-                        roots.push(local);
+        for s in &sites {
+            if s.yields.contains(&root) {
+                for &b in &s.binds {
+                    if !roots.contains(&b) {
+                        roots.push(b);
                     }
                 }
-                NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
-            body.for_each_child(node, |c| stack.push(c));
         }
         i += 1;
     }
@@ -1777,9 +1793,7 @@ fn delivers_projection_operand(body: &Body, op: Operand, roots: &[u32], gate: &G
 /// `match`/`switch`'s is its arm's — the same rule the freshness side follows.
 fn delivers_projection(body: &Body, expr: ExprId, roots: &[u32], gate: &Gate<'_>) -> bool {
     if gate.is_reference_type(body.exprs[expr].type_id)
-        && roots
-            .iter()
-            .any(|&r| projection_roots_at(body, expr, r, gate))
+        && projection_root_of(body, expr, gate).is_some_and(|r| roots.contains(&r))
     {
         return true;
     }
@@ -1833,36 +1847,38 @@ fn collect_pattern_bindings(body: &Body, pattern: crate::nir_arena::PatId, out: 
     }
 }
 
-/// Whether evaluating `op` can produce the storage of `root` itself: it is, or
-/// contains, a reference-typed projection rooted there. A scalar projection
-/// (`s.used`) copies its value out and does not count.
-fn yields_projection_of(body: &Body, op: Operand, root: u32, gate: &Gate<'_>) -> bool {
+/// Every local whose storage evaluating `op` can produce: the root of each
+/// reference-typed projection in its subtree. A scalar projection (`s.used`)
+/// copies its value out and does not count.
+fn yielded_roots(body: &Body, op: Operand, gate: &Gate<'_>) -> Vec<u32> {
+    let mut out = Vec::new();
     let Some(expr) = op.as_expr() else {
-        return false;
+        return out;
     };
     let mut stack = vec![NodeRef::Expr(expr)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
-            && projection_roots_at(body, e, root, gate)
             && gate.is_reference_type(body.exprs[e].type_id)
+            && let Some(root) = projection_root_of(body, e, gate)
+            && !out.contains(&root)
         {
-            return true;
+            out.push(root);
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-    false
+    out
 }
 
-/// Whether `expr` is a projection chain (`x`, `x.f`, `x[i].f`) rooted at local
-/// `idx`.
-fn projection_roots_at(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
+/// The local a projection chain (`x`, `x.f`, `x[i].f`) is rooted at, or `None`
+/// when `expr` is not one.
+fn projection_root_of(body: &Body, expr: ExprId, gate: &Gate<'_>) -> Option<u32> {
     match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => *index == idx,
+        ExprKind::Local { index, .. } => Some(*index),
         ExprKind::FieldAccess { expr: base, .. }
         | ExprKind::Index { expr: base, .. }
         | ExprKind::Cast { expr: base, .. } => base
             .as_expr()
-            .is_some_and(|e| projection_roots_at(body, e, idx, gate)),
+            .and_then(|e| projection_root_of(body, e, gate)),
         // A borrow and a deref both name the referent's storage, not a copy of
         // it: whether the caller keeps a copy is the ownership analysis's call,
         // and for a fresh literal it elides one.
@@ -1871,14 +1887,14 @@ fn projection_roots_at(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> 
             expr: base,
         } => base
             .as_expr()
-            .is_some_and(|e| projection_roots_at(body, e, idx, gate)),
+            .and_then(|e| projection_root_of(body, e, gate)),
         // An element accessor names the array's storage as an `Index` node
         // does; it is the same projection, spelled as a call.
         ExprKind::Call { func_id, args, .. } if gate.element_accessor(*func_id) => args
             .first()
             .and_then(|a| a.expr.as_expr())
-            .is_some_and(|e| projection_roots_at(body, e, idx, gate)),
-        _ => false,
+            .and_then(|e| projection_root_of(body, e, gate)),
+        _ => None,
     }
 }
 

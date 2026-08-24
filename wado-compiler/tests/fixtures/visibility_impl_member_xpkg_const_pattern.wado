@@ -1,0 +1,16 @@
+//! Pattern position answers to the ladder as expression position does, and
+//! across a package boundary as within one.
+use { Gadget } from "xpkg";
+
+export fn run() {
+    match 200 {
+        Gadget::PKG_INTERNAL_C => {}
+        _ => {}
+    }
+}
+
+__DATA__
+{
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" },
+  "compile_error": "is `internal` to its package and cannot be read from another package"
+}

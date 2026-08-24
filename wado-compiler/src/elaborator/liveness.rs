@@ -128,6 +128,14 @@ pub(crate) fn compute(
                         // Slice 1: methods are live production intermediaries.
                         graph.seed_export(key);
                     }
+                    // A constant's body is materialized at every read, like a
+                    // struct field default above, and seeded a root for the same
+                    // reason: no module here knows whether it is read.
+                    for constant in &impl_block.constants {
+                        let key = constant.id;
+                        graph.add_expr_edges(&constant.value, references, &key);
+                        graph.seed_export(key);
+                    }
                 }
                 Item::Trait(trait_decl) => {
                     for method in &trait_decl.methods {

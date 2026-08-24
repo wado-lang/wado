@@ -3650,13 +3650,12 @@ For associative arrays, use `TreeMap` from `core:collections`:
 use { TreeMap } from "core:collections";
 
 let mut map = TreeMap::<String, i32>::new();
-map.insert("x", 10);
-map.insert("y", 20);
+map["x"] = 10;                   // insert or overwrite
+map["y"] = 20;
 
-// Index syntax
-map["z"] = 30;                    // assignment
-let v = map["x"];                 // panics if key not found
+let v = map["x"];                // panics if key not found
 let opt = map.get("x");          // returns Option<V>
+map.try_insert("x", 99);         // inserts only if absent; reports whether it did
 
 // Keys preserve insertion order
 let keys = map.keys();  // returns List<K> in insertion order
@@ -3853,13 +3852,19 @@ export fn run() { ... }
 A `pub`-only item reaches Wado consumers only (source dependency or
 provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
 
-The ladder applies to top-level items. Members of an `impl` block (methods,
-associated constants) accept the same file-private / `internal` / `pub` ladder;
-`export` on a member is a compile error (a method has no Component Model
-boundary). Member visibility is not yet enforced at call sites, so `internal` on
-a member currently records intent (package scope) rather than restricting
-access. A struct field accepts `pub` or `internal` (only `pub` widens access
-beyond the defining module; `internal` currently behaves like file-private).
+The ladder applies to top-level items, struct fields, and `impl` members
+(methods, associated constants); reaching one beyond its rung is a compile
+error. `export` on a member is an error — a method has no CM boundary. Only an
+_inherent_ member has a ladder; a trait impl's members reach as far as the
+trait.
+
+```wado
+impl Config {
+    fn parse_raw() { }         // this file only
+    internal fn reload() { }   // other files in this package
+    pub fn get() { }           // other packages
+}
+```
 
 #### Re-export visibility
 
@@ -3872,23 +3877,22 @@ as members of the importing module, at the modifier's reach:
 | `internal use { x } from "M"` | `x` is re-exported package-internal         |
 | `use { x } from "M"`          | file-private import; `x` is not re-exported |
 
-A re-export's reach is the re-export keyword's, not `x`'s own visibility. So
-a `pub use` publishes `x` even when `x` is `internal` in its defining module —
-the "internal implementation, public facade" pattern, where a package's entry
-module re-exports its internal submodules' items as the library API:
+A re-export cannot reach further than `x` itself, so `pub use { x }` requires
+`x` to be `pub`; claiming more is a compile error at the re-export. Narrowing is
+allowed, and the facade still names the API — a package's entry module publishes
+its items under its own names, so consumers never name the files behind them:
 
 ```wado
-// foo/impl.wado — package-internal implementation
-internal fn compute() -> i32 { ... }
+// foo/impl.wado — the implementation
+pub fn compute() -> i32 { ... }
 
-// foo.wado — the package's public entry module
-pub use { compute } from "./impl.wado";   // compute is now the library API
+// foo.wado — the package's entry module
+pub use { compute } from "./impl.wado";   // reached as foo's `compute`
 ```
 
-You may only re-export a name you can see: `pub use { x } from "M"` requires `x`
-to be importable here (`x` is `pub`, or `x` is `internal` and `M` is in this
-package). Re-exporting a file-private name is a visibility error, like any other
-import. See [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
+You may also only re-export a name you can see: `x` must be importable here
+(`x` is `pub`, or `x` is `internal` and `M` is in this package). Re-exporting a
+file-private name is a visibility error, like any other import. See [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 
 ### Module Source Types
 
@@ -3933,7 +3937,7 @@ A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query
 ```
 core:json#parse                      # free function / global
 core:math#f64::PI                    # associated const / static fn
-core:collections#TreeMap.insert      # instance method
+core:collections#TreeMap.get         # instance method
 core:collections#List<String>::len   # generics use Wado angle brackets
 core:fmt#Point^Display::fmt          # trait-impl member
 "./utils.wado"#Helper::new           # relative path — must be quoted

@@ -244,6 +244,7 @@ pub async fn publish_diagnostics<W: Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     fn read(input: &[u8]) -> Result<Option<JsonRpcRequest>, ReadError> {
         read_message(&mut std::io::BufReader::new(input))
@@ -274,9 +275,10 @@ mod tests {
         // The buffer is allocated eagerly at the declared size.
         let raw = format!("Content-Length: {}\r\n\r\n", MAX_CONTENT_LENGTH + 1);
         let err = read(raw.as_bytes()).expect_err("oversized length must be refused");
-        assert!(
-            matches!(&err, ReadError::Io(m) if m.contains("exceeds")),
-            "expected a fatal transport error, got {err:?}",
+        assert_matches!(
+            &err,
+            ReadError::Io(m) if m.contains("exceeds"),
+            "expected a fatal transport error"
         );
     }
 
@@ -285,9 +287,10 @@ mod tests {
         // Recovering here would read the unconsumed body as headers.
         let raw = "Content-Length: not-a-number\r\n\r\n{}";
         let err = read(raw.as_bytes()).expect_err("an unparseable length must be refused");
-        assert!(
-            matches!(&err, ReadError::Io(m) if m.contains("invalid Content-Length")),
-            "expected a fatal transport error, got {err:?}",
+        assert_matches!(
+            &err,
+            ReadError::Io(m) if m.contains("invalid Content-Length"),
+            "expected a fatal transport error"
         );
     }
 
@@ -295,9 +298,10 @@ mod tests {
     fn malformed_json_body_stays_recoverable() {
         // The counter-case: the body was consumed, so the stream stays framed.
         let err = read(&frame("not json")).expect_err("malformed JSON must be reported");
-        assert!(
-            matches!(&err, ReadError::Parse(m) if m.contains("invalid JSON")),
-            "expected a recoverable parse error, got {err:?}",
+        assert_matches!(
+            &err,
+            ReadError::Parse(m) if m.contains("invalid JSON"),
+            "expected a recoverable parse error"
         );
     }
 

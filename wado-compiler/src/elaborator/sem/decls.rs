@@ -4,7 +4,6 @@
 //! [`crate::ast::AstId`] belongs in [`super::types::TypeAnnotations`], and an
 //! import fact in [`super::imports::ModuleImports`].
 
-use crate::ast;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
@@ -80,7 +79,7 @@ pub(crate) struct ModuleDecls {
     /// Canonical keys make cross-module collisions impossible, so the
     /// driver-merged view needs no shadowing rules.
     pub(crate) associated_constants:
-        IndexMap<(crate::defs::DefId, String), (ModuleSource, TypeId, ast::Expr)>,
+        IndexMap<(crate::defs::DefId, String), super::super::sig::AssocConstSig>,
     /// Canonical signatures of this module's method declarations, keyed by
     /// the method's globally-unique `AstId`.
     ///

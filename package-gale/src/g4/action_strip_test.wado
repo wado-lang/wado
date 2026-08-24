@@ -109,3 +109,35 @@ test "strip: IfIfElseNonGreedyBinding1 — the descriptor that motivated this" {
     let expected = "grammar T;\nstart : statement+ ;\nstatement : 'x' | ifStatement;\nifStatement : 'if' 'y' statement ('else' statement)?? ;\nID : 'a'..'z'+ ;\nWS : (' '|'\\n') -> channel(HIDDEN);\n";
     assert result == expected, `got '${result}'`;
 }
+
+test "strip: a parser rule's argument list balances a `[]` host type" {
+    let g = "r[int[] arr] : 'a' { act(arr); } ;";
+    let result = strip_action_bodies(&g);
+    assert result == "r[int[] arr] : 'a'  ;", `got '${result}'`;
+}
+
+test "strip: a `[]` host type does not expose an initializer to the action stripper" {
+    // Ending the bracket at the `]` of `int[]` leaves ` a = {1, 2}]` at top
+    // level, where `{1, 2}` reads as an action body and is stripped.
+    let g = "r locals [int[] a = {1, 2}] : 'x' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `got '${result}'`;
+}
+
+test "strip: a lexer rule's char set is not balanced as an argument list" {
+    let g = "fragment REGEX : ~[/[] ; r[int[] a] : 'x' { act(); } ;";
+    let result = strip_action_bodies(&g);
+    assert result == "fragment REGEX : ~[/[] ; r[int[] a] : 'x'  ;", `got '${result}'`;
+}
+
+test "strip: a `tokens` prequel does not fix the rule type for the rules after it" {
+    let g = "grammar T;\ntokens { A, B }\nr[int[] a] : 'x' { act(); } ;";
+    let result = strip_action_bodies(&g);
+    assert result == "grammar T;\ntokens { A, B }\nr[int[] a] : 'x'  ;", `got '${result}'`;
+}
+
+test "strip: a line comment ending in `tokens` does not make the next action a prequel" {
+    let g = "r : 'a' // tokens\n { act(); } ;";
+    let result = strip_action_bodies(&g);
+    assert result == "r : 'a' // tokens\n  ;", `got '${result}'`;
+}

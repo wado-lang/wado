@@ -107,6 +107,15 @@ pub enum AnalyzeError {
         visibility: crate::ast::Visibility,
         span: Span,
     },
+    /// A `pub use` / `internal use` that promises more reach than the item it
+    /// names actually has.
+    ReExportWidensVisibility {
+        name: String,
+        module_source: ModuleSource,
+        source_visibility: crate::ast::Visibility,
+        reexport_visibility: crate::ast::Visibility,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for AnalyzeError {
@@ -190,8 +199,47 @@ impl std::fmt::Display for AnalyzeError {
                     symbol_not_visible_message(name, module_source, *visibility)
                 )
             }
+            AnalyzeError::ReExportWidensVisibility {
+                name,
+                module_source,
+                source_visibility,
+                reexport_visibility,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: {}",
+                    span.line,
+                    span.column,
+                    reexport_widens_message(
+                        name,
+                        module_source,
+                        *source_visibility,
+                        *reexport_visibility
+                    )
+                )
+            }
         }
     }
+}
+
+fn reexport_widens_message(
+    name: &str,
+    module_source: &ModuleSource,
+    source_visibility: crate::ast::Visibility,
+    reexport_visibility: crate::ast::Visibility,
+) -> String {
+    let reexport = reexport_visibility.keyword().trim_end();
+    let declared = match source_visibility {
+        crate::ast::Visibility::Private => "file-private".to_string(),
+        crate::ast::Visibility::Internal | crate::ast::Visibility::Public => {
+            format!("`{}`", source_visibility.keyword().trim_end())
+        }
+    };
+    format!(
+        "`{reexport} use` of '{name}' reaches further than '{name}' itself, which is \
+         {declared} in '{module_source}'; widen the declaration, or narrow the re-export"
+    )
 }
 
 fn symbol_not_visible_message(
@@ -282,6 +330,22 @@ impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::PrivateSymbol,
                 symbol_not_visible_message(name, module_source, *visibility),
+                *span,
+            ),
+            AnalyzeError::ReExportWidensVisibility {
+                name,
+                module_source,
+                source_visibility,
+                reexport_visibility,
+                span,
+            } => (
+                Code::PrivateSymbol,
+                reexport_widens_message(
+                    name,
+                    module_source,
+                    *source_visibility,
+                    *reexport_visibility,
+                ),
                 *span,
             ),
         };
@@ -903,7 +967,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     ) -> Result<(), Bail> {
         let Some(visibility) = self
             .symbols
-            .binding_visibility_in_module(target_module, name)
+            .effective_visibility_in_module(target_module, name)
         else {
             return Ok(());
         };
@@ -919,6 +983,40 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             )?;
         }
         Ok(())
+    }
+
+    /// Emit `ReExportWidensVisibility` when a `pub use` / `internal use`
+    /// promises more reach than the item it names has.
+    fn check_reexport_widening(
+        &self,
+        from_module_source: &ModuleSource,
+        target_module: &ModuleSource,
+        name: &str,
+        reexport_visibility: crate::ast::Visibility,
+        span: Span,
+    ) -> Result<(), Bail> {
+        if !reexport_visibility.reaches_beyond_file() {
+            return Ok(());
+        }
+        let Some(source_visibility) = self
+            .symbols
+            .effective_visibility_in_module(target_module, name)
+        else {
+            return Ok(());
+        };
+        if reexport_visibility.reaches_no_further_than(source_visibility) {
+            return Ok(());
+        }
+        self.logger.error_in(
+            from_module_source,
+            AnalyzeError::ReExportWidensVisibility {
+                name: name.to_string(),
+                module_source: target_module.clone(),
+                source_visibility,
+                reexport_visibility,
+                span,
+            },
+        )
     }
 
     /// Reject an import whose local name the module also declares.
@@ -1024,6 +1122,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     name,
                                     use_decl.span,
                                 )?;
+                                self.check_reexport_widening(
+                                    from_module_source,
+                                    &module_source,
+                                    name,
+                                    use_decl.visibility,
+                                    use_decl.span,
+                                )?;
                                 self.reject_import_collision(
                                     from_module_source,
                                     import_name,
@@ -1058,6 +1163,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                         from_module_source,
                                         &module_source,
                                         &lookup_name,
+                                        use_decl.span,
+                                    )?;
+                                    self.check_reexport_widening(
+                                        from_module_source,
+                                        &module_source,
+                                        &lookup_name,
+                                        use_decl.visibility,
                                         use_decl.span,
                                     )?;
                                     // Registered under the bare member name

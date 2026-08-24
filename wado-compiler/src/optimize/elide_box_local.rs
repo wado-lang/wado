@@ -352,7 +352,7 @@ fn is_placeholder(body: &Body, stmt: StmtId) -> bool {
 // Leftmost-evaluated-subexpression walker
 // -----------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LeftmostWalk {
     Found,
     Pure,
@@ -671,6 +671,7 @@ mod tests {
     use crate::nir_arena::ExprNode;
     use crate::tir::TypeId;
     use crate::token::Span;
+    use std::assert_matches;
 
     /// Build an expression into a fresh arena and run the leftmost walker on it.
     fn leftmost(
@@ -769,7 +770,7 @@ mod tests {
             let i = int(b, 0);
             binary(b, NirBinaryOp::Add, f, i)
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Found);
     }
 
     /// Use site `arr[idx] + boxed.v` — `arr[idx]` is observable
@@ -790,7 +791,7 @@ mod tests {
             let f = field(b, l, "v");
             binary(b, NirBinaryOp::Add, idx, f)
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked);
     }
 
     /// Use site `(other.f) + boxed.v` — non-target `FieldAccess` may
@@ -805,7 +806,7 @@ mod tests {
             let f = field(b, l7, "v");
             binary(b, NirBinaryOp::Add, other, f)
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked);
     }
 
     /// Use site `(x as i32) + boxed.v` — `Cast` may trap, observable.
@@ -818,7 +819,7 @@ mod tests {
             let f = field(b, l7, "v");
             binary(b, NirBinaryOp::Add, c, f)
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked);
     }
 
     /// Use site `*p + boxed.v` — `Unary::Deref` may trap, observable.
@@ -831,7 +832,7 @@ mod tests {
             let f = field(b, l7, "v");
             binary(b, NirBinaryOp::Add, d, f)
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked);
     }
 
     /// Use site `(a / b) + boxed.v` — `Binary::Div` may trap on zero
@@ -846,7 +847,7 @@ mod tests {
             let f = field(b, l7, "v");
             binary(b, NirBinaryOp::Add, div, f)
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked);
     }
 
     /// Use site `boxed.v + arr[idx]` — observable on RIGHT side
@@ -863,7 +864,7 @@ mod tests {
             let idx = index(b, a1, a2);
             binary(b, NirBinaryOp::Add, f, idx)
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Found);
     }
 
     /// Use site `Cast(boxed.v)` — `FieldAccess` inside an observable
@@ -876,7 +877,7 @@ mod tests {
             let f = field(b, l7, "v");
             cast(b, f, ty())
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Found);
     }
 
     /// Use site `cond && boxed.v` — the right operand of `&&` is
@@ -890,6 +891,6 @@ mod tests {
             let f = field(b, l7, "v");
             binary(b, NirBinaryOp::And, l2, f)
         };
-        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked);
     }
 }

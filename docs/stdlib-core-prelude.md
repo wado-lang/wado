@@ -948,8 +948,8 @@ Drop the waitable set. Traps if waitables are still joined to this set.
 
 ### `pub resource Subtask`
 
-A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
-(see below) which pairs the handle with its result buffer.
+A raw CM subtask handle. Prefer `AsyncCall<T>` (see below), which pairs the
+handle with its result buffer.
 
 `Subtask` extends `Waitable` in the CM spec. When dropped, it
 automatically removes itself from any joined `WaitableSet` (the CM

@@ -512,9 +512,11 @@ async fn render_phases(
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
     let target_world = extract_world_from_data_section(source, default_world);
+    let dependencies = crate::data_section::extract_dependencies_from_data_section(source);
 
     if needs_dump {
-        let host = FilesystemCompilerHost::silent(base_path.clone());
+        let host = FilesystemCompilerHost::silent(base_path.clone())
+            .with_dependencies(dependencies.clone());
         let dumped = wado_compiler::dump_with_host_and_world(
             source,
             &host,
@@ -598,7 +600,7 @@ async fn render_phases(
     }
 
     if needs_wat {
-        let host = FilesystemCompilerHost::silent(base_path);
+        let host = FilesystemCompilerHost::silent(base_path).with_dependencies(dependencies);
         let options = wado_compiler::CompilerOptions {
             opt_level,
             target_world: target_world.clone(),

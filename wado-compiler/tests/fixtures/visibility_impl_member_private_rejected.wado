@@ -1,0 +1,9 @@
+//! A file-private method is not callable from another file, same package or not.
+use { make_item } from "./sub/impl_member_lib.wado";
+
+export fn run() {
+    assert make_item().file_private() == 1;
+}
+
+__DATA__
+{"compile_error": "is private to"}

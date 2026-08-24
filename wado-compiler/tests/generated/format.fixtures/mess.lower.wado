@@ -34,21 +34,21 @@ pub struct FormatResult {
     pub n_digits: i32,
 }
 
-struct u128 {
+pub struct u128 {
     low: u64,
     high: u64,
 }
 
-struct i128 {
+pub struct i128 {
     low: u64,
     high: i64,
 }
 
-struct ParseIntError {
+pub struct ParseIntError {
     pub kind: IntErrorKind,
 }
 
-struct ParseFloatError {
+pub struct ParseFloatError {
     pub kind: FloatErrorKind,
 }
 
@@ -58,18 +58,18 @@ struct Utf8Scalar {
     valid: bool,
 }
 
-struct String {
+pub struct String {
     repr: Array<u8>,
     used: i32,
 }
 
-struct StrUtf8ByteIter {
+pub struct StrUtf8ByteIter {
     repr: &Array<u8>,
     used: i32,
     index: i32,
 }
 
-struct StrCharIter {
+pub struct StrCharIter {
     repr: &Array<u8>,
     used: i32,
     byte_index: i32,
@@ -113,13 +113,13 @@ struct StrLinesIter {
     finished: bool,
 }
 
-struct WaitEvent {
+pub struct WaitEvent {
     pub code: i32,
     pub handle: i32,
     pub payload: u32,
 }
 
-struct Formatter {
+pub struct Formatter {
     pub fill: char,
     pub align: Alignment,
     pub sign_plus: bool,
@@ -130,7 +130,7 @@ struct Formatter {
     pub buf: &mut String,
 }
 
-struct ConvertError {
+pub struct ConvertError {
     pub message: String,
 }
 
@@ -623,19 +623,19 @@ pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,u64>" {
     is_secret: bool,
 }
 
-struct "SliceValueIter<core:prelude/string.wado/String>" {
+pub struct "SliceValueIter<core:prelude/string.wado/String>" {
     repr: &Array<String>,
     index: i32,
     end: i32,
 }
 
-struct "Slice<core:prelude/string.wado/String>" {
+pub struct "Slice<core:prelude/string.wado/String>" {
     repr: &Array<String>,
     start: i32,
     end: i32,
 }
 
-struct "AsyncCall<core:prelude/types.wado/Result<(),()>>" {
+pub struct "AsyncCall<core:prelude/types.wado/Result<(),()>>" {
     __cm_packed: i32,
     __cm_outptr: i32,
     __cm_size: i32,
@@ -643,187 +643,187 @@ struct "AsyncCall<core:prelude/types.wado/Result<(),()>>" {
     __cm_lift: fn(i32) -> Result<(), ()>,
 }
 
-struct "IterMap<core:prelude/string.wado/StrCharIter,char>" {
+pub struct "IterMap<core:prelude/string.wado/StrCharIter,char>" {
     pub inner: StrCharIter,
     pub f: fn mut(char) -> char,
 }
 
-struct "IterSkip<core:prelude/string.wado/StrLinesIter>" {
+pub struct "IterSkip<core:prelude/string.wado/StrLinesIter>" {
     pub inner: StrLinesIter,
     pub remaining: i32,
 }
 
-struct "IterTake<core:prelude/string.wado/StrLinesIter>" {
+pub struct "IterTake<core:prelude/string.wado/StrLinesIter>" {
     pub inner: StrLinesIter,
     pub remaining: i32,
 }
 
-struct "IterEnumerate<core:prelude/string.wado/StrLinesIter>" {
+pub struct "IterEnumerate<core:prelude/string.wado/StrLinesIter>" {
     pub inner: StrLinesIter,
     pub count: i32,
 }
 
-struct "IterFilter<core:prelude/string.wado/StrLinesIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrLinesIter>" {
     pub inner: StrLinesIter,
     pub pred: fn mut(String) -> bool,
 }
 
-struct "IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>" {
+pub struct "IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>" {
     pub inner: StrSplitWhitespaceIter,
     pub remaining: i32,
 }
 
-struct "IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>" {
+pub struct "IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>" {
     pub inner: StrSplitWhitespaceIter,
     pub remaining: i32,
 }
 
-struct "IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>" {
+pub struct "IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>" {
     pub inner: StrSplitWhitespaceIter,
     pub count: i32,
 }
 
-struct "IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>" {
     pub inner: StrSplitWhitespaceIter,
     pub pred: fn mut(String) -> bool,
 }
 
-struct "IterSkip<core:prelude/string.wado/StrSplitNIter>" {
+pub struct "IterSkip<core:prelude/string.wado/StrSplitNIter>" {
     pub inner: StrSplitNIter,
     pub remaining: i32,
 }
 
-struct "IterTake<core:prelude/string.wado/StrSplitNIter>" {
+pub struct "IterTake<core:prelude/string.wado/StrSplitNIter>" {
     pub inner: StrSplitNIter,
     pub remaining: i32,
 }
 
-struct "IterEnumerate<core:prelude/string.wado/StrSplitNIter>" {
+pub struct "IterEnumerate<core:prelude/string.wado/StrSplitNIter>" {
     pub inner: StrSplitNIter,
     pub count: i32,
 }
 
-struct "IterFilter<core:prelude/string.wado/StrSplitNIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrSplitNIter>" {
     pub inner: StrSplitNIter,
     pub pred: fn mut(String) -> bool,
 }
 
-struct "IterSkip<core:prelude/string.wado/StrSplitIter>" {
+pub struct "IterSkip<core:prelude/string.wado/StrSplitIter>" {
     pub inner: StrSplitIter,
     pub remaining: i32,
 }
 
-struct "IterTake<core:prelude/string.wado/StrSplitIter>" {
+pub struct "IterTake<core:prelude/string.wado/StrSplitIter>" {
     pub inner: StrSplitIter,
     pub remaining: i32,
 }
 
-struct "IterEnumerate<core:prelude/string.wado/StrSplitIter>" {
+pub struct "IterEnumerate<core:prelude/string.wado/StrSplitIter>" {
     pub inner: StrSplitIter,
     pub count: i32,
 }
 
-struct "IterFilter<core:prelude/string.wado/StrSplitIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrSplitIter>" {
     pub inner: StrSplitIter,
     pub pred: fn mut(String) -> bool,
 }
 
-struct "IterSkip<core:prelude/string.wado/StrCharIndicesIter>" {
+pub struct "IterSkip<core:prelude/string.wado/StrCharIndicesIter>" {
     pub inner: StrCharIndicesIter,
     pub remaining: i32,
 }
 
-struct "IterTake<core:prelude/string.wado/StrCharIndicesIter>" {
+pub struct "IterTake<core:prelude/string.wado/StrCharIndicesIter>" {
     pub inner: StrCharIndicesIter,
     pub remaining: i32,
 }
 
-struct "IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>" {
+pub struct "IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>" {
     pub inner: StrCharIndicesIter,
     pub count: i32,
 }
 
-struct "IterFilter<core:prelude/string.wado/StrCharIndicesIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrCharIndicesIter>" {
     pub inner: StrCharIndicesIter,
     pub pred: fn mut([i32, char]) -> bool,
 }
 
-struct "IterSkip<core:prelude/string.wado/StrCharIter>" {
+pub struct "IterSkip<core:prelude/string.wado/StrCharIter>" {
     pub inner: StrCharIter,
     pub remaining: i32,
 }
 
-struct "IterTake<core:prelude/string.wado/StrCharIter>" {
+pub struct "IterTake<core:prelude/string.wado/StrCharIter>" {
     pub inner: StrCharIter,
     pub remaining: i32,
 }
 
-struct "IterEnumerate<core:prelude/string.wado/StrCharIter>" {
+pub struct "IterEnumerate<core:prelude/string.wado/StrCharIter>" {
     pub inner: StrCharIter,
     pub count: i32,
 }
 
-struct "IterFilter<core:prelude/string.wado/StrCharIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrCharIter>" {
     pub inner: StrCharIter,
     pub pred: fn mut(char) -> bool,
 }
 
-struct "IterSkip<core:prelude/string.wado/StrUtf8ByteIter>" {
+pub struct "IterSkip<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub inner: StrUtf8ByteIter,
     pub remaining: i32,
 }
 
-struct "IterTake<core:prelude/string.wado/StrUtf8ByteIter>" {
+pub struct "IterTake<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub inner: StrUtf8ByteIter,
     pub remaining: i32,
 }
 
-struct "IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>" {
+pub struct "IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub inner: StrUtf8ByteIter,
     pub count: i32,
 }
 
-struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub inner: StrUtf8ByteIter,
     pub pred: fn mut(u8) -> bool,
 }
 
-struct "SliceRefIter<u8>" {
+pub struct "SliceRefIter<u8>" {
     repr: &Array<u8>,
     index: i32,
     end: i32,
 }
 
-struct "SliceValueIter<u8>" {
+pub struct "SliceValueIter<u8>" {
     repr: &Array<u8>,
     index: i32,
     end: i32,
 }
 
-struct "SliceValueIter<i32>" {
+pub struct "SliceValueIter<i32>" {
     repr: &Array<i32>,
     index: i32,
     end: i32,
 }
 
-struct "Slice<i32>" {
+pub struct "Slice<i32>" {
     repr: &Array<i32>,
     start: i32,
     end: i32,
 }
 
-struct "RangeInclusive<i32>" {
+pub struct "RangeInclusive<i32>" {
     pub start: i32,
     pub end: i32,
     exhausted: bool,
 }
 
-struct "RangeExclusive<i32>" {
+pub struct "RangeExclusive<i32>" {
     pub start: i32,
     pub end: i32,
 }
 
-struct "Slice<u8>" {
+pub struct "Slice<u8>" {
     repr: &Array<u8>,
     start: i32,
     end: i32,
@@ -1984,14 +1984,14 @@ pub enum SpecialKind {
     NaN,
 }
 
-enum IntErrorKind {
+pub enum IntErrorKind {
     Empty,
     InvalidDigit,
     PosOverflow,
     NegOverflow,
 }
 
-enum FloatErrorKind {
+pub enum FloatErrorKind {
     Empty,
     Invalid,
 }
@@ -2002,13 +2002,13 @@ pub enum ErrorCode {
     Pipe,
 }
 
-enum Alignment {
+pub enum Alignment {
     Left,
     Center,
     Right,
 }
 
-enum Ordering {
+pub enum Ordering {
     Less,
     Equal,
     Greater,
@@ -13977,7 +13977,7 @@ pub fn log_stderr(message: String) {
     core::rt::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
 }
 
-fn panic(message: String) -> ! {
+pub fn panic(message: String) -> ! {
     core::rt::log_stderr(message);
     core::builtin::unreachable();
 }
@@ -13986,7 +13986,7 @@ fn assert_failed(message: String) -> ! {
     core::rt::panic(message);
 }
 
-fn unreachable() -> ! {
+pub fn unreachable() -> ! {
     core::builtin::unreachable();
 }
 

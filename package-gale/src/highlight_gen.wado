@@ -239,6 +239,48 @@ fn gen_highlight_mapping(
 
     w.end();
     w.blank();
+
+    gen_capture_vocabulary(w, &default_by_kind, &overrides);
+}
+
+/// `capture_vocabulary`: the distinct capture classes this grammar's query can
+/// emit, sorted — what `gale-highlight`'s `Theme::unstyled` checks a theme against.
+fn gen_capture_vocabulary(
+    w: &mut CodeWriter,
+    default_by_kind: &TreeMap<i32, String>,
+    overrides: &List<ResolvedOverride>,
+) {
+    let mut vocabulary: List<String> = [];
+    for let capture of default_by_kind.values() {
+        push_unique(&mut vocabulary, *capture);
+    }
+    for let ov of overrides {
+        push_unique(&mut vocabulary, ov.capture);
+    }
+    vocabulary.sort();
+
+    let mut f = FnSpec::new(&"capture_vocabulary", Vis::Pub);
+    f.set_return_type(&"List<String>");
+    f.emit_begin(w);
+    if vocabulary.is_empty() {
+        w.line(&"return [];");
+    } else {
+        w.line(&"return [");
+        w.indent();
+        for let capture of &vocabulary {
+            w.line(&`${str_lit(*capture)},`);
+        }
+        w.dedent();
+        w.line(&"];");
+    }
+    w.end();
+    w.blank();
+}
+
+fn push_unique(out: &mut List<String>, value: String) {
+    if !out.contains(&value) {
+        out.push(value);
+    }
 }
 
 fn gen_highlight_run(w: &mut CodeWriter) {

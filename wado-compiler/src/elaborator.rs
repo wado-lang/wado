@@ -231,6 +231,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.logger.error_in(&self.current_module_source, err)
     }
 
+    /// [`Self::emit`] for a diagnostic whose span belongs to `module` — a
+    /// foreign default expression or associated-constant body — so the file it
+    /// is reported against is the one the span indexes.
+    pub(super) fn emit_in(
+        &self,
+        module: &ModuleSource,
+        err: impl Into<crate::compiler_host::Diagnostic>,
+    ) -> Result<(), crate::logger::Bail> {
+        self.logger.error_in(module, err)
+    }
+
     /// The declaration an item node declares.
     ///
     /// Every item the collect pass walks was declared into the table, so a miss
@@ -1205,7 +1216,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         owner: crate::defs::DefId,
         name: &str,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<sig::AssocConstSig> {
         self.tysys
             .signatures
             .associated_constant(owner, name)
@@ -1217,7 +1228,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn associated_constant_of_path(
         &self,
         ident: &ast::IdentExpr,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<sig::AssocConstSig> {
         let owner = trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
         let name = ident.segments.last()?;
         self.associated_constant_of(owner, &name.name)
@@ -1229,7 +1240,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         qualifier: Option<&ast::Type>,
         name: &str,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<sig::AssocConstSig> {
         let owner = trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
         self.associated_constant_of(owner, name)
     }
@@ -1652,7 +1663,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // same-named types. Lookups canonicalize the queried prefix the
         // same way ([`Self::lookup_associated_constant`]).
         self.sem.decls.associated_constants.clear();
-        let assoc_const_inputs: Vec<(String, String, ast::Type, ast::Expr)> = module
+        type AssocConstInput = (
+            String,
+            String,
+            ast::Type,
+            ast::Expr,
+            Option<ast::Visibility>,
+        );
+        let assoc_const_inputs: Vec<AssocConstInput> = module
             .items
             .iter()
             .filter_map(|item| {
@@ -1664,6 +1682,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             })
             .flat_map(|impl_block| {
                 let type_name = self.get_type_name(&impl_block.ty);
+                let is_inherent = impl_block.trait_type.is_none();
                 impl_block
                     .constants
                     .iter()
@@ -1673,20 +1692,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             assoc_const.name.clone(),
                             assoc_const.ty.clone(),
                             assoc_const.value.clone(),
+                            is_inherent.then_some(assoc_const.visibility),
                         )
                     })
                     .collect::<Vec<_>>()
             })
             .collect();
-        for (type_name, const_name, ty, value) in assoc_const_inputs {
+        for (type_name, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
             let Some(owner) = self.decl_key_or_local(&type_name) else {
                 continue;
             };
-            self.sem
-                .decls
-                .associated_constants
-                .insert((owner, const_name), (module_source.clone(), type_id, value));
+            self.sem.decls.associated_constants.insert(
+                (owner, const_name),
+                sig::AssocConstSig {
+                    module: module_source.clone(),
+                    ty: type_id,
+                    value,
+                    inherent_visibility,
+                },
+            );
         }
 
         // Must stay in the decl pass: `Signatures` is assembled once every
@@ -2024,6 +2049,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     concrete_owner,
                 },
             );
+        }
+
+        // Reify reads a constant's body facts under this module's
+        // perspective, so this module must be the one that records them.
+        let mut scope = scope;
+        for constant in &impl_block.constants {
+            let declared = scope.resolve_type(&constant.ty);
+            let mut ctx = crate::elaborator::types::FunctionContext::new(
+                declared,
+                crate::name::global_name(&scope.current_module_source, &constant.name),
+            );
+            scope.resolve_expr(&constant.value, &mut ctx, Some(declared));
         }
 
         // Collect explicitly provided method names

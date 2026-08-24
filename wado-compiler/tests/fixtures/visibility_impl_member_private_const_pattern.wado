@@ -1,0 +1,14 @@
+//! A file-private associated constant is out of reach in pattern position,
+//! not only as an expression.
+use { Item, make_item } from "./sub/impl_member_lib.wado";
+
+export fn run() {
+    let v = make_item().v;
+    match v {
+        Item::FILE_PRIVATE_C => { assert true }
+        _ => { assert false }
+    }
+}
+
+__DATA__
+{"compile_error": "is private to"}

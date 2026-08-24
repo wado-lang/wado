@@ -1,4 +1,5 @@
 use indexmap::IndexMap;
+use std::assert_matches;
 use wado_manifest::{LockFile, LockFileError, LockedPackage};
 
 /// Build a `[world]` map from `(fq, path)` pairs for `LockedPackage` fixtures.
@@ -163,7 +164,7 @@ fn missing_version_header() {
 deps-hash = "sha256:abc"
 "#;
     let err = toml.parse::<LockFile>().unwrap_err();
-    assert!(matches!(err, LockFileError::MissingField { .. }));
+    assert_matches!(err, LockFileError::MissingField { .. });
 }
 
 #[test]
@@ -172,7 +173,7 @@ fn missing_deps_hash() {
 version = 1
 ";
     let err = toml.parse::<LockFile>().unwrap_err();
-    assert!(matches!(err, LockFileError::MissingField { .. }));
+    assert_matches!(err, LockFileError::MissingField { .. });
 }
 
 #[test]
@@ -186,7 +187,7 @@ version = "1.0.0"
 deps = []
 "#;
     let err = toml.parse::<LockFile>().unwrap_err();
-    assert!(matches!(err, LockFileError::MissingField { .. }));
+    assert_matches!(err, LockFileError::MissingField { .. });
 }
 
 #[test]
@@ -200,7 +201,7 @@ id = "registry+https://wa.dev/ns:pkg"
 deps = []
 "#;
     let err = toml.parse::<LockFile>().unwrap_err();
-    assert!(matches!(err, LockFileError::MissingField { .. }));
+    assert_matches!(err, LockFileError::MissingField { .. });
 }
 
 #[test]

@@ -125,6 +125,7 @@ pub async fn run(opts: PublishOptions) -> Result<(), CliExit> {
 }
 
 /// One package's publish-readiness verdict.
+#[derive(Debug)]
 enum Verdict {
     /// No `[package]` — not a publishable unit; ignored.
     NotAPackage,
@@ -480,6 +481,7 @@ fn problems_error(header: &str, problems: &[PublishError]) -> CliExit {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn usage_documents_authentication() {
@@ -520,29 +522,29 @@ mod tests {
         let m = manifest(
             "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\ndescription = \"d\"\nrepository = \"https://x/y\"\nlicense = \"MIT\"\nauthors = [\"A\"]\n",
         );
-        assert!(matches!(classify(&m), Verdict::Ready(c) if c == "org:app@0.1.0"));
+        assert_matches!(classify(&m), Verdict::Ready(c) if c == "org:app@0.1.0");
     }
 
     #[test]
     fn classify_skips_publish_false_and_no_namespace() {
         let no_ns = manifest("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert!(matches!(classify(&no_ns), Verdict::Skipped(r) if r == "no namespace"));
+        assert_matches!(classify(&no_ns), Verdict::Skipped(r) if r == "no namespace");
         let opted_out = manifest(
             "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\npublish = false\n",
         );
-        assert!(matches!(classify(&opted_out), Verdict::Skipped(r) if r == "publish = false"));
+        assert_matches!(classify(&opted_out), Verdict::Skipped(r) if r == "publish = false");
     }
 
     #[test]
     fn classify_failed_when_metadata_missing() {
         let m = manifest("[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert!(matches!(classify(&m), Verdict::Failed(p) if !p.is_empty()));
+        assert_matches!(classify(&m), Verdict::Failed(p) if !p.is_empty());
     }
 
     #[test]
     fn classify_not_a_package_for_workspace_only_manifest() {
         let m = manifest("[workspace]\nmembers = [\"packages/*\"]\n");
-        assert!(matches!(classify(&m), Verdict::NotAPackage));
+        assert_matches!(classify(&m), Verdict::NotAPackage);
     }
 
     fn ready_manifest_with_registry(registry: &str) -> Manifest {

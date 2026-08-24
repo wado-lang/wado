@@ -25,12 +25,12 @@ pub(crate) fn module_uri(
     }
     match module {
         ModuleSource::EntryPoint { filename } => Some(filename_to_uri(filename)),
-        ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
+        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
             Some(resolve_local_uri(path, request_uri))
         }
         ModuleSource::Core { name } => Some(format!("core:{name}")),
         ModuleSource::Wasi { interface } => Some(format!("wasi:{interface}")),
-        ModuleSource::Remote { url } => Some(url.to_string()),
+        ModuleSource::Remote { url, .. } => Some(url.to_string()),
         // Kiln-redirected modules already carry a fully-qualified URI;
         // hand it to the LSP client unchanged.
         ModuleSource::Redirected { uri } => Some(uri.to_string()),

@@ -8,6 +8,7 @@
 //! give the interpreter a stable contract to refactor against, not to
 //! enumerate every operator.
 
+use std::assert_matches;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -668,10 +669,10 @@ fn reduce_short_circuits_or_false() {
     let rhs = local_expr(0, TypeTable::BOOL);
     let e = binary(NirBinaryOp::Or, lhs, rhs, TypeTable::BOOL);
     let (body, e) = reduce_to_expr(&e);
-    assert!(
-        matches!(body.exprs[e].kind, ExprKind::Local { index: 0, .. }),
-        "false || X should reduce to X, got {:?}",
-        body.exprs[e].kind
+    assert_matches!(
+        body.exprs[e].kind,
+        ExprKind::Local { index: 0, .. },
+        "false || X should reduce to X"
     );
 }
 
@@ -683,13 +684,13 @@ fn reduce_short_circuits_or_false() {
 fn lattice_const_for_literal() {
     let lit = int_lit(42, TypeTable::I32, "42");
     let lat = lattice_of(&lit);
-    assert!(matches!(
+    assert_matches!(
         lat,
         Lattice::Const(Value::Int {
             value: 42,
             prim: PrimitiveType::I32,
         }),
-    ));
+    );
 }
 
 #[test]
@@ -837,10 +838,10 @@ fn local_node_itself_is_not_rewritten_in_place() {
     );
     let local = local_expr(0, TypeTable::I32);
     let (body, e) = reduce_with(&mut interp, &local);
-    assert!(
-        matches!(body.exprs[e].kind, ExprKind::Local { index: 0, .. }),
-        "Local must stay structurally a Local; env lookup happens at parents only, got {:?}",
+    assert_matches!(
         body.exprs[e].kind,
+        ExprKind::Local { index: 0, .. },
+        "Local must stay structurally a Local; env lookup happens at parents only"
     );
 }
 
@@ -1440,7 +1441,7 @@ fn reduce_local_rewrites_if_false_true_to_not_cond() {
     let ExprKind::Unary { op, expr: inner } = body.exprs[e].kind else {
         panic!("expected Unary::Not, got {:?}", body.exprs[e].kind);
     };
-    assert!(matches!(op, NirUnaryOp::Not));
+    assert_matches!(op, NirUnaryOp::Not);
     let ExprKind::Local { index, .. } = body.exprs[inner.as_expr().unwrap()].kind else {
         panic!(
             "expected Local inside Unary::Not, got {:?}",
@@ -1477,10 +1478,10 @@ fn reduce_local_rewrites_if_true_false_with_non_speculatable_cond() {
     assert!(changed);
     // After rewrite, the if is replaced by the (still-non-speculatable)
     // cond expression itself — the Match.
-    assert!(
-        matches!(body.exprs[e].kind, ExprKind::Match { .. }),
-        "expected the original Match condition to survive as the result, got {:?}",
-        body.exprs[e].kind
+    assert_matches!(
+        body.exprs[e].kind,
+        ExprKind::Match { .. },
+        "expected the original Match condition to survive as the result"
     );
 }
 
@@ -1586,7 +1587,7 @@ fn reduce_local_block_leaves_nonconst_if_alone() {
     assert!(!interp.reduce_local_block_in_body(&mut body, block));
     assert_eq!(body.blocks[block].stmts.len(), 1);
     let s0 = body.blocks[block].stmts[0];
-    assert!(matches!(body.stmts[s0].kind, StmtKind::If { .. }));
+    assert_matches!(body.stmts[s0].kind, StmtKind::If { .. });
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -2570,7 +2571,7 @@ fn match_with_guard_under_const_scrut_does_not_rewrite() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -2594,7 +2595,7 @@ fn match_guarded_arm_blocks_rewrite_to_later_definite_arm() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -2642,7 +2643,7 @@ fn match_const_scrut_unsupported_pattern_does_not_rewrite() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -2700,7 +2701,7 @@ fn reduce_local_collapses_enum_match_true_false_to_eq() {
     let ExprKind::Binary { left, op, right } = body.exprs[e].kind else {
         panic!("expected Binary, got {:?}", body.exprs[e].kind);
     };
-    assert!(matches!(op, NirBinaryOp::Eq));
+    assert_matches!(op, NirBinaryOp::Eq);
     let ExprKind::Local { index, .. } = body.exprs[left.as_expr().unwrap()].kind else {
         panic!(
             "expected Local on left, got {:?}",
@@ -2746,7 +2747,7 @@ fn reduce_local_leaves_variant_match_alone() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -2771,7 +2772,7 @@ fn reduce_local_leaves_match_with_guard_alone() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -2794,7 +2795,7 @@ fn reduce_local_leaves_match_with_three_arms_alone() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -2818,7 +2819,7 @@ fn reduce_local_leaves_match_with_non_bool_body_alone() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -2853,7 +2854,7 @@ fn reduce_local_leaves_unequal_arm_match_alone() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -3022,7 +3023,7 @@ fn match_constant_value_pattern_unanalyzable_is_unknown() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -3260,7 +3261,7 @@ fn match_nonconst_scrut_non_exhaustive_all_arms_equal_does_not_rewrite() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 #[test]
@@ -3370,7 +3371,7 @@ fn match_nonconst_scrut_guarded_wildcard_does_not_count_as_exhaustive() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Match { .. });
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -3737,7 +3738,7 @@ fn a_constant_string_call_result_becomes_a_literal() {
         .find(|f| f.field_index == SeqField::Backing.index())
         .and_then(|f| f.value.as_expr())
         .expect("a backing operand");
-    assert!(matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi"));
+    assert_matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi");
     assert_eq!(
         fields
             .iter()
@@ -3788,7 +3789,7 @@ fn a_container_still_copying_its_contents_becomes_a_literal_once() {
         .find(|f| f.field_index == SeqField::Backing.index())
         .and_then(|f| f.value.as_expr())
         .expect("a backing operand");
-    assert!(matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi"));
+    assert_matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi");
     assert!(
         !interp.reduce_local_in_body(&mut body, e),
         "the literal it wrote is left alone",
@@ -4182,7 +4183,7 @@ fn a_container_the_frame_never_filled_stays_an_allocation() {
 
     let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(&with_capacity, vec![]));
     assert!(!changed, "a reservation is not written back as a literal");
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -4856,10 +4857,10 @@ fn a_sequence_over_the_cap_is_not_modelled() {
         Lattice::NonConst,
     );
     let at_cap = packed_array(vec![0u8; MAX_SEQ_ELEMENTS], TypeTable::I32);
-    assert!(matches!(
+    assert_matches!(
         reduce_lat(&mut Interpreter::new(&table), &at_cap),
         Lattice::Const(_),
-    ));
+    );
 }
 
 #[test]
@@ -4939,7 +4940,7 @@ fn array_get_past_the_end_is_left_alone() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &call);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -4972,7 +4973,7 @@ fn a_sequence_without_the_builtin_map_stays_a_call() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &call);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -5457,7 +5458,7 @@ fn pure_call_nonconst_arg_left_intact() {
     let expr = call_expr(&double, vec![local_expr(7, TypeTable::I32)]);
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -5480,7 +5481,7 @@ fn non_pure_call_with_effect_left_intact() {
     let expr = call_expr(&greet, vec![]);
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 /// The `Value` a folded `i32` expression yields.
@@ -5533,7 +5534,7 @@ fn assert_call_intact(f: &NirFunction, args: Vec<Build>) {
     interp.with_callees(&callees);
     let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(f, args));
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 /// `base + 0 + 0 + …`, `depth` additions deep. The value is `base`'s; what it
@@ -6226,7 +6227,7 @@ fn multi_stmt_step_budget_bails() {
     interp.set_step_budget(2);
     let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(&f, vec![]));
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -6253,7 +6254,7 @@ fn recursive_call_bails_via_call_stack() {
     // Must not fold; must terminate.
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -6272,7 +6273,7 @@ fn step_budget_zero_bails() {
     let expr = call_expr(&id, vec![int_lit(7, TypeTable::I32, "7")]);
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -6296,7 +6297,7 @@ fn body_traps_at_ctfe_left_intact() {
     let expr = call_expr(&bad, vec![]);
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -6313,7 +6314,7 @@ fn missing_callee_left_intact() {
     let expr = call_expr(&f, vec![]);
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -6328,7 +6329,7 @@ fn no_callee_map_means_no_fold() {
     let expr = call_expr(&f, vec![]);
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Call { .. });
 }
 
 #[test]
@@ -6505,7 +6506,7 @@ fn global_mut_recorded_as_nonconst_blocks_fold() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Binary { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::Binary { .. });
 }
 
 #[test]
@@ -6892,10 +6893,10 @@ fn a_binding_the_arm_body_reads_blocks_the_splice() {
     let (mut body, e) = into_body_expr(&expr);
     let mut interp = Interpreter::new(&table);
     interp.reduce_to_lattice_full(&mut body, e);
-    assert!(
-        matches!(body.exprs[e].kind, ExprKind::Match { .. }),
-        "the match must survive: {:?}",
-        body.exprs[e].kind
+    assert_matches!(
+        body.exprs[e].kind,
+        ExprKind::Match { .. },
+        "the match must survive"
     );
 }
 
@@ -7022,10 +7023,10 @@ fn an_unknown_guard_leaves_the_match_alone() {
     let (mut body, e) = into_body_expr(&expr);
     let mut interp = Interpreter::new(&table);
     interp.reduce_to_lattice_full(&mut body, e);
-    assert!(
-        matches!(body.exprs[e].kind, ExprKind::Match { .. }),
-        "the match must survive: {:?}",
-        body.exprs[e].kind
+    assert_matches!(
+        body.exprs[e].kind,
+        ExprKind::Match { .. },
+        "the match must survive"
     );
 }
 
@@ -7050,10 +7051,10 @@ fn a_guard_the_engine_cannot_evaluate_blocks_a_later_arm() {
     let (mut body, e) = into_body_expr(&expr);
     let mut interp = Interpreter::new(&table);
     interp.reduce_to_lattice_full(&mut body, e);
-    assert!(
-        matches!(body.exprs[e].kind, ExprKind::Match { .. }),
-        "the match must survive: {:?}",
-        body.exprs[e].kind
+    assert_matches!(
+        body.exprs[e].kind,
+        ExprKind::Match { .. },
+        "the match must survive"
     );
 }
 
@@ -7479,7 +7480,7 @@ fn a_region_writing_an_outer_local_is_refused() {
     let (mut body, e) = into_body_expr(&region);
     let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
     assert_eq!(lat, Lattice::Unevaluated);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Block(_)));
+    assert_matches!(body.exprs[e].kind, ExprKind::Block(_));
 }
 
 #[test]
@@ -7519,7 +7520,7 @@ fn a_region_breaking_to_an_outer_label_is_refused() {
     let (mut body, e) = into_body_expr(&region);
     let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
     assert_eq!(lat, Lattice::Unevaluated);
-    assert!(matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. }));
+    assert_matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. });
 }
 
 #[test]
@@ -7836,7 +7837,7 @@ fn a_unit_typed_region_does_not_fold_to_its_last_value() {
         !interp.reduce_local_in_body(&mut body, e),
         "a block yielding nothing has no value to stand in for it",
     );
-    assert!(matches!(body.exprs[e].kind, ExprKind::Block(_)));
+    assert_matches!(body.exprs[e].kind, ExprKind::Block(_));
 
     // The same region typed as what it computes still folds, so the refusal
     // above is about the unit position and not about the shape.

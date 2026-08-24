@@ -536,8 +536,8 @@ pub fn resolve_wasm_asset_path(
             path,
             import_source,
         )),
-        ModuleSource::Dependency { path } => Ok(resolve_module_path(path, import_source)),
-        ModuleSource::Remote { url } => Ok(resolve_module_path(url, import_source)),
+        ModuleSource::Dependency { path, .. } => Ok(resolve_module_path(path, import_source)),
+        ModuleSource::Remote { url, .. } => Ok(resolve_module_path(url, import_source)),
         ModuleSource::EntryPoint { .. } => Ok(crate::name::canonical_local_path(
             entry_dir,
             &normalize_module_path(import_source),
@@ -1792,7 +1792,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = match from_module_source {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path } => path.to_string(),
+            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+                path.to_string()
+            }
             ModuleSource::EntryPoint { filename } => filename.to_string(),
             ModuleSource::Redirected { uri } => uri.to_string(),
             _ => String::new(),
@@ -1825,7 +1827,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // base-path joining or relative-path normalization happens.
         if !self.invocations.is_empty() {
             let decl_file = match from_module_source {
-                ModuleSource::Local { path } | ModuleSource::Dependency { path } => path.as_str(),
+                ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+                    path.as_str()
+                }
                 ModuleSource::EntryPoint { filename } => filename.as_str(),
                 ModuleSource::Redirected { uri } => uri.as_str(),
                 _ => "",
@@ -1867,15 +1871,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 }
                 return Ok(self.interner.local(&resolved));
             }
-            if let ModuleSource::Remote { url: from_url } = from_module_source {
+            if let ModuleSource::Remote { pkg, url: from_url } = from_module_source {
                 let resolved = resolve_module_path(from_url, import_source);
-                return Ok(self.interner.remote(&resolved));
+                let pkg = pkg.to_string();
+                return Ok(self.interner.remote_module(&pkg, &resolved));
             }
-            // Relative import from within a dependency module stays inside
-            // that dependency package.
-            if let ModuleSource::Dependency { path } = from_module_source {
+            // A relative import inherits the importer's package root.
+            if let ModuleSource::Dependency { pkg, path } = from_module_source {
                 let resolved = resolve_module_path(path, import_source);
-                return Ok(self.interner.dependency(&resolved));
+                let pkg = pkg.to_string();
+                return Ok(self.interner.dependency_module(&pkg, &resolved));
             }
             // Entry imports canonicalize against the entry dir; stdlib / bare
             // relative imports are not anchored there, so they only normalize.
@@ -1941,14 +1946,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         _from_module_source: &ModuleSource,
     ) -> Result<String, LoadError> {
         match module_source {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
+            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
                 let bytes = self.host.load_source(path).await.map_err(LoadError::from)?;
                 String::from_utf8(bytes).map_err(|_| LoadError::IoError {
                     path: path.to_string(),
                     message: "file is not valid UTF-8".to_string(),
                 })
             }
-            ModuleSource::Remote { url } => {
+            ModuleSource::Remote { url, .. } => {
                 let bytes = self.host.load_source(url).await.map_err(LoadError::from)?;
                 String::from_utf8(bytes).map_err(|_| LoadError::IoError {
                     path: url.to_string(),

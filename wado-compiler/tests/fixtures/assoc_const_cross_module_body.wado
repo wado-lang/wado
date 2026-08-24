@@ -1,0 +1,11 @@
+//! A `pub const` used only from another module reached codegen with nothing
+//! resolved, because only the consumer ever walked its body.
+use { Holder } from "./sub/assoc_const_body_lib.wado";
+
+test "a cross-module list constant" {
+    assert Holder::LIST.len() == 2;
+}
+
+test "a cross-module constant built from a struct literal" {
+    assert Holder::FROM_LITERAL == 4;
+}

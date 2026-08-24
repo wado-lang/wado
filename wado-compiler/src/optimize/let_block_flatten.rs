@@ -148,6 +148,7 @@ fn is_place_expr(kind: &ExprKind) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     use crate::hashmap::IndexSet;
     use crate::nir::NirLocal;
@@ -306,14 +307,8 @@ mod tests {
         }
 
         assert_single_parent(&body);
-        assert!(matches!(
-            body.exprs[block_a].kind,
-            ExprKind::TupleLiteral { .. }
-        ));
-        assert!(matches!(
-            body.exprs[block_b].kind,
-            ExprKind::TupleLiteral { .. }
-        ));
+        assert_matches!(body.exprs[block_a].kind, ExprKind::TupleLiteral { .. });
+        assert_matches!(body.exprs[block_b].kind, ExprKind::TupleLiteral { .. });
         let root_lets: Vec<&str> = body.blocks[r]
             .stmts
             .iter()

@@ -205,6 +205,11 @@ struct TestSpec {
     #[serde(default)]
     param_env: indexmap::IndexMap<String, String>,
 
+    /// Stubbed path `[dependencies]`: name → the dependency's `[package].lib`,
+    /// relative to the fixture directory. Each entry is its own package.
+    #[serde(default)]
+    dependencies: indexmap::IndexMap<String, String>,
+
     /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
     #[serde(default)]
     param_unknown: Option<String>,
@@ -738,6 +743,7 @@ fn run_normal_test(
         options,
         None,
         spec.param_env.clone(),
+        spec.dependencies.clone(),
     );
 
     // Assert compile-time warnings (e.g. DeadFunction / DeadGlobal). These are
