@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787576193719,
+  "lastUpdate": 1787583825600,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50765,6 +50765,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "35934917651c2b01ed6ad7b62e2e68507c4ebaa1",
+          "message": "Merge pull request #1891 from wado-lang/worktree-literal-builder-variadic\n\nLiteral coercion as `From<Array<…>>`",
+          "timestamp": "2026-08-24T23:52:05+09:00",
+          "tree_id": "e2d35dd6e82a12f16976328451aeb0f0055b4b06",
+          "url": "https://github.com/wado-lang/wado/commit/35934917651c2b01ed6ad7b62e2e68507c4ebaa1"
+        },
+        "date": 1787583824896,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
             "unit": "bytes"
           }
         ]
