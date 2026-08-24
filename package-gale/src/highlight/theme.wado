@@ -29,6 +29,33 @@ impl Theme {
     pub fn color(&self, class: &String) -> Option<String> {
         return self.colors.get(*class);
     }
+
+    /// The classes in `vocabulary` this theme assigns no color to — they
+    /// render in the surrounding text color. Pass the generated
+    /// `capture_vocabulary()` of the grammar being highlighted: the class set
+    /// is grammar-defined, so this is the only way a hand-written theme can
+    /// tell a dropped class from a deliberate omission.
+    pub fn unstyled(&self, vocabulary: &List<String>) -> List<String> {
+        let mut out: List<String> = [];
+        for let class of vocabulary {
+            if self.colors.get(*class) matches { None } {
+                out.push(*class);
+            }
+        }
+        return out;
+    }
+
+    /// The classes this theme colors that `vocabulary` never emits — a
+    /// mistyped or stale key. Sorted, since `colors` is keyed.
+    pub fn unknown(&self, vocabulary: &List<String>) -> List<String> {
+        let mut out: List<String> = [];
+        for let [class, _color] of self.colors.entries() {
+            if !vocabulary.contains(class) {
+                out.push(*class);
+            }
+        }
+        return out;
+    }
 }
 
 /// Render `theme` to a CSS stylesheet: one `color` rule per capture class. A

@@ -193,3 +193,19 @@ B : 'b' ;
     assert diags.len() == 1, `expected one diagnostic, got ${diags.len()}`;
     assert diags[0].message.contains("unknown parser rule"), diags[0].message;
 }
+
+test "capture_vocabulary lists the query's distinct capture classes, sorted" {
+    let out = highlight_output_q(
+        "grammar T; s : KW STR KW ; KW : 'if' ; STR : '\"' ~[\"]* '\"' ;",
+        "(KW) @keyword\n(STR) @string\n",
+    );
+    assert index_of(
+        &out,
+        "pub fn capture_vocabulary() -> List<String> {\n    return [\n        \"keyword\",\n        \"string\",\n    ];\n}",
+    ) >= 0, out;
+}
+
+test "capture_vocabulary is empty without a highlight query" {
+    let out = highlight_output("grammar T; s : KW ; KW : 'if' ;");
+    assert index_of(&out, "pub fn capture_vocabulary() -> List<String> {\n    return [];\n}") >= 0, out;
+}

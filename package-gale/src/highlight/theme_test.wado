@@ -32,3 +32,26 @@ test "default_theme colors the common vocabulary and leaves unknowns unstyled" {
 test "an empty theme yields an empty stylesheet" {
     assert stylesheet(&Theme::new()) == "";
 }
+
+test "unstyled names the vocabulary classes a theme leaves without a color" {
+    let mut t = Theme::new();
+    t.set("keyword", "#111");
+    t.set("constant.builtin", "#222");
+    let vocabulary: List<String> = ["comment", "constant.builtin", "keyword"];
+    assert t.unstyled(&vocabulary) == ["comment"], `${t.unstyled(&vocabulary):?}`;
+}
+
+test "unstyled is empty when the theme covers the vocabulary" {
+    let mut t = Theme::new();
+    t.set("keyword", "#111");
+    let vocabulary: List<String> = ["keyword"];
+    assert t.unstyled(&vocabulary).is_empty();
+}
+
+test "unknown names the theme classes no grammar emits" {
+    let mut t = Theme::new();
+    t.set("keyword", "#111");
+    t.set("kyeword", "#222");
+    let vocabulary: List<String> = ["keyword"];
+    assert t.unknown(&vocabulary) == ["kyeword"], `${t.unknown(&vocabulary):?}`;
+}
