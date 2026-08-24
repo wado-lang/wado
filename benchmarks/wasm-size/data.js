@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787566189877,
+  "lastUpdate": 1787567528609,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50657,6 +50657,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9fe9af1299d172faa02f287651b3b668804c5bc3"
         },
         "date": 1787566189045,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3e70fcc5f8facf7939625a4d591628ee2456fb26",
+          "message": "Merge pull request #1888 from wado-lang/claude/package-gale-todo-cleanup-c07ynl\n\nfix(gale): balance a rule-argument `[...]`, and expose a grammar's capture vocabulary",
+          "timestamp": "2026-08-24T19:21:05+09:00",
+          "tree_id": "7dd1d05f9a1983f9e1ca33e50cb6d943b3ea66f7",
+          "url": "https://github.com/wado-lang/wado/commit/3e70fcc5f8facf7939625a4d591628ee2456fb26"
+        },
+        "date": 1787567528089,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
