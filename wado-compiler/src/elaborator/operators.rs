@@ -1974,20 +1974,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Everything else answers from the receiver's newtype chain, keyed on
         // the link the lookup was made on — peeling to the base would send an
         // impl written on the newtype to the base's module.
+        let defs = self.tysys.resolutions.defs();
         let concrete_impl = resolved.impl_def.filter(|def| {
             self.tysys
                 .trait_env
                 .impl_headers
                 .get(def)
-                .is_some_and(|h| h.type_params.is_empty())
+                .is_some_and(super::trait_env::ImplHeader::is_concrete)
         });
         let module_source = match concrete_impl {
-            Some(def) => self.tysys.resolutions.defs().module(def).clone(),
+            Some(def) => defs.module(def).clone(),
             None => self
                 .impl_target_decl_key(receiver.type_id, &resolved.impl_name)
                 .map_or_else(
                     || self.declaring_module_of(&resolved.impl_name),
-                    |def| self.tysys.resolutions.defs().module(def).clone(),
+                    |def| defs.module(def).clone(),
                 ),
         };
         let function_ref = FunctionRef {

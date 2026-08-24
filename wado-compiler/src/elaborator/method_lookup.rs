@@ -1799,7 +1799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_blanket_tp = matches!(&header.ty, Type::Named(n) if is_target_slot(&n.name));
         let generic_is_parametric = matches!(&header.ty, Type::Generic(g)
             if g.args.iter().any(|a| matches!(a, Type::Named(n) if is_target_slot(&n.name))));
-        let skip_filter = !header.type_params.is_empty()
+        let skip_filter = !header.is_concrete()
             || is_blanket_tp
             || matches!(&header.ty, Type::Reference(_) | Type::MutReference(_))
             || generic_is_parametric;

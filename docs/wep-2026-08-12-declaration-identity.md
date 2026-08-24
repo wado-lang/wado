@@ -467,16 +467,16 @@ a sited entry point a caller with a reference site reaches instead.
 The same derivation in the `Symbol` currency, which §5's `DefId` columns subsume:
 
 - `symbol_named`, `imported`, `lookup_in_module`, `lookup_in_module_with_visited`
-- `decl_in_module` — `lookup_in_module` read back as an identity, for the two
-  qualified positions no reference site answers: `builtin::f`, and a member of
-  a namespace import. The module is named by the path rather than searched for,
-  so no vantage is supplied.
+- `decl_in_module` — `lookup_in_module` read back as an identity, for the
+  positions no reference site answers: `builtin::f`, a namespace member,
+  `core:rt`'s `panic` at a synthesised call, and a default expression's own
+  module. Each names its module rather than searching for one, so no vantage
+  is supplied.
 
-One rendering still compared against a declaration's own. The impl index now
-carries `DefId`s, so a dispatch that matched a concrete block reads its module
-off that block; what is left is the paths where no block is named — an
-auto-derived `Eq` / `Ord`, and a method reached through a type parameter's
-bound, whose block monomorphization picks:
+One rendering still compared against a declaration's own, on the paths that
+name no block: an auto-derived `Eq` / `Ord`, and a method reached through a
+type parameter's bound, whose block monomorphization picks. A dispatch that
+matched a concrete block reads the module off it instead.
 
 - `impl_target_decl_key` — a receiver's newtype chain against an impl's head
 

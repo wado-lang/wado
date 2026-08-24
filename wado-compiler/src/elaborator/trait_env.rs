@@ -259,6 +259,13 @@ pub(super) struct ImplHeader {
 }
 
 impl ImplHeader {
+    /// Whether the block writes no type parameters. A concrete block hosts its
+    /// own function; a generic one's instance is materialised in the
+    /// receiver's module.
+    pub(super) fn is_concrete(&self) -> bool {
+        self.type_params.is_empty()
+    }
+
     /// The implemented trait as a mangled method name embeds it: named by the
     /// module that declares it, carrying the header's written type arguments.
     /// `None` for an inherent impl, and for a trait position filled by a
@@ -701,7 +708,7 @@ fn index_impl_modules(
         if matches!(header.target, ImplTargetKey::TypeParam(..)) {
             continue;
         }
-        if concrete_only && !header.type_params.is_empty() {
+        if concrete_only && !header.is_concrete() {
             continue;
         }
         let Some(fq_trait) = header.fq_trait(resolutions) else {

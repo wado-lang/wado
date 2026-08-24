@@ -458,8 +458,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The declaration `module` declares under `name`, for the positions no
-    /// reference site answers: `builtin::f`, a namespace member, `core:rt`'s
-    /// `panic`. The module is named by the path, not searched for.
+    /// reference site answers. The module is named by the caller, not searched
+    /// for.
     pub(super) fn decl_in_module(
         &self,
         module: &ModuleSource,
