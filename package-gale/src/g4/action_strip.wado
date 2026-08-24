@@ -1,25 +1,10 @@
-//! Action-body stripper for ANTLR4 grammar source.
+//! Action-body stripper for ANTLR4 grammar source, for the Stage B′ oracle.
 //!
-//! The published ANTLR4 jar's Java target copies action-body source
-//! into the generated parser verbatim — it does not substitute the
-//! StringTemplate directives the testsuite uses (`<writeln("$text")>`,
-//! etc.). `javac` then rejects the body, making the oracle uninvocable.
-//! Stripping action bodies before handing the grammar to the oracle
-//! works because actions are side-effecting host code; they don't
-//! affect what the parser matches.
-//!
-//! The char-level region scanners (`scan_string`, `scan_char_class`,
-//! `scan_line_comment`, `scan_block_comment`, `scan_balanced`) are shared
-//! with the lexer and parser via `scan.wado`, so string-/comment-handling
-//! lives in one place. Here a region that must be preserved is copied to
-//! `out` verbatim; an action body is skipped by advancing `i` past it.
-//!
-//! A `[` means one of two things, and ANTLR4's own lexer decides by the
-//! rule it is in: a char set inside a lexer rule (no nesting, ends at the
-//! first unescaped `]`), an argument list anywhere else (nests, so a
-//! `[]` host type stays inside it). `RuleType` mirrors ANTLR's
-//! `currentRuleType` — set by the first non-keyword identifier of a rule,
-//! reset by `;`.
+//! The jar's Java target copies an action body verbatim without substituting
+//! the StringTemplate directives the testsuite writes (`<writeln("$text")>`),
+//! so `javac` rejects it and the oracle will not run. Dropping the bodies is
+//! sound: actions are side-effecting host code and do not affect what the
+//! parser matches.
 
 use {
     scan_string,
@@ -31,9 +16,8 @@ use {
     is_id_continue_char,
 } from "./scan.wado";
 
-/// Which recognizer the rule being scanned belongs to. `Unknown` covers
-/// the span between rules, where ANTLR4 also reads a `[` as an argument
-/// list.
+/// ANTLR's `currentRuleType`: which recognizer the rule being scanned belongs
+/// to, `Unknown` between rules.
 enum RuleType {
     Unknown,
     Lexer,
@@ -70,22 +54,18 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             continue;
         }
         if c == '[' {
-            // Either way the region is copied verbatim; only where it ends
-            // matters. A lexer rule's char set does NOT nest — a literal
-            // `[` inside is content — so depth tracking there would stay
-            // "inside" past the real `]` for sets like TypeScript's
-            // `~[*...[]`, swallowing a following action. Everywhere else
-            // the brackets are an argument list, which does nest, so a
-            // `[]` host type does not end it.
+            // Both regions are copied verbatim; only where they end differs.
+            // A lexer rule's char set does not nest — a literal `[` inside is
+            // content, so depth tracking would run past the real `]` for sets
+            // like TypeScript's `~[*...[]` and swallow the next action.
+            // Anywhere else the brackets are an argument list, which nests, so
+            // a `[]` host type does not end it.
             let scanned = if rule_type matches { RuleType::Lexer } {
                 scan_char_class(&chars, i);
             } else {
                 scan_balanced(&chars, i, '[', ']');
             };
-            let end = match scanned {
-                Some(e) => e,
-                None => n,
-            };
+            let end = region_end(scanned, n);
             push_span(&mut out, &chars, i, end);
             i = end;
             continue;
@@ -168,19 +148,17 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             }
         }
         if c == '{' {
-            // `tokens { … }`, `options { … }`, `channels { … }` are
-            // grammar prequels, not action bodies — keep them whole, so
-            // the names inside them never read as a rule name.
+            let scanned = scan_balanced(&chars, i, '{', '}');
+            // `tokens { … }`, `options { … }`, `channels { … }` are grammar
+            // prequels, not action bodies — keep them whole, so the names
+            // inside them never read as a rule name.
             if preceded_by_prequel_keyword(&out) {
-                let end = match scan_balanced(&chars, i, '{', '}') {
-                    Some(e) => e,
-                    None => n,
-                };
+                let end = region_end(scanned, n);
                 push_span(&mut out, &chars, i, end);
                 i = end;
                 continue;
             }
-            match scan_balanced(&chars, i, '{', '}') {
+            match scanned {
                 Some(end) => {
                     let mut k = end;
                     // `{…}?` is a semantic predicate — strip the `?` too.
@@ -219,6 +197,14 @@ pub fn strip_action_bodies(grammar: &String) -> String {
         i += 1;
     }
     return out;
+}
+
+/// A region left unterminated runs to end-of-input, as ANTLR4's lexer treats it.
+fn region_end(scanned: Option<i32>, n: i32) -> i32 {
+    return match scanned {
+        Some(e) => e,
+        None => n,
+    };
 }
 
 fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {

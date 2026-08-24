@@ -244,16 +244,14 @@ fn gen_highlight_mapping(
 }
 
 /// `capture_vocabulary`: the distinct capture classes this grammar's query can
-/// emit, sorted. The set is grammar-defined, so a theme author has nothing to
-/// check hand-typed class names against without it — see `gale-highlight`'s
-/// `Theme::unstyled`.
+/// emit, sorted — what `gale-highlight`'s `Theme::unstyled` checks a theme against.
 fn gen_capture_vocabulary(
     w: &mut CodeWriter,
     default_by_kind: &TreeMap<i32, String>,
     overrides: &List<ResolvedOverride>,
 ) {
     let mut vocabulary: List<String> = [];
-    for let [_kind, capture] of default_by_kind.entries() {
+    for let capture of default_by_kind.values() {
         push_unique(&mut vocabulary, *capture);
     }
     for let ov of overrides {

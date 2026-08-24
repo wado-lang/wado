@@ -117,9 +117,8 @@ test "strip: a parser rule's argument list balances a `[]` host type" {
 }
 
 test "strip: a `[]` host type does not expose an initializer to the action stripper" {
-    // `scan_char_class` ends `[int[] a = {1, 2}]` at the `]` of `int[]`,
-    // leaving ` a = {1, 2}]` at top level, where `{1, 2}` reads as an
-    // action body and is stripped.
+    // Ending the bracket at the `]` of `int[]` leaves ` a = {1, 2}]` at top
+    // level, where `{1, 2}` reads as an action body and is stripped.
     let g = "r locals [int[] a = {1, 2}] : 'x' ;";
     let result = strip_action_bodies(&g);
     assert result == g, `got '${result}'`;

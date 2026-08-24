@@ -30,11 +30,9 @@ impl Theme {
         return self.colors.get(*class);
     }
 
-    /// The classes in `vocabulary` this theme assigns no color to — they
-    /// render in the surrounding text color. Pass the generated
-    /// `capture_vocabulary()` of the grammar being highlighted: the class set
-    /// is grammar-defined, so this is the only way a hand-written theme can
-    /// tell a dropped class from a deliberate omission.
+    /// The classes in `vocabulary` this theme leaves without a color — they
+    /// render in the surrounding text color. Pass a grammar's generated
+    /// `capture_vocabulary()`.
     pub fn unstyled(&self, vocabulary: &List<String>) -> List<String> {
         let mut out: List<String> = [];
         for let class of vocabulary {
@@ -45,9 +43,8 @@ impl Theme {
         return out;
     }
 
-    /// The classes this theme colors that `vocabulary` never emits — a
-    /// mistyped or stale key. Sorted, so the answer does not depend on the
-    /// order the theme was built in.
+    /// The classes this theme colors that `vocabulary` never emits — a mistyped
+    /// or stale key. Sorted, so the answer does not depend on build order.
     pub fn unknown(&self, vocabulary: &List<String>) -> List<String> {
         let mut out: List<String> = [];
         for let class of self.colors.keys() {
