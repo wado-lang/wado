@@ -88,6 +88,8 @@ Per-literal wrappers cast the canonical `env` back to `__Closure_N` and forward 
 
 An exported or imported signature may not carry a closure type in any position, including one buried in a container, a named struct's field, or a variant payload.
 
+A host callback does not need one to: the closure stays in a guest-side registry and a `u32` key crosses instead, with a synthesized export as the trampoline — see [Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
+
 ## Consequences
 
 - A function taking `fn(...)` becomes generic, so code size grows with the number of distinct closures reaching it, in exchange for static dispatch and inlining.

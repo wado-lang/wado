@@ -16,6 +16,7 @@ use super::scope::Scope;
 use super::sem::decls::FunctionSig;
 use super::sig::MethodSig;
 use super::trait_env;
+use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
@@ -832,7 +833,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                let raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
+                let mut raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
+                let qualified_sig = self.static_method_sig(prefix, suffix);
+                // Written qualified, an instance method takes its receiver as
+                // the first argument — the one position the shared lookup
+                // leaves out, every other caller holding it separately.
+                if let Some(sig) = &qualified_sig
+                    && sig.self_kind != ast::SelfKind::None
+                    && let Some(&receiver) = sig.decl.param_types.first()
+                {
+                    raw_param_types.insert(0, receiver);
+                }
                 let substituted: Vec<TypeId> =
                     if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
                         raw_param_types
@@ -845,6 +856,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                // Per-argument checking alone passes a call with too few
+                // arguments — the loop below simply does not reach them, and a
+                // qualified instance method whose receiver was dropped then
+                // reaches codegen as an invalid module.
+                // A defaulted parameter may be omitted here and is filled at
+                // reify, so only a signature without defaults has a count to
+                // check. Without this, a call missing its receiver passes and
+                // reaches codegen as an invalid module.
+                let counts_are_fixed = qualified_sig
+                    .as_ref()
+                    .is_some_and(|sig| sig.params.iter().all(|p| p.default.is_none()));
+                if counts_are_fixed && !substituted.is_empty() && args.len() != substituted.len() {
+                    let _ = self.emit(TypeError::ArgumentCountMismatch {
+                        expected: substituted.len(),
+                        found: args.len(),
+                        span: call.span,
+                    });
+                    return TypeTable::ERROR;
+                }
                 for (i, arg) in args.iter().enumerate() {
                     if let Some(&expected) = substituted.get(i) {
                         self.typecheck(
@@ -2776,15 +2806,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
-        let (_, _, decl_id, _) = trait_env
-            .resource_static_method_index
-            .get(&key)?
-            .iter()
-            .find(|(name, ..)| name == method_name)?;
-        self.tysys
-            .signatures
-            .resource_method_sig(*decl_id, method_name)
-            .cloned()
+        if let Some((_, _, decl_id, _)) = trait_env.resource_static(&key, method_name) {
+            return self
+                .tysys
+                .signatures
+                .resource_method_sig(*decl_id, method_name)
+                .cloned();
+        }
+        // The qualified form disambiguates a colliding name, so it reaches an
+        // inherited method too.
+        let ImplTargetKey::Decl(def) = key else {
+            return None;
+        };
+        self.resource_instance_method(def, method_name)
+            .map(|(_, sig)| sig)
     }
 
     /// Look up function parameter types with type args substituted.

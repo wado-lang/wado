@@ -822,6 +822,29 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// One name reachable both as a resource's own or inherited method and
+    /// through a visible trait impl. The call must name which it means.
+    AmbiguousResourceMethod {
+        method: String,
+        resource: String,
+        trait_name: String,
+        span: Span,
+    },
+
+    /// A `#[cm(..., type = ...)]` backing the elaborator rejected.
+    ResourceBacking {
+        message: String,
+        span: Span,
+    },
+
+    /// A `resource Child extends Parent` clause the elaborator rejected: the
+    /// parent is not a resource, a backing does not match, the chain is
+    /// cyclic, or the parent carries generic arguments (out of scope in v1).
+    ResourceExtends {
+        message: String,
+        span: Span,
+    },
+
     /// A bare generic function name was used as a value with no expected
     /// `fn(...)` type to drive inference. The function type depends on
     /// type arguments that have not been supplied. The fix is to either
@@ -1655,6 +1678,24 @@ impl TypeError {
             TypeError::CompilerItemAttr { message, span } => {
                 (Code::CompilerItemAttr, message.clone(), *span)
             }
+            TypeError::ResourceExtends { message, span } => {
+                (Code::ResourceExtends, message.clone(), *span)
+            }
+            TypeError::ResourceBacking { message, span } => {
+                (Code::ResourceBacking, message.clone(), *span)
+            }
+            TypeError::AmbiguousResourceMethod {
+                method,
+                resource,
+                trait_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
             TypeError::BareGenericFunctionRef { name, span } => (
                 Code::GenericFunctionRef,
                 format!(

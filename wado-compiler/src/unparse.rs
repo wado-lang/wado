@@ -1133,6 +1133,10 @@ impl<'a> Unparser<'a> {
         self.output.push_str("resource ");
         self.output.push_str(&r.name);
         self.unparse_generic_params(&r.type_params);
+        if let Some(parent) = &r.parent {
+            self.output.push_str(" extends ");
+            self.unparse_type(parent);
+        }
 
         if r.methods.is_empty() {
             self.output.push_str(";\n");

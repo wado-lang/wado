@@ -524,6 +524,9 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         Item::Resource(r) => {
             v.visit_id(r.id, r.span);
             v.visit_generic_params(&r.type_params);
+            if let Some(parent) = &r.parent {
+                v.visit_type(parent);
+            }
             for m in &r.methods {
                 v.visit_function(m);
             }
@@ -1257,6 +1260,14 @@ impl Attribute {
         })
     }
 
+    /// The backing `#[cm(..., type=...)]` declares, if any.
+    pub fn cm_resource_backing(&self) -> Option<CmResourceBacking> {
+        if self.name != "cm" {
+            return None;
+        }
+        self.kv_value("type").and_then(CmResourceBacking::parse)
+    }
+
     /// Returns the parsed CM interface import (`namespace:package/interface[@v][#fn]`)
     /// carried by this attribute, if any. Returns `None` for `#[canonical(...)]`,
     /// for `#[cm("simple-name")]`, and for non-CM attributes.
@@ -1293,6 +1304,24 @@ pub enum CmBoundary {
     /// `docs/wep-2026-06-26-wasm-cm-component-import.md`.
     WorldImport(String),
     Name(String),
+}
+
+/// How a `#[cm(..., type=...)]` resource is represented at the CM boundary.
+/// See `docs/wep-2026-04-28-resource-inheritance.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CmResourceBacking {
+    ExternRef,
+    I32,
+}
+
+impl CmResourceBacking {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "extern-ref" => Some(Self::ExternRef),
+            "i32" => Some(Self::I32),
+            _ => None,
+        }
+    }
 }
 
 impl CmBoundary {
@@ -1420,6 +1449,9 @@ pub struct ResourceDecl {
     pub visibility: Visibility,
     /// Generic type parameters: `resource Future<T> { ... }`
     pub type_params: Vec<GenericParam>,
+    /// The parent named by `resource Child extends Parent`, unresolved.
+    /// See `docs/wep-2026-04-28-resource-inheritance.md`.
+    pub parent: Option<Type>,
     pub attrs: Vec<Attribute>,
     /// Methods declared within the resource block. Each is a signature only:
     /// a resource operation is backed by a CM import, so it has no body to

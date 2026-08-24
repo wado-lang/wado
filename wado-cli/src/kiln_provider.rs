@@ -710,7 +710,7 @@ struct SourceEntry {
 
 /// Moves with the `combined_sources_hash` magic, so a downgrade is a miss
 /// rather than a silent mix of hash generations.
-const INDEX_VERSION: u32 = 3;
+const INDEX_VERSION: u32 = 4;
 
 fn dedup_sort_sources(mut sources: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
     sources.sort_by(|a, b| a.0.cmp(&b.0));
@@ -720,10 +720,10 @@ fn dedup_sort_sources(mut sources: Vec<(String, [u8; 32])>) -> Vec<(String, [u8;
 
 fn combined_sources_hash(sources: &[(String, [u8; 32])]) -> String {
     let mut hasher = Sha256::new();
-    // v3: `.wado` sources hash as token streams (see `hash_source`), and the
+    // v4: `.wado` sources hash as token streams (see `hash_source`), and the
     // ABI generation folds in here because this is a generator's only
-    // identity. The magic tracks `INDEX_VERSION`.
-    hasher.update(b"kiln-generator-sources-v3\n");
+    // identity. The magic tracks `INDEX_VERSION`, which a new keyword moves.
+    hasher.update(b"kiln-generator-sources-v4\n");
     hasher.update(KILN_GENERATOR_ABI_TAG);
     for (path, hash) in sources {
         hasher.update(path.as_bytes());

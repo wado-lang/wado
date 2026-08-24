@@ -329,6 +329,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // Reachable through both the `extends` chain and a trait impl: picking
+        // either side rebinds call sites when the other grows the name. Asked
+        // of the receiver alone, so no resolution order can hide one of them —
+        // a `&T` impl resolves first, and is keyed by its reference kind
+        // rather than by the receiver's declaration, so both keys are asked.
+        // The qualified forms have returned above.
+        let colliding_trait = |this: &Self| {
+            let value_key =
+                this.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name));
+            this.trait_impl_declaring(&value_key, method_name)
+                .or_else(|| {
+                    let kind = RefKind::from_resolved(
+                        &this.tysys.type_table.borrow().get(receiver.type_id).clone(),
+                    )?;
+                    this.trait_impl_declaring(&ImplTargetKey::Ref(kind), method_name)
+                })
+        };
+        if required_trait.is_none()
+            && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
+            && self.tysys.type_table.borrow().is_extern_ref_resource(def)
+            && let Some((declaring, _)) = self.resource_instance_method(def, method_name)
+            && let Some(trait_name) = colliding_trait(self)
+        {
+            let _ = self.emit(TypeError::AmbiguousResourceMethod {
+                method: method_name.to_string(),
+                resource: self.tysys.resolutions.defs().name(declaring).to_string(),
+                trait_name,
+                span,
+            });
+        }
+
         // Look up method info based on receiver type (inherent + base type trait methods)
         if method_info.is_none() && required_trait.is_none() {
             method_info = self.lookup_method_info(receiver.type_id, method_name);
@@ -2576,13 +2607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.resolutions.defs(),
             def?,
         );
-        let (_, _, decl_id, _) = self
-            .tysys
-            .trait_env
-            .resource_static_method_index
-            .get(&key)?
-            .iter()
-            .find(|(name, ..)| name == method_name)?;
+        let (_, _, decl_id, _) = self.tysys.trait_env.resource_static(&key, method_name)?;
         self.tysys
             .signatures
             .resource_method_sig(*decl_id, method_name)?
@@ -2671,19 +2696,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let indexed_resource_return = self
             .tysys
             .trait_env
-            .resource_static_method_index
-            .get(&static_key)
-            .and_then(|entries| {
-                entries
-                    .iter()
-                    .find(|(name, ..)| name == method_name)
-                    .and_then(|(name, _, item_id, _)| {
-                        let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
-                        Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
-                    })
+            .resource_static(&static_key, method_name)
+            .and_then(|(name, _, item_id, _)| {
+                let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
+                Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
             });
         if let Some(return_type) = indexed_resource_return {
             return return_type;
+        }
+
+        // The index is keyed by the declaring resource, so an inherited
+        // method is reachable only by walking the chain.
+        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
+            && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
+        {
+            return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         }
 
         // Auto-derived `Default::default()` returns the struct type itself.
@@ -2762,14 +2789,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // imports, not the caller's.
         // Static methods take no receiver, so the digest's canonical form —
         // impl type params left abstract — is already the answer.
-        let indexed = self
-            .unique_static_method_sig(&static_key, method_name)
-            .map(|sig| sig.decl.param_types[sig.first_value_param()..].to_vec());
-        if let Some(param_types) = indexed {
-            return param_types;
+        // Value parameters only: every caller keeps a receiver of its own,
+        // separate from this list.
+        if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
+            return sig.decl.param_types[sig.first_value_param()..].to_vec();
         }
-
+        // The index holds only the declaring resource's own methods, so an
+        // inherited one is reached by walking the chain. Instance methods
+        // only: a static is not inherited, and answering for one here would
+        // newly type-check calls this lookup has always left alone. A static
+        // the receiver declares itself shadows an inherited instance method of
+        // the same name, so the chain must not answer for it either.
+        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
+            && !self.declares_resource_static(*def, method_name)
+            && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
+        {
+            return sig.decl.param_types[sig.first_value_param()..].to_vec();
+        }
         Vec::new()
+    }
+
+    /// Whether the resource `def` declares `method_name` as a static of its own.
+    fn declares_resource_static(&self, def: crate::defs::DefId, method_name: &str) -> bool {
+        self.tysys
+            .trait_env
+            .resource_static(
+                &crate::elaborator::trait_env::ImplTargetKey::Decl(def),
+                method_name,
+            )
+            .is_some()
     }
 
     /// Resolve a static-method receiver `TypeId` to its `(struct_name,
@@ -3539,14 +3587,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // O(1) lookup via pre-built resource static method index.
-        // Same canonical-key disambiguation.
-        if let Some(methods) = self
+        if self
             .tysys
             .trait_env
-            .resource_static_method_index
-            .get(&static_key)
-            && methods.iter().any(|(name, ..)| name == method_name)
+            .resource_static(&static_key, method_name)
+            .is_some()
+        {
+            return true;
+        }
+
+        // Same walk as `lookup_static_method_return_type`: the index holds
+        // only the declaring resource's own methods.
+        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
+            && self.resource_instance_method(*def, method_name).is_some()
         {
             return true;
         }

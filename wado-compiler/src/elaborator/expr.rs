@@ -1942,50 +1942,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // AST mirror of `block_result_type(chain_block)`: the
-                    // normalized chain's result is `agree(then_block_result,
-                    // else_type)` collapsed to `Unit` on mismatch (the
-                    // per-level `unwrap_or(UNIT)` recursion reduces to exactly
-                    // this — equal for single- and multi-element chains). Then
-                    // the same agreement against the else block as before.
+                    // AST mirror of `block_result_type(chain_block)`, and the
+                    // same shape as the `Condition::Expr` arm below: the chain's
+                    // result is what the then block and the else block agree on.
                     let else_type = if_expr
                         .else_block
                         .as_ref()
                         .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-                    let chain_type = crate::tir::agree_branch_types(
-                        self.ast_block_result_type(&if_expr.then_block),
-                        else_type,
-                    )
-                    .unwrap_or(TypeTable::UNIT);
-                    if chain_type == else_type
-                        || chain_type == TypeTable::NEVER
-                        || else_type == TypeTable::NEVER
-                    {
-                        if chain_type == TypeTable::NEVER {
-                            else_type
-                        } else {
-                            chain_type
+                    let then_type = self.ast_block_result_type(&if_expr.then_block);
+                    match (
+                        self.agreed_branch_type(&[then_type, else_type]),
+                        &if_expr.else_block,
+                    ) {
+                        (Some(agreed), _) => agreed,
+                        (None, None) => TypeTable::UNIT,
+                        (None, Some(else_block)) => {
+                            let (then_name, else_name) = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .type_names_for_mismatch(then_type, else_type);
+                            let _ = self.emit(TypeError::TypeMismatch {
+                                expected: then_name,
+                                found: else_name,
+                                span: else_block.span,
+                            });
+                            then_type
                         }
-                    } else if if_expr.else_block.is_none() {
-                        TypeTable::UNIT
-                    } else {
-                        let (chain_name, else_name) = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .type_names_for_mismatch(chain_type, else_type);
-                        let _ = self.emit(TypeError::TypeMismatch {
-                            expected: chain_name,
-                            found: else_name,
-                            span: if_expr.else_block.as_ref().unwrap().span,
-                        });
-                        chain_type
                     }
                 };
 
                 // An `if let` whose branches are all bare `null` leaves the
                 // type unresolved; report it rather than ICEing in codegen.
-                self.report_uninferable_result(type_id, if_expr.span, "if expression");
+                // When one branch resolved, the other's `null` tail is checked
+                // against it — the sibling's type is what agreement adopted.
+                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
+                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+                    if let Some(eb) = &if_expr.else_block {
+                        blocks.push(eb);
+                    }
+                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
+                }
 
                 // Same arm-agreement rule as the `Condition::Expr` arm below:
                 // `expected_type = Some(X)` pins `type_id` unconditionally, so
@@ -2057,6 +2054,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
                     //
+<<<<<<< HEAD
                     // An indefinite branch defers to its sibling's resolved
                     // type; its tail is patched below.
                     let tt = self.tysys.type_table.borrow();
@@ -2081,20 +2079,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 found: type_name,
                                 span: if_expr.then_block.span,
                             });
-                        }
-                        TypeTable::UNIT
-                    } else {
-                        let (then_name, else_name) = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .type_names_for_mismatch(then_type, else_type);
-                        let _ = self.emit(TypeError::TypeMismatch {
-                            expected: then_name,
-                            found: else_name,
-                            span: if_expr.else_block.as_ref().unwrap().span,
-                        });
+||||||| 3e70fcc5f8
+                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
+                    // inner type could not be inferred) defer to the sibling branch's
+                    // resolved type. The unresolved branch's tail is patched below.
+                    let tt = self.tysys.type_table.borrow();
+                    let then_unknown = tt.contains_unknown(then_type);
+                    let else_unknown = tt.contains_unknown(else_type);
+                    drop(tt);
+                    if then_type == else_type {
                         then_type
+                    } else if then_type == TypeTable::NEVER {
+                        else_type
+                    } else if else_type == TypeTable::NEVER {
+                        then_type
+                    } else if then_unknown && !else_unknown {
+                        else_type
+                    } else if else_unknown && !then_unknown {
+                        then_type
+                    } else if if_expr.else_block.is_none() {
+                        if then_type != TypeTable::UNIT {
+                            let type_name = self.tysys.type_table.borrow().type_name(then_type);
+                            let _ = self.emit(TypeError::TypeMismatch {
+                                expected: "()".to_string(),
+                                found: type_name,
+                                span: if_expr.then_block.span,
+                            });
+=======
+                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
+                    // inner type could not be inferred) defer to the sibling branch's
+                    // resolved type. The unresolved branch's tail is patched below.
+                    match (
+                        self.agreed_branch_type(&[then_type, else_type]),
+                        &if_expr.else_block,
+                    ) {
+                        (Some(agreed), _) => agreed,
+                        (None, None) => {
+                            if then_type != TypeTable::UNIT {
+                                let type_name = self.tysys.type_table.borrow().type_name(then_type);
+                                let _ = self.emit(TypeError::TypeMismatch {
+                                    expected: "()".to_string(),
+                                    found: type_name,
+                                    span: if_expr.then_block.span,
+                                });
+                            }
+                            TypeTable::UNIT
+                        }
+                        (None, Some(else_block)) => {
+                            let (then_name, else_name) = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .type_names_for_mismatch(then_type, else_type);
+                            let _ = self.emit(TypeError::TypeMismatch {
+                                expected: then_name,
+                                found: else_name,
+                                span: else_block.span,
+                            });
+                            then_type
+>>>>>>> origin/main
+                        }
                     }
                 };
 
@@ -2312,6 +2356,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The type a set of branches agrees on, `None` when they disagree — the
+    /// caller reports that in its own terms. The one place branch agreement is
+    /// decided: `if`, `if let` and `match` all route here.
+    pub(super) fn agreed_branch_type(&self, branches: &[TypeId]) -> Option<TypeId> {
+        let mut agreed: Option<TypeId> = None;
+        for &branch in branches {
+            agreed = Some(match agreed {
+                None => branch,
+                Some(acc) => self.agree_two_branches(acc, branch)?,
+            });
+        }
+        agreed
+    }
+
+    fn agree_two_branches(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        if a == b {
+            return Some(a);
+        }
+        if a == TypeTable::NEVER {
+            return Some(b);
+        }
+        if b == TypeTable::NEVER {
+            return Some(a);
+        }
+        let (a_unknown, b_unknown) = {
+            let tt = self.tysys.type_table.borrow();
+            (tt.contains_unknown(a), tt.contains_unknown(b))
+        };
+        if a_unknown && !b_unknown {
+            return Some(b);
+        }
+        if b_unknown && !a_unknown {
+            return Some(a);
+        }
+        self.tysys.type_table.borrow().resource_join(a, b)
+    }
+
     pub(super) fn resolve_match_expr(
         &mut self,
         match_expr: &ast::MatchExpr,
@@ -2384,6 +2465,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .unwrap_or(TypeTable::UNIT)
                 })
         });
+
+        // Whichever order the arms are written in: the first-arm pick above
+        // would make a parent-typed later arm a mismatch.
+        let type_id = if expected_type.is_some() {
+            type_id
+        } else {
+            arm_bodies.iter().fold(type_id, |acc, (arm_type, _)| {
+                self.agreed_branch_type(&[acc, *arm_type]).unwrap_or(acc)
+            })
+        };
 
         // Report any `null`-bodied arm whose `Option<???>` inner could not be
         // inferred against a resolved non-`Option` result — AST mirror of the
