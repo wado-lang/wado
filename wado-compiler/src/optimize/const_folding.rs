@@ -664,6 +664,15 @@ impl GlobalStoreCollector<'_> {
         interpreter.with_callees(self.callees);
         interpreter.with_ctfe_builtins(self.ctfe_builtins);
         interpreter.with_globals(self.declared_env);
+        // The stored value may be a block that binds its parts first
+        // (`elements = […]; List { repr: elements, … }`), so its `let`s are
+        // bound before the tail reads them.
+        if let Some(e) = value.as_expr()
+            && let ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } =
+                body.exprs[e].kind
+        {
+            interpreter.bind_block_lets(body, block);
+        }
         // A store whose value does not reduce says the global is not a constant
         // — joining it as `NonConst` keeps a sibling store from speaking for the
         // whole global.

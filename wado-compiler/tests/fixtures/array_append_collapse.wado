@@ -1,5 +1,5 @@
-// Verifies that List<T> literals go through SequenceLiteralBuilder
-// and the collapse_array_append_sequences WIR pass recovers ArrayNewFixed.
+// Verifies that a `List<T>` literal reaches the WIR as one `array.new_fixed`,
+// with no push chain — `lower` emits the array node the literal denotes.
 //
 // Only the lists something still reads at run time reach the WIR: one whose
 // every read folds to the element it denotes drops with its array.
@@ -56,20 +56,10 @@ struct SeqVec<T> {
     items: List<T>,
 }
 
-impl SequenceLiteralBuilder for SeqVec<T> {
-    type Element = T;
-    type Output = SeqVec<T>;
-
-    fn new_literal(capacity: i32) -> SeqVec<T> {
-        return SeqVec { items: List::<T>::with_capacity(capacity) };
-    }
-
-    fn push_literal(&mut self, value: Self::Element) {
-        self.items.push(value);
-    }
-
-    fn build(&self) -> SeqVec<T> {
-        return *self;
+impl From<Array<T>> for SeqVec<T> {
+    fn from(elements: Array<T>) -> SeqVec<T> {
+        let items = List::<T>::from(elements);
+        return SeqVec { items };
     }
 }
 
@@ -80,7 +70,6 @@ __DATA__
         "array.new_fixed<i32>(100, 200)"
     ],
     "wir_not_expect:O2": [
-        "SequenceLiteralBuilder::push_literal\"(",
         "List<String>::push\"(__local_",
         "List<i32>::push\"(",
         "array.new_fixed<ref \"core:prelude/string.wado//String\">("

@@ -203,6 +203,23 @@ fn resolve_with(value: &WirInstr, local_defs: &IndexMap<String, WirInstr>) -> Op
             }
             resolve_with(tail, &defs)
         }
+        // The tail is the aggregate itself (`elements = array.new_fixed(…);
+        // List { repr: elements, used: 3 }`), so its fields resolve against the
+        // bindings rather than being asked for const-ness where they stand.
+        WirInstr::StructNew { type_id, fields } => Some(WirInstr::StructNew {
+            type_id: type_id.clone(),
+            fields: fields
+                .iter()
+                .map(|f| resolve_with(f, local_defs))
+                .collect::<Option<Vec<_>>>()?,
+        }),
+        WirInstr::ArrayNewFixed { type_id, elements } => Some(WirInstr::ArrayNewFixed {
+            type_id: type_id.clone(),
+            elements: elements
+                .iter()
+                .map(|e| resolve_with(e, local_defs))
+                .collect::<Option<Vec<_>>>()?,
+        }),
         _ => value.is_const_expressible().then(|| value.clone()),
     }
 }

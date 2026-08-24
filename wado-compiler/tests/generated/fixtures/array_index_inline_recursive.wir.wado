@@ -22,9 +22,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array Array<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>> (mut ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>");  // TypeId(4)
+array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
 
-array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(5)
+array Array<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>> (mut ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>");  // TypeId(5)
 
 struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(6)
     mut repr: ref "Array<core:prelude/string.wado/String>",
@@ -201,15 +201,21 @@ fn "array_index_inline_recursive.wado/run"() with Stdout {
     let leaf1: ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
     let leaf2: ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
     let root: ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
+    let elements_3: ref "Array<core:prelude/string.wado/String>";
+    let elements_4: ref "Array<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
+    let elements_5: ref "Array<core:prelude/string.wado/String>";
+    let elements_6: ref "Array<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
+    let elements_7: ref "Array<core:prelude/string.wado/String>";
+    let elements_8: ref "Array<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:array_index_inline_recursive.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:array_index_inline_recursive.wado::__modules_initialized = 1;
     };
-    leaf1 = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 }, children: struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(0), used: 0 }, is_leaf: 1 };
-    leaf2 = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 }), used: 2 }, children: struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(0), used: 0 }, is_leaf: 1 };
-    root = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }), used: 1 }, children: struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(leaf1, leaf2), used: 2 }, is_leaf: 0 };
+    leaf1 = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(elements_3 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_3, used: 2 }), children: ref.as_non_null(elements_4 = array.new_fixed<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: elements_4, used: 0 }), is_leaf: 1 };
+    leaf2 = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(elements_5 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 }); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_5, used: 2 }), children: ref.as_non_null(elements_6 = array.new_fixed<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: elements_6, used: 0 }), is_leaf: 1 };
+    root = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(elements_7 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_7, used: 1 }), children: ref.as_non_null(elements_8 = array.new_fixed<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(leaf1, leaf2); struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: elements_8, used: builtin::array_len(elements_8) }), is_leaf: 0 };
     "array_index_inline_recursive.wado/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse$spec0"(root, 0);
 }
 

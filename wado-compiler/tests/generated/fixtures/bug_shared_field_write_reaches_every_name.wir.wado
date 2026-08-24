@@ -160,11 +160,11 @@ global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_0: ref
 global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_1: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
 global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_4: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 344 };
+global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_4: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 345 };
 global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 114, 101, 102, 95, 109, 117, 116), used: 19 };
 global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
-global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_12: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 317 };
+global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_12: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 318 };
 global global:bug_shared_field_write_reaches_every_name.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 global global:core:prelude/primitive.wado::__const_obj_34: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:prelude/traits.wado::__const_obj_35: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
@@ -177,7 +177,11 @@ global global:core:prelude/array.wado::__const_obj_61: ref null "core:prelude/st
 global global:core:prelude/array.wado::__const_obj_62: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32, 46, 46, 46), used: 5 };
 
 fn "bug_shared_field_write_reaches_every_name.wado/fresh"() {
-    return struct.new "bug_shared_field_write_reaches_every_name.wado//Holder" { inner: struct.new "bug_shared_field_write_reaches_every_name.wado//Inner" { x: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } }, rows: struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }), used: 1 }, items: struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 } };
+    let elements_0: ref Array<i32>;
+    let elements_1: ref Array<i32>;
+    let elements_2: ref "Array<core:prelude/list.wado/List<i32>>";
+    let elements_3: ref Array<i32>;
+    return struct.new "bug_shared_field_write_reaches_every_name.wado//Holder" { inner: struct.new "bug_shared_field_write_reaches_every_name.wado//Inner" { x: ref.as_non_null(elements_0 = array.new_fixed<i32>(1, 2, 3); struct.new "core:prelude//List<i32>" { repr: elements_0, used: builtin::array_len(elements_0) }) }, rows: ref.as_non_null(elements_2 = array.new_fixed<ref "core:prelude//List<i32>">(elements_1 = array.new_fixed<i32>(1, 2, 3); struct.new "core:prelude//List<i32>" { repr: elements_1, used: builtin::array_len(elements_1) }); struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: elements_2, used: builtin::array_len(elements_2) }), items: ref.as_non_null(elements_3 = array.new_fixed<i32>(); struct.new "core:prelude//List<i32>" { repr: elements_3, used: 0 }) };
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/__cm_export____test_0_a_write_through_a_borrowed_field_reaches_it"() {
@@ -493,13 +497,15 @@ fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_borrow"(self) {
-    self.inner.x = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+    let elements: ref Array<i32>;
+    self.inner.x = ref.as_non_null(elements = array.new_fixed<i32>(9, 9); struct.new "core:prelude//List<i32>" { repr: elements, used: 2 });
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_pattern"(self) {
     let d: ref "bug_shared_field_write_reaches_every_name.wado//Inner";
+    let elements: ref Array<i32>;
     d = self.inner;
-    d.x = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+    d.x = ref.as_non_null(elements = array.new_fixed<i32>(9, 9); struct.new "core:prelude//List<i32>" { repr: elements, used: 2 });
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_element"(self) {

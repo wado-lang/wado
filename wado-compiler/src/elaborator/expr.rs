@@ -342,7 +342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     branch_types
                         .iter()
                         .copied()
-                        .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
                         .or_else(|| {
                             branch_types
                                 .iter()
@@ -463,11 +463,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TypeTable::U8
             }
+            // `Option` of the bottom type: a value of every `Option<T>` and of
+            // no other type. `Unknown` here would instead defer every check it
+            // meets, which is how a `null` used to reach a non-nullable slot.
             Literal::Null => self
                 .tysys
                 .type_table
                 .borrow_mut()
-                .make_option(TypeTable::UNKNOWN),
+                .make_option(TypeTable::NEVER),
             Literal::Unit => TypeTable::UNIT,
             Literal::LocationFile => {
                 // #file - returns the current module source as a string
@@ -2051,9 +2054,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
                     //
-                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
-                    // inner type could not be inferred) defer to the sibling branch's
-                    // resolved type. The unresolved branch's tail is patched below.
+                    // An indefinite branch defers to its sibling's resolved
+                    // type; its tail is patched below.
                     match (
                         self.agreed_branch_type(&[then_type, else_type]),
                         &if_expr.else_block,
@@ -2089,7 +2091,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Report any unresolved `null` tail in either branch against
                 // the determined result type — AST mirror of the old
                 // `patch_unresolved_null` pass (whose TIR mutation was dead).
-                // When the type stayed UNKNOWN (both branches a bare `null`)
+                // When the type stayed indefinite (both branches a bare `null`)
                 // `report_uninferable_result` already fired and the null pass
                 // is skipped.
                 if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
@@ -2162,18 +2164,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Reports a `CannotInferType` error when a branch construct's result
-    /// type could not be inferred — it still contains UNKNOWN because every
-    /// branch produced an un-typeable value (e.g. a bare `null`). Returns
-    /// `true` when an error was reported, so the caller can skip the
-    /// `null`-patching pass (which requires a resolved target type).
+    /// Reports a `CannotInferType` error when every branch of a construct
+    /// produced an indefinite type, leaving the result one too. Returns `true`
+    /// when an error was reported, so the caller can skip the `null`-patching
+    /// pass (which requires a resolved target type).
     fn report_uninferable_result(
         &mut self,
         result_type: TypeId,
         span: Span,
         construct: &str,
     ) -> bool {
-        if !self.tysys.type_table.borrow().contains_unknown(result_type) {
+        if !self.tysys.type_table.borrow().is_indefinite(result_type) {
             return false;
         }
         let _ = self.emit(TypeError::CannotInferType {
@@ -2327,7 +2328,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let (a_unknown, b_unknown) = {
             let tt = self.tysys.type_table.borrow();
-            (tt.contains_unknown(a), tt.contains_unknown(b))
+            (tt.is_indefinite(a), tt.is_indefinite(b))
         };
         if a_unknown && !b_unknown {
             return Some(b);
@@ -2368,7 +2369,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
                         t != TypeTable::NEVER
                             && !self.type_has_infer_hole(t)
-                            && !self.tysys.type_table.borrow().contains_unknown(t)
+                            && !self.tysys.type_table.borrow().is_indefinite(t)
                     })
                 });
             if let Some(target) = target {
@@ -2388,16 +2389,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
             //
-            // Also skip arms whose type still contains UNKNOWN — typically a bare
-            // `null` literal whose `Option<...>` inner could not be inferred from
-            // the arm body alone. A sibling arm with a fully-resolved type
-            // (e.g. `Option::Some(s)` where `s: String`) wins; we then patch the
-            // unresolved `null` arm bodies below.
+            // Also skip arms whose type is indefinite: a sibling arm with a
+            // fully-resolved type (e.g. `Option::Some(s)` where `s: String`)
+            // wins, and we patch the unresolved arm bodies below.
             let tt = self.tysys.type_table.borrow();
             arm_bodies
                 .iter()
                 .map(|(t, _)| *t)
-                .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
                 .or_else(|| {
                     arm_bodies
                         .iter()
@@ -3159,14 +3158,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
-        // [1, 2, 3] as List<i32>, [1, 2, 3] as SeqVec<i32>
+        // `[1, 2, 3] as List<i32>`, `[1, 2, 3] as SeqVec<i32>`
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
             return coerced.type_id;
         }
 
-        // Special case: struct literal cast to a type implementing KeyValueLiteral
-        // { a: 1, b: 2 } as TreeMap<String, i32>
+        // `{ a: 1, b: 2 } as TreeMap<String, i32>`
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
             return coerced.type_id;
         }
@@ -4146,27 +4143,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         // Gather each base's field list once, reused below. A `TreeMap` is a
-        // struct too, so an implemented `KeyValueLiteral` marks it as a map
-        // rather than a composable struct.
+        // struct too, so a `From<Array<[K, V]>>` impl marks it as a map rather
+        // than a composable struct.
         let spread_base_types: Vec<TypeId> = struct_lit
             .spreads
             .iter()
             .map(|spread| self.resolve_expr(&spread.expr, ctx, None))
             .collect();
-        let kv_literal = self
-            .tysys
-            .compiler_trait_def(crate::compiler_item::CompilerItem::KeyValueLiteral);
         let base_info: Vec<BaseSpreadInfo> = spread_base_types
             .iter()
             .map(|&t| {
-                let is_map = kv_literal.is_some_and(|trait_| {
-                    self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        t,
-                        trait_,
-                    )
-                });
+                let is_map = self.is_key_value_literal_target(t);
                 let fields = if is_map {
                     None
                 } else {
@@ -4179,12 +4166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let has_spread = !struct_lit.spreads.is_empty();
         let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
         let all_map = base_info.iter().all(|(m, _)| *m);
-        let expected_is_map = expected_type.is_some_and(|t| {
-            kv_literal.is_some_and(|trait_| {
-                self.tysys
-                    .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), t, trait_)
-            })
-        });
+        let expected_is_map = expected_type.is_some_and(|t| self.is_key_value_literal_target(t));
         // A pure key-value merge with a map-typed target is the only valid
         // non-composition spread.
         let is_kv_merge = has_spread && all_map && expected_is_map;

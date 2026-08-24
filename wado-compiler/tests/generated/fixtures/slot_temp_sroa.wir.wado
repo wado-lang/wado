@@ -132,7 +132,7 @@ global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude
 global global:slot_temp_sroa.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
 global global:slot_temp_sroa.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:slot_temp_sroa.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:slot_temp_sroa.wado::__const_obj_4: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 317 };
+global global:slot_temp_sroa.wado::__const_obj_4: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 318 };
 global global:slot_temp_sroa.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:slot_temp_sroa.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 global global:slot_temp_sroa.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
@@ -197,52 +197,54 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
     let total: i32;
     let j: i32;
     let e: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<i32>;
     let handle: i32;
     let packed: i64;
-    let rx_32: i32;
-    let tx_33: i32;
+    let rx_23: i32;
+    let tx_24: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:slot_temp_sroa.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:slot_temp_sroa.wado::__modules_initialized = 1;
     };
-    m = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
+    elements = array.new_fixed<i32>(10, 20, 30);
+    m = struct.new "core:prelude//List<i32>" { repr: elements, used: builtin::array_len(elements) };
     total = 0;
     j = 0;
     b7: block {
         l8: loop {
             break_if b7 j >= 3;
-            let __match_8_mv_0: i32;
-            let __match_8_mv_1: i32;
-            let __match_8_mv_2: ref null "core:prelude/string.wado//String";
-            multivalue_bind [__match_8_mv_0, __match_8_mv_1, __match_8_mv_2] = "slot_temp_sroa.wado/outer"(m, 10 * (j + 1));
-            if __match_8_mv_0 == 0 {
-                total = total + __match_8_mv_1;
+            let __match_7_mv_0: i32;
+            let __match_7_mv_1: i32;
+            let __match_7_mv_2: ref null "core:prelude/string.wado//String";
+            multivalue_bind [__match_7_mv_0, __match_7_mv_1, __match_7_mv_2] = "slot_temp_sroa.wado/outer"(m, 10 * (j + 1));
+            if __match_7_mv_0 == 0 {
+                total = total + __match_7_mv_1;
             } else {
             }
             j = j + 1;
             continue l8;
         };
     };
-    let __match_9_mv_0: i32;
-    let __match_9_mv_1: i32;
-    let __match_9_mv_2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__match_9_mv_0, __match_9_mv_1, __match_9_mv_2] = "slot_temp_sroa.wado/outer"(m, 99);
-    if __match_9_mv_0 == 1 {
-        e = ref.as_non_null(__match_9_mv_2);
+    let __match_8_mv_0: i32;
+    let __match_8_mv_1: i32;
+    let __match_8_mv_2: ref null "core:prelude/string.wado//String";
+    multivalue_bind [__match_8_mv_0, __match_8_mv_1, __match_8_mv_2] = "slot_temp_sroa.wado/outer"(m, 99);
+    if __match_8_mv_0 == 1 {
+        e = ref.as_non_null(__match_8_mv_2);
         total = total + e.used;
     } else {
     }
-    __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(total, __local_7);
-    rx_32 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_33 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "slot_temp_sroa.wado/__cm_binding__Stdout_write_via_stream"(rx_32);
-    "core:cli/write_to_stream"(tx_33, __local_6, 1);
+    __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(total, __local_6);
+    rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "slot_temp_sroa.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+    "core:cli/write_to_stream"(tx_24, __local_5, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

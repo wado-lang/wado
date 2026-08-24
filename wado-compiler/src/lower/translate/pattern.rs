@@ -2392,7 +2392,7 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(&mut field.value, type_table);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 for elem in elements {
                     self.lower_expr(elem, type_table);
                 }

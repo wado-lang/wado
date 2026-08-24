@@ -1,6 +1,7 @@
-// Tests that a blanket impl `impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T`
-// compiles successfully (T::Value on a type parameter is resolved by the elaborator).
-// Also tests that a user-defined type implementing KeyValueLiteralBuilder works end-to-end.
+// A blanket impl whose bound projects an associated type of the type parameter
+// (`T::Value`) compiles and dispatches. The two traits below are the fixture's
+// own — literal coercion goes through `From<Array<…>>` (WEP 2026-08-24) and
+// has no builder protocol to test here.
 use { println, Stdout } from "core:cli";
 
 trait KeyValueLiteralBuilder {

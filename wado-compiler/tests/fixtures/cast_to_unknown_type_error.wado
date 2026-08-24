@@ -1,0 +1,10 @@
+// A cast to a type that resolves to nothing reports and stops. Annotate records
+// no ERROR entry on `expression_types`, so reify read a missing one and panicked
+// on top of the diagnostic it had already emitted.
+export fn run() {
+    let n = 1;
+    let x = n as NoSuchType;
+}
+
+__DATA__
+{"compile_error": "unknown type 'NoSuchType'"}

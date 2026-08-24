@@ -4914,7 +4914,7 @@ impl<'a> TirUnparser<'a> {
                 });
                 self.output.push_str(" }");
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 self.delimited("[", "]", elements, TirUnparser::unparse_expr);
             }
             TirExprKind::TupleSpread { expr }

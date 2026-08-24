@@ -292,7 +292,7 @@ impl TypeSystem {
     }
 
     /// Check that concrete type args at non-type-parameter positions match the impl type.
-    /// e.g., `impl KeyValueLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
+    /// e.g. `impl From<…> for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
     /// because position 0 expects String but got i32.
     pub(crate) fn verify_impl_type_compatibility(
         &self,

@@ -208,6 +208,12 @@ impl Interpreter<'_> {
     /// An array literal denotes the whole container, not just its elements:
     /// `wir_build` lowers it to `{ backing: array.new_fixed, len: N }`.
     fn array_literal_lattice(&self, body: &Body, type_id: TypeId, elements: &[Operand]) -> Lattice {
+        // A raw `Array<T>` — what a `[e0, e1, …]` literal denotes (WEP
+        // 2026-08-24) — *is* the sequence. Only the `List<T>`-typed node
+        // `optimize::array_literal` materializes wraps it in `{ repr, used }`.
+        if matches!(self.type_table.get(type_id), ResolvedType::BuiltinArray(_)) {
+            return self.seq_lattice(body, type_id, elements);
+        }
         match self.seq_lattice(body, type_id, elements) {
             Lattice::Const(backing) => Lattice::Const(Value::aggregate(
                 type_id,
@@ -395,12 +401,25 @@ impl Interpreter<'_> {
 
     /// The lattice of a block: its single tail `Expr`, else `Unevaluated`.
     pub(super) fn block_lattice(&self, body: &Body, b: BlockId) -> Lattice {
-        match body.blocks[b].stmts.as_slice() {
-            [] => Lattice::Unevaluated,
-            [single] => match &body.stmts[*single].kind {
-                StmtKind::Expr(e) => self.operand_to_lattice(body, *e),
-                _ => Lattice::Unevaluated,
-            },
+        let Some((last, lets)) = body.blocks[b].stmts.split_last() else {
+            return Lattice::Unevaluated;
+        };
+        // Leading `let`s are transparent exactly when the frame already knows
+        // each one's value: a binding that folded to a constant computed
+        // nothing observable, so the block is worth its tail. A statement the
+        // frame cannot value leaves the block undecided rather than dropping
+        // whatever it did.
+        let bound_const = |stmt: &crate::nir_arena::StmtId| match &body.stmts[*stmt].kind {
+            StmtKind::Let { local_index, .. } => {
+                matches!(self.frame.env.get(local_index), Some(Lattice::Const(_)))
+            }
+            _ => false,
+        };
+        if !lets.iter().all(bound_const) {
+            return Lattice::Unevaluated;
+        }
+        match &body.stmts[*last].kind {
+            StmtKind::Expr(e) => self.operand_to_lattice(body, *e),
             _ => Lattice::Unevaluated,
         }
     }

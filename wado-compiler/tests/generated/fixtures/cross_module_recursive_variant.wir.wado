@@ -74,9 +74,9 @@ struct ./sub/cross_module_recursive_variant_b.wado//Child::Node {  // TypeId(14)
     payload_0: ref "./sub/cross_module_recursive_variant_b.wado//Node",
 }
 
-array Array<./sub/cross_module_recursive_variant_b.wado/Child> (mut ref "./sub/cross_module_recursive_variant_b.wado//Child");  // TypeId(15)
+array Array<./sub/cross_module_recursive_variant_a.wado/Child> (mut ref "./sub/cross_module_recursive_variant_a.wado//Child");  // TypeId(15)
 
-array Array<./sub/cross_module_recursive_variant_a.wado/Child> (mut ref "./sub/cross_module_recursive_variant_a.wado//Child");  // TypeId(16)
+array Array<./sub/cross_module_recursive_variant_b.wado/Child> (mut ref "./sub/cross_module_recursive_variant_b.wado//Child");  // TypeId(16)
 
 struct core:prelude//List<./sub/cross_module_recursive_variant_a.wado/Child> {  // TypeId(17)
     mut repr: ref "Array<./sub/cross_module_recursive_variant_a.wado/Child>",
@@ -226,8 +226,12 @@ fn "cross_module_recursive_variant.wado/__test_0_same_name_recursive_variant_typ
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    a = struct.new "./sub/cross_module_recursive_variant_a.wado//Node" { kind: 1, children: struct.new "core:prelude//List<./sub/cross_module_recursive_variant_a.wado/Child>" { repr: array.new_fixed<ref "./sub/cross_module_recursive_variant_a.wado//Child">(struct.new "./sub/cross_module_recursive_variant_a.wado//Child::Leaf" { discriminant: 0, payload_0: 10 }, struct.new "./sub/cross_module_recursive_variant_a.wado//Child::Node" { discriminant: 1, payload_0: struct.new "./sub/cross_module_recursive_variant_a.wado//Node" { kind: 2, children: struct.new "core:prelude//List<./sub/cross_module_recursive_variant_a.wado/Child>" { repr: builtin::array_new<ref "./sub/cross_module_recursive_variant_a.wado//Child">(0), used: 0 } } }), used: 2 } };
-    b = struct.new "./sub/cross_module_recursive_variant_b.wado//Node" { kind: 5, children: struct.new "core:prelude//List<./sub/cross_module_recursive_variant_b.wado/Child>" { repr: array.new_fixed<ref "./sub/cross_module_recursive_variant_b.wado//Child">(struct.new "./sub/cross_module_recursive_variant_b.wado//Child::Node" { discriminant: 1, payload_0: struct.new "./sub/cross_module_recursive_variant_b.wado//Node" { kind: 7, children: struct.new "core:prelude//List<./sub/cross_module_recursive_variant_b.wado/Child>" { repr: builtin::array_new<ref "./sub/cross_module_recursive_variant_b.wado//Child">(0), used: 0 } } }, struct.new "./sub/cross_module_recursive_variant_b.wado//Child::Leaf" { discriminant: 0, payload_0: 20 }), used: 2 } };
+    let elements_10: ref "Array<./sub/cross_module_recursive_variant_a.wado/Child>";
+    let elements_11: ref "Array<./sub/cross_module_recursive_variant_a.wado/Child>";
+    let elements_12: ref "Array<./sub/cross_module_recursive_variant_b.wado/Child>";
+    let elements_13: ref "Array<./sub/cross_module_recursive_variant_b.wado/Child>";
+    a = struct.new "./sub/cross_module_recursive_variant_a.wado//Node" { kind: 1, children: ref.as_non_null(elements_11 = array.new_fixed<ref "./sub/cross_module_recursive_variant_a.wado//Child">(struct.new "./sub/cross_module_recursive_variant_a.wado//Child::Leaf" { discriminant: 0, payload_0: 10 }, struct.new "./sub/cross_module_recursive_variant_a.wado//Child::Node" { discriminant: 1, payload_0: struct.new "./sub/cross_module_recursive_variant_a.wado//Node" { kind: 2, children: ref.as_non_null(elements_10 = array.new_fixed<ref "./sub/cross_module_recursive_variant_a.wado//Child">(); struct.new "core:prelude//List<./sub/cross_module_recursive_variant_a.wado/Child>" { repr: elements_10, used: 0 }) } }); struct.new "core:prelude//List<./sub/cross_module_recursive_variant_a.wado/Child>" { repr: elements_11, used: 2 }) };
+    b = struct.new "./sub/cross_module_recursive_variant_b.wado//Node" { kind: 5, children: ref.as_non_null(elements_13 = array.new_fixed<ref "./sub/cross_module_recursive_variant_b.wado//Child">(struct.new "./sub/cross_module_recursive_variant_b.wado//Child::Node" { discriminant: 1, payload_0: struct.new "./sub/cross_module_recursive_variant_b.wado//Node" { kind: 7, children: ref.as_non_null(elements_12 = array.new_fixed<ref "./sub/cross_module_recursive_variant_b.wado//Child">(); struct.new "core:prelude//List<./sub/cross_module_recursive_variant_b.wado/Child>" { repr: elements_12, used: 0 }) } }, struct.new "./sub/cross_module_recursive_variant_b.wado//Child::Leaf" { discriminant: 0, payload_0: 20 }); struct.new "core:prelude//List<./sub/cross_module_recursive_variant_b.wado/Child>" { repr: elements_13, used: 2 }) };
     __v1_2 = "./sub/cross_module_recursive_variant_a.wado/sum_a$spec0"(a);
     if @unlikely(__v1_2 != 3) {
         cold_path;
@@ -1107,7 +1111,7 @@ fn "core:prelude/traits.wado/./sub/cross_module_recursive_variant_b.wado/Node^co
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 100);
     s_19 = global:core:prelude/traits.wado::__const_obj_14;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_19);
-    "core:prelude/primitive.wado/i32::fmt_decimal"(5, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.kind, f);
     s_28 = global:core:prelude/traits.wado::__const_obj_15;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_28);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 99);
@@ -1142,7 +1146,7 @@ fn "core:prelude/traits.wado/./sub/cross_module_recursive_variant_a.wado/Node^co
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 100);
     s_19 = global:core:prelude/traits.wado::__const_obj_14;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_19);
-    "core:prelude/primitive.wado/i32::fmt_decimal"(1, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.kind, f);
     s_28 = global:core:prelude/traits.wado::__const_obj_15;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_28);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 99);

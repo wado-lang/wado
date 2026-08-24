@@ -1,4 +1,4 @@
-// KeyValueLiteral error: newtype in concrete impl position rejects wrong type.
+// Key-value literal error: newtype in concrete impl position rejects wrong type.
 // Before the is_known_type_name fix, Tag was treated as a free type parameter,
 // so TagMap<String, i32> incorrectly matched the impl.
 type Tag = String;
@@ -8,21 +8,14 @@ struct TagMap<K, V> {
     values: List<V>,
 }
 
-impl KeyValueLiteralBuilder for TagMap<Tag, V> {
-    type Value = V;
-    type Output = TagMap<Tag, V>;
-
-    fn new_literal(capacity: i32) -> TagMap<Tag, V> {
-        return TagMap { keys: [], values: [] };
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> TagMap<Tag, V> {
-        return *self;
+impl From<Array<[String, V]>> for TagMap<Tag, V> {
+    fn from(entries: Array<[String, V]>) -> TagMap<Tag, V> {
+        let mut out: TagMap<Tag, V> = TagMap { keys: [], values: [] };
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 
@@ -32,4 +25,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "does not implement KeyValueLiteral"}
+{"compile_error": "cannot be built from an object literal"}

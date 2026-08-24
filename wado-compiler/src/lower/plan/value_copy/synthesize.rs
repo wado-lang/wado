@@ -510,9 +510,15 @@ fn is_synth_safe_element(
                 return true;
             }
             // A concrete monomorphised struct entry is the strongest
-            // signal — without it WIR has no `Ref` to point at.
-            let mangled = type_table.borrow().mangle_type_name(elem_type);
-            if lookup_struct(project, &mangled, Some(module_source)).is_some() {
+            // signal — without it WIR has no `Ref` to point at. The struct
+            // list keys on the bare instantiation name, the one
+            // `struct_list_name` derives; a module-qualified head matches
+            // nothing, which would call every generic-instance element
+            // unsafe and copy the enclosing `List<T>` by identity.
+            let listed = type_table.borrow().struct_list_name(elem_type);
+            if listed
+                .is_some_and(|name| lookup_struct(project, &name, Some(module_source)).is_some())
+            {
                 return true;
             }
             project.find_variant(module_source, name).is_some()

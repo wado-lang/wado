@@ -2,9 +2,9 @@
 // annotation asks for, and `T` is the enclosing body's own parameter — opaque,
 // so an `i32` element does not satisfy it.
 //
-// The literal coercion suppressed its heterogeneous-element diagnostic
-// whenever the element type mentioned a parameter, which let this build a
-// `List<T>` out of `i32`s and die in the WIR validator.
+// The literal coercion suppressed its element diagnostic whenever the element
+// type mentioned a parameter, which let this build a `List<T>` out of `i32`s
+// and die in the WIR validator.
 
 fn f<T>(v: T) -> i32 {
     let xs: List<T> = [1, 2, 3];
@@ -16,4 +16,4 @@ export fn run() {
 }
 
 __DATA__
-{ "compile_error": "type mismatch" }
+{ "compile_error": "cannot use `i32` where `T` is expected" }

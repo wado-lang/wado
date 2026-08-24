@@ -1,0 +1,59 @@
+// Assigning a value holding a `List<S<..>>` deep-copies the list, elements
+// included. The element being a *generic* struct instance is what makes this a
+// case of its own, and it aliased in two places: the synthesized
+// `$value_copy$List<T>` looked its element up under a module-qualified head the
+// struct list does not key on and copied the list by identity, and
+// `needs_value_copy` answered `false` for the element, so the array clone
+// copied element references in bulk.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+struct Pair<K, V> {
+    key: K,
+    value: V,
+}
+
+struct Holder<K, V> {
+    items: List<Pair<K, V>>,
+}
+
+export fn run() with Stdout {
+    let mut base: Holder<String, i32> = Holder { items: [] };
+    base.items.push(Pair { key: "a", value: 1 });
+
+    let mut copy = base;
+    copy.items.push(Pair { key: "b", value: 2 });
+
+    assert copy.items.len() == 2;
+    assert base.items.len() == 1;
+    assert base.items[0].key == "a";
+
+    // Writing through an element of the copy must not reach the original: the
+    // array clone owes each element its own struct.
+    copy.items[0].value = 99;
+    assert copy.items[0].value == 99;
+    assert base.items[0].value == 1;
+
+    // `TreeMap` is the standard-library shape of the same thing: its entry
+    // list holds a generic struct.
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    let mut map_copy = map;
+    map_copy["b"] = 2;
+    map_copy["a"] = 100;
+
+    assert map_copy.len() == 2;
+    assert map_copy["a"] == 100;
+    assert map.len() == 1;
+    assert map["a"] == 1;
+    let mut seen = 0;
+    for let [_k, _v] of map.entries() {
+        seen += 1;
+    }
+    assert seen == 1;
+
+    println("value-copy list of generic struct: ok");
+}
+
+__DATA__
+{"stdout": "value-copy list of generic struct: ok\n"}

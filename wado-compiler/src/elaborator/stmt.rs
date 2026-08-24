@@ -588,13 +588,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         (coerced.type_id, target_type)
                     } else {
-                        // Target type does not implement KeyValueLiteral
-                        let type_name = self.tysys.type_table.borrow().type_name(target_type);
-                        let _ = self.emit(TypeError::MissingTraitImpl {
-                            type_name,
-                            trait_name: "KeyValueLiteral".to_string(),
-                            span: struct_lit.span,
-                        });
+                        self.report_if_not_a_map_target(target_type, struct_lit.span);
                         let value_type = self.resolve_expr(ast_value, ctx, None);
                         (value_type, target_type)
                     }

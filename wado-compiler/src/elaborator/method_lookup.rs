@@ -23,9 +23,8 @@ use super::sig::InstantiatedImplSig;
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
-    ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
-    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, MethodOwner,
-    SequenceLiteralTraitInfo, TypeError, TypeLookup,
+    ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo,
+    IndexTraitInfo, IndexValueTraitInfo, MethodInfo, MethodOwner, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 
@@ -2806,185 +2805,81 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find `KeyValueLiteralBuilder` trait implementation for a type.
+    /// The `From<Array<E>>` impls a literal in a position of type
+    /// `base_type_id` could coerce through (WEP 2026-08-24).
     ///
-    /// Checks first for an explicit `impl KeyValueLiteralBuilder for T` (with `Output = T`
-    /// check for blanket-style self-as-builder usage), then falls back to checking whether
-    /// `T` implements the `KeyValueLiteral` trait (separate builder pattern).
-    pub(super) fn find_key_value_literal_trait_impl(
+    /// `want_pair` is the literal's form: a `{ … }` literal admits only an `E`
+    /// that is a two-element tuple, and a `[ … ]` literal prefers an `E` that
+    /// is not one — which is what separates `Value`'s two impls. A target whose
+    /// base is `Array<E>` itself answers with the identity: the array the
+    /// compiler builds is already the result.
+    pub(super) fn find_from_array_impls(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-    ) -> Option<KeyValueLiteralTraitInfo> {
-        // Primary: explicit impl KeyValueLiteralBuilder for T (self-as-builder pattern)
-        if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
-            struct_name,
-            base_type_id,
-            CompilerItem::KeyValueLiteralBuilder,
-            "insert_literal",
-            "Value",
-            None,
-        ) {
-            // Check if Output = Self (self-as-builder pattern)
-            let output_type = self
-                .find_assoc_type_in_trait_impl(
-                    struct_name,
-                    base_type_id,
-                    CompilerItem::KeyValueLiteralBuilder,
-                    "Output",
-                )
-                .unwrap_or(TypeTable::UNKNOWN);
-            // Accept if no Output constraint mismatch (output == Self or unknown)
-            if output_type == TypeTable::UNKNOWN || output_type == base_type_id {
-                return Some(KeyValueLiteralTraitInfo {
-                    value_type,
-                    builder_type: base_type_id,
-                    self_kind,
-                    trait_name,
-                });
-            }
-        }
+        want_pair: bool,
+    ) -> Vec<FromArrayInfo> {
+        let candidates = if let ResolvedType::BuiltinArray(element_type) =
+            *self.tysys.type_table.borrow().get(base_type_id)
+        {
+            // No conversion runs for an `Array<E>` target, so the module and
+            // trait name are never read; the array the literal builds is the
+            // result.
+            vec![FromArrayInfo {
+                element_type,
+                array_type: base_type_id,
+                impl_module_source: self.current_module_source.clone(),
+                trait_name: self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_trait_fq(crate::compiler_item::CompilerItem::From),
+            }]
+        } else {
+            let Some(from_def) = self
+                .tysys
+                .compiler_trait_def(crate::compiler_item::CompilerItem::From)
+            else {
+                return Vec::new();
+            };
+            self.find_arithmetic_trait_impls(struct_name, base_type_id, from_def, "from", None)
+                .into_iter()
+                .filter_map(|info| {
+                    let array_type = info.rhs_type?;
+                    let ResolvedType::BuiltinArray(element_type) =
+                        *self.tysys.type_table.borrow().get(array_type)
+                    else {
+                        return None;
+                    };
+                    Some(FromArrayInfo {
+                        element_type,
+                        array_type,
+                        impl_module_source: info.impl_module_source,
+                        trait_name: info.trait_name,
+                    })
+                })
+                .collect()
+        };
 
-        // Secondary: explicit impl KeyValueLiteral for T with type Builder (separate builder
-        // pattern for immutable output types).
-        let builder_type = self.find_assoc_type_in_trait_impl(
-            struct_name,
-            base_type_id,
-            CompilerItem::KeyValueLiteral,
-            "Builder",
-        )?;
-        let builder_name = self.tysys.struct_name_for_type(builder_type)?;
-        if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
-            &builder_name,
-            builder_type,
-            CompilerItem::KeyValueLiteralBuilder,
-            "insert_literal",
-            "Value",
-            None,
-        ) {
-            return Some(KeyValueLiteralTraitInfo {
-                value_type,
-                builder_type,
-                self_kind,
-                trait_name,
-            });
+        let (pairs, plain): (Vec<_>, Vec<_>) = candidates
+            .into_iter()
+            .partition(|found| self.is_pair_type(found.element_type));
+        if want_pair {
+            return pairs;
         }
-
-        None
+        // A sequence literal prefers the non-pair reading; the pair impls are
+        // its only candidates when the type offers nothing else.
+        if plain.is_empty() { pairs } else { plain }
     }
 
-    /// Find the value of a specific associated type in a trait impl for a given struct.
-    fn find_assoc_type_in_trait_impl(
-        &mut self,
-        struct_name: &str,
-        base_type_id: TypeId,
-        item: CompilerItem,
-        assoc_name: &str,
-    ) -> Option<TypeId> {
-        let concrete_type_args = self
-            .tysys
+    /// Whether `type_id` is a `[K, V]` — the element a `{ k: v, … }` literal
+    /// writes, and what separates a map's `From` impl from a sequence's.
+    fn is_pair_type(&self, type_id: TypeId) -> bool {
+        self.tysys
             .type_table
             .borrow()
-            .nominal_type_args(base_type_id)
-            .unwrap_or_default();
-
-        let trait_ = self.tysys.compiler_trait_def(item)?;
-        self.probe_trait_impls(
-            &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
-            &concrete_type_args,
-            |_, found| found == Some(trait_),
-            |s, impl_ref, impl_sig, declared| {
-                let trait_env = Arc::clone(&s.tysys.trait_env);
-                let header = impl_header(&trait_env, impl_ref);
-                let binding = *impl_sig.associated_types.get(assoc_name)?;
-                if !s.tysys.verify_impl_type_compatibility(
-                    &header.ty,
-                    &concrete_type_args,
-                    declared,
-                ) {
-                    return None;
-                }
-                Some(binding)
-            },
-        )
-    }
-
-    /// Find `SequenceLiteralBuilder` trait implementation for a type.
-    ///
-    /// Checks for an explicit `impl SequenceLiteralBuilder for T` (self-as-builder) first.
-    /// If not found, checks for `impl SequenceLiteral for T` with `type Builder` (separate
-    /// builder pattern for immutable output types).
-    pub(super) fn find_sequence_literal_trait_impl(
-        &mut self,
-        struct_name: &str,
-        base_type_id: TypeId,
-    ) -> Option<SequenceLiteralTraitInfo> {
-        // Primary: self-as-builder (impl SequenceLiteralBuilder for T)
-        if let Some((element_type, self_kind, trait_name, impl_source, _)) = self
-            .find_indexing_trait_impl(
-                struct_name,
-                base_type_id,
-                CompilerItem::SequenceLiteralBuilder,
-                "push_literal",
-                "Element",
-                None,
-            )
-        {
-            let output_type = self
-                .find_assoc_type_in_trait_impl(
-                    struct_name,
-                    base_type_id,
-                    CompilerItem::SequenceLiteralBuilder,
-                    "Output",
-                )
-                .unwrap_or(base_type_id);
-            return Some(SequenceLiteralTraitInfo {
-                element_type,
-                builder_type: base_type_id,
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source: impl_source,
-            });
-        }
-
-        // Secondary: separate builder (impl SequenceLiteral for T with type Builder)
-        let builder_type = self.find_assoc_type_in_trait_impl(
-            struct_name,
-            base_type_id,
-            CompilerItem::SequenceLiteral,
-            "Builder",
-        )?;
-        let builder_name = self.tysys.struct_name_for_type(builder_type)?;
-        if let Some((element_type, self_kind, trait_name, impl_source, _)) = self
-            .find_indexing_trait_impl(
-                &builder_name,
-                builder_type,
-                CompilerItem::SequenceLiteralBuilder,
-                "push_literal",
-                "Element",
-                None,
-            )
-        {
-            let output_type = self
-                .find_assoc_type_in_trait_impl(
-                    &builder_name,
-                    builder_type,
-                    CompilerItem::SequenceLiteralBuilder,
-                    "Output",
-                )
-                .unwrap_or(base_type_id);
-            return Some(SequenceLiteralTraitInfo {
-                element_type,
-                builder_type,
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source: impl_source,
-            });
-        }
-
-        None
+            .as_tuple(type_id)
+            .is_some_and(|elems| elems.len() == 2)
     }
 
     pub(super) fn find_index_assign_trait_impl(
@@ -3115,13 +3010,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
             |_, found| found == Some(trait_),
-            |s, impl_ref, impl_sig, _declared| {
+            |s, impl_ref, impl_sig, declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
                 // Shared with `lookup_method_info_uncached` and
                 // `find_trait_impl_for_type_with_args`, so a bound-checking
                 // fix for any AST shape applies to every caller.
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
+                // A concrete type argument in the impl target is a constraint,
+                // not a free parameter: `impl … for TreeMap<String, V>` does
+                // not answer for a `TreeMap<i32, String>` receiver. Without
+                // this the method signature instantiates against the wrong
+                // arguments and the mismatch only surfaces at WIR build.
+                if !s.tysys.verify_impl_type_compatibility(
+                    &header.ty,
+                    &concrete_type_args,
+                    declared,
+                ) {
+                    return None;
+                }
                 if !s.tysys.check_impl_block_bounds(
                     &s.annotate_ctx,
                     &s.type_lookup(),
@@ -3170,6 +3077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ArithmeticTraitInfo {
                     output_type,
                     self_kind,
+                    impl_module_source: header.module.clone(),
                     // The *full* spelling (`Add<Feet>`), not the operator's
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing

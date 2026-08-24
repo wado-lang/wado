@@ -1601,6 +1601,12 @@ impl FunctionTranslator<'_, '_> {
                     .map(|e| self.convert_literal_element(e))
                     .collect(),
             },
+            TirExprKind::ArrayLiteral { elements } => ExprKind::ArrayLiteral {
+                elements: elements
+                    .iter()
+                    .map(|e| self.convert_literal_element(e))
+                    .collect(),
+            },
             TirExprKind::TupleSpread { .. } => unreachable!(
                 "TirExprKind::TupleSpread should be expanded by monomorphize before lower::translate runs"
             ),

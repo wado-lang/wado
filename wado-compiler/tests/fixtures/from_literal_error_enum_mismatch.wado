@@ -1,4 +1,4 @@
-// KeyValueLiteral error: enum in concrete impl position rejects wrong type.
+// Key-value literal error: enum in concrete impl position rejects wrong type.
 // Before the is_known_type_name fix, Direction was treated as a free type
 // parameter, so DirMap<String, i32> incorrectly matched the impl.
 enum Direction { North, South }
@@ -8,21 +8,14 @@ struct DirMap<D, V> {
     values: List<V>,
 }
 
-impl KeyValueLiteralBuilder for DirMap<Direction, V> {
-    type Value = V;
-    type Output = DirMap<Direction, V>;
-
-    fn new_literal(capacity: i32) -> DirMap<Direction, V> {
-        return DirMap { keys: [], values: [] };
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> DirMap<Direction, V> {
-        return *self;
+impl From<Array<[String, V]>> for DirMap<Direction, V> {
+    fn from(entries: Array<[String, V]>) -> DirMap<Direction, V> {
+        let mut out: DirMap<Direction, V> = DirMap { keys: [], values: [] };
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 
@@ -32,4 +25,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "does not implement KeyValueLiteral"}
+{"compile_error": "cannot be built from an object literal"}

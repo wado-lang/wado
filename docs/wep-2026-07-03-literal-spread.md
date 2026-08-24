@@ -7,7 +7,7 @@ field of a struct forces listing every other field; building a map from another
 map, or composing a payload from several field sets, has the same boilerplate.
 Wado's `{ … }` literal already covers three shapes — named structs, anonymous
 structs (synthesized from field shape, auto-`Serialize`), and key-value
-collections via `KeyValueLiteralBuilder` — so the fix should serve all three with
+collections via `From<Array<[K, V]>>` — so the fix should serve all three with
 one rule.
 
 ## Decision
