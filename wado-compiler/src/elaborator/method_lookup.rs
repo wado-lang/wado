@@ -1036,10 +1036,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-<<<<<<< HEAD
-||||||| effa03c1d
-        let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
-=======
         // The nearest declaration answers, keeping its own signature. Only the
         // receiver's takes type arguments — a generic resource is rejected.
         self.resource_chain_of(def)
@@ -1067,11 +1063,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Option<(crate::defs::DefId, super::sig::MethodSig)> {
         self.resource_chain_of(def).into_iter().find_map(|current| {
-            let info = self.tysys.all_resource_types.get(&current)?;
             let sig = self
                 .tysys
                 .signatures
-                .resource_method_sig(info.defined_at, method_name)?;
+                .resource_method_sig(current, method_name)?;
             (sig.self_kind != ast::SelfKind::None).then(|| (current, sig.clone()))
         })
     }
@@ -1085,12 +1080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Option<String> {
         for impl_ref in self.collect_trait_impl_refs_multi(std::slice::from_ref(type_key)) {
-            let Some(header) = self
-                .tysys
-                .trait_env
-                .impl_headers
-                .get(&(impl_ref.0.clone(), impl_ref.1))
-            else {
+            let Some(header) = self.tysys.trait_env.impl_headers.get(&impl_ref.0) else {
                 continue;
             };
             if header.methods.iter().any(|m| m.name == method_name)
@@ -1109,8 +1099,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-        let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
->>>>>>> origin/main
         let sig = self
             .tysys
             .signatures

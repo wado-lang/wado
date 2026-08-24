@@ -429,6 +429,7 @@ fn method_headers(
                 .iter()
                 .filter(|p| p.self_kind == ast::SelfKind::None)
                 .count(),
+            visibility: m.visibility,
         })
         .collect()
 }
@@ -897,7 +898,7 @@ impl TraitEnv {
         &self,
         key: &ImplTargetKey,
         method_name: &str,
-    ) -> Option<&(String, ModuleSource, AstId, usize)> {
+    ) -> Option<&(String, ModuleSource, DefId, usize)> {
         self.resource_static_method_index
             .get(key)?
             .iter()
@@ -1118,44 +1119,7 @@ impl TraitEnv {
                             name: trait_decl.name.clone(),
                             type_params: trait_decl.type_params.clone(),
                             supertraits: trait_decl.supertraits.clone(),
-<<<<<<< HEAD
                             methods: method_headers(defs, &trait_decl.methods),
-||||||| effa03c1d
-                            methods: trait_decl
-                                .methods
-                                .iter()
-                                .map(|m| ImplMethodHeader {
-                                    name: m.name.clone(),
-                                    ast_id: m.id,
-                                    type_params: m.type_params.clone(),
-                                    span: m.span,
-                                    name_span: m.name_span,
-                                    param_count: m
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.self_kind == ast::SelfKind::None)
-                                        .count(),
-                                })
-                                .collect(),
-=======
-                            methods: trait_decl
-                                .methods
-                                .iter()
-                                .map(|m| ImplMethodHeader {
-                                    name: m.name.clone(),
-                                    ast_id: m.id,
-                                    type_params: m.type_params.clone(),
-                                    span: m.span,
-                                    name_span: m.name_span,
-                                    param_count: m
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.self_kind == ast::SelfKind::None)
-                                        .count(),
-                                    visibility: m.visibility,
-                                })
-                                .collect(),
->>>>>>> origin/main
                             assoc_types: trait_decl.associated_types.clone(),
                             span: trait_decl.span,
                         },
@@ -1192,44 +1156,7 @@ impl TraitEnv {
                         trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
-<<<<<<< HEAD
                         methods: method_headers(defs, &impl_block.methods),
-||||||| effa03c1d
-                        methods: impl_block
-                            .methods
-                            .iter()
-                            .map(|m| ImplMethodHeader {
-                                name: m.name.clone(),
-                                ast_id: m.id,
-                                type_params: m.type_params.clone(),
-                                span: m.span,
-                                name_span: m.name_span,
-                                param_count: m
-                                    .params
-                                    .iter()
-                                    .filter(|p| p.self_kind == ast::SelfKind::None)
-                                    .count(),
-                            })
-                            .collect(),
-=======
-                        methods: impl_block
-                            .methods
-                            .iter()
-                            .map(|m| ImplMethodHeader {
-                                name: m.name.clone(),
-                                ast_id: m.id,
-                                type_params: m.type_params.clone(),
-                                span: m.span,
-                                name_span: m.name_span,
-                                param_count: m
-                                    .params
-                                    .iter()
-                                    .filter(|p| p.self_kind == ast::SelfKind::None)
-                                    .count(),
-                                visibility: m.visibility,
-                            })
-                            .collect(),
->>>>>>> origin/main
                         associated_types: impl_block.associated_types.clone(),
                         is_synthesize_request: impl_block.is_synthesize_request,
                         span: impl_block.span,
@@ -1300,15 +1227,9 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-<<<<<<< HEAD
-                                    method_id: defs.def_at(method.id),
-||||||| effa03c1d
-                                    method_id: method.id,
-=======
                                     module: module_source.clone(),
                                     inherent_visibility: None,
-                                    method_id: method.id,
->>>>>>> origin/main
+                                    method_id: defs.def_at(method.id),
                                 });
                         }
                     }
@@ -1327,15 +1248,9 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-<<<<<<< HEAD
-                                    method_id: defs.def_at(method.id),
-||||||| effa03c1d
-                                    method_id: method.id,
-=======
                                     module: module_source.clone(),
                                     inherent_visibility: Some(method.visibility),
-                                    method_id: method.id,
->>>>>>> origin/main
+                                    method_id: defs.def_at(method.id),
                                 });
                         }
                     }
