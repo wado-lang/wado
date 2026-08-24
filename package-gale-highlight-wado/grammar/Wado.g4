@@ -202,7 +202,7 @@ worldItem
     ;
 
 resourceDecl
-    : 'resource' IDENTIFIER genericParams? ('{' resourceMember* '}' | ';')
+    : 'resource' IDENTIFIER genericParams? ('extends' typeRef)? ('{' resourceMember* '}' | ';')
     ;
 
 resourceMember

@@ -139,6 +139,7 @@
 "else" @keyword
 "enum" @keyword
 "export" @keyword
+"extends" @keyword
 "flags" @keyword
 "fn" @keyword
 "for" @keyword

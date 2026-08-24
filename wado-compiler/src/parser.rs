@@ -5,38 +5,15 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
-<<<<<<< HEAD
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
-    RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-||||||| 3e70fcc5f
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
-    RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
-    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
-    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
-=======
     CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
     FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
     IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
     InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
     MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
-    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
->>>>>>> origin/main
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
+    StructLiteralExpr,
     StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
     TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
     UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
@@ -6240,89 +6217,6 @@ fn span_of_open_brace(origin: crate::token::Position) -> Span {
     )
 }
 
-<<<<<<< HEAD
-||||||| 3e70fcc5f
-/// Rebase a position produced by lexing a fragment on its own onto the file the
-/// fragment came from.
-///
-/// The fragment starts at line 1, column 1, offset 0, so only its first line
-/// needs the column shift — every later line already begins at column 1 where
-/// the file's does.
-fn rebase_position(
-    position: crate::token::Position,
-    origin: crate::token::Position,
-) -> crate::token::Position {
-    crate::token::Position {
-        offset: origin.offset + position.offset,
-        line: origin.line + position.line - 1,
-        column: if position.line == 1 {
-            origin.column + position.column - 1
-        } else {
-            position.column
-        },
-    }
-}
-
-/// Rebase a span the same way [`rebase_position`] rebases a point.
-fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
-    let shift_column = |line: usize, column: usize| {
-        if line == 1 {
-            origin.column + column - 1
-        } else {
-            column
-        }
-    };
-    Span::with_end(
-        origin.offset + span.start,
-        origin.offset + span.end,
-        origin.line + span.line - 1,
-        shift_column(span.line, span.column),
-        origin.line + span.end_line - 1,
-        shift_column(span.end_line, span.end_column),
-    )
-}
-
-=======
-/// Rebase a position produced by lexing a fragment on its own onto the file the
-/// fragment came from.
-///
-/// The fragment starts at line 1, column 1, offset 0, so only its first line
-/// needs the column shift — every later line already begins at column 1 where
-/// the file's does.
-fn rebase_position(
-    position: crate::token::Position,
-    origin: crate::token::Position,
-) -> crate::token::Position {
-    crate::token::Position {
-        offset: origin.offset + position.offset,
-        line: origin.line + position.line - 1,
-        column: if position.line == 1 {
-            origin.column + position.column - 1
-        } else {
-            position.column
-        },
-    }
-}
-
-/// Rebase a span the same way [`rebase_position`] rebases a point.
-fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
-    let shift_column = |line: usize, column: usize| {
-        if line == 1 {
-            origin.column + column - 1
-        } else {
-            column
-        }
-    };
-    Span::with_end(
-        origin.offset + span.start,
-        origin.offset + span.end,
-        origin.line + span.line - 1,
-        shift_column(span.line, span.column),
-        origin.line + span.end_line - 1,
-        shift_column(span.end_line, span.end_column),
-    )
-}
-
 /// The backing is a property of the handle type, so it has one home: the
 /// `resource` declaration. Anything else carrying it is rejected.
 fn reject_resource_backing(attrs: &[Attribute]) -> ParseResult<()> {
@@ -6337,7 +6231,6 @@ fn reject_resource_backing(attrs: &[Attribute]) -> ParseResult<()> {
     }
 }
 
->>>>>>> origin/main
 /// Populate `Attribute::cm_boundary` from the attribute name:
 /// `#[canonical("namespace", "name")]` gives `Canonical`,
 /// `#[cm("ns:pkg/iface[@v][#fn]")]` gives `Import`, and a `#[cm(…)]` that does
