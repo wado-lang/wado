@@ -2054,61 +2054,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
                     //
-<<<<<<< HEAD
                     // An indefinite branch defers to its sibling's resolved
                     // type; its tail is patched below.
-                    let tt = self.tysys.type_table.borrow();
-                    let then_unknown = tt.is_indefinite(then_type);
-                    let else_unknown = tt.is_indefinite(else_type);
-                    drop(tt);
-                    if then_type == else_type {
-                        then_type
-                    } else if then_type == TypeTable::NEVER {
-                        else_type
-                    } else if else_type == TypeTable::NEVER {
-                        then_type
-                    } else if then_unknown && !else_unknown {
-                        else_type
-                    } else if else_unknown && !then_unknown {
-                        then_type
-                    } else if if_expr.else_block.is_none() {
-                        if then_type != TypeTable::UNIT {
-                            let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: "()".to_string(),
-                                found: type_name,
-                                span: if_expr.then_block.span,
-                            });
-||||||| 3e70fcc5f8
-                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
-                    // inner type could not be inferred) defer to the sibling branch's
-                    // resolved type. The unresolved branch's tail is patched below.
-                    let tt = self.tysys.type_table.borrow();
-                    let then_unknown = tt.contains_unknown(then_type);
-                    let else_unknown = tt.contains_unknown(else_type);
-                    drop(tt);
-                    if then_type == else_type {
-                        then_type
-                    } else if then_type == TypeTable::NEVER {
-                        else_type
-                    } else if else_type == TypeTable::NEVER {
-                        then_type
-                    } else if then_unknown && !else_unknown {
-                        else_type
-                    } else if else_unknown && !then_unknown {
-                        then_type
-                    } else if if_expr.else_block.is_none() {
-                        if then_type != TypeTable::UNIT {
-                            let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: "()".to_string(),
-                                found: type_name,
-                                span: if_expr.then_block.span,
-                            });
-=======
-                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
-                    // inner type could not be inferred) defer to the sibling branch's
-                    // resolved type. The unresolved branch's tail is patched below.
                     match (
                         self.agreed_branch_type(&[then_type, else_type]),
                         &if_expr.else_block,
@@ -2137,7 +2084,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 span: else_block.span,
                             });
                             then_type
->>>>>>> origin/main
                         }
                     }
                 };
@@ -2145,7 +2091,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Report any unresolved `null` tail in either branch against
                 // the determined result type — AST mirror of the old
                 // `patch_unresolved_null` pass (whose TIR mutation was dead).
-                // When the type stayed UNKNOWN (both branches a bare `null`)
+                // When the type stayed indefinite (both branches a bare `null`)
                 // `report_uninferable_result` already fired and the null pass
                 // is skipped.
                 if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
@@ -2382,7 +2328,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let (a_unknown, b_unknown) = {
             let tt = self.tysys.type_table.borrow();
-            (tt.contains_unknown(a), tt.contains_unknown(b))
+            (tt.is_indefinite(a), tt.is_indefinite(b))
         };
         if a_unknown && !b_unknown {
             return Some(b);
