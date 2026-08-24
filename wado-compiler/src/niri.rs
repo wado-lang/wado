@@ -446,12 +446,18 @@ impl<'a> Interpreter<'a> {
     /// the constants they are. A global initializer arrives this way once its
     /// constructor is inlined (`elements = […]; List { repr: elements, … }`),
     /// and a block whose statements are anything else binds nothing.
+    ///
+    /// The bindings go through [`Self::bind_local`], so an aggregate the
+    /// aliasing analysis has not cleared is still demoted rather than believed;
+    /// recording that analysis for `body` first is what lets a genuinely
+    /// unaliased `elements = […]` survive as the constant it is.
     pub fn bind_block_lets(&mut self, body: &crate::nir_arena::Body, block: BlockId) {
         use crate::nir_arena::StmtKind;
         let stmts = body.blocks[block].stmts.clone();
         let Some((_, lets)) = stmts.split_last() else {
             return;
         };
+        self.record_aggregate_locals(body);
         for stmt in lets {
             let StmtKind::Let {
                 local_index, value, ..
@@ -461,7 +467,7 @@ impl<'a> Interpreter<'a> {
             };
             let (local_index, value) = (*local_index, *value);
             let lattice = self.operand_to_lattice(body, value);
-            self.frame.env.insert(local_index, lattice);
+            self.bind_local(local_index, lattice);
         }
     }
 

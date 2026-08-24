@@ -2017,13 +2017,18 @@ let asc = orig.sorted();                // returns new sorted array
 #### Collection Literal Coercion
 
 Sequence literals `[e0, e1, ...]` and key-value literals `{ k: v, ... }` can be
-coerced to any collection type through `From`. A literal's natural type is an
-`Array`, and the target's `From<Array<…>>` impl is what builds it:
+coerced to any collection type through `From`. Coercing one materializes an
+`Array`, which the target's `From<Array<…>>` impl builds from:
 
-| Literal         | Natural type    | Impl the target writes                            |
+| Literal         | Materializes    | Impl the target writes                            |
 | --------------- | --------------- | ------------------------------------------------- |
 | `[e0, e1, ...]` | `Array<E>`      | `From<Array<T>> for List<T>`                      |
 | `{ k: v, ... }` | `Array<[K, V]>` | `From<Array<[String, V]>> for TreeMap<String, V>` |
+
+This applies only where a coercion runs. The tuple and struct readings keep
+their priority: with no target type `[1, 2, 3]` is still the tuple
+`[i32, i32, i32]` (see [List Literals](#list-literals)), and `{ … }` against a
+nominal struct with matching fields is still a struct literal.
 
 A key-value literal is an array of pairs, so `[["a", 1]]` builds the same map
 `{ a: 1 }` does. `Array<T>` itself needs no impl — the array the literal

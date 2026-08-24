@@ -468,13 +468,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // A key-value literal whose generic target builds from no pair array
-        // at all: say what is missing where it is written.
+        // at all: say what is missing where it is written. Asked of the target
+        // rather than inferred from the coercion declining — several admitted
+        // impls decline too, and having already reported the ambiguity, this
+        // would contradict it.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(
                 self.tysys.type_table.borrow().get(target_type),
                 ResolvedType::GenericInstance { .. }
             )
+            && !self.is_key_value_literal_target(target_type)
         {
             self.report_not_a_map_target(target_type, expr.span());
         }

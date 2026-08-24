@@ -1,12 +1,14 @@
-// Test that the WIR-level DCE removes `List<T>::push` / `::grow`
-// instantiations whose only call site was eliminated by Phase 3's
-// `collapse_array_push_sequences`.
+// A list literal pulls in no `List<T>::push` / `::grow` instantiation at all:
+// `[w]` denotes an `Array<Widget>` that `List<Widget>::from` takes ownership of
+// (WEP 2026-08-24), so `array.new_fixed` is the whole construction.
 //
-// The single-element array literal `[w]` lowers to a TIR
-// `List::push` chain that the WIR optimizer
-// rewrites to `array.new_fixed`. After that rewrite, the monomorphized
-// `List<Widget>::push` (and its `List<Widget>::grow` callee) have
-// zero call sites — they must not appear in the final WIR.
+// This fixture used to assert that WIR DCE *removed* those instantiations after
+// a push chain was collapsed. That premise is gone with the builder protocol —
+// and the assertion never held anyway: a monomorphized name is module-qualified
+// (`List<wir_optimize_dce_orphan_push.wado/Widget>::push`), so the old
+// `List<Widget>::push` pattern matched nothing on either lowering and the
+// `wir_not_expect` passed unconditionally. The patterns below are the qualified
+// suffix, which is 3 occurrences under the old lowering and 0 under this one.
 
 use { println, Stdout } from "core:cli";
 
@@ -24,8 +26,8 @@ __DATA__
 {
     "stdout": "7\n",
     "wir_not_expect:O2": [
-        "List<Widget>::push",
-        "List<Widget>::grow"
+        "Widget>::push",
+        "Widget>::grow"
     ],
     "wir_expect:O2": [
         "array.new_fixed"

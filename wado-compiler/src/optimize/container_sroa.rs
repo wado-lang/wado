@@ -126,8 +126,22 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
         [p0] if is_ref_list_of_t(*p0) && is_query_return(ret) => Some(ListMethodKind::Query),
         // fn(i32) -> List<T> — Constructor (static)
         [p0] if is_i32(*p0) && is_list_of_t(ret) => Some(ListMethodKind::Constructor),
-        // fn(Array<T>) -> List<T> — FromArray (static)
-        [p0] if is_array_of_t(*p0) && is_list_of_t(ret) => Some(ListMethodKind::FromArray),
+        // fn(Array<T>) -> List<T> on `impl From<…> for List<T>` — FromArray
+        // (static). The trait is part of the match, not just the shape: the
+        // rewrite drops the call rather than mirroring it per field, and a
+        // same-shaped method of another trait would lose whatever it did.
+        // Naming `From` identifies the impl exactly here, because the receiver
+        // is already `List<T>` and a second `From<Array<T>>` for it would
+        // overlap.
+        [p0] if is_array_of_t(*p0)
+            && is_list_of_t(ret)
+            && info
+                .trait_name
+                .as_ref()
+                .is_some_and(|t| t.base_name() == "From") =>
+        {
+            Some(ListMethodKind::FromArray)
+        }
         // fn(&mut List<T>, T) -> () — ElementWriter
         [p0, p1] if is_mut_ref_list_of_t(*p0) && is_t(*p1) && is_unit(ret) => {
             Some(ListMethodKind::ElementWriter)

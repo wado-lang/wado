@@ -47,9 +47,11 @@ iterator already yields (`type Item = [K, V]`). Two parallel arrays would be
 cheaper and are rejected for it: the pair array is the honest denotation, and it
 is what lets the whole mechanism be `From`, whose `from` takes one argument.
 
-Tuple and struct interpretations keep their existing priority: `[…]` against a
-tuple type is a tuple literal, and `{…}` against a nominal struct with matching
-fields is a struct literal. Coercion is attempted only when neither applies.
+This is what a coercion materializes, not what a literal is everywhere. Tuple
+and struct interpretations keep their existing priority: `[…]` against a tuple
+type — or against no type at all, as in `let t = [1, 2, 3]` — is a tuple
+literal, and `{…}` against a nominal struct with matching fields is a struct
+literal. Coercion is attempted only when neither applies.
 
 ### Coercion is `From`, applied at literal positions
 

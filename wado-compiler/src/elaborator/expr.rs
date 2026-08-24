@@ -2342,7 +2342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
                         t != TypeTable::NEVER
                             && !self.type_has_infer_hole(t)
-                            && !self.tysys.type_table.borrow().contains_unknown(t)
+                            && !self.tysys.type_table.borrow().is_indefinite(t)
                     })
                 });
             if let Some(target) = target {

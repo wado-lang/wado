@@ -269,11 +269,14 @@ impl MethodSig {
     /// [`Self::instantiate_call`] with the declaring block's own alignment.
     ///
     /// `declaring_args` are the *receiver's* type arguments, in the target
-    /// type's declaration order. Where the block is `impl … for Map<String, V>`
-    /// those do not line up with its slots at all — position 0 is pinned and
-    /// binds nothing — so [`ImplSig::slots`] is what reads them. Without an
-    /// `ImplSig` the two orders are assumed to coincide, which is true of a
-    /// fully generic target and of every non-impl declaration.
+    /// type's declaration order. Where the block writes a concrete argument
+    /// (`impl … for Map<String, V>`) those do not line up with its slots —
+    /// position 0 is pinned and binds nothing — and [`ImplSig::slots`] is what
+    /// reads them. It answers only for a target written as a generic
+    /// instantiation: a blanket, `&`-target or variadic-tuple block keeps no
+    /// `target_type_args` and binds its slots from the receiver differently, so
+    /// those fall back to the positional zip, as does every non-impl
+    /// declaration.
     pub(crate) fn instantiate_call_with(
         &self,
         type_table: &RefCell<TypeTable>,
@@ -281,13 +284,16 @@ impl MethodSig {
         declaring_args: &[TypeId],
         method_args: &[TypeId],
     ) -> InstantiatedSig {
-        let mut substitution = match declaring {
+        let aligned = declaring
+            .filter(|impl_sig| impl_sig.target_type_args.len() == declaring_args.len())
+            .filter(|impl_sig| !impl_sig.target_type_args.is_empty());
+        let mut substitution = match aligned {
             Some(impl_sig) => impl_sig.slots(type_table, declaring_args),
             None => IndexMap::default(),
         };
         {
             let table = type_table.borrow();
-            let pairs = declaring
+            let pairs = aligned
                 .is_none()
                 .then(|| self.declaring_type_params().iter().zip(declaring_args))
                 .into_iter()
