@@ -468,31 +468,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // A key-value literal whose generic target builds from no pair array
-        // at all: say what is missing where it is written. Asked of the target
-        // rather than inferred from the coercion declining — several admitted
-        // impls decline too, and having already reported the ambiguity, this
-        // would contradict it.
+        // at all: say what is missing where it is written.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(
                 self.tysys.type_table.borrow().get(target_type),
                 ResolvedType::GenericInstance { .. }
             )
-            && !self.is_key_value_literal_target(target_type)
         {
-            self.report_not_a_map_target(target_type, expr.span());
+            self.report_if_not_a_map_target(target_type, expr.span());
         }
 
         None
     }
 
     /// Report an object literal written against a type that builds from no pair
-    /// array at all.
-    pub(super) fn report_not_a_map_target(
+    /// array at all. Asked of the target, so a coercion that declined for
+    /// another reason — an ambiguity it has already reported — says nothing
+    /// here that would contradict it.
+    pub(super) fn report_if_not_a_map_target(
         &mut self,
         target_type: TypeId,
         span: crate::token::Span,
     ) {
+        if self.is_key_value_literal_target(target_type) {
+            return;
+        }
         let type_name = self.tysys.type_table.borrow().type_name(target_type);
         let _ = self.emit(TypeError::InvalidLiteral {
             message: format!(

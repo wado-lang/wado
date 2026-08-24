@@ -2031,8 +2031,8 @@ their priority: with no target type `[1, 2, 3]` is still the tuple
 nominal struct with matching fields is still a struct literal.
 
 A key-value literal is an array of pairs, so `[["a", 1]]` builds the same map
-`{ a: 1 }` does. `Array<T>` itself needs no impl — the array the literal
-denotes is already the result.
+`{ a: 1 }` does. `Array<T>` itself needs no impl — the array the coercion
+materializes is already the result.
 
 ##### Usage
 

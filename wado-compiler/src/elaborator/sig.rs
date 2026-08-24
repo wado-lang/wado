@@ -150,11 +150,9 @@ pub(crate) struct MethodSig {
     /// separately (`Type<A>::method<B>()`), so it needs the split; nothing
     /// else does, because a slot carries its own index.
     pub(crate) declaring_slot_count: u32,
-    /// The `impl` block that declares this method, where one does. A use site
-    /// spells the *receiver's* type arguments (`TreeMap::<String, i32>`), which
-    /// are in the target's declaration order, not the block's slot order —
-    /// [`ImplSig::slots`] is the alignment between them, and this is how a
-    /// caller reaches it.
+    /// The `impl` block that declares this method, where one does. How a caller
+    /// reaches [`ImplSig::spelled_slots`], which aligns a spelled turbofish
+    /// with the block's slots.
     pub(crate) declaring_impl: Option<AstId>,
     /// The method's own slots as the declaration wrote them, parallel to
     /// [`Self::own_type_params`]. Bounds and defaults are irreducibly AST and
@@ -271,12 +269,9 @@ impl MethodSig {
     /// `declaring_args` are the *receiver's* type arguments, in the target
     /// type's declaration order. Where the block writes a concrete argument
     /// (`impl … for Map<String, V>`) those do not line up with its slots —
-    /// position 0 is pinned and binds nothing — and [`ImplSig::slots`] is what
-    /// reads them. It answers only for a target written as a generic
-    /// instantiation: a blanket, `&`-target or variadic-tuple block keeps no
-    /// `target_type_args` and binds its slots from the receiver differently, so
-    /// those fall back to the positional zip, as does every non-impl
-    /// declaration.
+    /// position 0 is pinned and binds nothing — so [`ImplSig::spelled_slots`]
+    /// reads them, and whatever it cannot align falls back to the positional
+    /// zip, as does every non-impl declaration.
     pub(crate) fn instantiate_call_with(
         &self,
         type_table: &RefCell<TypeTable>,
@@ -284,17 +279,12 @@ impl MethodSig {
         declaring_args: &[TypeId],
         method_args: &[TypeId],
     ) -> InstantiatedSig {
-        let aligned = declaring
-            .filter(|impl_sig| impl_sig.target_type_args.len() == declaring_args.len())
-            .filter(|impl_sig| !impl_sig.target_type_args.is_empty());
-        let mut substitution = match aligned {
-            Some(impl_sig) => impl_sig.slots(type_table, declaring_args),
-            None => IndexMap::default(),
-        };
+        let aligned = declaring.and_then(|sig| sig.spelled_slots(type_table, declaring_args));
+        let positional = aligned.is_none();
+        let mut substitution = aligned.unwrap_or_default();
         {
             let table = type_table.borrow();
-            let pairs = aligned
-                .is_none()
+            let pairs = positional
                 .then(|| self.declaring_type_params().iter().zip(declaring_args))
                 .into_iter()
                 .flatten()
@@ -445,6 +435,19 @@ impl ImplSig {
                 _ => None,
             })
             .collect()
+    }
+
+    /// [`Self::slots`] where `receiver_args` are a *spelled* argument list, as
+    /// a turbofish writes them; `None` where this block's target cannot align
+    /// with one — a blanket, `&`-target or variadic-tuple block writes no
+    /// `target_type_args` and binds its slots from the receiver differently.
+    pub(crate) fn spelled_slots(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        receiver_args: &[TypeId],
+    ) -> Option<IndexMap<u32, TypeId>> {
+        (!self.target_type_args.is_empty() && self.target_type_args.len() == receiver_args.len())
+            .then(|| self.slots(type_table, receiver_args))
     }
 }
 

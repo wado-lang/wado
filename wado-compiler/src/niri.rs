@@ -444,13 +444,10 @@ impl<'a> Interpreter<'a> {
 
     /// Bind a block's leading `let`s into the frame, so the tail reads them as
     /// the constants they are. A global initializer arrives this way once its
-    /// constructor is inlined (`elements = […]; List { repr: elements, … }`),
-    /// and a block whose statements are anything else binds nothing.
+    /// constructor is inlined (`elements = […]; List { repr: elements, … }`).
     ///
-    /// The bindings go through [`Self::bind_local`], so an aggregate the
-    /// aliasing analysis has not cleared is still demoted rather than believed;
-    /// recording that analysis for `body` first is what lets a genuinely
-    /// unaliased `elements = […]` survive as the constant it is.
+    /// Recording the aliasing analysis first is what lets [`Self::bind_local`]
+    /// keep an unaliased `elements = […]` rather than demote it.
     pub fn bind_block_lets(&mut self, body: &crate::nir_arena::Body, block: BlockId) {
         use crate::nir_arena::StmtKind;
         let stmts = body.blocks[block].stmts.clone();

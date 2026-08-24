@@ -35,9 +35,9 @@ pipeline could see.
 
 ## Decision
 
-### A literal's natural type is an `Array`
+### Coercing a literal materializes an `Array`
 
-| Literal       | Natural type    |
+| Literal       | Materializes    |
 | ------------- | --------------- |
 | `[e0, e1, …]` | `Array<E>`      |
 | `{k0: v0, …}` | `Array<[K, V]>` |
@@ -47,9 +47,8 @@ iterator already yields (`type Item = [K, V]`). Two parallel arrays would be
 cheaper and are rejected for it: the pair array is the honest denotation, and it
 is what lets the whole mechanism be `From`, whose `from` takes one argument.
 
-This is what a coercion materializes, not what a literal is everywhere. Tuple
-and struct interpretations keep their existing priority: `[…]` against a tuple
-type — or against no type at all, as in `let t = [1, 2, 3]` — is a tuple
+Tuple and struct interpretations keep their existing priority: `[…]` against a
+tuple type — or against no type at all, as in `let t = [1, 2, 3]` — is a tuple
 literal, and `{…}` against a nominal struct with matching fields is a struct
 literal. Coercion is attempted only when neither applies.
 

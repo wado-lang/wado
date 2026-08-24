@@ -2428,21 +2428,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_args: &[TypeId],
     ) -> Vec<TypeId> {
-        // Only a target written as a generic instantiation aligns this way; a
-        // blanket or `&`-target block keeps no `target_type_args` and would
-        // bind nothing at all. See [`super::sig::MethodSig::instantiate_call_with`].
-        let Some(impl_sig) = self
+        let Some(slots) = self
             .static_method_sig(struct_name, method_name)
             .and_then(|sig| sig.declaring_impl)
             .and_then(|id| self.tysys.signatures.impl_sig(id))
-            .filter(|impl_sig| {
-                !impl_sig.target_type_args.is_empty()
-                    && impl_sig.target_type_args.len() == receiver_args.len()
-            })
+            .and_then(|impl_sig| impl_sig.spelled_slots(&self.tysys.type_table, receiver_args))
         else {
             return receiver_args.to_vec();
         };
-        let slots = impl_sig.slots(&self.tysys.type_table, receiver_args);
         let (decl_params, _) = self.static_method_slot_params(struct_name, method_name);
         let table = self.tysys.type_table.borrow();
         decl_params

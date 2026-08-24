@@ -118,6 +118,12 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
     let is_array_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if *inner == elem_ty);
     let is_i32 = |ty: TypeId| ty == TypeTable::I32;
     let is_unit = |ty: TypeId| ty == TypeTable::UNIT;
+    // Names the impl exactly, the receiver being `List<T>` already: a second
+    // `From<Array<T>>` for it would overlap.
+    let is_from_impl = info
+        .trait_name
+        .as_ref()
+        .is_some_and(|t| t.base_name() == "From");
     // Length-invariant query return types: i32 (len, capacity) or bool (is_empty).
     let is_query_return = |ty: TypeId| ty == TypeTable::I32 || ty == TypeTable::BOOL;
 
@@ -127,19 +133,10 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
         // fn(i32) -> List<T> — Constructor (static)
         [p0] if is_i32(*p0) && is_list_of_t(ret) => Some(ListMethodKind::Constructor),
         // fn(Array<T>) -> List<T> on `impl From<…> for List<T>` — FromArray
-        // (static). The trait is part of the match, not just the shape: the
-        // rewrite drops the call rather than mirroring it per field, and a
-        // same-shaped method of another trait would lose whatever it did.
-        // Naming `From` identifies the impl exactly here, because the receiver
-        // is already `List<T>` and a second `From<Array<T>>` for it would
-        // overlap.
-        [p0] if is_array_of_t(*p0)
-            && is_list_of_t(ret)
-            && info
-                .trait_name
-                .as_ref()
-                .is_some_and(|t| t.base_name() == "From") =>
-        {
+        // (static). The trait is matched, not just the shape: this rewrite
+        // drops the call rather than mirroring it per field, so a same-shaped
+        // method of another trait would lose whatever it did.
+        [p0] if is_array_of_t(*p0) && is_list_of_t(ret) && is_from_impl => {
             Some(ListMethodKind::FromArray)
         }
         // fn(&mut List<T>, T) -> () — ElementWriter
