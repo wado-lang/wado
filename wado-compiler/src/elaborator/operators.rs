@@ -1967,22 +1967,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         method_info.is_type_param_receiver = resolved.is_type_param_receiver;
 
-        // Where a block was matched, the module is its own — read off the
-        // declaration dispatch selected rather than derived from the receiver.
-        //
-        // The rest name no block: an auto-derived `Eq` / `Ord`, and a method
-        // reached through a type parameter's bound, whose block
-        // monomorphization picks. There the receiver's newtype chain answers,
-        // keyed on the link the lookup was made on — peeling to the base
-        // instead would send an impl written on the newtype to the base's
-        // module — and a by-name lookup is the last resort for a receiver
-        // carrying no declaring module.
         // Only a *concrete* block's function lives in the block's module: a
-        // generic block's post-substitution instance is materialised in the
-        // receiver type's module, the convention
-        // `TraitEnv::concrete_impl_module_for` encodes for monomorphization.
-        // Naming the block for one of those would send the call to a module
-        // that never defines it.
+        // generic block's instance is materialised in the receiver type's,
+        // the convention `TraitEnv::concrete_impl_module_for` encodes.
+        //
+        // Everything else answers from the receiver's newtype chain, keyed on
+        // the link the lookup was made on — peeling to the base would send an
+        // impl written on the newtype to the base's module.
         let concrete_impl = resolved.impl_def.filter(|def| {
             self.tysys
                 .trait_env

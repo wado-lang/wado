@@ -134,12 +134,9 @@ impl CalleeIdentKind<'_> {
         }
     }
 
-    /// The reference site of the callee itself, which the walk answered for in
-    /// the module that wrote it — the read that says which declaration a bare
-    /// `name(…)` means, whichever module the walk is standing in.
-    ///
-    /// `Rewritten` is synthesised from an already-resolved `Self::` / `T::`
-    /// prefix, so it names no node any walk saw.
+    /// The reference site of the callee itself, which says which declaration a
+    /// bare `name(…)` means. `Rewritten` is synthesised from an already-resolved
+    /// `Self::` / `T::` prefix, so no walk saw it.
     fn callee_site(&self) -> Option<ast::AstId> {
         match self {
             Self::AsIs(ident) => Some(ident.id),
@@ -501,8 +498,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_site = callee_kind.receiver_site();
 
         // First, determine expected parameter types to handle coercion.
-        let (mut param_types, callee_slots) =
-            self.lookup_function_signature(effective_name, receiver_site, callee_kind.callee_site());
+        let (mut param_types, callee_slots) = self.lookup_function_signature(
+            effective_name,
+            receiver_site,
+            callee_kind.callee_site(),
+        );
 
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
@@ -677,8 +677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Builtin functions: resolve through core:builtin module
             if prefix == "builtin" {
                 (
-                    self.decl_in_module(&ModuleSource::builtin(), suffix)
-                        .map(|def| CalleeRef::declared(self.tysys.resolutions.defs(), def)),
+                    self.callee_in_module(&ModuleSource::builtin(), suffix),
                     effective_name.to_string(),
                 )
             }
@@ -1327,8 +1326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 (
-                    self.decl_in_module(&ns_source, suffix)
-                        .map(|def| CalleeRef::declared(self.tysys.resolutions.defs(), def)),
+                    self.callee_in_module(&ns_source, suffix),
                     effective_name.to_string(),
                 )
             }
@@ -1359,30 +1357,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         // The call's own reference site, answered by the module that wrote it
-        // (WEP 2026-08-12). This is what makes a parameter default name the
-        // callee module's function: the default is written in the declaring
-        // module and walked from the call site, so a tier order over the
-        // *walking* module's names answers with the caller's same-named
-        // declaration instead.
-        else if let Some(callee) = self
-            .tysys
-            .resolutions
-            .declared_if_walked(ident.id)
-            .filter(|def| self.tysys.resolutions.defs().kind(*def) == crate::defs::DefKind::Function)
+        // (WEP 2026-08-12) — not by the module the walk is standing in, which
+        // for a parameter default is the caller's.
+        else if let Some(callee) =
+            self.tysys
+                .resolutions
+                .declared_if_walked(ident.id)
+                .filter(|def| {
+                    self.tysys.resolutions.defs().kind(*def) == crate::defs::DefKind::Function
+                })
         {
             self.record_reference_to_decl(ident.id, callee);
-            (
-                Some(CalleeRef::declared(self.tysys.resolutions.defs(), callee)),
-                effective_name.to_string(),
-            )
+            (Some(self.callee_of(callee)), effective_name.to_string())
         }
-        // `panic` / `unreachable` where no site answered — a synthesised call,
-        // whose node no walk saw. A module that declares either name of its own
-        // is answered by the site above, so this reaches only `core:rt`'s.
+        // `panic` / `unreachable` where no site answered — a synthesised call.
+        // A module declaring either name of its own is answered above.
         else if matches!(effective_name, "panic" | "unreachable") {
             (
-                self.decl_in_module(&ModuleSource::rt(), effective_name)
-                    .map(|def| CalleeRef::declared(self.tysys.resolutions.defs(), def)),
+                self.callee_in_module(&ModuleSource::rt(), effective_name),
                 effective_name.to_string(),
             )
         }
@@ -1690,7 +1682,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect: crate::defs::DefId,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
-        let sig = self.tysys.signatures.resource_method_sig(effect, operation)?;
+        let sig = self
+            .tysys
+            .signatures
+            .resource_method_sig(effect, operation)?;
         Some((sig.decl.param_types.clone(), sig.decl.return_type))
     }
 
@@ -1795,9 +1790,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (Vec::new(), Vec::new());
         }
 
-        // The callee's own site, answered by the module that wrote it — which
-        // covers this module's functions, its imports under either spelling,
-        // and a default expression's callee scope, all at once.
+        // One read for this module's functions, its imports under either
+        // spelling, and a default expression's callee scope.
         let Some(sig) = callee_site.and_then(|site| self.free_function_sig_at(site)) else {
             return (Vec::new(), Vec::new());
         };

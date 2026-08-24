@@ -1735,10 +1735,7 @@ impl TypeTable {
             .compiler_items
             .struct_decl(item)
             .expect("a registered struct item records its declaring node");
-        let def = self
-            .defs
-            .of_ast_id(decl)
-            .expect("a compiler item's declaring node is a declaration");
+        let def = self.defs.def_at(decl);
         crate::name::FqTypeName::declared(&self.defs, def)
     }
 

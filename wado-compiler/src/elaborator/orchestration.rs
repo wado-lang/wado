@@ -3508,17 +3508,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         _ => continue,
                     };
 
-                    // The target is named at the header's own site, which the
-                    // module that wrote it answered for — the same way
-                    // `trait_key` above is read. Looking it up by the written
-                    // name instead reached whichever module declares that
-                    // spelling first, a build-order pick rather than an answer.
-                    //
-                    // Rendered back to the declaring node because this key is
-                    // still `AstId`-shaped: its readers arrive through
-                    // `decl_of_type`, which also answers for monomorphized
-                    // instances and `BuiltinArray`, neither of which carries a
-                    // `DefId`.
+                    // The target is named at the header's own site, like
+                    // `trait_key` above. Rendered back to the declaring node
+                    // because the key stays `AstId`-shaped: its readers arrive
+                    // through `decl_of_type`, which also answers for
+                    // monomorphized instances and `BuiltinArray`.
                     let base_decl = crate::resolve::head_site(&impl_block.ty)
                         .and_then(|site| resolutions.declared(site))
                         .map(|def| resolutions.defs().ast_id(def));

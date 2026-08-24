@@ -953,8 +953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
 
-        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(ident)
-        else {
+        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(ident) else {
             // Fallback: known function but its signature is unreachable
             // (shouldn't normally happen). Emit a stub FuncRef so downstream
             // stays sane.

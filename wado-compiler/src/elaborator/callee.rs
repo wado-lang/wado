@@ -1,15 +1,11 @@
-//! Resolved call-target identities. A free function callee is the declaration
-//! it names (WEP 2026-08-12); a static method callee bundles the receiver and
-//! method names dispatch picked, alongside the method's own declaration.
+//! Resolved call-target identities: a free function callee is the declaration
+//! it names (WEP 2026-08-12), a static method callee what dispatch picked.
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 
-/// Identity of a free function callee.
-///
-/// `Declared` is the ordinary case: the declaration, plus the module and name
-/// its one constructor reads off the table, so a consumer emitting TIR needs no
-/// table at hand while only `def` says which declaration this is. Nothing reads
-/// the rendering back into an identity.
+/// Identity of a free function callee. `Declared` carries the module and name
+/// its one constructor reads off the table, so TIR emission needs none at hand;
+/// only `def` says which declaration this is, and nothing reads a name back.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum CalleeRef {
     Declared {
@@ -33,7 +29,6 @@ impl CalleeRef {
         }
     }
 
-    /// A callee with no declaration behind it. See [`Self::Rendered`].
     pub fn rendered(module: ModuleSource, name: impl Into<String>) -> Self {
         Self::Rendered {
             module,

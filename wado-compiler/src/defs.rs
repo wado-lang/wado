@@ -225,8 +225,6 @@ impl DefTable {
                             members: Vec::new(),
                         });
                     }
-                    // An `impl` block is a declaration the symbol table never
-                    // collected, since it writes no name to collect it under.
                     Item::Impl(block) => table.declare_impl_block(module, block, false),
                     _ => {}
                 }
@@ -265,12 +263,8 @@ impl DefTable {
         }
     }
 
-    /// Identify an `impl` block, which no symbol table row names.
-    ///
-    /// Its name is empty because it writes none: `name` is a rendering, and an
-    /// `impl` block has nothing to render. That is also what keeps it out of
-    /// every scope — a name-keyed layer can only be reached by a spelling, and
-    /// no spelling reaches this.
+    /// Identify an `impl` block, which no symbol table row names. Its name is
+    /// empty because it writes none, and no spelling reaches what has none.
     fn declare_impl_block(
         &mut self,
         module: &ModuleSource,
@@ -490,6 +484,14 @@ impl DefTable {
     /// nothing.
     ///
     /// This is not a name lookup: the node is already the declaration.
+    /// [`Self::of_ast_id`] for a node the collect pass identified, so a miss is
+    /// a hole in that pass rather than a case to handle.
+    #[must_use]
+    pub fn def_at(&self, id: AstId) -> DefId {
+        self.of_ast_id(id)
+            .unwrap_or_else(|| panic!("{id:?} declares nothing"))
+    }
+
     #[must_use]
     pub fn of_ast_id(&self, id: AstId) -> Option<DefId> {
         self.by_ast_id.get(&id).copied()
@@ -699,7 +701,10 @@ mod tests {
             impl Line { pub fn len(&self) -> i32 { return self.a; } }
         "#;
         let (defs, module) = build_from_source(source);
-        let blocks: Vec<DefId> = defs.iter().filter(|d| defs.kind(*d) == DefKind::Impl).collect();
+        let blocks: Vec<DefId> = defs
+            .iter()
+            .filter(|d| defs.kind(*d) == DefKind::Impl)
+            .collect();
         assert_eq!(blocks.len(), 2);
         assert_ne!(blocks[0], blocks[1]);
         // No spelling reaches an `impl` block, so it renders none.

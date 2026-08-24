@@ -401,18 +401,17 @@ pub(super) struct ImplMethodHeader {
     pub(super) param_count: usize,
 }
 
-/// Digest each method a `trait` or `impl` block declares, for its header.
-///
-/// One producer, so a trait's methods and an impl's are digested the same way
-/// and cannot disagree about what a header says.
-fn method_headers(defs: &crate::defs::DefTable, methods: &[ast::Function]) -> Vec<ImplMethodHeader> {
+/// Digest each method a `trait` or `impl` block declares. One producer, so the
+/// two cannot disagree about what a header says.
+fn method_headers(
+    defs: &crate::defs::DefTable,
+    methods: &[ast::Function],
+) -> Vec<ImplMethodHeader> {
     methods
         .iter()
         .map(|m| ImplMethodHeader {
             name: m.name.clone(),
-            def: defs
-                .of_ast_id(m.id)
-                .expect("every declared method is a declaration"),
+            def: defs.def_at(m.id),
             type_params: m.type_params.clone(),
             span: m.span,
             name_span: m.name_span,
@@ -1104,11 +1103,7 @@ impl TraitEnv {
                 let Item::Impl(impl_block) = item else {
                     continue;
                 };
-                // Every loaded module's `impl` blocks are identified by
-                // `DefTable::build`, so a miss means the two walks diverged.
-                let impl_def = defs
-                    .of_ast_id(impl_block.id)
-                    .expect("every impl block is a declaration");
+                let impl_def = defs.def_at(impl_block.id);
                 let type_key = impl_target_key_at(&impl_block.ty, module_source, resolutions);
                 let trait_ref: Option<crate::defs::DefId> = impl_block
                     .trait_type
@@ -1206,9 +1201,7 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-                                    method_id: defs
-                                        .of_ast_id(method.id)
-                                        .expect("every impl method is a declaration"),
+                                    method_id: defs.def_at(method.id),
                                 });
                         }
                     }
@@ -1227,9 +1220,7 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-                                    method_id: defs
-                                        .of_ast_id(method.id)
-                                        .expect("every impl method is a declaration"),
+                                    method_id: defs.def_at(method.id),
                                 });
                         }
                     }
@@ -1475,10 +1466,7 @@ impl TraitEnv {
 
     /// Collected form of [`Self::entries_by_receiver`], for callers that need
     /// to iterate the widened match more than once.
-    pub(crate) fn entries_by_receiver_vec(
-        &self,
-        receiver: &name::Receiver,
-    ) -> Vec<DefId> {
+    pub(crate) fn entries_by_receiver_vec(&self, receiver: &name::Receiver) -> Vec<DefId> {
         self.entries_by_receiver(receiver).collect()
     }
 
@@ -1513,8 +1501,7 @@ impl TraitEnv {
         module_source: &ModuleSource,
     ) -> bool {
         self.entries_by_receiver(receiver).any(|entry| {
-            self.defs.module(entry) == module_source
-                && self.methodful_header_matches(entry, trait_)
+            self.defs.module(entry) == module_source && self.methodful_header_matches(entry, trait_)
         })
     }
 

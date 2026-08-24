@@ -1676,11 +1676,10 @@ impl MethodOwner {
 
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
-    /// The method this lookup selected, taken from its
-    /// [`crate::elaborator::sig::MethodSig`]. The use→def edge for a call is
-    /// recorded from here, so it names the impl dispatch actually chose.
-    /// `None` where no declaration backs the signature: the tuple builtins,
-    /// an auto-derived `Eq` / `Ord`, and the error-recovery placeholder.
+    /// The method this lookup selected. A call's use→def edge is recorded from
+    /// here, so it names the impl dispatch chose. `None` where no declaration
+    /// backs the signature: tuple builtins, auto-derived `Eq` / `Ord`, the
+    /// error-recovery placeholder.
     pub(super) method_def: Option<crate::defs::DefId>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,
@@ -2465,10 +2464,9 @@ pub(super) struct ResolvedTraitMethod {
     pub(super) trait_name: crate::name::FqTraitName,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
-    /// The `impl` block dispatch selected, where one was matched. `None`
-    /// where no block is named: an auto-derived `Eq` / `Ord`, and a method
-    /// reached through a type parameter's bound, whose block monomorphization
-    /// picks.
+    /// The `impl` block dispatch matched. `None` where none is named: an
+    /// auto-derived `Eq` / `Ord`, and a method reached through a type
+    /// parameter's bound, whose block monomorphization picks.
     pub(super) impl_def: Option<crate::defs::DefId>,
     /// Written name of the type whose impl matched — the impl-index key. For
     /// newtypes this may be the ultimate base-type name when dispatch falls

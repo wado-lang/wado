@@ -643,8 +643,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if ident.name.contains("::") {
             return None;
         }
-        let def = self.free_function_at(ident.id)?;
-        Some(CalleeRef::declared(self.tysys.resolutions.defs(), def))
+        Some(self.callee_of(self.free_function_at(ident.id)?))
     }
 
     fn synth_method_call(

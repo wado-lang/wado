@@ -2422,12 +2422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // declares the method. The header alone would match an instance
             // method of the same name; both indices together will not.
             .filter(|(_, b)| {
-                let Some(header) = self
-                    .tysys
-                    .trait_env
-                    .impl_headers
-                    .get(&b.def)
-                else {
+                let Some(header) = self.tysys.trait_env.impl_headers.get(&b.def) else {
                     return false;
                 };
                 self.tysys
@@ -2447,11 +2442,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The trait comes off the impl's own header, so the blanket
             // index's bare-name key never reaches a mangled name.
             .filter_map(|(_, b)| {
-                let header = self
-                    .tysys
-                    .trait_env
-                    .impl_headers
-                    .get(&b.def)?;
+                let header = self.tysys.trait_env.impl_headers.get(&b.def)?;
                 Some((
                     self.tysys
                         .trait_env

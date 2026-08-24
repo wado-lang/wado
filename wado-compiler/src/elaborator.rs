@@ -434,12 +434,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// The free function the reference site `site` names, or `None` where it
-    /// names something else — a binder, a variant case, a node no walk saw.
-    ///
-    /// One read replaces the "this module, then the import, then the callee's
-    /// scope" tier order each caller used to spell for itself: the site was
-    /// answered once, by the module that wrote it (WEP 2026-08-12).
+    /// The free function the reference site `site` names, answered by the
+    /// module that wrote it (WEP 2026-08-12). `None` where it names something
+    /// else — a binder, a variant case, a node no walk saw.
     pub(super) fn free_function_at(&self, site: crate::ast::AstId) -> Option<crate::defs::DefId> {
         let def = self.tysys.resolutions.declared_if_walked(site)?;
         (self.tysys.resolutions.defs().kind(def) == crate::defs::DefKind::Function).then_some(def)
@@ -450,14 +447,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         site: crate::ast::AstId,
     ) -> Option<&sem::decls::FunctionSig> {
-        self.tysys.signatures.function_sig(self.free_function_at(site)?)
+        self.tysys
+            .signatures
+            .function_sig(self.free_function_at(site)?)
     }
 
-    /// The declaration `module` declares under `name`.
-    ///
-    /// The module is named rather than searched for: a qualified path spelled
-    /// it. For the two positions no reference site answers — `builtin::f`, and
-    /// a member of a namespace import.
+    /// The declaration `module` declares under `name`, for the positions no
+    /// reference site answers: `builtin::f`, a namespace member, `core:rt`'s
+    /// `panic`. The module is named by the path, not searched for.
     pub(super) fn decl_in_module(
         &self,
         module: &ModuleSource,
@@ -468,11 +465,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .and_then(|sym| self.tysys.resolutions.defs().of_ast_id(sym.defined_at))
     }
 
-    /// Record a use→def edge naming the declaration `def`.
-    ///
-    /// The edge map is keyed by node on both sides — navigation recovers a
-    /// def's module from its id space — so the declaring node is read off the
-    /// identity here rather than carried beside it.
+    /// [`Self::decl_in_module`] as a callee identity.
+    fn callee_in_module(&self, module: &ModuleSource, name: &str) -> Option<callee::CalleeRef> {
+        Some(self.callee_of(self.decl_in_module(module, name)?))
+    }
+
+    /// The callee identity of the declaration `def`.
+    fn callee_of(&self, def: crate::defs::DefId) -> callee::CalleeRef {
+        callee::CalleeRef::declared(self.tysys.resolutions.defs(), def)
+    }
+
+    /// Record a use→def edge naming the declaration `def`. The map is keyed by
+    /// node on both sides, so the declaring node is read off the identity here
+    /// rather than carried beside it.
     pub(super) fn record_reference_to_decl(
         &mut self,
         use_id: crate::ast::AstId,
@@ -1774,23 +1779,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .flatten();
             let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
             let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
-            let owner = defs
-                .of_ast_id(decl_id)
-                .expect("every interface / resource declaration is a declaration");
+            let owner = defs.def_at(decl_id);
             for method in &methods {
-                let op = defs
-                    .of_ast_id(method.id)
-                    .expect("every declared operation is a declaration");
+                let op = defs.def_at(method.id);
                 self.sem
                     .decls
                     .resource_method_ids
                     .insert((owner, method.name.clone()), op);
             }
-            self.sem.decls.effect_ops.insert(
-                defs.of_ast_id(decl_id)
-                    .expect("every interface / resource declaration is a declaration"),
-                ops,
-            );
+            self.sem.decls.effect_ops.insert(owner, ops);
         }
 
         // Pre-populate the generic-function inference caches for every
@@ -1803,12 +1800,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
-                let def = self
-                    .tysys
-                    .resolutions
-                    .defs()
-                    .of_ast_id(func.id)
-                    .expect("every free function is a declaration");
+                let def = self.tysys.resolutions.defs().def_at(func.id);
                 let sig = self.record_function_sig(func);
                 function_sigs.insert(def, Rc::new(sig));
             }
@@ -2091,12 +2083,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.
-            let method_def = scope
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(method.id)
-                .expect("every impl method is a declaration");
+            let method_def = scope.tysys.resolutions.defs().def_at(method.id);
             let recorded_sig = scope
                 .tysys
                 .signatures

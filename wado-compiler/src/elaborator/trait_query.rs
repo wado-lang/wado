@@ -1061,14 +1061,12 @@ impl TypeSystem {
         // A receiverless method has no receiver to deref, so `&T` inherits it
         // by forwarding — which works only where `Self` is absent from the
         // signature: `kind() -> String` forwards, `-> Option<Self>` cannot.
-        trait_sig_of_with(trait_, &self.trait_env, &self.signatures).is_some_and(
-            |sig| {
-                sig.methods.values().any(|m| {
-                    m.sig.self_kind == crate::ast::SelfKind::None
-                        && self.receiverless_method_mentions_self(&m.sig)
-                })
-            },
-        )
+        trait_sig_of_with(trait_, &self.trait_env, &self.signatures).is_some_and(|sig| {
+            sig.methods.values().any(|m| {
+                m.sig.self_kind == crate::ast::SelfKind::None
+                    && self.receiverless_method_mentions_self(&m.sig)
+            })
+        })
     }
 
     /// Whether a receiverless method's signature names `Self` — in a parameter,
@@ -2434,10 +2432,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
             for blanket in trait_env.blanket_impls.get(&trait_).into_iter().flatten() {
-                let Some(header) = trait_env
-                    .impl_headers
-                    .get(&blanket.def)
-                else {
+                let Some(header) = trait_env.impl_headers.get(&blanket.def) else {
                     continue;
                 };
                 if header.associated_types.is_empty() {

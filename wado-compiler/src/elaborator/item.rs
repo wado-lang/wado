@@ -888,12 +888,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .self_type
             .expect("entering an impl frame binds Self to the target");
 
-        let impl_def = scope
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(impl_block.id)
-            .expect("every impl block is a declaration");
+        let impl_def = scope.tysys.resolutions.defs().def_at(impl_block.id);
         scope.sem.decls.impl_sigs.insert(
             impl_def,
             super::sig::ImplSig {
@@ -1264,12 +1259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .first()
                 .map(|p| p.self_kind)
                 .unwrap_or(ast::SelfKind::None);
-            let method_def = frame_scope
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(method.id)
-                .expect("every impl method is a declaration");
+            let method_def = frame_scope.tysys.resolutions.defs().def_at(method.id);
             frame_scope.sem.decls.method_sigs.insert(
                 method_def,
                 MethodSig {
@@ -1519,12 +1509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Operation signatures the decl pass recorded for the declaration at
     /// `decl_id`.
     fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
-        let decl = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(decl_id)
-            .expect("every interface / resource declaration is a declaration");
+        let decl = self.tysys.resolutions.defs().def_at(decl_id);
         self.sem
             .decls
             .effect_ops
@@ -1631,12 +1616,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut type_params = decl_slots.clone();
             type_params.extend(method_slots);
 
-            let method_def = method_scope
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(method.id)
-                .expect("every trait method is a declaration");
+            let method_def = method_scope.tysys.resolutions.defs().def_at(method.id);
             methods.insert(
                 method.name.clone(),
                 super::sig::TraitMethod {
@@ -1679,12 +1659,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let module = scope.current_module_source.clone();
-        let trait_def = scope
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(trait_decl.id)
-            .expect("every trait declaration is a declaration");
+        let trait_def = scope.tysys.resolutions.defs().def_at(trait_decl.id);
         scope
             .sem
             .decls
@@ -1855,12 +1830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 SelfKind::None
             };
-            let method_def = scope
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(method.id)
-                .expect("every declared operation is a declaration");
+            let method_def = scope.tysys.resolutions.defs().def_at(method.id);
             scope.sem.decls.method_sigs.insert(
                 method_def,
                 MethodSig {
@@ -2224,12 +2194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// re-resolution. Returns the declared return type for callers that
     /// need it (`resolve_function`'s `task_return_type`).
     fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
-        let def = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(func.id)
-            .expect("every free function is a declaration");
+        let def = self.tysys.resolutions.defs().def_at(func.id);
         let sig = self
             .sem
             .decls
@@ -2661,15 +2626,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, Some(d)) => (Some(d), true),
                 (None, None) => (None, false),
             };
-            let async_op = decl_ref
-                .and_then(|decl| {
-                    scope
-                        .tysys
-                        .signatures
-                        .resource_method_sig(decl, &func.name)
-                        .filter(|op| op.is_async)
-                        .map(|op| op.cm_name.is_some())
-                });
+            let async_op = decl_ref.and_then(|decl| {
+                scope
+                    .tysys
+                    .signatures
+                    .resource_method_sig(decl, &func.name)
+                    .filter(|op| op.is_async)
+                    .map(|op| op.cm_name.is_some())
+            });
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {

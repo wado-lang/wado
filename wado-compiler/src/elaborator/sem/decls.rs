@@ -60,8 +60,7 @@ pub(crate) struct ModuleDecls {
     /// Canonical signatures of this module's own free functions, frozen
     /// behind `Rc` so the program-wide assembly and the stdlib-snapshot
     /// seeding share the map instead of deep-cloning every signature.
-    pub(crate) function_sigs:
-        std::rc::Rc<IndexMap<crate::defs::DefId, std::rc::Rc<FunctionSig>>>,
+    pub(crate) function_sigs: std::rc::Rc<IndexMap<crate::defs::DefId, std::rc::Rc<FunctionSig>>>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of
@@ -93,8 +92,7 @@ pub(crate) struct ModuleDecls {
     pub(crate) method_sigs: IndexMap<crate::defs::DefId, MethodSig>,
     /// A declaration paired with an operation name → the operation, so a
     /// caller holding only a name reaches its `method_sigs` entry.
-    pub(crate) resource_method_ids:
-        IndexMap<(crate::defs::DefId, String), crate::defs::DefId>,
+    pub(crate) resource_method_ids: IndexMap<(crate::defs::DefId, String), crate::defs::DefId>,
     /// Facts of this module's `impl` blocks that belong to the block rather
     /// than to one method — its target and trait type arguments and its
     /// associated-type bindings — resolved once in the block's own frame and

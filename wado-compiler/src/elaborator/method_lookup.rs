@@ -3224,11 +3224,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the indexing types come from the impl's associated-type
                 // bindings.
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-                let self_kind = s
-                    .tysys
-                    .signatures
-                    .method_sig(method_header.def)?
-                    .self_kind;
+                let self_kind = s.tysys.signatures.method_sig(method_header.def)?.self_kind;
                 let impl_source = s.impl_block_module_source(impl_ref);
 
                 let assoc_type = impl_sig
