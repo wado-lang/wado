@@ -6108,20 +6108,21 @@ impl TirProgram {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn test_primitive_constants() {
         let table = TypeTable::new();
-        assert!(matches!(
+        assert_matches!(
             table.get(TypeTable::I32),
             ResolvedType::Primitive(PrimitiveType::I32)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             table.get(TypeTable::BOOL),
             ResolvedType::Primitive(PrimitiveType::Bool)
-        ));
+        );
         // Note: String is now a user-defined struct, not a builtin type
-        assert!(matches!(table.get(TypeTable::UNIT), ResolvedType::Unit));
+        assert_matches!(table.get(TypeTable::UNIT), ResolvedType::Unit);
     }
 
     #[test]

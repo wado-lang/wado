@@ -1890,6 +1890,7 @@ pub fn test_function_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn bare_dep_resolves_only_for_consumer_not_inside_dependency() {
@@ -1902,7 +1903,7 @@ mod tests {
         let entry = interner.entry_point("main.wado");
         // From the consuming project, a bare name binds to its dependency.
         let from_entry = resolve_import_with_entry(&mut interner, &entry, "logger", None);
-        assert!(matches!(from_entry, ModuleSource::Dependency { .. }));
+        assert_matches!(from_entry, ModuleSource::Dependency { .. });
         // From inside a dependency, the same bare name must NOT bind to the
         // consumer's deps — it falls through to the local fallback.
         let from_dep = interner.dependency("../greet/src/lib.wado");

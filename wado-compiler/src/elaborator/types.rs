@@ -2646,6 +2646,7 @@ mod tests {
     use super::*;
     use crate::compiler_host::Diagnostic;
     use crate::token::Span;
+    use std::assert_matches;
 
     fn span() -> Span {
         Span::new(0, 1, 7, 3)
@@ -2670,10 +2671,7 @@ mod tests {
     #[test]
     fn render_carries_diagnostic_code_and_span() {
         let (code, message, sp) = TypeError::ResumeOutsideHandler { span: span() }.render();
-        assert!(matches!(
-            code,
-            crate::compiler_host::Code::UnsupportedFeature
-        ));
+        assert_matches!(code, crate::compiler_host::Code::UnsupportedFeature);
         assert_eq!(
             message,
             "`resume` is only valid inside an effect handler method body"

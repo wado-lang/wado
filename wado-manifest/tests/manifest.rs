@@ -1,3 +1,4 @@
+use std::assert_matches;
 use wado_manifest::{DependencySource, GitPin, Manifest, ManifestError};
 
 #[test]
@@ -56,43 +57,43 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
     assert_eq!(m.registries["default"], "https://wa.dev");
 
     // Git dep with version
-    assert!(matches!(
+    assert_matches!(
         &m.dependencies["router"].source,
         DependencySource::Git {
             url,
             pin: GitPin::Version(v),
             ..
         } if url == "https://github.com/user/router.git" && v == "^1.0.0"
-    ));
+    );
 
     // Registry dep
-    assert!(matches!(
+    assert_matches!(
         &m.dependencies["regex"].source,
         DependencySource::Registry {
             registry: None,
             package,
             version,
         } if package == "docs:regex" && version == "^0.1.0"
-    ));
+    );
 
     // Path dep
-    assert!(matches!(
+    assert_matches!(
         &m.dependencies["shared"].source,
         DependencySource::Path {
             path,
             publish_source: None,
         } if path == "../shared"
-    ));
+    );
 
     // Dev dep with ref
-    assert!(matches!(
+    assert_matches!(
         &m.dev_dependencies["bench"].source,
         DependencySource::Git {
             url,
             pin: GitPin::Ref(r),
             ..
         } if url == "https://gitlab.com/user/bench.git" && r == "main"
-    ));
+    );
 }
 
 #[test]
@@ -193,13 +194,13 @@ fn missing_package_name() {
 version = "0.1.0"
 "#;
     let err = toml.parse::<Manifest>().unwrap_err();
-    assert!(matches!(
+    assert_matches!(
         err,
         ManifestError::MissingField {
             section,
             field,
         } if section == "package" && field == "name"
-    ));
+    );
 }
 
 #[test]
@@ -209,13 +210,13 @@ fn missing_package_version() {
 name = "app"
 "#;
     let err = toml.parse::<Manifest>().unwrap_err();
-    assert!(matches!(
+    assert_matches!(
         err,
         ManifestError::MissingField {
             section,
             field,
         } if section == "package" && field == "version"
-    ));
+    );
 }
 
 #[test]
@@ -230,7 +231,7 @@ command = "main.wado"
 oops = {}
 "#;
     let err = toml.parse::<Manifest>().unwrap_err();
-    assert!(matches!(err, ManifestError::ConflictingSource { .. }));
+    assert_matches!(err, ManifestError::ConflictingSource { .. });
 }
 
 #[test]
@@ -245,7 +246,7 @@ command = "main.wado"
 x = { git = "https://example.com/x.git", package = "ns:x", version = "^1.0.0" }
 "#;
     let err = toml.parse::<Manifest>().unwrap_err();
-    assert!(matches!(err, ManifestError::ConflictingSource { .. }));
+    assert_matches!(err, ManifestError::ConflictingSource { .. });
 }
 
 #[test]
@@ -260,7 +261,7 @@ command = "main.wado"
 x = { workspace = true, path = "../x" }
 "#;
     let err = toml.parse::<Manifest>().unwrap_err();
-    assert!(matches!(err, ManifestError::ConflictingSource { .. }));
+    assert_matches!(err, ManifestError::ConflictingSource { .. });
 }
 
 #[test]
@@ -275,7 +276,7 @@ command = "main.wado"
 x = { git = "https://example.com/x.git" }
 "#;
     let err = toml.parse::<Manifest>().unwrap_err();
-    assert!(matches!(err, ManifestError::GitVersionRefConflict { .. }));
+    assert_matches!(err, ManifestError::GitVersionRefConflict { .. });
 }
 
 #[test]
@@ -295,18 +296,18 @@ b = { package = "ns:b", version = "~2.3.0" }
 c = { package = "ns:c", version = "=0.5.1" }
 "#;
     let m: Manifest = toml.parse().unwrap();
-    assert!(matches!(
+    assert_matches!(
         &m.dependencies["a"].source,
         DependencySource::Registry { version, .. } if version == "^1.0.0"
-    ));
-    assert!(matches!(
+    );
+    assert_matches!(
         &m.dependencies["b"].source,
         DependencySource::Registry { version, .. } if version == "~2.3.0"
-    ));
-    assert!(matches!(
+    );
+    assert_matches!(
         &m.dependencies["c"].source,
         DependencySource::Registry { version, .. } if version == "=0.5.1"
-    ));
+    );
 }
 
 #[test]
@@ -327,10 +328,10 @@ shared = { path = "../shared", git = "https://github.com/org/shared.git", versio
             publish_source,
         } => {
             assert_eq!(path, "../shared");
-            assert!(matches!(
+            assert_matches!(
                 publish_source.as_deref(),
                 Some(DependencySource::Git { .. })
-            ));
+            );
         }
         other => panic!("expected Path, got {other:?}"),
     }
@@ -351,14 +352,14 @@ custom = "https://registry.example.com"
 special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }
 "#;
     let m: Manifest = toml.parse().unwrap();
-    assert!(matches!(
+    assert_matches!(
         &m.dependencies["special"].source,
         DependencySource::Registry {
             registry: Some(reg),
             package,
             version,
         } if reg == "custom" && package == "ns:lib" && version == "^1.0.0"
-    ));
+    );
 }
 
 #[test]

@@ -139,6 +139,7 @@ impl std::error::Error for MetadataError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     fn sample() -> Metadata {
         Metadata {
@@ -202,7 +203,7 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{ not json").unwrap();
         let err = load(tmp.path(), OUTPUT_DIR, PRIMARY).unwrap_err();
-        assert!(matches!(err, MetadataError::Parse { .. }), "{err}");
+        assert_matches!(err, MetadataError::Parse { .. });
     }
 
     #[test]

@@ -16,7 +16,7 @@ resolver = "3"
 [workspace.package]
 version = "0.0.24"
 license = "MIT"
-rust-version = "1.96"
+rust-version = "1.98"
 
 [workspace.dependencies]
 datatest-mini = { version = "0.4" }
@@ -238,6 +238,9 @@ map_unwrap_or = "allow"
 needless_pass_by_value = "allow"
 # Visitor pattern methods may not use self yet
 unused_self = "allow"
+# `CompilerHost` declares its methods as `-> impl Future`; an impl with nothing
+# to await reads better as `async fn` than wrapped in `std::future::ready`.
+unused_async_trait_impl = "allow"
 # Explicit match is sometimes clearer than if-let collapse
 collapsible_match = "allow"
 # Explicit match is sometimes clearer than let-else

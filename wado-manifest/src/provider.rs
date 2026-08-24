@@ -323,6 +323,7 @@ impl DependencyProvider for InMemoryDependencyProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     use std::future::Future;
 
     fn run_async_test<F>(future: F)
@@ -416,7 +417,7 @@ version = "{version}"
                 .list_registry_versions("https://wa.dev", "nonexistent:pkg")
                 .await
                 .unwrap_err();
-            assert!(matches!(err, ProviderError::NotFound { .. }));
+            assert_matches!(err, ProviderError::NotFound { .. });
         });
     }
 
@@ -504,7 +505,7 @@ version = "{version}"
                 .load_path_manifest("./nonexistent")
                 .await
                 .unwrap_err();
-            assert!(matches!(err, ProviderError::NotFound { .. }));
+            assert_matches!(err, ProviderError::NotFound { .. });
         });
     }
 }

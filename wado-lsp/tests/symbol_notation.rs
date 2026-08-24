@@ -1,6 +1,7 @@
 //! Integration tests for `Engine::definition_by_symbol` — resolving a
 //! Wado symbol notation (`MODULE#SYMBOL`) to a definition location.
 
+use std::assert_matches;
 use wado_compiler::symbol_notation;
 use wado_lsp::test_support::MapHost;
 use wado_lsp::{DefinitionResult, DocumentHighlight, Engine, ReferenceLocation, SymbolQueryError};
@@ -392,9 +393,6 @@ fn unknown_method_errors() {
         let err = resolve("./geo.wado", lib, "./geo.wado", "./geo.wado#Point::nope")
             .await
             .expect_err("missing method is an error");
-        assert!(
-            matches!(err, SymbolQueryError::NotFound { .. }),
-            "got: {err:?}"
-        );
+        assert_matches!(err, SymbolQueryError::NotFound { .. });
     });
 }

@@ -624,6 +624,7 @@ impl CompilerHost for InMemoryCompilerHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn test_in_memory_host() {
@@ -642,7 +643,7 @@ mod tests {
 
                 // Test not found
                 let result = host.load_source("./missing.wado").await;
-                assert!(matches!(result, Err(SourceError::NotFound { .. })));
+                assert_matches!(result, Err(SourceError::NotFound { .. }));
             });
     }
 
@@ -663,7 +664,7 @@ mod tests {
                     options: crate::kiln::options_check::CanonicalOptions::default(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;
-                assert!(matches!(result, Err(GeneratorRunnerError::Unsupported)));
+                assert_matches!(result, Err(GeneratorRunnerError::Unsupported));
             });
     }
 

@@ -109,13 +109,13 @@ impl CmPayloadType {
 
     pub fn parse_suffix(s: &str) -> Option<Self> {
         let s = s.trim();
-        if let Some(inner) = s.strip_prefix("list<").and_then(|r| r.strip_suffix('>')) {
+        if let Some(inner) = s.strip_circumfix("list<", ">") {
             return Some(Self::List(Box::new(Self::parse_suffix(inner)?)));
         }
-        if let Some(inner) = s.strip_prefix("option<").and_then(|r| r.strip_suffix('>')) {
+        if let Some(inner) = s.strip_circumfix("option<", ">") {
             return Some(Self::Option(Box::new(Self::parse_suffix(inner)?)));
         }
-        if let Some(inner) = s.strip_prefix("result<").and_then(|r| r.strip_suffix('>')) {
+        if let Some(inner) = s.strip_circumfix("result<", ">") {
             let parts = split_top_level(inner);
             if parts.len() != 2 {
                 return None;
@@ -129,14 +129,14 @@ impl CmPayloadType {
             };
             return Some(Self::Result(arm(&parts[0])?, arm(&parts[1])?));
         }
-        if let Some(inner) = s.strip_prefix("tuple<").and_then(|r| r.strip_suffix('>')) {
+        if let Some(inner) = s.strip_circumfix("tuple<", ">") {
             let elems = split_top_level(inner)
                 .iter()
                 .map(|p| Self::parse_suffix(p))
                 .collect::<Option<Vec<_>>>()?;
             return Some(Self::Tuple(elems));
         }
-        if let Some(inner) = s.strip_prefix("own<").and_then(|r| r.strip_suffix('>')) {
+        if let Some(inner) = s.strip_circumfix("own<", ">") {
             return Some(Self::Resource(inner.to_string()));
         }
         if s == "string" {
