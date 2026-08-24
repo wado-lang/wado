@@ -1972,7 +1972,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .expect("a newtype names a declaration");
 
                     // Check if the newtype itself has the static method
-                    if self.has_static_method_direct(&newtype_name, &static_call.method) {
+                    if self.type_declares_static_method(target_type_id, &static_call.method) {
                         let fq = self
                             .tysys
                             .type_table
@@ -2072,7 +2072,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .nominal_head(target_type_id)
                         .expect("a flags type names a declaration");
-                    if self.has_static_method_direct(&flags_name, &static_call.method) {
+                    if self.type_declares_static_method(target_type_id, &static_call.method) {
                         let fq = self
                             .tysys
                             .type_table
@@ -2575,34 +2575,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .clone()
     }
 
-    /// Check if a static method exists directly for a given type name (no newtype fallback).
-    fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
-        let qualified = self.qualified_receiver_name(struct_name);
-        let mangled = MethodName::format_local(&qualified, None, method_name);
-        if self.sem.decls.function_return_types.contains_key(&mangled) {
-            return true;
-        }
-        // Also check with trait-qualified name
-        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
-            let trait_mangled =
-                MethodName::format_local(&qualified, Some(&trait_name), method_name);
-            if self
-                .sem
-                .decls
-                .function_return_types
-                .contains_key(&trait_mangled)
-            {
-                return true;
-            }
-        }
-        // Every impl block on the type, inherent and trait alike.
-        let keys = self
-            .tysys
-            .trait_env
-            .all_impl_keys(&self.impl_target(struct_name));
-        self.keys_declare_static_method(&keys, method_name)
-    }
-
     /// Look up static method return type based on struct name and method name
     /// `receiver` is the declaration the call site resolved, not a spelling to
     /// re-resolve: beside a same-named local declaration, the caller's own frame
@@ -2782,32 +2754,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // mismatch reaches codegen as an invalid module.
         if static_key_hint.is_none()
             && let Some(base) = self.newtype_static_base_at(None, struct_name)
+            && let Some(base_key) = self.type_impl_target(base)
+            && base_key != static_key
         {
-            let base_name = self.tysys.get_ultimate_base_struct_name(base);
-            let base_key = self.impl_target_of(base, &crate::name::DeclName::new(&base_name));
-            if base_key != static_key {
-                let params = self.lookup_static_method_param_types_keyed(
-                    &base_name,
-                    method_name,
-                    Some(&base_key),
-                );
-                // The base's own arguments stand for its impl-level slots, as
-                // `resolve_static_method_call_from_qualified` passes them:
-                // `type ByteList = List<u8>` makes `filled`'s `value: T` a `u8`.
-                let base_args = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_type_args(base)
-                    .unwrap_or_default();
-                if base_args.is_empty() {
-                    return params;
-                }
-                return params
-                    .iter()
-                    .map(|&param| self.substitute_type_params(param, &base_args))
-                    .collect();
+            let params = self.lookup_static_method_param_types_keyed(
+                struct_name,
+                method_name,
+                Some(&base_key),
+            );
+            // The base's own arguments stand for its impl-level slots, as
+            // `resolve_static_method_call_from_qualified` passes them:
+            // `type ByteList = List<u8>` makes `filled`'s `value: T` a `u8`.
+            let base_args = self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(base)
+                .unwrap_or_default();
+            if base_args.is_empty() {
+                return params;
             }
+            return params
+                .iter()
+                .map(|&param| self.substitute_type_params(param, &base_args))
+                .collect();
         }
         Vec::new()
     }
@@ -3517,6 +3487,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// The impl target `type_id`'s own declaration is. `None` for a type that
+    /// names none — a type parameter, an anonymous shape.
+    ///
+    /// The declaration comes off the type, so nothing here re-resolves a
+    /// rendering: a name reaches an identity only through the resolve pass
+    /// (WEP 2026-08-12).
+    pub(super) fn type_impl_target(
+        &self,
+        type_id: TypeId,
+    ) -> Option<super::trait_env::ImplTargetKey> {
+        let def = self.type_decl_key(type_id)?;
+        Some(super::trait_env::ImplTargetKey::of_decl(
+            self.tysys.resolutions.defs(),
+            def,
+        ))
+    }
+
+    /// Whether `type_id`'s own declaration declares `method_name` as a static.
+    fn type_declares_static_method(&self, type_id: TypeId, method_name: &str) -> bool {
+        self.type_impl_target(type_id).is_some_and(|key| {
+            self.receiver_declares_static_method(
+                &key,
+                &self.tysys.fq_receiver_head(type_id),
+                method_name,
+            )
+        })
+    }
+
     /// The impl-level arguments a newtype pins for a static it forwards to its
     /// base: `type Bytes = List<u8>` answers `[u8]` for `List`'s `T`. Empty
     /// when the newtype declares the static itself, as
@@ -3527,7 +3525,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<TypeId> {
-        if self.has_static_method_direct(struct_name, method_name) {
+        let Some(newtype_id) = self.lookup_newtype_at(site, struct_name) else {
+            return Vec::new();
+        };
+        if self.type_declares_static_method(newtype_id, method_name) {
             return Vec::new();
         }
         self.newtype_static_base_at(site, struct_name)
@@ -3628,13 +3629,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the type, not through a second spelling, so a module that imported
         // the newtype alone still resolves them.
         if let Some(base) = self.newtype_static_base_at(site, struct_name) {
-            let base_name = self.tysys.get_ultimate_base_struct_name(base);
-            let base_key = self.impl_target_of(base, &crate::name::DeclName::new(&base_name));
-            if self.receiver_declares_static_method(
-                &base_key,
-                &self.tysys.fq_receiver_head(base),
-                method_name,
-            ) || self.synthesizes_static_method(&base_name, method_name)
+            // `synthesizes_static_method` still takes a rendering: the two
+            // lookups behind it are name-keyed, and WEP 2026-07-31 phase 4
+            // carries them over.
+            if self.type_declares_static_method(base, method_name)
+                || self.synthesizes_static_method(
+                    &self.tysys.get_ultimate_base_struct_name(base),
+                    method_name,
+                )
             {
                 return true;
             }
@@ -3675,6 +3677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a static method call from a qualified name like `Point::origin()`
     pub(super) fn resolve_static_method_call_from_qualified(
         &mut self,
+        receiver_site: Option<AstId>,
         struct_name: &str,
         method_name: &str,
         args: &[TirExpr],
@@ -3700,11 +3703,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // then fall back to the base type's static method
         let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
         // The written name keys the impl indices; the fq form names the method.
+        // The site decides which declaration the receiver names, as
+        // `is_static_method_at` decided it for the same spelling; a second
+        // lookup by name could answer with another module's newtype.
         let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
-            self.lookup_newtype(struct_name)
+            self.lookup_newtype_at(receiver_site, struct_name)
         {
-            // First check if the newtype itself has this static method
-            if self.has_static_method_direct(struct_name, method_name) {
+            // The newtype's own static wins over the one it would forward to.
+            // Keyed off the newtype's declaration, as
+            // `newtype_forwarded_impl_args` decides the same question, so the
+            // two cannot disagree.
+            if self.type_declares_static_method(newtype_id, method_name) {
                 (
                     struct_name.to_string(),
                     qualified_struct_name,

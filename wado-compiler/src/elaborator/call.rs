@@ -901,6 +901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // typed placeholder.
                 return self
                     .resolve_static_method_call_from_qualified(
+                        receiver_site,
                         prefix,
                         suffix,
                         &args,
@@ -2804,16 +2805,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.impl_target(struct_name);
+        if let Some(sig) = self.static_method_sig_keyed(&self.impl_target(struct_name), method_name)
+        {
+            return Some(sig);
+        }
+        // A newtype forwards its base's statics, so the base's declaration is
+        // what the call measures against — its slots, its bounds, its
+        // parameters. Without this a generic static reached through a newtype
+        // reports no slots to infer, and its own parameter type is then read
+        // as a concrete type the argument cannot match. The base's key comes
+        // off the type, so no rendering is resolved a second time.
+        let base = self.newtype_static_base_at(None, struct_name)?;
+        self.static_method_sig_keyed(&self.type_impl_target(base)?, method_name)
+    }
+
+    /// [`Self::static_method_sig`] for a receiver already resolved to its
+    /// declaration.
+    fn static_method_sig_keyed(
+        &self,
+        key: &super::trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
         let trait_env = &self.tysys.trait_env;
         if let Some(entry) = trait_env
             .static_method_index
-            .get(&key)
+            .get(key)
             .and_then(|methods| methods.iter().find(|e| e.name == method_name))
         {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
-        if let Some((_, _, decl_id, _)) = trait_env.resource_static(&key, method_name) {
+        if let Some((_, _, decl_id, _)) = trait_env.resource_static(key, method_name) {
             return self
                 .tysys
                 .signatures
@@ -2822,22 +2843,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The qualified form disambiguates a colliding name, so it reaches an
         // inherited method too.
-        if let ImplTargetKey::Decl(def) = key
-            && let Some((_, sig)) = self.resource_instance_method(def, method_name)
-        {
-            return Some(sig);
-        }
-        // A newtype forwards its base's statics, so the base's declaration is
-        // what the call measures against — its slots, its bounds, its
-        // parameters. Without this a generic static reached through a newtype
-        // reports no slots to infer, and its own parameter type is then read
-        // as a concrete type the argument cannot match.
-        let base = self.newtype_static_base_at(None, struct_name)?;
-        let base_name = self.tysys.get_ultimate_base_struct_name(base);
-        if base_name == struct_name {
+        let ImplTargetKey::Decl(def) = key else {
             return None;
-        }
-        self.static_method_sig(&base_name, method_name)
+        };
+        self.resource_instance_method(*def, method_name)
+            .map(|(_, sig)| sig)
     }
 
     /// Look up function parameter types with type args substituted.
