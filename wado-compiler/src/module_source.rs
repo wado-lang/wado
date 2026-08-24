@@ -746,6 +746,7 @@ impl fmt::Display for ModuleSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn dependency_identity_is_the_resolved_path() {
@@ -793,10 +794,10 @@ mod tests {
     fn test_module_source_from_path_core() {
         let mut interner = ModuleSourceInterner::new();
         let source = interner.from_path(&["core".to_string(), "prelude".to_string()]);
-        assert!(matches!(source, ModuleSource::Core { ref name } if name == "prelude"));
+        assert_matches!(source, ModuleSource::Core { ref name } if name == "prelude");
 
         let source = interner.from_path(&["core".to_string(), "cli".to_string()]);
-        assert!(matches!(source, ModuleSource::Core { ref name } if name == "cli"));
+        assert_matches!(source, ModuleSource::Core { ref name } if name == "cli");
 
         let source = interner.from_path(&["core".to_string(), "rt".to_string()]);
         assert!(source.is_core_rt());
@@ -806,7 +807,7 @@ mod tests {
     fn test_module_source_from_path_wasi() {
         let mut interner = ModuleSourceInterner::new();
         let source = interner.from_path(&["wasi".to_string(), "cli".to_string()]);
-        assert!(matches!(source, ModuleSource::Wasi { ref interface } if interface == "cli"));
+        assert_matches!(source, ModuleSource::Wasi { ref interface } if interface == "cli");
 
         let source = interner.from_path(&["wasi".to_string(), "io".to_string()]);
         assert!(source.is_wasi());
@@ -816,7 +817,7 @@ mod tests {
     fn test_module_source_from_path_local() {
         let mut interner = ModuleSourceInterner::new();
         let source = interner.from_path(&["./geometry.wado".to_string()]);
-        assert!(matches!(source, ModuleSource::Local { ref path } if path == "./geometry.wado"));
+        assert_matches!(source, ModuleSource::Local { ref path } if path == "./geometry.wado");
 
         let source = interner.from_path(&["../lib.wado".to_string()]);
         assert!(source.is_local());

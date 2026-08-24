@@ -1433,6 +1433,7 @@ mod tests {
     mod execute_tests {
         use super::*;
         use indexmap::IndexMap;
+        use std::assert_matches;
         use std::sync::Mutex;
         use wado_compiler::compiler_host::{
             Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError,
@@ -1606,10 +1607,7 @@ mod tests {
             let err = runtime()
                 .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
                 .unwrap_err();
-            assert!(matches!(
-                err,
-                ExecuteError::Runner(GeneratorRunnerError::Unsupported)
-            ));
+            assert_matches!(err, ExecuteError::Runner(GeneratorRunnerError::Unsupported));
         }
 
         #[test]

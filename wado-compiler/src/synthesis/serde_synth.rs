@@ -94,7 +94,7 @@ pub fn synthesize_serde(project: &mut Package) {
     distribute_bound_driven_requests(project);
 
     for module in project.tir_modules.values_mut() {
-        let requests: Vec<_> = module.synthesis_requests.drain(..).collect();
+        let requests = std::mem::take(&mut module.synthesis_requests);
         if requests.is_empty() {
             continue;
         }

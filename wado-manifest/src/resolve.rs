@@ -533,6 +533,7 @@ mod tests {
     use super::*;
     use crate::provider::{GitTagInfo, InMemoryDependencyProvider, RegistryPackageInfo};
     use crate::version::Version;
+    use std::assert_matches;
     use std::future::Future;
 
     fn block_on<F: Future>(future: F) -> F::Output {
@@ -756,7 +757,7 @@ default = "https://wa.dev"
                 );
             }
             let err = resolve(&manifest, &provider).await.unwrap_err();
-            assert!(matches!(err, ResolveError::NoSolution { .. }), "{err:?}");
+            assert_matches!(err, ResolveError::NoSolution { .. });
         });
     }
 
@@ -885,7 +886,7 @@ default = "https://wa.dev"
                 leaf_info("pkg", "1.0.0", "sha256:x"),
             );
             let err = resolve(&manifest, &provider).await.unwrap_err();
-            assert!(matches!(err, ResolveError::NoSolution { .. }), "{err:?}");
+            assert_matches!(err, ResolveError::NoSolution { .. });
         });
     }
 
@@ -966,15 +967,12 @@ json = { workspace = true }
             .unwrap();
             let provider = InMemoryDependencyProvider::new();
             let err = resolve(&manifest, &provider).await.unwrap_err();
-            assert!(
-                matches!(
-                    err,
-                    ResolveError::UnsupportedSource {
-                        kind: "workspace",
-                        ..
-                    }
-                ),
-                "{err:?}"
+            assert_matches!(
+                err,
+                ResolveError::UnsupportedSource {
+                    kind: "workspace",
+                    ..
+                }
             );
         });
     }
@@ -1124,7 +1122,7 @@ version = "0.1.0"
                 },
             );
             let err = resolve(&manifest, &provider).await.unwrap_err();
-            assert!(matches!(err, ResolveError::NoSolution { .. }), "{err:?}");
+            assert_matches!(err, ResolveError::NoSolution { .. });
         });
     }
 }

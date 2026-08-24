@@ -181,6 +181,7 @@ impl DependencyProvider for FilesystemProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     use std::future::Future;
 
     fn block_on<F: Future>(future: F) -> F::Output {
@@ -278,7 +279,7 @@ name = "app"
         let provider = FilesystemProvider::new(".".into());
         let err = block_on(provider.list_registry_versions("https://wa.dev", "mizchi:brotli"))
             .unwrap_err();
-        assert!(matches!(err, ProviderError::NotFound { .. }), "{err:?}");
+        assert_matches!(err, ProviderError::NotFound { .. });
     }
 
     #[test]

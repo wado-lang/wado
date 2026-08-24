@@ -28,7 +28,7 @@ fn decode(data: &[u32]) -> Vec<Decoded> {
     let mut out = Vec::new();
     let mut line = 0u32;
     let mut start = 0u32;
-    for chunk in data.chunks_exact(5) {
+    for chunk in data.as_chunks::<5>().0 {
         let (delta_line, delta_start, length, token_type, modifiers) =
             (chunk[0], chunk[1], chunk[2], chunk[3], chunk[4]);
         if delta_line == 0 {

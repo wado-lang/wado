@@ -62,6 +62,7 @@ impl std::error::Error for VersionError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     fn v(s: &str) -> Version {
         Version::parse(s).unwrap()
@@ -69,18 +70,18 @@ mod tests {
 
     #[test]
     fn bare_version_rejected() {
-        assert!(matches!(
+        assert_matches!(
             VersionSpecifier::parse("1.0.0"),
             Err(VersionError::BareVersion { .. })
-        ));
+        );
     }
 
     #[test]
     fn invalid_specifier_rejected() {
-        assert!(matches!(
+        assert_matches!(
             VersionSpecifier::parse("^not.a.version"),
             Err(VersionError::InvalidFormat { .. })
-        ));
+        );
     }
 
     #[test]

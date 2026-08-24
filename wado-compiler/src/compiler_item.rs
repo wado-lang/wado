@@ -2127,6 +2127,7 @@ pub fn parse_compiler_item_attrs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn all_variants_have_unique_attr_names() {
@@ -2169,7 +2170,7 @@ mod tests {
                 },
             )
             .unwrap_err();
-        assert!(matches!(err, RegisterError::KindMismatch { .. }));
+        assert_matches!(err, RegisterError::KindMismatch { .. });
     }
 
     #[test]
@@ -2187,7 +2188,7 @@ mod tests {
         };
         reg.register(CompilerItem::Option, first).unwrap();
         let err = reg.register(CompilerItem::Option, second).unwrap_err();
-        assert!(matches!(err, RegisterError::Duplicate { .. }));
+        assert_matches!(err, RegisterError::Duplicate { .. });
     }
 
     #[test]
@@ -2402,7 +2403,7 @@ mod tests {
                 },
             )
             .unwrap_err();
-        assert!(matches!(err, RegisterError::KindMismatch { .. }));
+        assert_matches!(err, RegisterError::KindMismatch { .. });
     }
 
     /// Validator covers every required item in `ALL`. With an empty
