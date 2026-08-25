@@ -471,14 +471,11 @@ Verified against the tree.
       receiver's own storage; a path leaving through a `&` field lands where the
       caller cannot follow.
 
-      Three things this rests on. `ReturnPaths` is a least fixpoint, since an
-      accessor is routinely written over another accessor. A container-alias
-      read (`array_get_value`) names its container's slot in the resolver as it
-      does in the ownership walk. And `Place` carries whether the chain left the
-      root through a `&` field, set by the walk that builds the place: the
-      resolver reaches one through a local binding and through a callee's own
-      `ReturnPath`, which a walk over the returned expression's syntax follows
-      neither of.
+      Whether a place is reached through a borrow is decided by the walk that
+      resolves it, never re-derived from an expression's syntax. The walk
+      follows local bindings and callee return paths that the syntax does not,
+      so the two disagree, and a caller told a borrow is owned shares across a
+      write.
 
 - [ ] Follow a borrowed field back to what it borrows. This is what the item
       above does _not_ reach, and it is the by-value `for` binding: a
