@@ -570,6 +570,18 @@ impl Receiver {
         matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Binder(_)))
     }
 
+    /// Whether [`Self::head_key`] carries the receiver's module, so the mangled
+    /// namespace alone separates it from another module's same-named type. A
+    /// builtin, a tuple, a binder, a `&T`, and a projection are all spelled the
+    /// same wherever they are written, so for them the two namespaces agree.
+    #[must_use]
+    pub fn is_module_qualified(&self) -> bool {
+        matches!(
+            self,
+            Receiver::Type(fq) if matches!(fq.head(), TypeHead::Declared(_) | TypeHead::Shape { .. })
+        )
+    }
+
     /// The name an `impl` header writes its target as — no module, no type
     /// arguments.
     ///
