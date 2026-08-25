@@ -1,10 +1,11 @@
 use indexmap::{IndexMap, IndexSet};
 use wado_compiler::ast::{self, AstId, AstVisitor, Expr, Item, Type};
-use wado_compiler::lexer::lex;
+use wado_compiler::lexer::{lex, lex_interpolation};
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::{Symbol, SymbolKind};
-use wado_compiler::token::{Token, TokenKind};
+use wado_compiler::syntax::KeywordCategory;
+use wado_compiler::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
 
 use crate::text::{LineIndex, PositionEncoding};
 
@@ -64,10 +65,35 @@ pub mod token_modifier {
     pub const DECLARATION: u32 = 1 << 0;
     pub const DEFINITION: u32 = 1 << 1;
     pub const READONLY: u32 = 1 << 2;
+    pub const DEFAULT_LIBRARY: u32 = 1 << 3;
 }
 
 /// Token modifier legend for LSP capability declaration.
-pub const TOKEN_MODIFIERS: &[&str] = &["declaration", "definition", "readonly"];
+pub const TOKEN_MODIFIERS: &[&str] = &["declaration", "definition", "readonly", "defaultLibrary"];
+
+/// A language constant: `true` / `false` / `null` / `self`, the words
+/// `wado_compiler::syntax` files under [`KeywordCategory::Constant`].
+///
+/// LSP has no `constant` token type. `variable` + `readonly` +
+/// `defaultLibrary` is its standard spelling for one, and is what editors map
+/// onto a constant scope — matching the `constant.language.wado` the
+/// `TextMate` grammar gives the same words.
+const CONSTANT: (u32, u32) = (
+    token_type::VARIABLE,
+    token_modifier::READONLY | token_modifier::DEFAULT_LIBRARY,
+);
+
+/// A keyword, real or contextual.
+const KEYWORD: (u32, u32) = (token_type::KEYWORD, 0);
+
+/// A classified token keyed by byte span — the classification before LSP's
+/// wire constraints narrow it. See [`classify_all`].
+#[derive(Debug, Clone, Copy)]
+pub struct ClassifiedToken {
+    pub span: Span,
+    pub token_type: u32,
+    pub modifiers: u32,
+}
 
 /// A semantic token with absolute position (before delta encoding).
 #[derive(Debug, Clone)]
@@ -93,7 +119,35 @@ pub struct SemanticToken {
 /// (matching `Span::column - 1` from the lexer) and `length` as a codepoint
 /// count. [`delta_encode`] later converts both into the negotiated LSP
 /// position encoding.
+///
+/// Multi-line tokens are dropped: LSP semantic tokens MUST NOT span lines, so
+/// a block comment or a multi-line string is left to the editor's syntactic
+/// highlighter rather than half-encoded. That is a wire constraint, not a
+/// classification verdict — [`classify_all`] keeps them.
 pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
+    classify_all(source, sem)
+        .into_iter()
+        .filter(|token| token.span.line == token.span.end_line)
+        .map(|token| SemanticToken {
+            line: token.span.line.saturating_sub(1) as u32,
+            start_char: token.span.column.saturating_sub(1) as u32,
+            length: source
+                .get(token.span.start..token.span.end)
+                .map(|text| text.chars().count() as u32)
+                .unwrap_or(0),
+            token_type: token.token_type,
+            modifiers: token.modifiers,
+        })
+        .collect()
+}
+
+/// Classify every token in `source`, keyed by byte span and in source order.
+///
+/// The classification [`compute`] narrows to what the LSP wire accepts. Use
+/// this where the whole verdict matters — comparing the compiler's own
+/// highlighting against another implementation's, where a dropped multi-line
+/// token reads as a disagreement.
+pub fn classify_all(source: &str, sem: Option<&Semantics>) -> Vec<ClassifiedToken> {
     // Resilient: malformed input yields recovery tokens, which classify as plain.
     let lex_result = lex(source);
     let tokens = lex_result.tokens;
@@ -114,34 +168,114 @@ pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
 
     let mut result = Vec::new();
     for i in 0..tokens.len() {
-        if let Some(st) = classify_token(source, &tokens, i, &ast_spans, sem_classes.as_ref()) {
-            result.push(st);
-        }
+        classify_into(&tokens, i, &ast_spans, sem_classes.as_ref(), &mut result);
     }
-
-    // LSP semantic tokens MUST NOT span lines, so a multi-line comment is left
-    // to the editor's syntactic highlighter rather than half-encoded.
     for comment in &comments {
-        if comment.span.line != comment.span.end_line {
-            continue;
-        }
-        let line = comment.span.line.saturating_sub(1) as u32;
-        let start_char = comment.span.column.saturating_sub(1) as u32;
-        let length = source
-            .get(comment.span.start..comment.span.end)
-            .map(|s| s.chars().count() as u32)
-            .unwrap_or(0);
-        result.push(SemanticToken {
-            line,
-            start_char,
-            length,
+        result.push(ClassifiedToken {
+            span: comment.span,
+            token_type: token_type::COMMENT,
+            modifiers: 0,
+        });
+    }
+    // A `__DATA__` tail is not Wado, so no token carries it. Muting it says so.
+    // In an editor the run spans lines and `compute` drops it, leaving the
+    // `TextMate` grammar's embedded-JSON highlighting in place.
+    if let Some(span) = lex_result.data_section_span {
+        result.push(ClassifiedToken {
+            span,
             token_type: token_type::COMMENT,
             modifiers: 0,
         });
     }
 
-    result.sort_by(|a, b| a.line.cmp(&b.line).then(a.start_char.cmp(&b.start_char)));
+    result.sort_by_key(|token| token.span.start);
     result
+}
+
+/// Classify one token into `out`. A template literal expands into several;
+/// everything else contributes at most one.
+fn classify_into(
+    tokens: &[Token],
+    index: usize,
+    ast_spans: &AstSpans,
+    sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
+    out: &mut Vec<ClassifiedToken>,
+) {
+    let token = &tokens[index];
+    if let TokenKind::TemplateStringLit(parts) = &token.kind {
+        expand_template(token, parts, ast_spans, sem_classes, out);
+        return;
+    }
+    if let Some((token_type, modifiers)) = classify_token(tokens, index, ast_spans, sem_classes) {
+        out.push(ClassifiedToken {
+            span: token.span,
+            token_type,
+            modifiers,
+        });
+    }
+}
+
+/// Split a template literal, which reaches the classifier as a single token —
+/// so without this `${count + 1}` is string, left to the editor's syntactic
+/// highlighter.
+///
+/// Everything outside an interpolation is string, a `:spec` tail mutes as a
+/// comment, and the expression classifies like any other code:
+/// [`wado_compiler::lexer::lex_interpolation`] is the call the parser makes to
+/// build the AST, so the spans already sit on the file and the symbol map,
+/// keyed by byte start, resolves them for free.
+fn expand_template(
+    token: &Token,
+    parts: &[TemplateTokenPart],
+    ast_spans: &AstSpans,
+    sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
+    out: &mut Vec<ClassifiedToken>,
+) {
+    let (mut cursor, end) = token.span.bounds();
+    for part in parts {
+        let (Some((expr_start, expr_end)), TemplateTokenPart::Interpolation { expr, origin, .. }) =
+            (part.expr_bounds(), part)
+        else {
+            continue;
+        };
+        push_run(out, cursor, expr_start, token_type::STRING);
+        let inner = lex_interpolation(expr, *origin);
+        for i in 0..inner.tokens.len() {
+            // A template nested in this one expands the same way.
+            classify_into(&inner.tokens, i, ast_spans, sem_classes, out);
+        }
+        // `${ /* why */ x }` — the lexer keeps comments out of the token
+        // stream, so without this the comment falls through every span.
+        for comment in &inner.comments {
+            out.push(ClassifiedToken {
+                span: comment.span,
+                token_type: token_type::COMMENT,
+                modifiers: 0,
+            });
+        }
+        cursor = expr_end;
+        // Left to the token stream the `>` in `${x:>8}` would colour as an
+        // operator, which is what the `TextMate` grammar — regex-only, so it
+        // cannot parse a specifier — still does.
+        if let Some((spec_start, spec_end)) = part.format_bounds() {
+            push_run(out, spec_start, spec_end, token_type::COMMENT);
+            cursor = spec_end;
+        }
+    }
+    push_run(out, cursor, end, token_type::STRING);
+}
+
+/// Emit a run of one class, unless it is empty — an interpolation can sit
+/// flush against the one before it (`${a}${b}`), and against the backtick.
+fn push_run(out: &mut Vec<ClassifiedToken>, from: Position, to: Position, class: u32) {
+    if from.offset >= to.offset {
+        return;
+    }
+    out.push(ClassifiedToken {
+        span: from.span_to(to),
+        token_type: class,
+        modifiers: 0,
+    });
 }
 
 /// Delta-encode semantic tokens for LSP response.
@@ -200,6 +334,12 @@ struct AstSpans {
     /// recovered structurally here). Declaration and use sites share the
     /// binding's definition id, so one set covers both.
     param_ids: IndexSet<AstId>,
+    /// byte start -> class for the contextual keywords that double as names,
+    /// which lex as plain identifiers and are only keywords where they sit:
+    /// `test`, `do`, `resume`, `task`, `trap`, and `forward`. Kept apart from
+    /// `map` because it outranks symbol resolution. `self` is not here — the
+    /// language reserves it, so [`classify_token`] recognises it lexically.
+    contextual: IndexMap<usize, (u32, u32)>,
 }
 
 impl AstSpans {
@@ -217,6 +357,14 @@ impl AstSpans {
 
     fn is_param(&self, id: AstId) -> bool {
         self.param_ids.contains(&id)
+    }
+
+    fn mark_contextual(&mut self, start: usize, class: (u32, u32)) {
+        self.contextual.insert(start, class);
+    }
+
+    fn contextual_at(&self, start: usize) -> Option<(u32, u32)> {
+        self.contextual.get(&start).copied()
     }
 }
 
@@ -239,10 +387,15 @@ struct SpanCollector {
 
 impl AstVisitor for SpanCollector {
     fn visit_item(&mut self, item: &Item) {
-        // `test` is a contextual keyword: it lexes as an identifier, so the
-        // declaration's own span is the only place it can be recognised.
+        // The contextual keywords lex as identifiers, so the declaration's own
+        // span is the only place each can be recognised.
         if let Item::Test(t) = item {
-            self.spans.insert(t.span.start, token_type::KEYWORD);
+            self.spans.mark_contextual(t.span.start, KEYWORD);
+        }
+        if let Item::Impl(b) = item
+            && let Some(rest) = b.rest
+        {
+            self.spans.mark_contextual(rest.keyword_span.start, KEYWORD);
         }
         ast::walk_item(self, item);
     }
@@ -254,18 +407,26 @@ impl AstVisitor for SpanCollector {
         ast::walk_function(self, func);
     }
 
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        // `task` in `task return expr;` — the statement span opens on it.
+        if let ast::Stmt::TaskReturn(t) = stmt {
+            self.spans.mark_contextual(t.span.start, KEYWORD);
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
     fn visit_expr(&mut self, expr: &Expr) {
         if let Expr::Closure(c) = expr {
             for param in &c.params {
                 self.spans.mark_param(param.id);
             }
         }
-        // `resume` and `do`, the other two contextual keywords.
+        // `resume` and `do`, two more contextual keywords.
         if let Expr::Resume(r) = expr {
-            self.spans.insert(r.span.start, token_type::KEYWORD);
+            self.spans.mark_contextual(r.span.start, KEYWORD);
         }
         if let Expr::WithHandler(w) = expr {
-            self.spans.insert(w.do_span.start, token_type::KEYWORD);
+            self.spans.mark_contextual(w.do_span.start, KEYWORD);
         }
         ast::walk_expr(self, expr);
     }
@@ -306,68 +467,58 @@ impl AstVisitor for SpanCollector {
 
 // --- Lexer token classification ---
 
+/// The class of one token, or `None` where nothing should be coloured.
 fn classify_token(
-    source: &str,
     tokens: &[Token],
     index: usize,
     ast_spans: &AstSpans,
     sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
-) -> Option<SemanticToken> {
+) -> Option<(u32, u32)> {
     let token = &tokens[index];
-    if token.kind == TokenKind::Eof {
+    if token.kind == TokenKind::Eof || token.span.start == token.span.end {
         return None;
     }
 
-    // LSP semantic tokens MUST NOT span lines (see `compute` doc).
-    // Multi-line string / template literals are skipped; the editor's
-    // syntactic highlighter will still colour them.
-    if token.span.line != token.span.end_line {
-        return None;
-    }
+    let class = match token.kind.keyword_category() {
+        // Keywords, coloured by their editorial category rather than by being
+        // keyword *tokens*: `true` / `false` / `null` are constants and
+        // `matches` is an operator.
+        Some(category) => classify_keyword(category),
 
-    let line = token.span.line.saturating_sub(1) as u32;
-    let start_char = token.span.column.saturating_sub(1) as u32;
-    let length = source
-        .get(token.span.start..token.span.end)
-        .map(|s| s.chars().count() as u32)
-        .unwrap_or(0);
-    if length == 0 {
-        return None;
-    }
+        None => match &token.kind {
+            // `self` is the one contextual keyword the language reserves —
+            // `Wado.g4`'s `identifier` rule accepts every other one as a name,
+            // but not this — so it needs no AST position to be recognised, and
+            // the registry files it under `Constant`. Without this it colours
+            // as the parameter binding it resolves to.
+            TokenKind::Ident(name) if name == "self" => CONSTANT,
 
-    let (token_type, modifiers) = match &token.kind {
-        // Keywords
-        k if k.as_keyword_str().is_some() => (token_type::KEYWORD, 0),
+            // Identifiers. A contextual keyword outranks whatever else would
+            // classify the name; everything else prefers the resolved symbol
+            // classification (precomputed in `sem_classes`, keyed by byte
+            // start) and falls back to the lexer/AST heuristics.
+            TokenKind::Ident(_) => ast_spans
+                .contextual_at(token.span.start)
+                .or_else(|| sem_classes.and_then(|classes| classes.get(&token.span.start).copied()))
+                .unwrap_or_else(|| classify_ident(tokens, index, ast_spans)),
 
-        // Identifiers: prefer the resolved symbol classification (precomputed
-        // in `sem_classes`, keyed by byte start) when available, otherwise
-        // fall back to the lexer/AST heuristics.
-        TokenKind::Ident(_) => sem_classes
-            .and_then(|classes| classes.get(&token.span.start).copied())
-            .unwrap_or_else(|| classify_ident(tokens, index, ast_spans)),
+            // Literals
+            TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
+            TokenKind::StringLit(_)
+            | TokenKind::ByteStringLit(_)
+            | TokenKind::TemplateStringLit(_)
+            | TokenKind::ByteCharLit(_)
+            | TokenKind::CharLit(_) => (token_type::STRING, 0),
 
-        // Literals
-        TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
-        TokenKind::StringLit(_)
-        | TokenKind::ByteStringLit(_)
-        | TokenKind::TemplateStringLit(_)
-        | TokenKind::CharLit(_) => (token_type::STRING, 0),
+            // Operators (the highlightable subset; the registry's
+            // `is_highlight_operator` flag excludes punctuation-like tokens).
+            k if k.is_highlight_operator() => (token_type::OPERATOR, 0),
 
-        // Operators (the highlightable subset; the registry's
-        // `is_highlight_operator` flag excludes punctuation-like tokens).
-        k if k.is_highlight_operator() => (token_type::OPERATOR, 0),
-
-        // Punctuation — skip (don't emit semantic tokens for brackets, commas, etc.)
-        _ => return None,
+            // Punctuation — skip (don't emit semantic tokens for brackets, commas, etc.)
+            _ => return None,
+        },
     };
-
-    Some(SemanticToken {
-        line,
-        start_char,
-        length,
-        token_type,
-        modifiers,
-    })
+    Some(class)
 }
 
 /// Build the `byte start → (token type, modifiers)` classification map for
@@ -452,6 +603,20 @@ fn classify_symbol(
         }
     };
     (token_type, modifiers)
+}
+
+/// The class a keyword's editorial category implies. `Constant` and `Operator`
+/// exist in the registry precisely because those words must not be coloured as
+/// keywords.
+fn classify_keyword(category: KeywordCategory) -> (u32, u32) {
+    match category {
+        KeywordCategory::Control
+        | KeywordCategory::StorageType
+        | KeywordCategory::StorageModifier
+        | KeywordCategory::Other => KEYWORD,
+        KeywordCategory::Constant => CONSTANT,
+        KeywordCategory::Operator => (token_type::OPERATOR, 0),
+    }
 }
 
 /// Classify an identifier using AST type spans + lexer context heuristics.
@@ -580,6 +745,7 @@ mod tests {
             (token_modifier::DECLARATION, "declaration"),
             (token_modifier::DEFINITION, "definition"),
             (token_modifier::READONLY, "readonly"),
+            (token_modifier::DEFAULT_LIBRARY, "defaultLibrary"),
         ];
         assert_eq!(expected.len(), TOKEN_MODIFIERS.len());
         for (bit, name) in expected {
@@ -793,6 +959,158 @@ mod tests {
         let src = "fn run() {}\ntest \"t\" {\n    let _ = 1;\n}\n";
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 1, "test"), token_type::KEYWORD);
+    }
+
+    /// Class (type + modifiers) of the token whose text is `needle` on `line`.
+    fn class_of(tokens: &[SemanticToken], src: &str, line: u32, needle: &str) -> (u32, u32) {
+        let text = src.split_inclusive('\n').nth(line as usize).expect("line");
+        let col = text.find(needle).expect("needle on line") as u32;
+        let token = tokens
+            .iter()
+            .find(|t| t.line == line && t.start_char == col)
+            .unwrap_or_else(|| panic!("no token for {needle:?} at {line}:{col}"));
+        (token.token_type, token.modifiers)
+    }
+
+    /// `true` / `false` / `null` are `KeywordCategory::Constant`: keyword
+    /// tokens the registry says must not be coloured as keywords.
+    #[test]
+    fn language_constants_are_constants_not_keywords() {
+        let src = "fn run() {\n    let a = true;\n    let b = false;\n    let c = null;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(class_of(&tokens, src, 1, "true"), CONSTANT);
+        assert_eq!(class_of(&tokens, src, 2, "false"), CONSTANT);
+        assert_eq!(class_of(&tokens, src, 3, "null"), CONSTANT);
+    }
+
+    /// A template literal is one lexer token, so without expansion everything
+    /// inside `${…}` is painted string and the code there goes uncoloured.
+    #[test]
+    fn template_interpolation_is_classified_as_code() {
+        let src = "fn run() {\n    let n = 1;\n    let _ = `v=${n + 2}!`;\n}\n";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "n + 2"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 2, "+"), token_type::OPERATOR);
+        assert_eq!(kind_of(&tokens, src, 2, "2}"), token_type::NUMBER);
+        // The text around the interpolation, `${` included, stays string.
+        assert_eq!(kind_of(&tokens, src, 2, "`v=${"), token_type::STRING);
+        assert_eq!(kind_of(&tokens, src, 2, "}!`"), token_type::STRING);
+    }
+
+    /// The `:spec` tail is metadata, not code: `${x:>8}` must not colour `>`
+    /// as an operator, which the expansion would do if it stopped at the `}`.
+    #[test]
+    fn template_format_specifier_is_muted() {
+        let src = "fn run() {\n    let n = 1;\n    let _ = `${n:>8}`;\n}\n";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "n:>8"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 2, ":>8"), token_type::COMMENT);
+        assert_eq!(kind_of(&tokens, src, 2, "}`"), token_type::STRING);
+    }
+
+    /// The lexer keeps comments out of the token stream, so an interpolation's
+    /// comment reaches the classifier only through the fragment's `comments`.
+    #[test]
+    fn template_interpolation_comment_is_a_comment() {
+        let src = "fn run() {\n    let n = 1;\n    let _ = `${ /* why */ n }`;\n}\n";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "/* why */"), token_type::COMMENT);
+        assert_eq!(kind_of(&tokens, src, 2, "n }`"), token_type::VARIABLE);
+    }
+
+    /// `matches` lexes as a keyword but is a binary pattern-test operator.
+    #[test]
+    fn matches_is_an_operator() {
+        let src = "fn run(x: Option<i32>) -> bool {\n    return x matches { Some(_) };\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "matches"), token_type::OPERATOR);
+    }
+
+    /// `self` is `KeywordCategory::Constant`, so no occurrence may colour as
+    /// the parameter it resolves to — the receiver, the uses, and the ones in
+    /// positions no AST node carries a span for, like a `stores[self]` clause.
+    #[test]
+    fn every_self_is_a_constant() {
+        let src = concat!(
+            "struct S { n: i32 }\n",
+            "impl S {\n",
+            "    fn get(&self) -> i32 with stores[self] { return self.n; }\n",
+            "}\n",
+            "fn run() {}\n",
+        );
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        let line = src.split_inclusive('\n').nth(2).expect("line");
+        let columns: Vec<u32> = line
+            .match_indices("self")
+            .map(|(at, _)| at as u32)
+            .collect();
+        assert_eq!(columns.len(), 3, "receiver, stores clause, and use site");
+        for col in columns {
+            let token = tokens
+                .iter()
+                .find(|t| t.line == 2 && t.start_char == col)
+                .unwrap_or_else(|| panic!("no token at 2:{col}"));
+            assert_eq!((token.token_type, token.modifiers), CONSTANT);
+        }
+    }
+
+    /// A `__DATA__` tail is not Wado, and no token carries it. `classify_all`
+    /// mutes it; `compute` drops the run because it spans lines, which is what
+    /// leaves the editor's embedded-JSON highlighting in place.
+    #[test]
+    fn data_section_is_muted() {
+        let src = "fn run() {}\n__DATA__\n{ \"expect\": 1 }\n";
+        let marker = src.find("__DATA__").expect("marker");
+        let muted = classify_all(src, None)
+            .into_iter()
+            .find(|t| t.span.start == marker)
+            .expect("the data section is classified");
+        assert_eq!(muted.token_type, token_type::COMMENT);
+        assert_eq!(muted.span.end, src.len());
+        assert!(
+            compute(src, None).iter().all(|t| t.line < 1),
+            "a multi-line run cannot go on the LSP wire",
+        );
+    }
+
+    /// `b'0'` lexes as its own token kind, which the literal arm did not
+    /// list — so it fell through to punctuation and went uncoloured.
+    #[test]
+    fn byte_char_literal_is_a_string() {
+        let src = "fn is_digit(b: u8) -> bool {\n    return b >= b'0';\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "b'0'"), token_type::STRING);
+    }
+
+    /// `task`, `trap`, and `forward` lex as identifiers, so without an AST
+    /// span they fall through to the identifier heuristic and colour as
+    /// variables.
+    #[test]
+    fn contextual_keywords_task_trap_and_forward_are_keywords() {
+        let src = concat!(
+            "effect E {\n",
+            "    fn ask() -> i32;\n",
+            "}\n",
+            "struct H {}\n",
+            "impl E for H {\n",
+            "    ..trap\n",
+            "}\n",
+            "struct G {}\n",
+            "impl E for G {\n",
+            "    ..forward\n",
+            "}\n",
+            "export async fn run() -> i32 {\n",
+            "    task return 1;\n",
+            "}\n",
+        );
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 5, "trap"), token_type::KEYWORD);
+        assert_eq!(kind_of(&tokens, src, 9, "forward"), token_type::KEYWORD);
+        assert_eq!(kind_of(&tokens, src, 12, "task"), token_type::KEYWORD);
     }
 
     #[test]

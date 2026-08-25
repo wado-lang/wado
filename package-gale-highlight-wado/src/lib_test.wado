@@ -34,7 +34,31 @@ test "highlight template interpolation expression" {
     assert parse(&src).ok(), "parse failed";
     let html = highlight(src);
     assert html.contains("<span class=\"variable\">n</span>"), "interp identifier -> variable";
-    assert html.contains("<span class=\"keyword\">self</span>"), "interp keyword stays keyword";
+    assert html.contains("<span class=\"constant builtin\">self</span>"), "self is a constant";
+    assert html.contains("<span class=\"property\">now</span>"), "interp member -> property";
+}
+
+test "highlight identifiers the grammar can place" {
+    let src = "fn f<T>(p: Point) -> T { return p.x; }\n";
+    assert parse(&src).ok(), "parse failed";
+    let html = highlight(src);
+    assert html.contains("<span class=\"type\">Point</span>"), "type reference -> type";
+    assert html.contains("<span class=\"type\">T</span>"), "type parameter -> type";
+    assert html.contains("<span class=\"property\">x</span>"), "field access -> property";
+    // A plain name stays uncoloured: which kind it is takes name resolution.
+    // A `>` never survives inside span content (it escapes to `&gt;`), so this
+    // matches only a span whose whole content is `p`.
+    assert !html.contains(">p</span>"), "a bare identifier carries no span";
+}
+
+test "highlight contextual keyword used as a member name" {
+    // `memberName` spells `forward` out as a literal, so without an override it
+    // keeps the keyword class the token kind carries by default. The compiler
+    // lexes it as a plain identifier here.
+    let src = "fn f(h: H) -> i32 { return h.forward; }\n";
+    assert parse(&src).ok(), "parse failed";
+    let html = highlight(src);
+    assert html.contains("<span class=\"property\">forward</span>"), "member -> property";
 }
 
 test "highlight template format spec" {

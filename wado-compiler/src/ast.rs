@@ -3575,6 +3575,14 @@ pub enum RestClause {
     Forward,
 }
 
+/// A rest clause as written, positioned so the highlighter can reach it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RestClauseDecl {
+    pub kind: RestClause,
+    /// The `trap` / `forward` word, not the leading `..`.
+    pub keyword_span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     pub id: AstId,
@@ -3594,7 +3602,7 @@ pub struct ImplBlock {
     /// Rest clause at the end of an effect handler `impl` block, deciding
     /// what an operation absent from `methods` does when dispatched. Only
     /// meaningful for effect handler impls; ignored for ordinary trait impls.
-    pub rest: Option<RestClause>,
+    pub rest: Option<RestClauseDecl>,
     pub span: Span,
 }
 

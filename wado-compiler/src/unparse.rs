@@ -1064,7 +1064,7 @@ impl<'a> Unparser<'a> {
                     this.output.push('\n');
                 }
                 this.write_indent();
-                this.output.push_str(match rest {
+                this.output.push_str(match rest.kind {
                     RestClause::Trap => "..trap\n",
                     RestClause::Forward => "..forward\n",
                 });

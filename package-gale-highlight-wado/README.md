@@ -27,14 +27,20 @@ Public API:
 The output is a bare fragment: bring your own CSS and page shell. Classes use
 the tree-sitter capture vocabulary, so any tree-sitter theme applies:
 
-| Class              | Token                           |
-| ------------------ | ------------------------------- |
-| `comment`          | line / block / `__DATA__`       |
-| `string`           | strings, template text, `` ` `` |
-| `number`           | int / float literals            |
-| `keyword`          | `fn`, `let`, `if`, `self`, …    |
-| `variable`         | identifiers in an interpolation |
-| `constant builtin` | `true` / `false` / `null`       |
+| Class              | Token                                        |
+| ------------------ | -------------------------------------------- |
+| `comment`          | line / block / `__DATA__` / format specifier |
+| `string`           | strings, template text, `` ` ``              |
+| `number`           | int / float literals                         |
+| `keyword`          | `fn`, `let`, `if`, …                         |
+| `operator`         | `matches`, `+`, `==`, `->`, …                |
+| `type`             | type references and type parameters          |
+| `property`         | `.field`, `.method()`, struct literal fields |
+| `variable`         | identifiers in an interpolation              |
+| `constant builtin` | `true` / `false` / `null` / `self`           |
+
+A plain identifier stays uncoloured: telling a function from a variable takes
+name resolution, which no context-free grammar has.
 
 A dotted capture like `constant.builtin` becomes `class="constant builtin"`.
 See [`example/standalone.wado`](./example/standalone.wado) for a full styled
@@ -59,9 +65,27 @@ src/
   lib.wado              re-exports the generated parse/highlight API
   main.wado             CLI (delegates to gale-highlight's run_cli)
   lib_test.wado         highlight regression tests
+tools/
+  corpus.wado           shared: the path list and reading a file
+  corpus_check.wado     parse verdicts, for `mise run check-grammar`
+  highlight_dump.wado   capture spans, for `mise run check-highlight`
 example/
   standalone.wado       styled full-page demo / CSS-class reference
 ```
+
+## Held to the compiler
+
+`wado-compiler` owns Wado's syntax; three checks keep this package on it:
+
+- `mise run check-grammar` — the grammar must accept exactly what the
+  compiler's parser accepts, over the stdlib + fixture corpus.
+- `mise run check-highlight` — the two must _colour_ that corpus the same.
+  Every class but the identifier kinds is decidable without name resolution
+  and fails on disagreement; those are reported as a capability gap instead.
+- `mise run check-highlight-vocab` — the vocabulary half of that check, over
+  the registries rather than a corpus, so it runs in milliseconds: every
+  keyword carries the capture its `KeywordCategory` implies, and nothing else
+  is captured as one.
 
 ## The gale-highlight framework
 

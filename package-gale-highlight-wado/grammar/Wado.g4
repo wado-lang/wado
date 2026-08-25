@@ -202,7 +202,7 @@ worldItem
     ;
 
 resourceDecl
-    : 'resource' IDENTIFIER genericParams? ('{' resourceMember* '}' | ';')
+    : 'resource' IDENTIFIER genericParams? ('extends' typeRef)? ('{' resourceMember* '}' | ';')
     ;
 
 resourceMember
@@ -645,12 +645,19 @@ templatePart
     | interpolation
     ;
 
+// The `:` and the closing `}` get their own rules so the highlight query can
+// name them: an override matches anywhere under a rule, so `(interpolation ":"
+// …)` would also catch the `:` in `${ xs.all(|p: P| …) }`.
 interpolation
-    : INTERP_OPEN expression (':' formatSpec)? '}'
+    : INTERP_OPEN expression formatSpec? interpolationEnd
+    ;
+
+interpolationEnd
+    : '}'
     ;
 
 formatSpec
-    : formatSpecAtom*
+    : ':' formatSpecAtom*
     ;
 
 formatSpecAtom
