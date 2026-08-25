@@ -1,31 +1,33 @@
 #![stdlib("core:temporal")]
-//! Minimal date and time types, modelled on TC39 Temporal.
+//! Date and time, modelled on TC39 Temporal.
 //!
-//! This is the MVP described in `docs/wep-2026-06-05-core-temporal.md`: it
-//! provides only the two value types every temporal API is built around, an
-//! exact point on the timeline (`Instant`) and that instant paired with a
-//! time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
-//! formatting (`Display`), civil field accessors, RFC 3339 parsing, epoch
-//! constructors, and serde `Serialize`/`Deserialize` (an RFC 3339 string under
-//! CBOR's date/time tag 0, a bare string in JSON; an epoch-seconds number is
-//! also accepted on decode); arithmetic, `now()`, and
-//! `Duration` are deferred to follow-up work. The types exist so a serde format
-//! such as `core:json` or `core:cbor` has a concrete Wado type for timestamps.
+//! Two types carry an instant — `Instant`, an exact point on the timeline, and
+//! `ZonedDateTime`, that instant paired with the zone it is read in. Five are
+//! zoneless readings the way a birthday or a recurring wall-clock time is:
+//! `PlainDate`, `PlainTime`, `PlainDateTime`, `PlainYearMonth`, and
+//! `PlainMonthDay`. `Duration` is a signed span, and `Unit` and `RoundingMode`
+//! parameterize the difference and rounding operations.
+//!
+//! Every type parses and renders its ISO 8601 spelling, and that spelling is
+//! its serde wire form. `Instant` also reads and writes the RFC 7231
+//! IMF-fixdate an HTTP `Date` header carries. `Instant::now` takes the system
+//! clock through the effect row, so a program that never asks the time gains no
+//! WASI import.
+//!
+//! Only fixed UTC offsets (`"Z"`, `"UTC"`, `±HH:MM`) are interpretable: an IANA
+//! zone name is storable and serializable but traps on first use, until a
+//! time-zone database is bundled. See
+//! `docs/wep-2026-06-05-core-temporal.md`.
 //!
 //! Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
 //! record (`{ seconds, nanoseconds }`) for the system clock. That type is a
 //! Component Model binding — pinned to a specific WASI version and regenerated
 //! by `wado-from-idl` — whereas `core:temporal`'s `Instant` is a plain,
 //! version-independent Wado type that grows methods. They share a name and
-//! field layout deliberately: it is "the same concept, a different type". To
-//! bridge them without making either depend on the other's representation,
-//! `core:temporal` provides `From` impls both ways (a field-for-field copy), so
-//! a clock reading converts with `Instant::from(SystemClock::now())` and back
-//! with `ClockInstant::from`. Merely naming the `wasi:clocks` record in these
-//! impls is not a runtime use of the clock, so it pulls in no WASI import for a
-//! component that never calls one.
+//! field layout deliberately: it is "the same concept, a different type", and
+//! `From` impls both ways bridge them with a field-for-field copy.
 //!
-//! Both `core:temporal` types are ISO 8601 only and so store no calendar.
+//! Every type here is ISO 8601 only and so stores no calendar.
 
 use {
     Serialize,
@@ -48,6 +50,18 @@ test {
 
     assert ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20+09:00") matches { Ok(zoned) && zoned.hour() == 22
         && `${zoned}` == "2023-11-14T22:13:20+09:00" };
+
+    // A duration reads as written, and a calendar unit needs a calendar to
+    // resolve it: 01-31 plus a month is 02-28, not 03-03.
+    let month = Duration { months: 1 };
+    assert `${month}` == "P1M";
+    let end_of_january = ZonedDateTime::parse_rfc3339("2023-01-31T00:00:00Z").unwrap();
+    assert `${end_of_january.add(&month)}` == "2023-02-28T00:00:00Z";
+
+    // The zoneless types are the shapes a date or a clock reading really has.
+    assert PlainDate::new(2024, 2, 29).in_leap_year();
+    assert `${PlainTime { hour: 9, minute: 30 }}` == "09:30:00";
+    assert Instant::EPOCH.to_http_date() == "Thu, 01 Jan 1970 00:00:00 GMT";
 }
 
 /// An exact point on the timeline, as the offset from the Unix epoch
