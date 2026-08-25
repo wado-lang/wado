@@ -132,6 +132,22 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
 In-place places — `&mut <local>` of any type, and `&mut` of a struct / `List` /
 `String` reference mutated in place — are always allowed and unaffected.
 
+Two constraints the forbid must respect:
+
+- For `variant` the carve-out is not optional, and the forbid cannot be keyed on
+  the borrow alone. `Option<T>` is a variant, so `if let Some(e) = &mut self.f`
+  is a detached borrow, and mutation through the payload — which lands — is how
+  it is used: every gale-generated parser, `normalize_element(&mut lab.element)`
+  at 5 `package-gale` sites, and the `value_copy_*` fixtures. The other replace
+  types have no such idiom, which is why the borrow-site refusal suits them and
+  not `variant`.
+- The rule keys on the place being non-local, not on the borrow escaping. A
+  `&mut` rooted at a local _is_ that local's box, so a whole-value write through
+  it lands even when the borrow is stored in an aggregate and written much
+  later: `ValueSerializer { out: &mut v }` in `core:value`, written through by
+  `SerializeSeq::end`, is load-bearing across `core:value` / `core:json` /
+  `wasi:http`. Only a non-local root detaches.
+
 ## Decision
 
 - [x] The representation (in-place shared handle vs `Box<T>`) is normative, keyed
@@ -157,21 +173,22 @@ never carved out.
 These are gaps between the design above and the current tree. Each is a bug to
 fix to conform; none should be preserved.
 
-- [ ] D1 — silent write-back drop. `&mut` to a non-local replace-on-assign place
-      compiles but discards the write, for _every_ replace type. Verified by
-      probe (HEAD):
+- [ ] D1 — silent write-back drop, `variant` only. `&mut` to a non-local place
+      compiles but discards a whole-value write. Probe (HEAD):
 
-  | place                             | result  |
-  | --------------------------------- | ------- |
-  | `&mut xs[i]` — primitive element  | dropped |
-  | `&mut xs[i]` — enum element       | dropped |
-  | `&mut xs[i]` — flags element      | dropped |
-  | `&mut xs[i]` — variant element    | dropped |
-  | `&mut fns[i]` — `fn` element      | dropped |
-  | `&mut s.f` — enum / variant field | dropped |
+  | place, by referent and by where the borrow goes   | result                |
+  | ------------------------------------------------- | --------------------- |
+  | primitive / enum / flags / `fn`, anywhere         | refused at the borrow |
+  | `variant`, into a variable / aggregate / `return` | refused               |
+  | `variant`, used where it is taken                 | dropped               |
 
-  The same operations on a value-type _local_ all work. Resolved by the forbid +
-  carve-out.
+  The same operations on a value-type _local_ all work, wherever the borrow
+  goes. `variant` is the one referent still dropping: it is exempt from the
+  borrow-site refusal because mutation through its payload lands, so a
+  whole-value write is refused where the borrow is stored instead. The residue —
+  a call argument, a `match` / `if let` scrutinee, a method receiver — is the
+  carve-out's to close: such a borrow cannot outlive its use, so temp +
+  write-back applies.
 
 - [ ] D2 — no shared predicate. The boxed set is inlined in
       `lower/plan/boxing.rs::create_needed_box_types` as

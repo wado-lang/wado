@@ -1,0 +1,47 @@
+// A `&mut` to a variant field or element is a fresh box, not the place's
+// storage, so a whole-value write through it never reaches the place. Storage
+// outliving the expression that took it may not hold one — a variable, an
+// aggregate, a return. Using it where it is taken stays legal, because mutation
+// through the payload lands: ref_field_ref_variant and
+// value_copy_variant_in_aggregate guard that side.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct View {
+    slot: &mut Payload,
+}
+
+fn bound_to_a_variable(b: &mut Bag) {
+    let r = &mut b.item;
+    *r = Payload::Text(`xyz`);
+}
+
+fn stored_in_an_aggregate(b: &mut Bag) -> View with stores[b] {
+    return View { slot: &mut b.item };
+}
+
+fn returned(b: &mut Bag) -> &mut Payload with stores[b] {
+    return &mut b.item;
+}
+
+fn element_of_a_list(xs: &mut List<Payload>) {
+    let r = &mut xs[0];
+    *r = Payload::Empty;
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "cannot store a mutable reference to a field or element of a variant"
+}

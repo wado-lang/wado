@@ -14,6 +14,7 @@ mod callee;
 mod closure;
 mod coercion;
 mod control_flow;
+mod detached_borrow;
 mod expr;
 mod handlers;
 mod infer;
