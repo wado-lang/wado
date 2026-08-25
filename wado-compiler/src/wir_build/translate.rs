@@ -2863,27 +2863,23 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) -> bool {
     }
 }
 
-/// Whether every leaf of a value instruction yields the N results, so
-/// [`lift_struct_new_to_seq`] can turn each into its own `Return`.
+/// Lift a value into the `Return`s its leaves become, and report whether every
+/// leaf reached one. A leaf yields the results (the aggregate, or a call to a
+/// callee under this same ABI), or it already transfers control and carries no
+/// value at all.
 ///
-/// A leaf that already transfers control carries no value and needs no lift.
-fn lifts_to_results(instr: &WirInstr) -> bool {
-    match instr {
-        WirInstr::StructNew { .. } | WirInstr::Call { .. } => true,
-        WirInstr::Seq(items) => items.last().is_some_and(lifts_to_results),
-        WirInstr::If {
-            then_body,
-            else_body,
-            ..
-        } => {
-            then_body.last().is_some_and(lifts_to_results)
-                && else_body
-                    .as_ref()
-                    .and_then(|eb| eb.last())
-                    .is_some_and(lifts_to_results)
-        }
-        other => other.ends_with_terminator(),
+/// Tried on a copy, since [`lift_struct_new_to_seq`] rewrites as it descends:
+/// a value it cannot finish must be left exactly as it was, so the exit stays
+/// an exit and the block keeps the result type it was built with. Asking first
+/// instead would mean a second walk that has to agree with this one about every
+/// shape.
+fn lifted(value: &mut WirInstr) -> bool {
+    let mut trial = value.clone();
+    if !lift_struct_new_to_seq(&mut trial, true) {
+        return false;
     }
+    *value = trial;
+    true
 }
 
 /// Where the last instruction of a list ends up: yielding the block's result, or
@@ -2933,58 +2929,44 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
         }
     }
 
-    /// The value an exit carries: the aggregate, a call to a callee under this
-    /// same ABI (which `multi_value_return`'s tail-call rule accepts wherever
-    /// it accepts the aggregate), or control flow whose every leaf is one of
-    /// those — `match` in return position leaves the last shape.
-    fn exit_as_siblings(instrs: &[WirInstr], i: usize, target_depth: u32) -> bool {
-        lifts_to_results(&instrs[i])
-            && instrs.get(i + 1).is_some_and(
-                |next| matches!(next, WirInstr::Br { depth } if *depth == target_depth),
-            )
+    /// An exit written as the value and the `Br` side by side.
+    fn br_follows(instrs: &[WirInstr], i: usize, target_depth: u32) -> bool {
+        instrs.get(i + 1).is_some_and(
+            |next| matches!(next, WirInstr::Br { depth } if *depth == target_depth),
+        )
     }
 
+    /// An exit written as one `Seq` ending in the value and the `Br`.
     fn exit_as_seq(instr: &WirInstr, target_depth: u32) -> bool {
         let WirInstr::Seq(seq) = instr else {
             return false;
         };
-        exits_to_target(instr, target_depth)
-            && seq
-                .get(seq.len().wrapping_sub(2))
-                .is_some_and(lifts_to_results)
+        seq.len() >= 2
+            && matches!(seq.last(), Some(WirInstr::Br { depth }) if *depth == target_depth)
     }
 
-    /// Lift a value an exit carries into the `Return`s its leaves become.
-    /// [`exit_as_siblings`] and [`exit_as_seq`] have already established that
-    /// every leaf can be one.
-    fn returning(mut value: WirInstr) -> WirInstr {
-        let lifted = lift_struct_new_to_seq(&mut value, true);
-        assert!(lifted, "an exit value that lifts_to_results must lift");
-        value
+    /// Lift the value such a `Seq` carries and drop the `Br` it ends with.
+    fn lift_seq_exit(instr: &mut WirInstr) -> bool {
+        let WirInstr::Seq(seq) = instr else {
+            return false;
+        };
+        let value = seq.len() - 2;
+        if !lifted(&mut seq[value]) {
+            return false;
+        }
+        seq.pop();
+        true
     }
 
     let mut all_rewritten = true;
     let mut i = 0;
     while i < instrs.len() {
-        if exit_as_siblings(instrs, i, target_depth) {
-            let value = std::mem::replace(&mut instrs[i], WirInstr::Nop);
-            instrs[i] = returning(value);
+        if br_follows(instrs, i, target_depth) && lifted(&mut instrs[i]) {
             instrs[i + 1] = WirInstr::Nop;
             i += 2;
             continue;
         }
-        if exit_as_seq(&instrs[i], target_depth) {
-            if let WirInstr::Seq(mut seq) = std::mem::replace(&mut instrs[i], WirInstr::Nop) {
-                let _br = seq.pop();
-                if let Some(value) = seq.pop() {
-                    instrs[i] = if seq.is_empty() {
-                        returning(value)
-                    } else {
-                        seq.push(returning(value));
-                        WirInstr::Seq(seq)
-                    };
-                }
-            }
+        if exit_as_seq(&instrs[i], target_depth) && lift_seq_exit(&mut instrs[i]) {
             i += 1;
             continue;
         }
@@ -3034,10 +3016,8 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
 
     if tail == Tail::IsResult
         && let Some(last) = instrs.last_mut()
-        && lifts_to_results(last)
     {
-        let value = std::mem::replace(last, WirInstr::Nop);
-        *last = returning(value);
+        lifted(last);
     }
     all_rewritten
 }

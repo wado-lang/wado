@@ -1,0 +1,20 @@
+// A multi-value return whose value is a `match` in a block an inlined callee
+// left behind: each arm is a labeled block of its own, so the lift has to reach
+// the tuple through two levels of block before the ABI holds. At -O3 the
+// compiler used to leave the aggregate on the stack instead.
+
+use { from_bytes } from "core:cbor";
+
+test "a u64 read back through the cbor deserializer" {
+    let one: ByteList = [0x18, 0x2a];
+    let two: ByteList = [0x19, 0x01, 0x00];
+    let four: ByteList = [0x1a, 0x00, 0x01, 0x00, 0x00];
+    let truncated: ByteList = [0x18];
+    assert from_bytes::<u64, ByteList>(one) matches { Ok(42) };
+    assert from_bytes::<u64, ByteList>(two) matches { Ok(256) };
+    assert from_bytes::<u64, ByteList>(four) matches { Ok(65536) };
+    assert from_bytes::<u64, ByteList>(truncated) matches { Err(_) };
+}
+
+__DATA__
+{"test": {}}
