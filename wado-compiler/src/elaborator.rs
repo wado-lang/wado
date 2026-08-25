@@ -537,6 +537,45 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// The receiver is a key the caller resolved from its own reference site.
     /// A second key from another vantage makes the order a silent tiebreak.
+    /// The type a transparent alias or newtype stands for — `ByteList` for
+    /// `pub type ByteList = List<u8>;` — since the alias declares no method of
+    /// its own. `None` when `name` names no such declaration.
+    pub(super) fn newtype_base(&self, name: &str) -> Option<(tir::TypeId, String)> {
+        let mut current = self.lookup_newtype(name)?;
+        loop {
+            let peeled = match self.tysys.type_table.borrow().get(current).clone() {
+                tir::ResolvedType::Newtype { base_type, .. } => base_type,
+                // `type Buf = ByteList;` chains, so peeling stops at the type
+                // that declares methods, not at the first link.
+                tir::ResolvedType::Flags { .. } => tir::TypeTable::U32,
+                _ => break,
+            };
+            if peeled == current {
+                break;
+            }
+            current = peeled;
+        }
+        Some((current, self.tysys.get_ultimate_base_struct_name(current)))
+    }
+
+    /// The declaration a `Type::method` call resolves to, seeing through a
+    /// transparent alias. The single answer to that question: every site that
+    /// records the use→def edge for such a call asks here, so none of them
+    /// stops one alias short of the declaration.
+    pub(super) fn static_method_decl_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        type_name: &str,
+        method_name: &str,
+    ) -> Option<crate::ast::AstId> {
+        self.static_method_decl_id(&self.impl_target_at(site, type_name), method_name)
+            .or_else(|| {
+                let (base, base_name) = self.newtype_base(type_name)?;
+                let receiver = self.impl_target_of(base, &crate::name::DeclName::new(&base_name));
+                self.static_method_decl_id(&receiver, method_name)
+            })
+    }
+
     pub(super) fn static_method_decl_id(
         &self,
         receiver: &trait_env::ImplTargetKey,

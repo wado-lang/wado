@@ -3361,7 +3361,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let MethodInfo {
-            method_ast_id: _,
+            method_ast_id,
             return_type,
             self_kind,
             param_types,
@@ -3382,6 +3382,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Only use IndexMut if the method requires &mut self
         if self_kind != ast::SelfKind::MutRef {
             return None; // Method doesn't need &mut, fall back to Index
+        }
+
+        // Past the bail, this path owns the call, so it owns the use->def edge
+        // for the method name too — `resolve_method_call_with` never sees it.
+        if let Some(def_id) = method_ast_id {
+            self.record_reference_to_def(method_call.method_id, def_id);
         }
 
         // This path answers the call itself, so the ladder is enforced here
