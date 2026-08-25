@@ -3,33 +3,35 @@
 
 # core:temporal
 
-Minimal date and time types, modelled on TC39 Temporal.
+Date and time, modelled on TC39 Temporal.
 
-This is the MVP described in `docs/wep-2026-06-05-core-temporal.md`: it
-provides only the two value types every temporal API is built around, an
-exact point on the timeline (`Instant`) and that instant paired with a
-time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
-formatting (`Display`), civil field accessors, RFC 3339 parsing, epoch
-constructors, and serde `Serialize`/`Deserialize` (an RFC 3339 string under
-CBOR's date/time tag 0, a bare string in JSON; an epoch-seconds number is
-also accepted on decode); arithmetic, `now()`, and
-`Duration` are deferred to follow-up work. The types exist so a serde format
-such as `core:json` or `core:cbor` has a concrete Wado type for timestamps.
+Two types carry an instant — `Instant`, an exact point on the timeline, and
+`ZonedDateTime`, that instant paired with the zone it is read in. Five are
+zoneless readings the way a birthday or a recurring wall-clock time is:
+`PlainDate`, `PlainTime`, `PlainDateTime`, `PlainYearMonth`, and
+`PlainMonthDay`. `Duration` is a signed span, and `Unit` and `RoundingMode`
+parameterize the difference and rounding operations.
+
+Every type parses and renders its ISO 8601 spelling, and that spelling is
+its serde wire form. `Instant` also reads and writes the RFC 7231
+IMF-fixdate an HTTP `Date` header carries. `Instant::now` takes the system
+clock through the effect row, so a program that never asks the time gains no
+WASI import.
+
+Only fixed UTC offsets (`"Z"`, `"UTC"`, `±HH:MM`) are interpretable: an IANA
+zone name is storable and serializable but traps on first use, until a
+time-zone database is bundled. See
+`docs/wep-2026-06-05-core-temporal.md`.
 
 Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
 record (`{ seconds, nanoseconds }`) for the system clock. That type is a
 Component Model binding — pinned to a specific WASI version and regenerated
 by `wado-from-idl` — whereas `core:temporal`'s `Instant` is a plain,
 version-independent Wado type that grows methods. They share a name and
-field layout deliberately: it is "the same concept, a different type". To
-bridge them without making either depend on the other's representation,
-`core:temporal` provides `From` impls both ways (a field-for-field copy), so
-a clock reading converts with `Instant::from(SystemClock::now())` and back
-with `ClockInstant::from`. Merely naming the `wasi:clocks` record in these
-impls is not a runtime use of the clock, so it pulls in no WASI import for a
-component that never calls one.
+field layout deliberately: it is "the same concept, a different type", and
+`From` impls both ways bridge them with a field-for-field copy.
 
-Both `core:temporal` types are ISO 8601 only and so store no calendar.
+Every type here is ISO 8601 only and so stores no calendar.
 
 ## Synopsis
 
@@ -40,6 +42,18 @@ assert epoch < Instant::from_epoch_seconds(1_000_000_000);
 
 assert ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20+09:00") matches { Ok(zoned) && zoned.hour() == 22
     && `${zoned}` == "2023-11-14T22:13:20+09:00" };
+
+// A duration reads as written, and a calendar unit needs a calendar to
+// resolve it: 01-31 plus a month is 02-28, not 03-03.
+let month = Duration { months: 1 };
+assert `${month}` == "P1M";
+let end_of_january = ZonedDateTime::parse_rfc3339("2023-01-31T00:00:00Z").unwrap();
+assert `${end_of_january.add(&month)}` == "2023-02-28T00:00:00Z";
+
+// The zoneless types are the shapes a date or a clock reading really has.
+assert PlainDate::new(2024, 2, 29).in_leap_year();
+assert `${PlainTime { hour: 9, minute: 30 }}` == "09:30:00";
+assert Instant::EPOCH.to_http_date() == "Thu, 01 Jan 1970 00:00:00 GMT";
 ```
 
 ## Structs
@@ -87,11 +101,11 @@ integer form).
 Construct an instant from milliseconds since the Unix epoch. The inverse
 of `epoch_milliseconds`.
 
-#### `pub fn from_epoch_nanoseconds(nanoseconds: i64) -> Instant`
+#### `pub fn from_epoch_nanoseconds(nanoseconds: i128) -> Instant`
 
 Construct an instant from nanoseconds since the Unix epoch. The inverse
-of `epoch_nanoseconds`, and like it limited to the i64 range
-(≈ ±292 years).
+of `epoch_nanoseconds`, and like it spanning the whole `i64`-second
+range.
 
 #### `pub fn from_unix_seconds(seconds: f64) -> Instant`
 
@@ -100,24 +114,88 @@ tag 1 floating-point form). The fraction is rounded to the nearest
 nanosecond; `f64` precision limits sub-microsecond accuracy near the
 present.
 
+#### `pub fn from_epoch_microseconds(microseconds: i64) -> Instant`
+
+Construct an instant from microseconds since the Unix epoch. The inverse
+of `epoch_microseconds`.
+
+#### `pub fn epoch_microseconds(&self) -> i64`
+
+Microseconds since the Unix epoch, flooring toward the epoch's past so a
+pre-epoch instant keeps moving forward with `nanoseconds`.
+
 #### `pub fn epoch_milliseconds(&self) -> i64`
 
 Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
 
-#### `pub fn epoch_nanoseconds(&self) -> i64`
+#### `pub fn epoch_nanoseconds(&self) -> i128`
 
 Nanoseconds since the Unix epoch (`Temporal.Instant.epochNanoseconds`).
 
-Temporal uses a BigInt; this returns an `i64` and so is only valid within
-≈ ±292 years of the epoch (1678..=2262) — outside that range the
-multiplication traps. Use the `seconds`/`nanoseconds` fields directly for
-the full range.
+Temporal uses a BigInt; `i128` covers the whole `i64`-second range with
+nanosecond resolution, so this never truncates.
+
+#### `pub fn now() -> Instant with SystemClock`
+
+The current reading of the system clock (`Temporal.Now.instant`). The
+effect row is what keeps the clock off callers that never ask the time.
+
+#### `pub fn round(&self, smallest_unit: Unit, increment: i64 = 1, mode: RoundingMode = RoundingMode::HalfExpand) -> Instant`
+
+Round to a multiple of `increment` units. `smallest_unit` must be an
+hour or below, as on `add`; the multiples are counted from the epoch,
+and the step must divide the day so they line up with the clock.
+
+#### `pub fn to_http_date(&self) -> String`
+
+RFC 7231 IMF-fixdate, the form an HTTP `Date`, `Expires`, or
+`Last-Modified` header carries: `"Sun, 06 Nov 1994 08:49:37 GMT"`.
+Always UTC, always whole seconds.
+
+#### `pub fn parse_http_date(text: String) -> Result<Instant, DeserializeError>`
+
+Parse an HTTP-date. RFC 7231 requires a recipient to accept all three
+forms, so this reads IMF-fixdate
+(`"Sun, 06 Nov 1994 08:49:37 GMT"`), the obsolete RFC 850 form
+(`"Sunday, 06-Nov-94 08:49:37 GMT"`, whose two-digit year is read as
+the most recent one not more than 50 years ahead), and asctime
+(`"Sun Nov  6 08:49:37 1994"`). The weekday is not checked against the
+date; RFC 7231 leaves it advisory.
 
 #### `pub fn to_rfc3339(&self) -> String`
 
 RFC 3339 / ISO 8601 string in UTC (`…Z`), using the least sub-second
 precision (0, 3, 6, or 9 fraction digits) that represents the instant
 exactly. This is the serde wire form.
+
+#### `pub fn parse_rfc3339(text: String) -> Result<Instant, DeserializeError>`
+
+Parse an RFC 3339 / ISO 8601 timestamp into the exact instant it names,
+discarding the offset. Same grammar as `ZonedDateTime::parse_rfc3339`.
+
+#### `pub fn add(&self, duration: &Duration) -> Instant`
+
+Move forward by `duration`. Only the time components are admitted: a day
+and above has no fixed length without a calendar, so Temporal measures
+those against a `ZonedDateTime` instead.
+
+#### `pub fn subtract(&self, duration: &Duration) -> Instant`
+
+Move back by `duration`, under the same restriction as `add`.
+
+#### `pub fn until(&self, other: &Instant, largest_unit: Unit = Unit::Second) -> Duration`
+
+The span from this instant to `other`, positive when `other` is later.
+`largest_unit` must be a time unit, as on `add`.
+
+#### `pub fn since(&self, other: &Instant, largest_unit: Unit = Unit::Second) -> Duration`
+
+The span from `other` to this instant — `until` with the sign flipped.
+
+#### `pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime`
+
+Interpret this instant in `time_zone`, the zoned view of the same moment
+(`Temporal.Instant.toZonedDateTimeISO`).
 
 #### `impl Display for Instant`
 
@@ -126,6 +204,10 @@ exactly. This is the serde wire form.
 #### `impl DisplayAlt for Instant`
 
 ##### `fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl FromStr for Instant`
+
+##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<Instant, DeserializeError>`
 
 #### `impl Serialize for Instant`
 
@@ -150,8 +232,11 @@ month, day, hour, …) are a function of `instant` + `time_zone`, computed on
 demand by accessors rather than stored state.
 
 `Ord` is auto-derived and orders by `instant` first, then `time_zone`
-lexically. That is _not_ a meaningful chronological order across different
-zones beyond the instant; ordering distinct zones is the caller's concern.
+lexically, so it stays consistent with the derived `Eq`. Temporal splits the
+two questions — `compare` weighs only the instant, `equals` the zone as well
+— so for "the same moment, wherever it is read" compare `to_instant()`
+rather than the values. `new` canonicalizes the three spellings of UTC, so
+`"UTC"`, `"z"`, and `"+00:00"` are one zone rather than three.
 
 #### `instant: Instant`
 
@@ -173,13 +258,14 @@ the offset as a fixed-offset zone (so it round-trips through `to_rfc3339`
 / `Display` in canonical form).
 
 The grammar is `[±]Y…Y-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`: the year is
-four or more digits with an optional sign (ISO 8601 extended years), the
+four digits, or a sign followed by six (ISO 8601 expanded years), the
 date/time separator may be `T`, `t`, or a space, the fraction is
-truncated to nanosecond precision, and the offset is mandatory. `"Z"` and
-`"+00:00"` both normalize to a `"Z"` zone. Field values are range-checked
-against the ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"`
-are rejected); malformed or out-of-range input returns a
-`DeserializeError` carrying the byte offset of the problem.
+truncated to nanosecond precision, a leap second (`:60`) is constrained
+to `:59`, and the offset is mandatory. `"Z"` and `"+00:00"` both
+normalize to a `"Z"` zone. Field values are range-checked against the
+ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"` are
+rejected); malformed or out-of-range input returns a `DeserializeError`
+carrying the byte offset of the problem.
 
 #### `pub fn to_rfc3339(&self) -> String`
 
@@ -244,6 +330,111 @@ Number of days in this year, `365` or `366`.
 
 Whether this year is a leap year in the ISO 8601 calendar.
 
+#### `pub fn new(instant: Instant, time_zone: String) -> ZonedDateTime`
+
+Interpret `instant` in `time_zone`, canonicalizing the three spellings of
+UTC (`"UTC"`, `"z"`, `±00:00`) to `"Z"` so they are one value under the
+derived `Eq`. Any other zone is stored verbatim.
+
+#### `pub fn to_instant(&self) -> Instant`
+
+The exact instant, dropping the zone (`Temporal.ZonedDateTime.toInstant`).
+
+#### `pub fn epoch_milliseconds(&self) -> i64`
+
+Milliseconds since the Unix epoch.
+
+#### `pub fn epoch_nanoseconds(&self) -> i128`
+
+Nanoseconds since the Unix epoch.
+
+#### `pub fn offset(&self) -> String`
+
+The zone's UTC offset at this instant, as `±HH:MM`. Temporal spells a
+zero offset `"+00:00"` here even where the zone is `"Z"`.
+
+#### `pub fn offset_nanoseconds(&self) -> i64`
+
+The zone's UTC offset at this instant, in nanoseconds.
+
+#### `pub fn with_time_zone(&self, time_zone: String) -> ZonedDateTime`
+
+The same instant read in another zone.
+
+#### `pub fn add(&self, duration: &Duration) -> ZonedDateTime`
+
+Move forward by `duration`, reading the calendar components in local
+time. Following Temporal, years and months are applied first (a day
+beyond the target month's end is constrained to its last day), then
+weeks and days, then the exact time. Traps on an IANA zone name.
+
+#### `pub fn subtract(&self, duration: &Duration) -> ZonedDateTime`
+
+Move back by `duration`. Not the inverse of `add` when a month-end is
+constrained on the way out: 01-31 plus a month is 02-28, and minus a
+month again is 01-28.
+
+#### `pub fn until(&self, other: &ZonedDateTime, largest_unit: Unit = Unit::Hour) -> Duration`
+
+The span from this value to `other`, positive when `other` is later,
+measured in this value's zone. A date `largest_unit` walks the calendar;
+a time one divides the exact span.
+
+#### `pub fn since(&self, other: &ZonedDateTime, largest_unit: Unit = Unit::Hour) -> Duration`
+
+The span from `other` to this value — `until` with the sign flipped.
+
+#### `pub fn now(time_zone: String) -> ZonedDateTime with SystemClock`
+
+The current time read in `time_zone` (`Temporal.Now.zonedDateTimeISO`).
+The zone is the caller's: there is no system-zone lookup until the
+`wasi:clocks` `timezone` interface is wired up.
+
+#### `pub fn round(&self, smallest_unit: Unit, increment: i64 = 1, mode: RoundingMode = RoundingMode::HalfExpand) -> ZonedDateTime`
+
+Round the local wall clock to a multiple of `increment` units, counting
+from local midnight so a day-aligned unit lands on the civil boundary.
+`Unit::Day` rounds to the nearest midnight. Traps on an IANA zone name.
+
+#### `pub fn start_of_day(&self) -> ZonedDateTime`
+
+Local midnight on this value's day. Traps on an IANA zone name.
+
+#### `pub fn hours_in_day(&self) -> i32`
+
+Hours between this day's start and the next. A fixed offset has no DST,
+so it is always 24; an IANA zone traps.
+
+#### `pub fn to_plain_date(&self) -> PlainDate`
+
+The local calendar date. Traps on an IANA zone name.
+
+#### `pub fn to_plain_time(&self) -> PlainTime`
+
+The local wall-clock time. Traps on an IANA zone name.
+
+#### `pub fn to_plain_date_time(&self) -> PlainDateTime`
+
+The local date and time together, dropping the zone. Traps on an IANA
+zone name.
+
+#### `pub fn week_of_year(&self) -> i32`
+
+ISO 8601 week of the week-year, `1..=53`.
+
+#### `pub fn year_of_week(&self) -> i32`
+
+ISO 8601 week-numbering year, which differs from `year` in the days at
+either end of the year that belong to the neighbour's week.
+
+#### `pub fn days_in_week(&self) -> i32`
+
+Number of days in this week — always `7` for ISO 8601.
+
+#### `pub fn month_code(&self) -> String`
+
+Temporal month code, `"M01"` … `"M12"` under the ISO 8601 calendar.
+
 #### `pub fn months_in_year(&self) -> i32`
 
 Number of months in this year — always `12` for ISO 8601.
@@ -256,6 +447,10 @@ Number of months in this year — always `12` for ISO 8601.
 
 ##### `fn fmt_alt(&self, f: &mut Formatter)`
 
+#### `impl FromStr for ZonedDateTime`
+
+##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<ZonedDateTime, DeserializeError>`
+
 #### `impl Serialize for ZonedDateTime`
 
 ##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
@@ -263,3 +458,572 @@ Number of months in this year — always `12` for ISO 8601.
 #### `impl Deserialize for ZonedDateTime`
 
 ##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<ZonedDateTime, DeserializeError>`
+
+### `pub struct Duration`
+
+A signed span of time, as a Temporal-shaped record of ten components rather
+than one scalar. Corresponds to `Temporal.Duration`.
+
+The date components (`years`, `months`, `weeks`) have no fixed length, so a
+duration carrying one can only be applied to a `ZonedDateTime`, which knows
+the calendar position to measure them against; `Instant` admits hours and
+below. Unlike Temporal, the components are not required to share a sign — a
+literal is plain data here — so `sign` reports the largest non-zero one and
+a mixed-sign duration behaves as the sum of its parts.
+
+#### `years: i64`
+
+#### `months: i64`
+
+#### `weeks: i64`
+
+#### `days: i64`
+
+#### `hours: i64`
+
+#### `minutes: i64`
+
+#### `seconds: i64`
+
+#### `milliseconds: i64`
+
+#### `microseconds: i64`
+
+#### `nanoseconds: i64`
+
+#### `pub fn parse(text: String) -> Result<Duration, DeserializeError>`
+
+Parse an ISO 8601 duration such as `"P1Y2M3W4DT5H6M7.5S"`, optionally
+signed. A fraction is allowed on the last time component present and
+spills into the components below it, so `"PT1.5H"` is `PT1H30M`.
+
+#### `pub fn sign(&self) -> i32`
+
+The sign of the largest non-zero component: `1`, `-1`, or `0` when every
+component is zero.
+
+#### `pub fn is_zero(&self) -> bool`
+
+Whether every component is zero (`Temporal.Duration.prototype.blank`).
+
+#### `pub fn negated(&self) -> Duration`
+
+The same span in the opposite direction.
+
+#### `pub fn abs(&self) -> Duration`
+
+The same span with a non-negative sign.
+
+#### `pub fn add(&self, other: &Duration) -> Duration`
+
+Component-wise sum. Neither operand is balanced, so the components stay
+where the caller put them.
+
+#### `pub fn subtract(&self, other: &Duration) -> Duration`
+
+Component-wise difference.
+
+#### `pub fn total(&self, unit: Unit) -> f64`
+
+The whole span expressed in `unit`, as a fraction. A day counts as 24
+hours; the calendar components have no length without an anchor and
+trap.
+
+#### `pub fn round(&self, smallest_unit: Unit, largest_unit: Unit, increment: i64 = 1, mode: RoundingMode = RoundingMode::HalfExpand) -> Duration`
+
+Round the exact span to a multiple of `increment` `smallest_unit`s and
+re-express it with `largest_unit` on top. Calendar components trap.
+
+#### `pub fn to_iso8601(&self) -> String`
+
+The ISO 8601 form, e.g. `"P1Y2M3W4DT5H6M7.5S"`. A zero duration is
+`"PT0S"`; a negative one takes a leading `-`.
+
+#### `impl Display for Duration`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for Duration`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl FromStr for Duration`
+
+##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<Duration, DeserializeError>`
+
+#### `impl Deserialize for Duration`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Duration, DeserializeError>`
+
+### `pub struct PlainDate`
+
+A calendar date with no time and no zone. Corresponds to
+`Temporal.PlainDate`. `Ord` is auto-derived over year, month, day and so
+orders chronologically.
+
+#### `year: i32`
+
+#### `month: i32`
+
+#### `day: i32`
+
+#### `pub fn new(year: i32, month: i32, day: i32) -> PlainDate`
+
+A date, asserted to exist in the ISO 8601 calendar. Use `constrain` to
+clamp a day past the month's end instead, or `parse` for input that may
+be malformed.
+
+#### `pub fn constrain(year: i32, month: i32, day: i32) -> PlainDate`
+
+A date with `month` clamped to `1..=12` and `day` to that month's
+length — Temporal's `constrain` overflow.
+
+#### `pub fn parse(text: String) -> Result<PlainDate, DeserializeError>`
+
+Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
+
+#### `pub fn epoch_days(&self) -> i64`
+
+Days since 1970-01-01, negative before it.
+
+#### `pub fn from_epoch_days(days: i64) -> PlainDate`
+
+The date `days` after the Unix epoch.
+
+#### `pub fn day_of_week(&self) -> i32`
+
+Day of the week, `1` (Monday) through `7` (Sunday), per ISO 8601.
+
+#### `pub fn day_of_year(&self) -> i32`
+
+Day of the year, `1..=366`.
+
+#### `pub fn week_of_year(&self) -> i32`
+
+ISO 8601 week of the week-year, `1..=53`.
+
+#### `pub fn year_of_week(&self) -> i32`
+
+ISO 8601 week-numbering year.
+
+#### `pub fn days_in_week(&self) -> i32`
+
+Number of days in this week — always `7` for ISO 8601.
+
+#### `pub fn days_in_month(&self) -> i32`
+
+Number of days in this month, `28..=31`.
+
+#### `pub fn days_in_year(&self) -> i32`
+
+Number of days in this year, `365` or `366`.
+
+#### `pub fn months_in_year(&self) -> i32`
+
+Number of months in this year — always `12` for ISO 8601.
+
+#### `pub fn in_leap_year(&self) -> bool`
+
+Whether this year is a leap year in the ISO 8601 calendar.
+
+#### `pub fn month_code(&self) -> String`
+
+Temporal month code, `"M01"` … `"M12"`.
+
+#### `pub fn add(&self, duration: &Duration) -> PlainDate`
+
+Move forward by `duration`'s date components, constraining a month-end
+overflow. Time components trap: a date has no clock to carry them.
+
+#### `pub fn subtract(&self, duration: &Duration) -> PlainDate`
+
+Move back by `duration`. Not the inverse of `add` when a month-end is
+constrained on the way out.
+
+#### `pub fn until(&self, other: &PlainDate, largest_unit: Unit = Unit::Day) -> Duration`
+
+The span from this date to `other`, positive when `other` is later.
+
+#### `pub fn since(&self, other: &PlainDate, largest_unit: Unit = Unit::Day) -> Duration`
+
+The span from `other` to this date — `until` with the sign flipped.
+
+#### `pub fn to_plain_year_month(&self) -> PlainYearMonth`
+
+Drop the day.
+
+#### `pub fn to_plain_month_day(&self) -> PlainMonthDay`
+
+Drop the year.
+
+#### `pub fn to_plain_date_time(&self, time: PlainTime = PlainTime {}) -> PlainDateTime`
+
+Pair this date with a wall-clock time.
+
+#### `pub fn to_zoned_date_time(&self, time_zone: String, time: PlainTime = PlainTime {}) -> ZonedDateTime`
+
+Read this date at `time` in `time_zone`, which resolves it to an
+instant. Traps on an IANA zone name.
+
+#### `pub fn to_iso8601(&self) -> String`
+
+`YYYY-MM-DD`, with an expanded year where it does not fit four digits.
+
+#### `impl Display for PlainDate`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for PlainDate`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for PlainDate`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainDate, DeserializeError>`
+
+#### `impl FromStr for PlainDate`
+
+##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDate, DeserializeError>`
+
+### `pub struct PlainTime`
+
+A wall-clock time with no date and no zone. Corresponds to
+`Temporal.PlainTime`. `Ord` is auto-derived over the components in
+descending significance and so orders chronologically within a day.
+
+#### `hour: i32`
+
+#### `minute: i32`
+
+#### `second: i32`
+
+#### `millisecond: i32`
+
+#### `microsecond: i32`
+
+#### `nanosecond: i32`
+
+#### `pub fn new(hour: i32, minute: i32, second: i32 = 0, millisecond: i32 = 0, microsecond: i32 = 0, nanosecond: i32 = 0) -> PlainTime`
+
+A wall-clock time, asserted to be in range. Every component defaults to
+zero, so `PlainTime { hour: 9 }` is 09:00:00.
+
+#### `pub fn parse(text: String) -> Result<PlainTime, DeserializeError>`
+
+Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
+
+#### `pub fn is_valid(&self) -> bool`
+
+Whether every component is in the range the ISO 8601 clock allows.
+
+#### `pub fn nanoseconds_since_midnight(&self) -> i64`
+
+Nanoseconds since midnight, `0..<86_400_000_000_000`.
+
+#### `pub fn from_nanoseconds_since_midnight(nanoseconds: i64) -> PlainTime`
+
+The time `nanoseconds` after midnight, wrapping into `0..<24h` so a
+negative or overflowing count lands on the same clock reading a day's
+worth of turning would.
+
+#### `pub fn add(&self, duration: &Duration) -> PlainTime`
+
+Move forward by `duration`'s exact components, wrapping around midnight
+as Temporal does. Date components trap: a clock has no calendar.
+
+#### `pub fn subtract(&self, duration: &Duration) -> PlainTime`
+
+Move back by `duration`, wrapping the same way.
+
+#### `pub fn until(&self, other: &PlainTime, largest_unit: Unit = Unit::Hour) -> Duration`
+
+The span from this time to `other` within one day, positive when
+`other` is later on the clock.
+
+#### `pub fn since(&self, other: &PlainTime, largest_unit: Unit = Unit::Hour) -> Duration`
+
+The span from `other` to this time — `until` with the sign flipped.
+
+#### `pub fn round(&self, smallest_unit: Unit, increment: i64 = 1, mode: RoundingMode = RoundingMode::HalfExpand) -> PlainTime`
+
+Round to a multiple of `increment` units, counted from midnight and
+wrapping at the end of the day.
+
+#### `pub fn to_iso8601(&self) -> String`
+
+`hh:mm:ss[.fraction]`, with the least sub-second precision that is
+exact.
+
+#### `impl Display for PlainTime`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for PlainTime`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for PlainTime`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainTime, DeserializeError>`
+
+#### `impl FromStr for PlainTime`
+
+##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainTime, DeserializeError>`
+
+### `pub struct PlainDateTime`
+
+A date and a wall-clock time with no zone, and so no instant — the pair
+still names a different moment in every zone. Corresponds to
+`Temporal.PlainDateTime`.
+
+#### `date: PlainDate`
+
+#### `time: PlainTime`
+
+#### `pub fn new(date: PlainDate, time: PlainTime = PlainTime {}) -> PlainDateTime`
+
+A date and time, asserted to be in range.
+
+#### `pub fn parse(text: String) -> Result<PlainDateTime, DeserializeError>`
+
+Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
+the separator and no offset.
+
+#### `pub fn add(&self, duration: &Duration) -> PlainDateTime`
+
+Move forward by `duration`: the date components first, constraining a
+month-end overflow, then the exact time, carrying whole days into the
+date.
+
+#### `pub fn subtract(&self, duration: &Duration) -> PlainDateTime`
+
+Move back by `duration`.
+
+#### `pub fn until(&self, other: &PlainDateTime, largest_unit: Unit = Unit::Hour) -> Duration`
+
+The span from this value to `other`, positive when `other` is later.
+
+#### `pub fn since(&self, other: &PlainDateTime, largest_unit: Unit = Unit::Hour) -> Duration`
+
+The span from `other` to this value — `until` with the sign flipped.
+
+#### `pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime`
+
+Read this reading in `time_zone`, which resolves it to an instant.
+Traps on an IANA zone name.
+
+#### `pub fn to_iso8601(&self) -> String`
+
+`YYYY-MM-DDThh:mm:ss[.fraction]`.
+
+#### `impl Display for PlainDateTime`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for PlainDateTime`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for PlainDateTime`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainDateTime, DeserializeError>`
+
+#### `impl FromStr for PlainDateTime`
+
+##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDateTime, DeserializeError>`
+
+### `pub struct PlainYearMonth`
+
+A month of a particular year, with no day — a credit-card expiry, a billing
+period. Corresponds to `Temporal.PlainYearMonth`.
+
+#### `year: i32`
+
+#### `month: i32`
+
+#### `pub fn new(year: i32, month: i32) -> PlainYearMonth`
+
+A year and month, asserted to be in range.
+
+#### `pub fn parse(text: String) -> Result<PlainYearMonth, DeserializeError>`
+
+Parse `YYYY-MM`.
+
+#### `pub fn days_in_month(&self) -> i32`
+
+Number of days in this month, `28..=31`.
+
+#### `pub fn days_in_year(&self) -> i32`
+
+Number of days in this year, `365` or `366`.
+
+#### `pub fn months_in_year(&self) -> i32`
+
+Number of months in this year — always `12` for ISO 8601.
+
+#### `pub fn in_leap_year(&self) -> bool`
+
+Whether this year is a leap year in the ISO 8601 calendar.
+
+#### `pub fn month_code(&self) -> String`
+
+Temporal month code, `"M01"` … `"M12"`.
+
+#### `pub fn add(&self, duration: &Duration) -> PlainYearMonth`
+
+Move forward by `duration`'s years and months. Smaller components trap:
+a year-month has no day to carry them.
+
+#### `pub fn subtract(&self, duration: &Duration) -> PlainYearMonth`
+
+Move back by `duration`.
+
+#### `pub fn until(&self, other: &PlainYearMonth, largest_unit: Unit = Unit::Year) -> Duration`
+
+The span from this month to `other`, positive when `other` is later.
+
+#### `pub fn since(&self, other: &PlainYearMonth, largest_unit: Unit = Unit::Year) -> Duration`
+
+The span from `other` to this month — `until` with the sign flipped.
+
+#### `pub fn to_plain_date(&self, day: i32) -> PlainDate`
+
+Land this month on a day, clamped to the month's length.
+
+#### `pub fn to_iso8601(&self) -> String`
+
+`YYYY-MM`.
+
+#### `impl Display for PlainYearMonth`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for PlainYearMonth`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for PlainYearMonth`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainYearMonth, DeserializeError>`
+
+#### `impl FromStr for PlainYearMonth`
+
+##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainYearMonth, DeserializeError>`
+
+### `pub struct PlainMonthDay`
+
+A day of a month with no year — a birthday, an anniversary. Corresponds to
+`Temporal.PlainMonthDay`. February 29 is representable; landing it on a year
+is `to_plain_date`'s problem.
+
+#### `month: i32`
+
+#### `day: i32`
+
+#### `pub fn new(month: i32, day: i32) -> PlainMonthDay`
+
+A month and day, asserted to exist in some year — February 29 does, so
+it is accepted here and resolved by `to_plain_date`.
+
+#### `pub fn parse(text: String) -> Result<PlainMonthDay, DeserializeError>`
+
+Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
+
+#### `pub fn to_plain_date(&self, year: i32) -> PlainDate`
+
+Land this month-day in `year`, clamping February 29 to the 28th outside
+a leap year.
+
+#### `pub fn month_code(&self) -> String`
+
+Temporal month code, `"M01"` … `"M12"`.
+
+#### `pub fn to_iso8601(&self) -> String`
+
+`--MM-DD`, the ISO 8601 spelling.
+
+#### `impl Display for PlainMonthDay`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for PlainMonthDay`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for PlainMonthDay`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainMonthDay, DeserializeError>`
+
+#### `impl FromStr for PlainMonthDay`
+
+##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainMonthDay, DeserializeError>`
+
+## Enums
+
+### `pub enum Unit`
+
+The unit a temporal difference or rounding operation works in. The order is
+Temporal's, largest first; `Year`, `Month`, `Week`, and `Day` are the date
+units, the rest the time units.
+
+#### `Year`
+
+#### `Month`
+
+#### `Week`
+
+#### `Day`
+
+#### `Hour`
+
+#### `Minute`
+
+#### `Second`
+
+#### `Millisecond`
+
+#### `Microsecond`
+
+#### `Nanosecond`
+
+### `pub enum RoundingMode`
+
+How a rounding operation breaks a tie and which way it moves. Temporal's
+nine modes: the first four are directed, the `Half*` five choose only when
+the value sits exactly halfway.
+
+#### `Ceil`
+
+Toward positive infinity.
+
+#### `Floor`
+
+Toward negative infinity.
+
+#### `Expand`
+
+Away from zero.
+
+#### `Trunc`
+
+Toward zero.
+
+#### `HalfCeil`
+
+Nearest; a tie goes toward positive infinity.
+
+#### `HalfFloor`
+
+Nearest; a tie goes toward negative infinity.
+
+#### `HalfExpand`
+
+Nearest; a tie goes away from zero. Temporal's default.
+
+#### `HalfTrunc`
+
+Nearest; a tie goes toward zero.
+
+#### `HalfEven`
+
+Nearest; a tie goes to the even multiple.

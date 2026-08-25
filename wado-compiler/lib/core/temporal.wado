@@ -323,6 +323,11 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
 // exposes only epoch-based convenience values. The calendar is always ISO 8601.
 
 impl Instant {
+
+
+    /// The Unix epoch itself, 1970-01-01T00:00:00Z.
+    pub const EPOCH: Instant = Instant { seconds: 0, nanoseconds: 0 };
+
     /// Construct an instant `nanoseconds` after `seconds` since the Unix epoch,
     /// normalizing so the stored sub-second part lands in `0..<1_000_000_000`
     /// even when `nanoseconds` is negative or `>= 1_000_000_000`. This is the
@@ -366,8 +371,6 @@ impl Instant {
         return Instant::new(whole as i64, nanos as i64);
     }
 
-    /// The Unix epoch itself, 1970-01-01T00:00:00Z.
-    pub const EPOCH: Instant = Instant { seconds: 0, nanoseconds: 0 };
 
     /// Construct an instant from microseconds since the Unix epoch. The inverse
     /// of `epoch_microseconds`.
@@ -683,9 +686,7 @@ impl ZonedDateTime {
             day,
             duration.years * 12 + duration.months,
         );
-        let local_days = days_from_civil(shifted_year, shifted_month, shifted_day)
-            + duration.weeks * 7
-            + duration.days;
+        let local_days = days_from_civil(shifted_year, shifted_month, shifted_day) + duration.weeks * 7 + duration.days;
         let local_seconds = local_days * 86400 + second_of_day;
         let shifted = Instant { seconds: local_seconds - offset, nanoseconds: self.instant.nanoseconds };
         return ZonedDateTime {
@@ -774,7 +775,10 @@ impl ZonedDateTime {
     /// The local date and time together, dropping the zone. Traps on an IANA
     /// zone name.
     pub fn to_plain_date_time(&self) -> PlainDateTime {
-        return PlainDateTime { date: self.to_plain_date(), time: self.to_plain_time() };
+        return PlainDateTime {
+            date: self.to_plain_date(),
+            time: self.to_plain_time(),
+        };
     }
 
     /// ISO 8601 week of the week-year, `1..=53`.
@@ -1406,16 +1410,8 @@ impl Duration {
     /// read them in.
     fn components(&self) -> [i64, i64, i64, i64, i64, i64, i64, i64, i64, i64] {
         return [
-            self.years,
-            self.months,
-            self.weeks,
-            self.days,
-            self.hours,
-            self.minutes,
-            self.seconds,
-            self.milliseconds,
-            self.microseconds,
-            self.nanoseconds,
+            self.years, self.months, self.weeks, self.days, self.hours, self.minutes, self.seconds, self.milliseconds,
+            self.microseconds, self.nanoseconds,
         ];
     }
 
@@ -1531,12 +1527,7 @@ impl Duration {
     /// The time components (`hours` and below) as a nanosecond count. The date
     /// components are ignored — they have no length without a calendar anchor.
     fn time_nanoseconds(&self) -> i128 {
-        return self.hours as i128 * 3_600_000_000_000
-            + self.minutes as i128 * 60_000_000_000
-            + self.seconds as i128 * 1_000_000_000
-            + self.milliseconds as i128 * 1_000_000
-            + self.microseconds as i128 * 1000
-            + self.nanoseconds as i128;
+        return self.hours as i128 * 3_600_000_000_000 + self.minutes as i128 * 60_000_000_000 + self.seconds as i128 * 1_000_000_000 + self.milliseconds as i128 * 1_000_000 + self.microseconds as i128 * 1000 + self.nanoseconds as i128;
     }
 
     /// Every component scaled by `factor`.
@@ -1668,7 +1659,7 @@ fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, D
         }
         i += 1;
     }
-    if i >= end || (text.get_byte_unchecked(i) != b'P' && text.get_byte_unchecked(i) != b'p') {
+    if i >= end || text.get_byte_unchecked(i) != b'P' && text.get_byte_unchecked(i) != b'p' {
         return Result::Err(DeserializeError::malformed("expected 'P'", i as i64));
     }
     i += 1;
@@ -1772,7 +1763,7 @@ fn read_duration_number(text: &String, i: i32, end: i32) -> Result<[i64, i32], D
 /// Read an optional `.`/`,` fraction at `i` as a nine-digit nanosecond scale,
 /// returning it and the index just past it. Absent, it reads as zero and `i`.
 fn read_duration_fraction(text: &String, i: i32, end: i32) -> Result<[i128, i32], DeserializeError> {
-    if i >= end || (text.get_byte_unchecked(i) != b'.' && text.get_byte_unchecked(i) != b',') {
+    if i >= end || text.get_byte_unchecked(i) != b'.' && text.get_byte_unchecked(i) != b',' {
         return Result::Ok([0, i]);
     }
     let mut j = i + 1;
@@ -1971,9 +1962,9 @@ fn parse_asctime(text: &String, end: i32) -> Result<Instant, DeserializeError> {
     let month = read_month_name(text, 4, end)?;
     expect_byte(text, 7, end, b' ')?;
     let day = if text.get_byte_unchecked(8) == b' ' {
-        read_digits(text, 9, end, 1)?
+        read_digits(text, 9, end, 1)?;
     } else {
-        read_digits(text, 8, end, 2)?
+        read_digits(text, 8, end, 2)?;
     };
     expect_byte(text, 10, end, b' ')?;
     let [second_of_day, after] = read_clock_time(text, 11, end)?;
@@ -2279,7 +2270,14 @@ impl Display for PlainDate {
 impl PlainTime {
     /// A wall-clock time, asserted to be in range. Every component defaults to
     /// zero, so `PlainTime { hour: 9 }` is 09:00:00.
-    pub fn new(hour: i32, minute: i32, second: i32 = 0, millisecond: i32 = 0, microsecond: i32 = 0, nanosecond: i32 = 0) -> PlainTime {
+    pub fn new(
+        hour: i32,
+        minute: i32,
+        second: i32 = 0,
+        millisecond: i32 = 0,
+        microsecond: i32 = 0,
+        nanosecond: i32 = 0,
+    ) -> PlainTime {
         let time = PlainTime {
             hour: hour,
             minute: minute,
@@ -2299,22 +2297,23 @@ impl PlainTime {
 
     /// Whether every component is in the range the ISO 8601 clock allows.
     pub fn is_valid(&self) -> bool {
-        return self.hour >= 0 && self.hour <= 23
-            && self.minute >= 0 && self.minute <= 59
-            && self.second >= 0 && self.second <= 59
-            && self.millisecond >= 0 && self.millisecond <= 999
-            && self.microsecond >= 0 && self.microsecond <= 999
-            && self.nanosecond >= 0 && self.nanosecond <= 999;
+        return self.hour >= 0
+            && self.hour <= 23
+            && self.minute >= 0
+            && self.minute <= 59
+            && self.second >= 0
+            && self.second <= 59
+            && self.millisecond >= 0
+            && self.millisecond <= 999
+            && self.microsecond >= 0
+            && self.microsecond <= 999
+            && self.nanosecond >= 0
+            && self.nanosecond <= 999;
     }
 
     /// Nanoseconds since midnight, `0..<86_400_000_000_000`.
     pub fn nanoseconds_since_midnight(&self) -> i64 {
-        return self.hour as i64 * 3_600_000_000_000
-            + self.minute as i64 * 60_000_000_000
-            + self.second as i64 * 1_000_000_000
-            + self.millisecond as i64 * 1_000_000
-            + self.microsecond as i64 * 1000
-            + self.nanosecond as i64;
+        return self.hour as i64 * 3_600_000_000_000 + self.minute as i64 * 60_000_000_000 + self.second as i64 * 1_000_000_000 + self.millisecond as i64 * 1_000_000 + self.microsecond as i64 * 1000 + self.nanosecond as i64;
     }
 
     /// The time `nanoseconds` after midnight, wrapping into `0..<24h` so a
@@ -2642,7 +2641,10 @@ fn parse_iso_time(text: &String, start: i32, end: i32) -> Result<[PlainTime, i32
     }
     i += 2;
     if i >= end || text.get_byte_unchecked(i) != b':' {
-        return Result::Ok([PlainTime { hour: hour as i32, minute: minute as i32 }, i]);
+        return Result::Ok([
+            PlainTime { hour: hour as i32, minute: minute as i32 },
+            i,
+        ]);
     }
     i += 1;
     let parsed_second = read_digits(text, i, end, 2)?;
@@ -2664,7 +2666,10 @@ fn parse_iso_time(text: &String, start: i32, end: i32) -> Result<[PlainTime, i32
             i += 1;
         }
         if i == fraction_start {
-            return Result::Err(DeserializeError::malformed("expected fractional digits after '.'", fraction_start as i64));
+            return Result::Err(DeserializeError::malformed(
+                "expected fractional digits after '.'",
+                fraction_start as i64,
+            ));
         }
     }
     return Result::Ok([
@@ -2896,7 +2901,10 @@ impl Visitor for PlainDateTimeVisitor {
     }
 
     fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string, found sequence", -1));
+        return Result::Err(DeserializeError::unexpected_type(
+            "expected an ISO 8601 date-time string, found sequence",
+            -1,
+        ));
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainDateTime, DeserializeError> {
@@ -2976,7 +2984,10 @@ impl Visitor for PlainYearMonthVisitor {
     }
 
     fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string, found sequence", -1));
+        return Result::Err(DeserializeError::unexpected_type(
+            "expected an ISO 8601 year-month string, found sequence",
+            -1,
+        ));
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainYearMonth, DeserializeError> {
@@ -3053,7 +3064,10 @@ impl Visitor for PlainMonthDayVisitor {
     }
 
     fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string, found sequence", -1));
+        return Result::Err(DeserializeError::unexpected_type(
+            "expected an ISO 8601 month-day string, found sequence",
+            -1,
+        ));
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainMonthDay, DeserializeError> {

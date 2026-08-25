@@ -56,16 +56,16 @@ value everywhere is _instant + time zone_. `core:temporal` adopts that split.
 Eight types, all ISO 8601. Two carry an instant, five are zoneless readings, one
 is a span.
 
-| Type            | What it is                       | Temporal counterpart      |
-| --------------- | -------------------------------- | ------------------------- |
-| `Instant`       | exact point on the timeline      | `Temporal.Instant`        |
-| `ZonedDateTime` | instant + the zone it is read in | `Temporal.ZonedDateTime`  |
-| `PlainDate`     | calendar date, no time, no zone  | `Temporal.PlainDate`      |
-| `PlainTime`     | wall clock, no date, no zone     | `Temporal.PlainTime`      |
-| `PlainDateTime` | both, still no zone              | `Temporal.PlainDateTime`  |
-| `PlainYearMonth`| a month of a year, no day        | `Temporal.PlainYearMonth` |
-| `PlainMonthDay` | a day of a month, no year        | `Temporal.PlainMonthDay`  |
-| `Duration`      | a signed span                    | `Temporal.Duration`       |
+| Type             | What it is                       | Temporal counterpart      |
+| ---------------- | -------------------------------- | ------------------------- |
+| `Instant`        | exact point on the timeline      | `Temporal.Instant`        |
+| `ZonedDateTime`  | instant + the zone it is read in | `Temporal.ZonedDateTime`  |
+| `PlainDate`      | calendar date, no time, no zone  | `Temporal.PlainDate`      |
+| `PlainTime`      | wall clock, no date, no zone     | `Temporal.PlainTime`      |
+| `PlainDateTime`  | both, still no zone              | `Temporal.PlainDateTime`  |
+| `PlainYearMonth` | a month of a year, no day        | `Temporal.PlainYearMonth` |
+| `PlainMonthDay`  | a day of a month, no year        | `Temporal.PlainMonthDay`  |
+| `Duration`       | a signed span                    | `Temporal.Duration`       |
 
 `Unit` and `RoundingMode` are the two enums the difference and rounding
 operations are parameterized by.
@@ -158,14 +158,14 @@ needed. `constrain` covers the month-end clamp that `with` would apply.
 A date component has no fixed length, so the type that carries a calendar
 position is the one that can resolve it:
 
-| Receiver        | `add` / `subtract` accepts     | `until` / `since` measures in |
-| --------------- | ------------------------------ | ----------------------------- |
-| `Instant`       | hours and below                | hours and below (default: second) |
-| `ZonedDateTime` | everything                     | everything (default: hour)    |
-| `PlainDate`     | date components                | days and above (default: day) |
-| `PlainTime`     | time components, wrapping      | hours and below               |
-| `PlainDateTime` | everything                     | hours and above               |
-| `PlainYearMonth`| years and months               | years or months               |
+| Receiver         | `add` / `subtract` accepts | `until` / `since` measures in     |
+| ---------------- | -------------------------- | --------------------------------- |
+| `Instant`        | hours and below            | hours and below (default: second) |
+| `ZonedDateTime`  | everything                 | everything (default: hour)        |
+| `PlainDate`      | date components            | days and above (default: day)     |
+| `PlainTime`      | time components, wrapping  | hours and below                   |
+| `PlainDateTime`  | everything                 | hours and above                   |
+| `PlainYearMonth` | years and months           | years or months                   |
 
 Anything outside its row traps with a message naming the type that can do it.
 Rounding follows the same rule: an `Instant` counts multiples from the epoch, a
@@ -250,10 +250,12 @@ above, so this gap is downstream of it.
 ### `relativeTo` for calendar-unit durations
 
 `Duration::total` and `Duration::round` trap on a duration carrying years,
-months, or weeks, because those have no length without a calendar position.
-Temporal's answer is a `relativeTo` anchor that turns the calendar components
-into exact time before measuring. Closing it takes that parameter on both, and a
-decision about what it accepts — a `PlainDate`, a `ZonedDateTime`, or either.
+months, or weeks, because those have no length without a calendar position, and
+`Duration` has no ordering at all for the same reason — `Temporal.Duration`'s
+`compare` also demands an anchor. Temporal's answer is a `relativeTo` argument
+that turns the calendar components into exact time before measuring. Closing it
+takes that parameter on `total` and `round`, a `compare` that takes it too, and
+a decision about what it accepts — a `PlainDate`, a `ZonedDateTime`, or either.
 
 ### The system time zone
 

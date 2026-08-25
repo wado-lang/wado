@@ -410,18 +410,23 @@ test "ZonedDateTime::parse_rfc3339 accepts a leap second, constraining it to 59"
 }
 
 test "Instant::parse_rfc3339 drops the offset, keeping the exact instant" {
-    assert Instant::parse_rfc3339("2023-11-15T07:13:20+09:00") matches { Ok(t)
-        && t == Instant { seconds: 1_700_000_000, nanoseconds: 0 } };
-    assert Instant::parse_rfc3339("2023-11-14T22:13:20Z") matches { Ok(t)
-        && t == Instant { seconds: 1_700_000_000, nanoseconds: 0 } };
+    assert Instant::parse_rfc3339("2023-11-15T07:13:20+09:00") matches { Ok(t) && t == Instant {
+        seconds: 1_700_000_000,
+        nanoseconds: 0,
+    } };
+    assert Instant::parse_rfc3339("2023-11-14T22:13:20Z") matches { Ok(t) && t == Instant {
+        seconds: 1_700_000_000,
+        nanoseconds: 0,
+    } };
     assert Instant::parse_rfc3339("2023-11-14T22:13:20") matches { Err(_) };
 }
 
 test "Instant and ZonedDateTime parse through FromStr" {
-    assert Instant::from_str("2023-11-14T22:13:20Z") matches { Ok(t)
-        && t == Instant { seconds: 1_700_000_000, nanoseconds: 0 } };
-    assert ZonedDateTime::from_str("2023-11-15T07:13:20+09:00") matches { Ok(zdt)
-        && zdt.time_zone == "+09:00" };
+    assert Instant::from_str("2023-11-14T22:13:20Z") matches { Ok(t) && t == Instant {
+        seconds: 1_700_000_000,
+        nanoseconds: 0,
+    } };
+    assert ZonedDateTime::from_str("2023-11-15T07:13:20+09:00") matches { Ok(zdt) && zdt.time_zone == "+09:00" };
     assert Instant::from_str("nope") matches { Err(_) };
 }
 
@@ -429,8 +434,10 @@ test "Instant exposes microsecond and full-range nanosecond epochs" {
     let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
     assert t.epoch_microseconds() == 1_700_000_000_123_456;
     assert t.epoch_nanoseconds() == 1_700_000_000_123_456_789;
-    assert Instant::from_epoch_microseconds(1_700_000_000_123_456)
-        == Instant { seconds: 1_700_000_000, nanoseconds: 123_456_000 };
+    assert Instant::from_epoch_microseconds(1_700_000_000_123_456) == Instant {
+        seconds: 1_700_000_000,
+        nanoseconds: 123_456_000,
+    };
 
     // i128 nanoseconds reach far beyond the ±292 years an i64 count spans.
     let far = Instant { seconds: 253_402_300_799, nanoseconds: 0 };
@@ -581,7 +588,13 @@ test "Duration renders as an ISO 8601 duration" {
 
 test "Duration parses an ISO 8601 duration" {
     assert Duration::parse("P1Y2M3W4DT5H6M7S") matches { Ok(d) && d == Duration {
-        years: 1, months: 2, weeks: 3, days: 4, hours: 5, minutes: 6, seconds: 7,
+        years: 1,
+        months: 2,
+        weeks: 3,
+        days: 4,
+        hours: 5,
+        minutes: 6,
+        seconds: 7,
     } };
     assert Duration::parse("PT0S") matches { Ok(d) && d.is_zero() };
     assert Duration::parse("-P1D") matches { Ok(d) && d == Duration { days: -1 } };
@@ -772,8 +785,10 @@ test "Instant renders and reads an HTTP-date" {
 
     // The epoch itself, and a two-digit day in the asctime form.
     assert Instant::EPOCH.to_http_date() == "Thu, 01 Jan 1970 00:00:00 GMT";
-    assert Instant::parse_http_date("Sun Nov 16 08:49:37 1994") matches { Ok(t)
-        && t == Instant { seconds: 784_975_777, nanoseconds: 0 } };
+    assert Instant::parse_http_date("Sun Nov 16 08:49:37 1994") matches { Ok(t) && t == Instant {
+        seconds: 784_975_777,
+        nanoseconds: 0,
+    } };
 }
 
 test "Instant::parse_http_date rejects malformed input" {
@@ -831,8 +846,12 @@ test "PlainTime constructs, parses, and renders" {
     assert `${PlainTime { hour: 9 }}` == "09:00:00";
     assert `${PlainTime::new(22, 13, 20, 500)}` == "22:13:20.500";
     assert PlainTime::parse("22:13") matches { Ok(t) && t == PlainTime { hour: 22, minute: 13 } };
-    assert PlainTime::parse("22:13:20.5") matches { Ok(t)
-        && t == PlainTime { hour: 22, minute: 13, second: 20, millisecond: 500 } };
+    assert PlainTime::parse("22:13:20.5") matches { Ok(t) && t == PlainTime {
+        hour: 22,
+        minute: 13,
+        second: 20,
+        millisecond: 500,
+    } };
     assert PlainTime::parse("24:00") matches { Err(_) };
     assert PlainTime { hour: 9 } < PlainTime { hour: 9, minute: 1 };
 }
@@ -841,8 +860,14 @@ test "PlainTime wraps around midnight" {
     let t = PlainTime { hour: 23, minute: 30 };
     assert t.add(&Duration { hours: 1 }) == PlainTime { hour: 0, minute: 30 };
     assert t.subtract(&Duration { hours: 24 }) == t;
-    assert PlainTime {}.subtract(&Duration { nanoseconds: 1 })
-        == PlainTime { hour: 23, minute: 59, second: 59, millisecond: 999, microsecond: 999, nanosecond: 999 };
+    assert PlainTime {}.subtract(&Duration { nanoseconds: 1 }) == PlainTime {
+        hour: 23,
+        minute: 59,
+        second: 59,
+        millisecond: 999,
+        microsecond: 999,
+        nanosecond: 999,
+    };
     assert t.until(&PlainTime { hour: 23, minute: 45 }) == Duration { minutes: 15 };
     assert t.round(Unit::Hour) == PlainTime {};
 }
@@ -854,8 +879,10 @@ test "PlainDateTime pairs a date with a clock and carries into the date" {
     assert PlainDateTime::parse("2023-11-14 23:30") matches { Ok(p) && p == dt };
 
     // An hour past 23:30 rolls the date over.
-    assert dt.add(&Duration { hours: 1 })
-        == PlainDateTime::new(PlainDate::new(2023, 11, 15), PlainTime { hour: 0, minute: 30 });
+    assert dt.add(&Duration { hours: 1 }) == PlainDateTime::new(PlainDate::new(2023, 11, 15), PlainTime {
+        hour: 0,
+        minute: 30,
+    });
     assert dt.until(&dt.add(&Duration { days: 1, hours: 1 })) == Duration { hours: 25 };
 }
 
