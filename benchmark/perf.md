@@ -106,6 +106,10 @@ run to 77%.
 Generalizes: price a "share instead of copy" idea against the live set it
 creates, not the allocations it removes.
 
+The motivating copy is gone as of 2026-08-25: `SllConfig.elements` is a
+`&List<Element>`, which shares a list that is already a root rather than its
+elements, and gale-gen gained 32% (`package-gale/perf.md`).
+
 ## Making an expression-position labeled block a break target (2026-08-20)
 
 `Analyzer::walk_expr` pushes no exit entry for a value-producing labeled block,
