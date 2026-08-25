@@ -135,7 +135,7 @@ impl DataRefs {
 /// Sort-then-merge the ranges of each segment, absorbing gaps up to `gap`: a
 /// second segment costs more header than a short gap costs payload.
 pub(crate) fn merge_with_gap(ranges: &mut Vec<DataRange>, gap: u32) {
-    ranges.sort_unstable();
+    ranges.sort();
     ranges.dedup_by(|next, last| {
         let adjoins = last.segment == next.segment && next.offset <= last.end().saturating_add(gap);
         if adjoins {
