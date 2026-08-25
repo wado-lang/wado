@@ -639,8 +639,7 @@ fn a_range_that_cannot_end_is_rejected() {
     );
 }
 
-/// A range naming no bytes describes nothing, and honouring one emits a
-/// segment that writes nothing.
+/// Honouring one would spend a segment header to write nothing.
 #[test]
 fn a_range_naming_no_bytes_is_rejected() {
     assert_matches!(embed_err(&quarters(Some("a 0:4+0\n"))), Error::DataRef(_));
