@@ -682,9 +682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 if let Some(trait_info) = trait_info_opt {
                     let resolved = ResolvedTraitMethod {
-                        method_def: self
-                            .tysys
-                            .declared_method(trait_info.impl_def, method_name),
+                        method_def: self.tysys.declared_method(trait_info.impl_def, method_name),
                         trait_name: trait_info.trait_name,
                         method_name: method_name.to_string(),
                         impl_def: Some(trait_info.impl_def),
@@ -880,9 +878,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // shared builder will type-check against u32 and will not
                     // wrap the operand in `&`.
                     let resolved = ResolvedTraitMethod {
-                        method_def: self
-                            .tysys
-                            .declared_method(trait_info.impl_def, method_name),
+                        method_def: self.tysys.declared_method(trait_info.impl_def, method_name),
                         trait_name: trait_info.trait_name,
                         method_name: method_name.to_string(),
                         impl_def: Some(trait_info.impl_def),

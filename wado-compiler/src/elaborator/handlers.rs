@@ -439,7 +439,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Keyed by the bare head: `impl<T> Log for Ctx<T>` is indexed under
         // `Ctx`, not the instantiated `Ctx<i32>`.
         let type_name = match &resolved {
-            ResolvedType::GenericInstance { def, .. } | ResolvedType::GenericResource { def, .. } => {
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => {
                 self.tysys.type_table.borrow().def_name(*def).to_string()
             }
             _ => self.tysys.type_table.borrow().type_name(handler_type),

@@ -1818,70 +1818,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later; computing it here lets reify gate item emission on the live
         // set and the unused-diagnostics emitter read `dead_items`.
         {
-            let mut direct: IndexMap<crate::ast::AstId, crate::ast::AstId> = IndexMap::default();
-            let mut inherited: IndexMap<crate::ast::AstId, IndexSet<crate::ast::AstId>> =
-                IndexMap::default();
-            for sem in state.module_semantics.values() {
-                for (use_id, def_key) in &sem.bindings.references {
-                    direct.insert(*use_id, *def_key);
-                }
-            }
-            // A trait's default body is walked once per inheriting impl, each
-            // against its own `ModuleSemantics`, so its edges live there rather
-            // than in the module's own bindings. A snapshot module runs no body
-            // walk this compile, so its share comes from the snapshot's state —
-            // read in place, since cloning it back would cost what the snapshot
-            // saves.
-            let inherit_sems = state
-                .module_semantics
-                .values()
-                .chain(
-                    snapshot
-                        .and_then(|s| s.state.as_ref())
-                        .into_iter()
-                        .flat_map(|s| s.module_semantics.values()),
-                )
-                .flat_map(|sem| sem.default_method_semantics.values());
-            for sem in inherit_sems {
-                for (use_id, def_key) in &sem.bindings.references {
-                    inherited.entry(*use_id).or_default().insert(*def_key);
-                }
-            }
-            // The callees a dispatch fact names. A snapshot module runs no body
-            // walk this compile, and only the facts `Semantics` drains are
-            // re-seeded into its `ModuleSemantics` — the rest stay in the
-            // snapshot's own, so both are read.
-            let mut dispatch: IndexMap<crate::ast::AstId, IndexSet<crate::ast::AstId>> =
-                IndexMap::default();
-            {
-                let defs = state.tysys.resolutions.defs();
-                let dispatch_sems = state
-                    .module_semantics
-                    .values()
-                    .chain(
-                        snapshot
-                            .and_then(|s| s.state.as_ref())
-                            .into_iter()
-                            .flat_map(|s| s.module_semantics.values()),
-                    )
-                    .flat_map(|sem| {
-                        std::iter::once(sem).chain(sem.default_method_semantics.values())
-                    });
-                for sem in dispatch_sems {
-                    for (use_id, def) in sem.types.dispatched_callees() {
-                        dispatch
-                            .entry(use_id)
-                            .or_default()
-                            .insert(defs.ast_id(def));
-                    }
-                    // A handler binding installs a whole block: the dispatch
-                    // wrapper may route any of the effect's operations to it.
-                    for (use_id, impl_def) in sem.types.handler_impl_blocks() {
-                        let entry = dispatch.entry(use_id).or_default();
-                        entry.extend(defs.members(impl_def).iter().map(|&m| defs.ast_id(m)));
-                    }
-                }
-            }
+            let (direct, inherited) = spelled_references(state, snapshot);
+            let dispatch = dispatched_callee_edges(state, snapshot);
             let references = super::liveness::References {
                 direct: &direct,
                 inherited: &inherited,
@@ -1892,131 +1830,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .all_export_names()
                 .map(str::to_string)
                 .collect();
-            // The inherent methods and free functions the compiler names itself
-            // — the call reaching one is minted after this pass, so no edge here
-            // can. An entity the compiler reaches for and has not registered as
-            // a `CompilerItem` is a gap in the registry, not in this set.
-            let compiler_named = {
-                let tt = state.tysys.type_table.borrow();
-                let items = tt.compiler_items();
-                let mut named = super::liveness::CompilerNamed::default();
-                for &item in crate::compiler_item::CompilerItem::ALL {
-                    match items.get(item) {
-                        Some(crate::compiler_item::Resolved::Method {
-                            owner_type, name, ..
-                        }) => {
-                            named
-                                .methods
-                                .entry(owner_type.clone())
-                                .or_default()
-                                .insert(name.clone());
-                        }
-                        Some(crate::compiler_item::Resolved::Function {
-                            module_source,
-                            name,
-                        }) => {
-                            named
-                                .functions
-                                .entry(module_source.clone())
-                                .or_default()
-                                .insert(name.clone());
-                        }
-                        _ => {}
-                    }
-                }
-                // The traits a synthesis pass dispatches, as declarations —
-                // a block implementing one is reached by a call minted after
-                // liveness, from a format specifier or a derive this pass does
-                // not interpret.
-                let defs = state.tysys.resolutions.defs();
-                let synthesis_traits: IndexSet<crate::defs::DefId> =
-                    crate::compiler_item::CompilerItem::ALL
-                        .iter()
-                        .filter(|item| item.dispatched_by_synthesis())
-                        .filter_map(|&item| match items.get(item) {
-                            Some(crate::compiler_item::Resolved::Trait { decl, .. }) => {
-                                defs.of_ast_id(*decl)
-                            }
-                            _ => None,
-                        })
-                        .collect();
-                for (impl_def, header) in &state.tysys.trait_env.impl_headers {
-                    if header
-                        .trait_ref
-                        .is_some_and(|trait_| synthesis_traits.contains(&trait_))
-                    {
-                        named
-                            .synthesis_dispatched_impls
-                            .insert(defs.ast_id(*impl_def));
-                    }
-                }
-                named
-            };
-            // Which impl methods one method stands for, where only
-            // monomorphization can say which block a call actually reaches.
-            let trait_method_impls = {
-                let defs = state.tysys.resolutions.defs();
-                let mut stands_for: IndexMap<crate::ast::AstId, IndexSet<crate::ast::AstId>> =
-                    IndexMap::default();
-                let mut edge = |from: crate::defs::DefId, to: crate::defs::DefId| {
-                    stands_for
-                        .entry(defs.ast_id(from))
-                        .or_default()
-                        .insert(defs.ast_id(to));
-                };
-                // A generic block and one written for a single instantiation of
-                // the same head name the same function once the template is
-                // instantiated, and the specific block wins — coherence Rule 1,
-                // settled at monomorphization by that collision. A call through
-                // the template is the only thing the source spells, so the
-                // specific block's method has to be reachable from it or
-                // monomorphization never sees the block it must yield to.
-                let mut by_head: IndexMap<
-                    (crate::defs::DefId, &super::trait_env::ImplTargetKey),
-                    (Vec<&super::trait_env::ImplHeader>, Vec<&super::trait_env::ImplHeader>),
-                > = IndexMap::default();
-                for header in state.tysys.trait_env.impl_headers.values() {
-                    let Some(trait_) = header.trait_ref else {
-                        continue;
-                    };
-                    // A trait method reached through a generic bound
-                    // (`fn show<T: Display>(x: T) { x.fmt() }`, `C::from_iter`,
-                    // a projection like `S::MapSerializer`) has its block picked
-                    // by monomorphization, so it stands for every impl's.
-                    for method in &header.methods {
-                        if let Some(declared) = state.tysys.declared_method(trait_, &method.name) {
-                            edge(declared, method.def);
-                        }
-                    }
-                    let group = by_head.entry((trait_, &header.target)).or_default();
-                    if header.is_concrete() {
-                        group.1.push(header);
-                    } else {
-                        group.0.push(header);
-                    }
-                }
-                for (generics, concretes) in by_head.into_values() {
-                    for generic in generics {
-                        for concrete in &concretes {
-                            for method in &generic.methods {
-                                let Some(specific) =
-                                    concrete.methods.iter().find(|m| m.name == method.name)
-                                else {
-                                    continue;
-                                };
-                                edge(method.def, specific.def);
-                            }
-                        }
-                    }
-                }
-                stands_for
-            };
             state.liveness = super::liveness::compute(
                 modules,
                 &references,
                 &export_names,
-                &compiler_named,
-                &trait_method_impls,
+                &compiler_named_entities(&state.tysys),
+                &trait_method_impls(&state.tysys),
             );
         }
 
@@ -4034,6 +3853,194 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
     }
+}
+
+/// Every `ModuleSemantics` this compile can read: the ones its own body walk
+/// built, plus the snapshot's, which ran theirs when the snapshot was built.
+/// The snapshot's are read in place — cloning them back would cost what the
+/// snapshot saves.
+fn all_module_semantics<'a>(
+    state: &'a AnnotateState,
+    snapshot: Option<&'a crate::semantics::Semantics>,
+) -> impl Iterator<Item = &'a super::sem::ModuleSemantics> {
+    state.module_semantics.values().chain(
+        snapshot
+            .and_then(|s| s.state.as_ref())
+            .into_iter()
+            .flat_map(|s| s.module_semantics.values()),
+    )
+}
+
+/// The use→def edges the source spells, as `liveness` reads them: `direct`
+/// from each module's own bindings, `inherited` from a trait default body,
+/// which is walked once per inheriting impl against its own `ModuleSemantics`
+/// and so files its edges there rather than in the module's.
+fn spelled_references(
+    state: &AnnotateState,
+    snapshot: Option<&crate::semantics::Semantics>,
+) -> (
+    IndexMap<ast::AstId, ast::AstId>,
+    IndexMap<ast::AstId, IndexSet<ast::AstId>>,
+) {
+    let mut direct: IndexMap<ast::AstId, ast::AstId> = IndexMap::default();
+    for sem in state.module_semantics.values() {
+        for (use_id, def_key) in &sem.bindings.references {
+            direct.insert(*use_id, *def_key);
+        }
+    }
+    let mut inherited: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
+    let inherit_sems =
+        all_module_semantics(state, snapshot).flat_map(|sem| sem.default_method_semantics.values());
+    for sem in inherit_sems {
+        for (use_id, def_key) in &sem.bindings.references {
+            inherited.entry(*use_id).or_default().insert(*def_key);
+        }
+    }
+    (direct, inherited)
+}
+
+/// The callees a dispatch fact names — the sites that spell no name for the
+/// graph to follow. Only the facts `Semantics` drains are re-seeded into a
+/// snapshot module's `ModuleSemantics`; the rest stay in the snapshot's own,
+/// so both are read.
+fn dispatched_callee_edges(
+    state: &AnnotateState,
+    snapshot: Option<&crate::semantics::Semantics>,
+) -> IndexMap<ast::AstId, IndexSet<ast::AstId>> {
+    let defs = state.tysys.resolutions.defs();
+    let mut edges: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
+    let sems = all_module_semantics(state, snapshot)
+        .flat_map(|sem| std::iter::once(sem).chain(sem.default_method_semantics.values()));
+    for sem in sems {
+        for (use_id, def) in sem.types.dispatched_callees() {
+            edges.entry(use_id).or_default().insert(defs.ast_id(def));
+        }
+        // A handler binding installs a whole block: the dispatch wrapper may
+        // route any of the effect's operations to it.
+        for (use_id, impl_def) in sem.types.handler_impl_blocks() {
+            let entry = edges.entry(use_id).or_default();
+            entry.extend(defs.members(impl_def).iter().map(|&m| defs.ast_id(m)));
+        }
+    }
+    edges
+}
+
+/// The inherent methods and free functions the compiler names itself — the
+/// call reaching one is minted after `liveness`, so no edge here can — plus
+/// the impl blocks a synthesis pass dispatches to. An entity the compiler
+/// reaches for and has not registered as a `CompilerItem` is a gap in the
+/// registry, not in this set.
+fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed {
+    let tt = tysys.type_table.borrow();
+    let items = tt.compiler_items();
+    let mut named = super::liveness::CompilerNamed::default();
+    for &item in CompilerItem::ALL {
+        match items.get(item) {
+            Some(crate::compiler_item::Resolved::Method {
+                owner_type, name, ..
+            }) => {
+                named
+                    .methods
+                    .entry(owner_type.clone())
+                    .or_default()
+                    .insert(name.clone());
+            }
+            Some(crate::compiler_item::Resolved::Function {
+                module_source,
+                name,
+            }) => {
+                named
+                    .functions
+                    .entry(module_source.clone())
+                    .or_default()
+                    .insert(name.clone());
+            }
+            _ => {}
+        }
+    }
+    // The traits a synthesis pass dispatches, as declarations — a block
+    // implementing one is reached by a call minted after liveness, from a
+    // format specifier or a derive this pass does not interpret.
+    let defs = tysys.resolutions.defs();
+    let synthesis_traits: IndexSet<crate::defs::DefId> = CompilerItem::ALL
+        .iter()
+        .filter(|item| item.dispatched_by_synthesis())
+        .filter_map(|&item| match items.get(item) {
+            Some(crate::compiler_item::Resolved::Trait { decl, .. }) => defs.of_ast_id(*decl),
+            _ => None,
+        })
+        .collect();
+    for (impl_def, header) in &tysys.trait_env.impl_headers {
+        if header
+            .trait_ref
+            .is_some_and(|trait_| synthesis_traits.contains(&trait_))
+        {
+            named
+                .synthesis_dispatched_impls
+                .insert(defs.ast_id(*impl_def));
+        }
+    }
+    named
+}
+
+/// Which impl methods one method stands for, where only monomorphization can
+/// say which block a call actually reaches.
+fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::AstId>> {
+    let defs = tysys.resolutions.defs();
+    let mut stands_for: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
+    let mut edge = |from: crate::defs::DefId, to: crate::defs::DefId| {
+        stands_for
+            .entry(defs.ast_id(from))
+            .or_default()
+            .insert(defs.ast_id(to));
+    };
+    // A generic block and one written for a single instantiation of the same
+    // head name the same function once the template is instantiated, and the
+    // specific block wins — coherence Rule 1, settled at monomorphization by
+    // that collision. A call through the template is the only thing the source
+    // spells, so the specific block's method has to be reachable from it or
+    // monomorphization never sees the block it must yield to.
+    let mut by_head: IndexMap<
+        (crate::defs::DefId, &super::trait_env::ImplTargetKey),
+        (
+            Vec<&super::trait_env::ImplHeader>,
+            Vec<&super::trait_env::ImplHeader>,
+        ),
+    > = IndexMap::default();
+    for header in tysys.trait_env.impl_headers.values() {
+        let Some(trait_) = header.trait_ref else {
+            continue;
+        };
+        // A trait method reached through a generic bound
+        // (`fn show<T: Display>(x: T) { x.fmt() }`, `C::from_iter`, a
+        // projection like `S::MapSerializer`) has its block picked by
+        // monomorphization, so it stands for every impl's.
+        for method in &header.methods {
+            if let Some(declared) = tysys.declared_method(trait_, &method.name) {
+                edge(declared, method.def);
+            }
+        }
+        let group = by_head.entry((trait_, &header.target)).or_default();
+        if header.is_concrete() {
+            group.1.push(header);
+        } else {
+            group.0.push(header);
+        }
+    }
+    for (generics, concretes) in by_head.into_values() {
+        for generic in generics {
+            for concrete in &concretes {
+                for method in &generic.methods {
+                    let Some(specific) = concrete.methods.iter().find(|m| m.name == method.name)
+                    else {
+                        continue;
+                    };
+                    edge(method.def, specific.def);
+                }
+            }
+        }
+    }
+    stands_for
 }
 
 /// Fold component-dependency interfaces into `registry` (copy-on-write) so
