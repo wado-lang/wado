@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787633133056,
+  "lastUpdate": 1787673957371,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50921,6 +50921,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7ea29eef42a1af4a9bf32f0b21fc84eb1d6935cf"
         },
         "date": 1787633132471,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8de52f0726bb7f38b6f966ad004e5e801c78ecfe",
+          "message": "Merge pull request #1895 from wado-lang/perf-gale-gen-copies\n\nperf: fewer value-semantic copies in lowering, and in Gale's prediction walk",
+          "timestamp": "2026-08-26T00:51:51+09:00",
+          "tree_id": "2eb5992a0910fe9204a5f8c17caac0be11f57a23",
+          "url": "https://github.com/wado-lang/wado/commit/8de52f0726bb7f38b6f966ad004e5e801c78ecfe"
+        },
+        "date": 1787673956663,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
