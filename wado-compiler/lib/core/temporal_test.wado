@@ -258,6 +258,17 @@ test "ZonedDateTime accessors trap on an IANA zone name" {
 }
 
 #[expect_trap]
+test "the sub-second accessors trap on an IANA zone name too" {
+    // Their answer does not depend on the offset, but a zone the rest of the
+    // type cannot read is not one to answer from either.
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 0, nanoseconds: 123_456_789 },
+        time_zone: "Asia/Tokyo",
+    };
+    let _ = zdt.millisecond();
+}
+
+#[expect_trap]
 test "ZonedDateTime::months_in_year also traps on an IANA zone name" {
     let zdt = ZonedDateTime {
         instant: Instant { seconds: 0, nanoseconds: 0 },
@@ -575,7 +586,7 @@ test "Duration arithmetic balances into a uniformly signed result" {
     assert a.add(&b) == Duration { days: 1, hours: 5, minutes: 4 };
 
     // A component-wise difference would leave `{ days: 1, hours: -1 }`, which
-    // has no ISO 8601 spelling. Balancing keeps the result renderable.
+    // has no ISO 8601 spelling.
     assert a.subtract(&b) == Duration { hours: 22, minutes: 56 };
     assert `${a.subtract(&b)}` == "PT22H56M";
     assert `${Duration { hours: 1 }.subtract(&Duration { minutes: 30 })}` == "PT30M";

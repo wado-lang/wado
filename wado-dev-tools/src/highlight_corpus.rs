@@ -279,8 +279,6 @@ fn to_byte_offsets(source: &str, pieces: &[Piece]) -> Vec<Piece> {
 
 /// 1-based line number of byte offset `at`.
 fn line_of(source: &str, at: usize) -> u32 {
-    // Splitting counts the lines directly, where counting the newline bytes
-    // counts one fewer and has to add it back.
     source.as_bytes()[..at.min(source.len())]
         .split(|byte| *byte == b'\n')
         .count() as u32

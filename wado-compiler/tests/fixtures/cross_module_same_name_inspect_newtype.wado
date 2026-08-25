@@ -1,11 +1,8 @@
-// Regression: a struct whose `Inspect` comes from the `ReflectStruct` blanket
-// must not be answered by a same-named newtype in another module.
-//
-// `ImplModuleIndex` keys one namespace by the module-qualified head and another
-// by the bare declaration name. The blanket records nothing under module B's
-// qualified `Span`, so the lookup fell through to the bare `Span` — which held
-// module A's newtype derive — and lowering minted an extern stub in A's module
-// for a function B's module defines, tripping the interner's shadow assert.
+// Regression: module B's `Span` derives `Inspect` through the `ReflectStruct`
+// blanket, which records nothing under B's module-qualified head. The lookup
+// fell through to the module-blind declaration namespace, found module A's
+// same-named newtype there, and lowering minted an extern stub in A's module
+// for a function B's module defines — tripping the interner's shadow assert.
 
 use { Span, anchored, is_flat } from "./sub/cross_module_same_name_inspect_newtype_b.wado";
 use { Anchor } from "./sub/cross_module_same_name_inspect_newtype_a.wado";

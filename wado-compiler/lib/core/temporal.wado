@@ -160,13 +160,7 @@ fn resolve_fraction_digits(f: &Formatter, default_digits: i32) -> i32 {
     if p == Formatter::PRECISION_INFINITE {
         return 9;
     }
-    if p < 0 {
-        return 0;
-    }
-    if p > 9 {
-        return 9;
-    }
-    return p;
+    return clamp_i32(p, 0, 9);
 }
 
 /// Render an instant as an ISO 8601 / RFC 3339 string in the civil time given
@@ -176,9 +170,7 @@ fn render_iso8601(seconds: i64, nanoseconds: u32, offset_seconds: i64, digits: i
     let local = seconds + offset_seconds;
     let [days, second_of_day] = epoch_days_and_seconds(local);
     let [year, month, day] = civil_from_days(days);
-    let hour = second_of_day / 3600;
-    let minute = second_of_day % 3600 / 60;
-    let second = second_of_day % 60;
+    let [hour, minute, second] = clock_from_second_of_day(second_of_day);
     let year_str = format_iso_year(year);
     let fraction = format_fraction(nanoseconds, digits);
     return `${year_str}-${month:02}-${day:02}T${hour:02}:${minute:02}:${second:02}${fraction}${suffix}`;
@@ -213,6 +205,11 @@ fn civil_from_days(days: i64) -> [i64, i64, i64] {
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let civil_year = if month <= 2 { year + 1 } else { year };
     return [civil_year, month, day];
+}
+
+/// Split a second-of-day into `[hour, minute, second]`.
+fn clock_from_second_of_day(second_of_day: i64) -> [i64, i64, i64] {
+    return [second_of_day / 3600, second_of_day % 3600 / 60, second_of_day % 60];
 }
 
 /// Format the year per ISO 8601 / Temporal `PadISOYear`: four digits in
@@ -260,39 +257,13 @@ fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
 /// A fixed UTC offset zone string as a signed second count, or `None` when the
 /// zone is not one: `"Z"`/`"z"`, `"UTC"`, and ±HH:MM are the forms understood.
 fn try_fixed_offset(zone: &String) -> Option<i64> {
-    let n = zone.len();
-    if n == 1 && (zone.get_byte_unchecked(0) == b'Z' || zone.get_byte_unchecked(0) == b'z') {
+    if *zone == "UTC" {
         return Option::Some(0);
     }
-    if n == 3
-        && zone.get_byte_unchecked(0) == b'U'
-        && zone.get_byte_unchecked(1) == b'T'
-        && zone.get_byte_unchecked(2) == b'C' {
-        return Option::Some(0);
+    if let Ok(offset) = parse_zone_designator(zone, 0, zone.len()) {
+        return Option::Some(offset);
     }
-    let well_formed = n == 6
-        && (zone.get_byte_unchecked(0) == b'+' || zone.get_byte_unchecked(0) == b'-')
-        && is_ascii_digit(zone.get_byte_unchecked(1))
-        && is_ascii_digit(zone.get_byte_unchecked(2))
-        && zone.get_byte_unchecked(3) == b':'
-        && is_ascii_digit(zone.get_byte_unchecked(4))
-        && is_ascii_digit(zone.get_byte_unchecked(5));
-    if !well_formed {
-        return Option::None;
-    }
-    let hours = (zone.get_byte_unchecked(1) - b'0') as i64 * 10 + (zone.get_byte_unchecked(2) - b'0') as i64;
-    let minutes = (zone.get_byte_unchecked(4) - b'0') as i64 * 10 + (zone.get_byte_unchecked(5) - b'0') as i64;
-    // Range-checked like the zone designator a timestamp carries: `"+24:00"` is
-    // not an offset, and renormalizing `"+00:60"` into `"+01:00"` would silently
-    // move the value to a zone the caller did not name.
-    if hours > 23 || minutes > 59 {
-        return Option::None;
-    }
-    let magnitude = hours * 3600 + minutes * 60;
-    if zone.get_byte_unchecked(0) == b'-' {
-        return Option::Some(-magnitude);
-    }
-    return Option::Some(magnitude);
+    return Option::None;
 }
 
 /// The fixed UTC offset of `zone` in seconds. Any other value (notably an IANA
@@ -307,7 +278,7 @@ fn parse_fixed_offset(zone: &String) -> i64 {
 }
 
 fn is_ascii_digit(byte: u8) -> bool {
-    return byte >= 0x30 && byte <= 0x39;
+    return byte >= b'0' && byte <= b'9';
 }
 
 /// Format a signed offset second count as `"Z"` (when zero) or `±HH:MM`.
@@ -315,11 +286,14 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
     if offset_seconds == 0 {
         return "Z";
     }
+    return format_offset(offset_seconds);
+}
+
+/// Format a signed offset second count as `±HH:MM`, spelling zero `"+00:00"`.
+fn format_offset(offset_seconds: i64) -> String {
     let sign = if offset_seconds < 0 { "-" } else { "+" };
     let magnitude = if offset_seconds < 0 { -offset_seconds } else { offset_seconds };
-    let hours = magnitude / 3600;
-    let minutes = magnitude % 3600 / 60;
-    return `${sign}${hours:02}:${minutes:02}`;
+    return `${sign}${magnitude / 3600:02}:${magnitude % 3600 / 60:02}`;
 }
 
 // Accessors.
@@ -329,8 +303,6 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
 // exposes only epoch-based convenience values. The calendar is always ISO 8601.
 
 impl Instant {
-
-
     /// The Unix epoch itself, 1970-01-01T00:00:00Z.
     pub const EPOCH: Instant = Instant { seconds: 0, nanoseconds: 0 };
 
@@ -360,6 +332,12 @@ impl Instant {
         return Instant::new(milliseconds / 1000, milliseconds % 1000 * 1_000_000);
     }
 
+    /// Construct an instant from microseconds since the Unix epoch. The inverse
+    /// of `epoch_microseconds`.
+    pub fn from_epoch_microseconds(microseconds: i64) -> Instant {
+        return Instant::new(microseconds / 1_000_000, microseconds % 1_000_000 * 1000);
+    }
+
     /// Construct an instant from nanoseconds since the Unix epoch. The inverse
     /// of `epoch_nanoseconds`, and like it spanning the whole `i64`-second
     /// range.
@@ -377,11 +355,15 @@ impl Instant {
         return Instant::new(whole as i64, nanos as i64);
     }
 
+    /// The current reading of the system clock (`Temporal.Now.instant`). The
+    /// effect row is what keeps the clock off callers that never ask the time.
+    pub fn now() -> Instant with SystemClock {
+        return Instant::from(SystemClock::now());
+    }
 
-    /// Construct an instant from microseconds since the Unix epoch. The inverse
-    /// of `epoch_microseconds`.
-    pub fn from_epoch_microseconds(microseconds: i64) -> Instant {
-        return Instant::new(microseconds / 1_000_000, microseconds % 1_000_000 * 1000);
+    /// Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
+    pub fn epoch_milliseconds(&self) -> i64 {
+        return self.seconds * 1000 + self.nanoseconds as i64 / 1_000_000;
     }
 
     /// Microseconds since the Unix epoch, flooring toward the epoch's past so a
@@ -390,81 +372,12 @@ impl Instant {
         return self.seconds * 1_000_000 + (self.nanoseconds / 1000) as i64;
     }
 
-    /// Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
-    pub fn epoch_milliseconds(&self) -> i64 {
-        return self.seconds * 1000 + self.nanoseconds as i64 / 1_000_000;
-    }
-
     /// Nanoseconds since the Unix epoch (`Temporal.Instant.epochNanoseconds`).
     ///
     /// Temporal uses a BigInt; `i128` covers the whole `i64`-second range with
     /// nanosecond resolution, so this never truncates.
     pub fn epoch_nanoseconds(&self) -> i128 {
         return self.seconds as i128 * 1_000_000_000 + self.nanoseconds as i128;
-    }
-
-    /// The current reading of the system clock (`Temporal.Now.instant`). The
-    /// effect row is what keeps the clock off callers that never ask the time.
-    pub fn now() -> Instant with SystemClock {
-        return Instant::from(SystemClock::now());
-    }
-
-    /// Round to a multiple of `increment` units. `smallest_unit` must be an
-    /// hour or below, as on `add`; the multiples are counted from the epoch,
-    /// and the step must divide the day so they line up with the clock.
-    pub fn round(
-        &self,
-        smallest_unit: Unit,
-        increment: i64 = 1,
-        mode: RoundingMode = RoundingMode::HalfExpand,
-    ) -> Instant {
-        if is_date_unit(smallest_unit) {
-            panic("core:temporal: an Instant rounds to hours and below; use ZonedDateTime::round for a calendar unit");
-        }
-        return Instant::from_epoch_nanoseconds(round_to_increment(
-            self.epoch_nanoseconds(),
-            day_aligned_step(smallest_unit, increment),
-            mode,
-        ));
-    }
-
-    /// RFC 7231 IMF-fixdate, the form an HTTP `Date`, `Expires`, or
-    /// `Last-Modified` header carries: `"Sun, 06 Nov 1994 08:49:37 GMT"`.
-    /// Always UTC, always whole seconds.
-    pub fn to_http_date(&self) -> String {
-        let [days, second_of_day] = epoch_days_and_seconds(self.seconds);
-        let [year, month, day] = civil_from_days(days);
-        assert year >= 0 && year <= 9999;
-        let weekday = floor_mod(days + 3, 7) + 1;
-        let hour = second_of_day / 3600;
-        let minute = second_of_day % 3600 / 60;
-        let second = second_of_day % 60;
-        return `${imf_weekday_name(weekday)}, ${day:02} ${imf_month_name(month)} ${year:04} ${hour:02}:${minute:02}:${second:02} GMT`;
-    }
-
-    /// Parse an HTTP-date. RFC 7231 requires a recipient to accept all three
-    /// forms, so this reads IMF-fixdate
-    /// (`"Sun, 06 Nov 1994 08:49:37 GMT"`), the obsolete RFC 850 form
-    /// (`"Sunday, 06-Nov-94 08:49:37 GMT"`, whose two-digit year is read as
-    /// the most recent one not more than 50 years ahead), and asctime
-    /// (`"Sun Nov  6 08:49:37 1994"`). The weekday is not checked against the
-    /// date; RFC 7231 leaves it advisory.
-    pub fn parse_http_date(text: String) -> Result<Instant, DeserializeError> {
-        return parse_http_date_text(&text);
-    }
-
-    /// RFC 3339 / ISO 8601 string in UTC (`…Z`), using the least sub-second
-    /// precision (0, 3, 6, or 9 fraction digits) that represents the instant
-    /// exactly. This is the serde wire form.
-    pub fn to_rfc3339(&self) -> String {
-        let digits = fraction_digits_for(self.nanoseconds);
-        return render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z");
-    }
-
-    /// Parse an RFC 3339 / ISO 8601 timestamp into the exact instant it names,
-    /// discarding the offset. Same grammar as `ZonedDateTime::parse_rfc3339`.
-    pub fn parse_rfc3339(text: String) -> Result<Instant, DeserializeError> {
-        return Result::Ok(parse_iso_zoned(&text, 0, text.len())?.instant);
     }
 
     /// Move forward by `duration`. Only the time components are admitted: a day
@@ -500,13 +413,74 @@ impl Instant {
         return self.until(other, largest_unit).negated();
     }
 
+    /// Round to a multiple of `increment` units. `smallest_unit` must be an
+    /// hour or below, as on `add`; the multiples are counted from the epoch,
+    /// and the step must divide the day so they line up with the clock.
+    pub fn round(
+        &self,
+        smallest_unit: Unit,
+        increment: i64 = 1,
+        mode: RoundingMode = RoundingMode::HalfExpand,
+    ) -> Instant {
+        if is_date_unit(smallest_unit) {
+            panic("core:temporal: an Instant rounds to hours and below; use ZonedDateTime::round for a calendar unit");
+        }
+        return Instant::from_epoch_nanoseconds(round_to_increment(
+            self.epoch_nanoseconds(),
+            day_aligned_step(smallest_unit, increment),
+            mode,
+        ));
+    }
+
+    /// RFC 3339 / ISO 8601 string in UTC (`…Z`), using the least sub-second
+    /// precision (0, 3, 6, or 9 fraction digits) that represents the instant
+    /// exactly. This is the serde wire form.
+    pub fn to_rfc3339(&self) -> String {
+        let digits = fraction_digits_for(self.nanoseconds);
+        return render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z");
+    }
+
+    /// Parse an RFC 3339 / ISO 8601 timestamp into the exact instant it names,
+    /// discarding the offset. Same grammar as `ZonedDateTime::parse_rfc3339`.
+    pub fn parse_rfc3339(text: String) -> Result<Instant, DeserializeError> {
+        return Result::Ok(parse_iso_zoned(&text, 0, text.len())?.instant);
+    }
+
+    /// RFC 7231 IMF-fixdate, the form an HTTP `Date`, `Expires`, or
+    /// `Last-Modified` header carries: `"Sun, 06 Nov 1994 08:49:37 GMT"`.
+    /// Always UTC, always whole seconds.
+    pub fn to_http_date(&self) -> String {
+        let [days, second_of_day] = epoch_days_and_seconds(self.seconds);
+        let [year, month, day] = civil_from_days(days);
+        assert year >= 0 && year <= 9999;
+        let weekday = day_of_week_of(days);
+        let [hour, minute, second] = clock_from_second_of_day(second_of_day);
+        return `${imf_weekday_name(weekday)}, ${day:02} ${imf_month_name(month)} ${year:04} ${hour:02}:${minute:02}:${second:02} GMT`;
+    }
+
+    /// Parse an HTTP-date in any of the three forms RFC 7231 requires a
+    /// recipient to accept: IMF-fixdate (`"Sun, 06 Nov 1994 08:49:37 GMT"`),
+    /// the obsolete RFC 850 (`"Sunday, 06-Nov-94 08:49:37 GMT"`, whose
+    /// two-digit year pivots at 70), and asctime (`"Sun Nov  6 08:49:37 1994"`).
+    /// The weekday is advisory and is not checked against the date.
+    pub fn parse_http_date(text: String) -> Result<Instant, DeserializeError> {
+        let end = text.len();
+        let comma = index_of_byte(&text, b',');
+        if comma < 0 {
+            return parse_asctime(&text, end);
+        }
+        if comma + 4 < end && text.get_byte_unchecked(comma + 4) == b'-' {
+            return parse_rfc850_date(&text, comma, end);
+        }
+        return parse_imf_fixdate(&text, comma, end);
+    }
+
     /// Interpret this instant in `time_zone`, the zoned view of the same moment
     /// (`Temporal.Instant.toZonedDateTimeISO`).
     pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime {
         return ZonedDateTime::new(*self, time_zone);
     }
 }
-
 impl FromStr for Instant {
     type Err = DeserializeError;
 
@@ -524,6 +498,20 @@ impl FromStr for ZonedDateTime {
 }
 
 impl ZonedDateTime {
+    /// Interpret `instant` in `time_zone`, canonicalizing the three spellings of
+    /// UTC (`"UTC"`, `"z"`, `±00:00`) to `"Z"` so they are one value under the
+    /// derived `Eq`. Any other zone is stored verbatim.
+    pub fn new(instant: Instant, time_zone: String) -> ZonedDateTime {
+        return ZonedDateTime { instant: instant, time_zone: canonical_time_zone(time_zone) };
+    }
+
+    /// The current time read in `time_zone` (`Temporal.Now.zonedDateTimeISO`).
+    /// The zone is the caller's: there is no system-zone lookup until the
+    /// `wasi:clocks` `timezone` interface is wired up.
+    pub fn now(time_zone: String) -> ZonedDateTime with SystemClock {
+        return ZonedDateTime::new(Instant::now(), time_zone);
+    }
+
     /// Parse an RFC 3339 / ISO 8601 timestamp such as
     /// `"2023-11-14T22:13:20.5+09:00"` or `"1970-01-01T00:00:00Z"`, preserving
     /// the offset as a fixed-offset zone (so it round-trips through `to_rfc3339`
@@ -542,16 +530,30 @@ impl ZonedDateTime {
         return parse_iso_zoned(&text, 0, text.len());
     }
 
-    /// RFC 3339 / ISO 8601 string in this zone's local time, with the offset
-    /// suffix (or `Z`) and the least sub-second precision that is exact. This is
-    /// the serde wire form. Traps on an IANA zone name (offset resolution is
-    /// future work).
-    pub fn to_rfc3339(&self) -> String {
-        let offset = parse_fixed_offset(&self.time_zone);
-        let digits = fraction_digits_for(self.instant.nanoseconds);
-        return render_iso8601(self.instant.seconds, self.instant.nanoseconds, offset, digits, format_offset_suffix(
-            offset,
-        ));
+    /// The exact instant, dropping the zone (`Temporal.ZonedDateTime.toInstant`).
+    pub fn to_instant(&self) -> Instant {
+        return self.instant;
+    }
+
+    /// Milliseconds since the Unix epoch.
+    pub fn epoch_milliseconds(&self) -> i64 {
+        return self.instant.epoch_milliseconds();
+    }
+
+    /// Nanoseconds since the Unix epoch.
+    pub fn epoch_nanoseconds(&self) -> i128 {
+        return self.instant.epoch_nanoseconds();
+    }
+
+    /// The zone's UTC offset at this instant, as `±HH:MM`. Temporal spells a
+    /// zero offset `"+00:00"` here even where the zone is `"Z"`.
+    pub fn offset(&self) -> String {
+        return format_offset(parse_fixed_offset(&self.time_zone));
+    }
+
+    /// The zone's UTC offset at this instant, in nanoseconds.
+    pub fn offset_nanoseconds(&self) -> i64 {
+        return parse_fixed_offset(&self.time_zone) * 1_000_000_000;
     }
 
     /// ISO year in the zone's local time. May be negative or beyond four digits.
@@ -564,6 +566,11 @@ impl ZonedDateTime {
     pub fn month(&self) -> i32 {
         let [_, _, month, _, _] = self.local_parts();
         return month as i32;
+    }
+
+    /// Temporal month code, `"M01"` … `"M12"` under the ISO 8601 calendar.
+    pub fn month_code(&self) -> String {
+        return month_code_of(self.month());
     }
 
     /// Day of the month, `1..=31`.
@@ -592,29 +599,53 @@ impl ZonedDateTime {
 
     /// Millisecond of the second, `0..=999`.
     pub fn millisecond(&self) -> i32 {
+        self.require_resolvable_zone();
         return (self.instant.nanoseconds / 1_000_000) as i32;
     }
 
     /// Microsecond of the millisecond, `0..=999`.
     pub fn microsecond(&self) -> i32 {
+        self.require_resolvable_zone();
         return (self.instant.nanoseconds / 1000 % 1000) as i32;
     }
 
     /// Nanosecond of the microsecond, `0..=999`.
     pub fn nanosecond(&self) -> i32 {
+        self.require_resolvable_zone();
         return (self.instant.nanoseconds % 1000) as i32;
     }
 
     /// Day of the week, `1` (Monday) through `7` (Sunday), per ISO 8601.
     pub fn day_of_week(&self) -> i32 {
         let [days, _, _, _, _] = self.local_parts();
-        return (floor_mod(days + 3, 7) + 1) as i32;
+        return day_of_week_of(days) as i32;
     }
 
     /// Day of the year, `1..=366`.
     pub fn day_of_year(&self) -> i32 {
         let [days, year, _, _, _] = self.local_parts();
-        return (days - days_from_civil(year, 1, 1) + 1) as i32;
+        return day_of_year_of(days, year) as i32;
+    }
+
+    /// ISO 8601 week of the week-year, `1..=53`.
+    pub fn week_of_year(&self) -> i32 {
+        let [_, year, _, _, _] = self.local_parts();
+        let [week, _] = iso_week_date(year, self.day_of_year() as i64, self.day_of_week() as i64);
+        return week as i32;
+    }
+
+    /// ISO 8601 week-numbering year, which differs from `year` in the days at
+    /// either end of the year that belong to the neighbour's week.
+    pub fn year_of_week(&self) -> i32 {
+        let [_, year, _, _, _] = self.local_parts();
+        let [_, week_year] = iso_week_date(year, self.day_of_year() as i64, self.day_of_week() as i64);
+        return week_year as i32;
+    }
+
+    /// Number of days in this week — always `7` for ISO 8601.
+    pub fn days_in_week(&self) -> i32 {
+        self.require_resolvable_zone();
+        return 7;
     }
 
     /// Number of days in this month, `28..=31`.
@@ -626,10 +657,13 @@ impl ZonedDateTime {
     /// Number of days in this year, `365` or `366`.
     pub fn days_in_year(&self) -> i32 {
         let [_, year, _, _, _] = self.local_parts();
-        if is_leap_year(year) {
-            return 366;
-        }
-        return 365;
+        return days_in_year_value(year);
+    }
+
+    /// Number of months in this year — always `12` for ISO 8601.
+    pub fn months_in_year(&self) -> i32 {
+        self.require_resolvable_zone();
+        return 12;
     }
 
     /// Whether this year is a leap year in the ISO 8601 calendar.
@@ -638,45 +672,18 @@ impl ZonedDateTime {
         return is_leap_year(year);
     }
 
-    /// Interpret `instant` in `time_zone`, canonicalizing the three spellings of
-    /// UTC (`"UTC"`, `"z"`, `±00:00`) to `"Z"` so they are one value under the
-    /// derived `Eq`. Any other zone is stored verbatim.
-    pub fn new(instant: Instant, time_zone: String) -> ZonedDateTime {
-        return ZonedDateTime { instant: instant, time_zone: canonical_time_zone(time_zone) };
+    /// Hours between this day's start and the next. A fixed offset has no DST,
+    /// so it is always 24; an IANA zone traps.
+    pub fn hours_in_day(&self) -> i32 {
+        self.require_resolvable_zone();
+        return 24;
     }
 
-    /// The exact instant, dropping the zone (`Temporal.ZonedDateTime.toInstant`).
-    pub fn to_instant(&self) -> Instant {
-        return self.instant;
-    }
-
-    /// Milliseconds since the Unix epoch.
-    pub fn epoch_milliseconds(&self) -> i64 {
-        return self.instant.epoch_milliseconds();
-    }
-
-    /// Nanoseconds since the Unix epoch.
-    pub fn epoch_nanoseconds(&self) -> i128 {
-        return self.instant.epoch_nanoseconds();
-    }
-
-    /// The zone's UTC offset at this instant, as `±HH:MM`. Temporal spells a
-    /// zero offset `"+00:00"` here even where the zone is `"Z"`.
-    pub fn offset(&self) -> String {
+    /// Local midnight on this value's day. Traps on an IANA zone name.
+    pub fn start_of_day(&self) -> ZonedDateTime {
         let offset = parse_fixed_offset(&self.time_zone);
-        let sign = if offset < 0 { "-" } else { "+" };
-        let magnitude = if offset < 0 { -offset } else { offset };
-        return `${sign}${magnitude / 3600:02}:${magnitude % 3600 / 60:02}`;
-    }
-
-    /// The zone's UTC offset at this instant, in nanoseconds.
-    pub fn offset_nanoseconds(&self) -> i64 {
-        return parse_fixed_offset(&self.time_zone) * 1_000_000_000;
-    }
-
-    /// The same instant read in another zone.
-    pub fn with_time_zone(&self, time_zone: String) -> ZonedDateTime {
-        return ZonedDateTime::new(self.instant, time_zone);
+        let [days, _, _, _, _] = self.local_parts();
+        return self.with_instant(Instant { seconds: days * 86400 - offset, nanoseconds: 0 });
     }
 
     /// Move forward by `duration`, reading the calendar components in local
@@ -695,10 +702,9 @@ impl ZonedDateTime {
         let local_days = days_from_civil(shifted_year, shifted_month, shifted_day) + duration.weeks * 7 + duration.days;
         let local_seconds = local_days * 86400 + second_of_day;
         let shifted = Instant { seconds: local_seconds - offset, nanoseconds: self.instant.nanoseconds };
-        return ZonedDateTime {
-            instant: Instant::from_epoch_nanoseconds(shifted.epoch_nanoseconds() + duration.time_nanoseconds()),
-            time_zone: self.time_zone,
-        };
+        return self.with_instant(Instant::from_epoch_nanoseconds(
+            shifted.epoch_nanoseconds() + duration.time_nanoseconds(),
+        ));
     }
 
     /// Move back by `duration`. Not the inverse of `add` when a month-end is
@@ -721,13 +727,6 @@ impl ZonedDateTime {
         return self.until(other, largest_unit).negated();
     }
 
-    /// The current time read in `time_zone` (`Temporal.Now.zonedDateTimeISO`).
-    /// The zone is the caller's: there is no system-zone lookup until the
-    /// `wasi:clocks` `timezone` interface is wired up.
-    pub fn now(time_zone: String) -> ZonedDateTime with SystemClock {
-        return ZonedDateTime::new(Instant::now(), time_zone);
-    }
-
     /// Round the local wall clock to a multiple of `increment` units, counting
     /// from local midnight so a day-aligned unit lands on the civil boundary.
     /// `Unit::Day` rounds to the nearest midnight. Traps on an IANA zone name.
@@ -741,27 +740,24 @@ impl ZonedDateTime {
         let [days, time_of_day] = local_day_and_nanoseconds(self.instant.epoch_nanoseconds(), offset);
         let rounded = round_to_increment(time_of_day, day_aligned_step(smallest_unit, increment), mode);
         let local = days as i128 * 86_400_000_000_000 + rounded;
-        return ZonedDateTime {
-            instant: Instant::from_epoch_nanoseconds(local - offset as i128 * 1_000_000_000),
-            time_zone: self.time_zone,
-        };
+        return self.with_instant(Instant::from_epoch_nanoseconds(local - offset as i128 * 1_000_000_000));
     }
 
-    /// Local midnight on this value's day. Traps on an IANA zone name.
-    pub fn start_of_day(&self) -> ZonedDateTime {
+    /// The same instant read in another zone.
+    pub fn with_time_zone(&self, time_zone: String) -> ZonedDateTime {
+        return ZonedDateTime::new(self.instant, time_zone);
+    }
+
+    /// RFC 3339 / ISO 8601 string in this zone's local time, with the offset
+    /// suffix (or `Z`) and the least sub-second precision that is exact. This is
+    /// the serde wire form. Traps on an IANA zone name (offset resolution is
+    /// future work).
+    pub fn to_rfc3339(&self) -> String {
         let offset = parse_fixed_offset(&self.time_zone);
-        let [days, _, _, _, _] = self.local_parts();
-        return ZonedDateTime {
-            instant: Instant { seconds: days * 86400 - offset, nanoseconds: 0 },
-            time_zone: self.time_zone,
-        };
-    }
-
-    /// Hours between this day's start and the next. A fixed offset has no DST,
-    /// so it is always 24; an IANA zone traps.
-    pub fn hours_in_day(&self) -> i32 {
-        let _ = parse_fixed_offset(&self.time_zone);
-        return 24;
+        let digits = fraction_digits_for(self.instant.nanoseconds);
+        return render_iso8601(self.instant.seconds, self.instant.nanoseconds, offset, digits, format_offset_suffix(
+            offset,
+        ));
     }
 
     /// The local calendar date. Traps on an IANA zone name.
@@ -787,38 +783,16 @@ impl ZonedDateTime {
         };
     }
 
-    /// ISO 8601 week of the week-year, `1..=53`.
-    pub fn week_of_year(&self) -> i32 {
-        let [_, year, _, _, _] = self.local_parts();
-        let [week, _] = iso_week_date(year, self.day_of_year() as i64, self.day_of_week() as i64);
-        return week as i32;
-    }
-
-    /// ISO 8601 week-numbering year, which differs from `year` in the days at
-    /// either end of the year that belong to the neighbour's week.
-    pub fn year_of_week(&self) -> i32 {
-        let [_, year, _, _, _] = self.local_parts();
-        let [_, week_year] = iso_week_date(year, self.day_of_year() as i64, self.day_of_week() as i64);
-        return week_year as i32;
-    }
-
-    /// Number of days in this week — always `7` for ISO 8601.
-    pub fn days_in_week(&self) -> i32 {
+    /// Trap unless this zone resolves, so an accessor whose answer does not
+    /// depend on the offset still refuses a zone the rest of the type cannot
+    /// read.
+    fn require_resolvable_zone(&self) {
         let _ = parse_fixed_offset(&self.time_zone);
-        return 7;
     }
 
-    /// Temporal month code, `"M01"` … `"M12"` under the ISO 8601 calendar.
-    pub fn month_code(&self) -> String {
-        return `M${self.month():02}`;
-    }
-
-    /// Number of months in this year — always `12` for ISO 8601.
-    pub fn months_in_year(&self) -> i32 {
-        // Validate the zone for consistency with the other accessors (all of
-        // which trap on an unresolvable zone); the ISO 8601 answer is 12.
-        let _ = parse_fixed_offset(&self.time_zone);
-        return 12;
+    /// The same zone at a different instant.
+    fn with_instant(&self, instant: Instant) -> ZonedDateTime {
+        return ZonedDateTime { instant: instant, time_zone: self.time_zone };
     }
 
     /// Local broken-down parts `[days_since_epoch, year, month, day,
@@ -832,21 +806,9 @@ impl ZonedDateTime {
         return [days, year, month, day, second_of_day];
     }
 }
-
 /// Whether `unit` measures calendar time rather than exact time.
 fn is_date_unit(unit: Unit) -> bool {
-    return match unit {
-        Year => true,
-        Month => true,
-        Week => true,
-        Day => true,
-        Hour => false,
-        Minute => false,
-        Second => false,
-        Millisecond => false,
-        Microsecond => false,
-        Nanosecond => false,
-    };
+    return unit_rank(unit) <= unit_rank(Unit::Day);
 }
 
 /// Add `months` to a proleptic Gregorian date, constraining a day beyond the
@@ -864,7 +826,7 @@ fn add_months_to_civil(year: i64, month: i64, day: i64, months: i64) -> [i64, i6
 fn difference_zoned(offset: i64, start: Instant, end: Instant, largest_unit: Unit) -> Duration {
     let start_nanoseconds = start.epoch_nanoseconds();
     let end_nanoseconds = end.epoch_nanoseconds();
-    if !is_date_unit(largest_unit) || largest_unit matches { Day } {
+    if unit_rank(largest_unit) >= unit_rank(Unit::Day) {
         return duration_from_nanoseconds(end_nanoseconds - start_nanoseconds, largest_unit);
     }
     if end_nanoseconds < start_nanoseconds {
@@ -994,6 +956,31 @@ fn year_end_weekday(year: i64) -> i64 {
     return floor_mod(year + year / 4 - year / 100 + year / 400, 7);
 }
 
+/// Temporal month code, `"M01"` … `"M12"`. The ISO 8601 calendar has no leap
+/// month, so no case carries the `L` suffix a lunisolar one would.
+fn month_code_of(month: i32) -> String {
+    return `M${month:02}`;
+}
+
+/// ISO 8601 day of the week for a day count since the epoch, `1` (Monday)
+/// through `7` (Sunday). 1970-01-01 was a Thursday, hence the `+ 3`.
+fn day_of_week_of(days: i64) -> i64 {
+    return floor_mod(days + 3, 7) + 1;
+}
+
+/// Day of the year, `1..=366`, for a day count since the epoch and its year.
+fn day_of_year_of(days: i64, year: i64) -> i64 {
+    return days - days_from_civil(year, 1, 1) + 1;
+}
+
+/// Number of days in `year`, `365` or `366`.
+fn days_in_year_value(year: i64) -> i32 {
+    if is_leap_year(year) {
+        return 366;
+    }
+    return 365;
+}
+
 /// Whether `year` is a leap year in the proleptic Gregorian (ISO 8601) calendar.
 fn is_leap_year(year: i64) -> bool {
     return year % 4 == 0 && year % 100 != 0 || year % 400 == 0;
@@ -1047,7 +1034,6 @@ fn parse_iso_zoned(text: &String, start: i32, end: i32) -> Result<ZonedDateTime,
     }
     i += 2;
 
-    // Date/time separator: 'T', 't', or a space.
     if i >= end {
         return Result::Err(DeserializeError::eof(i as i64));
     }
@@ -1073,33 +1059,18 @@ fn parse_iso_zoned(text: &String, start: i32, end: i32) -> Result<ZonedDateTime,
     if parsed_second > 60 {
         return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
     }
-    // RFC 3339 admits a leap second; the ISO caenddar has no 61st second to
-    // hold it, so Temporal constrains :60 to :59 rather than rejecting it.
+    // RFC 3339 admits a leap second; the ISO calendar has no 61st second to hold
+    // it, so Temporal constrains :60 to :59 rather than rejecting it.
     let second = if parsed_second == 60 { 59 } else { parsed_second };
     i += 2;
 
-    // Optional fractional seconds, truncated to nanosecond precision.
     let mut nanoseconds: i64 = 0;
     if i < end && text.get_byte_unchecked(i) == b'.' {
-        i += 1;
-        let frac_start = i;
-        let mut scale: i64 = 100_000_000;
-        while i < end && is_ascii_digit(text.get_byte_unchecked(i)) {
-            if scale >= 1 {
-                nanoseconds = nanoseconds + (text.get_byte_unchecked(i) - b'0') as i64 * scale;
-                scale = scale / 10;
-            }
-            i += 1;
-        }
-        if i == frac_start {
-            return Result::Err(DeserializeError::malformed(
-                "expected fractional digits after '.'",
-                frac_start as i64,
-            ));
-        }
+        let [fraction, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+        nanoseconds = fraction;
+        i = after;
     }
 
-    // Mandatory zone designator: 'Z'/'z' or ±hh:mm.
     let offset = parse_zone_designator(text, i, end)?;
 
     let days = days_from_civil(year, month, day);
@@ -1206,10 +1177,7 @@ fn format_minimal_fraction(nanoseconds: u32) -> String {
         value = value / 10;
         digits = digits - 1;
     }
-    let rendered = `${value}`;
-    let zeros = digits - rendered.len();
-    let padding = if zeros > 0 { "0".repeat(zeros) } else { "" };
-    return `.${padding}${rendered}`;
+    return format_fraction(nanoseconds, digits);
 }
 
 /// Least sub-second precision (0, 3, 6, or 9 fraction digits) that renders
@@ -1408,9 +1376,8 @@ fn imf_month_number(text: &String, i: i32) -> i64 {
 /// The date components (`years`, `months`, `weeks`) have no fixed length, so a
 /// duration carrying one can only be applied to a `ZonedDateTime`, which knows
 /// the calendar position to measure them against; `Instant` admits hours and
-/// below. Unlike Temporal, the components are not required to share a sign — a
-/// literal is plain data here — so `sign` reports the largest non-zero one and
-/// a mixed-sign duration behaves as the sum of its parts.
+/// below. Unlike Temporal, a mixed-sign literal is representable — nothing
+/// rejects one at construction — and the ISO 8601 form asserts against it.
 pub struct Duration {
     pub years: i64 = 0,
     pub months: i64 = 0,
@@ -1479,10 +1446,6 @@ impl Duration {
     /// two top units. A day counts as 24 hours; years, months, and weeks trap,
     /// since adding one needs the calendar position Temporal's `relativeTo`
     /// supplies.
-    ///
-    /// Balancing is what keeps the result renderable: a component-wise
-    /// `1 hour - 30 minutes` would be `{ hours: 1, minutes: -30 }`, which has
-    /// no ISO 8601 spelling.
     pub fn add(&self, other: &Duration) -> Duration {
         if self.has_calendar_components() || other.has_calendar_components() {
             panic(
@@ -1773,7 +1736,6 @@ fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, D
     let mut out = Duration {};
     let mut seen_component = false;
 
-    // Date components, in the order ISO 8601 fixes them.
     let mut date_slot = 0;
     while i < end {
         let byte = text.get_byte_unchecked(i);
@@ -1872,18 +1834,25 @@ fn read_duration_fraction(text: &String, i: i32, end: i32) -> Result<[i128, i32]
     if i >= end || text.get_byte_unchecked(i) != b'.' && text.get_byte_unchecked(i) != b',' {
         return Result::Ok([0, i]);
     }
-    let mut j = i + 1;
-    let mut scale: i128 = 100_000_000;
-    let mut value: i128 = 0;
+    let [nanoseconds, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+    return Result::Ok([nanoseconds as i128, after]);
+}
+
+/// Read the run of digits at `i` as a nanosecond count — the first digit is a
+/// tenth of a second — truncating past the ninth. Errors on no digit at all.
+fn read_fraction_nanoseconds(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+    let mut j = i;
+    let mut scale: i64 = 100_000_000;
+    let mut value: i64 = 0;
     while j < end && is_ascii_digit(text.get_byte_unchecked(j)) {
         if scale >= 1 {
-            value = value + (text.get_byte_unchecked(j) - b'0') as i128 * scale;
+            value = value + (text.get_byte_unchecked(j) - b'0') as i64 * scale;
             scale = scale / 10;
         }
         j += 1;
     }
-    if j == i + 1 {
-        return Result::Err(DeserializeError::malformed("expected fractional digits", (i + 1) as i64));
+    if j == i {
+        return Result::Err(DeserializeError::malformed("expected fractional digits after the separator", i as i64));
     }
     return Result::Ok([value, j]);
 }
@@ -2011,19 +1980,6 @@ impl Deserialize for Duration {
     }
 }
 
-/// Parse the three HTTP-date forms RFC 7231 requires a recipient to accept.
-fn parse_http_date_text(text: &String) -> Result<Instant, DeserializeError> {
-    let end = text.len();
-    let comma = index_of_byte(text, b',');
-    if comma < 0 {
-        return parse_asctime(text, end);
-    }
-    if comma + 4 < end && text.get_byte_unchecked(comma + 4) == b'-' {
-        return parse_rfc850_date(text, comma, end);
-    }
-    return parse_imf_fixdate(text, comma, end);
-}
-
 /// `"Sun, 06 Nov 1994 08:49:37 GMT"`.
 fn parse_imf_fixdate(text: &String, comma: i32, end: i32) -> Result<Instant, DeserializeError> {
     let mut i = comma + 1;
@@ -2141,14 +2097,9 @@ fn index_of_byte(text: &String, byte: u8) -> i32 {
     return -1;
 }
 
-// The plain (zoneless) family. Following Temporal, these carry no time zone and
-// no instant: they are calendar and clock readings, the shapes a birthday, a
-// business date, or a recurring wall-clock time actually have. The ISO 8601
-// calendar is the only one, so none of them stores a calendar either.
-//
-// Wado's literal spread is Temporal's `with`: `PlainDate { ..d, day: 1 }`
-// replaces one component and keeps the rest. It does not constrain, so use
-// `constrain` where the result may fall off the end of a month.
+// The plain (zoneless) family. Wado's literal spread is Temporal's `with`:
+// `PlainDate { ..d, day: 1 }` replaces one component and keeps the rest. It does
+// not constrain, so use `constrain` where the result may fall off a month's end.
 
 /// A calendar date with no time and no zone. Corresponds to
 /// `Temporal.PlainDate`. `Ord` is auto-derived over year, month, day and so
@@ -2227,6 +2178,12 @@ impl PlainDate {
         return PlainDate { year: year, month: clamped_month, day: clamp_i32(day, 1, length) };
     }
 
+    /// The date `days` after the Unix epoch.
+    pub fn from_epoch_days(days: i64) -> PlainDate {
+        let [year, month, day] = civil_from_days(days);
+        return PlainDate { year: year as i32, month: month as i32, day: day as i32 };
+    }
+
     /// Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
     pub fn parse(text: String) -> Result<PlainDate, DeserializeError> {
         return PlainDate::from_str_range(&text, 0, text.len());
@@ -2237,20 +2194,14 @@ impl PlainDate {
         return days_from_civil(self.year as i64, self.month as i64, self.day as i64);
     }
 
-    /// The date `days` after the Unix epoch.
-    pub fn from_epoch_days(days: i64) -> PlainDate {
-        let [year, month, day] = civil_from_days(days);
-        return PlainDate { year: year as i32, month: month as i32, day: day as i32 };
-    }
-
     /// Day of the week, `1` (Monday) through `7` (Sunday), per ISO 8601.
     pub fn day_of_week(&self) -> i32 {
-        return (floor_mod(self.epoch_days() + 3, 7) + 1) as i32;
+        return day_of_week_of(self.epoch_days()) as i32;
     }
 
     /// Day of the year, `1..=366`.
     pub fn day_of_year(&self) -> i32 {
-        return (self.epoch_days() - days_from_civil(self.year as i64, 1, 1) + 1) as i32;
+        return day_of_year_of(self.epoch_days(), self.year as i64) as i32;
     }
 
     /// ISO 8601 week of the week-year, `1..=53`.
@@ -2277,10 +2228,7 @@ impl PlainDate {
 
     /// Number of days in this year, `365` or `366`.
     pub fn days_in_year(&self) -> i32 {
-        if is_leap_year(self.year as i64) {
-            return 366;
-        }
-        return 365;
+        return days_in_year_value(self.year as i64);
     }
 
     /// Number of months in this year — always `12` for ISO 8601.
@@ -2295,7 +2243,7 @@ impl PlainDate {
 
     /// Temporal month code, `"M01"` … `"M12"`.
     pub fn month_code(&self) -> String {
-        return `M${self.month:02}`;
+        return month_code_of(self.month);
     }
 
     /// Move forward by `duration`'s date components, constraining a month-end
@@ -2620,7 +2568,7 @@ impl PlainYearMonth {
 
     /// Temporal month code, `"M01"` … `"M12"`.
     pub fn month_code(&self) -> String {
-        return `M${self.month:02}`;
+        return month_code_of(self.month);
     }
 
     /// Move forward by `duration`'s years and months. Smaller components trap:
@@ -2699,7 +2647,7 @@ impl PlainMonthDay {
 
     /// Temporal month code, `"M01"` … `"M12"`.
     pub fn month_code(&self) -> String {
-        return `M${self.month:02}`;
+        return month_code_of(self.month);
     }
 
     /// `--MM-DD`, the ISO 8601 spelling.
@@ -2761,22 +2709,9 @@ fn parse_iso_time(text: &String, start: i32, end: i32) -> Result<[PlainTime, i32
     i += 2;
     let mut nanoseconds: i64 = 0;
     if i < end && text.get_byte_unchecked(i) == b'.' {
-        i += 1;
-        let fraction_start = i;
-        let mut scale: i64 = 100_000_000;
-        while i < end && is_ascii_digit(text.get_byte_unchecked(i)) {
-            if scale >= 1 {
-                nanoseconds = nanoseconds + (text.get_byte_unchecked(i) - b'0') as i64 * scale;
-                scale = scale / 10;
-            }
-            i += 1;
-        }
-        if i == fraction_start {
-            return Result::Err(DeserializeError::malformed(
-                "expected fractional digits after '.'",
-                fraction_start as i64,
-            ));
-        }
+        let [fraction, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+        nanoseconds = fraction;
+        i = after;
     }
     return Result::Ok([
         PlainTime {
@@ -2812,9 +2747,7 @@ fn floor_div_i128(a: i128, m: i128) -> i128 {
 }
 
 // The plain family goes over the wire as its ISO 8601 form, the way Temporal's
-// `toJSON` does, rather than as the field bag the structural derive would
-// produce. `FromStr` reads the same spelling, and is where each type's parse
-// actually lives.
+// `toJSON` does, not as the field bag the structural derive would produce.
 
 impl Serialize for PlainDate {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {

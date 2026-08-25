@@ -571,9 +571,7 @@ impl Receiver {
     }
 
     /// Whether [`Self::head_key`] carries the receiver's module, so the mangled
-    /// namespace alone separates it from another module's same-named type. A
-    /// builtin, a tuple, a binder, a `&T`, and a projection are all spelled the
-    /// same wherever they are written, so for them the two namespaces agree.
+    /// namespace alone separates it from another module's same-named type.
     #[must_use]
     pub fn is_module_qualified(&self) -> bool {
         matches!(

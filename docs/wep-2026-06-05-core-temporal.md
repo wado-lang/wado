@@ -107,8 +107,7 @@ truncating.
 
 ### ISO 8601 only
 
-Non-ISO calendars are out of scope and will be reconsidered only if a concrete
-need arises. Because the calendar is fixed, no type stores a calendar field —
+Non-ISO calendars are not supported. Because the calendar is fixed, no type stores a calendar field —
 one fewer string per value and no calendar-resolution machinery. `era` and
 `era_year` are undefined for ISO 8601 and are not offered; `month_code` is,
 since it is part of the Temporal field vocabulary.
@@ -140,7 +139,7 @@ weighs only the instant, while `equals` weighs the zone as well. Wado answers
 both questions with one relation and points at `to_instant()` for "the same
 moment, wherever it is read".
 
-### `Duration` is plain data, not a validated construction
+### `Duration` is plain data, and its arithmetic rebalances
 
 Temporal's constructor rejects a duration whose components disagree in sign. A
 Wado struct literal has no constructor to reject anything, so a mixed-sign
@@ -176,14 +175,14 @@ position is the one that can resolve it:
 | `PlainYearMonth` | years and months           | years or months                   |
 
 Anything outside its row traps with a message naming the type that can do it.
-That is stricter than Temporal in two places, deliberately: Temporal folds a
-`PlainDate.add({hours: 25})` into a day and drops the remainder, and lets a
-`PlainTime.add({days: 1})` wrap to the same clock reading. Both are silent — a
-caller who wrote either almost certainly wanted the date to move, which only
-`PlainDateTime` can do — so here they trap and say so.
 Rounding follows the same rule: an `Instant` counts multiples from the epoch, a
 `ZonedDateTime` and a `PlainTime` from local midnight, so a day-aligned unit
 lands on the civil boundary rather than on an epoch multiple.
+
+Two of those traps are stricter than Temporal, deliberately: Temporal folds a
+`PlainDate.add({hours: 25})` into a day and drops the remainder, and lets a
+`PlainTime.add({days: 1})` wrap to the same clock reading. Both are silent about
+a caller who meant the date to move, which only `PlainDateTime` can do.
 
 ### `now()` rides the effect row
 
@@ -199,9 +198,7 @@ Every type parses and renders its ISO 8601 spelling, and that spelling is the
 serde wire form — `Instant` and `ZonedDateTime` under CBOR's date/time tag 0
 (RFC 8949 §3.4.1) with a bare string in JSON, the rest as plain strings.
 Deserialization of the two instant-bearing types also accepts an epoch-seconds
-number (tag 1 / JSON number), read as UTC. `FromStr` reads the same spellings
-and is where each plain type's parser lives, so nothing copies its input to
-reach a substring.
+number (tag 1 / JSON number), read as UTC. `FromStr` reads the same spellings.
 
 `Instant` additionally carries RFC 7231 IMF-fixdate, the form an HTTP `Date`,
 `Expires`, or `Last-Modified` header takes. It renders that form and reads all

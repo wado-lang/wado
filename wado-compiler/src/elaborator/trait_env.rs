@@ -632,11 +632,11 @@ impl ImplModuleIndex {
         match receiver {
             ImplReceiver::Of(r) => {
                 let mangled = self.by_mangled.get(&key(r.head_key().into_string()));
-                // `record` writes both namespaces together, so a module-qualified
-                // receiver that misses the mangled key has no entry of its own.
                 // The declaration namespace is keyed by the bare written name,
-                // which another module's same-named type also answers to — so
-                // falling through to it there hands back a stranger's impl.
+                // which another module's same-named type answers to as well, and
+                // `record` writes both namespaces together — so a
+                // module-qualified miss is a real absence, not one to fall
+                // through on.
                 if mangled.is_some() || r.is_module_qualified() {
                     return mangled;
                 }
