@@ -2792,7 +2792,8 @@ impl FunctionTranslator<'_, '_> {
 /// its N fields instead of building a heap struct — only for a
 /// `ReturnAbi::MultiValue` function. Recurses into a `Seq` tail, both `If`
 /// branch tails (clearing the `If`'s `result`, since branches now transfer
-/// control themselves), and each `StructNew; Br depth` exit of a `match` block.
+/// control themselves), and every exit of a `match` block down to the leaves
+/// that yield the results.
 ///
 /// Reports whether every path now transfers control itself. A `false` leaves a
 /// tail still yielding the aggregate, which under this ABI is a signature the
