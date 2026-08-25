@@ -9,9 +9,9 @@
 //! comparison stays honest about what a context-free grammar can know: every
 //! class but `Ident` is decidable without name resolution and is gated, while
 //! `Ident` covers the dozen resolved kinds Gale cannot tell apart and is only
-//! reported. Files Gale reports diagnostics for are skipped and counted —
-//! their partial CST colours arbitrarily, and `check-grammar` owns that
-//! failure.
+//! reported. Files Gale reports diagnostics for are skipped and counted:
+//! `check-grammar` owns that failure. The two recoveries agree closely — what
+//! comparing them anyway adds is a divergence on the broken token itself.
 
 use std::fmt::Write as _;
 use std::fs;
