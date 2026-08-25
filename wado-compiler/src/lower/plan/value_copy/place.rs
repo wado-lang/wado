@@ -39,6 +39,15 @@ impl Selector {
 pub struct Place {
     pub root: u32,
     pub selectors: Vec<Selector>,
+    /// The chain read a `&` / `&mut` field on its way down, so the storage it
+    /// ends at is only borrowed by the root. Carried by the walk rather than
+    /// re-derived from an expression's syntax, because [`Resolver::names`]
+    /// resolves a place through a local binding and through a callee's own
+    /// [`ReturnPath`], and a second walk follows neither.
+    ///
+    /// It takes part in equality: two reaches of one storage that differ here
+    /// compare unequal, which only ever refuses a share.
+    pub through_borrow: bool,
 }
 
 impl Place {
@@ -47,6 +56,7 @@ impl Place {
         Self {
             root,
             selectors: Vec::new(),
+            through_borrow: false,
         }
     }
 }
@@ -130,9 +140,7 @@ pub fn compute_return_paths(
         let resolver = Resolver::new(&func, type_table, &paths, returns_owned);
         let mut returned = ReturnedPlace {
             resolver: &resolver,
-            type_table,
             names: None,
-            through_borrow: false,
         };
         returned.visit_block(body);
         let Some(Names::Place(place)) = returned.names else {
@@ -146,7 +154,7 @@ pub fn compute_return_paths(
             func.name.clone(),
             ReturnPath {
                 selectors: place.selectors,
-                through_borrow: returned.through_borrow,
+                through_borrow: place.through_borrow,
             },
         );
         true
@@ -157,9 +165,7 @@ pub fn compute_return_paths(
 /// The single place a body returns, or `None` where it returns more than one.
 struct ReturnedPlace<'r, 'a> {
     resolver: &'r Resolver<'a>,
-    type_table: &'a TypeTable,
     names: Option<Names>,
-    through_borrow: bool,
 }
 
 impl TirRefVisitor for ReturnedPlace<'_, '_> {
@@ -170,7 +176,6 @@ impl TirRefVisitor for ReturnedPlace<'_, '_> {
             // none and abstains.
             let value = super::analyze::returned_value(value, true);
             if !super::analyze::carries_no_storage(value) {
-                self.through_borrow |= reads_reference_field(value, self.type_table);
                 let names = self.resolver.names(value);
                 self.names = match self.names.take() {
                     None => Some(names),
@@ -180,27 +185,6 @@ impl TirRefVisitor for ReturnedPlace<'_, '_> {
             }
         }
         self.walk_stmt(stmt);
-    }
-}
-
-/// Whether a projection chain reads a `&` / `&mut` field on its way down, so
-/// what it ends at is storage the chain's root only borrows.
-fn reads_reference_field(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    match &expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. } => {
-            matches!(
-                type_table.get(expr.type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            ) || reads_reference_field(inner, type_table)
-        }
-        TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. }
-        | TirExprKind::Unary { expr: inner, .. } => reads_reference_field(inner, type_table),
-        TirExprKind::Call { args, .. } => args
-            .first()
-            .is_some_and(|a| reads_reference_field(&a.expr, type_table)),
-        _ => false,
     }
 }
 
@@ -273,9 +257,11 @@ impl<'a> Resolver<'a> {
                 .get(*index)
                 .cloned()
                 .unwrap_or(Names::Place(Place::local(*index))),
-            // A reference-typed field holds a borrow of storage the receiver
-            // does not own, so reading it leaves the place this walk is
-            // following — an iterator's `repr` borrows the list it iterates.
+            // A reference field borrows storage its holder does not own — an
+            // iterator's `repr` borrows the list it walks. A fresh aggregate
+            // therefore does not make what it points at fresh; rooted at a place
+            // the walk already names, the projection stands but is marked as
+            // reached through that borrow.
             TirExprKind::FieldAccess {
                 expr: inner,
                 field_index,
@@ -288,19 +274,19 @@ impl<'a> Resolver<'a> {
                         index: *field_index,
                     },
                 );
-                // A reference field borrows storage its holder does not own, so
-                // a fresh aggregate does not make what it points at fresh — an
-                // iterator's `repr` borrows the list it walks. Rooted at a place
-                // the walk already names, the projection stands.
-                if matches!(names, Names::Value)
-                    && matches!(
-                        self.type_table.get(expr.type_id),
-                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                    )
-                {
-                    return Names::Unknown;
+                if !matches!(
+                    self.type_table.get(expr.type_id),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                ) {
+                    return names;
                 }
-                names
+                match names {
+                    Names::Place(mut place) => {
+                        place.through_borrow = true;
+                        Names::Place(place)
+                    }
+                    Names::Value | Names::Unknown => Names::Unknown,
+                }
             }
             TirExprKind::VariantPayload {
                 expr: inner,
@@ -339,6 +325,7 @@ impl<'a> Resolver<'a> {
                     Some(path) => match args.first().map(|r| self.names(&r.expr)) {
                         Some(Names::Place(mut place)) => {
                             place.selectors.extend(path.selectors.iter().copied());
+                            place.through_borrow |= path.through_borrow;
                             Names::Place(place)
                         }
                         // A fresh receiver does not own what it borrows.

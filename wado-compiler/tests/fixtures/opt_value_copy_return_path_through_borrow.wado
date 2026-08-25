@@ -1,0 +1,77 @@
+// A return path that leaves the receiver through a `&` field names storage the
+// receiver does not own, so a caller holding a *fresh* receiver must not read
+// the result as storage of its own. The walk resolves such a path through a
+// callee's own return path and through a local rebind, so the "through a
+// borrow" verdict has to follow it the same way — derived from the returned
+// expression's syntax instead, both shapes below report "no borrow crossed",
+// the writes `bump` performs become invisible, and `r` is shared across them.
+struct View {
+    repr: &mut List<i32>,
+}
+
+impl View {
+    fn inner(&self) -> &mut List<i32> {
+        return self.repr;
+    }
+
+    /// Accessor over accessor: the path is `self.repr` one call further out.
+    fn inner_via_call(&self) -> &mut List<i32> {
+        return self.inner();
+    }
+
+    /// The same place, reached through a local.
+    fn inner_via_local(&self) -> &mut List<i32> {
+        let r = self.repr;
+        return r;
+    }
+}
+
+struct Holder {
+    rows: List<i32>,
+    tick: i32,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn bump_via_call(&mut self) with stores[self] {
+        let v = View { repr: &mut self.rows };
+        v.inner_via_call().push(9);
+    }
+
+    #[inline("never")]
+    fn bump_via_local(&mut self) with stores[self] {
+        let v = View { repr: &mut self.rows };
+        v.inner_via_local().push(9);
+    }
+}
+
+#[inline("never")]
+fn len_across_call(h: &mut Holder) -> i32 with stores[h] {
+    let r = h.rows;
+    h.bump_via_call();
+    return r.len();
+}
+
+#[inline("never")]
+fn len_across_local(h: &mut Holder) -> i32 with stores[h] {
+    let r = h.rows;
+    h.bump_via_local();
+    return r.len();
+}
+
+test "a copy survives a write reached through a callee's return path" {
+    let mut h = Holder { rows: [1, 2, 3], tick: 0 };
+    assert len_across_call(&mut h) == 3;
+    assert h.rows.len() == 4;
+}
+
+test "a copy survives a write reached through a rebound local" {
+    let mut h = Holder { rows: [1, 2, 3], tick: 0 };
+    assert len_across_local(&mut h) == 3;
+    assert h.rows.len() == 4;
+}
+
+__DATA__
+{
+    "test": {}
+}

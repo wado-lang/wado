@@ -526,10 +526,7 @@ impl ShareCollector<'_> {
 
     fn mark_local_mutated(&mut self, index: u32) {
         self.mutated.push(Mutation {
-            path: AccessPath {
-                root: index,
-                selectors: Vec::new(),
-            },
+            path: AccessPath::local(index),
             rebinds_place: false,
             pos: self.pos,
         });

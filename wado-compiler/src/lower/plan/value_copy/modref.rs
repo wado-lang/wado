@@ -276,5 +276,6 @@ fn handed_out(names: &Names, handed: TypeId, type_table: &TypeTable) -> Names {
             owner: type_table.peel_refs(handed),
             index: u32::MAX,
         }],
+        through_borrow: place.through_borrow,
     })
 }
