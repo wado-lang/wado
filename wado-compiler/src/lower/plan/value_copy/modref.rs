@@ -186,6 +186,17 @@ impl Walker<'_> {
         }
     }
 
+    /// Record a writable handle escaping into an aggregate as a write to what
+    /// it borrows. Nothing else in this walk sees the write, because the
+    /// aggregate carries the handle past the expression that took it.
+    fn record_handle_escape(&mut self, value: &TirExpr) {
+        if !could_write_through(value.type_id, self.type_table) {
+            return;
+        }
+        let names = self.resolver.names(value);
+        self.record(&handed_out(&names, value.type_id, self.type_table));
+    }
+
     /// Record only the fields a path names, leaving what a callee does inside
     /// its own parameter to the call graph.
     fn record_fields(&mut self, names: &Names) {
@@ -251,6 +262,24 @@ impl TirRefVisitor for Walker<'_> {
                     self.record(&handed_out(&names, arg.type_id, self.type_table));
                 }
             }
+            // A handle stored into an aggregate outlives the expression that
+            // took it, and this walk cannot follow where it is written — so it
+            // counts as a write to what it borrows, as an unknown callee's
+            // argument does.
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.record_handle_escape(&field.value);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
+                for element in elements {
+                    self.record_handle_escape(element);
+                }
+            }
+            TirExprKind::VariantConstruct {
+                payload: Some(payload),
+                ..
+            } => self.record_handle_escape(payload),
             _ => {}
         }
         self.walk_expr(expr);
@@ -276,5 +305,6 @@ fn handed_out(names: &Names, handed: TypeId, type_table: &TypeTable) -> Names {
             owner: type_table.peel_refs(handed),
             index: u32::MAX,
         }],
+        through_borrow: place.through_borrow,
     })
 }

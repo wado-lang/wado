@@ -6,7 +6,6 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::module_source::ModuleSource;
 use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -153,6 +152,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
         let handler_type = self.handler_underlying_type(handler);
 
+        // Trait/resource type args at this `with E => h do` site (e.g.
+        // `[u8]` for `with Stream<u8> => &mut s do`). Resolved from the
+        // effect type's AST; non-generic effects produce `vec![]`. The
+        // dispatch synthesis projects this together with the bare base
+        // name into the per-monomorphisation `InstantiationKey`.
+        let trait_type_args: Vec<TypeId> = match effect_ty {
+            ast::Type::Generic(generic) => generic
+                .args
+                .iter()
+                .map(|arg| self.resolve_type(arg))
+                .collect(),
+            _ => Vec::new(),
+        };
+
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
             name: interface_name,
@@ -192,22 +205,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     interface_name: interface_name.clone(),
                     span: binding.span,
                 });
+            } else if is_real_type
+                && !trait_type_args.is_empty()
+                && effect_decl.is_some_and(|trait_| {
+                    self.effect_impl_block(handler_type, trait_, &trait_type_args)
+                        .is_none()
+                })
+            {
+                // The bound check answers by declaration alone, so a handler
+                // implementing `Stream<u8>` satisfies it for `with Stream<i32>`.
+                // Dispatch synthesis has no plan for the instantiation the
+                // clause names, so say so here rather than reach that panic.
+                let type_name = self.tysys.type_table.borrow().type_name(handler_type);
+                let _ = self.emit(TypeError::HandlerEffectNotImplemented {
+                    type_name,
+                    interface_name: self.get_type_name(effect_ty),
+                    span: binding.span,
+                });
             }
         }
-
-        // Trait/resource type args at this `with E => h do` site (e.g.
-        // `[u8]` for `with Stream<u8> => &mut s do`). Resolved from the
-        // effect type's AST; non-generic effects produce `vec![]`. The
-        // dispatch synthesis projects this together with the bare base
-        // name into the per-monomorphisation `InstantiationKey`.
-        let trait_type_args: Vec<TypeId> = match effect_ty {
-            ast::Type::Generic(generic) => generic
-                .args
-                .iter()
-                .map(|arg| self.resolve_type(arg))
-                .collect(),
-            _ => Vec::new(),
-        };
 
         // Record this explicit binding so
         // reify_with_handler reads the single-effect entry without
@@ -234,6 +250,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 binding.id,
                 super::sem::types::HandlerBindingFacts {
                     effects: vec![super::sem::types::HandlerEffectEntry {
+                        impl_def: effect_decl.and_then(|trait_| {
+                            self.effect_impl_block(handler_type, trait_, &trait_type_args)
+                        }),
                         name,
                         module_source,
                         trait_type_args,
@@ -293,16 +312,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Enumerate by the bare head: a generic impl `impl<T> Log for Ctx<T>`
-        // is keyed under "Ctx", not the instantiated "Ctx<i32>".
-        let type_name = match &resolved {
-            ResolvedType::GenericInstance { def, .. }
-            | ResolvedType::GenericResource { def, .. } => {
-                self.tysys.type_table.borrow().def_name(*def).to_string()
-            }
-            _ => self.tysys.type_table.borrow().type_name(handler_type),
-        };
-        let effects = self.collect_effect_impls_for_type(&type_name);
+        let type_name = self.handler_impl_target_name(handler_type);
+        let effects = self.collect_effect_impls_for_type(handler_type);
 
         if effects.is_empty() {
             let _ = self
@@ -332,95 +343,146 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_handler_binding_facts(
             binding.id,
             super::sem::types::HandlerBindingFacts {
-                effects: effects
-                    .into_iter()
-                    .map(
-                        |(name, module, type_args)| super::sem::types::HandlerEffectEntry {
-                            name,
-                            module_source: module,
-                            trait_type_args: type_args,
-                        },
-                    )
-                    .collect(),
+                effects,
                 bundle_group: Some(bundle_group),
                 handler_type,
             },
         );
     }
 
-    /// The `(base_trait_name, defining_module, trait_type_args)` triple for every
-    /// in-scope `impl` whose trait resolves to an effect or resource — both are
-    /// installable, so a bundled `with h do` expands to one binding each. Dedup
-    /// by that triple keeps `Stream<u8>` and `Stream<i32>` separate. Discovery
-    /// runs the impl index first, then the module's own items, in walk order.
+    /// One entry per in-scope `impl` whose trait resolves to an effect or a
+    /// resource — both are installable, so a bundled `with h do` expands to one
+    /// binding each. Dedup by `(module, name, type args)` keeps `Stream<u8>`
+    /// and `Stream<i32>` separate.
     fn collect_effect_impls_for_type(
-        &mut self,
-        type_name: &str,
-    ) -> Vec<(String, ModuleSource, Vec<TypeId>)> {
-        let mut out: Vec<(String, ModuleSource, Vec<TypeId>)> = Vec::new();
-        let mut seen: crate::hashmap::IndexSet<(ModuleSource, String, Vec<TypeId>)> =
+        &self,
+        handler_type: TypeId,
+    ) -> Vec<super::sem::types::HandlerEffectEntry> {
+        let defs = self.tysys.resolutions.defs();
+        let mut out: Vec<super::sem::types::HandlerEffectEntry> = Vec::new();
+        // Keyed by the effect's declaration, not its spelling: `Stream<u8>` and
+        // `Stream<i32>` stay separate, two modules' same-named effects too.
+        let mut seen: crate::hashmap::IndexSet<(crate::defs::DefId, Vec<TypeId>)> =
             crate::hashmap::IndexSet::default();
 
-        // Collect the impl `trait_type` ASTs first so subsequent
-        // `resolve_type` calls (which need `&mut self`) don't fight the
-        // borrow on `trait_env.impl_headers`.
-        let mut trait_types: Vec<ast::Type> = Vec::new();
-        if let Some(entries) = self
+        let Some(entries) = self
             .tysys
             .trait_env
             .impl_index
-            .get(&self.impl_target(type_name))
-        {
-            for key in entries {
-                if let Some(trait_type) = self
-                    .tysys
-                    .trait_env
-                    .impl_headers
-                    .get(key)
-                    .and_then(|header| header.trait_type.as_ref())
-                {
-                    trait_types.push(trait_type.clone());
-                }
-            }
-        }
-
-        for trait_type in &trait_types {
-            let base_trait_name = self.get_type_name(trait_type);
-            // Accept either an effect or a resource declaration. The
-            // dispatch synthesis pass treats both uniformly.
-            //
-            // Canonicalise through the current module's import context
-            // because `trait_type` was just referenced by bare name in an
-            // `impl Foo for T` block we're walking; the decl index is
-            // keyed by `(decl_module, name)` and two modules can declare
-            // a same-named effect / resource.
-            let decl_module = self.decl_key_or_local(&base_trait_name).filter(|key| {
-                self.tysys.trait_env.effect_decl_index.contains(key)
-                    || self.tysys.trait_env.resource_decl_index.contains(key)
-            });
-            let Some(decl_module) =
-                decl_module.map(|key| self.tysys.resolutions.defs().module(key).clone())
+            .get(&self.handler_impl_target(handler_type))
+        else {
+            return out;
+        };
+        for &impl_def in entries {
+            // Everything the block says about itself it says in its own frame:
+            // `impl Stream<u8> for Ctx` names `Stream` and resolves `u8` where
+            // the block was written, which is not where it is installed.
+            let Some(trait_ref) = self
+                .tysys
+                .trait_env
+                .impl_headers
+                .get(&impl_def)
+                .and_then(|header| header.trait_ref)
             else {
                 continue;
             };
-            let type_args: Vec<TypeId> = match trait_type {
-                ast::Type::Generic(generic) => generic
-                    .args
-                    .iter()
-                    .map(|arg| self.resolve_type(arg))
-                    .collect(),
-                _ => Vec::new(),
-            };
-            if seen.insert((
-                decl_module.clone(),
-                base_trait_name.clone(),
-                type_args.clone(),
-            )) {
-                out.push((base_trait_name, decl_module, type_args));
+            // Accept either an effect or a resource declaration. The
+            // dispatch synthesis pass treats both uniformly.
+            if !(self.tysys.trait_env.effect_decl_index.contains(&trait_ref)
+                || self
+                    .tysys
+                    .trait_env
+                    .resource_decl_index
+                    .contains(&trait_ref))
+            {
+                continue;
+            }
+            let type_args = self
+                .tysys
+                .signatures
+                .impl_sig(impl_def)
+                .map(|sig| sig.trait_type_args.clone())
+                .unwrap_or_default();
+            if seen.insert((trait_ref, type_args.clone())) {
+                out.push(super::sem::types::HandlerEffectEntry {
+                    impl_def: Some(impl_def),
+                    name: crate::name::FqTraitName::declared(defs, trait_ref)
+                        .base_name()
+                        .to_string(),
+                    module_source: defs.module(trait_ref).clone(),
+                    trait_type_args: type_args,
+                });
             }
         }
 
         out
+    }
+
+    /// The `impl <effect> for <handler>` block a `with Effect => h do` clause
+    /// installs, picked by `trait_type_args` where one type implements several
+    /// instantiations of one generic effect.
+    fn effect_impl_block(
+        &self,
+        handler_type: TypeId,
+        effect_decl: crate::defs::DefId,
+        trait_type_args: &[TypeId],
+    ) -> Option<crate::defs::DefId> {
+        let keys = self
+            .tysys
+            .trait_env
+            .impl_index
+            .get(&self.handler_impl_target(handler_type))?;
+        let implements = |key: &crate::defs::DefId| {
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(key)
+                .is_some_and(|header| header.trait_ref == Some(effect_decl))
+        };
+        // A block's arguments answer for the clause's when they are the same,
+        // or where the block left a slot for monomorphization to fill —
+        // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
+        // block written for other arguments answers for nothing.
+        let fills = |key: &crate::defs::DefId| {
+            self.tysys.signatures.impl_sig(*key).is_some_and(|sig| {
+                sig.trait_type_args.len() == trait_type_args.len()
+                    && std::iter::zip(&sig.trait_type_args, trait_type_args)
+                        .all(|(slot, arg)| slot == arg || self.is_open_slot(*slot))
+            })
+        };
+        keys.iter()
+            .find(|key| implements(key) && fills(key))
+            .copied()
+    }
+
+    /// Whether `type_id` is a slot an impl block left for monomorphization,
+    /// rather than a type it committed to.
+    fn is_open_slot(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.tysys.type_table.borrow().get(type_id),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        )
+    }
+
+    /// The impl-index key for a handler type: its own declaration, not what
+    /// the installing module's scope makes of the written name — the handler
+    /// may be declared elsewhere, or shadowed by a same-named type here.
+    fn handler_impl_target(&self, handler_type: TypeId) -> super::trait_env::ImplTargetKey {
+        let name = self.handler_impl_target_name(handler_type);
+        self.impl_target_of(handler_type, &crate::name::DeclName::new(name))
+    }
+
+    /// The name an `impl <effect> for <handler>` block is indexed under — the
+    /// bare head, so `impl<T> Log for Ctx<T>` answers for a `Ctx<i32>` handler.
+    fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
+        let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
+        match &resolved {
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => {
+                self.tysys.type_table.borrow().def_name(*def).to_string()
+            }
+            _ => self.tysys.type_table.borrow().type_name(handler_type),
+        }
     }
 
     /// Strip a single leading `&` / `&mut` layer to reach the type that the

@@ -133,6 +133,10 @@ pub struct Lowering {
     eq_trait_name: crate::name::FqTraitName,
     /// Canonical stdlib name of the `String` struct.
     string_struct_name: FqTypeName,
+    /// `&String`, the type of the argument a synthesised `String^Eq::eq` takes.
+    /// Interned once here because the per-function walk holds the type table
+    /// immutably.
+    string_ref_type: TypeId,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
     /// Callees whose every return aliases the receiver.
@@ -175,15 +179,26 @@ impl Lowering {
             }
         }
 
-        let type_table = flat.type_table.borrow();
+        let mut type_table = flat.type_table.borrow_mut();
         let eq_trait_name = type_table.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq);
         let string_struct_name =
             type_table.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String);
+        let string_def = crate::tir::StructDef::Decl(
+            type_table
+                .compiler_item_def(crate::compiler_item::CompilerItem::String)
+                .expect("the prelude always defines String"),
+        );
+        let string_type = type_table.intern(crate::tir::ResolvedType::Struct {
+            def: string_def,
+            type_args: Vec::new(),
+        });
+        let string_ref_type = type_table.make_ref(string_type);
         Self {
             variant_case_map,
             struct_fields_map,
             eq_trait_name,
             string_struct_name,
+            string_ref_type,
             const_int_globals,
             returns_receiver_alias: returns_receiver_alias.clone(),
         }
@@ -203,6 +218,7 @@ impl Lowering {
             locals,
             self.eq_trait_name.clone(),
             self.string_struct_name.clone(),
+            self.string_ref_type,
             &self.variant_case_map,
             &self.struct_fields_map,
             &self.const_int_globals,
@@ -231,6 +247,8 @@ struct PatternLowerer<'a> {
     /// the same registry so the receiver-type slot of the synthesised
     /// `String^Eq::eq` `LocalMethodName` tracks renames too.
     string_struct_name: FqTypeName,
+    /// `&String`; see `Lowering::string_ref_type`.
+    string_ref_type: TypeId,
     /// Map from the `variant` declaration to a list of (`case_name`,
     /// `case_index`) pairs; the scrutinee's type names the declaration.
     variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
@@ -306,6 +324,7 @@ impl<'a> PatternLowerer<'a> {
         locals: Vec<TirLocal>,
         eq_trait_name: crate::name::FqTraitName,
         string_struct_name: FqTypeName,
+        string_ref_type: TypeId,
         variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
@@ -317,6 +336,7 @@ impl<'a> PatternLowerer<'a> {
             temp_counter: 0,
             eq_trait_name,
             string_struct_name,
+            string_ref_type,
             variant_case_map,
             struct_fields_map,
             const_int_globals,
@@ -1462,7 +1482,7 @@ impl<'a> PatternLowerer<'a> {
 
         // For String, use a method call to String^Eq::eq
         if matches!(lit, TirLiteralPattern::String(_)) {
-            return self.string_eq_call(local_expr, literal_expr, local_type, span);
+            return self.string_eq_call(local_expr, literal_expr, span);
         }
 
         // For primitives, use binary ==
@@ -1478,17 +1498,13 @@ impl<'a> PatternLowerer<'a> {
     }
 
     /// Build a `String^Eq::eq(&self, &other)` method call expression.
-    fn string_eq_call(
-        &self,
-        receiver: TirExpr,
-        other: TirExpr,
-        string_type: TypeId,
-        span: Span,
-    ) -> TirExpr {
-        // Eq::eq expects (&self, &Self) — both receiver and argument are &String.
-        // The WIR translate phase handles ref wrapping for method calls,
-        // so we pass the values directly and let translate handle self-kind adjustment.
-        // However, the arg explicitly needs &String since that's the method signature.
+    ///
+    /// The argument carries the callee's own `&String`: typed as `String` the
+    /// fold reads it as a value the literal must be defended from, and builds
+    /// the backing array a second time at every string-literal pattern.
+    fn string_eq_call(&self, receiver: TirExpr, other: TirExpr, span: Span) -> TirExpr {
+        // `translate` adjusts the receiver for the method's self-kind; only the
+        // argument is spelled out here.
         let method_info = LocalMethodName::new(
             self.string_struct_name.clone(),
             Some(self.eq_trait_name.clone()),
@@ -1511,7 +1527,7 @@ impl<'a> PatternLowerer<'a> {
                             op: TirUnaryOp::Ref,
                             expr: Box::new(other),
                         },
-                        string_type, // &String, but type_id here is approximate
+                        self.string_ref_type,
                         span,
                     ),
                     false,

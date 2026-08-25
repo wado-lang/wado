@@ -41,6 +41,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
+- Edit files with the editing tools, one call per change site. A `sed -i` or a `python3` heredoc that rewrites a file keeps matching where it was not aimed — a `CLAUDE.md` symlink replaced by a regular file, a migration table rewritten into nonsense, `.rs` hit when only `.wado` was meant — and each miss costs a diagnosis-and-revert cycle. Exact-match asserts do not save it; the rule is about the tool. For a rename too wide to do that way, agree on the approach first.
 - Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo "exit=$?" >> run.log`.
 - Always redirect output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards everything you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
 - Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.

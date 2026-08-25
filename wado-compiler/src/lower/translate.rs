@@ -329,6 +329,10 @@ struct FunctionTranslator<'a, 'p> {
     /// aggregate at a struct/tuple literal (place-level move): the copy is elided
     /// exactly as for a whole-local final-use move, but for a projection.
     move_eligible_place_spans: IndexSet<crate::token::Span>,
+    /// Whether this function hands a returned variant's payload out uncopied,
+    /// so `return Some(place)` delivers the borrow exactly as `return place`
+    /// does ([`value_copy::hands_out_payload`]).
+    hands_out_payload: bool,
     /// Locals whose binding copy is elided by sharing the source storage
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
@@ -437,6 +441,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         } else {
             value_copy::last_use::AliasComponents::empty()
         };
+        // Keyed on the *return* type rather than `needs_copy_analysis`: the
+        // payload is read out of the receiver, so it need not be any local's
+        // type.
+        let hands_out_payload = value_copy::hands_out_payload(func, &base.value_copy.return_paths)
+            && value_copy::needs_value_copy(func.return_type, &base.type_table.borrow());
         Self {
             base,
             specialized,
@@ -449,6 +458,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             func_moved_spans,
             move_eligible_locals,
             move_eligible_place_spans,
+            hands_out_payload,
             share_eligible_locals,
             ref_targets,
             moved_roots,
@@ -473,6 +483,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             func_moved_spans: None,
             move_eligible_locals: IndexSet::default(),
             move_eligible_place_spans: IndexSet::default(),
+            hands_out_payload: false,
             share_eligible_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
@@ -1136,7 +1147,7 @@ impl FunctionTranslator<'_, '_> {
             }
             TirStmtKind::Expr(expr) => StmtKind::Expr(self.convert_operand(expr)),
             TirStmtKind::Return { value } => StmtKind::Return {
-                value: value.as_ref().map(|v| self.convert_operand(v)),
+                value: value.as_ref().map(|v| self.convert_returned_operand(v)),
             },
             TirStmtKind::TaskReturn { .. } => unreachable!(
                 "TirStmtKind::TaskReturn should be eliminated by synthesis::cm_binding before lower::translate runs"
@@ -2096,6 +2107,33 @@ impl FunctionTranslator<'_, '_> {
             value: self.convert_literal_element(&field.value),
             field_index: field.field_index,
         }
+    }
+
+    /// Convert a `return` value. A variant construction on its spine hands the
+    /// payload out uncopied where this function does that at all
+    /// ([`value_copy::analyze::returned_value`]) — recognized by where the
+    /// conversion arrived, since a span can be shared with a synthesized node
+    /// that is not returned.
+    fn convert_returned_operand(&self, value: &TirExpr) -> Operand {
+        let TirExprKind::VariantConstruct {
+            variant_type,
+            case_index,
+            case_name,
+            payload: Some(payload),
+        } = &value.kind
+        else {
+            return self.convert_operand(value);
+        };
+        if !self.hands_out_payload {
+            return self.convert_operand(value);
+        }
+        let kind = ExprKind::VariantConstruct {
+            variant_type: *variant_type,
+            case_index: *case_index,
+            case_name: case_name.clone(),
+            payload: Some(self.convert_returned_operand(payload)),
+        };
+        self.alloc_expr(kind, value.type_id, value.span).into()
     }
 
     /// Convert a value stored into an aggregate literal (a struct field or tuple

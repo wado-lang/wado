@@ -526,10 +526,7 @@ impl ShareCollector<'_> {
 
     fn mark_local_mutated(&mut self, index: u32) {
         self.mutated.push(Mutation {
-            path: AccessPath {
-                root: index,
-                selectors: Vec::new(),
-            },
+            path: AccessPath::local(index),
             rebinds_place: false,
             pos: self.pos,
         });
@@ -696,7 +693,9 @@ impl ShareCollector<'_> {
                 }
             }
             TirExprKind::Match { expr: scrut, arms } => {
-                self.walk_value(scrut);
+                // A `match` projects its scrutinee rather than taking it: the
+                // arm bindings are the reads, and each decides its own copy.
+                self.walk_place_base(scrut);
                 for arm in arms {
                     if let Some(g) = &arm.guard {
                         self.walk_value(g);

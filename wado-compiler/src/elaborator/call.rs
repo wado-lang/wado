@@ -524,6 +524,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_site,
             callee_kind.callee_site(),
         );
+        // The declaration's own frame, before instantiation replaces its slots
+        // with inference variables. Inferred type arguments substitute into
+        // these, not into the variables.
+        let declared_param_types = param_types.clone();
 
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
@@ -1352,6 +1356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.sem.types.static_method_dispatch.insert(
                         key,
                         super::sem::types::StaticMethodDispatch {
+                            method_def: method_ref.method_id,
                             function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
@@ -1552,7 +1557,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let check_param_types = if type_args.is_empty() {
             param_types
         } else {
-            self.lookup_function_param_types_with_type_args(&call.callee, &type_args)
+            declared_param_types
+                .iter()
+                .map(|&param| self.substitute_type_params(param, &type_args))
+                .collect()
         };
         if !check_param_types.is_empty() && args.len() < check_param_types.len() {
             self.pad_args_with_defaults(
@@ -1617,6 +1625,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
+                // A free function, whose spelled callee already records the
+                // edge; this fact exists for reify's `FunctionRef` shape.
+                method_def: None,
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: type_args.clone(),
@@ -1778,8 +1789,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Both halves come from one lookup because the call site needs both: a
     /// parameter type is usable as an argument's expected type only once its
     /// slots are instantiated, and a rigid slot is opaque — a literal checked
-    /// against one can only be rejected. The qualified spellings report no
-    /// slots; they infer through their own paths.
+    /// against one can only be rejected. An effect operation reports no slots;
+    /// it infers through its own path.
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
@@ -1803,11 +1814,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return (params, slots);
             }
 
+<<<<<<< HEAD
             // Builtin functions: look up param types from core:builtin module.
             // A generic one reports its slots like any other callee — without
             // them `black_box<T>(3)` checks the literal against a rigid `T`,
             // which leaves it the default `i32` while the return type takes
             // whatever the context says.
+||||||| 7ea29eef4
+            // Builtin functions: look up param types from core:builtin module
+=======
+            // Builtin functions resolve through the `core:builtin` module,
+            // slots and all: a generic builtin takes its type parameter from
+            // the expected type, and a literal argument is re-coerced to it.
+>>>>>>> origin/main
             if prefix == "builtin"
                 && let Some(def) = self.decl_in_module(&ModuleSource::builtin(), suffix)
                 && let Some(sig) = self.tysys.signatures.function_sig(def)
@@ -2762,6 +2781,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, sig)| sig)
     }
 
+<<<<<<< HEAD
     /// Look up function parameter types with type args substituted.
     /// For generic functions like `fn identity<T>(x: T)` called as `identity::<i32>(...)`,
     /// this temporarily registers `T` as a `TypeParam`, resolves param types, then
@@ -2800,6 +2820,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
+||||||| 7ea29eef4
+    /// Look up function parameter types with type args substituted.
+    /// For generic functions like `fn identity<T>(x: T)` called as `identity::<i32>(...)`,
+    /// this temporarily registers `T` as a `TypeParam`, resolves param types, then
+    /// substitutes `T` → `i32` to get `[i32]`.
+    fn lookup_function_param_types_with_type_args(
+        &mut self,
+        callee: &Expr,
+        type_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        let Expr::Ident(ident) = callee else {
+            return Vec::new();
+        };
+
+        let Some(sig) = self.free_function_sig_at(ident.id) else {
+            return Vec::new();
+        };
+        let param_types: Vec<TypeId> = sig.decl.param_types.clone();
+
+        // Substitute type params with explicit type args
+        param_types
+            .iter()
+            .map(|&pt| self.substitute_type_params(pt, type_args))
+            .collect()
+    }
+
+=======
+>>>>>>> origin/main
     /// `Type::method()` reaching a value blanket's static, which is indexed
     /// under the blanket's receiver param and so misses `type_name`'s own
     /// bucket. The variant-case branch owns the `Variant::Name` shape, so it
@@ -3075,6 +3123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.sem.types.static_method_dispatch.insert(
                 key,
                 super::sem::types::StaticMethodDispatch {
+                    method_def: method_info_result.method_def,
                     function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],

@@ -1,0 +1,16 @@
+// The effect this module's `impl` header names is resolved here, in the
+// module that wrote the block — not in whichever module installs the handler.
+pub interface Remote {
+    fn emit() -> i32;
+}
+
+pub struct Ctx {
+    pub seen: i32,
+}
+
+impl Remote for Ctx {
+    fn emit(&mut self) -> i32 {
+        self.seen += 1;
+        resume self.seen
+    }
+}
