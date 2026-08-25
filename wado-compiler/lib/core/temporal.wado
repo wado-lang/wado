@@ -84,8 +84,11 @@ impl Ord for Instant;
 /// demand by accessors rather than stored state.
 ///
 /// `Ord` is auto-derived and orders by `instant` first, then `time_zone`
-/// lexically. That is _not_ a meaningful chronological order across different
-/// zones beyond the instant; ordering distinct zones is the caller's concern.
+/// lexically, so it stays consistent with the derived `Eq`. Temporal splits the
+/// two questions — `compare` weighs only the instant, `equals` the zone as well
+/// — so for "the same moment, wherever it is read" compare `to_instant()`
+/// rather than the values. `new` canonicalizes the three spellings of UTC, so
+/// `"UTC"`, `"z"`, and `"+00:00"` are one zone rather than three.
 pub struct ZonedDateTime {
     /// The exact instant.
     pub instant: Instant,
@@ -240,19 +243,18 @@ fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
     f.pad(render_iso8601(zdt.instant.seconds, zdt.instant.nanoseconds, offset, digits, suffix));
 }
 
-/// Parse a fixed UTC offset zone string into a signed second count. Accepts
-/// `"Z"`/`"z"`, `"UTC"`, and `±HH:MM`. Any other value (notably an IANA zone
-/// name) traps with a clear message.
-fn parse_fixed_offset(zone: &String) -> i64 {
+/// A fixed UTC offset zone string as a signed second count, or `None` when the
+/// zone is not one: `"Z"`/`"z"`, `"UTC"`, and ±HH:MM are the forms understood.
+fn try_fixed_offset(zone: &String) -> Option<i64> {
     let n = zone.len();
     if n == 1 && (zone.get_byte_unchecked(0) == b'Z' || zone.get_byte_unchecked(0) == b'z') {
-        return 0;
+        return Option::Some(0);
     }
     if n == 3
         && zone.get_byte_unchecked(0) == b'U'
         && zone.get_byte_unchecked(1) == b'T'
         && zone.get_byte_unchecked(2) == b'C' {
-        return 0;
+        return Option::Some(0);
     }
     let well_formed = n == 6
         && (zone.get_byte_unchecked(0) == b'+' || zone.get_byte_unchecked(0) == b'-')
@@ -262,17 +264,26 @@ fn parse_fixed_offset(zone: &String) -> i64 {
         && is_ascii_digit(zone.get_byte_unchecked(4))
         && is_ascii_digit(zone.get_byte_unchecked(5));
     if !well_formed {
-        panic(
-            `core:temporal: cannot Display a ZonedDateTime whose time zone "${zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
-        );
+        return Option::None;
     }
     let hours = (zone.get_byte_unchecked(1) - b'0') as i64 * 10 + (zone.get_byte_unchecked(2) - b'0') as i64;
     let minutes = (zone.get_byte_unchecked(4) - b'0') as i64 * 10 + (zone.get_byte_unchecked(5) - b'0') as i64;
     let magnitude = hours * 3600 + minutes * 60;
     if zone.get_byte_unchecked(0) == b'-' {
-        return -magnitude;
+        return Option::Some(-magnitude);
     }
-    return magnitude;
+    return Option::Some(magnitude);
+}
+
+/// The fixed UTC offset of `zone` in seconds. Any other value (notably an IANA
+/// zone name) traps with a clear message.
+fn parse_fixed_offset(zone: &String) -> i64 {
+    if let Some(offset) = try_fixed_offset(zone) {
+        return offset;
+    }
+    panic(
+        `core:temporal: time zone "${zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
+    );
 }
 
 fn is_ascii_digit(byte: u8) -> bool {
@@ -325,10 +336,10 @@ impl Instant {
     }
 
     /// Construct an instant from nanoseconds since the Unix epoch. The inverse
-    /// of `epoch_nanoseconds`, and like it limited to the i64 range
-    /// (≈ ±292 years).
-    pub fn from_epoch_nanoseconds(nanoseconds: i64) -> Instant {
-        return Instant::new(0, nanoseconds);
+    /// of `epoch_nanoseconds`, and like it spanning the whole `i64`-second
+    /// range.
+    pub fn from_epoch_nanoseconds(nanoseconds: i128) -> Instant {
+        return Instant::new((nanoseconds / 1_000_000_000) as i64, (nanoseconds % 1_000_000_000) as i64);
     }
 
     /// Construct an instant from fractional seconds since the Unix epoch (CBOR
@@ -341,6 +352,21 @@ impl Instant {
         return Instant::new(whole as i64, nanos as i64);
     }
 
+    /// The Unix epoch itself, 1970-01-01T00:00:00Z.
+    pub const EPOCH: Instant = Instant { seconds: 0, nanoseconds: 0 };
+
+    /// Construct an instant from microseconds since the Unix epoch. The inverse
+    /// of `epoch_microseconds`.
+    pub fn from_epoch_microseconds(microseconds: i64) -> Instant {
+        return Instant::new(microseconds / 1_000_000, microseconds % 1_000_000 * 1000);
+    }
+
+    /// Microseconds since the Unix epoch, flooring toward the epoch's past so a
+    /// pre-epoch instant keeps moving forward with `nanoseconds`.
+    pub fn epoch_microseconds(&self) -> i64 {
+        return self.seconds * 1_000_000 + (self.nanoseconds / 1000) as i64;
+    }
+
     /// Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
     pub fn epoch_milliseconds(&self) -> i64 {
         return self.seconds * 1000 + self.nanoseconds as i64 / 1_000_000;
@@ -348,12 +374,10 @@ impl Instant {
 
     /// Nanoseconds since the Unix epoch (`Temporal.Instant.epochNanoseconds`).
     ///
-    /// Temporal uses a BigInt; this returns an `i64` and so is only valid within
-    /// ≈ ±292 years of the epoch (1678..=2262) — outside that range the
-    /// multiplication traps. Use the `seconds`/`nanoseconds` fields directly for
-    /// the full range.
-    pub fn epoch_nanoseconds(&self) -> i64 {
-        return self.seconds * 1_000_000_000 + self.nanoseconds as i64;
+    /// Temporal uses a BigInt; `i128` covers the whole `i64`-second range with
+    /// nanosecond resolution, so this never truncates.
+    pub fn epoch_nanoseconds(&self) -> i128 {
+        return self.seconds as i128 * 1_000_000_000 + self.nanoseconds as i128;
     }
 
     /// RFC 3339 / ISO 8601 string in UTC (`…Z`), using the least sub-second
@@ -362,6 +386,34 @@ impl Instant {
     pub fn to_rfc3339(&self) -> String {
         let digits = fraction_digits_for(self.nanoseconds);
         return render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z");
+    }
+
+    /// Parse an RFC 3339 / ISO 8601 timestamp into the exact instant it names,
+    /// discarding the offset. Same grammar as `ZonedDateTime::parse_rfc3339`.
+    pub fn parse_rfc3339(text: String) -> Result<Instant, DeserializeError> {
+        return Result::Ok(parse_iso_zoned(&text, 0, text.len())?.instant);
+    }
+
+    /// Interpret this instant in `time_zone`, the zoned view of the same moment
+    /// (`Temporal.Instant.toZonedDateTimeISO`).
+    pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime {
+        return ZonedDateTime::new(*self, time_zone);
+    }
+}
+
+impl FromStr for Instant {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Instant, DeserializeError> {
+        return Result::Ok(parse_iso_zoned(s, start, end)?.instant);
+    }
+}
+
+impl FromStr for ZonedDateTime {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<ZonedDateTime, DeserializeError> {
+        return parse_iso_zoned(s, start, end);
     }
 }
 
@@ -375,92 +427,13 @@ impl ZonedDateTime {
     /// four digits, or a sign followed by six (ISO 8601 expanded years), the
     /// date/time separator may be `T`, `t`, or a space, the fraction is
     /// truncated to nanosecond precision, a leap second (`:60`) is constrained
-    /// to `:59`, and the offset is mandatory. `"Z"` and
-    /// `"+00:00"` both normalize to a `"Z"` zone. Field values are range-checked
-    /// against the ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"`
-    /// are rejected); malformed or out-of-range input returns a
-    /// `DeserializeError` carrying the byte offset of the problem.
+    /// to `:59`, and the offset is mandatory. `"Z"` and `"+00:00"` both
+    /// normalize to a `"Z"` zone. Field values are range-checked against the
+    /// ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"` are
+    /// rejected); malformed or out-of-range input returns a `DeserializeError`
+    /// carrying the byte offset of the problem.
     pub fn parse_rfc3339(text: String) -> Result<ZonedDateTime, DeserializeError> {
-        let len = text.len();
-        let mut i: i32 = 0;
-
-        let [year, year_end] = parse_iso_year(&text, i)?;
-        i = year_end;
-
-        i = expect_byte(&text, i, b'-')?;
-        let month = read_digits(&text, i, 2)?;
-        if month < 1 || month > 12 {
-            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
-        }
-        i += 2;
-        i = expect_byte(&text, i, b'-')?;
-        let day = read_digits(&text, i, 2)?;
-        if day < 1 || day > days_in_month_value(year, month) {
-            return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
-        }
-        i += 2;
-
-        // Date/time separator: 'T', 't', or a space.
-        if i >= len {
-            return Result::Err(DeserializeError::eof(i as i64));
-        }
-        let sep = text.get_byte_unchecked(i);
-        if sep != b'T' && sep != b't' && sep != b' ' {
-            return Result::Err(DeserializeError::malformed("expected a date/time separator", i as i64));
-        }
-        i += 1;
-
-        let hour = read_digits(&text, i, 2)?;
-        if hour > 23 {
-            return Result::Err(DeserializeError::invalid_value("hour out of range", i as i64));
-        }
-        i += 2;
-        i = expect_byte(&text, i, b':')?;
-        let minute = read_digits(&text, i, 2)?;
-        if minute > 59 {
-            return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
-        }
-        i += 2;
-        i = expect_byte(&text, i, b':')?;
-        let parsed_second = read_digits(&text, i, 2)?;
-        if parsed_second > 60 {
-            return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
-        }
-        // RFC 3339 admits a leap second; the ISO calendar has no 61st second to
-        // hold it, so Temporal constrains :60 to :59 rather than rejecting it.
-        let second = if parsed_second == 60 { 59 } else { parsed_second };
-        i += 2;
-
-        // Optional fractional seconds, truncated to nanosecond precision.
-        let mut nanoseconds: i64 = 0;
-        if i < len && text.get_byte_unchecked(i) == b'.' {
-            i += 1;
-            let frac_start = i;
-            let mut scale: i64 = 100_000_000;
-            while i < len && is_ascii_digit(text.get_byte_unchecked(i)) {
-                if scale >= 1 {
-                    nanoseconds = nanoseconds + (text.get_byte_unchecked(i) - b'0') as i64 * scale;
-                    scale = scale / 10;
-                }
-                i += 1;
-            }
-            if i == frac_start {
-                return Result::Err(DeserializeError::malformed(
-                    "expected fractional digits after '.'",
-                    frac_start as i64,
-                ));
-            }
-        }
-
-        // Mandatory zone designator: 'Z'/'z' or ±hh:mm.
-        let offset = parse_zone_designator(&text, i, len)?;
-
-        let days = days_from_civil(year, month, day);
-        let local_seconds = days * 86400 + hour * 3600 + minute * 60 + second;
-        return Result::Ok(ZonedDateTime {
-            instant: Instant { seconds: local_seconds - offset, nanoseconds: nanoseconds as u32 },
-            time_zone: format_offset_suffix(offset),
-        });
+        return parse_iso_zoned(&text, 0, text.len());
     }
 
     /// RFC 3339 / ISO 8601 string in this zone's local time, with the offset
@@ -559,6 +532,90 @@ impl ZonedDateTime {
         return is_leap_year(year);
     }
 
+    /// Interpret `instant` in `time_zone`, canonicalizing the three spellings of
+    /// UTC (`"UTC"`, `"z"`, `±00:00`) to `"Z"` so they are one value under the
+    /// derived `Eq`. Any other zone is stored verbatim.
+    pub fn new(instant: Instant, time_zone: String) -> ZonedDateTime {
+        return ZonedDateTime { instant: instant, time_zone: canonical_time_zone(time_zone) };
+    }
+
+    /// The exact instant, dropping the zone (`Temporal.ZonedDateTime.toInstant`).
+    pub fn to_instant(&self) -> Instant {
+        return self.instant;
+    }
+
+    /// Milliseconds since the Unix epoch.
+    pub fn epoch_milliseconds(&self) -> i64 {
+        return self.instant.epoch_milliseconds();
+    }
+
+    /// Nanoseconds since the Unix epoch.
+    pub fn epoch_nanoseconds(&self) -> i128 {
+        return self.instant.epoch_nanoseconds();
+    }
+
+    /// The zone's UTC offset at this instant, as `±HH:MM`. Temporal spells a
+    /// zero offset `"+00:00"` here even where the zone is `"Z"`.
+    pub fn offset(&self) -> String {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let sign = if offset < 0 { "-" } else { "+" };
+        let magnitude = if offset < 0 { -offset } else { offset };
+        return `${sign}${magnitude / 3600:02}:${magnitude % 3600 / 60:02}`;
+    }
+
+    /// The zone's UTC offset at this instant, in nanoseconds.
+    pub fn offset_nanoseconds(&self) -> i64 {
+        return parse_fixed_offset(&self.time_zone) * 1_000_000_000;
+    }
+
+    /// The same instant read in another zone.
+    pub fn with_time_zone(&self, time_zone: String) -> ZonedDateTime {
+        return ZonedDateTime::new(self.instant, time_zone);
+    }
+
+    /// Local midnight on this value's day. Traps on an IANA zone name.
+    pub fn start_of_day(&self) -> ZonedDateTime {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let [days, _, _, _, _] = self.local_parts();
+        return ZonedDateTime {
+            instant: Instant { seconds: days * 86400 - offset, nanoseconds: 0 },
+            time_zone: self.time_zone,
+        };
+    }
+
+    /// Hours between this day's start and the next. A fixed offset has no DST,
+    /// so it is always 24; an IANA zone traps.
+    pub fn hours_in_day(&self) -> i32 {
+        let _ = parse_fixed_offset(&self.time_zone);
+        return 24;
+    }
+
+    /// ISO 8601 week of the week-year, `1..=53`.
+    pub fn week_of_year(&self) -> i32 {
+        let [_, year, _, _, _] = self.local_parts();
+        let [week, _] = iso_week_date(year, self.day_of_year() as i64, self.day_of_week() as i64);
+        return week as i32;
+    }
+
+    /// ISO 8601 week-numbering year, which differs from `year` in the days at
+    /// either end of the year that belong to the neighbour's week.
+    pub fn year_of_week(&self) -> i32 {
+        let [_, year, _, _, _] = self.local_parts();
+        let [_, week_year] = iso_week_date(year, self.day_of_year() as i64, self.day_of_week() as i64);
+        return week_year as i32;
+    }
+
+    /// Number of days in this week — always `7` for ISO 8601.
+    pub fn days_in_week(&self) -> i32 {
+        let _ = parse_fixed_offset(&self.time_zone);
+        return 7;
+    }
+
+    /// Temporal month code, `"M01"` … `"M12"` under the ISO 8601 calendar.
+    pub fn month_code(&self) -> String {
+        return `M${self.month():02}`;
+    }
+
     /// Number of months in this year — always `12` for ISO 8601.
     pub fn months_in_year(&self) -> i32 {
         // Validate the zone for consistency with the other accessors (all of
@@ -586,6 +643,43 @@ fn floor_mod(a: i64, m: i64) -> i64 {
         return r + m;
     }
     return r;
+}
+
+/// Canonicalize the spellings of a zero-offset zone (`"UTC"`, `"z"`, `±00:00`)
+/// to `"Z"`, and a fixed offset to `±HH:MM`. Anything else is left verbatim.
+fn canonical_time_zone(zone: String) -> String {
+    if let Some(offset) = try_fixed_offset(&zone) {
+        return format_offset_suffix(offset);
+    }
+    return zone;
+}
+
+/// ISO 8601 week date `[week, week_year]` for a day given by its calendar year,
+/// day of year (`1..=366`), and day of week (`1` Monday … `7` Sunday).
+fn iso_week_date(year: i64, day_of_year: i64, day_of_week: i64) -> [i64, i64] {
+    let week = (day_of_year - day_of_week + 10) / 7;
+    if week < 1 {
+        return [iso_weeks_in_year(year - 1), year - 1];
+    }
+    if week > iso_weeks_in_year(year) {
+        return [1, year + 1];
+    }
+    return [week, year];
+}
+
+/// Number of ISO 8601 weeks in `year`: 53 when the year ends on a Thursday, or
+/// the year before it ended on a Wednesday; else 52.
+fn iso_weeks_in_year(year: i64) -> i64 {
+    if year_end_weekday(year) == 4 || year_end_weekday(year - 1) == 3 {
+        return 53;
+    }
+    return 52;
+}
+
+/// Weekday of 31 December of `year`, `0` (Sunday) … `6` (Saturday), by the
+/// closed form the ISO week count is built on.
+fn year_end_weekday(year: i64) -> i64 {
+    return floor_mod(year + year / 4 - year / 100 + year / 400, 7);
 }
 
 /// Whether `year` is a leap year in the proleptic Gregorian (ISO 8601) calendar.
@@ -619,19 +713,104 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     return era * 146097 + doe - 719468;
 }
 
-/// Require byte `byte` at index `i` of `text`, returning the next index, or a
-/// `DeserializeError` on mismatch or end of input.
-fn expect_byte(text: &String, i: i32, byte: u8) -> Result<i32, DeserializeError> {
-    if i >= text.len() || text.get_byte_unchecked(i) != byte {
+/// Parse an RFC 3339 / ISO 8601 timestamp in `text[start..<end]`. The shared
+/// engine behind `ZonedDateTime::parse_rfc3339`, `Instant::parse_rfc3339`, and
+/// both `FromStr` impls.
+fn parse_iso_zoned(text: &String, start: i32, end: i32) -> Result<ZonedDateTime, DeserializeError> {
+    let mut i = start;
+
+    let [year, year_end] = parse_iso_year(text, i, end)?;
+    i = year_end;
+
+    i = expect_byte(text, i, end, b'-')?;
+    let month = read_digits(text, i, end, 2)?;
+    if month < 1 || month > 12 {
+        return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
+    }
+    i += 2;
+    i = expect_byte(text, i, end, b'-')?;
+    let day = read_digits(text, i, end, 2)?;
+    if day < 1 || day > days_in_month_value(year, month) {
+        return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
+    }
+    i += 2;
+
+    // Date/time separator: 'T', 't', or a space.
+    if i >= end {
+        return Result::Err(DeserializeError::eof(i as i64));
+    }
+    let sep = text.get_byte_unchecked(i);
+    if sep != b'T' && sep != b't' && sep != b' ' {
+        return Result::Err(DeserializeError::malformed("expected a date/time separator", i as i64));
+    }
+    i += 1;
+
+    let hour = read_digits(text, i, end, 2)?;
+    if hour > 23 {
+        return Result::Err(DeserializeError::invalid_value("hour out of range", i as i64));
+    }
+    i += 2;
+    i = expect_byte(text, i, end, b':')?;
+    let minute = read_digits(text, i, end, 2)?;
+    if minute > 59 {
+        return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
+    }
+    i += 2;
+    i = expect_byte(text, i, end, b':')?;
+    let parsed_second = read_digits(text, i, end, 2)?;
+    if parsed_second > 60 {
+        return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
+    }
+    // RFC 3339 admits a leap second; the ISO caenddar has no 61st second to
+    // hold it, so Temporal constrains :60 to :59 rather than rejecting it.
+    let second = if parsed_second == 60 { 59 } else { parsed_second };
+    i += 2;
+
+    // Optional fractional seconds, truncated to nanosecond precision.
+    let mut nanoseconds: i64 = 0;
+    if i < end && text.get_byte_unchecked(i) == b'.' {
+        i += 1;
+        let frac_start = i;
+        let mut scale: i64 = 100_000_000;
+        while i < end && is_ascii_digit(text.get_byte_unchecked(i)) {
+            if scale >= 1 {
+                nanoseconds = nanoseconds + (text.get_byte_unchecked(i) - b'0') as i64 * scale;
+                scale = scale / 10;
+            }
+            i += 1;
+        }
+        if i == frac_start {
+            return Result::Err(DeserializeError::malformed(
+                "expected fractional digits after '.'",
+                frac_start as i64,
+            ));
+        }
+    }
+
+    // Mandatory zone designator: 'Z'/'z' or ±hh:mm.
+    let offset = parse_zone_designator(text, i, end)?;
+
+    let days = days_from_civil(year, month, day);
+    let local_seconds = days * 86400 + hour * 3600 + minute * 60 + second;
+    return Result::Ok(ZonedDateTime {
+        instant: Instant { seconds: local_seconds - offset, nanoseconds: nanoseconds as u32 },
+        time_zone: format_offset_suffix(offset),
+    });
+}
+
+/// Require byte `byte` at index `i` of `text[..<end]`, returning the next index,
+/// or a `DeserializeError` on mismatch or end of input.
+fn expect_byte(text: &String, i: i32, end: i32, byte: u8) -> Result<i32, DeserializeError> {
+    if i >= end || text.get_byte_unchecked(i) != byte {
         return Result::Err(DeserializeError::malformed(`expected '${byte as char}'`, i as i64));
     }
     return Result::Ok(i + 1);
 }
 
-/// Read exactly `count` ASCII digits at index `i` of `text` as an integer,
+/// Read exactly `count` ASCII digits at index `i` of `text[..<end]` as an integer,
 /// erroring if any of them is missing or non-numeric.
-fn read_digits(text: &String, i: i32, count: i32) -> Result<i64, DeserializeError> {
-    if i + count > text.len() {
+fn read_digits(text: &String, i: i32, end: i32, count: i32) -> Result<i64, DeserializeError> {
+    if i + count > end {
         return Result::Err(DeserializeError::malformed(`expected ${count} digits`, i as i64));
     }
     let mut value: i64 = 0;
@@ -650,15 +829,15 @@ fn read_digits(text: &String, i: i32, count: i32) -> Result<i64, DeserializeErro
 /// Parse the ISO 8601 year at index `i` — exactly four digits, or a sign
 /// followed by exactly six (the expanded form) — returning the year and the
 /// index just past it. `-000000` is the one expanded year ISO 8601 forbids.
-fn parse_iso_year(text: &String, i: i32) -> Result<[i64, i32], DeserializeError> {
-    if i >= text.len() {
+fn parse_iso_year(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+    if i >= end {
         return Result::Err(DeserializeError::eof(i as i64));
     }
     let sign = text.get_byte_unchecked(i);
     if sign != b'+' && sign != b'-' {
-        return Result::Ok([read_digits(text, i, 4)?, i + 4]);
+        return Result::Ok([read_digits(text, i, end, 4)?, i + 4]);
     }
-    let magnitude = read_digits(text, i + 1, 6)?;
+    let magnitude = read_digits(text, i + 1, end, 6)?;
     if sign == b'-' {
         if magnitude == 0 {
             return Result::Err(DeserializeError::invalid_value("year -000000 is not an ISO 8601 year", i as i64));

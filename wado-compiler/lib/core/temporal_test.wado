@@ -398,6 +398,124 @@ test "ZonedDateTime::parse_rfc3339 accepts a leap second, constraining it to 59"
     assert ZonedDateTime::parse_rfc3339("2016-12-31T23:59:61Z") matches { Err(_) };
 }
 
+test "Instant::parse_rfc3339 drops the offset, keeping the exact instant" {
+    assert Instant::parse_rfc3339("2023-11-15T07:13:20+09:00") matches { Ok(t)
+        && t == Instant { seconds: 1_700_000_000, nanoseconds: 0 } };
+    assert Instant::parse_rfc3339("2023-11-14T22:13:20Z") matches { Ok(t)
+        && t == Instant { seconds: 1_700_000_000, nanoseconds: 0 } };
+    assert Instant::parse_rfc3339("2023-11-14T22:13:20") matches { Err(_) };
+}
+
+test "Instant and ZonedDateTime parse through FromStr" {
+    assert Instant::from_str("2023-11-14T22:13:20Z") matches { Ok(t)
+        && t == Instant { seconds: 1_700_000_000, nanoseconds: 0 } };
+    assert ZonedDateTime::from_str("2023-11-15T07:13:20+09:00") matches { Ok(zdt)
+        && zdt.time_zone == "+09:00" };
+    assert Instant::from_str("nope") matches { Err(_) };
+}
+
+test "Instant exposes microsecond and full-range nanosecond epochs" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert t.epoch_microseconds() == 1_700_000_000_123_456;
+    assert t.epoch_nanoseconds() == 1_700_000_000_123_456_789;
+    assert Instant::from_epoch_microseconds(1_700_000_000_123_456)
+        == Instant { seconds: 1_700_000_000, nanoseconds: 123_456_000 };
+
+    // i128 nanoseconds reach far beyond the ±292 years an i64 count spans.
+    let far = Instant { seconds: 253_402_300_799, nanoseconds: 0 };
+    assert far.epoch_nanoseconds() == 253_402_300_799_000_000_000;
+    assert Instant::from_epoch_nanoseconds(far.epoch_nanoseconds()) == far;
+
+    // Before the epoch, the nanosecond field still moves time forward.
+    let before = Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert before.epoch_nanoseconds() == -1;
+    assert before.epoch_microseconds() == -1;
+}
+
+test "Instant::EPOCH is the Unix epoch" {
+    assert Instant::EPOCH == Instant { seconds: 0, nanoseconds: 0 };
+    assert `${Instant::EPOCH}` == "1970-01-01T00:00:00Z";
+}
+
+test "Instant projects into a zone and back" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    let zdt = t.to_zoned_date_time("+09:00");
+    assert zdt.hour() == 7 && zdt.day() == 15;
+    assert zdt.to_instant() == t;
+}
+
+test "ZonedDateTime::new canonicalizes the UTC spellings to Z" {
+    let t = Instant::EPOCH;
+    assert ZonedDateTime::new(t, "UTC").time_zone == "Z";
+    assert ZonedDateTime::new(t, "z").time_zone == "Z";
+    assert ZonedDateTime::new(t, "+00:00").time_zone == "Z";
+    assert ZonedDateTime::new(t, "-00:00").time_zone == "Z";
+    assert ZonedDateTime::new(t, "+09:00").time_zone == "+09:00";
+
+    // So the three spellings are one value under the derived Eq.
+    assert ZonedDateTime::new(t, "UTC") == ZonedDateTime::new(t, "Z");
+
+    // An IANA name is preserved verbatim; it still traps on use.
+    assert ZonedDateTime::new(t, "Asia/Tokyo").time_zone == "Asia/Tokyo";
+}
+
+test "ZonedDateTime exposes its epoch and offset views" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20.5+09:00").unwrap();
+    assert zdt.to_instant() == Instant { seconds: 1_700_000_000, nanoseconds: 500_000_000 };
+    assert zdt.epoch_milliseconds() == 1_700_000_000_500;
+    assert zdt.epoch_nanoseconds() == 1_700_000_000_500_000_000;
+    assert zdt.offset() == "+09:00";
+    assert zdt.offset_nanoseconds() == 32_400_000_000_000;
+
+    // Temporal spells a zero offset "+00:00" here, even where the zone is "Z".
+    let utc = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    assert utc.offset() == "+00:00";
+    assert utc.offset_nanoseconds() == 0;
+}
+
+test "ZonedDateTime::with_time_zone keeps the instant and moves the wall clock" {
+    let utc = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    let tokyo = utc.with_time_zone("+09:00");
+    assert tokyo.to_instant() == utc.to_instant();
+    assert tokyo.hour() == 7 && tokyo.day() == 15;
+}
+
+test "ZonedDateTime::start_of_day snaps to local midnight" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20.5+09:00").unwrap();
+    let start = zdt.start_of_day();
+    assert `${start}` == "2023-11-15T00:00:00+09:00";
+    assert start.start_of_day() == start;
+
+    // A fixed offset has no DST, so every day is 24 hours long.
+    assert zdt.hours_in_day() == 24;
+
+    // Before the epoch the floor still lands on the correct civil day.
+    let pre = ZonedDateTime::parse_rfc3339("1969-12-31T23:59:59Z").unwrap();
+    assert `${pre.start_of_day()}` == "1969-12-31T00:00:00Z";
+}
+
+test "ZonedDateTime exposes the ISO week date" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    assert zdt.week_of_year() == 46;
+    assert zdt.year_of_week() == 2023;
+    assert zdt.days_in_week() == 7;
+
+    // 2021-01-01 is a Friday, in ISO week 53 of 2020.
+    let early = ZonedDateTime::parse_rfc3339("2021-01-01T00:00:00Z").unwrap();
+    assert early.week_of_year() == 53;
+    assert early.year_of_week() == 2020;
+
+    // 2019-12-30 is a Monday, already in ISO week 1 of 2020.
+    let late = ZonedDateTime::parse_rfc3339("2019-12-30T00:00:00Z").unwrap();
+    assert late.week_of_year() == 1;
+    assert late.year_of_week() == 2020;
+}
+
+test "ZonedDateTime::month_code names the ISO month" {
+    assert ZonedDateTime::parse_rfc3339("2023-01-14T00:00:00Z").unwrap().month_code() == "M01";
+    assert ZonedDateTime::parse_rfc3339("2023-11-14T00:00:00Z").unwrap().month_code() == "M11";
+}
+
 test "Instant serializes as an RFC 3339 string with minimal precision" {
     let whole = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
     assert to_string(&whole) matches { Ok(s) && s == `"2023-11-14T22:13:20Z"` };
