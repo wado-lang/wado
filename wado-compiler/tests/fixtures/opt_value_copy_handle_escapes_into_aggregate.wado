@@ -1,0 +1,61 @@
+// A `&mut` stored into an aggregate outlives the expression that took it, and
+// the mod/ref walk cannot follow where it is written — so taking one counts as
+// a write to what it borrows. Unrecorded, `bump`'s writes are invisible to its
+// caller, and `r` is shared across them.
+struct View {
+    repr: &mut List<i32>,
+    tag: i32,
+}
+
+struct Holder {
+    rows: List<i32>,
+    tick: i32,
+}
+
+impl Holder {
+    /// The borrow reaches `self.rows` through a struct literal.
+    #[inline("never")]
+    fn bump_via_field(&mut self) with stores[self] {
+        let v = View { repr: &mut self.rows, tag: 0 };
+        v.repr.push(9);
+    }
+
+    /// The same, read back out by destructuring rather than field access.
+    #[inline("never")]
+    fn bump_via_destructure(&mut self) with stores[self] {
+        let v = View { repr: &mut self.rows, tag: 0 };
+        let View { repr, tag } = v;
+        repr.push(9);
+    }
+}
+
+#[inline("never")]
+fn len_across_field(h: &mut Holder) -> i32 with stores[h] {
+    let r = h.rows;
+    h.bump_via_field();
+    return r.len();
+}
+
+#[inline("never")]
+fn len_across_destructure(h: &mut Holder) -> i32 with stores[h] {
+    let r = h.rows;
+    h.bump_via_destructure();
+    return r.len();
+}
+
+test "a copy survives a write through a handle held by a struct" {
+    let mut h = Holder { rows: [1, 2, 3], tick: 0 };
+    assert len_across_field(&mut h) == 3;
+    assert h.rows.len() == 4;
+}
+
+test "a copy survives a write through a destructured handle" {
+    let mut h = Holder { rows: [1, 2, 3], tick: 0 };
+    assert len_across_destructure(&mut h) == 3;
+    assert h.rows.len() == 4;
+}
+
+__DATA__
+{
+    "test": {}
+}

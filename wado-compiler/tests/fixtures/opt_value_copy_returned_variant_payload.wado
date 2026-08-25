@@ -1,0 +1,36 @@
+// A `return Some(place)` hands its payload out uncopied, exactly as
+// `return place` does, where the caller can name what it got — so a caller that
+// only reads the payload copies nothing at either end.
+struct Store {
+    name: String,
+    rows: List<i32>,
+}
+
+impl Store {
+    #[inline("never")]
+    fn find(&self, want: i32) -> Option<String> {
+        if want < 0 {
+            return null;
+        }
+        return Option::Some(self.name);
+    }
+}
+
+#[inline("never")]
+fn name_len(s: &Store) -> i32 {
+    if let Some(n) = s.find(builtin::black_box(0)) {
+        return n.len();
+    }
+    return -1;
+}
+
+test "reads the payload in place" {
+    let s = Store { name: "abcde", rows: [1, 2, 3] };
+    assert name_len(&s) == 5;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": ["__array_clone_src"]
+}
