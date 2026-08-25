@@ -631,7 +631,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         site: Option<crate::ast::AstId>,
         type_name: &str,
         method_name: &str,
-    ) -> Option<crate::ast::AstId> {
+    ) -> Option<crate::defs::DefId> {
         self.static_method_decl_id(&self.impl_target_at(site, type_name), method_name)
             .or_else(|| {
                 let (base, base_name) = self.newtype_base(type_name)?;

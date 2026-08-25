@@ -3330,13 +3330,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let MethodInfo {
-<<<<<<< HEAD
-            method_ast_id,
-||||||| 3e70fcc5f8
-            method_ast_id: _,
-=======
-            method_def: _,
->>>>>>> origin/main
+            method_def,
             return_type,
             self_kind,
             param_types,
@@ -3361,8 +3355,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Past the bail, this path owns the call, so it owns the use->def edge
         // for the method name too — `resolve_method_call_with` never sees it.
-        if let Some(def_id) = method_ast_id {
-            self.record_reference_to_def(method_call.method_id, def_id);
+        if let Some(def) = method_def {
+            self.record_reference_to_decl(method_call.method_id, def);
         }
 
         // This path answers the call itself, so the ladder is enforced here

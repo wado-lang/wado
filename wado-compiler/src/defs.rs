@@ -83,22 +83,13 @@ pub enum DefKind {
     VariantCase,
     /// A `flags` member.
     FlagsMember,
-<<<<<<< HEAD
-||||||| 3e70fcc5f8
-    /// A method declared by a trait, a resource, or an effect interface.
-=======
     /// An `impl` block. It writes no name, so nothing can import it and no
     /// scope answers for it; its identity exists so the methods it declares
     /// have an owner and its own facts have a key.
     Impl,
->>>>>>> origin/main
     /// A method declared by a trait, a resource, an effect interface, or an
     /// `impl` block.
     Method,
-    /// An `impl` block, which owns the methods it declares. The type it is on
-    /// cannot: that type may live in another module, and two impls on one type
-    /// may each declare a method of the same name.
-    Impl,
 }
 
 impl DefKind {
@@ -334,25 +325,6 @@ impl DefTable {
     }
 
     fn declare_item_members(&mut self, module: &ModuleSource, item: &Item) {
-        // An `impl` block names no symbol, so nothing above declared it; the
-        // methods it owns need one to hang from.
-        if let Item::Impl(impl_block) = item
-            && !self.by_ast_id.contains_key(&impl_block.id)
-        {
-            self.declare(Def {
-                ast_id: impl_block.id,
-                module: module.clone(),
-                name: crate::ast::type_head_name(&impl_block.ty)
-                    .unwrap_or_default()
-                    .to_string(),
-                kind: DefKind::Impl,
-                visibility: Visibility::Private,
-                span: Some(impl_block.span),
-                parent: None,
-                function_local: false,
-                members: Vec::new(),
-            });
-        }
         let (owner, members) = match item {
             Item::Struct(s) => (
                 s.id,
@@ -382,15 +354,6 @@ impl DefTable {
                 members(
                     DefKind::FlagsMember,
                     f.flags.iter().map(|m| (m.id, &m.name, None, m.span)),
-                ),
-            ),
-            Item::Impl(i) => (
-                i.id,
-                members(
-                    DefKind::Method,
-                    i.methods
-                        .iter()
-                        .map(|m| (m.id, &m.name, Some(m.visibility), m.span)),
                 ),
             ),
             Item::Trait(t) => (

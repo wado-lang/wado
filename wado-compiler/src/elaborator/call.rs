@@ -692,13 +692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let builtin_source = ModuleSource::builtin();
                 self.check_namespaced_visibility(&builtin_source, suffix, ident.span);
                 (
-<<<<<<< HEAD
-                    Some(CalleeRef::new(builtin_source, suffix)),
-||||||| 3e70fcc5f8
-                    Some(CalleeRef::new(ModuleSource::builtin(), suffix)),
-=======
-                    self.callee_in_module(&ModuleSource::builtin(), suffix),
->>>>>>> origin/main
+                    self.callee_in_module(&builtin_source, suffix),
                     effective_name.to_string(),
                 )
             }
@@ -729,29 +723,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_def = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
                         .and_then(|r| r.method_id)
-<<<<<<< HEAD
                         .or_else(|| self.static_method_decl_at(receiver_site, prefix, suffix));
-                    if let Some(method_ast_id) = method_ast_id {
-                        self.record_reference_to_def(suffix_seg.id, method_ast_id);
-||||||| 3e70fcc5f8
-                        .or_else(|| {
-                            self.static_method_decl_id(
-                                &self.impl_target_at(receiver_site, prefix),
-                                suffix,
-                            )
-                        });
-                    if let Some(method_ast_id) = method_ast_id {
-                        self.record_reference_to_def(suffix_seg.id, method_ast_id);
-=======
-                        .or_else(|| {
-                            self.static_method_decl_id(
-                                &self.impl_target_at(receiver_site, prefix),
-                                suffix,
-                            )
-                        });
                     if let Some(method_def) = method_def {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
->>>>>>> origin/main
                     }
                 }
                 // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
@@ -1405,44 +1379,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // its declared effects. The whole-path `ident.id` is the key the
                 // effect walker resolves free calls on (`check_effects_semantic`),
                 // and the suffix segment id is the key LSP jump-to-def uses.
-                // The callee names the module that defines the symbol, not the
-                // namespace it was reached through: `lookup_in_module` follows
-                // that module's own `pub use`, and the mangled name is keyed by
-                // where the declaration lives.
-                let resolved = self
+                let def_key = self
                     .symbols
                     .lookup_in_module(&ns_source, suffix)
-                    .map(|sym| {
-                        (
-                            sym.defined_at,
-                            CalleeRef::new(sym.module_source().clone(), sym.name.clone()),
-                        )
-                    });
-                let callee = match resolved {
-                    Some((def_key, callee)) => {
-                        self.record_reference_to_def(ident.id, def_key);
-                        if let Some(seg) = ident.segments.get(1) {
-                            self.record_reference_to_def(seg.id, def_key);
-                        }
-                        callee
+                    .map(|sym| sym.defined_at);
+                if let Some(def_key) = def_key {
+                    self.record_reference_to_def(ident.id, def_key);
+                    if let Some(seg) = ident.segments.get(1) {
+                        self.record_reference_to_def(seg.id, def_key);
                     }
-<<<<<<< HEAD
-                    None => CalleeRef::new(ns_source, suffix),
-                };
-                (Some(callee), effective_name.to_string())
-||||||| 3e70fcc5f8
-                }
-                (
-                    Some(CalleeRef::new(ns_source, suffix)),
-                    effective_name.to_string(),
-                )
-=======
                 }
                 (
                     self.callee_in_module(&ns_source, suffix),
                     effective_name.to_string(),
                 )
->>>>>>> origin/main
             }
             // Effect operations - pass through to codegen. This covers
             // `Stdout::write()`, etc. Effects/resources have no static-method
