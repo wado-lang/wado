@@ -1,4 +1,4 @@
-use { Instant, ZonedDateTime } from "core:temporal";
+use { Instant, ZonedDateTime, Duration, Unit } from "core:temporal";
 use { Instant as ClockInstant } from "wasi:clocks";
 use { to_string, from_string } from "core:json";
 use { to_bytes, from_bytes } from "core:cbor";
@@ -514,6 +514,153 @@ test "ZonedDateTime exposes the ISO week date" {
 test "ZonedDateTime::month_code names the ISO month" {
     assert ZonedDateTime::parse_rfc3339("2023-01-14T00:00:00Z").unwrap().month_code() == "M01";
     assert ZonedDateTime::parse_rfc3339("2023-11-14T00:00:00Z").unwrap().month_code() == "M11";
+}
+
+test "Duration defaults every field to zero" {
+    let d = Duration { hours: 1, minutes: 30 };
+    assert d.hours == 1 && d.minutes == 30;
+    assert d.years == 0 && d.days == 0 && d.nanoseconds == 0;
+    assert Duration {}.is_zero();
+    assert !d.is_zero();
+}
+
+test "Duration sign follows its largest non-zero field" {
+    assert Duration {}.sign() == 0;
+    assert Duration { days: 3 }.sign() == 1;
+    assert Duration { days: -3 }.sign() == -1;
+    assert Duration { years: 1, nanoseconds: -5 }.sign() == 1;
+}
+
+test "Duration negated and abs flip every field together" {
+    let d = Duration { years: 1, days: -2, seconds: 3 };
+    assert d.negated() == Duration { years: -1, days: 2, seconds: -3 };
+    assert Duration { days: -2, seconds: -3 }.abs() == Duration { days: 2, seconds: 3 };
+    assert d.negated().negated() == d;
+}
+
+test "Duration adds field-wise" {
+    let a = Duration { days: 1, hours: 2 };
+    let b = Duration { hours: 3, minutes: 4 };
+    assert a.add(&b) == Duration { days: 1, hours: 5, minutes: 4 };
+    assert a.subtract(&b) == Duration { days: 1, hours: -1, minutes: -4 };
+}
+
+test "Duration renders as an ISO 8601 duration" {
+    assert `${Duration {}}` == "PT0S";
+    assert `${Duration { years: 1, months: 2, weeks: 3, days: 4 }}` == "P1Y2M3W4D";
+    assert `${Duration { hours: 1, minutes: 30 }}` == "PT1H30M";
+    assert `${Duration { seconds: 1, milliseconds: 500 }}` == "PT1.5S";
+    assert `${Duration { nanoseconds: 1 }}` == "PT0.000000001S";
+    assert `${Duration { days: -1, hours: -2 }}` == "-P1DT2H";
+    assert `${Duration { weeks: 2 }}` == "P2W";
+}
+
+test "Duration parses an ISO 8601 duration" {
+    assert Duration::parse("P1Y2M3W4DT5H6M7S") matches { Ok(d) && d == Duration {
+        years: 1, months: 2, weeks: 3, days: 4, hours: 5, minutes: 6, seconds: 7,
+    } };
+    assert Duration::parse("PT0S") matches { Ok(d) && d.is_zero() };
+    assert Duration::parse("-P1D") matches { Ok(d) && d == Duration { days: -1 } };
+    assert Duration::parse("+PT1H") matches { Ok(d) && d == Duration { hours: 1 } };
+
+    // A fraction spills into the units below it, as Temporal balances it.
+    assert Duration::parse("PT1.5H") matches { Ok(d) && d == Duration { hours: 1, minutes: 30 } };
+    assert Duration::parse("PT1.5M") matches { Ok(d) && d == Duration { minutes: 1, seconds: 30 } };
+    assert Duration::parse("PT1.5S") matches { Ok(d) && d == Duration { seconds: 1, milliseconds: 500 } };
+}
+
+test "Duration rejects malformed ISO 8601 durations" {
+    assert Duration::parse("") matches { Err(_) };
+    assert Duration::parse("P") matches { Err(_) };
+    assert Duration::parse("1D") matches { Err(_) };
+    assert Duration::parse("P1D2H") matches { Err(_) };
+    assert Duration::parse("PT1H2Y") matches { Err(_) };
+    assert Duration::parse("P1DT") matches { Err(_) };
+    // A fraction must be on the last component present.
+    assert Duration::parse("PT1.5H30M") matches { Err(_) };
+}
+
+test "Duration round-trips through its ISO 8601 form" {
+    for let text of ["P1Y2M3W4DT5H6M7.5S", "-P1DT2H", "PT0S", "PT0.000000001S"] {
+        let parsed = Duration::parse(text).expect(`parse ${text}`);
+        assert `${parsed}` == text;
+    }
+}
+
+test "Instant adds and subtracts an exact duration" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert t.add(&Duration { hours: 1 }) == Instant { seconds: 1_700_003_600, nanoseconds: 0 };
+    assert t.subtract(&Duration { hours: 1 }) == Instant { seconds: 1_699_996_400, nanoseconds: 0 };
+    assert t.add(&Duration { nanoseconds: -1 }) == Instant { seconds: 1_699_999_999, nanoseconds: 999_999_999 };
+    assert t.add(&Duration { hours: 1 }).subtract(&Duration { hours: 1 }) == t;
+}
+
+#[expect_trap]
+test "Instant arithmetic rejects a calendar unit" {
+    // A day is not a fixed length once a calendar is involved, so Temporal
+    // admits only hours and below on an instant.
+    let _ = Instant::EPOCH.add(&Duration { days: 1 });
+}
+
+test "Instant::until and since measure the span between two instants" {
+    let a = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    let b = Instant { seconds: 1_700_003_661, nanoseconds: 500_000_000 };
+
+    // The default largest unit is the second, as in Temporal.
+    assert a.until(&b) == Duration { seconds: 3661, milliseconds: 500 };
+    assert a.until(&b, Unit::Hour) == Duration { hours: 1, minutes: 1, seconds: 1, milliseconds: 500 };
+    assert a.since(&b) == a.until(&b).negated();
+    assert b.until(&a) == a.until(&b).negated();
+    assert a.until(&a).is_zero();
+}
+
+test "ZonedDateTime adds calendar units in local time" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20+09:00").unwrap();
+    assert `${zdt.add(&Duration { days: 1 })}` == "2023-11-15T22:13:20+09:00";
+    assert `${zdt.add(&Duration { months: 1 })}` == "2023-12-14T22:13:20+09:00";
+    assert `${zdt.add(&Duration { years: 1 })}` == "2024-11-14T22:13:20+09:00";
+    assert `${zdt.add(&Duration { weeks: 2 })}` == "2023-11-28T22:13:20+09:00";
+    assert `${zdt.add(&Duration { hours: 2 })}` == "2023-11-15T00:13:20+09:00";
+    assert zdt.subtract(&Duration { months: 1 }) == ZonedDateTime::parse_rfc3339("2023-10-14T22:13:20+09:00").unwrap();
+}
+
+test "ZonedDateTime constrains a month-end overflow to the last valid day" {
+    let end = ZonedDateTime::parse_rfc3339("2023-01-31T00:00:00Z").unwrap();
+    assert `${end.add(&Duration { months: 1 })}` == "2023-02-28T00:00:00Z";
+    assert `${end.add(&Duration { months: 13 })}` == "2024-02-29T00:00:00Z";
+
+    // Constraining is lossy, so adding a month is not invertible.
+    assert `${end.add(&Duration { months: 1 }).subtract(&Duration { months: 1 })}` == "2023-01-28T00:00:00Z";
+}
+
+test "ZonedDateTime::until walks the calendar for a date-unit largest unit" {
+    let a = ZonedDateTime::parse_rfc3339("2023-01-31T00:00:00Z").unwrap();
+    let b = ZonedDateTime::parse_rfc3339("2024-03-01T12:00:00Z").unwrap();
+
+    // 2023-01-31 + 1y1m lands on 2024-02-29 (constrained), one day short of b.
+    assert a.until(&b, Unit::Year) == Duration { years: 1, months: 1, days: 1, hours: 12 };
+    assert a.until(&b, Unit::Month) == Duration { months: 13, days: 1, hours: 12 };
+    assert a.until(&b, Unit::Week) == Duration { weeks: 56, days: 3, hours: 12 };
+    assert a.until(&b, Unit::Day) == Duration { days: 395, hours: 12 };
+
+    // The default largest unit is the hour, as in Temporal.
+    assert a.until(&b) == Duration { hours: 9492 };
+    assert a.since(&b, Unit::Year) == a.until(&b, Unit::Year).negated();
+    assert b.until(&a, Unit::Month) == a.until(&b, Unit::Month).negated();
+}
+
+test "ZonedDateTime::until reads the span in the receiver's zone" {
+    let a = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    let b = a.add(&Duration { days: 1, minutes: 30 });
+    assert a.until(&b, Unit::Day) == Duration { days: 1, minutes: 30 };
+    assert a.until(&b) == Duration { hours: 24, minutes: 30 };
+}
+
+test "Duration serializes as its ISO 8601 string" {
+    let d = Duration { hours: 1, minutes: 30 };
+    assert to_string(&d) matches { Ok(json) && json == `"PT1H30M"` };
+    assert from_string::<Duration>(`"PT1H30M"`) matches { Ok(back) && back == d };
+    assert from_string::<Duration>(`"nope"`) matches { Err(_) };
 }
 
 test "Instant serializes as an RFC 3339 string with minimal precision" {

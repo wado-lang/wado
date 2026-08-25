@@ -394,6 +394,39 @@ impl Instant {
         return Result::Ok(parse_iso_zoned(&text, 0, text.len())?.instant);
     }
 
+    /// Move forward by `duration`. Only the time components are admitted: a day
+    /// and above has no fixed length without a calendar, so Temporal measures
+    /// those against a `ZonedDateTime` instead.
+    pub fn add(&self, duration: &Duration) -> Instant {
+        if duration.has_date_components() {
+            panic(
+                "core:temporal: Instant arithmetic admits hours and below; days and above need the calendar a ZonedDateTime carries",
+            );
+        }
+        return Instant::from_epoch_nanoseconds(self.epoch_nanoseconds() + duration.time_nanoseconds());
+    }
+
+    /// Move back by `duration`, under the same restriction as `add`.
+    pub fn subtract(&self, duration: &Duration) -> Instant {
+        return self.add(&duration.negated());
+    }
+
+    /// The span from this instant to `other`, positive when `other` is later.
+    /// `largest_unit` must be a time unit, as on `add`.
+    pub fn until(&self, other: &Instant, largest_unit: Unit = Unit::Second) -> Duration {
+        if is_date_unit(largest_unit) {
+            panic(
+                "core:temporal: Instant differences are measured in hours and below; use ZonedDateTime::until for a calendar unit",
+            );
+        }
+        return duration_from_nanoseconds(other.epoch_nanoseconds() - self.epoch_nanoseconds(), largest_unit);
+    }
+
+    /// The span from `other` to this instant — `until` with the sign flipped.
+    pub fn since(&self, other: &Instant, largest_unit: Unit = Unit::Second) -> Duration {
+        return self.until(other, largest_unit).negated();
+    }
+
     /// Interpret this instant in `time_zone`, the zoned view of the same moment
     /// (`Temporal.Instant.toZonedDateTimeISO`).
     pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime {
@@ -573,6 +606,50 @@ impl ZonedDateTime {
         return ZonedDateTime::new(self.instant, time_zone);
     }
 
+    /// Move forward by `duration`, reading the calendar components in local
+    /// time. Following Temporal, years and months are applied first (a day
+    /// beyond the target month's end is constrained to its last day), then
+    /// weeks and days, then the exact time. Traps on an IANA zone name.
+    pub fn add(&self, duration: &Duration) -> ZonedDateTime {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let [_, year, month, day, second_of_day] = self.local_parts();
+        let [shifted_year, shifted_month, shifted_day] = add_months_to_civil(
+            year,
+            month,
+            day,
+            duration.years * 12 + duration.months,
+        );
+        let local_days = days_from_civil(shifted_year, shifted_month, shifted_day)
+            + duration.weeks * 7
+            + duration.days;
+        let local_seconds = local_days * 86400 + second_of_day;
+        let shifted = Instant { seconds: local_seconds - offset, nanoseconds: self.instant.nanoseconds };
+        return ZonedDateTime {
+            instant: Instant::from_epoch_nanoseconds(shifted.epoch_nanoseconds() + duration.time_nanoseconds()),
+            time_zone: self.time_zone,
+        };
+    }
+
+    /// Move back by `duration`. Not the inverse of `add` when a month-end is
+    /// constrained on the way out: 01-31 plus a month is 02-28, and minus a
+    /// month again is 01-28.
+    pub fn subtract(&self, duration: &Duration) -> ZonedDateTime {
+        return self.add(&duration.negated());
+    }
+
+    /// The span from this value to `other`, positive when `other` is later,
+    /// measured in this value's zone. A date `largest_unit` walks the calendar;
+    /// a time one divides the exact span.
+    pub fn until(&self, other: &ZonedDateTime, largest_unit: Unit = Unit::Hour) -> Duration {
+        let offset = parse_fixed_offset(&self.time_zone);
+        return difference_zoned(offset, self.instant, other.instant, largest_unit);
+    }
+
+    /// The span from `other` to this value — `until` with the sign flipped.
+    pub fn since(&self, other: &ZonedDateTime, largest_unit: Unit = Unit::Hour) -> Duration {
+        return self.until(other, largest_unit).negated();
+    }
+
     /// Local midnight on this value's day. Traps on an IANA zone name.
     pub fn start_of_day(&self) -> ZonedDateTime {
         let offset = parse_fixed_offset(&self.time_zone);
@@ -634,6 +711,119 @@ impl ZonedDateTime {
         let [year, month, day] = civil_from_days(days);
         return [days, year, month, day, second_of_day];
     }
+}
+
+/// Whether `unit` measures calendar time rather than exact time.
+fn is_date_unit(unit: Unit) -> bool {
+    return match unit {
+        Year => true,
+        Month => true,
+        Week => true,
+        Day => true,
+        Hour => false,
+        Minute => false,
+        Second => false,
+        Millisecond => false,
+        Microsecond => false,
+        Nanosecond => false,
+    };
+}
+
+/// Add `months` to a proleptic Gregorian date, constraining a day beyond the
+/// target month's end to its last day, as Temporal's `constrain` overflow does.
+fn add_months_to_civil(year: i64, month: i64, day: i64, months: i64) -> [i64, i64, i64] {
+    let total = year * 12 + month - 1 + months;
+    let shifted_year = floor_div(total, 12);
+    let shifted_month = floor_mod(total, 12) + 1;
+    let month_length = days_in_month_value(shifted_year, shifted_month);
+    let shifted_day = if day > month_length { month_length } else { day };
+    return [shifted_year, shifted_month, shifted_day];
+}
+
+/// The span between two instants read at a fixed UTC `offset`.
+fn difference_zoned(offset: i64, start: Instant, end: Instant, largest_unit: Unit) -> Duration {
+    let start_nanoseconds = start.epoch_nanoseconds();
+    let end_nanoseconds = end.epoch_nanoseconds();
+    if !is_date_unit(largest_unit) || largest_unit matches { Day } {
+        return duration_from_nanoseconds(end_nanoseconds - start_nanoseconds, largest_unit);
+    }
+    if end_nanoseconds < start_nanoseconds {
+        return difference_zoned(offset, end, start, largest_unit).negated();
+    }
+
+    let [start_days, start_time] = local_day_and_nanoseconds(start_nanoseconds, offset);
+    let [end_days, end_time] = local_day_and_nanoseconds(end_nanoseconds, offset);
+
+    // Borrow a day when the end's wall clock is earlier in the day than the
+    // start's, so the date part never overshoots.
+    let mut date_days = end_days;
+    let mut time_nanoseconds = end_time - start_time;
+    if time_nanoseconds < 0 {
+        time_nanoseconds = time_nanoseconds + 86_400_000_000_000;
+        date_days = date_days - 1;
+    }
+
+    let date = calendar_difference(start_days, date_days, largest_unit);
+    return date.add(&duration_from_nanoseconds(time_nanoseconds, Unit::Hour));
+}
+
+/// The date part of a difference, in whole weeks, months, or years plus a day
+/// remainder. `start_days <= end_days`.
+fn calendar_difference(start_days: i64, end_days: i64, largest_unit: Unit) -> Duration {
+    let span = end_days - start_days;
+    if largest_unit matches { Week } {
+        return Duration { weeks: span / 7, days: span % 7 };
+    }
+    let [year, month, day] = civil_from_days(start_days);
+    let months = whole_months_between(year, month, day, end_days);
+    let [base_year, base_month, base_day] = add_months_to_civil(year, month, day, months);
+    let days = end_days - days_from_civil(base_year, base_month, base_day);
+    if largest_unit matches { Month } {
+        return Duration { months: months, days: days };
+    }
+    return Duration { years: months / 12, months: months % 12, days: days };
+}
+
+/// Whole months from a civil date to `end_days`, the largest count whose
+/// constrained sum does not pass it.
+fn whole_months_between(year: i64, month: i64, day: i64, end_days: i64) -> i64 {
+    let [end_year, end_month, _] = civil_from_days(end_days);
+    let mut months = (end_year - year) * 12 + (end_month - month);
+    if months < 0 {
+        months = 0;
+    }
+    while months > 0 && civil_days_after_months(year, month, day, months) > end_days {
+        months = months - 1;
+    }
+    while civil_days_after_months(year, month, day, months + 1) <= end_days {
+        months = months + 1;
+    }
+    return months;
+}
+
+/// Day count of a civil date shifted by `months`, constrained at the month end.
+fn civil_days_after_months(year: i64, month: i64, day: i64, months: i64) -> i64 {
+    let [shifted_year, shifted_month, shifted_day] = add_months_to_civil(year, month, day, months);
+    return days_from_civil(shifted_year, shifted_month, shifted_day);
+}
+
+/// Split an epoch-nanosecond count into the local day and the nanosecond of
+/// that day, at a fixed UTC `offset`.
+fn local_day_and_nanoseconds(epoch_nanoseconds: i128, offset: i64) -> [i64, i128] {
+    let nanoseconds_per_day: i128 = 86_400_000_000_000;
+    let local = epoch_nanoseconds + offset as i128 * 1_000_000_000;
+    let mut days = local / nanoseconds_per_day;
+    let mut rest = local % nanoseconds_per_day;
+    if rest < 0 {
+        days = days - 1;
+        rest = rest + nanoseconds_per_day;
+    }
+    return [days as i64, rest];
+}
+
+/// Quotient of `a` by positive `m`, flooring toward negative infinity.
+fn floor_div(a: i64, m: i64) -> i64 {
+    return (a - floor_mod(a, m)) / m;
 }
 
 /// Non-negative remainder of `a` modulo positive `m`.
@@ -881,6 +1071,25 @@ fn parse_zone_designator(text: &String, start: i32, end: i32) -> Result<i64, Des
     return Result::Ok(magnitude);
 }
 
+/// The `.fff…` fraction of an ISO 8601 duration: as many digits as the value
+/// needs and no more, trailing zeros trimmed, `""` for zero. Durations spell a
+/// fraction at its shortest, where a timestamp keeps the 0/3/6/9 digit groups.
+fn format_minimal_fraction(nanoseconds: u32) -> String {
+    if nanoseconds == 0 {
+        return "";
+    }
+    let mut digits = 9;
+    let mut value = nanoseconds;
+    while value % 10 == 0 {
+        value = value / 10;
+        digits = digits - 1;
+    }
+    let rendered = `${value}`;
+    let zeros = digits - rendered.len();
+    let padding = if zeros > 0 { "0".repeat(zeros) } else { "" };
+    return `.${padding}${rendered}`;
+}
+
 /// Least sub-second precision (0, 3, 6, or 9 fraction digits) that renders
 /// `nanoseconds` without loss.
 fn fraction_digits_for(nanoseconds: u32) -> i32 {
@@ -894,6 +1103,536 @@ fn fraction_digits_for(nanoseconds: u32) -> i32 {
         return 6;
     }
     return 9;
+}
+
+/// The unit a temporal difference or rounding operation works in. The order is
+/// Temporal's, largest first; `Year`, `Month`, `Week`, and `Day` are the date
+/// units, the rest the time units.
+pub enum Unit {
+    Year,
+    Month,
+    Week,
+    Day,
+    Hour,
+    Minute,
+    Second,
+    Millisecond,
+    Microsecond,
+    Nanosecond,
+}
+
+/// A signed span of time, as a Temporal-shaped record of ten components rather
+/// than one scalar. Corresponds to `Temporal.Duration`.
+///
+/// The date components (`years`, `months`, `weeks`) have no fixed length, so a
+/// duration carrying one can only be applied to a `ZonedDateTime`, which knows
+/// the calendar position to measure them against; `Instant` admits hours and
+/// below. Unlike Temporal, the components are not required to share a sign — a
+/// literal is plain data here — so `sign` reports the largest non-zero one and
+/// a mixed-sign duration behaves as the sum of its parts.
+pub struct Duration {
+    pub years: i64 = 0,
+    pub months: i64 = 0,
+    pub weeks: i64 = 0,
+    pub days: i64 = 0,
+    pub hours: i64 = 0,
+    pub minutes: i64 = 0,
+    pub seconds: i64 = 0,
+    pub milliseconds: i64 = 0,
+    pub microseconds: i64 = 0,
+    pub nanoseconds: i64 = 0,
+}
+
+impl Eq for Duration;
+
+impl Duration {
+    /// Parse an ISO 8601 duration such as `"P1Y2M3W4DT5H6M7.5S"`, optionally
+    /// signed. A fraction is allowed on the last time component present and
+    /// spills into the components below it, so `"PT1.5H"` is `PT1H30M`.
+    pub fn parse(text: String) -> Result<Duration, DeserializeError> {
+        return parse_iso_duration(&text, 0, text.len());
+    }
+
+    /// The sign of the largest non-zero component: `1`, `-1`, or `0` when every
+    /// component is zero.
+    pub fn sign(&self) -> i32 {
+        let ordered = [
+            self.years,
+            self.months,
+            self.weeks,
+            self.days,
+            self.hours,
+            self.minutes,
+            self.seconds,
+            self.milliseconds,
+            self.microseconds,
+            self.nanoseconds,
+        ];
+        for let component of ordered {
+            if component > 0 {
+                return 1;
+            }
+            if component < 0 {
+                return -1;
+            }
+        }
+        return 0;
+    }
+
+    /// Whether every component is zero (`Temporal.Duration.prototype.blank`).
+    pub fn is_zero(&self) -> bool {
+        return self.sign() == 0;
+    }
+
+    /// The same span in the opposite direction.
+    pub fn negated(&self) -> Duration {
+        return self.scaled(-1);
+    }
+
+    /// The same span with a non-negative sign.
+    pub fn abs(&self) -> Duration {
+        if self.sign() < 0 {
+            return self.negated();
+        }
+        return *self;
+    }
+
+    /// Component-wise sum. Neither operand is balanced, so the components stay
+    /// where the caller put them.
+    pub fn add(&self, other: &Duration) -> Duration {
+        return Duration {
+            years: self.years + other.years,
+            months: self.months + other.months,
+            weeks: self.weeks + other.weeks,
+            days: self.days + other.days,
+            hours: self.hours + other.hours,
+            minutes: self.minutes + other.minutes,
+            seconds: self.seconds + other.seconds,
+            milliseconds: self.milliseconds + other.milliseconds,
+            microseconds: self.microseconds + other.microseconds,
+            nanoseconds: self.nanoseconds + other.nanoseconds,
+        };
+    }
+
+    /// Component-wise difference.
+    pub fn subtract(&self, other: &Duration) -> Duration {
+        return self.add(&other.negated());
+    }
+
+    /// The ISO 8601 form, e.g. `"P1Y2M3W4DT5H6M7.5S"`. A zero duration is
+    /// `"PT0S"`; a negative one takes a leading `-`.
+    pub fn to_iso8601(&self) -> String {
+        assert self.is_uniformly_signed();
+        let d = self.abs();
+        let mut out = if self.sign() < 0 { "-P" } else { "P" };
+        if d.years != 0 {
+            out = `${out}${d.years}Y`;
+        }
+        if d.months != 0 {
+            out = `${out}${d.months}M`;
+        }
+        if d.weeks != 0 {
+            out = `${out}${d.weeks}W`;
+        }
+        if d.days != 0 {
+            out = `${out}${d.days}D`;
+        }
+        let sub_second = d.milliseconds * 1_000_000 + d.microseconds * 1000 + d.nanoseconds;
+        if d.hours == 0 && d.minutes == 0 && d.seconds == 0 && sub_second == 0 {
+            if out.len() <= 2 {
+                return `${out}T0S`;
+            }
+            return out;
+        }
+        out = `${out}T`;
+        if d.hours != 0 {
+            out = `${out}${d.hours}H`;
+        }
+        if d.minutes != 0 {
+            out = `${out}${d.minutes}M`;
+        }
+        if d.seconds != 0 || sub_second != 0 {
+            let whole = d.seconds + sub_second / 1_000_000_000;
+            out = `${out}${whole}${format_minimal_fraction((sub_second % 1_000_000_000) as u32)}S`;
+        }
+        return out;
+    }
+
+    /// The time components (`hours` and below) as a nanosecond count. The date
+    /// components are ignored — they have no length without a calendar anchor.
+    fn time_nanoseconds(&self) -> i128 {
+        return self.hours as i128 * 3_600_000_000_000
+            + self.minutes as i128 * 60_000_000_000
+            + self.seconds as i128 * 1_000_000_000
+            + self.milliseconds as i128 * 1_000_000
+            + self.microseconds as i128 * 1000
+            + self.nanoseconds as i128;
+    }
+
+    /// Every component scaled by `factor`.
+    fn scaled(&self, factor: i64) -> Duration {
+        return Duration {
+            years: self.years * factor,
+            months: self.months * factor,
+            weeks: self.weeks * factor,
+            days: self.days * factor,
+            hours: self.hours * factor,
+            minutes: self.minutes * factor,
+            seconds: self.seconds * factor,
+            milliseconds: self.milliseconds * factor,
+            microseconds: self.microseconds * factor,
+            nanoseconds: self.nanoseconds * factor,
+        };
+    }
+
+    /// Whether every non-zero component carries the same sign, the invariant
+    /// Temporal enforces at construction and the ISO 8601 form needs.
+    fn is_uniformly_signed(&self) -> bool {
+        return self.abs().sign() >= 0 && self.negated().abs().sign() >= 0;
+    }
+
+    /// Whether any component measures calendar time, which only a
+    /// `ZonedDateTime` can resolve.
+    fn has_date_components(&self) -> bool {
+        return self.years != 0 || self.months != 0 || self.weeks != 0 || self.days != 0;
+    }
+}
+
+impl Display for Duration {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(self.to_iso8601());
+    }
+}
+
+impl Serialize for Duration {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+impl FromStr for Duration {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Duration, DeserializeError> {
+        return parse_iso_duration(s, start, end);
+    }
+}
+
+/// Split a nanosecond count into a `Duration` whose largest populated component
+/// is `largest_unit`. The date units above `Day` have no fixed length, so they
+/// are not reachable from a bare nanosecond count and trap.
+fn duration_from_nanoseconds(total: i128, largest_unit: Unit) -> Duration {
+    let negative = total < 0;
+    let magnitude = if negative { -total } else { total };
+
+    let nanoseconds = (magnitude % 1000) as i64;
+    let microseconds = (magnitude / 1000 % 1000) as i64;
+    let milliseconds = (magnitude / 1_000_000 % 1000) as i64;
+    let whole_seconds = magnitude / 1_000_000_000;
+
+    let mut out = match largest_unit {
+        Nanosecond => Duration { nanoseconds: magnitude as i64 },
+        Microsecond => Duration { microseconds: (magnitude / 1000) as i64, nanoseconds: nanoseconds },
+        Millisecond => Duration {
+            milliseconds: (magnitude / 1_000_000) as i64,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Second => Duration {
+            seconds: whole_seconds as i64,
+            milliseconds: milliseconds,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Minute => Duration {
+            minutes: (whole_seconds / 60) as i64,
+            seconds: (whole_seconds % 60) as i64,
+            milliseconds: milliseconds,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Hour => Duration {
+            hours: (whole_seconds / 3600) as i64,
+            minutes: (whole_seconds / 60 % 60) as i64,
+            seconds: (whole_seconds % 60) as i64,
+            milliseconds: milliseconds,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Day => Duration {
+            days: (whole_seconds / 86400) as i64,
+            hours: (whole_seconds / 3600 % 24) as i64,
+            minutes: (whole_seconds / 60 % 60) as i64,
+            seconds: (whole_seconds % 60) as i64,
+            milliseconds: milliseconds,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Year => panic("core:temporal: a year is not a fixed length; measure it against a ZonedDateTime"),
+        Month => panic("core:temporal: a month is not a fixed length; measure it against a ZonedDateTime"),
+        Week => panic("core:temporal: a week needs a calendar anchor; measure it against a ZonedDateTime"),
+    };
+    if negative {
+        out = out.negated();
+    }
+    return out;
+}
+
+/// Parse an ISO 8601 duration in `text[start..<end]`.
+fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, DeserializeError> {
+    let mut i = start;
+    let mut sign: i64 = 1;
+    if i < end && (text.get_byte_unchecked(i) == b'+' || text.get_byte_unchecked(i) == b'-') {
+        if text.get_byte_unchecked(i) == b'-' {
+            sign = -1;
+        }
+        i += 1;
+    }
+    if i >= end || (text.get_byte_unchecked(i) != b'P' && text.get_byte_unchecked(i) != b'p') {
+        return Result::Err(DeserializeError::malformed("expected 'P'", i as i64));
+    }
+    i += 1;
+
+    let mut out = Duration {};
+    let mut seen_component = false;
+
+    // Date components, in the order ISO 8601 fixes them.
+    let mut date_slot = 0;
+    while i < end {
+        let byte = text.get_byte_unchecked(i);
+        if byte == b'T' || byte == b't' {
+            break;
+        }
+        let [value, after] = read_duration_number(text, i, end)?;
+        if after >= end {
+            return Result::Err(DeserializeError::eof(after as i64));
+        }
+        let designator_slot = duration_date_slot(text.get_byte_unchecked(after));
+        if designator_slot < 0 {
+            return Result::Err(DeserializeError::malformed("expected 'Y', 'M', 'W', or 'D'", after as i64));
+        }
+        if designator_slot < date_slot {
+            return Result::Err(DeserializeError::malformed("duration components are out of order", after as i64));
+        }
+        date_slot = designator_slot + 1;
+        seen_component = true;
+        out = assign_date_component(out, designator_slot, value);
+        i = after + 1;
+    }
+
+    if i < end && (text.get_byte_unchecked(i) == b'T' || text.get_byte_unchecked(i) == b't') {
+        i += 1;
+        let mut time_slot = 0;
+        let mut seen_time_component = false;
+        let mut fraction_seen = false;
+        while i < end {
+            if fraction_seen {
+                return Result::Err(DeserializeError::malformed(
+                    "only the last duration component may carry a fraction",
+                    i as i64,
+                ));
+            }
+            let [value, after_number] = read_duration_number(text, i, end)?;
+            let [fraction_nanoseconds, after] = read_duration_fraction(text, after_number, end)?;
+            if after >= end {
+                return Result::Err(DeserializeError::eof(after as i64));
+            }
+            let designator_slot = duration_time_slot(text.get_byte_unchecked(after));
+            if designator_slot < 0 {
+                return Result::Err(DeserializeError::malformed("expected 'H', 'M', or 'S'", after as i64));
+            }
+            if designator_slot < time_slot {
+                return Result::Err(DeserializeError::malformed("duration components are out of order", after as i64));
+            }
+            time_slot = designator_slot + 1;
+            seen_time_component = true;
+            seen_component = true;
+            out = assign_time_component(out, designator_slot, value);
+            if after > after_number {
+                fraction_seen = true;
+                out = out.add(&duration_from_nanoseconds(
+                    fraction_nanoseconds * duration_time_slot_seconds(designator_slot),
+                    Unit::Minute,
+                ));
+            }
+            i = after + 1;
+        }
+        if !seen_time_component {
+            return Result::Err(DeserializeError::malformed("expected a time component after 'T'", i as i64));
+        }
+    }
+
+    if !seen_component {
+        return Result::Err(DeserializeError::malformed("a duration needs at least one component", i as i64));
+    }
+    if i != end {
+        return Result::Err(DeserializeError::malformed("trailing characters", i as i64));
+    }
+    if sign < 0 {
+        return Result::Ok(out.negated());
+    }
+    return Result::Ok(out);
+}
+
+/// Read the leading run of digits at `i`, returning the value and the index just
+/// past it.
+fn read_duration_number(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+    let mut j = i;
+    let mut value: i64 = 0;
+    while j < end && is_ascii_digit(text.get_byte_unchecked(j)) {
+        value = value * 10 + (text.get_byte_unchecked(j) - b'0') as i64;
+        j += 1;
+    }
+    if j == i {
+        return Result::Err(DeserializeError::malformed("expected a duration component", i as i64));
+    }
+    return Result::Ok([value, j]);
+}
+
+/// Read an optional `.`/`,` fraction at `i` as a nine-digit nanosecond scale,
+/// returning it and the index just past it. Absent, it reads as zero and `i`.
+fn read_duration_fraction(text: &String, i: i32, end: i32) -> Result<[i128, i32], DeserializeError> {
+    if i >= end || (text.get_byte_unchecked(i) != b'.' && text.get_byte_unchecked(i) != b',') {
+        return Result::Ok([0, i]);
+    }
+    let mut j = i + 1;
+    let mut scale: i128 = 100_000_000;
+    let mut value: i128 = 0;
+    while j < end && is_ascii_digit(text.get_byte_unchecked(j)) {
+        if scale >= 1 {
+            value = value + (text.get_byte_unchecked(j) - b'0') as i128 * scale;
+            scale = scale / 10;
+        }
+        j += 1;
+    }
+    if j == i + 1 {
+        return Result::Err(DeserializeError::malformed("expected fractional digits", (i + 1) as i64));
+    }
+    return Result::Ok([value, j]);
+}
+
+/// Slot index of an ISO 8601 date designator (`Y`, `M`, `W`, `D`), or `-1`.
+fn duration_date_slot(byte: u8) -> i32 {
+    if byte == b'Y' || byte == b'y' {
+        return 0;
+    }
+    if byte == b'M' || byte == b'm' {
+        return 1;
+    }
+    if byte == b'W' || byte == b'w' {
+        return 2;
+    }
+    if byte == b'D' || byte == b'd' {
+        return 3;
+    }
+    return -1;
+}
+
+/// Slot index of an ISO 8601 time designator (`H`, `M`, `S`), or `-1`.
+fn duration_time_slot(byte: u8) -> i32 {
+    if byte == b'H' || byte == b'h' {
+        return 0;
+    }
+    if byte == b'M' || byte == b'm' {
+        return 1;
+    }
+    if byte == b'S' || byte == b's' {
+        return 2;
+    }
+    return -1;
+}
+
+/// Seconds in one whole unit of the time slot, which scales a fraction read as
+/// nanoseconds-per-second into nanoseconds of that unit.
+fn duration_time_slot_seconds(slot: i32) -> i128 {
+    if slot == 0 {
+        return 3600;
+    }
+    if slot == 1 {
+        return 60;
+    }
+    return 1;
+}
+
+/// Store `value` in the date component named by `slot`.
+fn assign_date_component(duration: Duration, slot: i32, value: i64) -> Duration {
+    if slot == 0 {
+        return Duration { ..duration, years: value };
+    }
+    if slot == 1 {
+        return Duration { ..duration, months: value };
+    }
+    if slot == 2 {
+        return Duration { ..duration, weeks: value };
+    }
+    return Duration { ..duration, days: value };
+}
+
+/// Store `value` in the time component named by `slot`.
+fn assign_time_component(duration: Duration, slot: i32, value: i64) -> Duration {
+    if slot == 0 {
+        return Duration { ..duration, hours: value };
+    }
+    if slot == 1 {
+        return Duration { ..duration, minutes: value };
+    }
+    return Duration { ..duration, seconds: value };
+}
+
+/// Accepts an ISO 8601 duration string.
+struct DurationVisitor {
+}
+
+impl Visitor for DurationVisitor {
+    type Value = Duration;
+
+    fn visit_string(&mut self, v: String) -> Result<Duration, DeserializeError> {
+        return Duration::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected duration, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected duration, found map", -1));
+    }
+}
+
+impl Deserialize for Duration {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Duration, DeserializeError> {
+        let mut v = DurationVisitor {};
+        return d.deserialize_any::<DurationVisitor>(&mut v);
+    }
 }
 
 // serde — `Instant` and `ZonedDateTime` serialize as an RFC 3339 string under
