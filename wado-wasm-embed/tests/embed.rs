@@ -5,6 +5,21 @@ fn prune(source: &str, keep: &[&str]) -> Vec<u8> {
     prune_with(source, keep, false)
 }
 
+/// The error `source` is rejected with. Every export is kept, so nothing but
+/// the asset's own shape can be the reason.
+fn embed_err(source: &str) -> Error {
+    let wasm = wat::parse_str(source).expect("fixture must parse");
+    embed(
+        &wasm,
+        &Embed {
+            memory_import: ("env", "memory"),
+            keep_export: &|_| true,
+            strip_custom_sections: false,
+        },
+    )
+    .expect_err("an asset the prune cannot trust must not be embedded")
+}
+
 fn prune_with(source: &str, keep: &[&str], strip: bool) -> Vec<u8> {
     let wasm = wat::parse_str(source).expect("fixture must parse");
     let out = embed(
@@ -186,32 +201,13 @@ fn an_existing_memory_import_is_left_alone() {
 
 #[test]
 fn two_memories_are_rejected() {
-    let wasm = wat::parse_str(r#"(module (import "env" "memory" (memory 1)) (memory 1))"#)
-        .expect("fixture must parse");
-    let err = embed(
-        &wasm,
-        &Embed {
-            memory_import: ("env", "memory"),
-            keep_export: &|_| true,
-            strip_custom_sections: false,
-        },
-    )
-    .expect_err("two memories cannot share one component memory");
+    let err = embed_err(r#"(module (import "env" "memory" (memory 1)) (memory 1))"#);
     assert_matches!(err, Error::Unsupported("more than one memory"));
 }
 
 #[test]
 fn a_start_section_is_rejected() {
-    let wasm = wat::parse_str(r#"(module (func $init) (start $init))"#).expect("fixture");
-    let err = embed(
-        &wasm,
-        &Embed {
-            memory_import: ("env", "memory"),
-            keep_export: &|_| true,
-            strip_custom_sections: false,
-        },
-    )
-    .expect_err("a start section cannot run inside the embedding");
+    let err = embed_err(r#"(module (func $init) (start $init))"#);
     assert_matches!(err, Error::Unsupported("start section"));
 }
 
@@ -526,34 +522,15 @@ fn the_map_itself_never_survives_the_prune() {
 
 #[test]
 fn a_map_naming_an_unknown_function_is_rejected() {
-    let source = quarters(Some("a 0:0+4\nnobody 0:4+4\n"));
-    let wasm = wat::parse_str(&source).expect("fixture must parse");
-    let error = embed(
-        &wasm,
-        &Embed {
-            memory_import: ("env", "memory"),
-            keep_export: &|_| true,
-            strip_custom_sections: false,
-        },
-    )
-    .expect_err("a map that has drifted from the module must not be used");
-    assert_matches!(error, Error::DataRef(_));
+    assert_matches!(
+        embed_err(&quarters(Some("a 0:0+4\nnobody 0:4+4\n"))),
+        Error::DataRef(_)
+    );
 }
 
 #[test]
 fn a_map_reaching_past_the_end_of_its_segment_is_rejected() {
-    let source = quarters(Some("a 0:0+64\n"));
-    let wasm = wat::parse_str(&source).expect("fixture must parse");
-    let error = embed(
-        &wasm,
-        &Embed {
-            memory_import: ("env", "memory"),
-            keep_export: &|_| true,
-            strip_custom_sections: false,
-        },
-    )
-    .expect_err("a range outside its segment must not be used");
-    assert_matches!(error, Error::DataRef(_));
+    assert_matches!(embed_err(&quarters(Some("a 0:0+64\n"))), Error::DataRef(_));
 }
 
 /// `memory.init` names a segment by index, so a passive segment is never split
@@ -656,31 +633,24 @@ fn a_map_naming_a_passive_segment_does_not_keep_it_alive() {
     );
 }
 
-fn dataref_error(map: &str) -> Error {
-    let wasm = wat::parse_str(&quarters(Some(map))).expect("fixture must parse");
-    embed(
-        &wasm,
-        &Embed {
-            memory_import: ("env", "memory"),
-            keep_export: &|_| true,
-            strip_custom_sections: false,
-        },
-    )
-    .expect_err("a map that cannot be trusted must not be used")
-}
-
 /// A map that names nothing reads exactly like one that failed to resolve, and
 /// honouring it would prune every data segment away.
 #[test]
 fn an_empty_map_is_rejected_rather_than_pruning_everything() {
-    assert_matches!(dataref_error(""), Error::DataRef(_));
-    assert_matches!(dataref_error("\n  \n"), Error::DataRef(_));
+    assert_matches!(embed_err(&quarters(Some(""))), Error::DataRef(_));
+    assert_matches!(embed_err(&quarters(Some("\n  \n"))), Error::DataRef(_));
 }
 
 /// `offset + size` past the end of the address space wraps in release, so the
 /// range has to be refused where it is built, not where it is sliced.
 #[test]
 fn a_range_that_cannot_end_is_rejected() {
-    assert_matches!(dataref_error("a 0:4294967295+8\n"), Error::DataRef(_));
-    assert_matches!(dataref_error("a 0:1+4294967295\n"), Error::DataRef(_));
+    assert_matches!(
+        embed_err(&quarters(Some("a 0:4294967295+8\n"))),
+        Error::DataRef(_)
+    );
+    assert_matches!(
+        embed_err(&quarters(Some("a 0:1+4294967295\n"))),
+        Error::DataRef(_)
+    );
 }

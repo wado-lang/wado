@@ -1,19 +1,13 @@
 //! Turn a relocatable core wasm module into the `.wat` asset the compiler
-//! bundles.
-//!
-//! wasm-ld linked with `--emit-relocs` says which data bytes each function
-//! reads, but only against the byte offsets of the binary it produced — a
-//! `.wat` round trip re-encodes every relocatable immediate to its narrow form
-//! and invalidates them. So the graph is resolved here, once, into the
-//! offset-free `wado.dataref` map that `wado-wasm-embed` prunes with, and the
-//! sections it came from are dropped along with the DWARF nobody reads.
+//! bundles, resolving its relocations into a `wado.dataref` map on the way.
+
+use std::fmt::Write as _;
 
 use lexopt::Arg::Value;
 use wado_wasm_embed::dataref::{self, DataRefs};
 
-/// Custom sections the asset has no use for: the relocation metadata is spent
-/// once the map is resolved, and DWARF describing an asset nothing debugs is
-/// tens of kilobytes of escaped bytes in the middle of a reviewable file.
+/// Custom sections the asset has no use for: the relocations are spent once the
+/// map is resolved, and nothing ever debugs the asset.
 fn is_spent(name: &str) -> bool {
     name == "linking" || name.starts_with("reloc.") || name.starts_with(".debug_")
 }
@@ -51,10 +45,10 @@ pub fn run(mut parser: lexopt::Parser) {
     print!("{}{}{}", &wat[..close], block, &wat[close..]);
 }
 
-/// Re-emit `wasm` without the sections [`is_spent`] names. Every section is
-/// copied verbatim, so nothing but the section list changes.
+/// Re-emit `wasm` without the sections [`is_spent`] names. Every other section
+/// is copied verbatim, so nothing but the section list changes.
 fn strip(wasm: &[u8]) -> Vec<u8> {
-    let mut out = Vec::from(&wasm[..8]);
+    let mut out = wasm_encoder::Module::new();
     for payload in wasmparser::Parser::new(0).parse_all(wasm) {
         let payload = payload.expect("input must be a core wasm module");
         let (id, range) = match &payload {
@@ -65,22 +59,12 @@ fn strip(wasm: &[u8]) -> Vec<u8> {
                 None => continue,
             },
         };
-        out.push(id);
-        let mut length = (range.end - range.start) as u32;
-        loop {
-            let mut byte = (length & 0x7f) as u8;
-            length >>= 7;
-            if length != 0 {
-                byte |= 0x80;
-            }
-            out.push(byte);
-            if length == 0 {
-                break;
-            }
-        }
-        out.extend_from_slice(&wasm[range.start..range.end]);
+        out.section(&wasm_encoder::RawSection {
+            id,
+            data: &wasm[range.start..range.end],
+        });
     }
-    out
+    out.finish()
 }
 
 fn data_bytes(wasm: &[u8]) -> usize {
@@ -110,18 +94,18 @@ fn block(refs: &DataRefs, data_bytes: usize) -> String {
          \x20 ;;   <function name> <segment>:<offset>+<size> ...      (sorted by offset)\n\
          \x20 ;;\n",
     );
-    block.push_str(&format!(
-        "  ;; {} functions claim {} of {data_bytes} data bytes; the rest is padding.\n",
+    writeln!(
+        block,
+        "  ;; {} functions claim {} of {data_bytes} data bytes; the rest is padding.\n\
+         \x20 ;; Regenerate with `mise run update-bundled` — never edit by hand.\n\
+         \x20 (@custom \"{}\" (after data)",
         refs.len(),
         refs.claimed_bytes(),
-    ));
-    block.push_str("  ;; Regenerate with `mise run update-bundled` — never edit by hand.\n");
-    block.push_str(&format!(
-        "  (@custom \"{}\" (after data)\n",
-        dataref::SECTION_NAME
-    ));
+        dataref::SECTION_NAME,
+    )
+    .expect("writing to a String cannot fail");
     for line in refs.to_text().lines() {
-        block.push_str(&format!("    \"{line}\\n\"\n"));
+        writeln!(block, "    \"{line}\\n\"").expect("writing to a String cannot fail");
     }
     block.push_str("  )\n");
     block

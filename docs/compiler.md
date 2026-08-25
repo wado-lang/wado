@@ -345,7 +345,7 @@ The compiler bundles the standard library inside its binary (`stdlib.rs` embeds 
 
 The `wado-bundled-libm/` crate compiles a deterministic libm to `wasm32-unknown-unknown`, checked in as `lib/core/libm.wat` (rebuild with `mise run update-bundled`). `core:prelude` name-imports its exports through the ordinary core-wasm asset import (`use { libm_sin as f64_sin, … } from "../libm.wat" with { type: "wat" }`) and attaches them to `f32` / `f64`. The compiler links the asset as a separate core module inside the produced component, pruned to the exports the program actually calls.
 
-The asset also carries a `wado.dataref` custom section — one line per function, naming the rodata ranges that function reads — so the prune reaches its 5.4 KB of tables too. `mise run update-bundled` resolves it from the `linking` and `reloc.CODE` sections of a `--emit-relocs` build and drops those sections, because a `.wat` round trip re-encodes every relocatable immediate to its narrow form and invalidates the byte offsets they hold. A program calling `sin` keeps 344 of those bytes.
+The asset also carries a `wado.dataref` custom section — one line per function, naming the rodata ranges that function reads — so the prune reaches its 5.4 KB of tables too, and a program calling `sin` keeps 344 of those bytes. `mise run update-bundled` resolves it from the `linking` and `reloc.CODE` sections of a `--emit-relocs` build and drops those sections, whose byte offsets into code the `.wat` round trip invalidates.
 
 ## Allocators
 

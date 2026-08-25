@@ -7,6 +7,7 @@ use std::convert::Infallible;
 use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind};
 
+use crate::dataref::DataRange;
 use crate::reach::{Keep, Live};
 use crate::{Asset, Embed, Error};
 
@@ -44,7 +45,7 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
     );
 
     let datas = DataPlan::new(asset, live);
-    let mut remap = Remap::new(asset, live, &datas);
+    let mut remap = Remap::new(asset, live, datas.first.clone());
     let mut module = wasm_encoder::Module::new();
 
     let mut types = wasm_encoder::TypeSection::new();
@@ -179,20 +180,7 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
         match live.datas.get(&(i as u32)) {
             None => {}
             Some(Keep::Whole) => remap.parse_data(&mut section, data.clone())?,
-            Some(Keep::Ranges(ranges)) => {
-                let base = crate::segment_base(data)
-                    .expect("`Keep::Ranges` is only reached for a constant-address segment");
-                for range in ranges {
-                    let address = base.address + i64::from(range.offset);
-                    let offset = if base.is_64 {
-                        wasm_encoder::ConstExpr::i64_const(address)
-                    } else {
-                        wasm_encoder::ConstExpr::i32_const(address as i32)
-                    };
-                    let bytes = &data.data[range.offset as usize..range.end() as usize];
-                    section.active(0, &offset, bytes.iter().copied());
-                }
-            }
+            Some(Keep::Ranges(ranges)) => split_segment(&mut section, data, ranges),
         }
     }
     if !section.is_empty() {
@@ -263,11 +251,30 @@ fn name_section(
     wrote.then_some(section)
 }
 
-/// Where each source data segment lands once the split ones have become several.
-///
-/// A split segment is only ever reached through the memory it initialises, so
-/// its index is never named; mapping it to its first piece keeps `data.drop` on
-/// an already-dropped active segment encodable and costs nothing else.
+/// Emit each surviving run of a segment as a segment of its own, at the address
+/// the bytes had.
+fn split_segment(
+    section: &mut wasm_encoder::DataSection,
+    data: &wasmparser::Data<'_>,
+    ranges: &[DataRange],
+) {
+    assert!(!ranges.is_empty(), "an empty run keeps no bytes");
+    let base = crate::segment_base(data)
+        .expect("`Keep::Ranges` is only reached for a constant-address segment");
+    for range in ranges {
+        let address = base.address + i64::from(range.offset);
+        let offset = if base.is_64 {
+            wasm_encoder::ConstExpr::i64_const(address)
+        } else {
+            wasm_encoder::ConstExpr::i32_const(address as i32)
+        };
+        let bytes = &data.data[range.offset as usize..range.end() as usize];
+        section.active(0, &offset, bytes.iter().copied());
+    }
+}
+
+/// Where each source data segment lands once the split ones have become
+/// several. A split one is never named by index, so it maps to its first piece.
 struct DataPlan {
     first: Vec<Option<u32>>,
     total: u32,
@@ -306,7 +313,7 @@ struct Remap {
 }
 
 impl Remap {
-    fn new(asset: &Asset<'_>, live: &Live, datas: &DataPlan) -> Self {
+    fn new(asset: &Asset<'_>, live: &Live, datas: Vec<Option<u32>>) -> Self {
         Remap {
             funcs: entities(asset.total_funcs(), asset.imported.funcs, &live.funcs),
             tables: entities(asset.total_tables(), asset.imported.tables, &live.tables),
@@ -314,7 +321,7 @@ impl Remap {
             tags: entities(asset.total_tags(), asset.imported.tags, &live.tags),
             types: entities(asset.types.len() as u32, 0, &live.types),
             elems: entities(asset.elems.len() as u32, 0, &live.elems),
-            datas: datas.first.clone(),
+            datas,
         }
     }
 }

@@ -7,10 +7,9 @@
 //! - every function, global, table, tag, type and segment unreachable from the
 //!   exports the component actually uses is dropped.
 //!
-//! An active data segment is pruned by the byte, not kept whole, where the
-//! asset carries a [`dataref`] map saying which of its bytes each function
-//! reads. Without one the segment stays whole: it initialises memory whether
-//! or not anything still reads what it wrote.
+//! An active data segment is pruned by the byte where the asset carries a
+//! [`dataref`] map, and kept whole where it does not: a segment initialises
+//! memory whether or not anything still reads what it wrote.
 //!
 //! A custom section survives only where the prune leaves it true. The `name`
 //! section is rebuilt against the functions that remain; `producers` and
@@ -86,15 +85,14 @@ impl From<wasm_encoder::reencode::Error> for Error {
     }
 }
 
-/// Where an active data segment starts, when the pieces of a split one could
-/// name their own addresses: a constant base plus an offset is expressible,
-/// `global.get` plus an offset is not.
+/// The constant address an active data segment starts at.
 pub(crate) struct SegmentBase {
     pub address: i64,
     pub is_64: bool,
 }
 
-/// `None` for a passive segment or one at a computed address.
+/// `None` for a passive segment or one at a computed address — neither can hand
+/// the pieces of a split an address of their own.
 pub(crate) fn segment_base(data: &wasmparser::Data<'_>) -> Option<SegmentBase> {
     let wasmparser::DataKind::Active { offset_expr, .. } = &data.kind else {
         return None;

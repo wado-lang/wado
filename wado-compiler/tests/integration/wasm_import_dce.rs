@@ -176,34 +176,7 @@ fn the_bundled_libm_is_pruned_to_what_the_program_calls() {
     let full = wat::parse_bytes(wado_compiler::stdlib::CORE_LIBM_WAT).expect("libm.wat parses");
     let full_functions = code_entry_count(&full);
 
-    let source = r#"
-use { println, Stdout } from "core:cli";
-
-export fn run() with Stdout {
-    println(`${f64::sin(builtin::black_box(0.5))}`);
-}
-"#;
-    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let result = crate::common::compile_source_with_opts(
-        &fixture_dir.join("__libm_dce_entry__.wado"),
-        source,
-        wado_compiler::OptLevel::default(),
-    )
-    .expect("compile should succeed");
-
-    let mut libm = None;
-    for payload in Parser::new(0).parse_all(&result.wasm) {
-        if let Ok(Payload::ModuleSection {
-            unchecked_range, ..
-        }) = payload
-        {
-            let module = &result.wasm[unchecked_range.start..unchecked_range.end];
-            if module_has_export(module, "libm_sin") {
-                libm = Some(module.to_vec());
-            }
-        }
-    }
-    let libm = libm.expect("the component embeds libm");
+    let libm = embedded_libm("__libm_dce_entry__.wado");
 
     assert_eq!(
         function_exports(&libm),
@@ -230,35 +203,7 @@ fn the_bundled_libm_keeps_only_the_data_the_program_reads() {
         "the asset should carry its tables: {full_bytes} bytes"
     );
 
-    let source = r#"
-use { println, Stdout } from "core:cli";
-
-export fn run() with Stdout {
-    println(`${f64::sin(builtin::black_box(0.5))}`);
-}
-"#;
-    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let result = crate::common::compile_source_with_opts(
-        &fixture_dir.join("__libm_data_dce_entry__.wado"),
-        source,
-        wado_compiler::OptLevel::default(),
-    )
-    .expect("compile should succeed");
-
-    let mut libm = None;
-    for payload in Parser::new(0).parse_all(&result.wasm) {
-        if let Ok(Payload::ModuleSection {
-            unchecked_range, ..
-        }) = payload
-        {
-            let module = &result.wasm[unchecked_range.start..unchecked_range.end];
-            if module_has_export(module, "libm_sin") {
-                libm = Some(module.to_vec());
-            }
-        }
-    }
-    let libm = libm.expect("the component embeds libm");
-
+    let libm = embedded_libm("__libm_data_dce_entry__.wado");
     let kept = data_byte_count(&libm);
     assert!(
         kept > 0 && kept < full_bytes / 4,
@@ -290,9 +235,7 @@ fn the_bundled_libm_carries_its_data_reference_map() {
     )
     .expect("the map must parse");
 
-    // A map that has quietly stopped describing the asset would prune data the
-    // program still reads, and nothing else here would notice. It claims all
-    // but the alignment padding, so anything short of that is drift.
+    // Everything but the alignment padding, so anything short of that is drift.
     let claimed = refs.claimed_bytes() as usize;
     let total = data_byte_count(&full);
     assert!(
@@ -300,6 +243,39 @@ fn the_bundled_libm_carries_its_data_reference_map() {
         "the map claims {claimed} of {total} data bytes; regenerate with \
          `mise run update-bundled`"
     );
+}
+
+/// The embedded libm core module of a program that calls `sin` and nothing
+/// else. `black_box` keeps the argument off the constant-folding path, so the
+/// bundled code really is reached.
+fn embedded_libm(entry: &str) -> Vec<u8> {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`${f64::sin(builtin::black_box(0.5))}`);
+}
+"#;
+    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let result = crate::common::compile_source_with_opts(
+        &fixture_dir.join(entry),
+        source,
+        wado_compiler::OptLevel::default(),
+    )
+    .expect("compile should succeed");
+
+    for payload in Parser::new(0).parse_all(&result.wasm) {
+        if let Ok(Payload::ModuleSection {
+            unchecked_range, ..
+        }) = payload
+        {
+            let module = &result.wasm[unchecked_range.start..unchecked_range.end];
+            if module_has_export(module, "libm_sin") {
+                return module.to_vec();
+            }
+        }
+    }
+    panic!("the component embeds libm");
 }
 
 fn code_entry_count(module_bytes: &[u8]) -> usize {

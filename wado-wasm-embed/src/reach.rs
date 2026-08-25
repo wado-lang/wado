@@ -53,10 +53,9 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
             Some(refs) => func_ranges(asset, refs)?,
             None => BTreeMap::new(),
         },
-        // A map can only narrow a segment whose surviving pieces can name their
-        // own addresses: an active segment at a constant base. A passive one is
-        // named by index and copied by `memory.init`, and one at a computed
-        // address has no base to add an offset to.
+        // Only an active segment at a constant base can have its pieces name
+        // their own addresses. A passive one is reached through the
+        // `memory.init` that copies it, which the walk already follows.
         splittable: asset
             .datas
             .iter()
@@ -355,13 +354,9 @@ impl Walk<'_, '_> {
         }
     }
 
-    /// Keep one range of a segment. The offset expression still has to be
-    /// walked, so a segment reached this way is queued like any other.
-    ///
-    /// A range naming a segment no map can narrow is dropped rather than kept:
-    /// a passive segment reaches memory through the `memory.init` that copies
-    /// it, which the walk already follows, and a segment at a computed address
-    /// was kept whole before the walk began.
+    /// Keep one range of a segment, and queue the segment so its offset
+    /// expression is walked. A range naming a segment no map can narrow is
+    /// dropped: something else already decided that segment's fate.
     fn mark_data_range(&mut self, range: DataRange) {
         if !self.splittable[range.segment as usize] {
             return;

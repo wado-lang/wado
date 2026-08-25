@@ -1,15 +1,5 @@
-//! Which bytes of an asset's data segments each of its functions reads.
-//!
-//! wasm-ld records this in the `linking` and `reloc.CODE` sections, but only
-//! against the byte offsets of the binary it produced: a `.wat` round trip
-//! re-encodes every relocatable immediate to its narrow form and every one of
-//! those offsets then points at the wrong instruction. So the graph is resolved
-//! once, when the asset is built ([`resolve`]), into a form that names no byte
-//! offset into code — a function name and the data ranges it reaches — and the
-//! asset carries it in a [`SECTION_NAME`] custom section.
-//!
-//! Without it every active data segment is live, because an active segment
-//! initialises memory whether or not anything still reads what it wrote.
+//! Which bytes of an asset's data segments each of its functions reads, keyed
+//! by function name and carried in a [`SECTION_NAME`] custom section.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -28,9 +18,8 @@ pub struct DataRange {
 }
 
 impl DataRange {
-    /// `None` where the range would end past the end of the address space, so
-    /// every `DataRange` that exists has an `end` and both constructors reject
-    /// one that does not.
+    /// `None` for a range with no end to reach. Every constructor goes through
+    /// here, so [`end`](Self::end) is total.
     fn new(segment: u32, offset: u32, size: u32) -> Option<Self> {
         offset.checked_add(size)?;
         Some(DataRange {
@@ -43,16 +32,13 @@ impl DataRange {
     pub(crate) fn end(&self) -> u32 {
         self.offset
             .checked_add(self.size)
-            .expect("a DataRange is rejected at construction unless it has an end")
+            .expect("a DataRange without an end is rejected at construction")
     }
 }
 
-/// Function name -> the data ranges its body relocates against.
-///
-/// Names are the asset's own, as its `name` section spells them, so a map and
-/// the module it describes are only meaningful together — both come out of one
-/// `mise run update-bundled`.
-#[derive(Default, Debug)]
+/// Function name -> the data ranges its body relocates against. Names are the
+/// asset's own, so a map and the module it describes only mean anything together.
+#[derive(Debug)]
 pub struct DataRefs {
     entries: BTreeMap<String, Vec<DataRange>>,
 }
@@ -74,7 +60,6 @@ impl DataRefs {
     /// this against the segment's size: what is unclaimed is padding.
     pub fn claimed_bytes(&self) -> u32 {
         let mut ranges: Vec<DataRange> = self.entries.values().flatten().copied().collect();
-        ranges.sort_unstable();
         merge(&mut ranges);
         ranges.iter().map(|r| r.size).sum()
     }
@@ -108,15 +93,14 @@ impl DataRefs {
             if ranges.is_empty() {
                 return Err(malformed());
             }
-            ranges.sort_unstable();
+            merge(&mut ranges);
             if entries.insert(name.to_string(), ranges).is_some() {
                 return Err(Error::DataRef(format!("`{name}` is listed twice")));
             }
         }
-        // An empty map and a map that failed to resolve read the same, and the
-        // two differ by everything: the first prunes every data segment away,
-        // the second means the section should not have been written. An asset
-        // with nothing to say carries no section at all.
+        // Indistinguishable from a map that failed to resolve, and honouring it
+        // prunes every data segment away. An asset with nothing to say carries
+        // no section at all.
         if entries.is_empty() {
             return Err(Error::DataRef("names no function".into()));
         }
@@ -144,25 +128,17 @@ impl DataRefs {
     }
 }
 
-/// Sort-then-merge overlapping and adjacent ranges of the same segment.
-///
-/// `gap` bytes between two ranges are absorbed rather than split around: a
+/// Sort-then-merge the ranges of each segment, absorbing gaps up to `gap`: a
 /// second segment costs more header than a short gap costs payload.
 pub(crate) fn merge_with_gap(ranges: &mut Vec<DataRange>, gap: u32) {
     ranges.sort_unstable();
-    let mut merged: Vec<DataRange> = Vec::with_capacity(ranges.len());
-    for range in ranges.iter() {
-        match merged.last_mut() {
-            Some(last)
-                if last.segment == range.segment
-                    && range.offset <= last.end().saturating_add(gap) =>
-            {
-                last.size = range.end().max(last.end()) - last.offset;
-            }
-            _ => merged.push(*range),
+    ranges.dedup_by(|next, last| {
+        let adjoins = last.segment == next.segment && next.offset <= last.end().saturating_add(gap);
+        if adjoins {
+            last.size = next.end().max(last.end()) - last.offset;
         }
-    }
-    *ranges = merged;
+        adjoins
+    });
 }
 
 fn merge(ranges: &mut Vec<DataRange>) {
@@ -177,7 +153,7 @@ fn merge(ranges: &mut Vec<DataRange>) {
 /// data-to-function edge this map cannot express — so one is an error rather
 /// than something to resolve halfway.
 pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
-    use wasmparser::{Linking, LinkingSectionReader, Payload, RelocSectionReader, SymbolInfo};
+    use wasmparser::{Payload, RelocSectionReader};
 
     // A relocation names its target by position among the module's sections,
     // custom ones counted, so the walk has to count them the same way. A code
@@ -243,36 +219,7 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
     let (data, offset) = linking.ok_or_else(|| {
         Error::DataRef("no `linking` section: link the asset with `--emit-relocs`".into())
     })?;
-    let mut symbols: BTreeMap<u32, DataRange> = BTreeMap::new();
-    let reader = LinkingSectionReader::new(wasmparser::BinaryReader::new(data, offset))?;
-    for subsection in reader.subsections() {
-        let Linking::SymbolTable(map) = subsection? else {
-            continue;
-        };
-        for (index, symbol) in map.into_iter().enumerate() {
-            let SymbolInfo::Data {
-                symbol: Some(defined),
-                ..
-            } = symbol?
-            else {
-                continue;
-            };
-            if defined.size == 0 {
-                continue;
-            }
-            let range =
-                DataRange::new(defined.index, defined.offset, defined.size).ok_or_else(|| {
-                    Error::DataRef(format!(
-                        "symbol {index} spans {}..{} of segment {}, which the address \
-                         space cannot hold",
-                        defined.offset,
-                        u64::from(defined.offset) + u64::from(defined.size),
-                        defined.index
-                    ))
-                })?;
-            symbols.insert(index as u32, range);
-        }
-    }
+    let symbols = data_symbols(data, offset)?;
 
     let mut entries: BTreeMap<String, Vec<DataRange>> = BTreeMap::new();
     for (data, offset) in relocs {
@@ -315,4 +262,40 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
         merge(ranges);
     }
     Ok(DataRefs { entries })
+}
+
+/// The range each data symbol of the `linking` section defines, by symbol
+/// index. A relocation names one of these.
+fn data_symbols(data: &[u8], offset: usize) -> Result<BTreeMap<u32, DataRange>, Error> {
+    use wasmparser::{Linking, LinkingSectionReader, SymbolInfo};
+
+    let mut symbols = BTreeMap::new();
+    let reader = LinkingSectionReader::new(wasmparser::BinaryReader::new(data, offset))?;
+    for subsection in reader.subsections() {
+        let Linking::SymbolTable(map) = subsection? else {
+            continue;
+        };
+        for (index, symbol) in map.into_iter().enumerate() {
+            let SymbolInfo::Data {
+                symbol: Some(defined),
+                ..
+            } = symbol?
+            else {
+                continue;
+            };
+            if defined.size == 0 {
+                continue;
+            }
+            let range =
+                DataRange::new(defined.index, defined.offset, defined.size).ok_or_else(|| {
+                    Error::DataRef(format!(
+                        "symbol {index} spans {} bytes from {} of segment {}, which the \
+                         address space cannot hold",
+                        defined.size, defined.offset, defined.index
+                    ))
+                })?;
+            symbols.insert(index as u32, range);
+        }
+    }
+    Ok(symbols)
 }

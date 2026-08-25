@@ -60,15 +60,13 @@ Only the functions a program actually reaches survive into the output — the
 bundled module is pruned to the used export set when it is linked, so a program
 that calls `sin` does not carry `pow`.
 
-The pruning reaches the library's tables too. Two thirds of the asset's 5.4 KB
-of rodata belongs to `exp2` alone, and a program that never calls it has no
-reason to carry it, so the asset ships a `wado.dataref` custom section naming
-the rodata ranges each function reads and the prune keeps only the ranges the
-surviving functions claim. `mise run update-bundled` resolves that map from the
-`linking` and `reloc.CODE` sections of a `--emit-relocs` build, and drops those
-sections: they hold byte offsets into the code, which the `.wat` round trip
-invalidates by re-encoding relocatable immediates to their narrow form. A
-program calling `sin` keeps 344 of the 5,448 bytes.
+The pruning reaches the library's tables too — two thirds of the asset's 5.4 KB
+of rodata is `exp2`'s alone. The asset carries a `wado.dataref` custom section
+naming the rodata ranges each function reads, and the prune keeps only the
+ranges the surviving functions claim: a program calling `sin` keeps 344 of the
+5,448 bytes. `mise run update-bundled` resolves that map from the `linking` and
+`reloc.CODE` sections of a `--emit-relocs` build and drops them, since they hold
+byte offsets into code that the `.wat` round trip invalidates.
 
 ### Surface: methods, not a math module
 
