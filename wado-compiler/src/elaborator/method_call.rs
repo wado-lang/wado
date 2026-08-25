@@ -2765,12 +2765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The base's own arguments stand for its impl-level slots, as
             // `resolve_static_method_call_from_qualified` passes them:
             // `type ByteList = List<u8>` makes `filled`'s `value: T` a `u8`.
-            let base_args = self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_type_args(base)
-                .unwrap_or_default();
+            let base_args = self.newtype_forwarded_impl_args(None, struct_name, method_name);
             if base_args.is_empty() {
                 return params;
             }
@@ -3487,8 +3482,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// The impl target `type_id`'s own declaration is. `None` for a type that
-    /// names none — a type parameter, an anonymous shape.
+    /// The impl target keyed by `type_id`'s own declaration. `None` for a type
+    /// that names none — a type parameter, an anonymous shape, a primitive.
     ///
     /// The declaration comes off the type, so nothing here re-resolves a
     /// rendering: a name reaches an identity only through the resolve pass
@@ -3519,6 +3514,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// base: `type Bytes = List<u8>` answers `[u8]` for `List`'s `T`. Empty
     /// when the newtype declares the static itself, as
     /// [`Self::resolve_static_method_call_from_qualified`] decides the same.
+    ///
+    /// The base's arguments only stand for slots the *declaration* binds: a
+    /// static written in a concrete impl (`impl Holder<i32>`) binds none, and
+    /// filling one there would shift the method's own slots down one and read
+    /// `fn tagged<U>` as taking an `i32`.
     pub(super) fn newtype_forwarded_impl_args(
         &self,
         site: Option<crate::ast::AstId>,
@@ -3531,9 +3531,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.type_declares_static_method(newtype_id, method_name) {
             return Vec::new();
         }
-        self.newtype_static_base_at(site, struct_name)
+        let args: Vec<TypeId> = self
+            .newtype_static_base_at(site, struct_name)
             .and_then(|base| self.tysys.type_table.borrow().nominal_type_args(base))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        match self.static_method_sig(struct_name, method_name) {
+            Some(sig) if sig.declaring_split() != args.len() => Vec::new(),
+            _ => args,
+        }
     }
 
     /// The type a newtype (or `flags` type) forwards its statics to:
@@ -3544,15 +3549,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         name: &str,
     ) -> Option<TypeId> {
         let newtype_id = self.lookup_newtype_at(site, name)?;
-        let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
-        match resolved {
-            ResolvedType::Newtype { .. } => Some(
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .get_ultimate_base_type(newtype_id),
-            ),
-            ResolvedType::Flags { .. } => Some(TypeTable::U32),
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(newtype_id) {
+            // `get_ultimate_base_type` answers `u32` for a `flags` type itself.
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
+                Some(tt.get_ultimate_base_type(newtype_id))
+            }
             _ => None,
         }
     }
@@ -3736,12 +3738,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => None,
                     });
                 if let (Some(base_name), Some(base_type_id)) = (base_name.clone(), base_type_id) {
-                    let base_args = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_type_args(base_type_id)
-                        .unwrap_or_default();
+                    let base_args =
+                        self.newtype_forwarded_impl_args(receiver_site, struct_name, method_name);
                     newtype_dispatch = Some((newtype_id, base_type_id, base_args));
                     let base_fq = self.tysys.fq_receiver_head(base_type_id);
                     let mangled = MethodName::format_local(&base_fq, None, method_name);
