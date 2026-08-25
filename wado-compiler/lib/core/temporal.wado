@@ -2094,12 +2094,7 @@ impl PlainDate {
 
     /// Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
     pub fn parse(text: String) -> Result<PlainDate, DeserializeError> {
-        let end = text.len();
-        let [date, after] = parse_iso_date(&text, 0, end)?;
-        if after != end {
-            return Result::Err(DeserializeError::malformed("trailing characters", after as i64));
-        }
-        return Result::Ok(date);
+        return PlainDate::from_str_range(&text, 0, text.len());
     }
 
     /// Days since 1970-01-01, negative before it.
@@ -2261,12 +2256,7 @@ impl PlainTime {
 
     /// Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
     pub fn parse(text: String) -> Result<PlainTime, DeserializeError> {
-        let end = text.len();
-        let [time, after] = parse_iso_time(&text, 0, end)?;
-        if after != end {
-            return Result::Err(DeserializeError::malformed("trailing characters", after as i64));
-        }
-        return Result::Ok(time);
+        return PlainTime::from_str_range(&text, 0, text.len());
     }
 
     /// Whether every component is in the range the ISO 8601 clock allows.
@@ -2380,20 +2370,7 @@ impl PlainDateTime {
     /// Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
     /// the separator and no offset.
     pub fn parse(text: String) -> Result<PlainDateTime, DeserializeError> {
-        let end = text.len();
-        let [date, after_date] = parse_iso_date(&text, 0, end)?;
-        if after_date >= end {
-            return Result::Err(DeserializeError::eof(after_date as i64));
-        }
-        let separator = text.get_byte_unchecked(after_date);
-        if separator != b'T' && separator != b't' && separator != b' ' {
-            return Result::Err(DeserializeError::malformed("expected a date/time separator", after_date as i64));
-        }
-        let [time, after] = parse_iso_time(&text, after_date + 1, end)?;
-        if after != end {
-            return Result::Err(DeserializeError::malformed("trailing characters", after as i64));
-        }
-        return Result::Ok(PlainDateTime { date: date, time: time });
+        return PlainDateTime::from_str_range(&text, 0, text.len());
     }
 
     /// Move forward by `duration`: the date components first, constraining a
@@ -2475,17 +2452,7 @@ impl PlainYearMonth {
 
     /// Parse `YYYY-MM`.
     pub fn parse(text: String) -> Result<PlainYearMonth, DeserializeError> {
-        let end = text.len();
-        let [year, after_year] = parse_iso_year(&text, 0, end)?;
-        let i = expect_byte(&text, after_year, end, b'-')?;
-        let month = read_digits(&text, i, end, 2)?;
-        if month < 1 || month > 12 {
-            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
-        }
-        if i + 2 != end {
-            return Result::Err(DeserializeError::malformed("trailing characters", (i + 2) as i64));
-        }
-        return Result::Ok(PlainYearMonth { year: year as i32, month: month as i32 });
+        return PlainYearMonth::from_str_range(&text, 0, text.len());
     }
 
     /// Number of days in this month, `28..=31`.
@@ -2578,25 +2545,7 @@ impl PlainMonthDay {
 
     /// Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
     pub fn parse(text: String) -> Result<PlainMonthDay, DeserializeError> {
-        let end = text.len();
-        let mut i = 0;
-        if end >= 2 && text.get_byte_unchecked(0) == b'-' && text.get_byte_unchecked(1) == b'-' {
-            i = 2;
-        }
-        let month = read_digits(&text, i, end, 2)?;
-        if month < 1 || month > 12 {
-            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
-        }
-        let j = expect_byte(&text, i + 2, end, b'-')?;
-        let day = read_digits(&text, j, end, 2)?;
-        // A leap year is the yardstick: 02-29 is a real month-day.
-        if day < 1 || day > days_in_month_value(2024, month) {
-            return Result::Err(DeserializeError::invalid_value("day out of range", j as i64));
-        }
-        if j + 2 != end {
-            return Result::Err(DeserializeError::malformed("trailing characters", (j + 2) as i64));
-        }
-        return Result::Ok(PlainMonthDay { month: month as i32, day: day as i32 });
+        return PlainMonthDay::from_str_range(&text, 0, text.len());
     }
 
     /// Land this month-day in `year`, clamping February 29 to the 28th outside
@@ -2711,6 +2660,405 @@ fn floor_div_i128(a: i128, m: i128) -> i128 {
         q = q - 1;
     }
     return q;
+}
+
+// The plain family goes over the wire as its ISO 8601 form, the way Temporal's
+// `toJSON` does, rather than as the field bag the structural derive would
+// produce. `FromStr` reads the same spelling, and is where each type's parse
+// actually lives.
+
+impl Serialize for PlainDate {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a date.
+struct PlainDateVisitor {
+}
+
+impl Visitor for PlainDateVisitor {
+    type Value = PlainDate;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainDate, DeserializeError> {
+        return PlainDate::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainDate {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainDate, DeserializeError> {
+        let mut v = PlainDateVisitor {};
+        return d.deserialize_any::<PlainDateVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainDate {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDate, DeserializeError> {
+        let [date, after] = parse_iso_date(s, start, end)?;
+        require_end(after, end)?;
+        return Result::Ok(date);
+    }
+}
+
+impl Serialize for PlainTime {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a time.
+struct PlainTimeVisitor {
+}
+
+impl Visitor for PlainTimeVisitor {
+    type Value = PlainTime;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainTime, DeserializeError> {
+        return PlainTime::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainTime {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainTime, DeserializeError> {
+        let mut v = PlainTimeVisitor {};
+        return d.deserialize_any::<PlainTimeVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainTime {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainTime, DeserializeError> {
+        let [time, after] = parse_iso_time(s, start, end)?;
+        require_end(after, end)?;
+        return Result::Ok(time);
+    }
+}
+
+impl Serialize for PlainDateTime {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a date-time.
+struct PlainDateTimeVisitor {
+}
+
+impl Visitor for PlainDateTimeVisitor {
+    type Value = PlainDateTime;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainDateTime, DeserializeError> {
+        return PlainDateTime::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainDateTime {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainDateTime, DeserializeError> {
+        let mut v = PlainDateTimeVisitor {};
+        return d.deserialize_any::<PlainDateTimeVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainDateTime {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDateTime, DeserializeError> {
+        let [date, after_date] = parse_iso_date(s, start, end)?;
+        if after_date >= end {
+            return Result::Err(DeserializeError::eof(after_date as i64));
+        }
+        let separator = s.get_byte_unchecked(after_date);
+        if separator != b'T' && separator != b't' && separator != b' ' {
+            return Result::Err(DeserializeError::malformed("expected a date/time separator", after_date as i64));
+        }
+        let [time, after] = parse_iso_time(s, after_date + 1, end)?;
+        require_end(after, end)?;
+        return Result::Ok(PlainDateTime { date: date, time: time });
+    }
+}
+
+impl Serialize for PlainYearMonth {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a year-month.
+struct PlainYearMonthVisitor {
+}
+
+impl Visitor for PlainYearMonthVisitor {
+    type Value = PlainYearMonth;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainYearMonth, DeserializeError> {
+        return PlainYearMonth::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainYearMonth {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainYearMonth, DeserializeError> {
+        let mut v = PlainYearMonthVisitor {};
+        return d.deserialize_any::<PlainYearMonthVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainYearMonth {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainYearMonth, DeserializeError> {
+        let [year, after_year] = parse_iso_year(s, start, end)?;
+        let i = expect_byte(s, after_year, end, b'-')?;
+        let month = read_digits(s, i, end, 2)?;
+        if month < 1 || month > 12 {
+            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
+        }
+        require_end(i + 2, end)?;
+        return Result::Ok(PlainYearMonth { year: year as i32, month: month as i32 });
+    }
+}
+
+impl Serialize for PlainMonthDay {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a month-day.
+struct PlainMonthDayVisitor {
+}
+
+impl Visitor for PlainMonthDayVisitor {
+    type Value = PlainMonthDay;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainMonthDay, DeserializeError> {
+        return PlainMonthDay::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainMonthDay {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainMonthDay, DeserializeError> {
+        let mut v = PlainMonthDayVisitor {};
+        return d.deserialize_any::<PlainMonthDayVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainMonthDay {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainMonthDay, DeserializeError> {
+        let mut i = start;
+        if start + 2 <= end && s.get_byte_unchecked(start) == b'-' && s.get_byte_unchecked(start + 1) == b'-' {
+            i = start + 2;
+        }
+        let month = read_digits(s, i, end, 2)?;
+        if month < 1 || month > 12 {
+            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
+        }
+        let j = expect_byte(s, i + 2, end, b'-')?;
+        let day = read_digits(s, j, end, 2)?;
+        // A leap year is the yardstick: 02-29 is a real month-day.
+        if day < 1 || day > days_in_month_value(2024, month) {
+            return Result::Err(DeserializeError::invalid_value("day out of range", j as i64));
+        }
+        require_end(j + 2, end)?;
+        return Result::Ok(PlainMonthDay { month: month as i32, day: day as i32 });
+    }
+}
+
+/// Require that a parse consumed everything up to `end`.
+fn require_end(after: i32, end: i32) -> Result<(), DeserializeError> {
+    if after != end {
+        return Result::Err(DeserializeError::malformed("trailing characters", after as i64));
+    }
+    return Result::Ok(());
 }
 
 // serde — `Instant` and `ZonedDateTime` serialize as an RFC 3339 string under

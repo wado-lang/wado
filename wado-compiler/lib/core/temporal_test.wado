@@ -871,6 +871,37 @@ test "PlainYearMonth and PlainMonthDay carry the partial dates" {
     assert PlainDate::new(2024, 2, 29).to_plain_year_month() == ym;
 }
 
+test "the plain family goes over the wire as its ISO 8601 form" {
+    let date = PlainDate::new(2023, 11, 14);
+    assert to_string(&date) matches { Ok(json) && json == `"2023-11-14"` };
+    assert from_string::<PlainDate>(`"2023-11-14"`) matches { Ok(back) && back == date };
+
+    let time = PlainTime::new(22, 13, 20, 500);
+    assert to_string(&time) matches { Ok(json) && json == `"22:13:20.500"` };
+    assert from_string::<PlainTime>(`"22:13:20.5"`) matches { Ok(back) && back == time };
+
+    let dt = PlainDateTime::new(date, time);
+    assert to_string(&dt) matches { Ok(json) && json == `"2023-11-14T22:13:20.500"` };
+    assert from_string::<PlainDateTime>(`"2023-11-14T22:13:20.5"`) matches { Ok(back) && back == dt };
+
+    assert to_string(&PlainYearMonth::new(2024, 2)) matches { Ok(json) && json == `"2024-02"` };
+    assert to_string(&PlainMonthDay::new(2, 29)) matches { Ok(json) && json == `"--02-29"` };
+    assert from_string::<PlainMonthDay>(`"--02-29"`) matches { Ok(back) && back == PlainMonthDay::new(2, 29) };
+
+    // A structurally-shaped value is refused, not read field by field.
+    assert from_string::<PlainDate>(`{"year":2023,"month":11,"day":14}`) matches { Err(_) };
+    assert from_string::<PlainDate>(`"nope"`) matches { Err(_) };
+}
+
+test "the plain family parses through FromStr" {
+    assert PlainDate::from_str("2023-11-14") matches { Ok(d) && d == PlainDate::new(2023, 11, 14) };
+    assert PlainTime::from_str("22:13") matches { Ok(t) && t == PlainTime { hour: 22, minute: 13 } };
+    assert PlainYearMonth::from_str("2024-02") matches { Ok(m) && m == PlainYearMonth::new(2024, 2) };
+    assert PlainMonthDay::from_str("--02-29") matches { Ok(m) && m == PlainMonthDay::new(2, 29) };
+    assert PlainDateTime::from_str("2023-11-14T22:13") matches { Ok(_) };
+    assert PlainDate::from_str("2023-11-14 ") matches { Err(_) };
+}
+
 test "Instant serializes as an RFC 3339 string with minimal precision" {
     let whole = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
     assert to_string(&whole) matches { Ok(s) && s == `"2023-11-14T22:13:20Z"` };
