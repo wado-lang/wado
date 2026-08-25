@@ -152,6 +152,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
         let handler_type = self.handler_underlying_type(handler);
 
+        // Trait/resource type args at this `with E => h do` site (e.g.
+        // `[u8]` for `with Stream<u8> => &mut s do`). Resolved from the
+        // effect type's AST; non-generic effects produce `vec![]`. The
+        // dispatch synthesis projects this together with the bare base
+        // name into the per-monomorphisation `InstantiationKey`.
+        let trait_type_args: Vec<TypeId> = match effect_ty {
+            ast::Type::Generic(generic) => generic
+                .args
+                .iter()
+                .map(|arg| self.resolve_type(arg))
+                .collect(),
+            _ => Vec::new(),
+        };
+
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
             name: interface_name,
@@ -191,22 +205,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     interface_name: interface_name.clone(),
                     span: binding.span,
                 });
+            } else if is_real_type
+                && !trait_type_args.is_empty()
+                && effect_decl.is_some_and(|trait_| {
+                    self.effect_impl_block(handler_type, trait_, &trait_type_args)
+                        .is_none()
+                })
+            {
+                // The bound check answers by declaration alone, so a handler
+                // implementing `Stream<u8>` satisfies it for `with Stream<i32>`.
+                // Dispatch synthesis has no plan for the instantiation the
+                // clause names, so say so here rather than reach that panic.
+                let type_name = self.tysys.type_table.borrow().type_name(handler_type);
+                let _ = self.emit(TypeError::HandlerEffectNotImplemented {
+                    type_name,
+                    interface_name: self.get_type_name(effect_ty),
+                    span: binding.span,
+                });
             }
         }
-
-        // Trait/resource type args at this `with E => h do` site (e.g.
-        // `[u8]` for `with Stream<u8> => &mut s do`). Resolved from the
-        // effect type's AST; non-generic effects produce `vec![]`. The
-        // dispatch synthesis projects this together with the bare base
-        // name into the per-monomorphisation `InstantiationKey`.
-        let trait_type_args: Vec<TypeId> = match effect_ty {
-            ast::Type::Generic(generic) => generic
-                .args
-                .iter()
-                .map(|arg| self.resolve_type(arg))
-                .collect(),
-            _ => Vec::new(),
-        };
 
         // Record this explicit binding so
         // reify_with_handler reads the single-effect entry without
@@ -422,17 +439,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get(key)
                 .is_some_and(|header| header.trait_ref == Some(effect_decl))
         };
-        keys.iter()
-            .find(|key| {
-                implements(key)
-                    && self
-                        .tysys
-                        .signatures
-                        .impl_sig(**key)
-                        .is_some_and(|sig| sig.trait_type_args == trait_type_args)
+        // A block's arguments answer for the clause's when they are the same,
+        // or where the block left a slot for monomorphization to fill —
+        // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
+        // block written for other arguments answers for nothing.
+        let fills = |key: &crate::defs::DefId| {
+            self.tysys.signatures.impl_sig(*key).is_some_and(|sig| {
+                sig.trait_type_args.len() == trait_type_args.len()
+                    && std::iter::zip(&sig.trait_type_args, trait_type_args)
+                        .all(|(slot, arg)| slot == arg || self.is_open_slot(*slot))
             })
-            .or_else(|| keys.iter().find(|key| implements(key)))
+        };
+        keys.iter()
+            .find(|key| implements(key) && fills(key))
             .copied()
+    }
+
+    /// Whether `type_id` is a slot an impl block left for monomorphization,
+    /// rather than a type it committed to.
+    fn is_open_slot(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.tysys.type_table.borrow().get(type_id),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        )
     }
 
     /// The impl-index key for a handler type: its own declaration, not what
