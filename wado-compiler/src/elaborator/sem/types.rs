@@ -335,6 +335,13 @@ fn dispatch_edges<'a>(
                         .iter()
                         .map(|(id, facts)| (id, &facts.call.callee)),
                 )
+                // A `..base` member merges through `LiteralSpread`, a second
+                // callee at the same site.
+                .chain(
+                    key_value_coercions
+                        .iter()
+                        .filter_map(|(id, facts)| Some((id, facts.spread.as_ref()?))),
+                )
                 .filter_map(|(id, callee)| Some((*id, callee.method_def?))),
         )
 }
@@ -438,6 +445,25 @@ impl TypeAnnotations {
                 )
             });
         own.chain(overlaid)
+    }
+
+    /// The `impl <effect> for <handler>` blocks each handler binding installs.
+    /// Every method of such a block is reachable from the binding: dispatch
+    /// synthesis routes the effect's operations to them after `liveness` runs,
+    /// and it is the binding, not any call in the source, that names them.
+    ///
+    /// Kept apart from [`Self::dispatched_callees`] because the target is a
+    /// block, not one method — the caller expands it through the declaration
+    /// table.
+    pub(crate) fn handler_impl_blocks(
+        &self,
+    ) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + '_ {
+        self.handler_bindings.iter().flat_map(|(id, facts)| {
+            facts
+                .effects
+                .iter()
+                .filter_map(move |effect| Some((*id, effect.impl_def?)))
+        })
     }
 
     /// Snapshot the current lengths of the per-element overlay maps, taken
@@ -815,6 +841,12 @@ pub(crate) struct HandlerBindingFacts {
 /// `resolve_bundled_handler_binding`.
 #[derive(Clone)]
 pub(crate) struct HandlerEffectEntry {
+    /// The `impl <effect> for <handler>` block this binding installs. Dispatch
+    /// synthesis routes the effect's operations to its methods after
+    /// `liveness` runs, so the binding is the only thing that names them.
+    /// `None` where the handler resolves to no block — an error path an earlier
+    /// diagnostic already covered.
+    pub(crate) impl_def: Option<crate::defs::DefId>,
     pub(crate) name: String,
     pub(crate) module_source: crate::module_source::ModuleSource,
     pub(crate) trait_type_args: Vec<TypeId>,

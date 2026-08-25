@@ -1874,6 +1874,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .or_default()
                             .insert(defs.ast_id(def));
                     }
+                    // A handler binding installs a whole block: the dispatch
+                    // wrapper may route any of the effect's operations to it.
+                    for (use_id, impl_def) in sem.types.handler_impl_blocks() {
+                        let entry = dispatch.entry(use_id).or_default();
+                        entry.extend(defs.members(impl_def).iter().map(|&m| defs.ast_id(m)));
+                    }
                 }
             }
             let references = super::liveness::References {

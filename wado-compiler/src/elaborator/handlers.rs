@@ -234,6 +234,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 binding.id,
                 super::sem::types::HandlerBindingFacts {
                     effects: vec![super::sem::types::HandlerEffectEntry {
+                        impl_def: effect_decl
+                            .and_then(|trait_| self.effect_impl_block(handler_type, trait_)),
                         name,
                         module_source,
                         trait_type_args,
@@ -334,13 +336,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::HandlerBindingFacts {
                 effects: effects
                     .into_iter()
-                    .map(
-                        |(name, module, type_args)| super::sem::types::HandlerEffectEntry {
+                    .map(|(impl_def, name, module, type_args)| {
+                        super::sem::types::HandlerEffectEntry {
+                            impl_def: Some(impl_def),
                             name,
                             module_source: module,
                             trait_type_args: type_args,
-                        },
-                    )
+                        }
+                    })
                     .collect(),
                 bundle_group: Some(bundle_group),
                 handler_type,
@@ -356,15 +359,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn collect_effect_impls_for_type(
         &mut self,
         type_name: &str,
-    ) -> Vec<(String, ModuleSource, Vec<TypeId>)> {
-        let mut out: Vec<(String, ModuleSource, Vec<TypeId>)> = Vec::new();
+    ) -> Vec<(crate::defs::DefId, String, ModuleSource, Vec<TypeId>)> {
+        let mut out: Vec<(crate::defs::DefId, String, ModuleSource, Vec<TypeId>)> = Vec::new();
         let mut seen: crate::hashmap::IndexSet<(ModuleSource, String, Vec<TypeId>)> =
             crate::hashmap::IndexSet::default();
 
         // Collect the impl `trait_type` ASTs first so subsequent
         // `resolve_type` calls (which need `&mut self`) don't fight the
         // borrow on `trait_env.impl_headers`.
-        let mut trait_types: Vec<ast::Type> = Vec::new();
+        let mut trait_types: Vec<(crate::defs::DefId, ast::Type)> = Vec::new();
         if let Some(entries) = self
             .tysys
             .trait_env
@@ -379,12 +382,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(key)
                     .and_then(|header| header.trait_type.as_ref())
                 {
-                    trait_types.push(trait_type.clone());
+                    trait_types.push((*key, trait_type.clone()));
                 }
             }
         }
 
-        for trait_type in &trait_types {
+        for (impl_def, trait_type) in &trait_types {
             let base_trait_name = self.get_type_name(trait_type);
             // Accept either an effect or a resource declaration. The
             // dispatch synthesis pass treats both uniformly.
@@ -416,11 +419,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base_trait_name.clone(),
                 type_args.clone(),
             )) {
-                out.push((base_trait_name, decl_module, type_args));
+                out.push((*impl_def, base_trait_name, decl_module, type_args));
             }
         }
 
         out
+    }
+
+    /// The `impl <effect> for <handler>` block a `with Effect => h do` clause
+    /// installs. Dispatch synthesis routes the effect's operations to this
+    /// block's methods, and it does so after `liveness` runs — so the binding
+    /// records which block it is, and nothing has to find one by name later.
+    fn effect_impl_block(
+        &self,
+        handler_type: TypeId,
+        effect_decl: crate::defs::DefId,
+    ) -> Option<crate::defs::DefId> {
+        let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
+        // Keyed by the bare head: `impl<T> Log for Ctx<T>` is indexed under
+        // `Ctx`, not the instantiated `Ctx<i32>`.
+        let type_name = match &resolved {
+            ResolvedType::GenericInstance { def, .. } | ResolvedType::GenericResource { def, .. } => {
+                self.tysys.type_table.borrow().def_name(*def).to_string()
+            }
+            _ => self.tysys.type_table.borrow().type_name(handler_type),
+        };
+        self.tysys
+            .trait_env
+            .impl_index
+            .get(&self.impl_target(&type_name))?
+            .iter()
+            .find(|key| {
+                self.tysys
+                    .trait_env
+                    .impl_headers
+                    .get(*key)
+                    .is_some_and(|header| header.trait_ref == Some(effect_decl))
+            })
+            .copied()
     }
 
     /// Strip a single leading `&` / `&mut` layer to reach the type that the
