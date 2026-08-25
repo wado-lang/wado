@@ -164,7 +164,7 @@ position is the one that can resolve it:
 | `ZonedDateTime`  | everything                 | everything (default: hour)        |
 | `PlainDate`      | date components            | days and above (default: day)     |
 | `PlainTime`      | time components, wrapping  | hours and below                   |
-| `PlainDateTime`  | everything                 | hours and above                   |
+| `PlainDateTime`  | everything                 | everything (default: hour)        |
 | `PlainYearMonth` | years and months           | years or months                   |
 
 Anything outside its row traps with a message naming the type that can do it.
