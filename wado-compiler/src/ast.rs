@@ -822,9 +822,16 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::WithHandler(w) => {
             for binding in &w.handlers {
-                if let Some(effect) = &binding.effect {
-                    v.visit_id(binding.id, effect.span());
-                    v.visit_type(effect);
+                // The binding is a node in both forms. A bundled one
+                // (`with &mut h do`) writes no effect type, so it answers with
+                // its own span — visiting the id only when an effect is written
+                // left the bundled node unreachable to every id-keyed walker.
+                match &binding.effect {
+                    Some(effect) => {
+                        v.visit_id(binding.id, effect.span());
+                        v.visit_type(effect);
+                    }
+                    None => v.visit_id(binding.id, binding.span),
                 }
                 v.visit_expr(&binding.handler);
             }
