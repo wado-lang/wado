@@ -39,14 +39,10 @@ impl Selector {
 pub struct Place {
     pub root: u32,
     pub selectors: Vec<Selector>,
-    /// The chain read a `&` / `&mut` field on its way down, so the storage it
-    /// ends at is only borrowed by the root. Carried by the walk rather than
-    /// re-derived from an expression's syntax, because [`Resolver::names`]
-    /// resolves a place through a local binding and through a callee's own
-    /// [`ReturnPath`], and a second walk follows neither.
-    ///
-    /// It takes part in equality: two reaches of one storage that differ here
-    /// compare unequal, which only ever refuses a share.
+    /// The chain read a `&` / `&mut` field, so the root only borrows what it
+    /// ends at. [`Resolver::names`] must set it as it walks — it resolves
+    /// through a local binding and through a callee's [`ReturnPath`], which a
+    /// second walk over the expression's syntax would follow neither of.
     pub through_borrow: bool,
 }
 
@@ -96,8 +92,8 @@ impl Bindings {
 #[derive(Clone, Debug)]
 pub struct ReturnPath {
     pub selectors: Vec<Selector>,
-    /// The path reads a `&` / `&mut` field, so what it names lives outside the
-    /// receiver — a caller holding even a *fresh* receiver does not own it.
+    /// [`Place::through_borrow`] for the place this path lands on, so even a
+    /// fresh receiver does not own it.
     pub through_borrow: bool,
 }
 
@@ -109,18 +105,17 @@ pub type ReturnPaths = FuncKeyMap<ReturnPath>;
 /// calls that name storage rather than build it.
 ///
 /// A least fixpoint, because an accessor is routinely written over another one
-/// (`fn first(&self) -> &T { return self.rows.get(0) }`): a single pass resolves
-/// the inner call to [`Names::Unknown`] and the outer accessor gets no path at
-/// all. Monotone — extra knowledge only turns an `Unknown` into a place, so an
-/// entry once recorded stays valid and the loop only adds.
+/// (`fn first(&self) -> &T { return self.rows.get(0) }`) and a single pass
+/// resolves the inner call to [`Names::Unknown`]. Monotone: knowing more only
+/// turns an `Unknown` into a place, so a recorded entry stays valid.
 #[must_use]
 pub fn compute_return_paths(
     flat: &crate::flat_package::FlatPackage,
+    call_graph: &super::callgraph::CallGraph,
     type_table: &TypeTable,
     returns_owned: &FuncKeySet,
 ) -> ReturnPaths {
     let mut paths = ReturnPaths::default();
-    let call_graph = super::callgraph::CallGraph::build(flat);
     call_graph.solve(flat, |id| {
         let func = flat.functions[id as usize].borrow();
         if paths.get(&func.module_source, &func.name).is_some() {
@@ -258,10 +253,8 @@ impl<'a> Resolver<'a> {
                 .cloned()
                 .unwrap_or(Names::Place(Place::local(*index))),
             // A reference field borrows storage its holder does not own — an
-            // iterator's `repr` borrows the list it walks. A fresh aggregate
-            // therefore does not make what it points at fresh; rooted at a place
-            // the walk already names, the projection stands but is marked as
-            // reached through that borrow.
+            // iterator's `repr` borrows the list it walks — so a fresh aggregate
+            // does not make what it points at fresh.
             TirExprKind::FieldAccess {
                 expr: inner,
                 field_index,

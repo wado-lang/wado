@@ -1,8 +1,9 @@
 //! Shared call graph for the value-copy interprocedural analyses.
 //!
-//! `confine`, `compute_return_conventions`, and `compute_receiver_alias` are all
-//! monotone backward summaries: a function's result depends only on its callees'
-//! results. Re-scanning every function each round is O(functions · rounds); a
+//! Every summary `plan` computes is a monotone backward one: a function's
+//! result depends only on its callees'. So they share one graph, built after
+//! synthesis — `confine` is the exception, running before closure lifting adds
+//! functions. Re-scanning every function each round is O(functions · rounds); a
 //! worklist keyed by the reverse edges (a callee's change re-enqueues only its
 //! callers) reaches the same least fixpoint touching each function only when a
 //! callee it reads actually moves.

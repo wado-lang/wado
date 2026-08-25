@@ -116,9 +116,9 @@ pub struct ReturnConventions {
 /// decision; the read-only-share analysis and pattern lowering consume it.
 pub fn compute_receiver_alias(
     project: &FlatPackage,
+    call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
 ) -> FuncKeySet {
-    let call_graph = CallGraph::build(project);
     let mut set = FuncKeySet::default();
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
@@ -205,6 +205,7 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
 /// `returns_self_projection`.
 pub fn compute_return_conventions(
     project: &FlatPackage,
+    call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
 ) -> ReturnConventions {
     let type_table = project.type_table.borrow();
@@ -222,7 +223,6 @@ pub fn compute_return_conventions(
     }
     let mut self_proj = owned.clone();
 
-    let call_graph = CallGraph::build(project);
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
         let already_owned = owned.contains(&func.module_source, &func.name);

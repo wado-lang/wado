@@ -46,7 +46,7 @@ impl StoresOracle<'_> {
     }
 }
 
-pub fn compute_stored_params(project: &FlatPackage) -> StoredParams {
+pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> StoredParams {
     let type_table = project.type_table.borrow();
     let mut computed: StoredParams = FuncKeyMap::default();
 
@@ -56,7 +56,6 @@ pub fn compute_stored_params(project: &FlatPackage) -> StoredParams {
         computed.insert(func.module_source.clone(), func.name.clone(), declared);
     }
 
-    let call_graph = CallGraph::build(project);
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
         let Some(body) = &func.body else {
