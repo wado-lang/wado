@@ -1761,7 +1761,11 @@ impl FunctionTranslator<'_, '_> {
                             mut other @ (WirInstr::Seq(_)
                             | WirInstr::Block { .. }
                             | WirInstr::If { .. }) => {
-                                lift_struct_new_to_seq(&mut other, true);
+                                assert!(
+                                    lift_struct_new_to_seq(&mut other, true),
+                                    "[WIR] the multi-value return of `{}` left a tail yielding the aggregate",
+                                    self.tir_func.name
+                                );
                                 Some(other)
                             }
                             other => Some(WirInstr::Return {
@@ -2789,7 +2793,12 @@ impl FunctionTranslator<'_, '_> {
 /// `ReturnAbi::MultiValue` function. Recurses into a `Seq` tail, both `If`
 /// branch tails (clearing the `If`'s `result`, since branches now transfer
 /// control themselves), and each `StructNew; Br depth` exit of a `match` block.
-fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
+///
+/// Reports whether every path now transfers control itself. A `false` leaves a
+/// tail still yielding the aggregate, which under this ABI is a signature the
+/// body does not satisfy — [`lifts_to_results`] is what the callers check
+/// beforehand, so a `false` is a disagreement between the two.
+fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) -> bool {
     match expr {
         WirInstr::StructNew { .. } => {
             if let WirInstr::StructNew { fields, .. } = std::mem::replace(expr, WirInstr::Nop) {
@@ -2802,12 +2811,11 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
                     payload
                 };
             }
+            true
         }
-        WirInstr::Seq(items) => {
-            if let Some(last) = items.last_mut() {
-                lift_struct_new_to_seq(last, wrap_in_return);
-            }
-        }
+        WirInstr::Seq(items) => items
+            .last_mut()
+            .is_some_and(|last| lift_struct_new_to_seq(last, wrap_in_return)),
         WirInstr::If {
             then_body,
             else_body,
@@ -2816,19 +2824,24 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
         } => {
             // Branches now Return directly; the If no longer produces a value.
             *result = None;
-            if let Some(last) = then_body.last_mut() {
-                lift_struct_new_to_seq(last, true);
-            }
-            if let Some(eb) = else_body
-                && let Some(last) = eb.last_mut()
-            {
-                lift_struct_new_to_seq(last, true);
-            }
+            let then_lifted = then_body
+                .last_mut()
+                .is_some_and(|last| lift_struct_new_to_seq(last, true));
+            let else_lifted = else_body
+                .as_mut()
+                .and_then(|eb| eb.last_mut())
+                .is_some_and(|last| lift_struct_new_to_seq(last, true));
+            then_lifted && else_lifted
         }
         WirInstr::Block { body, result, .. } => {
-            if result.is_some() && return_every_exit(body, 0, Tail::IsResult) {
+            if result.is_none() {
+                return true;
+            }
+            let lifted = return_every_exit(body, 0, Tail::IsResult);
+            if lifted {
                 *result = None;
             }
+            lifted
         }
         // A tail that already yields the N results — a call to a callee under
         // this same ABI (`multi_value_return`'s tail-call rule). The branch it
@@ -2843,8 +2856,32 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
             *other = WirInstr::Return {
                 value: Some(Box::new(value)),
             };
+            true
         }
-        _ => {}
+        other => other.ends_with_terminator(),
+    }
+}
+
+/// Whether every leaf of a value instruction yields the N results, so
+/// [`lift_struct_new_to_seq`] can turn each into its own `Return`.
+///
+/// A leaf that already transfers control carries no value and needs no lift.
+fn lifts_to_results(instr: &WirInstr) -> bool {
+    match instr {
+        WirInstr::StructNew { .. } | WirInstr::Call { .. } => true,
+        WirInstr::Seq(items) => items.last().is_some_and(lifts_to_results),
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            then_body.last().is_some_and(lifts_to_results)
+                && else_body
+                    .as_ref()
+                    .and_then(|eb| eb.last())
+                    .is_some_and(lifts_to_results)
+        }
+        other => other.ends_with_terminator(),
     }
 }
 
@@ -2895,15 +2932,12 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
         }
     }
 
-    /// The two values an exit may carry: the aggregate itself, or a call to a
-    /// callee under this same ABI, which `multi_value_return`'s tail-call rule
-    /// accepts wherever it accepts the aggregate.
-    fn yields_results(instr: &WirInstr) -> bool {
-        matches!(instr, WirInstr::StructNew { .. } | WirInstr::Call { .. })
-    }
-
+    /// The value an exit carries: the aggregate, a call to a callee under this
+    /// same ABI (which `multi_value_return`'s tail-call rule accepts wherever
+    /// it accepts the aggregate), or control flow whose every leaf is one of
+    /// those — `match` in return position leaves the last shape.
     fn exit_as_siblings(instrs: &[WirInstr], i: usize, target_depth: u32) -> bool {
-        yields_results(&instrs[i])
+        lifts_to_results(&instrs[i])
             && instrs.get(i + 1).is_some_and(
                 |next| matches!(next, WirInstr::Br { depth } if *depth == target_depth),
             )
@@ -2916,17 +2950,16 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
         exits_to_target(instr, target_depth)
             && seq
                 .get(seq.len().wrapping_sub(2))
-                .is_some_and(yields_results)
+                .is_some_and(lifts_to_results)
     }
 
-    fn returning(value: WirInstr) -> WirInstr {
-        let payload = match value {
-            WirInstr::StructNew { fields, .. } => WirInstr::Seq(fields),
-            already_results => already_results,
-        };
-        WirInstr::Return {
-            value: Some(Box::new(payload)),
-        }
+    /// Lift a value an exit carries into the `Return`s its leaves become.
+    /// [`exit_as_siblings`] and [`exit_as_seq`] have already established that
+    /// every leaf can be one.
+    fn returning(mut value: WirInstr) -> WirInstr {
+        let lifted = lift_struct_new_to_seq(&mut value, true);
+        assert!(lifted, "an exit value that lifts_to_results must lift");
+        value
     }
 
     let mut all_rewritten = true;
@@ -3000,7 +3033,7 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
 
     if tail == Tail::IsResult
         && let Some(last) = instrs.last_mut()
-        && yields_results(last)
+        && lifts_to_results(last)
     {
         let value = std::mem::replace(last, WirInstr::Nop);
         *last = returning(value);

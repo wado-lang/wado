@@ -1,0 +1,20 @@
+// An `Ok` payload that is itself an `Option<T>` shares its slot type with the
+// `Option<T>` wrapper `sroa_variant_return` puts a bare `T` payload in, so the
+// two encodings must not be confused. At -O3 the deserializer below read the
+// slot back the wrong way and trapped.
+
+use { parse } from "core:args";
+use { Deserialize } from "core:serde";
+use { Uuid } from "core:uuid";
+
+struct RunCli {
+    trace: Option<Uuid> = null,
+}
+impl Deserialize for RunCli;
+
+test "an option-typed field parsed from argv" {
+    assert parse::<RunCli>(["--trace", "ffffffff-ffff-4fff-bfff-ffffffffffff"]) matches { Ok(_) };
+}
+
+__DATA__
+{"test": {}}
