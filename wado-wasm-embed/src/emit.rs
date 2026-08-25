@@ -181,7 +181,7 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
             Some(Keep::Whole) => remap.parse_data(&mut section, data.clone())?,
             Some(Keep::Ranges(ranges)) => {
                 let base = crate::segment_base(data)
-                    .expect("reachability only splits a segment at a constant address");
+                    .expect("`Keep::Ranges` is only reached for a constant-address segment");
                 for range in ranges {
                     let address = base.address + i64::from(range.offset);
                     let offset = if base.is_64 {

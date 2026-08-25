@@ -53,6 +53,15 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
             Some(refs) => func_ranges(asset, refs)?,
             None => BTreeMap::new(),
         },
+        // A map can only narrow a segment whose surviving pieces can name their
+        // own addresses: an active segment at a constant base. A passive one is
+        // named by index and copied by `memory.init`, and one at a computed
+        // address has no base to add an offset to.
+        splittable: asset
+            .datas
+            .iter()
+            .map(|data| asset.data_refs.is_some() && crate::segment_base(data).is_some())
+            .collect(),
     };
 
     // An imported table is kept whole, so the segments filling it are live for
@@ -86,12 +95,9 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
 
     for (i, data) in asset.datas.iter().enumerate() {
         // An active segment initialises the shared memory whether or not
-        // anything still reads what it wrote, so it is live by default. Only a
-        // map saying which of its bytes each function reads can narrow it, and
-        // only where the pieces can name their own addresses.
-        if matches!(data.kind, wasmparser::DataKind::Active { .. })
-            && !(asset.data_refs.is_some() && crate::segment_base(data).is_some())
-        {
+        // anything still reads what it wrote, so it is live by default unless a
+        // map can narrow it.
+        if matches!(data.kind, wasmparser::DataKind::Active { .. }) && !walk.splittable[i] {
             walk.mark_data_whole(i as u32);
         }
     }
@@ -174,6 +180,8 @@ struct Walk<'a, 'b> {
     /// map. Reaching a function reaches its ranges, so the data edges close
     /// over the same worklist the code edges do.
     data_refs: BTreeMap<u32, &'a [DataRange]>,
+    /// Which segments a range may narrow, by segment index.
+    splittable: Vec<bool>,
 }
 
 impl Walk<'_, '_> {
@@ -349,7 +357,15 @@ impl Walk<'_, '_> {
 
     /// Keep one range of a segment. The offset expression still has to be
     /// walked, so a segment reached this way is queued like any other.
+    ///
+    /// A range naming a segment no map can narrow is dropped rather than kept:
+    /// a passive segment reaches memory through the `memory.init` that copies
+    /// it, which the walk already follows, and a segment at a computed address
+    /// was kept whole before the walk began.
     fn mark_data_range(&mut self, range: DataRange) {
+        if !self.splittable[range.segment as usize] {
+            return;
+        }
         match self.live.datas.entry(range.segment) {
             std::collections::btree_map::Entry::Vacant(slot) => {
                 slot.insert(Keep::Ranges(vec![range]));

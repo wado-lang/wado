@@ -28,8 +28,22 @@ pub struct DataRange {
 }
 
 impl DataRange {
+    /// `None` where the range would end past the end of the address space, so
+    /// every `DataRange` that exists has an `end` and both constructors reject
+    /// one that does not.
+    fn new(segment: u32, offset: u32, size: u32) -> Option<Self> {
+        offset.checked_add(size)?;
+        Some(DataRange {
+            segment,
+            offset,
+            size,
+        })
+    }
+
     pub(crate) fn end(&self) -> u32 {
-        self.offset + self.size
+        self.offset
+            .checked_add(self.size)
+            .expect("a DataRange is rejected at construction unless it has an end")
     }
 }
 
@@ -82,11 +96,14 @@ impl DataRefs {
             for field in fields {
                 let (segment, rest) = field.split_once(':').ok_or_else(malformed)?;
                 let (offset, size) = rest.split_once('+').ok_or_else(malformed)?;
-                ranges.push(DataRange {
-                    segment: segment.parse().map_err(|_| malformed())?,
-                    offset: offset.parse().map_err(|_| malformed())?,
-                    size: size.parse().map_err(|_| malformed())?,
-                });
+                ranges.push(
+                    DataRange::new(
+                        segment.parse().map_err(|_| malformed())?,
+                        offset.parse().map_err(|_| malformed())?,
+                        size.parse().map_err(|_| malformed())?,
+                    )
+                    .ok_or_else(malformed)?,
+                );
             }
             if ranges.is_empty() {
                 return Err(malformed());
@@ -95,6 +112,13 @@ impl DataRefs {
             if entries.insert(name.to_string(), ranges).is_some() {
                 return Err(Error::DataRef(format!("`{name}` is listed twice")));
             }
+        }
+        // An empty map and a map that failed to resolve read the same, and the
+        // two differ by everything: the first prunes every data segment away,
+        // the second means the section should not have been written. An asset
+        // with nothing to say carries no section at all.
+        if entries.is_empty() {
+            return Err(Error::DataRef("names no function".into()));
         }
         Ok(DataRefs { entries })
     }
@@ -236,14 +260,17 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
             if defined.size == 0 {
                 continue;
             }
-            symbols.insert(
-                index as u32,
-                DataRange {
-                    segment: defined.index,
-                    offset: defined.offset,
-                    size: defined.size,
-                },
-            );
+            let range =
+                DataRange::new(defined.index, defined.offset, defined.size).ok_or_else(|| {
+                    Error::DataRef(format!(
+                        "symbol {index} spans {}..{} of segment {}, which the address \
+                         space cannot hold",
+                        defined.offset,
+                        u64::from(defined.offset) + u64::from(defined.size),
+                        defined.index
+                    ))
+                })?;
+            symbols.insert(index as u32, range);
         }
     }
 

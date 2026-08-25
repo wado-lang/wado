@@ -609,3 +609,78 @@ fn a_segment_at_a_computed_address_is_never_split() {
     }
     assert_eq!(kept, [b"AAAABBBB".to_vec()]);
 }
+
+/// A passive segment is named by index and copied by `memory.init`, so no map
+/// can narrow it — and a map that names one must not be honoured halfway.
+#[test]
+fn a_map_naming_a_passive_segment_leaves_it_to_memory_init() {
+    let source = r#"
+        (module
+          (memory 1)
+          (data $passive "passive")
+          (func $a (export "a")
+            (memory.init $passive (i32.const 0) (i32.const 0) (i32.const 7)))
+          (@custom "wado.dataref" (after data) "a 0:0+4\n"))
+    "#;
+    let pruned = prune(source, &["a"]);
+    let mut kept = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&pruned) {
+        if let Ok(wasmparser::Payload::DataSection(reader)) = payload {
+            for data in reader.into_iter().flatten() {
+                kept.push(data.data.to_vec());
+            }
+        }
+    }
+    assert_eq!(
+        kept,
+        [b"passive".to_vec()],
+        "the whole segment, not 4 bytes"
+    );
+}
+
+/// The same segment, with nothing initialising memory from it: the map must not
+/// be what keeps it alive either.
+#[test]
+fn a_map_naming_a_passive_segment_does_not_keep_it_alive() {
+    let source = r#"
+        (module
+          (memory 1)
+          (data $passive "passive")
+          (func $a (export "a") (result i32) (i32.const 1))
+          (@custom "wado.dataref" (after data) "a 0:0+4\n"))
+    "#;
+    assert_eq!(data_segments(&prune(source, &["a"])), []);
+    assert!(
+        !section_ids(&prune(source, &["a"])).contains(&11),
+        "no data section"
+    );
+}
+
+fn dataref_error(map: &str) -> Error {
+    let wasm = wat::parse_str(&quarters(Some(map))).expect("fixture must parse");
+    embed(
+        &wasm,
+        &Embed {
+            memory_import: ("env", "memory"),
+            keep_export: &|_| true,
+            strip_custom_sections: false,
+        },
+    )
+    .expect_err("a map that cannot be trusted must not be used")
+}
+
+/// A map that names nothing reads exactly like one that failed to resolve, and
+/// honouring it would prune every data segment away.
+#[test]
+fn an_empty_map_is_rejected_rather_than_pruning_everything() {
+    assert_matches!(dataref_error(""), Error::DataRef(_));
+    assert_matches!(dataref_error("\n  \n"), Error::DataRef(_));
+}
+
+/// `offset + size` past the end of the address space wraps in release, so the
+/// range has to be refused where it is built, not where it is sliced.
+#[test]
+fn a_range_that_cannot_end_is_rejected() {
+    assert_matches!(dataref_error("a 0:4294967295+8\n"), Error::DataRef(_));
+    assert_matches!(dataref_error("a 0:1+4294967295\n"), Error::DataRef(_));
+}

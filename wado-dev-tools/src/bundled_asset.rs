@@ -39,13 +39,16 @@ pub fn run(mut parser: lexopt::Parser) {
         .print(&stripped, &mut wasmprinter::PrintFmtWrite(&mut wat))
         .expect("failed to print wasm");
 
+    // A map naming no function would read as one that failed to resolve, and
+    // `wado-wasm-embed` rejects it for that reason. An asset with nothing to
+    // say carries no section, and keeps its data segments whole.
+    let block = if refs.is_empty() {
+        String::new()
+    } else {
+        block(&refs, data_bytes(&wasm))
+    };
     let close = wat.rfind(')').expect("printed wat must close its module");
-    print!(
-        "{}{}{}",
-        &wat[..close],
-        block(&refs, data_bytes(&wasm)),
-        &wat[close..]
-    );
+    print!("{}{}{}", &wat[..close], block, &wat[close..]);
 }
 
 /// Re-emit `wasm` without the sections [`is_spent`] names. Every section is

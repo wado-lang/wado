@@ -271,14 +271,34 @@ export fn run() with Stdout {
 #[test]
 fn the_bundled_libm_carries_its_data_reference_map() {
     let full = wat::parse_bytes(wado_compiler::stdlib::CORE_LIBM_WAT).expect("libm.wat parses");
-    let carried = Parser::new(0).parse_all(&full).any(|payload| {
-        matches!(payload, Ok(Payload::CustomSection(reader))
-            if reader.name() == wado_wasm_embed::dataref::SECTION_NAME)
+    let mut carried = None;
+    for payload in Parser::new(0).parse_all(&full) {
+        if let Ok(Payload::CustomSection(reader)) = payload
+            && reader.name() == wado_wasm_embed::dataref::SECTION_NAME
+        {
+            carried = Some(reader.data().to_vec());
+        }
+    }
+    let carried = carried.unwrap_or_else(|| {
+        panic!(
+            "libm.wat must carry `{}`; regenerate with `mise run update-bundled`",
+            wado_wasm_embed::dataref::SECTION_NAME
+        )
     });
+    let refs = wado_wasm_embed::dataref::DataRefs::parse(
+        std::str::from_utf8(&carried).expect("the map is text"),
+    )
+    .expect("the map must parse");
+
+    // A map that has quietly stopped describing the asset would prune data the
+    // program still reads, and nothing else here would notice. It claims all
+    // but the alignment padding, so anything short of that is drift.
+    let claimed = refs.claimed_bytes() as usize;
+    let total = data_byte_count(&full);
     assert!(
-        carried,
-        "libm.wat must carry `{}`; regenerate with `mise run update-bundled`",
-        wado_wasm_embed::dataref::SECTION_NAME
+        claimed + 16 >= total && claimed <= total,
+        "the map claims {claimed} of {total} data bytes; regenerate with \
+         `mise run update-bundled`"
     );
 }
 
