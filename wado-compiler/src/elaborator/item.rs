@@ -862,8 +862,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .self_type
             .expect("entering an impl frame binds Self to the target");
 
+        let impl_def = scope.def_at(impl_block.id);
         scope.sem.decls.impl_sigs.insert(
-            impl_block.id,
+            impl_def,
             super::sig::ImplSig {
                 self_type,
                 target_type_args,
@@ -1158,6 +1159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// instantiates a recorded signature instead of re-resolving the method
     /// AST under the *caller's* perspective (WEP 2026-05-26).
     pub(super) fn record_impl_decls(&mut self, impl_block: &ast::ImplBlock) {
+        let impl_def = self.def_at(impl_block.id);
         let mut block = self.enter_inherited_type_param_scope();
         block.annotate_ctx.trait_ctx.type_params.clear();
         block.annotate_ctx.trait_ctx.type_param_bounds.clear();
@@ -1232,10 +1234,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .first()
                 .map(|p| p.self_kind)
                 .unwrap_or(ast::SelfKind::None);
+            let method_def = frame_scope.def_at(method.id);
             frame_scope.sem.decls.method_sigs.insert(
-                method.id,
+                method_def,
                 MethodSig {
-                    ast_id: method.id,
+                    def: method_def,
                     decl: DeclSig {
                         type_params,
                         param_types,
@@ -1253,6 +1256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .collect(),
                     declaring_slot_count,
+                    declaring_impl: Some(impl_def),
                     own_params: super::sig::own_params_of(&method.type_params),
                     cm_name: method
                         .attrs
@@ -1478,12 +1482,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Operation signatures the decl pass recorded for `decl_id`.
+    /// Operation signatures the decl pass recorded for the declaration at
+    /// `decl_id`.
     fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
+        let decl = self.def_at(decl_id);
         self.sem
             .decls
             .effect_ops
-            .get(&decl_id)
+            .get(&decl)
             .cloned()
             .expect("the decl pass records every interface / resource declaration's operations")
     }
@@ -1586,11 +1592,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut type_params = decl_slots.clone();
             type_params.extend(method_slots);
 
+            let method_def = method_scope.def_at(method.id);
             methods.insert(
                 method.name.clone(),
                 super::sig::TraitMethod {
                     sig: MethodSig {
-                        ast_id: method.id,
+                        def: method_def,
                         decl: DeclSig {
                             type_params,
                             param_types,
@@ -1612,6 +1619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             })
                             .collect(),
                         declaring_slot_count: decl_slots.len() as u32,
+                        declaring_impl: None,
                         own_params: super::sig::own_params_of(&method.type_params),
                         cm_name: method
                             .attrs
@@ -1628,11 +1636,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let module = scope.current_module_source.clone();
+        let trait_def = scope.def_at(trait_decl.id);
         scope
             .sem
             .decls
             .trait_sigs
-            .insert(trait_decl.id, super::sig::TraitSig { module, methods });
+            .insert(trait_def, super::sig::TraitSig { module, methods });
     }
 
     /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s,
@@ -1680,6 +1689,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.tysys.type_table.borrow_mut().make_resource(def)
             }
         });
+        // `Self` in a resource method names the declaring resource.
+        if self_type.is_some() {
+            scope.annotate_ctx.trait_ctx.self_type = self_type;
+        }
 
         let decl_slots: Vec<(String, TypeId)> = scope
             .annotate_ctx
@@ -1798,10 +1811,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 SelfKind::None
             };
+            let method_def = scope.def_at(method.id);
             scope.sem.decls.method_sigs.insert(
-                method.id,
+                method_def,
                 MethodSig {
-                    ast_id: method.id,
+                    def: method_def,
                     decl: DeclSig {
                         type_params: decl_slots.clone(),
                         param_types: params.iter().map(|p| p.type_id).collect(),
@@ -1810,6 +1824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self_kind,
                     params: sig_params,
                     declaring_slot_count: decl_slots.len() as u32,
+                    declaring_impl: None,
                     // An `interface` / `resource` operation declares no type
                     // parameters of its own.
                     own_params: Vec::new(),
@@ -2161,11 +2176,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// re-resolution. Returns the declared return type for callers that
     /// need it (`resolve_function`'s `task_return_type`).
     fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
+        let def = self.def_at(func.id);
         let sig = self
             .sem
             .decls
             .function_sigs
-            .get(&func.name)
+            .get(&def)
             .expect("decl pass records every free function's canonical signature");
         let type_param_list = sig.decl.type_params.clone();
         let resolved_param_types = sig.decl.param_types.clone();
@@ -2592,16 +2608,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, Some(d)) => (Some(d), true),
                 (None, None) => (None, false),
             };
-            let async_op = decl_ref
-                .map(|key| scope.tysys.resolutions.defs().ast_id(key))
-                .and_then(|decl_id| {
-                    scope
-                        .tysys
-                        .signatures
-                        .resource_method_sig(decl_id, &func.name)
-                        .filter(|op| op.is_async)
-                        .map(|op| op.cm_name.is_some())
-                });
+            let async_op = decl_ref.and_then(|decl| {
+                scope
+                    .tysys
+                    .signatures
+                    .resource_method_sig(decl, &func.name)
+                    .filter(|op| op.is_async)
+                    .map(|op| op.cm_name.is_some())
+            });
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {

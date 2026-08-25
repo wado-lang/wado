@@ -1064,7 +1064,7 @@ impl<'a> Unparser<'a> {
                     this.output.push('\n');
                 }
                 this.write_indent();
-                this.output.push_str(match rest {
+                this.output.push_str(match rest.kind {
                     RestClause::Trap => "..trap\n",
                     RestClause::Forward => "..forward\n",
                 });
@@ -1133,6 +1133,10 @@ impl<'a> Unparser<'a> {
         self.output.push_str("resource ");
         self.output.push_str(&r.name);
         self.unparse_generic_params(&r.type_params);
+        if let Some(parent) = &r.parent {
+            self.output.push_str(" extends ");
+            self.unparse_type(parent);
+        }
 
         if r.methods.is_empty() {
             self.output.push_str(";\n");
@@ -4910,7 +4914,7 @@ impl<'a> TirUnparser<'a> {
                 });
                 self.output.push_str(" }");
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 self.delimited("[", "]", elements, TirUnparser::unparse_expr);
             }
             TirExprKind::TupleSpread { expr }

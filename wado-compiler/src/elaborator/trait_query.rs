@@ -204,14 +204,13 @@ fn mentions_self(ty: &ast::Type) -> bool {
 /// AST, and answers `None` for a declaration that is no trait.
 pub(crate) fn trait_sig_of_with<'a>(
     decl: crate::defs::DefId,
-    resolutions: &crate::resolve::Resolutions,
     trait_env: &super::trait_env::TraitEnv,
     signatures: &'a super::sig::Signatures,
 ) -> Option<&'a super::sig::TraitSig> {
     if !trait_env.decl_index.contains(&decl) {
         return None;
     }
-    signatures.trait_sig(resolutions.defs().ast_id(decl))
+    signatures.trait_sig(decl)
 }
 
 /// The structural-conformance rule's answer for one type: whether every member
@@ -292,7 +291,7 @@ impl TypeSystem {
     }
 
     /// Check that concrete type args at non-type-parameter positions match the impl type.
-    /// e.g., `impl KeyValueLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
+    /// e.g. `impl From<…> for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
     /// because position 0 expects String but got i32.
     pub(crate) fn verify_impl_type_compatibility(
         &self,
@@ -371,12 +370,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::trait_sig_of`] for a caller still holding a trait's spelling.
     pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&TraitSig> {
         let decl = self.decl_key_or_local(trait_name)?;
-        trait_sig_of_with(
-            decl,
-            &self.tysys.resolutions,
-            &self.tysys.trait_env,
-            &self.tysys.signatures,
-        )
+        trait_sig_of_with(decl, &self.tysys.trait_env, &self.tysys.signatures)
     }
 
     /// The declaration header of the trait `trait_name` names in this frame.
@@ -1067,14 +1061,12 @@ impl TypeSystem {
         // A receiverless method has no receiver to deref, so `&T` inherits it
         // by forwarding — which works only where `Self` is absent from the
         // signature: `kind() -> String` forwards, `-> Option<Self>` cannot.
-        trait_sig_of_with(trait_, &self.resolutions, &self.trait_env, &self.signatures).is_some_and(
-            |sig| {
-                sig.methods.values().any(|m| {
-                    m.sig.self_kind == crate::ast::SelfKind::None
-                        && self.receiverless_method_mentions_self(&m.sig)
-                })
-            },
-        )
+        trait_sig_of_with(trait_, &self.trait_env, &self.signatures).is_some_and(|sig| {
+            sig.methods.values().any(|m| {
+                m.sig.self_kind == crate::ast::SelfKind::None
+                    && self.receiverless_method_mentions_self(&m.sig)
+            })
+        })
     }
 
     /// Whether a receiverless method's signature names `Self` — in a parameter,
@@ -1751,9 +1743,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.tysys.trait_env.decl_index.contains(key) {
             return None;
         }
-        self.tysys
-            .signatures
-            .trait_sig(self.tysys.resolutions.defs().ast_id(*key))
+        self.tysys.signatures.trait_sig(*key)
     }
 
     /// What `Self::X` means for a receiver reached through a trait bound, for
@@ -1934,7 +1924,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((
             fq_trait_name,
             MethodInfo {
-                method_ast_id: Some(sig.ast_id),
+                method_def: Some(sig.def),
                 return_type: instantiated.return_type,
                 self_kind: sig.self_kind,
                 param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -2443,10 +2433,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
             for blanket in trait_env.blanket_impls.get(&trait_).into_iter().flatten() {
-                let Some(header) = trait_env
-                    .impl_headers
-                    .get(&(blanket.module.clone(), blanket.ast_id))
-                else {
+                let Some(header) = trait_env.impl_headers.get(&blanket.def) else {
                     continue;
                 };
                 if header.associated_types.is_empty() {
@@ -2554,12 +2541,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `output_type` to the receiver type absent a `type Output`. The set and
         // the types come from `TypeSystem::auto_derive_by_trait`.
         let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
-        let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
+        let (info_trait_name, self_kind, param_types, return_type, impl_def) = if let Some(info) =
             self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_, method_name, None)
         {
             let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
-            (info.trait_name, info.self_kind, param_types, return_type)
+            (
+                info.trait_name,
+                info.self_kind,
+                param_types,
+                return_type,
+                Some(info.impl_def),
+            )
         } else if let Some((item, return_type)) = auto_derive
             && let Some(trait_) = self.tysys.compiler_trait_def(item)
             && self.tysys.type_implements_trait(
@@ -2574,11 +2567,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
+            // Auto-derived: no `impl` block is written, so none is named.
             (
                 self.tysys.type_table.borrow().compiler_trait_fq(item),
                 ast::SelfKind::Ref,
                 vec![ref_self_ty],
                 return_type,
+                None,
             )
         } else {
             return None;
@@ -2586,6 +2581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(ResolvedTraitMethod {
             trait_name: info_trait_name,
             method_name: method_name.to_string(),
+            impl_def,
             impl_name: struct_name.to_string(),
             impl_type_id: (!is_type_param).then_some(lookup_type_id),
             self_kind,
@@ -2626,7 +2622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
-            method_ast_id: None,
+            method_def: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![ref_self_ty],

@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, BinaryOp, Expr, Type};
+use crate::ast::{self, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, RefKind};
 use crate::tir::{
@@ -23,9 +24,8 @@ use super::sig::InstantiatedImplSig;
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
-    ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
-    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, MethodOwner,
-    SequenceLiteralTraitInfo, TypeError, TypeLookup,
+    ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo,
+    IndexTraitInfo, IndexValueTraitInfo, MethodInfo, MethodOwner, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 
@@ -36,10 +36,10 @@ use super::util::placeholder;
 pub(super) const REPLACE_ON_ASSIGN_PLACE: &str = "a field or element of a replace-on-assign type (primitive, enum, flags, fn); \
      use the containing value's reference directly";
 
-/// Lightweight reference to an impl block. Stores `(module_source,
-/// item_id)` and resolves to the block's digested [`ImplHeader`] via
-/// [`impl_header`]. Dispatch cannot reach the impl AST at all.
-struct ImplBlockRef(ModuleSource, AstId);
+/// Lightweight reference to an impl block: its identity, resolving to the
+/// block's digested [`ImplHeader`] via [`impl_header`]. Dispatch cannot reach
+/// the impl AST at all.
+struct ImplBlockRef(DefId);
 
 /// The digested header of the impl block `r` points at. Borrowed from the
 /// caller's `TraitEnv` handle rather than from `&self`, so the header stays
@@ -51,7 +51,7 @@ struct ImplBlockRef(ModuleSource, AstId);
 fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader {
     trait_env
         .impl_headers
-        .get(&(r.0.clone(), r.1))
+        .get(&r.0)
         .expect("every indexed impl block has an ImplHeader")
 }
 
@@ -60,7 +60,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn impl_sig(&self, r: &ImplBlockRef) -> &super::sig::ImplSig {
         self.tysys
             .signatures
-            .impl_sig(r.1)
+            .impl_sig(r.0)
             .expect("the decl pass records every impl block's declaration facts")
     }
 }
@@ -334,7 +334,7 @@ impl TypeSystem {
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Get the module source for an `ImplBlockRef`.
     fn impl_block_module_source(&self, r: &ImplBlockRef) -> ModuleSource {
-        r.0.clone()
+        self.tysys.resolutions.defs().module(r.0).clone()
     }
 
     /// Collect trait impl block references for a given type name.
@@ -350,7 +350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(entry)
                     .is_some_and(|h| h.trait_name.is_some())
                 {
-                    refs.push(ImplBlockRef(entry.0.clone(), entry.1));
+                    refs.push(ImplBlockRef(*entry));
                 }
             }
         }
@@ -370,7 +370,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .get(entry)
                         .is_some_and(|h| h.trait_name.is_some())
                     {
-                        refs.push(ImplBlockRef(entry.0.clone(), entry.1));
+                        refs.push(ImplBlockRef(*entry));
                     }
                 }
             }
@@ -408,7 +408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             let impl_sig = signatures
-                .impl_sig(impl_ref.1)
+                .impl_sig(impl_ref.0)
                 .expect("the decl pass records every impl block's declaration facts")
                 .instantiate(&self.tysys.type_table, concrete_type_args);
             let declared = self
@@ -704,7 +704,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
-                            method_ast_id: None,
+                            method_def: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -747,7 +747,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
-                            method_ast_id: None,
+                            method_def: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -871,14 +871,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Coherence lets any same-package module host an `impl <struct_name>`.
         if struct_module_source.is_some() {
-            let entries: Vec<(ModuleSource, AstId)> = self.tysys.trait_env.inherent_impl_keys(
+            let entries: Vec<DefId> = self.tysys.trait_env.inherent_impl_keys(
                 &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
             );
             // The receiver's own declaration, which is what an impl header
             // targeting it must name.
             let receiver_decl = self.tysys.type_table.borrow().nominal_def(base_type_id);
-            for (impl_module, item_id) in &entries {
-                let impl_ref = ImplBlockRef(impl_module.clone(), *item_id);
+            for entry in &entries {
+                let impl_ref = ImplBlockRef(*entry);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
                 let header = impl_header(&trait_env, &impl_ref);
                 // The header names its target at a site of its own, answered
@@ -909,11 +909,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if struct_module_source.is_none() {
-            let entries: Vec<(ModuleSource, AstId)> = self.tysys.trait_env.inherent_impl_keys(
+            let entries: Vec<DefId> = self.tysys.trait_env.inherent_impl_keys(
                 &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
             );
-            for (search_module_source, item_id) in &entries {
-                let impl_ref = ImplBlockRef(search_module_source.clone(), *item_id);
+            for entry in &entries {
+                let impl_ref = ImplBlockRef(*entry);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
                 let header = impl_header(&trait_env, &impl_ref);
                 if self.get_type_name(&header.ty) != struct_name
@@ -995,9 +995,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let signatures = Rc::clone(&self.tysys.signatures);
         let header = impl_header(&trait_env, impl_ref);
         let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-        let sig = signatures.method_sig(method_header.ast_id)?;
+        let sig = signatures.method_sig(method_header.def)?;
         let impl_sig = signatures
-            .impl_sig(impl_ref.1)
+            .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts");
 
         let slots = impl_sig.slots(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
@@ -1005,7 +1005,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
 
         Some(MethodInfo {
-            method_ast_id: Some(sig.ast_id),
+            method_def: Some(sig.def),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -1015,7 +1015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_ref_impl: false,
             method_type_param_ids: sig.own_type_param_ids(),
             method_own_params: sig.own_params.clone(),
-            impl_module: Some(impl_ref.0.clone()),
+            impl_module: Some(self.impl_block_module_source(impl_ref)),
             from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
             param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
             param_names: super::sig::Param::names(&sig.params),
@@ -1035,11 +1035,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-        let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
+        // The nearest declaration answers, keeping its own signature. Only the
+        // receiver's takes type arguments — a generic resource is rejected.
+        self.resource_chain_of(def)
+            .into_iter()
+            .enumerate()
+            .find_map(|(step, current)| {
+                let args = if step == 0 { receiver_type_args } else { None };
+                self.resource_method_info_on(current, method_name, args)
+            })
+    }
+
+    /// `def` and every resource it extends. Collected, so the walk's own
+    /// lookups can borrow the type table again.
+    fn resource_chain_of(&self, def: crate::defs::DefId) -> Vec<crate::defs::DefId> {
+        self.tysys.type_table.borrow().resource_chain(def).collect()
+    }
+
+    /// The resource that declares `method_name` as an instance method for a
+    /// receiver declared by `def` — itself or the nearest ancestor — and what
+    /// it declares. A static belongs to its declaring resource alone, so the
+    /// walk passes it by.
+    pub(super) fn resource_instance_method(
+        &self,
+        def: crate::defs::DefId,
+        method_name: &str,
+    ) -> Option<(crate::defs::DefId, super::sig::MethodSig)> {
+        self.resource_chain_of(def).into_iter().find_map(|current| {
+            let sig = self
+                .tysys
+                .signatures
+                .resource_method_sig(current, method_name)?;
+            (sig.self_kind != ast::SelfKind::None).then(|| (current, sig.clone()))
+        })
+    }
+
+    /// The trait whose impl for `type_key` declares `method_name`, if one does.
+    /// Direct impls only: a blanket impl answers for every type, so counting it
+    /// here would make every prelude-provided name collide.
+    pub(super) fn trait_impl_declaring(
+        &self,
+        type_key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<String> {
+        for impl_ref in self.collect_trait_impl_refs_multi(std::slice::from_ref(type_key)) {
+            let Some(header) = self.tysys.trait_env.impl_headers.get(&impl_ref.0) else {
+                continue;
+            };
+            if header.methods.iter().any(|m| m.name == method_name)
+                && let Some(trait_name) = &header.trait_name
+            {
+                return Some(trait_name.clone());
+            }
+        }
+        None
+    }
+
+    /// [`Self::find_resource_method_info`] without the `extends` walk.
+    fn resource_method_info_on(
+        &mut self,
+        def: crate::defs::DefId,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<MethodInfo> {
         let sig = self
             .tysys
             .signatures
-            .resource_method_sig(decl_id, method_name)?
+            .resource_method_sig(def, method_name)?
             .clone();
         if sig.self_kind == ast::SelfKind::None {
             return None;
@@ -1052,7 +1114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_type_param_ids = sig.own_type_param_ids();
 
         Some(MethodInfo {
-            method_ast_id: Some(sig.ast_id),
+            method_def: Some(sig.def),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -1582,19 +1644,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the receiver
         // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
         // any concrete type that implements Iterator. Snapshot the value blankets
-        // (module, ast id, bound names) so the per-bound checks below borrow `self`
+        // (block, bound names) so the per-bound checks below borrow `self`
         // without holding a `trait_env` borrow.
-        let value_blankets: Vec<(ModuleSource, AstId, Vec<super::trait_env::BlanketBound>)> = self
+        let value_blankets: Vec<(DefId, Vec<super::trait_env::BlanketBound>)> = self
             .tysys
             .trait_env
             .blanket_impls
             .values()
             .flatten()
             .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
-            .map(|b| (b.module.clone(), b.ast_id, b.bounds.clone()))
+            .map(|b| (b.def, b.bounds.clone()))
             .collect();
         let type_lookup = self.type_lookup();
-        for (module, ast_id, bounds) in &value_blankets {
+        for (blanket, bounds) in &value_blankets {
             // Gate on all bounds. The receiver-`TypeId` check is preferred:
             // it recognises synthesized bounds (`ReflectStruct`, `Default`) with no
             // explicit `impl`, which the name-based lookup misses. A viable
@@ -1631,7 +1693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .blanket_assoc_constraints_hold(receiver_type_id, bounds)
             {
-                impl_refs.push(ImplBlockRef(module.clone(), *ast_id));
+                impl_refs.push(ImplBlockRef(*blanket));
             }
         }
         impl_refs
@@ -1795,14 +1857,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // frame exactly when a target argument names a type the impl's module
         // cannot see, and the target then carries a slot this filter believes
         // is concrete.
+        let impl_module = self.impl_block_module_source(impl_ref);
         let is_target_slot = |name: &str| {
             self.tysys
-                .is_impl_target_param(&impl_ref.0, &header.type_params, name)
+                .is_impl_target_param(&impl_module, &header.type_params, name)
         };
         let is_blanket_tp = matches!(&header.ty, Type::Named(n) if is_target_slot(&n.name));
         let generic_is_parametric = matches!(&header.ty, Type::Generic(g)
             if g.args.iter().any(|a| matches!(a, Type::Named(n) if is_target_slot(&n.name))));
-        let skip_filter = !header.type_params.is_empty()
+        let skip_filter = !header.is_concrete()
             || is_blanket_tp
             || matches!(&header.ty, Type::Reference(_) | Type::MutReference(_))
             || generic_is_parametric;
@@ -2113,7 +2176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // this query, resolved it.
         let signatures = Rc::clone(&scope.tysys.signatures);
         let impl_sig = signatures
-            .impl_sig(impl_ref.1)
+            .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts")
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
@@ -2153,7 +2216,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let sig = scope
                     .tysys
                     .signatures
-                    .method_sig(m.ast_id)
+                    .method_sig(m.def)
                     .expect("the decl pass records every impl-declared method's signature")
                     .clone();
                 (sig, m.type_params.clone())
@@ -2171,7 +2234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the spelling it wrote, which is how an erroneous block reaches a
         // lookup at all; a candidate built without an identity keys on nothing.
         let Some(trait_decl) = signatures
-            .impl_sig(impl_ref.1)
+            .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts")
             .trait_decl
         else {
@@ -2285,7 +2348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
-                    method_ast_id: Some(method_sig.ast_id),
+                    method_def: Some(method_sig.def),
                     return_type,
                     self_kind,
                     param_types,
@@ -2347,7 +2410,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
-                        method_ast_id: Some(default_method.sig.ast_id),
+                        method_def: Some(default_method.sig.def),
                         return_type: instantiated.return_type,
                         self_kind,
                         param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -2737,185 +2800,81 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find `KeyValueLiteralBuilder` trait implementation for a type.
+    /// The `From<Array<E>>` impls a literal in a position of type
+    /// `base_type_id` could coerce through (WEP 2026-08-24).
     ///
-    /// Checks first for an explicit `impl KeyValueLiteralBuilder for T` (with `Output = T`
-    /// check for blanket-style self-as-builder usage), then falls back to checking whether
-    /// `T` implements the `KeyValueLiteral` trait (separate builder pattern).
-    pub(super) fn find_key_value_literal_trait_impl(
+    /// `want_pair` is the literal's form: a `{ … }` literal admits only an `E`
+    /// that is a two-element tuple, and a `[ … ]` literal prefers an `E` that
+    /// is not one — which is what separates `Value`'s two impls. A target whose
+    /// base is `Array<E>` itself answers with the identity: the array the
+    /// compiler builds is already the result.
+    pub(super) fn find_from_array_impls(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-    ) -> Option<KeyValueLiteralTraitInfo> {
-        // Primary: explicit impl KeyValueLiteralBuilder for T (self-as-builder pattern)
-        if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
-            struct_name,
-            base_type_id,
-            CompilerItem::KeyValueLiteralBuilder,
-            "insert_literal",
-            "Value",
-            None,
-        ) {
-            // Check if Output = Self (self-as-builder pattern)
-            let output_type = self
-                .find_assoc_type_in_trait_impl(
-                    struct_name,
-                    base_type_id,
-                    CompilerItem::KeyValueLiteralBuilder,
-                    "Output",
-                )
-                .unwrap_or(TypeTable::UNKNOWN);
-            // Accept if no Output constraint mismatch (output == Self or unknown)
-            if output_type == TypeTable::UNKNOWN || output_type == base_type_id {
-                return Some(KeyValueLiteralTraitInfo {
-                    value_type,
-                    builder_type: base_type_id,
-                    self_kind,
-                    trait_name,
-                });
-            }
-        }
+        want_pair: bool,
+    ) -> Vec<FromArrayInfo> {
+        let candidates = if let ResolvedType::BuiltinArray(element_type) =
+            *self.tysys.type_table.borrow().get(base_type_id)
+        {
+            // No conversion runs for an `Array<E>` target, so the module and
+            // trait name are never read; the array the literal builds is the
+            // result.
+            vec![FromArrayInfo {
+                element_type,
+                array_type: base_type_id,
+                impl_module_source: self.current_module_source.clone(),
+                trait_name: self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_trait_fq(crate::compiler_item::CompilerItem::From),
+            }]
+        } else {
+            let Some(from_def) = self
+                .tysys
+                .compiler_trait_def(crate::compiler_item::CompilerItem::From)
+            else {
+                return Vec::new();
+            };
+            self.find_arithmetic_trait_impls(struct_name, base_type_id, from_def, "from", None)
+                .into_iter()
+                .filter_map(|info| {
+                    let array_type = info.rhs_type?;
+                    let ResolvedType::BuiltinArray(element_type) =
+                        *self.tysys.type_table.borrow().get(array_type)
+                    else {
+                        return None;
+                    };
+                    Some(FromArrayInfo {
+                        element_type,
+                        array_type,
+                        impl_module_source: info.impl_module_source,
+                        trait_name: info.trait_name,
+                    })
+                })
+                .collect()
+        };
 
-        // Secondary: explicit impl KeyValueLiteral for T with type Builder (separate builder
-        // pattern for immutable output types).
-        let builder_type = self.find_assoc_type_in_trait_impl(
-            struct_name,
-            base_type_id,
-            CompilerItem::KeyValueLiteral,
-            "Builder",
-        )?;
-        let builder_name = self.tysys.struct_name_for_type(builder_type)?;
-        if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
-            &builder_name,
-            builder_type,
-            CompilerItem::KeyValueLiteralBuilder,
-            "insert_literal",
-            "Value",
-            None,
-        ) {
-            return Some(KeyValueLiteralTraitInfo {
-                value_type,
-                builder_type,
-                self_kind,
-                trait_name,
-            });
+        let (pairs, plain): (Vec<_>, Vec<_>) = candidates
+            .into_iter()
+            .partition(|found| self.is_pair_type(found.element_type));
+        if want_pair {
+            return pairs;
         }
-
-        None
+        // A sequence literal prefers the non-pair reading; the pair impls are
+        // its only candidates when the type offers nothing else.
+        if plain.is_empty() { pairs } else { plain }
     }
 
-    /// Find the value of a specific associated type in a trait impl for a given struct.
-    fn find_assoc_type_in_trait_impl(
-        &mut self,
-        struct_name: &str,
-        base_type_id: TypeId,
-        item: CompilerItem,
-        assoc_name: &str,
-    ) -> Option<TypeId> {
-        let concrete_type_args = self
-            .tysys
+    /// Whether `type_id` is a `[K, V]` — the element a `{ k: v, … }` literal
+    /// writes, and what separates a map's `From` impl from a sequence's.
+    fn is_pair_type(&self, type_id: TypeId) -> bool {
+        self.tysys
             .type_table
             .borrow()
-            .nominal_type_args(base_type_id)
-            .unwrap_or_default();
-
-        let trait_ = self.tysys.compiler_trait_def(item)?;
-        self.probe_trait_impls(
-            &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
-            &concrete_type_args,
-            |_, found| found == Some(trait_),
-            |s, impl_ref, impl_sig, declared| {
-                let trait_env = Arc::clone(&s.tysys.trait_env);
-                let header = impl_header(&trait_env, impl_ref);
-                let binding = *impl_sig.associated_types.get(assoc_name)?;
-                if !s.tysys.verify_impl_type_compatibility(
-                    &header.ty,
-                    &concrete_type_args,
-                    declared,
-                ) {
-                    return None;
-                }
-                Some(binding)
-            },
-        )
-    }
-
-    /// Find `SequenceLiteralBuilder` trait implementation for a type.
-    ///
-    /// Checks for an explicit `impl SequenceLiteralBuilder for T` (self-as-builder) first.
-    /// If not found, checks for `impl SequenceLiteral for T` with `type Builder` (separate
-    /// builder pattern for immutable output types).
-    pub(super) fn find_sequence_literal_trait_impl(
-        &mut self,
-        struct_name: &str,
-        base_type_id: TypeId,
-    ) -> Option<SequenceLiteralTraitInfo> {
-        // Primary: self-as-builder (impl SequenceLiteralBuilder for T)
-        if let Some((element_type, self_kind, trait_name, impl_source, _)) = self
-            .find_indexing_trait_impl(
-                struct_name,
-                base_type_id,
-                CompilerItem::SequenceLiteralBuilder,
-                "push_literal",
-                "Element",
-                None,
-            )
-        {
-            let output_type = self
-                .find_assoc_type_in_trait_impl(
-                    struct_name,
-                    base_type_id,
-                    CompilerItem::SequenceLiteralBuilder,
-                    "Output",
-                )
-                .unwrap_or(base_type_id);
-            return Some(SequenceLiteralTraitInfo {
-                element_type,
-                builder_type: base_type_id,
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source: impl_source,
-            });
-        }
-
-        // Secondary: separate builder (impl SequenceLiteral for T with type Builder)
-        let builder_type = self.find_assoc_type_in_trait_impl(
-            struct_name,
-            base_type_id,
-            CompilerItem::SequenceLiteral,
-            "Builder",
-        )?;
-        let builder_name = self.tysys.struct_name_for_type(builder_type)?;
-        if let Some((element_type, self_kind, trait_name, impl_source, _)) = self
-            .find_indexing_trait_impl(
-                &builder_name,
-                builder_type,
-                CompilerItem::SequenceLiteralBuilder,
-                "push_literal",
-                "Element",
-                None,
-            )
-        {
-            let output_type = self
-                .find_assoc_type_in_trait_impl(
-                    &builder_name,
-                    builder_type,
-                    CompilerItem::SequenceLiteralBuilder,
-                    "Output",
-                )
-                .unwrap_or(base_type_id);
-            return Some(SequenceLiteralTraitInfo {
-                element_type,
-                builder_type,
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source: impl_source,
-            });
-        }
-
-        None
+            .as_tuple(type_id)
+            .is_some_and(|elems| elems.len() == 2)
     }
 
     pub(super) fn find_index_assign_trait_impl(
@@ -3046,13 +3005,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
             |_, found| found == Some(trait_),
-            |s, impl_ref, impl_sig, _declared| {
+            |s, impl_ref, impl_sig, declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
                 // Shared with `lookup_method_info_uncached` and
                 // `find_trait_impl_for_type_with_args`, so a bound-checking
                 // fix for any AST shape applies to every caller.
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
+                // A concrete type argument in the impl target is a constraint,
+                // not a free parameter: `impl … for TreeMap<String, V>` does
+                // not answer for a `TreeMap<i32, String>` receiver. Without
+                // this the method signature instantiates against the wrong
+                // arguments and the mismatch only surfaces at WIR build.
+                if !s.tysys.verify_impl_type_compatibility(
+                    &header.ty,
+                    &concrete_type_args,
+                    declared,
+                ) {
+                    return None;
+                }
                 if !s.tysys.check_impl_block_bounds(
                     &s.annotate_ctx,
                     &s.type_lookup(),
@@ -3068,7 +3039,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // type arguments is what the by-name re-resolution below used
                 // to approximate.
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-                let method_sig = s.tysys.signatures.method_sig(method_header.ast_id)?;
+                let method_sig = s.tysys.signatures.method_sig(method_header.def)?;
                 let self_kind = method_sig.self_kind;
                 let rhs_index = usize::from(self_kind != ast::SelfKind::None);
                 let rhs_type = method_sig
@@ -3099,8 +3070,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .unwrap_or(base_type_id);
 
                 Some(ArithmeticTraitInfo {
+                    impl_def: impl_ref.0,
                     output_type,
                     self_kind,
+                    impl_module_source: header.module.clone(),
                     // The *full* spelling (`Add<Feet>`), not the operator's
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
@@ -3140,8 +3113,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         callee: &super::callee::CalleeRef,
     ) -> Vec<ast::GenericParam> {
-        let callee_module = &callee.module;
-        let func_name = callee.name.as_str();
+        let callee_module = callee.module();
+        let func_name = callee.name();
         let fn_type_params = &self.tysys.trait_env.function_type_params;
         // Entry-point callees are looked up in the current module's functions first.
         if callee_module.is_entry_point()
@@ -3228,11 +3201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the indexing types come from the impl's associated-type
                 // bindings.
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-                let self_kind = s
-                    .tysys
-                    .signatures
-                    .method_sig(method_header.ast_id)?
-                    .self_kind;
+                let self_kind = s.tysys.signatures.method_sig(method_header.def)?.self_kind;
                 let impl_source = s.impl_block_module_source(impl_ref);
 
                 let assoc_type = impl_sig
@@ -3361,7 +3330,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let MethodInfo {
+<<<<<<< HEAD
             method_ast_id,
+||||||| 3e70fcc5f8
+            method_ast_id: _,
+=======
+            method_def: _,
+>>>>>>> origin/main
             return_type,
             self_kind,
             param_types,

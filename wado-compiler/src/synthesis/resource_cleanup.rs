@@ -135,9 +135,13 @@ fn carries_resource_rec(
     visited.push(base);
     let children: Vec<TypeId> = match tt.get(base).clone() {
         ResolvedType::Resource { def } => {
-            return reg
-                .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
-                .is_some();
+            return !tt.is_extern_ref_resource(def)
+                && reg
+                    .get_resource_cm_name_by_module(
+                        &tt.def_module(def).to_string(),
+                        tt.def_name(def),
+                    )
+                    .is_some();
         }
         ResolvedType::GenericResource { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
             return false;
@@ -380,6 +384,7 @@ fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let base = cx.tt.get_ultimate_base_type(type_id);
     match cx.tt.get(base).clone() {
+        ResolvedType::Resource { def } if cx.tt.is_extern_ref_resource(def) => Vec::new(),
         ResolvedType::Resource { def } => match cx
             .reg
             .get_resource_cm_name_by_module(&cx.tt.def_module(def).to_string(), cx.tt.def_name(def))
@@ -687,7 +692,7 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 scan_transfers(&field.value, true, consumed, cx);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 scan_transfers(elem, true, consumed, cx);
             }
@@ -885,7 +890,7 @@ fn elab_block_entry(
 fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> Vec<TirStmt> {
     let span = synth_span();
     let inner = TirBlock { stmts, span };
-    let result_ty = crate::tir::block_result_type(&inner);
+    let result_ty = crate::tir::block_result_type(cx.tt, &inner);
     if result_ty == TypeTable::UNIT || result_ty == TypeTable::NEVER {
         // The block yields nothing observable; the drops can simply run last.
         let mut out = inner.stmts;

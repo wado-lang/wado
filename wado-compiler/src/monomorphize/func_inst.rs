@@ -2587,6 +2587,19 @@ impl Monomorphizer {
                     );
                 }
             }
+            TirExprKind::ArrayLiteral { elements } => {
+                // Homogeneous and spread-free: an array literal's elements are
+                // plain expressions, so there is no second expansion pass.
+                for elem in elements.iter_mut() {
+                    self.substitute_types_in_expr(
+                        elem,
+                        substitution,
+                        type_table,
+                        local_count,
+                        locals,
+                    );
+                }
+            }
             TirExprKind::TupleLiteral { elements } => {
                 // First pass: substitute types in all elements (skip TypePackExpansion —
                 // those are expanded with per-element substitution in the second pass)

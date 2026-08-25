@@ -53,7 +53,6 @@ Allocation and aggregate:
 - `sroa_param` — replace a single-field-struct reference parameter with its inner scalar, unwrapping the box that `&T` values allocate.
 - `sroa_variant_return` — rewrite a variant return into a `[tag, slots…]` tuple, so a `Result`-returning call stops being one opaque boxed value to every later pass. The return-position dual of `sroa_param`; `multi_value_return` then flattens the tuple to the Wasm multi-value ABI. See [WEP: Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md).
 - `elide_box_local` — collapse a box bound once and read once into its inner value.
-- `array_literal` — fold an array-builder window into a single fixed-array literal.
 - `string_push` — expand a short `push_str("…")` literal into per-byte pushes, and specialize a constant-ASCII `push` to `push_ascii_unchecked`, skipping `encode_char`'s UTF-8 width dispatch.
 - `value_copy_demote` — demote a deep list value-copy to a shallow spine copy when its elements are provably never mutated through the binding.
 - `clone_forward` — collapse `array_clone(&array_clone(&place))` into a single clone, where inlining plus globalization left a read-only binding whose only reader is the outer clone.

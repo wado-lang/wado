@@ -1,0 +1,19 @@
+// `..base` merges through `LiteralSpread`, so a target without the impl rejects
+// the spread where it is written (WEP 2026-08-24).
+struct NoSpread {
+    n: i32,
+}
+
+impl From<Array<[String, i32]>> for NoSpread {
+    fn from(entries: Array<[String, i32]>) -> NoSpread {
+        return NoSpread { n: builtin::array_len(&entries) };
+    }
+}
+
+export fn run() {
+    let base: NoSpread = { a: 1 };
+    let extended: NoSpread = { ..base, b: 2 };
+}
+
+__DATA__
+{"compile_error": "does not implement LiteralSpread"}

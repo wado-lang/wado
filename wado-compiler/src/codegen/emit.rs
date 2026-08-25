@@ -2804,6 +2804,7 @@ mod tests {
             import_plan: Vec::new(),
             defined_func_base: 0,
             trait_bound_violations: Vec::new(),
+            cm_import_violations: Vec::new(),
         }
     }
 

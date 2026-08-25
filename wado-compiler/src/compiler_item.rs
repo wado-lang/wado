@@ -225,9 +225,6 @@ pub enum CompilerItem {
     IndexRef,
     IndexRefMut,
     IndexAssign,
-    SequenceLiteralBuilder,
-    KeyValueLiteralBuilder,
-    SequenceLiteral,
     /// The traits an operator dispatches to. The compiler picks each by
     /// construction, so they are items and not spellings a user trait of
     /// the same name could answer for.
@@ -292,9 +289,9 @@ pub enum CompilerItem {
     /// `core:prelude/traits::IntoIterator` — the trait a `for-of` loop's
     /// subject must implement.
     IntoIterator,
-    /// `core:prelude/traits::KeyValueLiteral` — the marker separating a
-    /// key-value literal's map target from a struct composition.
-    KeyValueLiteral,
+    /// `core:prelude/traits::LiteralSpread` — what `..base` inside a literal
+    /// merges through.
+    LiteralSpread,
     /// `core:prelude/traits::Display` — anchor for `${x}` template-string
     /// dispatch and the auto-derive Display→Inspect fallback.
     Display,
@@ -647,9 +644,6 @@ impl CompilerItem {
         Self::IndexRef,
         Self::IndexRefMut,
         Self::IndexAssign,
-        Self::SequenceLiteralBuilder,
-        Self::KeyValueLiteralBuilder,
-        Self::SequenceLiteral,
         Self::Add,
         Self::Sub,
         Self::Mul,
@@ -678,7 +672,7 @@ impl CompilerItem {
         Self::FieldSchema,
         Self::Iterator,
         Self::IntoIterator,
-        Self::KeyValueLiteral,
+        Self::LiteralSpread,
         Self::Display,
         Self::DisplayAlt,
         Self::Inspect,
@@ -846,9 +840,6 @@ impl CompilerItem {
             Self::IndexRef => "index_ref",
             Self::IndexRefMut => "index_ref_mut",
             Self::IndexAssign => "index_assign",
-            Self::SequenceLiteralBuilder => "sequence_literal_builder",
-            Self::KeyValueLiteralBuilder => "key_value_literal_builder",
-            Self::SequenceLiteral => "sequence_literal",
             Self::Add => "add",
             Self::Sub => "sub",
             Self::Mul => "mul",
@@ -877,7 +868,7 @@ impl CompilerItem {
             Self::FieldSchema => "field_schema",
             Self::Iterator => "iterator",
             Self::IntoIterator => "into_iterator",
-            Self::KeyValueLiteral => "key_value_literal",
+            Self::LiteralSpread => "literal_spread",
             Self::Display => "display",
             Self::DisplayAlt => "display_alt",
             Self::Inspect => "inspect",
@@ -1077,9 +1068,7 @@ impl CompilerItem {
             | Self::IndexRef
             | Self::IndexRefMut
             | Self::IndexAssign
-            | Self::SequenceLiteralBuilder
-            | Self::KeyValueLiteralBuilder
-            | Self::SequenceLiteral
+            | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -1162,8 +1151,7 @@ impl CompilerItem {
             | Self::LowerExp
             | Self::UpperExp
             | Self::Iterator
-            | Self::IntoIterator
-            | Self::KeyValueLiteral => true,
+            | Self::IntoIterator => true,
             // Kiln generator world only.
             Self::KilnRequest => world == "core:kiln/generator",
             // Loaded only when the user imports `core:serde` (which
@@ -1272,9 +1260,7 @@ impl CompilerItem {
             | Self::IndexRef
             | Self::IndexRefMut
             | Self::IndexAssign
-            | Self::SequenceLiteralBuilder
-            | Self::KeyValueLiteralBuilder
-            | Self::SequenceLiteral
+            | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -1291,7 +1277,6 @@ impl CompilerItem {
             | Self::FieldSchema
             | Self::Iterator
             | Self::IntoIterator
-            | Self::KeyValueLiteral
             | Self::Display
             | Self::DisplayAlt
             | Self::Inspect

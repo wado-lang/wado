@@ -107,15 +107,13 @@ Removes all key-value pairs from the map.
 
 ##### `fn index_ref_mut(&mut self, key: K) -> &mut V`
 
-#### `impl KeyValueLiteralBuilder for TreeMap<String, V>`
+#### `impl From<Array<[String, V]>> for TreeMap<String, V>`
 
-##### `fn new_literal(capacity: i32) -> TreeMap<String, V>`
+##### `fn from(entries: Array<[String, V]>) -> TreeMap<String, V>`
 
-##### `fn insert_literal(&mut self, key: String, value: Self::Value) with stores[value]`
+#### `impl LiteralSpread for TreeMap<String, V>`
 
-##### `fn insert_all(&mut self, base: TreeMap<String, V>)`
-
-##### `fn build(&self) -> TreeMap<String, V>`
+##### `fn spread_literal(&mut self, base: TreeMap<String, V>)`
 
 #### `impl Serialize for TreeMap<String, V>`
 
@@ -195,13 +193,9 @@ The elements, in insertion order.
 
 ##### `fn into_iter(&self) -> TreeSetValueIter<T> with stores[self]`
 
-#### `impl SequenceLiteralBuilder for TreeSet<T>`
+#### `impl From<Array<T>> for TreeSet<T>`
 
-##### `fn new_literal(capacity: i32) -> TreeSet<T>`
-
-##### `fn push_literal(&mut self, value: T)`
-
-##### `fn build(&self) -> TreeSet<T>`
+##### `fn from(elements: Array<T>) -> TreeSet<T>`
 
 #### `impl Inspect for TreeSet<T>`
 

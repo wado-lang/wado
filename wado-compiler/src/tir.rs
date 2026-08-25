@@ -820,6 +820,11 @@ pub struct TypeTable {
     /// any point in the pipeline rather than only after a declaration's type is
     /// interned.
     decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
+    /// Resources declared `#[cm(..., type = "extern-ref")]`: a copyable handle
+    /// to a host object, outside the affine resource discipline.
+    extern_ref_resources: IndexSet<crate::defs::DefId>,
+    /// `resource Child extends Parent`, child → parent.
+    resource_parents: IndexMap<crate::defs::DefId, crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
     /// A name comes out of an identity and never goes back in. Attached where
@@ -944,6 +949,8 @@ impl TypeTable {
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
             decl_index: IndexMap::default(),
+            extern_ref_resources: IndexSet::default(),
+            resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
 
@@ -1095,13 +1102,68 @@ impl TypeTable {
             .copied()
     }
 
-    /// Register the `(AstId -> TypeId)` mapping for a declared type.
-    ///
-    /// Called by the elaborator right after constructing the `TypeId` that
-    /// represents a user-declared type (struct, enum, variant, flags,
-    /// newtype, resource). Both directions of the map are populated:
-    /// forward `type_by_symbol[key] = type_id` and inverse
-    /// `symbol_by_type[type_id] = key`.
+    pub fn mark_extern_ref_resource(&mut self, def: crate::defs::DefId) {
+        self.extern_ref_resources.insert(def);
+    }
+
+    /// Whether `def` declares an extern-ref-backed resource, which no affine
+    /// check and no cleanup pass owns.
+    #[must_use]
+    pub fn is_extern_ref_resource(&self, def: crate::defs::DefId) -> bool {
+        self.extern_ref_resources.contains(&def)
+    }
+
+    /// Record `child extends parent`, already validated by the caller.
+    pub fn set_resource_parent(&mut self, child: crate::defs::DefId, parent: crate::defs::DefId) {
+        assert_ne!(child, parent, "a resource cannot extend itself");
+        assert!(
+            !self.is_resource_subtype(parent, child),
+            "a resource inheritance cycle would make every chain walk unbounded"
+        );
+        self.resource_parents.insert(child, parent);
+    }
+
+    #[must_use]
+    pub fn resource_parent(&self, def: crate::defs::DefId) -> Option<crate::defs::DefId> {
+        self.resource_parents.get(&def).copied()
+    }
+
+    /// The ancestor two branches agree on when one resource extends the other,
+    /// under the shared reference they were written with. `&mut` is invariant.
+    /// The answer is always one of `a` and `b`, so nothing new is interned.
+    #[must_use]
+    pub fn resource_join(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        if let (ResolvedType::Ref(a_inner), ResolvedType::Ref(b_inner)) = (self.get(a), self.get(b))
+        {
+            let (a_inner, b_inner) = (*a_inner, *b_inner);
+            let joined = self.resource_join(a_inner, b_inner)?;
+            return Some(if joined == a_inner { a } else { b });
+        }
+        let (ResolvedType::Resource { def: a_def }, ResolvedType::Resource { def: b_def }) =
+            (self.get(a), self.get(b))
+        else {
+            return None;
+        };
+        if self.is_resource_subtype(*a_def, *b_def) {
+            return Some(b);
+        }
+        self.is_resource_subtype(*b_def, *a_def).then_some(a)
+    }
+
+    /// `def` and every resource it extends, nearest first.
+    pub fn resource_chain(
+        &self,
+        def: crate::defs::DefId,
+    ) -> impl Iterator<Item = crate::defs::DefId> {
+        std::iter::successors(Some(def), |&current| self.resource_parent(current))
+    }
+
+    /// Whether `sub` is `sup` or extends it, directly or transitively.
+    #[must_use]
+    pub fn is_resource_subtype(&self, sub: crate::defs::DefId, sup: crate::defs::DefId) -> bool {
+        self.resource_chain(sub).any(|current| current == sup)
+    }
+
     /// Attach the program's declarations, so a nominal type can render its
     /// head once it carries one instead of a spelling.
     pub fn attach_defs(&mut self, defs: std::sync::Arc<crate::defs::DefTable>) {
@@ -1735,10 +1797,7 @@ impl TypeTable {
             .compiler_items
             .struct_decl(item)
             .expect("a registered struct item records its declaring node");
-        let def = self
-            .defs
-            .of_ast_id(decl)
-            .expect("a compiler item's declaring node is a declaration");
+        let def = self.defs.def_at(decl);
         crate::name::FqTypeName::declared(&self.defs, def)
     }
 
@@ -3316,6 +3375,42 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` carries `!` in an argument position — `Option<!>`, a bare
+    /// `null`'s type, names a value of every `Option` and so decides nothing.
+    /// `!` itself is not an argument position and answers `false`; callers that
+    /// mean "diverges" compare against [`Self::NEVER`].
+    pub fn contains_never_arg(&self, id: TypeId) -> bool {
+        fn mentions(tt: &TypeTable, id: TypeId) -> bool {
+            if id == TypeTable::NEVER {
+                return true;
+            }
+            match tt.get(id) {
+                ResolvedType::BuiltinArray(inner)
+                | ResolvedType::Ref(inner)
+                | ResolvedType::MutRef(inner)
+                | ResolvedType::Reactive(inner) => mentions(tt, *inner),
+                ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } => params.iter().any(|p| mentions(tt, *p)) || mentions(tt, *return_type),
+                ResolvedType::GenericInstance { type_args, .. }
+                | ResolvedType::GenericResource { type_args, .. } => {
+                    type_args.iter().any(|t| mentions(tt, *t))
+                }
+                _ => false,
+            }
+        }
+        id != TypeTable::NEVER && mentions(self, id)
+    }
+
+    /// Whether `id` names no type of its own: it still holds UNKNOWN, or it is
+    /// a bare `null`'s `Option<!>`. Such a type never decides a branch
+    /// construct's result — a sibling with a definite type does.
+    pub fn is_indefinite(&self, id: TypeId) -> bool {
+        self.contains_unknown(id) || self.contains_never_arg(id)
+    }
+
     /// Whether `id` (recursively) mentions anything a type check cannot decide
     /// yet: an inference variable, a type pack, or an unresolved / error type.
     /// A rigid type parameter is decided, and so is a projection over one.
@@ -4522,6 +4617,12 @@ pub enum TirExprKind {
     TupleLiteral {
         elements: Vec<TirExpr>,
     },
+    /// `Array<T>` of exactly `elements.len()` slots, the value a `[e0, e1, …]`
+    /// literal denotes. Emitted by literal coercion, which then hands it to the
+    /// target type's `From<Array<T>>` impl. Lowers to `NirExprKind::ArrayLiteral`.
+    ArrayLiteral {
+        elements: Vec<TirExpr>,
+    },
 
     /// Spread a tuple expression into an enclosing `TupleLiteral`.
     /// Created by the elaborator for `[..expr]` syntax. Expanded by monomorphization
@@ -4914,7 +5015,7 @@ impl TirBlock {
 /// and falls back to `Unit`, and a diverging `Return` / `Break` / `Continue`
 /// yields `Never`. The elaborator enforces the agreement rule while typing the
 /// surrounding expression, so a mismatch here is already reported.
-pub fn block_result_type(block: &TirBlock) -> TypeId {
+pub fn block_result_type(tt: &TypeTable, block: &TirBlock) -> TypeId {
     block
         .stmts
         .last()
@@ -4924,7 +5025,11 @@ pub fn block_result_type(block: &TirBlock) -> TypeId {
                 then_block,
                 else_block: Some(else_block),
                 ..
-            } => agree_branch_types(block_result_type(then_block), block_result_type(else_block)),
+            } => agree_branch_types(
+                tt,
+                block_result_type(tt, then_block),
+                block_result_type(tt, else_block),
+            ),
             TirStmtKind::Return { .. } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {
                 Some(TypeTable::NEVER)
             }
@@ -4934,10 +5039,10 @@ pub fn block_result_type(block: &TirBlock) -> TypeId {
 }
 
 /// Combine two branch result types under the elaborator's rule:
-/// equal types agree; a `Never` branch defers to the other; an
-/// outright mismatch yields `None` so the caller falls back to
-/// `Unit`.
-pub(crate) fn agree_branch_types(t: TypeId, e: TypeId) -> Option<TypeId> {
+/// equal types agree; a `Never` branch defers to the other; two
+/// `extends`-related resources agree on the ancestor; an outright
+/// mismatch yields `None` so the caller falls back to `Unit`.
+pub(crate) fn agree_branch_types(tt: &TypeTable, t: TypeId, e: TypeId) -> Option<TypeId> {
     if t == e {
         Some(t)
     } else if t == TypeTable::NEVER {
@@ -4945,7 +5050,7 @@ pub(crate) fn agree_branch_types(t: TypeId, e: TypeId) -> Option<TypeId> {
     } else if e == TypeTable::NEVER {
         Some(t)
     } else {
-        None
+        tt.resource_join(t, e)
     }
 }
 
@@ -5186,8 +5291,8 @@ pub struct TirGlobal {
     pub module_source: ModuleSource,
     pub span: Span,
     /// Per-local metadata for the initializer expression. Populated when
-    /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`
-    /// coercion). Indexed by local index, like `TirFunction::locals`.
+    /// the initializer is non-trivial (e.g. a literal coercion). Indexed by
+    /// local index, like `TirFunction::locals`.
     pub locals: Vec<TirLocal>,
 }
 

@@ -175,7 +175,8 @@ impl fmt::Display for TemplateFormatSpec {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FormatSpecError {
     pub message: String,
-    /// Byte offset into the spec text passed to [`parse`], after trimming.
+    /// Byte offset into the spec text as passed to [`parse`], leading
+    /// whitespace included, so a caller can anchor it against its own source.
     pub offset: usize,
 }
 
@@ -191,8 +192,8 @@ impl fmt::Display for FormatSpecError {
 ///
 /// # Errors
 ///
-/// Returns the first violation of the grammar above, with its offset in the
-/// trimmed spec.
+/// Returns the first violation of the grammar above, with its offset measured
+/// in `spec` as passed — the trim moves the parse, not the offsets.
 pub fn parse(spec: &str) -> Result<TemplateFormatSpec, FormatSpecError> {
     Parser::new(spec).parse()
 }

@@ -168,10 +168,14 @@ fn collect_resource_refs(
     let ty = tt.get(type_id);
     match ty {
         ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
-            out.insert(EffectRef::Concrete {
-                name: tt.def_name(*def).to_string(),
-                module_source: tt.def_module(*def).clone(),
-            });
+            // A `resource Child extends Parent` value is usable wherever the
+            // parent is, so holding it holds every ancestor too.
+            for ancestor in tt.resource_chain(*def) {
+                out.insert(EffectRef::Concrete {
+                    name: tt.def_name(ancestor).to_string(),
+                    module_source: tt.def_module(ancestor).clone(),
+                });
+            }
             if let ResolvedType::GenericResource { type_args, .. } = ty {
                 for ta in type_args {
                     collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);

@@ -8,19 +8,14 @@ struct core:prelude/types.wado//Box<v128> {  // TypeId(1)
     mut value: v128,
 }
 
-struct core:simd//U8x16Builder {  // TypeId(2)
-    mut vec: v128,
-    mut index: i32,
-}
+array Array<u8> (mut u8);  // TypeId(2)
 
-array Array<u8> (mut u8);  // TypeId(3)
-
-struct core:prelude/string.wado//String {  // TypeId(4)
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(5)
+struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -31,9 +26,11 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct simd_v128_inspect.wado//Wrap {  // TypeId(6)
+struct simd_v128_inspect.wado//Wrap {  // TypeId(5)
     mut bytes: v128,
 }
+
+array Array<i32> (mut i32);  // TypeId(6)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
 
@@ -79,7 +76,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(28)
 
-type "functype//core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal" = fn(ref "core:simd//U8x16Builder", i32);  // TypeId(29)
+type "functype//core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from" = fn(ref Array<i32>) -> v128;  // TypeId(29)
 
 type "functype//core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect" = fn(ref "simd_v128_inspect.wado//Wrap", ref "core:prelude/format.wado//Formatter");  // TypeId(30)
 
@@ -115,65 +112,47 @@ global global:core:prelude/traits.wado::__const_obj_6: ref null "core:prelude/st
 global global:core:prelude/traits.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87, 114, 97, 112), used: 4 };
 
 fn "simd_v128_inspect.wado/run"() with Stdout {
-    let __b: ref "core:simd//U8x16Builder";
     let v: v128;
     let w: ref "simd_v128_inspect.wado//Wrap";
-    let __local_3: ref "core:prelude/string.wado//String";
-    let __local_4_4: ref "core:prelude/format.wado//Formatter";
-    let __local_5: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/format.wado//Formatter";
-    let handle_12: i32;
+    let __local_2: ref "core:prelude/string.wado//String";
+    let __local_3: ref "core:prelude/format.wado//Formatter";
+    let __local_4_4: ref "core:prelude/string.wado//String";
+    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let handle_9: i32;
     let s: ref "core:prelude/string.wado//String";
-    let packed_20: i64;
-    let rx_21: i32;
-    let tx_22: i32;
-    let handle_27: i32;
-    let packed_31: i64;
-    let rx_32: i32;
-    let tx_33: i32;
+    let packed_17: i64;
+    let rx_18: i32;
+    let tx_19: i32;
+    let handle_24: i32;
+    let packed_28: i64;
+    let rx_29: i32;
+    let tx_30: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:simd_v128_inspect.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:simd_v128_inspect.wado::__modules_initialized = 1;
     };
-    __b = struct.new "core:simd//U8x16Builder" { vec: i8x16.splat(0), index: 0 };
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 0);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 1);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 2);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 3);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 4);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 5);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 6);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 7);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 8);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 9);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 10);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 11);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 12);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 13);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 14);
-    "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(__b, 15);
-    v = __b.vec;
-    __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<v128>" { value: v }, __local_4_4);
+    v = "core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from"(array.new_fixed<i32>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15));
+    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<v128>" { value: v }, __local_3);
     s = global:simd_v128_inspect.wado::__const_obj_2;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4.buf, s);
-    rx_21 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));
-    tx_22 = builtin::i32_wrap_i64(packed_20 >> 32_i64);
-    handle_12 = "simd_v128_inspect.wado/__cm_binding__Stdout_write_via_stream"(rx_21);
-    "core:cli/write_to_stream"(tx_22, __local_3, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3.buf, s);
+    rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
+    tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
+    handle_9 = "simd_v128_inspect.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
+    "core:cli/write_to_stream"(tx_19, __local_2, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_9);
     w = struct.new "simd_v128_inspect.wado//Wrap" { bytes: v };
-    __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
-    "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect"(w, __local_6);
-    rx_32 = builtin::i32_wrap_i64(local.tee packed_31("wasi/stream-new"()));
-    tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
-    handle_27 = "simd_v128_inspect.wado/__cm_binding__Stdout_write_via_stream"(rx_32);
-    "core:cli/write_to_stream"(tx_33, __local_5, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_27);
+    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
+    "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect"(w, __local_5);
+    rx_29 = builtin::i32_wrap_i64(local.tee packed_28("wasi/stream-new"()));
+    tx_30 = builtin::i32_wrap_i64(packed_28 >> 32_i64);
+    handle_24 = "simd_v128_inspect.wado/__cm_binding__Stdout_write_via_stream"(rx_29);
+    "core:cli/write_to_stream"(tx_30, __local_4_4, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_24);
 }
 
 fn "simd_v128_inspect.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -488,78 +467,89 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
     builtin::array_set_u8(self.repr, start_6, byte);
 }
 
-fn "core:simd/core:simd/U8x16Builder^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(self, value) {
-    let i: i32;
-    let _av_3: v128;
-    i = self.index;
-    _av_3 = self.vec;
-    self.vec = b41: block -> v128 {
-        b42: block {
-            b43: block {
-                b44: block {
-                    b45: block {
-                        b46: block {
-                            b47: block {
-                                b48: block {
-                                    b49: block {
-                                        b50: block {
-                                            b51: block {
-                                                b52: block {
-                                                    b53: block {
-                                                        b54: block {
-                                                            b55: block {
-                                                                b56: block {
-                                                                    b57: block {
-                                                                        br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
-                                                                    };
-                                                                    i8x16.replace_lane(15, _av_3, value);
-                                                                    break b41;
-                                                                };
-                                                                i8x16.replace_lane(0, _av_3, value);
-                                                                break b41;
-                                                            };
-                                                            i8x16.replace_lane(1, _av_3, value);
-                                                            break b41;
-                                                        };
-                                                        i8x16.replace_lane(2, _av_3, value);
-                                                        break b41;
-                                                    };
-                                                    i8x16.replace_lane(3, _av_3, value);
-                                                    break b41;
-                                                };
-                                                i8x16.replace_lane(4, _av_3, value);
-                                                break b41;
-                                            };
-                                            i8x16.replace_lane(5, _av_3, value);
-                                            break b41;
-                                        };
-                                        i8x16.replace_lane(6, _av_3, value);
-                                        break b41;
-                                    };
-                                    i8x16.replace_lane(7, _av_3, value);
-                                    break b41;
-                                };
-                                i8x16.replace_lane(8, _av_3, value);
-                                break b41;
-                            };
-                            i8x16.replace_lane(9, _av_3, value);
-                            break b41;
-                        };
-                        i8x16.replace_lane(10, _av_3, value);
-                        break b41;
-                    };
-                    i8x16.replace_lane(11, _av_3, value);
-                    break b41;
-                };
-                i8x16.replace_lane(12, _av_3, value);
-                break b41;
-            };
-            i8x16.replace_lane(13, _av_3, value);
-            break b41;
-        };
-        i8x16.replace_lane(14, _av_3, value);
-    };
-    self.index = i + 1;
+fn "core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from"(lanes) {
+    let v: v128;
+    return local.tee v(i8x16.replace_lane(15, local.tee v(i8x16.replace_lane(14, local.tee v(i8x16.replace_lane(13, local.tee v(i8x16.replace_lane(12, local.tee v(i8x16.replace_lane(11, local.tee v(i8x16.replace_lane(10, local.tee v(i8x16.replace_lane(9, local.tee v(i8x16.replace_lane(8, local.tee v(i8x16.replace_lane(7, local.tee v(i8x16.replace_lane(6, local.tee v(i8x16.replace_lane(5, local.tee v(i8x16.replace_lane(4, local.tee v(i8x16.replace_lane(3, local.tee v(i8x16.replace_lane(2, local.tee v(i8x16.replace_lane(1, local.tee v(i8x16.replace_lane(0, local.tee v(i8x16.splat(0)), __inline_core_simd_lane_i32__0: block -> i32 {
+        if 0 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__0: builtin::array_get_value<i32>(lanes, 0);
+        }
+        break __inline_core_simd_lane_i32__0: 0;
+    })), __inline_core_simd_lane_i32__1: block -> i32 {
+        if 1 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__1: builtin::array_get_value<i32>(lanes, 1);
+        }
+        break __inline_core_simd_lane_i32__1: 0;
+    })), __inline_core_simd_lane_i32__2: block -> i32 {
+        if 2 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__2: builtin::array_get_value<i32>(lanes, 2);
+        }
+        break __inline_core_simd_lane_i32__2: 0;
+    })), __inline_core_simd_lane_i32__3: block -> i32 {
+        if 3 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__3: builtin::array_get_value<i32>(lanes, 3);
+        }
+        break __inline_core_simd_lane_i32__3: 0;
+    })), __inline_core_simd_lane_i32__4: block -> i32 {
+        if 4 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__4: builtin::array_get_value<i32>(lanes, 4);
+        }
+        break __inline_core_simd_lane_i32__4: 0;
+    })), __inline_core_simd_lane_i32__5: block -> i32 {
+        if 5 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__5: builtin::array_get_value<i32>(lanes, 5);
+        }
+        break __inline_core_simd_lane_i32__5: 0;
+    })), __inline_core_simd_lane_i32__6: block -> i32 {
+        if 6 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__6: builtin::array_get_value<i32>(lanes, 6);
+        }
+        break __inline_core_simd_lane_i32__6: 0;
+    })), __inline_core_simd_lane_i32__7: block -> i32 {
+        if 7 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__7: builtin::array_get_value<i32>(lanes, 7);
+        }
+        break __inline_core_simd_lane_i32__7: 0;
+    })), __inline_core_simd_lane_i32__8: block -> i32 {
+        if 8 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__8: builtin::array_get_value<i32>(lanes, 8);
+        }
+        break __inline_core_simd_lane_i32__8: 0;
+    })), __inline_core_simd_lane_i32__9: block -> i32 {
+        if 9 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__9: builtin::array_get_value<i32>(lanes, 9);
+        }
+        break __inline_core_simd_lane_i32__9: 0;
+    })), __inline_core_simd_lane_i32__10: block -> i32 {
+        if 10 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__10: builtin::array_get_value<i32>(lanes, 10);
+        }
+        break __inline_core_simd_lane_i32__10: 0;
+    })), __inline_core_simd_lane_i32__11: block -> i32 {
+        if 11 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__11: builtin::array_get_value<i32>(lanes, 11);
+        }
+        break __inline_core_simd_lane_i32__11: 0;
+    })), __inline_core_simd_lane_i32__12: block -> i32 {
+        if 12 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__12: builtin::array_get_value<i32>(lanes, 12);
+        }
+        break __inline_core_simd_lane_i32__12: 0;
+    })), __inline_core_simd_lane_i32__13: block -> i32 {
+        if 13 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__13: builtin::array_get_value<i32>(lanes, 13);
+        }
+        break __inline_core_simd_lane_i32__13: 0;
+    })), __inline_core_simd_lane_i32__14: block -> i32 {
+        if 14 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__14: builtin::array_get_value<i32>(lanes, 14);
+        }
+        break __inline_core_simd_lane_i32__14: 0;
+    })), __inline_core_simd_lane_i32__15: block -> i32 {
+        if 15 < builtin::array_len(lanes) {
+            break __inline_core_simd_lane_i32__15: builtin::array_get_value<i32>(lanes, 15);
+        }
+        break __inline_core_simd_lane_i32__15: 0;
+    }));
 }
 
 fn "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect"(self, f) {
@@ -646,12 +636,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
     i_24 = 0;
     _licm_buf_61 = self.buf;
-    b66: block {
-        l67: loop {
-            break_if b66 i_24 >= padding;
+    b65: block {
+        l66: loop {
+            break_if b65 i_24 >= padding;
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(_licm_buf_61, 48);
             i_24 = i_24 + 1;
-            continue l67;
+            continue l66;
         };
     };
     return self_25 = self.buf, new_used_27 = self_25.used + digit_count, if @unlikely(new_used_27 > builtin::array_len(self_25.repr)) {

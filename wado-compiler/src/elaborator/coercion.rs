@@ -6,12 +6,22 @@ use super::util;
 use super::util::placeholder;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
-use crate::elaborator::trait_env::ImplReceiver;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
+
+/// Whether `expr` is a literal — the only position implicit conversion reaches
+/// (WEP 2026-08-24). A template string, a variable, and a call are not.
+fn is_literal_expr(expr: &Expr) -> bool {
+    match expr {
+        Expr::Literal(_) | Expr::TupleLiteral(_) => true,
+        Expr::StructLiteral(struct_lit) => struct_lit.name.is_none(),
+        Expr::Unary(unary) => unary.op == UnaryOp::Neg && matches!(&unary.expr, Expr::Literal(_)),
+        _ => false,
+    }
+}
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Coerce a numeric literal (or negated numeric literal) to the
@@ -444,20 +454,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Tuple literal → type implementing SequenceLiteralBuilder (List<T> and user types).
-        // The sub-helper records `TupleToSequence` and `expression_types`.
+        // Sequence literal → a type with a `From<Array<E>>` impl (`List<T>`
+        // and user types). The sub-helper records `TupleToSequence` and
+        // `expression_types`.
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
             return Some(coerced.type_id);
         }
 
-        // Anonymous struct literal → type implementing KeyValueLiteralBuilder.
-        // The sub-helper records `StructToMap` and `expression_types`.
+        // Key-value literal → a type with a `From<Array<[K, V]>>` impl. The
+        // sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
             return Some(coerced.type_id);
         }
 
-        // If an anonymous struct literal targets a generic instance that doesn't
-        // implement KeyValueLiteral, report a compile error.
+        // A key-value literal whose generic target builds from no pair array
+        // at all: say what is missing where it is written.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(
@@ -465,21 +476,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::GenericInstance { .. }
             )
         {
-            let type_name = self.tysys.type_table.borrow().type_name(target_type);
-            let _ = self.emit(TypeError::MissingTraitImpl {
-                type_name,
-                trait_name: "KeyValueLiteral".to_string(),
-                span: expr.span(),
-            });
+            self.report_if_not_a_map_target(target_type, expr.span());
         }
 
         None
     }
 
-    /// Try to coerce an anonymous struct literal to a type implementing `KeyValueLiteralBuilder`.
-    /// Desugars to a `LabeledBlock` that calls `Builder::new_literal(capacity)`, then
-    /// `insert_literal(key, value)` for each field, then `build()`, so the monomorphize
-    /// phase naturally discovers the required function instantiations.
+    /// Report an object literal written against a type that builds from no pair
+    /// array at all. Asked of the target, so a coercion that declined for
+    /// another reason — an ambiguity it has already reported — says nothing
+    /// here that would contradict it.
+    pub(super) fn report_if_not_a_map_target(
+        &mut self,
+        target_type: TypeId,
+        span: crate::token::Span,
+    ) {
+        if self.is_key_value_literal_target(target_type) {
+            return;
+        }
+        let type_name = self.tysys.type_table.borrow().type_name(target_type);
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: format!(
+                "`{type_name}` implements no `From<Array<[K, V]>>`, so it cannot be built from an \
+                 object literal"
+            ),
+            span,
+        });
+    }
+
+    /// Coerce an anonymous struct literal into a type implementing
+    /// `From<Array<[K, V]>>` (WEP 2026-08-24).
     ///
     /// Records the coercion choice and resolved expression type at the
     /// decision point so every caller (`try_coerce`, `resolve_cast`,
@@ -514,115 +540,80 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
 
-        // Get base struct name from target type
-        let base_name = self.tysys.struct_name_for_type(target_type)?;
-
-        // Check if target type implements KeyValueLiteralBuilder (or legacy KeyValueLiteral)
-        let from_literal_info = self.find_key_value_literal_trait_impl(&base_name, target_type)?;
-        let value_type = from_literal_info.value_type;
-        let insert_self_kind = from_literal_info.self_kind;
-        let trait_name = from_literal_info.trait_name.clone();
-        let builder_type = from_literal_info.builder_type;
-        let use_new_api = trait_name.base_name() == "KeyValueLiteralBuilder";
-        // Resolve the builder impl's home module — that is where
-        // `Builder^Trait::new_literal` is registered, and (post-fix #1110)
-        // where the monomorphizer expects to find the template. Fall back to
-        // the receiver type's module for inherent / auto-derived impls; if
-        // neither resolves, panic (no current-module fallback per #1110 (2)).
-        let builder_name_for_lookup = self
-            .tysys
-            .struct_name_for_type(builder_type)
-            .unwrap_or_else(|| base_name.clone());
-        let builder_type_module = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_head(builder_type)
-            .map(|(_, m)| m);
-        // The builder's `Trait::new_literal` body lives in the impl-block's
-        // module (`KeyValueLiteralBuilder` impls in `core:prelude/internal`
-        // and the like), falling back to the builder type's own module
-        // for inherent / auto-derived impls. Both producer-side; no
-        // current-module fallback — if neither resolves, the builder
-        // has no callable `new_literal` and that's a synthesis bug.
-        let impl_module_source = self
-            .tysys
-            .trait_env
-            .impl_module_for(
-                ImplReceiver::Declared(&crate::name::DeclName::new(&builder_name_for_lookup)),
-                trait_name.base_name(),
-                builder_type_module.as_ref(),
-            )
-            .cloned()
-            .or(builder_type_module)
-            .unwrap_or_else(|| {
-                panic!(
-                    "KeyValueLiteralBuilder coercion: no home module for \
-                     `{builder_name_for_lookup}^{trait_name}::new_literal` \
-                     (builder type has no defining module and no impl in `TraitEnv`)"
-                )
-            });
-
         let span = expr.span();
-        // Intern the `String` compiler struct so reify and downstream phases
-        // see the same canonical `TypeId` the elaborator picked. The result is
-        // not otherwise needed here — reify rebuilds the `__kv_lit:` desugar.
-        self.tysys
+        let (from_info, output_type, needs_newtype_cast) =
+            self.find_literal_from_array(target_type, true, span)?;
+        let (key_type, value_type) = {
+            let tt = self.tysys.type_table.borrow();
+            let pair = tt.as_tuple(from_info.element_type).expect(
+                "find_from_array_impls with want_pair answers only with a two-element tuple",
+            );
+            (pair[0], pair[1])
+        };
+
+        // Every key a literal can write is a field name, so the impl's key type
+        // must accept a `String`. Refusing here is what keeps a `From<Array<[K,
+        // V]>>` with another `K` from reaching WIR build as a type mismatch;
+        // computed keys are what would give such a `K` a literal to be written
+        // from.
+        let string_type = self
+            .tysys
             .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+        let key_incompatible = matches!(
+            super::typecheck::check_assignable(
+                string_type,
+                key_type,
+                &self.tysys.type_table.borrow(),
+            ),
+            super::typecheck::TypeCheckResult::Incompatible
+        );
+        if key_incompatible {
+            let (type_name, key_name) = {
+                let tt = self.tysys.type_table.borrow();
+                (tt.type_name(target_type), tt.type_name(key_type))
+            };
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: format!(
+                    "`{type_name}` builds from keys of type `{key_name}`; an object literal \
+                     writes `String` keys"
+                ),
+                span,
+            });
+            // Recover as the target type: the literal named a real impl, so a
+            // second "not constructible" report would describe the same fault.
+            return Some(placeholder(target_type, span));
+        }
+        self.solve_infer_holes_against(key_type, string_type);
 
-        // Get type args for monomorphization from builder type
-        let builder_base_name = self.tysys.fq_receiver_head(builder_type);
-        let (type_arg_names, type_arg_ids): (Vec<FqTypeName>, Vec<TypeId>) = {
-            let tt = self.tysys.type_table.borrow();
-            match tt.get(builder_type) {
-                ResolvedType::GenericInstance { type_args, .. } => {
-                    let names: Vec<FqTypeName> =
-                        type_args.iter().map(|&id| tt.fq_type_name(id)).collect();
-                    (names, type_args.clone())
-                }
-                _ => (Vec::new(), Vec::new()),
+        let spread = if struct_lit.spreads.is_empty() {
+            None
+        } else {
+            let found = self.literal_spread_call(output_type);
+            if found.is_none() {
+                let type_name = self.tysys.type_table.borrow().type_name(target_type);
+                let _ = self.emit(TypeError::MissingTraitImpl {
+                    type_name,
+                    trait_name: "LiteralSpread".to_string(),
+                    span,
+                });
             }
+            found
         };
 
-        // Names come from `remangle` below, the one place that derives them
-        // from the type arguments — the sweep calls the same thing once a
-        // solved variable changes an argument.
-        let build_mangled_name = use_new_api.then(String::new);
+        let call = self.literal_from_call(&from_info, output_type);
+        self.sem.types.key_value_coercions.insert(
+            expr.id(),
+            super::sem::types::KeyValueCoercionFacts {
+                value_type,
+                pair_type: from_info.element_type,
+                newtype_cast_to: needs_newtype_cast.then_some(target_type),
+                call,
+                spread,
+            },
+        );
 
-        // WEP 2026-05-26: record the resolved
-        // `KeyValueLiteralBuilder` impl data so reify can rebuild the
-        // same `__kv_lit:` desugar block deterministically.
-        let key = expr.id();
-        let mut facts = super::sem::types::KeyValueCoercionFacts {
-            builder_type,
-            value_type,
-            insert_self_kind,
-            trait_name,
-            target_type,
-            impl_module_source,
-            builder_base_name,
-            type_arg_ids,
-            type_arg_names,
-            use_new_api,
-            new_mangled_name: String::new(),
-            insert_mangled_name: String::new(),
-            insert_all_mangled_name: String::new(),
-            build_mangled_name,
-        };
-        facts.remangle(&self.tysys.type_table.borrow());
-        self.sem.types.key_value_coercions.insert(key, facts);
-
-        // Reserve the `__b` builder local on the surrounding scope so
-        // subsequent local-index accounting in the enclosing function
-        // matches reify's expansion.
-        ctx.enter_scope();
-        let _builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
-
-        // Walk each field for fact recording + duplicate-field /
-        // value-type diagnostics. Reify rebuilds the `__kv_lit:` desugar
-        // block from the recorded `KeyValueCoercionFacts` + the AST.
         let mut seen_fields: IndexSet<&str> = IndexSet::default();
         for field in &struct_lit.fields {
             if !seen_fields.insert(field.name.as_str()) {
@@ -633,43 +624,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // As in the sequence path: the first value decides an open value type,
-        // and the rest are checked against that answer.
+        // Members in source order, so each subexpression is walked exactly
+        // where it is written — and, for a spread, in the same order reify's
+        // fold walks them, so the `__acc` reserved below lands on the index
+        // reify will allocate for it.
+        let has_spread = !struct_lit.spreads.is_empty();
+        if has_spread {
+            ctx.enter_scope();
+        }
         let mut value_type = value_type;
-        for field in &struct_lit.fields {
-            let value = self.resolve_expr(&field.value, ctx, Some(value_type));
-            // Route through the shared check rather than comparing ids, for
-            // the reason the sequence path does: an undecided value type — a
-            // callee's slot the call site instantiated — defers to its solver
-            // instead of rejecting every value.
-            let incompatible = matches!(
-                super::typecheck::check_assignable(
-                    value,
-                    value_type,
-                    &self.tysys.type_table.borrow(),
-                ),
-                super::typecheck::TypeCheckResult::Incompatible
-            );
-            if incompatible {
-                let _ = self.emit(TypeError::TypeMismatch {
-                    expected: self.tysys.type_table.borrow().type_name(value_type),
-                    found: self.tysys.type_table.borrow().type_name(value),
-                    span: field.value.span(),
-                });
-            } else {
-                // The values are what decide an open value type.
-                self.solve_infer_holes_against(value_type, value);
-                value_type = self.apply_infer_holes(value_type);
+        for member in struct_lit.members() {
+            match member {
+                crate::ast::LiteralMember::Spread(_, spread) => {
+                    self.resolve_expr(&spread.expr, ctx, Some(output_type));
+                }
+                crate::ast::LiteralMember::Field(_, field) => {
+                    let value = self.resolve_expr(&field.value, ctx, Some(value_type));
+                    // Route through the shared check rather than comparing ids:
+                    // an undecided value type — a callee's slot the call site
+                    // instantiated — defers to its solver instead of rejecting
+                    // every value.
+                    let incompatible = matches!(
+                        super::typecheck::check_assignable(
+                            value,
+                            value_type,
+                            &self.tysys.type_table.borrow(),
+                        ),
+                        super::typecheck::TypeCheckResult::Incompatible
+                    );
+                    if incompatible {
+                        self.convert_literal_element(&field.value, value, value_type);
+                    } else {
+                        // The values are what decide an open value type.
+                        self.solve_infer_holes_against(value_type, value);
+                        value_type = self.apply_infer_holes(value_type);
+                    }
+                }
             }
         }
-
-        ctx.exit_scope();
+        if has_spread {
+            ctx.add_local("__acc".to_string(), output_type, true, None);
+            ctx.exit_scope();
+        }
 
         Some(placeholder(target_type, span))
     }
 
-    /// Coerce a tuple/sequence literal `[e0, e1, …]` to a type implementing
-    /// `SequenceLiteralBuilder`, built-in `List<T>` included. A leading `&` /
+    /// Coerce a sequence literal `[e0, e1, …]` into a type implementing
+    /// `From<Array<E>>`, built-in `List<T>` included. A leading `&` /
     /// `&mut` is looked through: `&mut [...] as List<T>` parses as
     /// `(&mut [...]) as List<T>`, but means a `List<T>` the call site
     /// auto-borrows — lowering the inner literal as a tuple fails validation.
@@ -687,6 +689,227 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         self.record_expression_type(expr.id(), target_type);
         Some(coerced)
+    }
+
+    /// The `From<Array<E>>` a literal targeting `target_type` coerces through,
+    /// with what `from` returns and whether the target is a newtype the result
+    /// is cast back to. `want_pair` selects the literal's form; see
+    /// [`Self::find_from_array_impls`].
+    ///
+    /// Several admitted impls are an ambiguity the site reports here: only the
+    /// literal knows which form it was written in, and `T::from(…)` spelled out
+    /// resolves it by ordinary overload resolution.
+    fn find_literal_from_array(
+        &mut self,
+        target_type: TypeId,
+        want_pair: bool,
+        span: crate::token::Span,
+    ) -> Option<(super::types::FromArrayInfo, TypeId, bool)> {
+        let resolve = |elaborator: &mut Self, ty: TypeId| {
+            let name = elaborator.literal_target_name(ty)?;
+            match elaborator
+                .find_from_array_impls(&name, ty, want_pair)
+                .as_slice()
+            {
+                [only] => Some(Ok(only.clone())),
+                [] => None,
+                several => Some(Err(several.len())),
+            }
+        };
+        // A newtype over a literal-constructible type is built through the base
+        // and cast back.
+        let (found, output_type, needs_newtype_cast) =
+            if let Some(found) = resolve(self, target_type) {
+                (found, target_type, false)
+            } else {
+                let base_type = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .get_newtype_base(target_type)?;
+                (resolve(self, base_type)?, base_type, true)
+            };
+        match found {
+            Ok(info) => Some((info, output_type, needs_newtype_cast)),
+            Err(count) => {
+                let type_name = self.tysys.type_table.borrow().type_name(target_type);
+                let _ = self.emit(TypeError::AmbiguousLiteralConversion {
+                    type_name,
+                    count,
+                    span,
+                });
+                None
+            }
+        }
+    }
+
+    /// The name a literal's target type carries its impls under. Broader than
+    /// [`super::tysys::TypeSystem::struct_name_for_type`], which omits the
+    /// nominal shapes that are not structs: a variant is a literal target too
+    /// (`core:value::Value` is the case that matters).
+    fn literal_target_name(&self, target_type: TypeId) -> Option<String> {
+        self.tysys.struct_name_for_type(target_type).or_else(|| {
+            self.tysys
+                .type_table
+                .borrow()
+                .nominal_head(target_type)
+                .map(|(name, _)| name)
+        })
+    }
+
+    /// Record the `From` a literal element converts through to reach its
+    /// slot's type, reporting why where none applies (WEP 2026-08-24).
+    ///
+    /// Implicit conversion is confined to a literal position: only an element
+    /// the source wrote as a literal is offered one, so `[1, "x"] as
+    /// List<Value>` compiles while `[a, b]` still asks for `Value::from(a)`.
+    fn convert_literal_element(&mut self, element: &Expr, found_type: TypeId, slot_type: TypeId) {
+        if self.record_literal_conversion(element, found_type, slot_type) {
+            return;
+        }
+        let (found, slot) = {
+            let tt = self.tysys.type_table.borrow();
+            (tt.type_name(found_type), tt.type_name(slot_type))
+        };
+        // `null`'s own type is what a target converts from to accept it, and
+        // `Option<!>` reads badly in the message that says none was found.
+        if self.tysys.is_null_literal(element) {
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: format!(
+                    "`null` names no value of `{slot}`; an `Option` accepts it, and any other \
+                     type by implementing `From<Option<!>>`"
+                ),
+                span: element.span(),
+            });
+            return;
+        }
+        let reason = if is_literal_expr(element) {
+            format!("`{slot}` has no `From<{found}>`")
+        } else {
+            "only a literal converts implicitly".to_string()
+        };
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: format!(
+                "cannot use `{found}` where `{slot}` is expected: {reason}; \
+                 write `{slot}::from(…)`"
+            ),
+            span: element.span(),
+        });
+    }
+
+    /// [`Self::convert_literal_element`]'s lookup half: `true` once a `From`
+    /// is recorded for `element`.
+    fn record_literal_conversion(
+        &mut self,
+        element: &Expr,
+        found_type: TypeId,
+        slot_type: TypeId,
+    ) -> bool {
+        if !is_literal_expr(element) {
+            return false;
+        }
+        let Some(name) = self.literal_target_name(slot_type) else {
+            return false;
+        };
+        let Some(from_def) = self
+            .tysys
+            .compiler_trait_def(crate::compiler_item::CompilerItem::From)
+        else {
+            return false;
+        };
+        let found = self
+            .find_arithmetic_trait_impls(&name, slot_type, from_def, "from", None)
+            .into_iter()
+            .find(|info| info.rhs_type == Some(found_type));
+        let Some(info) = found else {
+            return false;
+        };
+        let call = self.literal_from_call(
+            &super::types::FromArrayInfo {
+                element_type: found_type,
+                array_type: found_type,
+                impl_module_source: info.impl_module_source.clone(),
+                trait_name: info.trait_name,
+            },
+            slot_type,
+        );
+        self.sem
+            .types
+            .literal_conversions
+            .insert(element.id(), call);
+        true
+    }
+
+    /// Whether `type_id` is a map — a type a `{ k: v, … }` literal builds
+    /// through `From<Array<[K, V]>>` — rather than a composable struct.
+    pub(super) fn is_key_value_literal_target(&mut self, type_id: TypeId) -> bool {
+        self.literal_target_name(type_id)
+            .is_some_and(|name| !self.find_from_array_impls(&name, type_id, true).is_empty())
+    }
+
+    /// The `LiteralSpread::spread_literal` a `..base` member calls on
+    /// `output_type`, or `None` where the type does not implement the trait.
+    fn literal_spread_call(
+        &mut self,
+        output_type: TypeId,
+    ) -> Option<super::sem::types::LiteralCallee> {
+        let name = self.literal_target_name(output_type)?;
+        let trait_ = self
+            .tysys
+            .compiler_trait_def(crate::compiler_item::CompilerItem::LiteralSpread)?;
+        let info =
+            self.find_arithmetic_trait_impl(&name, output_type, trait_, "spread_literal", None)?;
+        Some(self.literal_callee(
+            info.impl_module_source,
+            info.trait_name,
+            output_type,
+            "spread_literal",
+        ))
+    }
+
+    /// Assemble the `from` call's facts for a resolved `From<Array<E>>`,
+    /// already remangled.
+    fn literal_from_call(
+        &mut self,
+        from_info: &super::types::FromArrayInfo,
+        output_type: TypeId,
+    ) -> super::sem::types::LiteralFromCall {
+        super::sem::types::LiteralFromCall {
+            from_type: from_info.array_type,
+            output_type,
+            callee: self.literal_callee(
+                from_info.impl_module_source.clone(),
+                from_info.trait_name.clone(),
+                output_type,
+                "from",
+            ),
+        }
+    }
+
+    /// Name the trait method a literal calls on `output_type`, remangled.
+    fn literal_callee(
+        &mut self,
+        impl_module_source: crate::module_source::ModuleSource,
+        trait_name: crate::name::FqTraitName,
+        output_type: TypeId,
+        method: &'static str,
+    ) -> super::sem::types::LiteralCallee {
+        let mut callee = super::sem::types::LiteralCallee {
+            impl_module_source,
+            trait_name,
+            target_base_name: self.tysys.fq_receiver_head(output_type),
+            type_arg_ids: self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(output_type)
+                .unwrap_or_default(),
+            type_arg_names: Vec::new(),
+            method,
+            mangled_name: String::new(),
+        };
+        callee.remangle(&self.tysys.type_table.borrow());
+        callee
     }
 
     fn try_coerce_tuple_to_sequence_inner(
@@ -707,90 +930,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return None,
         };
 
-        let base_name = self.tysys.struct_name_for_type(target_type)?;
-        let (seq_info, needs_newtype_cast) = self
-            .find_sequence_literal_trait_impl(&base_name, target_type)
-            .map(|info| (info, false))
-            .or_else(|| {
-                // For newtypes, try the base type's SequenceLiteral impl
-                let base_type = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .get_newtype_base(target_type)?;
-                let base_name = self.tysys.struct_name_for_type(base_type)?;
-                self.find_sequence_literal_trait_impl(&base_name, base_type)
-                    .map(|info| (info, true))
-            })?;
-        let element_type = seq_info.element_type;
-        let push_self_kind = seq_info.self_kind;
-        let trait_name = seq_info.trait_name.clone();
-        let builder_type = seq_info.builder_type;
-        let output_type = seq_info.output_type;
-        let impl_module_source = seq_info.impl_module_source;
-        let builder_base_name = self.tysys.fq_receiver_head(builder_type);
-
         let span = expr.span();
+        let (from_info, output_type, needs_newtype_cast) =
+            self.find_literal_from_array(target_type, false, span)?;
+        let element_type = from_info.element_type;
 
-        let (type_arg_names, type_arg_ids): (Vec<FqTypeName>, Vec<TypeId>) = {
-            let tt = self.tysys.type_table.borrow();
-            match tt.get(builder_type) {
-                ResolvedType::GenericInstance { type_args, .. } => {
-                    let names: Vec<FqTypeName> =
-                        type_args.iter().map(|&id| tt.fq_type_name(id)).collect();
-                    (names, type_args.clone())
-                }
-                _ => (Vec::new(), Vec::new()),
-            }
-        };
+        // `[..a, b]` splices one tuple into another and `[..T::method()]`
+        // expands a type pack (WEP 2026-03-14); both stay with the tuple the
+        // literal already is, and `Array<T>` could not gain either — a fixed
+        // array does not grow. Reported after the target is known to be
+        // literal-constructible, so a tuple target still takes the tuple path,
+        // and before the element walk, which would hand the spread to
+        // `resolve_expr`.
+        if let Some(spread) = tuple_lit
+            .elements
+            .iter()
+            .find(|element| matches!(element, Expr::Spread(..)))
+        {
+            let type_name = self.tysys.type_table.borrow().type_name(target_type);
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: format!(
+                    "`..base` is a tuple spread; a sequence literal building `{type_name}` \
+                     cannot carry one"
+                ),
+                span: spread.span(),
+            });
+            return Some(placeholder(target_type, span));
+        }
 
-        // WEP 2026-05-26: record the resolved
-        // `SequenceLiteralBuilder` impl data so reify can rebuild the
-        // same `__seq_lit:` desugar block deterministically — the
-        // trait-impl lookup chain (newtype peel + sequence-trait
-        // search), the type-arg mangling, and the per-method mangled
-        // names are not reproducible from the AST alone. The names come
-        // from `remangle`, the one place that derives them from the type
-        // arguments — the sweep calls the same thing once a solved variable
-        // changes an argument.
-        let key = expr.id();
-        let mut facts = super::sem::types::SequenceCoercionFacts {
-            builder_type,
-            element_type,
-            push_self_kind,
-            trait_name,
-            output_type,
-            impl_module_source,
-            builder_base_name,
-            type_arg_ids,
-            type_arg_names,
-            newtype_cast_to: if needs_newtype_cast {
-                Some(target_type)
-            } else {
-                None
+        // WEP 2026-08-24: record the resolved `From<Array<E>>` so reify
+        // rebuilds the same array literal and `from` call. The names come from
+        // `remangle`, the one place that derives them from the types — the
+        // sweep calls the same thing once a solved variable changes one.
+        //
+        // Keyed on the literal's own id, not `expr`'s: a peeled `&mut [...]`
+        // reaches reify as the inner `TupleLiteral`, which is where the lookup
+        // happens.
+        let call = self.literal_from_call(&from_info, output_type);
+        self.sem.types.sequence_coercions.insert(
+            tuple_lit.id,
+            super::sem::types::SequenceCoercionFacts {
+                element_type,
+                newtype_cast_to: needs_newtype_cast.then_some(target_type),
+                call,
             },
-            new_mangled_name: String::new(),
-            push_mangled_name: String::new(),
-            build_mangled_name: String::new(),
-        };
-        facts.remangle(&self.tysys.type_table.borrow());
-        self.sem.types.sequence_coercions.insert(key, facts);
+        );
 
-        ctx.enter_scope();
-
-        // Reserve the `__b` builder slot so subsequent local-index
-        // accounting in the enclosing function stays consistent with
-        // reify's expansion.
-        let _builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
-
-        // Walk each element for fact recording + heterogeneous-element
-        // diagnostics. Reify rebuilds the `__seq_lit:` desugar block from
-        // the recorded `SequenceCoercionFacts` + the AST.
         // The first element decides an open element type; every element after
-        // it is checked against that answer. Reading `element_type` afresh
-        // each round is what makes the decision stick — left as the variable,
-        // it would defer for every later element and wave through
-        // `[1, "abc"]`.
+        // it is checked against that answer. Reading `element_type` afresh each
+        // round is what makes the decision stick — left as the variable, it
+        // would defer for every later element and wave through `[1, "abc"]`.
         let mut element_type = element_type;
         for element in &tuple_lit.elements {
             let elem_expr = self.resolve_expr(element, ctx, Some(element_type));
@@ -807,17 +996,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 super::typecheck::TypeCheckResult::Incompatible
             );
             if incompatible {
-                let _ = self.emit(TypeError::TypeMismatch {
-                    expected: format!(
-                        "homogeneous elements of type '{}'",
-                        self.tysys.type_table.borrow().type_name(element_type)
-                    ),
-                    found: format!(
-                        "heterogeneous element of type '{}'",
-                        self.tysys.type_table.borrow().type_name(elem_expr)
-                    ),
-                    span: element.span(),
-                });
+                self.convert_literal_element(element, elem_expr, element_type);
             } else {
                 // Where the target left the element type open — a callee's
                 // slot the call site instantiated — the elements decide it.
@@ -828,12 +1007,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        ctx.exit_scope();
-
         // Placeholder typed as the coercion's surface result — `target_type`
-        // when newtype-cast, otherwise the builder's `output_type`. The
-        // outer wrapper records `expression_types[expr.id]` from this
-        // value's `type_id`, and reify reads it from the recorded
+        // when newtype-cast, otherwise what `from` returns. The outer wrapper
+        // records `expression_types[expr.id]` from this value's `type_id`, and
+        // reify reads it from the recorded
         // `SequenceCoercionFacts.newtype_cast_to` / `output_type`.
         let result_type = if needs_newtype_cast {
             target_type

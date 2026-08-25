@@ -88,105 +88,107 @@ fn "tir_optimize_short_circuit_bounds.wado/check_char"(arr, pos, ch) {
 
 fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
     let a: ref "core:prelude//List<char>";
-    let __local_2: ref "core:prelude/string.wado//String";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_8: ref "core:prelude/string.wado//String";
-    let handle_26: i32;
-    let self_33: bool;
-    let packed_35: i64;
-    let rx_36: i32;
-    let tx_37: i32;
-    let handle_42: i32;
-    let self_49: bool;
-    let packed_51: i64;
-    let rx_52: i32;
-    let tx_53: i32;
-    let handle_58: i32;
-    let self_65: bool;
-    let packed_67: i64;
-    let rx_68: i32;
-    let tx_69: i32;
-    let handle_74: i32;
-    let self_80: bool;
-    let packed_82: i64;
-    let rx_83: i32;
-    let tx_84: i32;
-    let content_95: ref "core:prelude/string.wado//String";
-    let content_123: ref "core:prelude/string.wado//String";
-    let content_151: ref "core:prelude/string.wado//String";
-    let content_179: ref "core:prelude/string.wado//String";
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_7: ref "core:prelude/string.wado//String";
+    let elements: ref Array<char>;
+    let handle_13: i32;
+    let self_20: bool;
+    let packed_22: i64;
+    let rx_23: i32;
+    let tx_24: i32;
+    let handle_29: i32;
+    let self_36: bool;
+    let packed_38: i64;
+    let rx_39: i32;
+    let tx_40: i32;
+    let handle_45: i32;
+    let self_52: bool;
+    let packed_54: i64;
+    let rx_55: i32;
+    let tx_56: i32;
+    let handle_61: i32;
+    let self_67: bool;
+    let packed_69: i64;
+    let rx_70: i32;
+    let tx_71: i32;
+    let content_82: ref "core:prelude/string.wado//String";
+    let content_110: ref "core:prelude/string.wado//String";
+    let content_138: ref "core:prelude/string.wado//String";
+    let content_166: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:tir_optimize_short_circuit_bounds.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:tir_optimize_short_circuit_bounds.wado::__modules_initialized = 1;
     };
-    a = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(104, 101, 108, 108, 111), used: 5 };
-    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_33 = "tir_optimize_short_circuit_bounds.wado/check_char"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_8: ref Array<char>; __array_clone_src_8 = a.repr; let __array_clone_len_8: i32; __array_clone_len_8 = 5; let __array_clone_dst_8: ref Array<char>; __array_clone_dst_8 = builtin::array_new<char>(__array_clone_len_8); builtin::array_copy<char>(__array_clone_dst_8, 0, __array_clone_src_8, 0, __array_clone_len_8); __array_clone_dst_8), used: 5 }, 0, 104);
+    elements = array.new_fixed<char>(104, 101, 108, 108, 111);
+    a = struct.new "core:prelude//List<char>" { repr: elements, used: 5 };
+    __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    self_20 = "tir_optimize_short_circuit_bounds.wado/check_char"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<char>; __array_clone_src_9 = a.repr; let __array_clone_len_9: i32; __array_clone_len_9 = 5; let __array_clone_dst_9: ref Array<char>; __array_clone_dst_9 = builtin::array_new<char>(__array_clone_len_9); builtin::array_copy<char>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: 5 }, 0, 104);
     __inline_core_prelude_format_wado_Formatter__pad_spec0_0: block {
-        content_95 = (if self_33 -> ref "core:prelude/string.wado//String" {
+        content_82 = (if self_20 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_2, content_95);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_1, content_82);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_0;
     };
-    rx_36 = builtin::i32_wrap_i64(local.tee packed_35("wasi/stream-new"()));
-    tx_37 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
-    handle_26 = "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_36);
-    "core:cli/write_to_stream"(tx_37, __local_2, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_26);
-    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_49 = "tir_optimize_short_circuit_bounds.wado/check_char"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_8: ref Array<char>; __array_clone_src_8 = a.repr; let __array_clone_len_8: i32; __array_clone_len_8 = 5; let __array_clone_dst_8: ref Array<char>; __array_clone_dst_8 = builtin::array_new<char>(__array_clone_len_8); builtin::array_copy<char>(__array_clone_dst_8, 0, __array_clone_src_8, 0, __array_clone_len_8); __array_clone_dst_8), used: 5 }, 4, 111);
+    rx_23 = builtin::i32_wrap_i64(local.tee packed_22("wasi/stream-new"()));
+    tx_24 = builtin::i32_wrap_i64(packed_22 >> 32_i64);
+    handle_13 = "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+    "core:cli/write_to_stream"(tx_24, __local_1, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_13);
+    __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    self_36 = "tir_optimize_short_circuit_bounds.wado/check_char"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<char>; __array_clone_src_9 = a.repr; let __array_clone_len_9: i32; __array_clone_len_9 = 5; let __array_clone_dst_9: ref Array<char>; __array_clone_dst_9 = builtin::array_new<char>(__array_clone_len_9); builtin::array_copy<char>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: 5 }, 4, 111);
     __inline_core_prelude_format_wado_Formatter__pad_spec0_1: block {
-        content_123 = (if self_49 -> ref "core:prelude/string.wado//String" {
+        content_110 = (if self_36 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4, content_123);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, content_110);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_1;
     };
-    rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
-    tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
-    handle_42 = "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_52);
-    "core:cli/write_to_stream"(tx_53, __local_4_4, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_42);
-    __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_65 = "tir_optimize_short_circuit_bounds.wado/check_char"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_8: ref Array<char>; __array_clone_src_8 = a.repr; let __array_clone_len_8: i32; __array_clone_len_8 = 5; let __array_clone_dst_8: ref Array<char>; __array_clone_dst_8 = builtin::array_new<char>(__array_clone_len_8); builtin::array_copy<char>(__array_clone_dst_8, 0, __array_clone_src_8, 0, __array_clone_len_8); __array_clone_dst_8), used: 5 }, 5, 120);
+    rx_39 = builtin::i32_wrap_i64(local.tee packed_38("wasi/stream-new"()));
+    tx_40 = builtin::i32_wrap_i64(packed_38 >> 32_i64);
+    handle_29 = "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_39);
+    "core:cli/write_to_stream"(tx_40, __local_3, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_29);
+    __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    self_52 = "tir_optimize_short_circuit_bounds.wado/check_char"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<char>; __array_clone_src_9 = a.repr; let __array_clone_len_9: i32; __array_clone_len_9 = 5; let __array_clone_dst_9: ref Array<char>; __array_clone_dst_9 = builtin::array_new<char>(__array_clone_len_9); builtin::array_copy<char>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: 5 }, 5, 120);
     __inline_core_prelude_format_wado_Formatter__pad_spec0_2: block {
-        content_151 = (if self_65 -> ref "core:prelude/string.wado//String" {
+        content_138 = (if self_52 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, content_151);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, content_138);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_2;
     };
-    rx_68 = builtin::i32_wrap_i64(local.tee packed_67("wasi/stream-new"()));
-    tx_69 = builtin::i32_wrap_i64(packed_67 >> 32_i64);
-    handle_58 = "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_68);
-    "core:cli/write_to_stream"(tx_69, __local_6, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_58);
-    __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_80 = "tir_optimize_short_circuit_bounds.wado/check_char"(a, 2, 120);
+    rx_55 = builtin::i32_wrap_i64(local.tee packed_54("wasi/stream-new"()));
+    tx_56 = builtin::i32_wrap_i64(packed_54 >> 32_i64);
+    handle_45 = "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_55);
+    "core:cli/write_to_stream"(tx_56, __local_5, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_45);
+    __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    self_67 = "tir_optimize_short_circuit_bounds.wado/check_char"(a, 2, 120);
     __inline_core_prelude_format_wado_Formatter__pad_spec0_3: block {
-        content_179 = (if self_80 -> ref "core:prelude/string.wado//String" {
+        content_166 = (if self_67 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, content_179);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, content_166);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_3;
     };
-    rx_83 = builtin::i32_wrap_i64(local.tee packed_82("wasi/stream-new"()));
-    tx_84 = builtin::i32_wrap_i64(packed_82 >> 32_i64);
-    handle_74 = "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_83);
-    "core:cli/write_to_stream"(tx_84, __local_8, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_74);
+    rx_70 = builtin::i32_wrap_i64(local.tee packed_69("wasi/stream-new"()));
+    tx_71 = builtin::i32_wrap_i64(packed_69 >> 32_i64);
+    handle_61 = "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_70);
+    "core:cli/write_to_stream"(tx_71, __local_7, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_61);
 }
 
 fn "tir_optimize_short_circuit_bounds.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

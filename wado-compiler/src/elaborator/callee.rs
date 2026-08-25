@@ -1,56 +1,69 @@
-//! Resolved call-target identities: `CalleeRef` and `StaticMethodRef` bundle the
-//! `(module, name)` pair naming a free function or static method. Threaded
-//! separately, the defining-module name and the caller-visible alias could drift
-//! apart; the bundle leaves no way to split them and confines the
-//! alias→defining-name translation to the factory methods below.
+//! Resolved call-target identities: a free function callee is the declaration
+//! it names (WEP 2026-08-12), a static method callee what dispatch picked.
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::symbol::Symbol;
 
-/// Identity of a free function callee: the module where it is defined and the
-/// name under which it is defined in that module.
+/// Identity of a free function callee. `Declared` carries the module and name
+/// its one constructor reads off the table, so TIR emission needs none at hand;
+/// only `def` says which declaration this is, and nothing reads a name back.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct CalleeRef {
-    pub module: ModuleSource,
-    pub name: String,
+pub(super) enum CalleeRef {
+    Declared {
+        def: crate::defs::DefId,
+        module: ModuleSource,
+        name: String,
+    },
+    /// A callee no declaration names in this currency: an effect operation,
+    /// whose module is the namespace that signature resolution, the effect
+    /// check, dispatch and WIR all key on rather than one any module declares.
+    Rendered { module: ModuleSource, name: String },
 }
 
 impl CalleeRef {
-    pub fn new(module: ModuleSource, name: impl Into<String>) -> Self {
-        Self {
+    /// The free function `def` declares, rendered once from the table.
+    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+        Self::Declared {
+            def,
+            module: defs.module(def).clone(),
+            name: defs.name(def).to_string(),
+        }
+    }
+
+    pub fn rendered(module: ModuleSource, name: impl Into<String>) -> Self {
+        Self::Rendered {
             module,
             name: name.into(),
         }
     }
 
-    /// A callee defined in the current module (local function).
-    pub fn local(current_module: &ModuleSource, name: impl Into<String>) -> Self {
-        Self::new(current_module.clone(), name)
-    }
-
-    /// A callee imported into the current module via `use`. Translates the
-    /// caller-visible alias (under which the symbol is keyed in the current
-    /// module's symbol table) to the defining-module name in a single place.
-    pub fn from_imported_symbol(symbol: &Symbol) -> Self {
-        Self::new(symbol.module_source().clone(), symbol.name.clone())
-    }
-
-    /// A callee in `core:rt` (prelude functions like `panic`, `unreachable`).
-    pub fn rt_prelude(name: impl Into<String>) -> Self {
-        Self::new(ModuleSource::rt(), name)
-    }
-
-    /// A callee reached through a namespace-qualified call `Prefix::name`
-    /// where `Prefix` is a module path (e.g. `Stdout::write`). The
-    /// `prefix` is interned through the elaborator's
-    /// [`crate::module_source::ModuleSourceInterner`] and wrapped in a
-    /// `ModuleSource::Local`.
+    /// A callee reached through `Prefix::name` where `Prefix` names an effect
+    /// or resource rather than a module, so the prefix itself is the namespace.
     pub fn local_namespace(
         interner: &mut ModuleSourceInterner,
         prefix: &str,
         name: impl Into<String>,
     ) -> Self {
-        Self::new(interner.local(prefix), name)
+        Self::rendered(interner.local(prefix), name)
+    }
+
+    /// The declaration this names, or `None` for a [`Self::Rendered`] callee.
+    pub fn def(&self) -> Option<crate::defs::DefId> {
+        match self {
+            Self::Declared { def, .. } => Some(*def),
+            Self::Rendered { .. } => None,
+        }
+    }
+
+    pub fn module(&self) -> &ModuleSource {
+        match self {
+            Self::Declared { module, .. } | Self::Rendered { module, .. } => module,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Declared { name, .. } | Self::Rendered { name, .. } => name,
+        }
     }
 }
 
@@ -63,9 +76,9 @@ pub(super) struct StaticMethodRef {
     pub type_name: String,
     pub method_name: String,
     pub trait_name: Option<crate::name::FqTraitName>,
-    /// The node declaring the method this selection picked. `None` when no
-    /// declaration backs it — the auto-derived `Default::default`.
-    pub method_id: Option<crate::ast::AstId>,
+    /// The method this selection picked. `None` when no declaration backs
+    /// it — the auto-derived `Default::default`.
+    pub method_id: Option<crate::defs::DefId>,
 }
 
 impl StaticMethodRef {
@@ -74,7 +87,7 @@ impl StaticMethodRef {
         type_name: impl Into<String>,
         method_name: impl Into<String>,
         trait_name: Option<crate::name::FqTraitName>,
-        method_id: Option<crate::ast::AstId>,
+        method_id: Option<crate::defs::DefId>,
     ) -> Self {
         Self {
             module,

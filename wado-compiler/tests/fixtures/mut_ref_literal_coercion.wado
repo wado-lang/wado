@@ -1,0 +1,31 @@
+// `&mut [...] as List<T>` parses as `(&mut [...]) as List<T>` — `&mut` binds
+// tighter than `as` — so the coercion looks through the borrow. It must record
+// its facts on the literal's own AstId, which is what reify looks up, and reify
+// must drop the wrapper annotate already absorbed. Keyed on the outer unary
+// instead, the literal reified as a bare tuple: `type mismatch: expected
+// (ref null $type), found (ref (exact $type))`.
+use { println, Stdout } from "core:cli";
+
+fn grow(xs: &mut List<i32>) -> i32 {
+    xs.push(4);
+    return xs.len();
+}
+
+export fn run() with Stdout {
+    let xs = &mut [1, 2, 3] as List<i32>;
+    assert xs.len() == 3;
+    assert xs[0] == 1;
+    assert xs[2] == 3;
+
+    let ys = &[10, 20] as List<i32>;
+    assert ys.len() == 2;
+    assert ys[1] == 20;
+
+    // The parenthesized form casts first and borrows the result.
+    assert grow(&mut ([1, 2, 3] as List<i32>)) == 4;
+
+    println("mut ref literal coercion: ok");
+}
+
+__DATA__
+{"stdout": "mut ref literal coercion: ok\n"}

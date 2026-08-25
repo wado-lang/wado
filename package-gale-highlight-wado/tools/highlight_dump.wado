@@ -1,0 +1,72 @@
+//! Highlight dump: emit the Gale highlighter's capture spans for every `.wado`
+//! path given, for `wado-dev-tools highlight-corpus --compare` to join against
+//! the compiler's own classification.
+//!
+//!     wado run package-gale-highlight-wado/tools/highlight_dump.wado -- \
+//!         --paths-from list.txt
+//!
+//! Line-oriented and tab-separated. Spans are half-open **codepoint** offsets
+//! — Gale's runtime scans a `List<char>` — and only classified tokens appear:
+//! an absent span means the query captures nothing there, which is a verdict
+//! too.
+//!
+//!     V <TAB> capture0 <TAB> capture1 ...   the capture table, emitted once
+//!     F <TAB> path <TAB> diagnostic-count   one per file, then its captures
+//!     start <TAB> end <TAB> capture-id      indexes the capture table
+//!
+//! A file that cannot be read reports a diagnostic count of `-1`.
+
+use { corpus_root, collect_paths, read_file } from "./corpus.wado";
+use { parse, highlight_mapping, HighlightVisitor, highlight_walk } from "../grammar/Wado.g4"
+    with {
+        generator: {
+            module: "lib:gale",
+            inputs: ["../grammar/Wado.highlights.scm"],
+            options: {
+                fragment_entries: ["statement"],
+            },
+        },
+    };
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Preopens } from "wasi:filesystem";
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let root = match corpus_root() {
+        Some(dir) => dir,
+        None => {
+            return;
+        },
+    };
+    let paths = collect_paths(&root, &args());
+
+    let mapping = highlight_mapping();
+    let mut header = "V";
+    for let name of &HighlightVisitor::new(mapping).capture_names {
+        header.push_str(&`\t${*name}`);
+    }
+    println(header);
+
+    let mut unparsable = 0;
+    for let path of &paths {
+        let src = match read_file(&root, path) {
+            Some(text) => text,
+            None => {
+                println(`F\t${*path}\t-1`);
+                continue;
+            },
+        };
+        let result = parse(&src);
+        if result.diagnostics.len() != 0 {
+            unparsable += 1;
+        }
+        let mut visitor = HighlightVisitor::new(mapping);
+        highlight_walk(&mut visitor, &result.tokens, &result.cst);
+        visitor.hl_cover_unvisited(&result.tokens);
+
+        println(`F\t${*path}\t${result.diagnostics.len()}`);
+        for let capture of &visitor.captures {
+            println(`${capture.start}\t${capture.end}\t${capture.capture_id}`);
+        }
+    }
+    eprintln(`summary: ${paths.len()} files, ${unparsable} with diagnostics`);
+}

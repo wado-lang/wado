@@ -366,7 +366,7 @@ fn taint_of(ctx: &Ctx, taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
                 union(acc, taint_of(ctx, taint, &f.value))
             })
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
             elements.iter().fold(Taint::default(), |acc, el| {
                 union(acc, taint_of(ctx, taint, el))
             })

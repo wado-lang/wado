@@ -256,7 +256,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
     /// is not at hand — a mangled name, a synthesis target. No scope is run.
-    /// Prefer [`Self::symbol_at`], which reads the answer the walk recorded.
     pub(crate) fn symbol_named(
         &self,
         module: &ModuleSource,
@@ -273,16 +272,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return Some(symbol);
         }
         let def = self.tysys.resolutions.prelude_decl(name)?;
-        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
-    }
-
-    /// The symbol row behind a reference site.
-    ///
-    /// The walk answered for the site, so the declaration — and with it the
-    /// row — comes from what the name means where it was *written*, with no
-    /// second scope run beside the first.
-    pub(crate) fn symbol_at(&self, site: crate::ast::AstId) -> Option<&'a crate::symbol::Symbol> {
-        let def = self.tysys.resolutions.declared_if_walked(site)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
@@ -455,6 +444,64 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
+    /// The free function the reference site `site` names, answered by the
+    /// module that wrote it (WEP 2026-08-12). `None` where it names something
+    /// else — a binder, a variant case, a node no walk saw.
+    pub(super) fn free_function_at(&self, site: crate::ast::AstId) -> Option<crate::defs::DefId> {
+        let def = self.tysys.resolutions.declared_if_walked(site)?;
+        (self.tysys.resolutions.defs().kind(def) == crate::defs::DefKind::Function).then_some(def)
+    }
+
+    /// The canonical signature of the free function the site names.
+    pub(super) fn free_function_sig_at(
+        &self,
+        site: crate::ast::AstId,
+    ) -> Option<&sem::decls::FunctionSig> {
+        self.tysys
+            .signatures
+            .function_sig(self.free_function_at(site)?)
+    }
+
+    /// The declaration `id` declares. See [`crate::defs::DefTable::def_at`].
+    pub(super) fn def_at(&self, id: crate::ast::AstId) -> crate::defs::DefId {
+        self.tysys.resolutions.defs().def_at(id)
+    }
+
+    /// The declaration `module` declares under `name`, for the positions no
+    /// reference site answers. The module is named by the caller, not searched
+    /// for.
+    pub(super) fn decl_in_module(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+    ) -> Option<crate::defs::DefId> {
+        self.symbols
+            .lookup_in_module(module, name)
+            .and_then(|sym| self.tysys.resolutions.defs().of_ast_id(sym.defined_at))
+    }
+
+    /// [`Self::decl_in_module`] as a callee identity.
+    fn callee_in_module(&self, module: &ModuleSource, name: &str) -> Option<callee::CalleeRef> {
+        Some(self.callee_of(self.decl_in_module(module, name)?))
+    }
+
+    /// The callee identity of the declaration `def`.
+    fn callee_of(&self, def: crate::defs::DefId) -> callee::CalleeRef {
+        callee::CalleeRef::declared(self.tysys.resolutions.defs(), def)
+    }
+
+    /// Record a use→def edge naming the declaration `def`. The map is keyed by
+    /// node on both sides, so the declaring node is read off the identity here
+    /// rather than carried beside it.
+    pub(super) fn record_reference_to_decl(
+        &mut self,
+        use_id: crate::ast::AstId,
+        def: crate::defs::DefId,
+    ) {
+        let node = self.tysys.resolutions.defs().ast_id(def);
+        self.insert_reference(use_id, node);
+    }
+
     /// Record that an identifier resolved to a declared symbol reachable from
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
@@ -602,7 +649,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> Option<crate::ast::AstId> {
+    ) -> Option<crate::defs::DefId> {
         self.tysys
             .trait_env
             .static_method_index
@@ -679,14 +726,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if type_id == TypeTable::ERROR {
             return;
         }
-        // UNKNOWN-containing types ARE recorded: a bare `null` is
-        // `Option<UNKNOWN>`, and the AST-level block-result-type analysis the
-        // combined walk uses (in place of reading the body TIR) needs to see
-        // an unresolved-null branch to type it the same way the TIR walker
-        // did. Readers that want a *definite* type filter `contains_unknown`
-        // explicitly: reify's `ann_expression_types` (so a null still falls
-        // back to its `expected_type`) and the missing-return walk in
-        // `control_flow.rs`.
+        // An indefinite type IS recorded, because the AST-level
+        // block-result-type analysis the combined walk uses (in place of
+        // reading the body TIR) needs to see an unresolved-null branch to type
+        // it the same way the TIR walker did. Readers that want a *definite*
+        // type call `is_indefinite` explicitly: reify's `ann_expression_types`
+        // (so a null still falls back to its `expected_type`) and the
+        // missing-return walk in `control_flow.rs`.
         self.sem.types.expression_types.insert(ast_id, type_id);
     }
 
@@ -1821,13 +1867,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .then(|| self.tysys.resolutions.defs().of_ast_id(decl_id))
                 .flatten();
             let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
+            let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
+            let owner = defs.def_at(decl_id);
             for method in &methods {
+                let op = defs.def_at(method.id);
                 self.sem
                     .decls
                     .resource_method_ids
-                    .insert((decl_id, method.name.clone()), method.id);
+                    .insert((owner, method.name.clone()), op);
             }
-            self.sem.decls.effect_ops.insert(decl_id, ops);
+            self.sem.decls.effect_ops.insert(owner, ops);
         }
 
         // Pre-populate the generic-function inference caches for every
@@ -1836,11 +1885,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later in the file) to infer type arguments at the call site
         // during body resolution, without relying on a later
         // monomorphization-time fallback.
-        let mut function_sigs: IndexMap<String, sem::decls::FunctionSig> = IndexMap::default();
+        let mut function_sigs: IndexMap<crate::defs::DefId, Rc<sem::decls::FunctionSig>> =
+            IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
+                let def = self.def_at(func.id);
                 let sig = self.record_function_sig(func);
-                function_sigs.insert(func.name.clone(), sig);
+                function_sigs.insert(def, Rc::new(sig));
             }
         }
         for item in &module.items {
@@ -2133,10 +2184,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.
+            let method_def = scope.def_at(method.id);
             let recorded_sig = scope
                 .tysys
                 .signatures
-                .method_sig(method.id)
+                .method_sig(method_def)
                 .cloned()
                 .expect("the decl pass records every impl-declared method's canonical signature");
             scope.resolve_method(

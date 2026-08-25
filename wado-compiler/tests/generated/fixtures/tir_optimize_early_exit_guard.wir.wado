@@ -86,41 +86,43 @@ fn "tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
 
 fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     let a: ref "core:prelude//List<char>";
-    let __local_2: ref "core:prelude/string.wado//String";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let handle_18: i32;
-    let packed_23: i64;
-    let rx_24: i32;
-    let tx_25: i32;
-    let handle_30: i32;
-    let packed_34: i64;
-    let rx_35: i32;
-    let tx_36: i32;
-    let c_46: char;
-    let c_52: char;
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let elements: ref Array<char>;
+    let handle_9: i32;
+    let packed_14: i64;
+    let rx_15: i32;
+    let tx_16: i32;
+    let handle_21: i32;
+    let packed_25: i64;
+    let rx_26: i32;
+    let tx_27: i32;
+    let c_37: char;
+    let c_43: char;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:tir_optimize_early_exit_guard.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:tir_optimize_early_exit_guard.wado::__modules_initialized = 1;
     };
-    a = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
-    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    c_46 = "tir_optimize_early_exit_guard.wado/safe_get"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_8: ref Array<char>; __array_clone_src_8 = a.repr; let __array_clone_dst_8: ref Array<char>; __array_clone_dst_8 = builtin::array_new<char>(3); builtin::array_copy<char>(__array_clone_dst_8, 0, __array_clone_src_8, 0, 3); __array_clone_dst_8), used: 3 }, 1);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_2, c_46);
-    rx_24 = builtin::i32_wrap_i64(local.tee packed_23("wasi/stream-new"()));
-    tx_25 = builtin::i32_wrap_i64(packed_23 >> 32_i64);
-    handle_18 = "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
-    "core:cli/write_to_stream"(tx_25, __local_2, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_18);
-    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    c_52 = "tir_optimize_early_exit_guard.wado/safe_get"(a, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_4_4, c_52);
-    rx_35 = builtin::i32_wrap_i64(local.tee packed_34("wasi/stream-new"()));
-    tx_36 = builtin::i32_wrap_i64(packed_34 >> 32_i64);
-    handle_30 = "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_35);
-    "core:cli/write_to_stream"(tx_36, __local_4_4, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_30);
+    elements = array.new_fixed<char>(97, 98, 99);
+    a = struct.new "core:prelude//List<char>" { repr: elements, used: 3 };
+    __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    c_37 = "tir_optimize_early_exit_guard.wado/safe_get"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<char>; __array_clone_src_9 = a.repr; let __array_clone_dst_9: ref Array<char>; __array_clone_dst_9 = builtin::array_new<char>(3); builtin::array_copy<char>(__array_clone_dst_9, 0, __array_clone_src_9, 0, 3); __array_clone_dst_9), used: 3 }, 1);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_1, c_37);
+    rx_15 = builtin::i32_wrap_i64(local.tee packed_14("wasi/stream-new"()));
+    tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
+    handle_9 = "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_15);
+    "core:cli/write_to_stream"(tx_16, __local_1, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_9);
+    __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    c_43 = "tir_optimize_early_exit_guard.wado/safe_get"(a, 10);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_3, c_43);
+    rx_26 = builtin::i32_wrap_i64(local.tee packed_25("wasi/stream-new"()));
+    tx_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
+    handle_21 = "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
+    "core:cli/write_to_stream"(tx_27, __local_3, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_21);
 }
 
 fn "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

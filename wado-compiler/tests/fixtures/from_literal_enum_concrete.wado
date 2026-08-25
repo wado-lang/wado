@@ -12,21 +12,14 @@ struct DirMap<D, V> {
     values: List<V>,
 }
 
-impl KeyValueLiteralBuilder for DirMap<Direction, V> {
-    type Value = V;
-    type Output = DirMap<Direction, V>;
-
-    fn new_literal(capacity: i32) -> DirMap<Direction, V> {
-        return DirMap { keys: [], values: [] };
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> DirMap<Direction, V> {
-        return *self;
+impl From<Array<[String, V]>> for DirMap<Direction, V> {
+    fn from(entries: Array<[String, V]>) -> DirMap<Direction, V> {
+        let mut out: DirMap<Direction, V> = DirMap { keys: [], values: [] };
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 

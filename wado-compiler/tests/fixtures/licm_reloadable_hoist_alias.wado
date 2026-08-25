@@ -12,6 +12,9 @@ struct Holder {
 }
 
 impl Holder {
+    // Opaque to the caller: the reloadable-hoist path keys on a `&mut` call it
+    // cannot see through, and an inlined store would be an ordinary clobber.
+    #[inline("never")]
     fn reset(&mut self) {
         self.data = [9, 9, 9];
     }

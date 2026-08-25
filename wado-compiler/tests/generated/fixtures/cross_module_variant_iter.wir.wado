@@ -147,11 +147,12 @@ fn "cross_module_variant_iter.wado/__cm_export__run"() {
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let counter: ref "./sub/cross_module_variant_iter_helper.wado//Counter";
     let leaf1: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
     let leaf2: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
     let children: ref "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>";
-    let __sroa___sroa_tree_value_1: ref null "./sub/cross_module_variant_iter_helper.wado//AData";
+    let counter: ref "./sub/cross_module_variant_iter_helper.wado//Counter";
+    let __sroa_tree_value: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
+    let elements: ref "Array<./sub/cross_module_variant_iter_helper.wado/Choice>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cross_module_variant_iter.wado::__modules_initialized);
         cold_path;
@@ -166,10 +167,11 @@ fn "cross_module_variant_iter.wado/__cm_export__run"() {
     };
     leaf1 = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 10 } };
     leaf2 = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 20 } };
-    children = struct.new "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(leaf1, leaf2), used: 2 };
-    __sroa___sroa_tree_value_1 = struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: children };
+    elements = array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(leaf1, leaf2);
+    children = struct.new "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: elements, used: 2 };
+    __sroa_tree_value = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: children } };
     counter = struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 };
-    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(counter, struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: ref.as_non_null(__sroa___sroa_tree_value_1) });
+    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(counter, __sroa_tree_value);
     result = counter.total;
     if @unlikely(result != 30) {
         cold_path;

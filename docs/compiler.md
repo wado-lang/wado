@@ -11,7 +11,8 @@ The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm compo
 ```
 Source (.wado)
   → Lex → Parse → Bind                    (per module, in loader)
-  → Annotate (Analyze + Resolve + lower TIR)
+  → Analyze → Resolve
+  → Annotate (decls, then bodies) → Liveness → Reify (TIR)
   → Default-purity Check
   → Synthesis (auto-derives, template, From, serde, pre-CM effect dispatch, CM bindings)
   → Effect Check → Stores Check
@@ -31,7 +32,11 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
 | Bind                   | AST + bindings  | `bind.rs`                                        |
 | Loader                 | All modules     | `loader.rs`                                      |
-| Annotate               | TIR + facts     | `semantics.rs`, `analyze.rs`, `elaborator/`      |
+| Analyze                | `SymbolTable`   | `analyze.rs`                                     |
+| Resolve                | Declarations    | `defs.rs`, `resolve.rs`                          |
+| Annotate               | `Semantics`     | `semantics.rs`, `elaborator/`                    |
+| Liveness               | Reachability    | `elaborator/liveness.rs`                         |
+| Reify                  | `TirModule`     | `elaborator/reify.rs`                            |
 | Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
 | Synthesis              | TIR (extended)  | `synthesis/`                                     |
 | Effect / Stores        | TIR (validated) | `effect_check.rs`                                |
@@ -51,7 +56,7 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Unit                              | Layer                                                                                                        |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `Module` (`ast.rs`)               | Surface AST. Preserves source-level syntax to support `wado format`.                                         |
-| `TirModule` (`tir.rs`)            | Typed IR. One per source module after annotate.                                                              |
+| `TirModule` (`tir.rs`)            | Typed IR. One per source module, emitted by reify.                                                           |
 | `Package` (`package.rs`)          | Per-module compilation context, used from synthesis through link.                                            |
 | `FlatPackage` (`flat_package.rs`) | Flat list of all functions, types, and globals; used from monomorphize through the lower pipeline's planner. |
 | `NirPackage` (`nir_package.rs`)   | Normalized IR. Output of lower, input to optimize / WIR build / codegen.                                     |
@@ -69,9 +74,16 @@ The loader runs `lexer → parser → bind` on every loaded module:
 
 The AST is parser-immutable from this point on. The desugar-replacement surface rewrites — compound assignment (`x += y` → `x = x + y`), `while` / C-style `for` → explicit `loop`, `for x of expr` iteration (the `.into_iter()` / `.next()` dispatch and the `match Some(x) => body, _ => break` shape), the `assert` statement, the `matches` operator, the comparison chain `a < b < c`, template-string interpolations, `use … namespace` prefix stripping (`helper::foo`), and `Self::method` / `T::method` (T bound to concrete) static-call dispatch — happen inside the elaborator and are built TIR-direct: each rewrite resolves the user AST and constructs `TirExpr` / `TirStmt` nodes directly without producing synthetic AST. The implementations live in `elaborator/{stmt,operators,assert,matches}.rs` (`resolve_while`, `resolve_for`, `resolve_iterator_for_of`, `resolve_compound_assign`, `desugar_assert`, `desugar_matches_expr`, `desugar_comparison_chain`), `Elaborator::strip_ns_prefix` in `elaborator.rs`, and `CalleeIdentKind` / `classify_call_callee` in `elaborator/call.rs` (the prefix is resolved to its concrete type name before parameter-type lookup so argument resolution runs once with the correct expected-type hints). Synthetic call sites that need to dispatch a method on an already-resolved receiver TIR (the for-of `.into_iter()` / `.next()` calls today) reuse the AST-driven method dispatch via `Elaborator::resolve_method_call_with` (`elaborator/method_call.rs`) — that helper takes a pre-resolved receiver plus a method name and signals "no source AST" with `method_id: None` so no use→def edge is recorded against the synthesis site. Keeping the AST parser-shaped is what lets LSP queries land on the user's text rather than on a synthesised replacement.
 
-## Annotate (Analyze + Resolve + TIR Lowering)
+## Analyze and Elaborate
 
-`semantics_of` (`semantics.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for symbol-table construction and `elaborator/` for type checking; bodies are then lowered into TIR.
+`semantics_of` (`semantics.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for the symbol table, then `elaborator/` for the phases below ([WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md)):
+
+- **Resolve** answers every reference site once, from the module that wrote it, and identifies every declaration (`defs.rs`, `resolve.rs`, [WEP 2026-08-12](./wep-2026-08-12-declaration-identity.md)). Nothing else answers a site; a position that has none derives its `DefId` from a module the caller names.
+- **Annotate** runs a declaration pass over every module — types, `TraitEnv`, `Signatures` — then a body walk whose sole output is a populated `ModuleSemantics`.
+- **Liveness** computes source-level reachability, which gates what reify emits and feeds the unused diagnostics.
+- **Reify** reads the recorded facts back and emits one `TirModule` per module. No inference, no dispatch decisions.
+
+The LSP path stops after liveness and builds no TIR.
 
 The result, `Semantics`, carries the TIR modules plus an `AstIndex` and a use→def map (`AstId → AstId`, globally-unique ids). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
 

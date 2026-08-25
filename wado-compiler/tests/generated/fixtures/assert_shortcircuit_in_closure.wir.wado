@@ -145,12 +145,13 @@ global global:assert_shortcircuit_in_closure.wado::__const_obj_37: ref null "cor
 global global:assert_shortcircuit_in_closure.wado::__const_obj_39: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
 global global:assert_shortcircuit_in_closure.wado::__const_obj_41: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:assert_shortcircuit_in_closure.wado::__const_obj_42: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:assert_shortcircuit_in_closure.wado::__const_obj_43: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 317 };
+global global:assert_shortcircuit_in_closure.wado::__const_obj_43: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 318 };
 global global:assert_shortcircuit_in_closure.wado::__const_obj_44: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:assert_shortcircuit_in_closure.wado::__const_obj_45: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 
 fn "assert_shortcircuit_in_closure.wado/__cm_export__run"() {
     let list: ref "core:prelude//List<i32>";
+    let elements: ref Array<i32>;
     let f: ref "assert_shortcircuit_in_closure.wado//__Closure_0";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:assert_shortcircuit_in_closure.wado::__modules_initialized);
@@ -158,13 +159,14 @@ fn "assert_shortcircuit_in_closure.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:assert_shortcircuit_in_closure.wado::__modules_initialized = 1;
     };
-    __inline_run_0____inline___initialize_modules_0: block {
-        break_if __inline_run_0____inline___initialize_modules_0 @likely(global:assert_shortcircuit_in_closure.wado::__modules_initialized);
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:assert_shortcircuit_in_closure.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:assert_shortcircuit_in_closure.wado::__modules_initialized = 1;
     };
-    list = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    elements = array.new_fixed<i32>(1, 2, 3);
+    list = struct.new "core:prelude//List<i32>" { repr: elements, used: 3 };
     f = struct.new "assert_shortcircuit_in_closure.wado//__Closure_0" { __capture_0: 0, __capture_1: list };
     "assert_shortcircuit_in_closure.wado/assert_shortcircuit_in_closure.wado/__Closure_0::__call$spec0"(f);
     "wasi/task-return"(0);

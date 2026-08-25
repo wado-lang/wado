@@ -1,0 +1,26 @@
+// A newtype's static call dispatches to its base, whose declaration is the
+// imported module's. The caller's same-named `Meters` must not answer for it.
+//
+// A base's *trait* static is not inherited yet, so the call still fails; what
+// this pins is which module's impls the report reads — `i64` is the base's,
+// `String` the caller's.
+
+use { Km } from "./sub/newtype_base_conversion_module_a.wado";
+
+struct Meters {
+    v: i64,
+}
+
+impl From<String> for Meters {
+    fn from(value: String) -> Meters {
+        return Meters { v: 1000 };
+    }
+}
+
+test "a newtype's conversion report names its base's impls" {
+    let k = Km::from(5);
+    assert k.v == 50;
+}
+
+__DATA__
+{"test": {}, "compile_error": "'Meters::from' is available for 'i64'"}

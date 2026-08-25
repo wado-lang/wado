@@ -1,0 +1,14 @@
+// The same spelling as A's `Node`, implemented in its own module.
+use { Unwrap } from "./cross_module_same_name_gassoc_trait.wado";
+
+pub struct Node<K, V> {
+    pub k: K,
+    pub v: V,
+}
+
+impl<K, V> Unwrap for Node<K, V> {
+    type Out = V;
+    fn unwrap_it(&self) -> Self::Out {
+        return self.v;
+    }
+}
