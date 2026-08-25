@@ -711,6 +711,13 @@ test "Instant::round takes an increment" {
 }
 
 #[expect_trap]
+test "rounding rejects a step that does not divide the day" {
+    // A 7-hour bucket has no consistent place to start from, so Temporal
+    // rejects the increment rather than counting from an arbitrary origin.
+    let _ = Instant::EPOCH.round(Unit::Hour, 7);
+}
+
+#[expect_trap]
 test "Instant::round rejects a calendar unit" {
     let _ = Instant::EPOCH.round(Unit::Day);
 }
