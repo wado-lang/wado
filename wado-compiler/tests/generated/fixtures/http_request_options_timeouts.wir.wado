@@ -411,15 +411,15 @@ type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:pr
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<(),wasi:http/types.wado/RequestOptionsError>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<(),wasi:http/types.wado/RequestOptionsError>>", ref "core:prelude/format.wado//Formatter");  // TypeId(108)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(109)
+type "functype//core:prelude/traits.wado/wasi:http/types.wado/RequestOptionsError^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<wasi:http/types.wado/RequestOptionsError>", ref "core:prelude/format.wado//Formatter");  // TypeId(109)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(110)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(110)
 
-type "functype//core:prelude/traits.wado/wasi:http/types.wado/RequestOptionsError^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<wasi:http/types.wado/RequestOptionsError>", ref "core:prelude/format.wado//Formatter");  // TypeId(111)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(111)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(112)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>", ref "core:prelude/format.wado//Formatter");  // TypeId(112)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>", ref "core:prelude/format.wado//Formatter");  // TypeId(113)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(113)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(114)
 
@@ -2700,28 +2700,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),wasi:http/types.w
     }
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if @unlikely(used >= builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self);
-    }
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<u8>;
-    let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/traits.wado/wasi:http/types.wado/RequestOptionsError^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let s_10: ref "core:prelude/string.wado//String";
     let s_12: ref "core:prelude/string.wado//String";
@@ -2778,19 +2756,30 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
     _licm_used_10 = iter.used;
     _licm_repr_11 = iter.repr;
     __hfs_index_12 = iter.index;
-    b294: block {
-        l295: loop {
+    b293: block {
+        l294: loop {
             if __hfs_index_12 >= _licm_used_10 {
                 iter.index = __hfs_index_12;
-                break b294;
+                break b293;
             }
             byte = builtin::array_get_value<u8>(_licm_repr_11, __hfs_index_12);
             __hfs_index_12 = __hfs_index_12 + 1;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
-            continue l295;
+            continue l294;
         };
     };
     return result;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self);
+    }
+    builtin::array_set_u8(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
@@ -2832,6 +2821,17 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 110);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 101);
     }
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref Array<u8>;
+    let a: i32;
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 fn "core:prelude/primitive.wado/u64::fmt_base$spec0"(self, f, base, upper, prefix) {

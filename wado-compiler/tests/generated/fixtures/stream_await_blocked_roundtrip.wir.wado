@@ -298,9 +298,9 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(65)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> [i32, u8];  // TypeId(66)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(66)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(67)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> [i32, u8];  // TypeId(67)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(68)
 
@@ -1499,6 +1499,17 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self);
+    }
+    builtin::array_set_u8(self.repr, used, value);
+    self.used = used + 1;
+}
+
 fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u8;
     let _av_2: i32;
@@ -1509,17 +1520,6 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prel
     item = builtin::array_get_value<u8>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if @unlikely(used >= builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self);
-    }
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {

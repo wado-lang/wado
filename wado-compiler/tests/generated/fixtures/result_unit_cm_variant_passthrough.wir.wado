@@ -82,7 +82,7 @@ struct tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/S
     mut 1: ref "core:prelude/string.wado//String",
 }
 
-struct result_unit_cm_variant_passthrough.wado//__Closure_2 {  // TypeId(9)}
+struct result_unit_cm_variant_passthrough.wado//__Closure_0 {  // TypeId(9)}
 
 array Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]> (mut ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]");  // TypeId(10)
 
@@ -210,15 +210,15 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesys
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(60)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(61)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(61)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(62)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow" = fn(ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>");  // TypeId(62)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(63)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(63)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow" = fn(ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>");  // TypeId(64)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(64)
 
-type "functype//result_unit_cm_variant_passthrough.wado/result_unit_cm_variant_passthrough.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(65)
+type "functype//result_unit_cm_variant_passthrough.wado/result_unit_cm_variant_passthrough.wado/__Closure_0::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(65)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(66)
 
@@ -366,7 +366,7 @@ fn "result_unit_cm_variant_passthrough.wado/__cm_binding__Descriptor_open_at"(se
     builtin::store_i32(__params_buf + 12, builtin::i32_wrap_i64(__path_packed >> 32_i64));
     builtin::store_u8(__params_buf + 16, open_flags);
     builtin::store_u8(__params_buf + 17, flags);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr)), __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "result_unit_cm_variant_passthrough.wado//__Closure_2" {  }, func: ref.func "closure/result_unit_cm_variant_passthrough.wado/__closure_wrapper_0" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr)), __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "result_unit_cm_variant_passthrough.wado//__Closure_0" {  }, func: ref.func "closure/result_unit_cm_variant_passthrough.wado/__closure_wrapper_0" } };
 }
 
 fn "result_unit_cm_variant_passthrough.wado/__cm_binding__Descriptor_write_via_stream"(self, data, offset) with Descriptor {
@@ -1129,6 +1129,44 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     return result;
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
+    let result: ref "core:prelude//List<u8>";
+    let elements: ref Array<u8>;
+    let byte: u8;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref Array<u8>;
+    let __hfs_index_12: i32;
+    elements = array.new_fixed<u8>();
+    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
+    _licm_used_10 = iter.used;
+    _licm_repr_11 = iter.repr;
+    __hfs_index_12 = iter.index;
+    b144: block {
+        l145: loop {
+            if __hfs_index_12 >= _licm_used_10 {
+                iter.index = __hfs_index_12;
+                break b144;
+            }
+            byte = builtin::array_get_value<u8>(_licm_repr_11, __hfs_index_12);
+            __hfs_index_12 = __hfs_index_12 + 1;
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
+            continue l145;
+        };
+    };
+    return result;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
+    let a: i32;
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee new_capacity(select i32(a > 4, a, 4)));
+    builtin::array_copy<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -1151,50 +1189,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
-    let result: ref "core:prelude//List<u8>";
-    let elements: ref Array<u8>;
-    let byte: u8;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref Array<u8>;
-    let __hfs_index_12: i32;
-    elements = array.new_fixed<u8>();
-    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
-    _licm_used_10 = iter.used;
-    _licm_repr_11 = iter.repr;
-    __hfs_index_12 = iter.index;
-    b145: block {
-        l146: loop {
-            if __hfs_index_12 >= _licm_used_10 {
-                iter.index = __hfs_index_12;
-                break b145;
-            }
-            byte = builtin::array_get_value<u8>(_licm_repr_11, __hfs_index_12);
-            __hfs_index_12 = __hfs_index_12 + 1;
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
-            continue l146;
-        };
-    };
-    return result;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
-    let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
-    new_repr = builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "result_unit_cm_variant_passthrough.wado/result_unit_cm_variant_passthrough.wado/__Closure_2::__call"(__outptr) {
+fn "result_unit_cm_variant_passthrough.wado/result_unit_cm_variant_passthrough.wado/__Closure_0::__call"(__outptr) {
     return "result_unit_cm_variant_passthrough.wado/__cm_lift__Descriptor_open_at"(__outptr);
 }
 
 fn "closure/result_unit_cm_variant_passthrough.wado/__closure_wrapper_0"(__env, __p0) {
-    return "result_unit_cm_variant_passthrough.wado/result_unit_cm_variant_passthrough.wado/__Closure_2::__call"(__p0);
+    return "result_unit_cm_variant_passthrough.wado/result_unit_cm_variant_passthrough.wado/__Closure_0::__call"(__p0);
 }
 
 export fn "result_unit_cm_variant_passthrough.wado/__cm_export__run" as "run"

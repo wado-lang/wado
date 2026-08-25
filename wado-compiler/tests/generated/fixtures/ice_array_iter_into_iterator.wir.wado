@@ -103,13 +103,13 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref Array<u8>;  // TypeId(37)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(38)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(38)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(39)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(39)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(40)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> [i32, u8];  // TypeId(40)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> [i32, u8];  // TypeId(41)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(41)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
@@ -726,6 +726,27 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array"(self) {
     return out;
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter) {
+    let result: ref "core:prelude//List<u8>";
+    let elements: ref Array<u8>;
+    elements = array.new_fixed<u8>();
+    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
+    b76: block {
+        l77: loop {
+            let __match_3_mv_0: i32;
+            let __match_3_mv_1: u8;
+            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
+            if __match_3_mv_0 == 0 {
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, __match_3_mv_1);
+            } else {
+                break b76;
+            }
+            continue l77;
+        };
+    };
+    return result;
+}
+
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -735,38 +756,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
     }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<u8>;
-    let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter) {
-    let result: ref "core:prelude//List<u8>";
-    let elements: ref Array<u8>;
-    elements = array.new_fixed<u8>();
-    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
-    b77: block {
-        l78: loop {
-            let __match_3_mv_0: i32;
-            let __match_3_mv_1: u8;
-            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
-            if __match_3_mv_0 == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, __match_3_mv_1);
-            } else {
-                break b77;
-            }
-            continue l78;
-        };
-    };
-    return result;
 }
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
@@ -779,6 +768,17 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prel
     item = builtin::array_get_value<u8>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref Array<u8>;
+    let a: i32;
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 export fn "ice_array_iter_into_iterator.wado/__cm_export__run" as "run"

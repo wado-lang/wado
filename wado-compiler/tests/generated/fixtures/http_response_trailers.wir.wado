@@ -369,11 +369,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/traits.wado/Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(91)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(92)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(92)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(93)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(93)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(94)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(94)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(95)
 
@@ -2174,6 +2174,33 @@ fn "wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/traits.wado/In
     "core:prelude/primitive.wado/u64::fmt_base"(builtin::i64_extend_i32_u(self), f, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
+    let result: ref "core:prelude//List<u8>";
+    let elements: ref Array<u8>;
+    let byte: u8;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref Array<u8>;
+    let __hfs_index_12: i32;
+    elements = array.new_fixed<u8>();
+    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
+    _licm_used_10 = iter.used;
+    _licm_repr_11 = iter.repr;
+    __hfs_index_12 = iter.index;
+    b242: block {
+        l243: loop {
+            if __hfs_index_12 >= _licm_used_10 {
+                iter.index = __hfs_index_12;
+                break b242;
+            }
+            byte = builtin::array_get_value<u8>(_licm_repr_11, __hfs_index_12);
+            __hfs_index_12 = __hfs_index_12 + 1;
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
+            continue l243;
+        };
+    };
+    return result;
+}
+
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -2194,33 +2221,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
-    let result: ref "core:prelude//List<u8>";
-    let elements: ref Array<u8>;
-    let byte: u8;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref Array<u8>;
-    let __hfs_index_12: i32;
-    elements = array.new_fixed<u8>();
-    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
-    _licm_used_10 = iter.used;
-    _licm_repr_11 = iter.repr;
-    __hfs_index_12 = iter.index;
-    b243: block {
-        l244: loop {
-            if __hfs_index_12 >= _licm_used_10 {
-                iter.index = __hfs_index_12;
-                break b243;
-            }
-            byte = builtin::array_get_value<u8>(_licm_repr_11, __hfs_index_12);
-            __hfs_index_12 = __hfs_index_12 + 1;
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
-            continue l244;
-        };
-    };
-    return result;
 }
 
 export fn "http_response_trailers.wado/__cm_export__handle" as "handle"
