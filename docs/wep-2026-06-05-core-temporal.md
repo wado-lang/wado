@@ -142,11 +142,19 @@ moment, wherever it is read".
 
 ### `Duration` is plain data, not a validated construction
 
-Temporal's constructor rejects a duration whose components disagree in sign.
-A Wado struct literal has no constructor to reject anything, so the components
-are not forced to share a sign: `sign()` reports the largest non-zero one and
-arithmetic behaves as the sum of the parts. The ISO 8601 form is the one place
-the invariant matters, and it asserts rather than assuming.
+Temporal's constructor rejects a duration whose components disagree in sign. A
+Wado struct literal has no constructor to reject anything, so a mixed-sign
+literal is representable: `sign()` reports the largest non-zero component, and
+the ISO 8601 form — which has no spelling for one — asserts rather than
+assuming.
+
+`add` and `subtract` therefore rebalance rather than summing component-wise, as
+Temporal does without a `relativeTo`: they sum the exact nanoseconds, a day
+counting as 24 hours, and re-express the result at the coarser of the two
+operands' top units. Component-wise, `1 hour - 30 minutes` would be
+`{ hours: 1, minutes: -30 }` — arithmetically right, and unrenderable. Years,
+months, and weeks trap there for the same reason they trap in `total` and
+`round`.
 
 Field defaults make the literal the ergonomic constructor —
 `Duration { hours: 1, minutes: 30 }` — and the same trick makes Wado's literal

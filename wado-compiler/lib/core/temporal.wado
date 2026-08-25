@@ -282,6 +282,12 @@ fn try_fixed_offset(zone: &String) -> Option<i64> {
     }
     let hours = (zone.get_byte_unchecked(1) - b'0') as i64 * 10 + (zone.get_byte_unchecked(2) - b'0') as i64;
     let minutes = (zone.get_byte_unchecked(4) - b'0') as i64 * 10 + (zone.get_byte_unchecked(5) - b'0') as i64;
+    // Range-checked like the zone designator a timestamp carries: `"+24:00"` is
+    // not an offset, and renormalizing `"+00:60"` into `"+01:00"` would silently
+    // move the value to a zone the caller did not name.
+    if hours > 23 || minutes > 59 {
+        return Option::None;
+    }
     let magnitude = hours * 3600 + minutes * 60;
     if zone.get_byte_unchecked(0) == b'-' {
         return Option::Some(-magnitude);
@@ -878,7 +884,9 @@ fn difference_zoned(offset: i64, start: Instant, end: Instant, largest_unit: Uni
     }
 
     let date = calendar_difference(start_days, date_days, largest_unit);
-    return date.add(&duration_from_nanoseconds(time_nanoseconds, Unit::Hour));
+    // The date walk fills years through days and the remainder fills hours and
+    // below, so the two never overlap and nothing needs rebalancing.
+    return date.merge_components(&duration_from_nanoseconds(time_nanoseconds, Unit::Hour));
 }
 
 /// The date part of a difference, in whole weeks, months, or years plus a day
@@ -1259,9 +1267,8 @@ pub enum RoundingMode {
     HalfEven,
 }
 
-/// Nanoseconds in one whole `unit`. The calendar units have no fixed length and
-/// trap: measure them against a `ZonedDateTime` instead.
-fn unit_nanoseconds(unit: Unit) -> i128 {
+/// Nanoseconds in one whole `unit`, or `0` for a calendar unit, which has none.
+fn fixed_unit_nanoseconds(unit: Unit) -> i128 {
     return match unit {
         Nanosecond => 1,
         Microsecond => 1000,
@@ -1270,9 +1277,44 @@ fn unit_nanoseconds(unit: Unit) -> i128 {
         Minute => 60_000_000_000,
         Hour => 3_600_000_000_000,
         Day => 86_400_000_000_000,
-        Week => panic("core:temporal: a week is not a fixed length of exact time"),
-        Month => panic("core:temporal: a month is not a fixed length of exact time"),
-        Year => panic("core:temporal: a year is not a fixed length of exact time"),
+        Week => 0,
+        Month => 0,
+        Year => 0,
+    };
+}
+
+/// Nanoseconds in one whole `unit`. The calendar units have no fixed length and
+/// trap: measure them against a `ZonedDateTime` instead.
+fn unit_nanoseconds(unit: Unit) -> i128 {
+    let nanoseconds = fixed_unit_nanoseconds(unit);
+    if nanoseconds == 0 {
+        panic(`core:temporal: a ${unit} is not a fixed length of exact time; measure it against a ZonedDateTime`);
+    }
+    return nanoseconds;
+}
+
+/// The coarser of two units — the one that comes first in Temporal's order.
+fn coarser_unit(a: Unit, b: Unit) -> Unit {
+    if unit_rank(a) <= unit_rank(b) {
+        return a;
+    }
+    return b;
+}
+
+/// Position of `unit` in Temporal's order, `0` for `Year` … `9` for
+/// `Nanosecond`. Smaller is coarser.
+fn unit_rank(unit: Unit) -> i32 {
+    return match unit {
+        Year => 0,
+        Month => 1,
+        Week => 2,
+        Day => 3,
+        Hour => 4,
+        Minute => 5,
+        Second => 6,
+        Millisecond => 7,
+        Microsecond => 8,
+        Nanosecond => 9,
     };
 }
 
@@ -1433,9 +1475,36 @@ impl Duration {
         return *self;
     }
 
-    /// Component-wise sum. Neither operand is balanced, so the components stay
-    /// where the caller put them.
+    /// The two spans summed and rebalanced, expressed at the coarser of their
+    /// two top units. A day counts as 24 hours; years, months, and weeks trap,
+    /// since adding one needs the calendar position Temporal's `relativeTo`
+    /// supplies.
+    ///
+    /// Balancing is what keeps the result renderable: a component-wise
+    /// `1 hour - 30 minutes` would be `{ hours: 1, minutes: -30 }`, which has
+    /// no ISO 8601 spelling.
     pub fn add(&self, other: &Duration) -> Duration {
+        if self.has_calendar_components() || other.has_calendar_components() {
+            panic(
+                "core:temporal: adding a duration that carries years, months, or weeks needs the calendar position a relativeTo anchor would supply",
+            );
+        }
+        return duration_from_nanoseconds(
+            self.exact_nanoseconds() + other.exact_nanoseconds(),
+            coarser_unit(self.top_unit(), other.top_unit()),
+        );
+    }
+
+    /// The difference of the two spans, rebalanced the same way as `add`.
+    pub fn subtract(&self, other: &Duration) -> Duration {
+        return self.add(&other.negated());
+    }
+
+    /// Component-wise sum, for the parser folding a fraction into the
+    /// components below the designator it was written on. Those are provably
+    /// zero, so nothing needs balancing — and unlike `add` it admits the
+    /// calendar components a duration string may already carry.
+    fn merge_components(&self, other: &Duration) -> Duration {
         return Duration {
             years: self.years + other.years,
             months: self.months + other.months,
@@ -1450,9 +1519,34 @@ impl Duration {
         };
     }
 
-    /// Component-wise difference.
-    pub fn subtract(&self, other: &Duration) -> Duration {
-        return self.add(&other.negated());
+    /// The whole span as a nanosecond count, a day counting as 24 hours. Only
+    /// meaningful once the calendar components are known to be zero.
+    fn exact_nanoseconds(&self) -> i128 {
+        return self.days as i128 * 86_400_000_000_000 + self.time_nanoseconds();
+    }
+
+    /// The largest non-zero component, `Day` or below. A zero duration reads as
+    /// `Nanosecond`, as Temporal's `DefaultTemporalLargestUnit` does.
+    fn top_unit(&self) -> Unit {
+        if self.days != 0 {
+            return Unit::Day;
+        }
+        if self.hours != 0 {
+            return Unit::Hour;
+        }
+        if self.minutes != 0 {
+            return Unit::Minute;
+        }
+        if self.seconds != 0 {
+            return Unit::Second;
+        }
+        if self.milliseconds != 0 {
+            return Unit::Millisecond;
+        }
+        if self.microseconds != 0 {
+            return Unit::Microsecond;
+        }
+        return Unit::Nanosecond;
     }
 
     /// The whole span expressed in `unit`, as a fraction. A day counts as 24
@@ -1462,8 +1556,7 @@ impl Duration {
         if self.years != 0 || self.months != 0 || self.weeks != 0 {
             panic("core:temporal: a duration carrying years, months, or weeks has no total without a calendar anchor");
         }
-        let exact = self.days as i128 * 86_400_000_000_000 + self.time_nanoseconds();
-        return exact as f64 / unit_nanoseconds(unit) as f64;
+        return self.exact_nanoseconds() as f64 / unit_nanoseconds(unit) as f64;
     }
 
     /// Round the exact span to a multiple of `increment` `smallest_unit`s and
@@ -1478,9 +1571,12 @@ impl Duration {
         if self.years != 0 || self.months != 0 || self.weeks != 0 {
             panic("core:temporal: a duration carrying years, months, or weeks has no exact length to round");
         }
-        let exact = self.days as i128 * 86_400_000_000_000 + self.time_nanoseconds();
         return duration_from_nanoseconds(
-            round_to_increment(exact, unit_nanoseconds(smallest_unit) * increment as i128, mode),
+            round_to_increment(
+                self.exact_nanoseconds(),
+                unit_nanoseconds(smallest_unit) * increment as i128,
+                mode,
+            ),
             largest_unit,
         );
     }
@@ -1564,7 +1660,13 @@ impl Duration {
     /// Whether any component measures calendar time, which only a
     /// `ZonedDateTime` can resolve.
     fn has_date_components(&self) -> bool {
-        return self.years != 0 || self.months != 0 || self.weeks != 0 || self.days != 0;
+        return self.has_calendar_components() || self.days != 0;
+    }
+
+    /// Whether any component has no fixed length at all — a day is 24 hours
+    /// once a zone is fixed, but a year, month, or week never is.
+    fn has_calendar_components(&self) -> bool {
+        return self.years != 0 || self.months != 0 || self.weeks != 0;
     }
 }
 
@@ -1595,6 +1697,10 @@ impl FromStr for Duration {
 fn duration_from_nanoseconds(total: i128, largest_unit: Unit) -> Duration {
     let negative = total < 0;
     let magnitude = if negative { -total } else { total };
+    // Each component is an i64 and the largest one carries the whole span, so a
+    // count that does not fit is an overflow rather than something to wrap.
+    let step = fixed_unit_nanoseconds(largest_unit);
+    assert step == 0 || magnitude / step <= 9_223_372_036_854_775_807;
 
     let nanoseconds = (magnitude % 1000) as i64;
     let microseconds = (magnitude / 1000 % 1000) as i64;
@@ -1721,7 +1827,7 @@ fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, D
             out = assign_time_component(out, designator_slot, value);
             if after > after_number {
                 fraction_seen = true;
-                out = out.add(&duration_from_nanoseconds(
+                out = out.merge_components(&duration_from_nanoseconds(
                     fraction_nanoseconds * duration_time_slot_seconds(designator_slot),
                     Unit::Minute,
                 ));

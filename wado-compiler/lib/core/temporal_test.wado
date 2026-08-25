@@ -569,11 +569,49 @@ test "Duration negated and abs flip every field together" {
     assert d.negated().negated() == d;
 }
 
-test "Duration adds field-wise" {
+test "Duration arithmetic balances into a uniformly signed result" {
     let a = Duration { days: 1, hours: 2 };
     let b = Duration { hours: 3, minutes: 4 };
     assert a.add(&b) == Duration { days: 1, hours: 5, minutes: 4 };
-    assert a.subtract(&b) == Duration { days: 1, hours: -1, minutes: -4 };
+
+    // A component-wise difference would leave `{ days: 1, hours: -1 }`, which
+    // has no ISO 8601 spelling. Balancing keeps the result renderable.
+    assert a.subtract(&b) == Duration { hours: 22, minutes: 56 };
+    assert `${a.subtract(&b)}` == "PT22H56M";
+    assert `${Duration { hours: 1 }.subtract(&Duration { minutes: 30 })}` == "PT30M";
+
+    // The result is expressed at the coarser of the two operands' top units.
+    assert Duration { minutes: 30 }.add(&Duration { minutes: 45 }) == Duration { minutes: 75 };
+    assert Duration { hours: 1 }.add(&Duration { minutes: 30 }) == Duration { hours: 1, minutes: 30 };
+    assert Duration { days: 1 }.subtract(&Duration { hours: 1 }) == Duration { hours: 23 };
+}
+
+#[expect_trap]
+test "Duration arithmetic rejects a calendar component" {
+    // A month has no length to add without knowing where on the calendar it
+    // starts, so Temporal demands a relativeTo this module does not take yet.
+    let _ = Duration { months: 1 }.add(&Duration { days: 1 });
+}
+
+test "ZonedDateTime::new keeps an out-of-range offset verbatim" {
+    // An hour or minute past the clock is not a fixed offset, so it is stored
+    // as written rather than renormalized into a different zone.
+    assert ZonedDateTime::new(Instant::EPOCH, "+99:99").time_zone == "+99:99";
+    assert ZonedDateTime::new(Instant::EPOCH, "+24:00").time_zone == "+24:00";
+    assert ZonedDateTime::new(Instant::EPOCH, "+00:60").time_zone == "+00:60";
+    assert ZonedDateTime::new(Instant::EPOCH, "+23:59").time_zone == "+23:59";
+}
+
+#[expect_trap]
+test "an out-of-range offset traps on use, like an IANA name" {
+    let _ = `${ZonedDateTime::new(Instant::EPOCH, "+99:99")}`;
+}
+
+#[expect_trap]
+test "a nanosecond span beyond the i64 range traps rather than wrapping" {
+    // ~400 years in nanoseconds overflows the i64 a component is stored in.
+    let far = Instant::from_epoch_seconds(400 * 365 * 86400);
+    let _ = Instant::EPOCH.until(&far, Unit::Nanosecond);
 }
 
 test "Duration renders as an ISO 8601 duration" {
