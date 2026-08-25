@@ -16,6 +16,13 @@ use crate::tir::{FunctionRef, TypeId};
 /// entry: they rewrite the call into a shape reify reads off the receiver type.
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
+    /// The declaration dispatch selected. The spelled method name records a
+    /// use→def edge to the same place, but one node walked more than once
+    /// resolves differently each time — a tuple `for-of` body, once per element
+    /// — and a single-definition map keeps only the last. This is per-walk, so
+    /// the liveness edge reads it instead. `None` where no declaration backs
+    /// the signature: a builtin, an auto-derived method.
+    pub(crate) method_def: Option<crate::defs::DefId>,
     pub(crate) function_ref: FunctionRef,
     pub(crate) self_kind: ast::SelfKind,
     /// True when the resolved method's impl was found on a reference type
@@ -304,6 +311,8 @@ pub(crate) enum AssignPlace {
 /// The dispatch edges of one set of maps, shared by [`TypeAnnotations`] and the
 /// [`ElementOverlay`]s peeled off it — the two hold the same maps.
 fn dispatch_edges<'a>(
+    method_dispatch: &'a IndexMap<AstId, MethodDispatch>,
+    static_method_dispatch: &'a IndexMap<AstId, StaticMethodDispatch>,
     operator_dispatch: &'a IndexMap<AstId, OperatorDispatch>,
     index_assign_dispatch: &'a IndexMap<AstId, OperatorDispatch>,
     for_of_iterator: &'a IndexMap<AstId, ForOfIteratorInfo>,
@@ -311,10 +320,20 @@ fn dispatch_edges<'a>(
     sequence_coercions: &'a IndexMap<AstId, SequenceCoercionFacts>,
     key_value_coercions: &'a IndexMap<AstId, KeyValueCoercionFacts>,
 ) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + 'a {
-    operator_dispatch
+    method_dispatch
         .iter()
-        .chain(index_assign_dispatch)
-        .filter_map(|(id, op)| Some((*id, op.method_def?)))
+        .filter_map(|(id, d)| Some((*id, d.method_def?)))
+        .chain(
+            static_method_dispatch
+                .iter()
+                .filter_map(|(id, d)| Some((*id, d.method_def?))),
+        )
+        .chain(
+            operator_dispatch
+                .iter()
+                .chain(index_assign_dispatch)
+                .filter_map(|(id, op)| Some((*id, op.method_def?))),
+        )
         .chain(for_of_iterator.iter().flat_map(|(id, info)| {
             [info.into_iter_def, info.next_def]
                 .into_iter()
@@ -417,6 +436,8 @@ impl TypeAnnotations {
         &self,
     ) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + '_ {
         let own = dispatch_edges(
+            &self.method_dispatch,
+            &self.static_method_dispatch,
             &self.operator_dispatch,
             &self.index_assign_dispatch,
             &self.for_of_iterator,
@@ -436,6 +457,8 @@ impl TypeAnnotations {
             .flatten()
             .flat_map(|overlay| {
                 dispatch_edges(
+                    &overlay.method_dispatch,
+                    &overlay.static_method_dispatch,
                     &overlay.operator_dispatch,
                     &overlay.index_assign_dispatch,
                     &overlay.for_of_iterator,
@@ -658,6 +681,11 @@ pub(crate) struct KeyValueCoercionFacts {
 /// [`TypeAnnotations::static_method_dispatch`].
 #[derive(Clone)]
 pub(crate) struct StaticMethodDispatch {
+    /// The declaration dispatch selected — the liveness edge's target. A
+    /// static call through a blanket (`Point::tag()` answered by
+    /// `impl<T: Marker> Tag for T`) names the block only here. `None` where no
+    /// declaration backs it — a builtin or a variant constructor.
+    pub(crate) method_def: Option<crate::defs::DefId>,
     /// The resolved callee — `module_source`, mangled `name`,
     /// `method_info`, `monomorph_info` — as the elaborator constructed
     /// it after impl lookup and mangling.

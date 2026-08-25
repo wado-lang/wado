@@ -3412,6 +3412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `DesugarKind::IndexMutMethodCall`, so reify takes the expansion path.
         self.record_method_dispatch(
             Some(method_call.id),
+            method_def,
             &func,
             self_kind,
             method_is_ref_impl,
