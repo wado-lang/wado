@@ -24,7 +24,7 @@ if printf '%s' "$cmd" | grep -Eq "$forbidden"; then
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
-        permissionDecisionReason: "sed, awk, python and python3 are forbidden in this repository (AGENTS.md > Tooling). Edit files with the editing tools, one call per change site — an in-place rewrite keeps matching where it was not aimed. Read files with the Read tool or cat/head/tail, search with the Grep tool or grep/rg. For scripting, write Node.js (node, or a .mts script as in .claude/hooks/)."
+        permissionDecisionReason: "sed, awk, python and python3 are forbidden in this repository (AGENTS.md > Tooling). Edit files with the editing tools, one call per change site; read with the Read tool and search with the Grep tool; script in Node.js (node, or an executable .mts as in .claude/hooks/). The ban is about the tool, not the care taken with it: exact-match asserts do not save it. A sed -i or a python3 heredoc that rewrites a file keeps matching where it was not aimed — a CLAUDE.md symlink replaced by a regular file, a migration table rewritten into nonsense, .rs hit when only .wado was meant — and each miss costs a diagnosis-and-revert cycle. For a rename too wide to do one call at a time, agree on the approach first."
       }
     }'
     exit 0

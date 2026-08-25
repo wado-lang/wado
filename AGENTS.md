@@ -41,14 +41,11 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-- `sed`, `awk`, `python` and `python3` are forbidden — `.claude/settings.json` denies them and `.claude/hooks/no-sed-awk-python.sh` blocks the pipeline, `xargs`, `find -exec` and absolute-path forms. Edit files with the editing tools, one call per change site; script in Node.js (`node`, or an executable `.mts` as in `.claude/hooks/`); read with `cat`/`head`/`tail` and search with `grep`/`rg`.
-- The ban is about the tool, not the care taken with it: exact-match asserts do not save it. A `sed -i` or a `python3` heredoc that rewrites a file keeps matching where it was not aimed — a `CLAUDE.md` symlink replaced by a regular file, a migration table rewritten into nonsense, `.rs` hit when only `.wado` was meant — and each miss costs a diagnosis-and-revert cycle. For a rename too wide to do one call at a time, agree on the approach first.
-- Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo "exit=$?" >> run.log`.
-- Always redirect output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards everything you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
-- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
-- Decide "finished" from that completion line, not from what launched the job: a wrapper's exit code is its last command (`grep -c failures` exits 1 on a clean run), and a log left by a timeout-killed foreground command reads like a run still in progress. `grep -q "^exit=" run.log` tells them apart — wait on it with a background until-loop.
-- Give a long job its own invocation. Chaining it behind a slow step (`{ mise run format; mise run test; }`) puts both under one timeout, and the kill takes the job with it.
-- Don't edit sources while a `wado test` run is in flight. The run pins each Kiln generator at its first resolve and fails at the end naming every source that changed under it; that verdict describes neither tree, so re-run instead of reading it.
+- `sed`, `awk`, `python` and `python3` are denied in `.claude/` — edit with the editing tools, script in Node.js. For a rename too wide to do one call at a time, agree on the approach first.
+- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, each in its own invocation. Chaining one behind a slow step (`{ mise run format; mise run test; }`) puts both under one timeout, and the kill takes the job with it.
+- Redirect a job's output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards what you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
+- Have the job record its own completion — `cmd > run.log 2>&1; echo "exit=$?" >> run.log` — and wait on `grep -q "^exit=" run.log`. Nothing else tells you it finished: `pgrep` matches the watcher's own command line, a wrapper's exit code is its last command (`grep -c failures` exits 1 on a clean run), and a log left by a timeout-killed command reads like a run still in progress.
+- Don't edit sources while a `wado test` run is in flight. It pins each Kiln generator at its first resolve and fails at the end naming every source that changed under it; that verdict describes neither tree, so re-run instead of reading it.
 
 ## General Rules
 
