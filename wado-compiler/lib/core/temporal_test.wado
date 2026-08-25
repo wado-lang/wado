@@ -372,6 +372,32 @@ test "ZonedDateTime::parse_rfc3339 range-checks the calendar fields" {
     assert ZonedDateTime::parse_rfc3339("2023-02-29T00:00:00Z") matches { Err(_) };
 }
 
+test "ZonedDateTime::parse_rfc3339 requires a four-digit year or a signed six-digit one" {
+    // ISO 8601 fixes the year at four digits, or a sign plus exactly six.
+    assert ZonedDateTime::parse_rfc3339("1-01-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("999-01-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("12023-11-14T22:13:20Z") matches { Err(_) };
+
+    // A sign demands the six-digit expanded form, not four digits.
+    assert ZonedDateTime::parse_rfc3339("+2023-11-14T22:13:20Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("+002023-11-14T22:13:20Z") matches { Ok(zdt) && zdt.year() == 2023 };
+
+    // `-000000` is the one expanded year ISO 8601 forbids: negative zero.
+    assert ZonedDateTime::parse_rfc3339("-000000-01-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("+000000-01-01T00:00:00Z") matches { Ok(zdt) && zdt.year() == 0 };
+}
+
+test "ZonedDateTime::parse_rfc3339 accepts a leap second, constraining it to 59" {
+    // RFC 3339 permits :60; Temporal reads it and clamps, since the ISO
+    // calendar has no 61st second to represent.
+    let leap = ZonedDateTime::parse_rfc3339("2016-12-31T23:59:60Z").unwrap();
+    assert leap.second() == 59;
+    assert leap.instant == ZonedDateTime::parse_rfc3339("2016-12-31T23:59:59Z").unwrap().instant;
+
+    // :61 is not a leap second and stays rejected.
+    assert ZonedDateTime::parse_rfc3339("2016-12-31T23:59:61Z") matches { Err(_) };
+}
+
 test "Instant serializes as an RFC 3339 string with minimal precision" {
     let whole = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
     assert to_string(&whole) matches { Ok(s) && s == `"2023-11-14T22:13:20Z"` };

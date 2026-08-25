@@ -372,9 +372,10 @@ impl ZonedDateTime {
     /// / `Display` in canonical form).
     ///
     /// The grammar is `[±]Y…Y-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`: the year is
-    /// four or more digits with an optional sign (ISO 8601 extended years), the
+    /// four digits, or a sign followed by six (ISO 8601 expanded years), the
     /// date/time separator may be `T`, `t`, or a space, the fraction is
-    /// truncated to nanosecond precision, and the offset is mandatory. `"Z"` and
+    /// truncated to nanosecond precision, a leap second (`:60`) is constrained
+    /// to `:59`, and the offset is mandatory. `"Z"` and
     /// `"+00:00"` both normalize to a `"Z"` zone. Field values are range-checked
     /// against the ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"`
     /// are rejected); malformed or out-of-range input returns a
@@ -383,40 +384,17 @@ impl ZonedDateTime {
         let len = text.len();
         let mut i: i32 = 0;
 
-        // Year: an optional sign followed by one or more digits.
-        let mut year_sign: i64 = 1;
-        if i < len {
-            let c = text.get_byte_unchecked(i);
-            if c == b'+' || c == b'-' {
-                if c == b'-' {
-                    year_sign = -1;
-                }
-                i += 1;
-            }
-        }
-        let year_start = i;
-        while i < len && is_ascii_digit(text.get_byte_unchecked(i)) {
-            i += 1;
-        }
-        if i == year_start {
-            return Result::Err(DeserializeError::malformed("expected a year", year_start as i64));
-        }
-        let mut year: i64 = 0;
-        let mut yi = year_start;
-        while yi < i {
-            year = year * 10 + (text.get_byte_unchecked(yi) - b'0') as i64;
-            yi += 1;
-        }
-        year = year * year_sign;
+        let [year, year_end] = parse_iso_year(&text, i)?;
+        i = year_end;
 
         i = expect_byte(&text, i, b'-')?;
-        let month = read_two_digits(&text, i)?;
+        let month = read_digits(&text, i, 2)?;
         if month < 1 || month > 12 {
             return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
         }
         i += 2;
         i = expect_byte(&text, i, b'-')?;
-        let day = read_two_digits(&text, i)?;
+        let day = read_digits(&text, i, 2)?;
         if day < 1 || day > days_in_month_value(year, month) {
             return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
         }
@@ -432,22 +410,25 @@ impl ZonedDateTime {
         }
         i += 1;
 
-        let hour = read_two_digits(&text, i)?;
+        let hour = read_digits(&text, i, 2)?;
         if hour > 23 {
             return Result::Err(DeserializeError::invalid_value("hour out of range", i as i64));
         }
         i += 2;
         i = expect_byte(&text, i, b':')?;
-        let minute = read_two_digits(&text, i)?;
+        let minute = read_digits(&text, i, 2)?;
         if minute > 59 {
             return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
         }
         i += 2;
         i = expect_byte(&text, i, b':')?;
-        let second = read_two_digits(&text, i)?;
-        if second > 59 {
+        let parsed_second = read_digits(&text, i, 2)?;
+        if parsed_second > 60 {
             return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
         }
+        // RFC 3339 admits a leap second; the ISO calendar has no 61st second to
+        // hold it, so Temporal constrains :60 to :59 rather than rejecting it.
+        let second = if parsed_second == 60 { 59 } else { parsed_second };
         i += 2;
 
         // Optional fractional seconds, truncated to nanosecond precision.
@@ -647,17 +628,44 @@ fn expect_byte(text: &String, i: i32, byte: u8) -> Result<i32, DeserializeError>
     return Result::Ok(i + 1);
 }
 
-/// Read exactly two ASCII digits at index `i` of `text` as an integer, erroring
-/// if either is missing or non-numeric.
-fn read_two_digits(text: &String, i: i32) -> Result<i64, DeserializeError> {
-    if i + 1 >= text.len()
-        || !is_ascii_digit(text.get_byte_unchecked(i))
-        || !is_ascii_digit(text.get_byte_unchecked(i + 1)) {
-        return Result::Err(DeserializeError::malformed("expected two digits", i as i64));
+/// Read exactly `count` ASCII digits at index `i` of `text` as an integer,
+/// erroring if any of them is missing or non-numeric.
+fn read_digits(text: &String, i: i32, count: i32) -> Result<i64, DeserializeError> {
+    if i + count > text.len() {
+        return Result::Err(DeserializeError::malformed(`expected ${count} digits`, i as i64));
     }
-    let tens = (text.get_byte_unchecked(i) - b'0') as i64;
-    let ones = (text.get_byte_unchecked(i + 1) - b'0') as i64;
-    return Result::Ok(tens * 10 + ones);
+    let mut value: i64 = 0;
+    let mut k = 0;
+    while k < count {
+        let byte = text.get_byte_unchecked(i + k);
+        if !is_ascii_digit(byte) {
+            return Result::Err(DeserializeError::malformed(`expected ${count} digits`, i as i64));
+        }
+        value = value * 10 + (byte - b'0') as i64;
+        k += 1;
+    }
+    return Result::Ok(value);
+}
+
+/// Parse the ISO 8601 year at index `i` — exactly four digits, or a sign
+/// followed by exactly six (the expanded form) — returning the year and the
+/// index just past it. `-000000` is the one expanded year ISO 8601 forbids.
+fn parse_iso_year(text: &String, i: i32) -> Result<[i64, i32], DeserializeError> {
+    if i >= text.len() {
+        return Result::Err(DeserializeError::eof(i as i64));
+    }
+    let sign = text.get_byte_unchecked(i);
+    if sign != b'+' && sign != b'-' {
+        return Result::Ok([read_digits(text, i, 4)?, i + 4]);
+    }
+    let magnitude = read_digits(text, i + 1, 6)?;
+    if sign == b'-' {
+        if magnitude == 0 {
+            return Result::Err(DeserializeError::invalid_value("year -000000 is not an ISO 8601 year", i as i64));
+        }
+        return Result::Ok([-magnitude, i + 7]);
+    }
+    return Result::Ok([magnitude, i + 7]);
 }
 
 /// Parse the mandatory RFC 3339 zone designator in `text[start..<end]` into a
