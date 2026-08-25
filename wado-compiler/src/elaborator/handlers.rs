@@ -297,7 +297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let type_name = self.handler_impl_target_name(handler_type);
-        let effects = self.collect_effect_impls_for_type(&type_name);
+        let effects = self.collect_effect_impls_for_type(handler_type);
 
         if effects.is_empty() {
             let _ = self
@@ -340,7 +340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// and `Stream<i32>` separate.
     fn collect_effect_impls_for_type(
         &mut self,
-        type_name: &str,
+        handler_type: TypeId,
     ) -> Vec<super::sem::types::HandlerEffectEntry> {
         let mut out: Vec<super::sem::types::HandlerEffectEntry> = Vec::new();
         let mut seen: crate::hashmap::IndexSet<(ModuleSource, String, Vec<TypeId>)> =
@@ -354,7 +354,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .impl_index
-            .get(&self.impl_target(type_name))
+            .get(&self.handler_impl_target(handler_type))
         {
             for key in entries {
                 if let Some(trait_type) = self
@@ -422,12 +422,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect_decl: crate::defs::DefId,
         trait_type_args: &[TypeId],
     ) -> Option<crate::defs::DefId> {
-        let type_name = self.handler_impl_target_name(handler_type);
         let keys = self
             .tysys
             .trait_env
             .impl_index
-            .get(&self.impl_target(&type_name))?;
+            .get(&self.handler_impl_target(handler_type))?;
         let implements = |key: &crate::defs::DefId| {
             self.tysys
                 .trait_env
@@ -446,6 +445,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .or_else(|| keys.iter().find(|key| implements(key)))
             .copied()
+    }
+
+    /// The impl-index key for a handler type: its own declaration, not what
+    /// the installing module's scope makes of the written name — the handler
+    /// may be declared elsewhere, or shadowed by a same-named type here.
+    fn handler_impl_target(&self, handler_type: TypeId) -> super::trait_env::ImplTargetKey {
+        let name = self.handler_impl_target_name(handler_type);
+        self.impl_target_of(handler_type, &crate::name::DeclName::new(name))
     }
 
     /// The name an `impl <effect> for <handler>` block is indexed under — the
