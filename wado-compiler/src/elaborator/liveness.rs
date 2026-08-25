@@ -3,8 +3,9 @@
 //! package-external boundary over the call graph annotate recorded, tracing
 //! every site reify can emit a call from. Two kinds of edge make that graph:
 //! the use→def edge of every name the source spells, and the dispatch decision
-//! recorded at each site that spells none — an operator, a subscript, a `From`
-//! conversion, a `for-of` iterator, a literal coercion.
+//! recorded at the site — for an operator, a subscript, a `From` conversion, a
+//! `for-of` iterator, a literal coercion or a handler binding, the only thing
+//! that names the callee at all.
 //!
 //! Only free functions and globals are classified for diagnostics; a method
 //! counts as used so a function only it calls is not reported dead, but is
@@ -244,8 +245,11 @@ pub(crate) struct References<'a> {
     pub(crate) inherited: &'a IndexMap<AstId, IndexSet<AstId>>,
     /// Callees named by a dispatch fact rather than by a `use` of a name: an
     /// overloaded operator, a subscript, a `From` conversion, a `for-of`
-    /// iterator. The source spells no identifier at those sites, so nothing
-    /// records a `direct` edge and only the recorded decision names the callee.
+    /// iterator, a handler binding. Those sites spell no identifier, so
+    /// nothing records a `direct` edge for them. A spelled method call is here
+    /// too: `direct` keeps one definition per node, and a node walked once per
+    /// tuple-`for-of` element resolves differently each time, so only the
+    /// per-walk fact names every callee.
     pub(crate) dispatch: &'a IndexMap<AstId, IndexSet<AstId>>,
 }
 
@@ -1014,16 +1018,15 @@ impl Graph {
     }
 }
 
-/// Visitor that records every [`AstId`] in a body — the ids the walk hands to
-/// `visit_id` (names, fields, method segments) *and* each statement's and
-/// expression's own.
+/// Visitor that records every [`AstId`] the walk announces — names, fields and
+/// method segments, and each statement's and expression's own, which
+/// [`ast::walk_stmt`] and [`ast::walk_expr`] hand to `visit_id` before
+/// descending.
 ///
 /// The latter is where a dispatch fact is filed: `method_dispatch` keys on the
 /// call node, `for_of_iterator` on the loop, `operator_dispatch` on the binary
-/// or index expression. `walk_expr` announces almost none of those, so a
-/// collector built on `visit_id` alone would see the method's name segment but
-/// not the call it belongs to, and every edge that only a decision names would
-/// be dropped.
+/// or index expression. So the edges only a decision names ride the same
+/// collection as the spelled ones.
 #[derive(Default)]
 struct IdCollector {
     ids: Vec<AstId>,
@@ -1032,16 +1035,6 @@ struct IdCollector {
 impl AstVisitor for IdCollector {
     fn visit_id(&mut self, id: AstId, _span: Span) {
         self.ids.push(id);
-    }
-
-    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
-        self.ids.push(stmt.id());
-        ast::walk_stmt(self, stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &Expr) {
-        self.ids.push(expr.id());
-        ast::walk_expr(self, expr);
     }
 }
 

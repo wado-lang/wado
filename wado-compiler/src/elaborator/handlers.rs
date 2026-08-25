@@ -234,8 +234,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 binding.id,
                 super::sem::types::HandlerBindingFacts {
                     effects: vec![super::sem::types::HandlerEffectEntry {
-                        impl_def: effect_decl
-                            .and_then(|trait_| self.effect_impl_block(handler_type, trait_)),
+                        impl_def: effect_decl.and_then(|trait_| {
+                            self.effect_impl_block(handler_type, trait_, &trait_type_args)
+                        }),
                         name,
                         module_source,
                         trait_type_args,
@@ -295,15 +296,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Enumerate by the bare head: a generic impl `impl<T> Log for Ctx<T>`
-        // is keyed under "Ctx", not the instantiated "Ctx<i32>".
-        let type_name = match &resolved {
-            ResolvedType::GenericInstance { def, .. }
-            | ResolvedType::GenericResource { def, .. } => {
-                self.tysys.type_table.borrow().def_name(*def).to_string()
-            }
-            _ => self.tysys.type_table.borrow().type_name(handler_type),
-        };
+        let type_name = self.handler_impl_target_name(handler_type);
         let effects = self.collect_effect_impls_for_type(&type_name);
 
         if effects.is_empty() {
@@ -430,34 +423,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// installs. Dispatch synthesis routes the effect's operations to this
     /// block's methods, and it does so after `liveness` runs — so the binding
     /// records which block it is, and nothing has to find one by name later.
+    ///
+    /// `trait_type_args` picks between the blocks one type writes for several
+    /// instantiations of one generic effect (`impl Stream<u8> for T` beside
+    /// `impl Stream<i32> for T`): the clause's own arguments name which. A
+    /// generic block writes its slots there rather than a use site's
+    /// arguments, so an unmatched search falls back to the first block
+    /// implementing the effect at all.
     fn effect_impl_block(
         &self,
         handler_type: TypeId,
         effect_decl: crate::defs::DefId,
+        trait_type_args: &[TypeId],
     ) -> Option<crate::defs::DefId> {
+        let type_name = self.handler_impl_target_name(handler_type);
+        let keys = self
+            .tysys
+            .trait_env
+            .impl_index
+            .get(&self.impl_target(&type_name))?;
+        let implements = |key: &crate::defs::DefId| {
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(key)
+                .is_some_and(|header| header.trait_ref == Some(effect_decl))
+        };
+        keys.iter()
+            .find(|key| {
+                implements(key)
+                    && self
+                        .tysys
+                        .signatures
+                        .impl_sig(**key)
+                        .is_some_and(|sig| sig.trait_type_args == trait_type_args)
+            })
+            .or_else(|| keys.iter().find(|key| implements(key)))
+            .copied()
+    }
+
+    /// The name an `impl <effect> for <handler>` block is indexed under — the
+    /// bare head, so `impl<T> Log for Ctx<T>` answers for a handler of type
+    /// `Ctx<i32>`.
+    fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
         let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
-        // Keyed by the bare head: `impl<T> Log for Ctx<T>` is indexed under
-        // `Ctx`, not the instantiated `Ctx<i32>`.
-        let type_name = match &resolved {
+        match &resolved {
             ResolvedType::GenericInstance { def, .. }
             | ResolvedType::GenericResource { def, .. } => {
                 self.tysys.type_table.borrow().def_name(*def).to_string()
             }
             _ => self.tysys.type_table.borrow().type_name(handler_type),
-        };
-        self.tysys
-            .trait_env
-            .impl_index
-            .get(&self.impl_target(&type_name))?
-            .iter()
-            .find(|key| {
-                self.tysys
-                    .trait_env
-                    .impl_headers
-                    .get(*key)
-                    .is_some_and(|header| header.trait_ref == Some(effect_decl))
-            })
-            .copied()
+        }
     }
 
     /// Strip a single leading `&` / `&mut` layer to reach the type that the
