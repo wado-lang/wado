@@ -1,0 +1,16 @@
+// A generic builtin's type parameter is fixed by the expected type, not by the
+// argument, so a numeric literal argument has to be re-coerced once the
+// substitution is known. Without the declaration's type-param slots the call
+// site cannot substitute, the literal keeps its default width, and the mismatch
+// surfaces as an invalid module at codegen rather than as a diagnostic.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let narrow: f32 = builtin::black_box(0.5);
+    let wide: i64 = builtin::black_box(1);
+    println(`${narrow} ${wide}`);
+}
+
+__DATA__
+{"stdout": "0.5 1\n"}
