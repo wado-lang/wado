@@ -121,6 +121,13 @@ impl TirRefVisitor for SeedWalker<'_> {
                 expr: scrutinee, ..
             } => self.record_if_wrap(scrutinee),
             TirExprKind::Call { args, .. } => {
+                // A `copy_value::<T>` the source wrote asks for the same helper
+                // the fold's own markers do, and no wrap site seeds it: the
+                // fold never wraps this call's argument, since the call is
+                // already the copy.
+                if is_copy_value_call(expr) {
+                    self.out.insert(expr.type_id);
+                }
                 // Every by-value argument is copied — value semantics: passing
                 // a value to a function deep-copies it. `should_wrap` already
                 // excludes references (`&T` / `&mut T`), fresh values, and

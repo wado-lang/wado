@@ -1803,12 +1803,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return (params, slots);
             }
 
-            // Builtin functions: look up param types from core:builtin module
+            // Builtin functions: look up param types from core:builtin module.
+            // A generic one reports its slots like any other callee — without
+            // them `black_box<T>(3)` checks the literal against a rigid `T`,
+            // which leaves it the default `i32` while the return type takes
+            // whatever the context says.
             if prefix == "builtin"
                 && let Some(def) = self.decl_in_module(&ModuleSource::builtin(), suffix)
                 && let Some(sig) = self.tysys.signatures.function_sig(def)
             {
-                return (sig.decl.param_types.clone(), Vec::new());
+                return (
+                    sig.decl.param_types.clone(),
+                    sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
+                );
             }
 
             if let Some(decl) = self.effect_or_resource_decl_at(receiver_site)
@@ -2768,10 +2775,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
 
-        let Some(sig) = self.free_function_sig_at(ident.id) else {
-            return Vec::new();
+        // `builtin::f` is a qualified name no bare-name lookup answers, and a
+        // generic one is exactly where a literal argument needs re-coercing:
+        // resolved against the rigid `T` it fell back to `i32`.
+        let param_types: Vec<TypeId> = match self.free_function_sig_at(ident.id) {
+            Some(sig) => sig.decl.param_types.clone(),
+            None => {
+                let Some(sig) = ident
+                    .name
+                    .strip_prefix("builtin::")
+                    .and_then(|suffix| self.decl_in_module(&ModuleSource::builtin(), suffix))
+                    .and_then(|def| self.tysys.signatures.function_sig(def))
+                else {
+                    return Vec::new();
+                };
+                sig.decl.param_types.clone()
+            }
         };
-        let param_types: Vec<TypeId> = sig.decl.param_types.clone();
 
         // Substitute type params with explicit type args
         param_types

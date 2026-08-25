@@ -1735,7 +1735,8 @@ impl FunctionTranslator<'_, '_> {
             && let Some(type_id) = func
                 .monomorph_info
                 .as_ref()
-                .and_then(|mi| mi.impl_type_args.first().copied())
+                .and_then(|mi| mi.impl_type_args.first().or(mi.method_type_args.first()).copied())
+                .or_else(|| type_args.first().copied())
             && let Some((helper_module, helper_name)) = self
                 .base
                 .value_copy
