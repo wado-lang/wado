@@ -1,3 +1,4 @@
+mod bundled_asset;
 mod compiler_host;
 mod data_section;
 mod format_md;
@@ -16,15 +17,16 @@ fn main() {
         Some(Value(v)) => v.to_string_lossy().into_owned(),
         Some(other) => panic!(
             "expected subcommand as first argument, got {other:?} \
-             (commands: golden-dump, wasm2wat, format-md, grammar-corpus, highlight-corpus, highlight-vocab)"
+             (commands: golden-dump, wasm2wat, bundled-asset, format-md, grammar-corpus, highlight-corpus, highlight-vocab)"
         ),
         None => panic!(
-            "command is required (golden-dump, wasm2wat, format-md, grammar-corpus, highlight-corpus, highlight-vocab)"
+            "command is required (golden-dump, wasm2wat, bundled-asset, format-md, grammar-corpus, highlight-corpus, highlight-vocab)"
         ),
     };
     match cmd.as_str() {
         "golden-dump" => golden_dump(parser),
         "wasm2wat" => wasm2wat(parser),
+        "bundled-asset" => bundled_asset::run(parser),
         "format-md" => format_md::run(parser),
         "grammar-corpus" => grammar_corpus::run(parser),
         "highlight-corpus" => highlight_corpus::run(parser),

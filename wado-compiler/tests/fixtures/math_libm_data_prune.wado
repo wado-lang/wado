@@ -1,0 +1,50 @@
+// The bundled libm asset carries a `wado.dataref` map, and the prune keeps only
+// the rodata bytes the surviving functions claim. Every function below reads a
+// table: too narrow a map, and these answers change.
+//
+// `black_box` keeps the arguments away from constant folding, so the bundled
+// code really runs. The huge argument drives the Payne–Hanek reduction, which
+// is the one path that reaches libm's largest shared table.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x: f64 = builtin::black_box(0.5);
+    let huge: f64 = builtin::black_box(1.0e300);
+    let y: f32 = builtin::black_box(0.5);
+
+    println(`sin ${f64::sin(x)}`);
+    println(`cos ${f64::cos(x)}`);
+    println(`tan ${f64::tan(x)}`);
+    println(`sin_huge ${f64::sin(huge)}`);
+    println(`cos_huge ${f64::cos(huge)}`);
+    println(`tan_huge ${f64::tan(huge)}`);
+    println(`asin ${f64::asin(x)}`);
+    println(`acos ${f64::acos(x)}`);
+    println(`atan ${f64::atan(x)}`);
+    println(`atan2 ${f64::atan2(x, 2.0)}`);
+    println(`exp ${f64::exp(x)}`);
+    println(`exp2 ${f64::exp2(x)}`);
+    println(`exp10 ${f64::exp10(x)}`);
+    println(`sinh ${f64::sinh(x)}`);
+    println(`cosh ${f64::cosh(x)}`);
+    println(`pow ${f64::pow(x, 3.5)}`);
+    println(`cbrt ${f64::cbrt(x)}`);
+    println(`hypot ${f64::hypot(x, 2.0)}`);
+
+    println(`sinf ${f32::sin(y)}`);
+    println(`cosf ${f32::cos(y)}`);
+    println(`tanf ${f32::tan(y)}`);
+    println(`asinf ${f32::asin(y)}`);
+    println(`acosf ${f32::acos(y)}`);
+    println(`atanf ${f32::atan(y)}`);
+    println(`atan2f ${f32::atan2(y, 2.0)}`);
+    println(`expf ${f32::exp(y)}`);
+    println(`exp2f ${f32::exp2(y)}`);
+    println(`exp10f ${f32::exp10(y)}`);
+    println(`powf ${f32::pow(y, 3.5)}`);
+    println(`hypotf ${f32::hypot(y, 2.0)}`);
+}
+
+__DATA__
+{"stdout": "sin 0.479425538604203\ncos 0.8775825618903728\ntan 0.5463024898437905\nsin_huge -0.8178819121159085\ncos_huge -0.5753861119575491\ntan_huge 1.4214488238747245\nasin 0.5235987755982989\nacos 1.0471975511965979\natan 0.4636476090008061\natan2 0.24497866312686414\nexp 1.6487212707001282\nexp2 1.4142135623730951\nexp10 3.162277660168379\nsinh 0.5210953054937474\ncosh 1.1276259652063807\npow 0.08838834764831843\ncbrt 0.7937005259840998\nhypot 2.0615528128088303\nsinf 0.47942555\ncosf 0.87758255\ntanf 0.5463025\nasinf 0.5235988\nacosf 1.0471976\natanf 0.4636476\natan2f 0.24497867\nexpf 1.6487212\nexp2f 1.4142135\nexp10f 3.1622777\npowf 0.088388346\nhypotf 2.0615528\n"}

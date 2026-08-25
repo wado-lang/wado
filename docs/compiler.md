@@ -207,7 +207,7 @@ CM canonical operations (stream / future read + write, waitable-set, error-conte
 
 1. `emit.rs` emits core Wasm bytes from WIR, including the branch-hint section.
 2. `component.rs` wraps the core module in a Component Model envelope (imports, exports, adapters, optional WIT bundling, embedded data).
-3. `wado-wasm-embed` rewrites an embedded wasm asset's memory definition into an import and prunes it to the exports the component uses.
+3. `wado-wasm-embed` rewrites an embedded wasm asset's memory definition into an import and prunes it to the exports the component uses — code, and, where the asset carries a `wado.dataref` map, its data segments byte by byte.
 
 Output is validated with `wasmparser` unless `--no-validate` is set.
 
@@ -344,6 +344,8 @@ The compiler bundles the standard library inside its binary (`stdlib.rs` embeds 
 ## Bundled Math (`wado-bundled-libm`)
 
 The `wado-bundled-libm/` crate compiles a deterministic libm to `wasm32-unknown-unknown`, checked in as `lib/core/libm.wat` (rebuild with `mise run update-bundled`). `core:prelude` name-imports its exports through the ordinary core-wasm asset import (`use { libm_sin as f64_sin, … } from "../libm.wat" with { type: "wat" }`) and attaches them to `f32` / `f64`. The compiler links the asset as a separate core module inside the produced component, pruned to the exports the program actually calls.
+
+The asset also carries a `wado.dataref` custom section — one line per function, naming the rodata ranges that function reads — so the prune reaches its 5.4 KB of tables too. `mise run update-bundled` resolves it from the `linking` and `reloc.CODE` sections of a `--emit-relocs` build and drops those sections, because a `.wat` round trip re-encodes every relocatable immediate to its narrow form and invalidates the byte offsets they hold. A program calling `sin` keeps 344 of those bytes.
 
 ## Allocators
 

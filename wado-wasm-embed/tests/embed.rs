@@ -445,3 +445,167 @@ fn a_broken_name_section_is_dropped_rather_than_failing() {
     let pruned = prune(source, &["f"]);
     assert!(!custom_sections(&pruned).contains(&"name".to_string()));
 }
+
+/// The bytes of an active segment, as `(address, contents)` per emitted piece.
+fn data_segments(wasm: &[u8]) -> Vec<(i32, Vec<u8>)> {
+    let mut segments = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(wasm) {
+        if let Ok(wasmparser::Payload::DataSection(reader)) = payload {
+            for data in reader.into_iter().flatten() {
+                let wasmparser::DataKind::Active { offset_expr, .. } = data.kind else {
+                    continue;
+                };
+                let address = match offset_expr.get_operators_reader().read() {
+                    Ok(wasmparser::Operator::I32Const { value }) => value,
+                    other => panic!("expected a constant address, got {other:?}"),
+                };
+                segments.push((address, data.data.to_vec()));
+            }
+        }
+    }
+    segments
+}
+
+/// A module whose `.rodata` equivalent is one 16-byte segment at address 8,
+/// read four bytes at a time by four functions.
+fn quarters(dataref: Option<&str>) -> String {
+    let section = match dataref {
+        Some(text) => format!("(@custom \"wado.dataref\" (after data) {text:?})"),
+        None => String::new(),
+    };
+    format!(
+        r#"
+        (module
+          (memory 1)
+          (data (i32.const 8) "AAAABBBBCCCCDDDD")
+          (func $a (export "a") (result i32) (i32.load (i32.const 8)))
+          (func $b (export "b") (result i32) (i32.load (i32.const 12)))
+          (func $c (export "c") (result i32) (i32.load (i32.const 16)))
+          (func $d (export "d") (result i32) (i32.load (i32.const 20)))
+          {section})
+    "#
+    )
+}
+
+const QUARTERS_MAP: &str = "a 0:0+4\nb 0:4+4\nc 0:8+4\nd 0:12+4\n";
+
+#[test]
+fn a_data_reference_map_prunes_an_active_segment_by_the_byte() {
+    let pruned = prune(&quarters(Some(QUARTERS_MAP)), &["b"]);
+    assert_eq!(data_segments(&pruned), [(12, b"BBBB".to_vec())]);
+}
+
+#[test]
+fn without_a_map_an_active_segment_stays_whole() {
+    let pruned = prune(&quarters(None), &["b"]);
+    assert_eq!(data_segments(&pruned), [(8, b"AAAABBBBCCCCDDDD".to_vec())]);
+}
+
+/// A second segment costs more header than a short gap costs payload, so
+/// ranges close enough together are kept as one.
+#[test]
+fn ranges_separated_by_less_than_a_segment_header_are_merged() {
+    let pruned = prune(&quarters(Some(QUARTERS_MAP)), &["a", "c"]);
+    assert_eq!(data_segments(&pruned), [(8, b"AAAABBBBCCCC".to_vec())]);
+}
+
+#[test]
+fn a_map_that_reaches_nothing_drops_the_segment_and_its_section() {
+    let pruned = prune(&quarters(Some(QUARTERS_MAP)), &[]);
+    assert_eq!(data_segments(&pruned), []);
+    assert!(!section_ids(&pruned).contains(&11), "no data section");
+}
+
+/// The map describes the segments before the split, so keeping it would leave
+/// the asset carrying offsets into a segment that no longer exists.
+#[test]
+fn the_map_itself_never_survives_the_prune() {
+    let pruned = prune(&quarters(Some(QUARTERS_MAP)), &["a"]);
+    assert!(!custom_sections(&pruned).contains(&"wado.dataref".to_string()));
+}
+
+#[test]
+fn a_map_naming_an_unknown_function_is_rejected() {
+    let source = quarters(Some("a 0:0+4\nnobody 0:4+4\n"));
+    let wasm = wat::parse_str(&source).expect("fixture must parse");
+    let error = embed(
+        &wasm,
+        &Embed {
+            memory_import: ("env", "memory"),
+            keep_export: &|_| true,
+            strip_custom_sections: false,
+        },
+    )
+    .expect_err("a map that has drifted from the module must not be used");
+    assert_matches!(error, Error::DataRef(_));
+}
+
+#[test]
+fn a_map_reaching_past_the_end_of_its_segment_is_rejected() {
+    let source = quarters(Some("a 0:0+64\n"));
+    let wasm = wat::parse_str(&source).expect("fixture must parse");
+    let error = embed(
+        &wasm,
+        &Embed {
+            memory_import: ("env", "memory"),
+            keep_export: &|_| true,
+            strip_custom_sections: false,
+        },
+    )
+    .expect_err("a range outside its segment must not be used");
+    assert_matches!(error, Error::DataRef(_));
+}
+
+/// `memory.init` names a segment by index, so a passive segment is never split
+/// and the indices of the ones that remain still have to line up.
+#[test]
+fn passive_segments_keep_their_indices_across_a_split() {
+    let source = r#"
+        (module
+          (memory 1)
+          (data (i32.const 8) "AAAABBBB")
+          (data $passive "passive")
+          (func $a (export "a") (result i32) (i32.load (i32.const 8)))
+          (func (export "init")
+            (memory.init $passive (i32.const 64) (i32.const 0) (i32.const 7)))
+          (@custom "wado.dataref" (after data) "a 0:0+4\n"))
+    "#;
+    let pruned = prune(source, &["a", "init"]);
+    assert_eq!(data_segments(&pruned), [(8, b"AAAA".to_vec())]);
+    let mut init_targets = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&pruned) {
+        if let Ok(wasmparser::Payload::CodeSectionEntry(body)) = payload {
+            let mut ops = body.get_operators_reader().expect("body must read");
+            while !ops.eof() {
+                if let Ok(wasmparser::Operator::MemoryInit { data_index, .. }) = ops.read() {
+                    init_targets.push(data_index);
+                }
+            }
+        }
+    }
+    assert_eq!(init_targets, [1], "the passive segment is still the second");
+}
+
+/// A segment whose address is not a constant cannot have its pieces address
+/// themselves, so it is kept whole however narrow the map is.
+#[test]
+fn a_segment_at_a_computed_address_is_never_split() {
+    let source = r#"
+        (module
+          (memory 1)
+          (global $base i32 (i32.const 8))
+          (data (global.get $base) "AAAABBBB")
+          (func $a (export "a") (result i32) (i32.load (i32.const 8)))
+          (@custom "wado.dataref" (after data) "a 0:0+4\n"))
+    "#;
+    let pruned = prune(source, &["a"]);
+    let mut kept = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&pruned) {
+        if let Ok(wasmparser::Payload::DataSection(reader)) = payload {
+            for data in reader.into_iter().flatten() {
+                kept.push(data.data.to_vec());
+            }
+        }
+    }
+    assert_eq!(kept, [b"AAAABBBB".to_vec()]);
+}

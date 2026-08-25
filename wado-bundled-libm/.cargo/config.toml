@@ -5,5 +5,9 @@ target = "wasm32-unknown-unknown"
 # Place data after FTS module's data (which ends around 1049384) to avoid
 # overlap when both modules share the same linear memory.
 # Default global-base is 1048576 (= stack-size with --stack-first).
+# `--emit-relocs` keeps the `linking` and `reloc.CODE` sections, which say which
+# rodata bytes each function reads. `bundled-asset` resolves them into the
+# asset's `wado.dataref` map and drops them; without them the whole rodata table
+# is bundled into every program that calls any function here.
 [target.wasm32-unknown-unknown]
-rustflags = ["-Clink-arg=--global-base=1052672"]
+rustflags = ["-Clink-arg=--global-base=1052672", "-Clink-arg=--emit-relocs"]

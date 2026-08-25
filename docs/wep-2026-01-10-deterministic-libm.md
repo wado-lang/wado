@@ -60,6 +60,16 @@ Only the functions a program actually reaches survive into the output — the
 bundled module is pruned to the used export set when it is linked, so a program
 that calls `sin` does not carry `pow`.
 
+The pruning reaches the library's tables too. Two thirds of the asset's 5.4 KB
+of rodata belongs to `exp2` alone, and a program that never calls it has no
+reason to carry it, so the asset ships a `wado.dataref` custom section naming
+the rodata ranges each function reads and the prune keeps only the ranges the
+surviving functions claim. `mise run update-bundled` resolves that map from the
+`linking` and `reloc.CODE` sections of a `--emit-relocs` build, and drops those
+sections: they hold byte offsets into the code, which the `.wat` round trip
+invalidates by re-encoding relocatable immediates to their narrow form. A
+program calling `sin` keeps 344 of the 5,448 bytes.
+
 ### Surface: methods, not a math module
 
 The bundled asset is not a user-visible module. The prelude attaches its
@@ -84,8 +94,8 @@ bit for bit.
   and run-time evaluation.
 - Math needs no host capability, so it works in every world — including ones
   with nothing to import it from.
-- A program carries the code for the math it uses. Pruning bounds this to the
-  reachable set, but a program spanning many families pays for them.
+- A program carries the code and the tables for the math it uses. Pruning bounds
+  both to the reachable set, but a program spanning many families pays for them.
 - The bundled implementation can be slower than a host's routines built on
   architecture-specific instructions. Determinism is the deliberate trade.
 - Platform-specific extended precision is unavailable by construction. That is

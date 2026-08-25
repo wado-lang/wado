@@ -7,7 +7,7 @@ use std::convert::Infallible;
 use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind};
 
-use crate::reach::Live;
+use crate::reach::{Keep, Live};
 use crate::{Asset, Embed, Error};
 
 /// What an asset with no memory of its own is given, so every embedded module
@@ -43,7 +43,8 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
         "function and code sections must agree"
     );
 
-    let mut remap = Remap::new(asset, live);
+    let datas = DataPlan::new(asset, live);
+    let mut remap = Remap::new(asset, live, &datas);
     let mut module = wasm_encoder::Module::new();
 
     let mut types = wasm_encoder::TypeSection::new();
@@ -160,9 +161,7 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
     }
 
     if !asset.datas.is_empty() {
-        module.section(&wasm_encoder::DataCountSection {
-            count: live.datas.len() as u32,
-        });
+        module.section(&wasm_encoder::DataCountSection { count: datas.total });
     }
 
     let mut code = wasm_encoder::CodeSection::new();
@@ -175,14 +174,29 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
         module.section(&code);
     }
 
-    let mut datas = wasm_encoder::DataSection::new();
+    let mut section = wasm_encoder::DataSection::new();
     for (i, data) in asset.datas.iter().enumerate() {
-        if live.datas.contains(&(i as u32)) {
-            remap.parse_data(&mut datas, data.clone())?;
+        match live.datas.get(&(i as u32)) {
+            None => {}
+            Some(Keep::Whole) => remap.parse_data(&mut section, data.clone())?,
+            Some(Keep::Ranges(ranges)) => {
+                let base = crate::segment_base(data)
+                    .expect("reachability only splits a segment at a constant address");
+                for range in ranges {
+                    let address = base.address + i64::from(range.offset);
+                    let offset = if base.is_64 {
+                        wasm_encoder::ConstExpr::i64_const(address)
+                    } else {
+                        wasm_encoder::ConstExpr::i32_const(address as i32)
+                    };
+                    let bytes = &data.data[range.offset as usize..range.end() as usize];
+                    section.active(0, &offset, bytes.iter().copied());
+                }
+            }
         }
     }
-    if !datas.is_empty() {
-        module.section(&datas);
+    if !section.is_empty() {
+        module.section(&section);
     }
 
     if !opts.strip_custom_sections {
@@ -249,6 +263,36 @@ fn name_section(
     wrote.then_some(section)
 }
 
+/// Where each source data segment lands once the split ones have become several.
+///
+/// A split segment is only ever reached through the memory it initialises, so
+/// its index is never named; mapping it to its first piece keeps `data.drop` on
+/// an already-dropped active segment encodable and costs nothing else.
+struct DataPlan {
+    first: Vec<Option<u32>>,
+    total: u32,
+}
+
+impl DataPlan {
+    fn new(asset: &Asset<'_>, live: &Live) -> Self {
+        let mut first = Vec::with_capacity(asset.datas.len());
+        let mut next = 0;
+        for index in 0..asset.datas.len() as u32 {
+            match live.datas.get(&index) {
+                None => first.push(None),
+                Some(keep) => {
+                    first.push(Some(next));
+                    next += match keep {
+                        Keep::Whole => 1,
+                        Keep::Ranges(ranges) => ranges.len() as u32,
+                    };
+                }
+            }
+        }
+        DataPlan { first, total: next }
+    }
+}
+
 /// Old index -> new index, per index space. `None` is an item that was pruned;
 /// reaching one means emission and reachability disagreed.
 struct Remap {
@@ -262,7 +306,7 @@ struct Remap {
 }
 
 impl Remap {
-    fn new(asset: &Asset<'_>, live: &Live) -> Self {
+    fn new(asset: &Asset<'_>, live: &Live, datas: &DataPlan) -> Self {
         Remap {
             funcs: entities(asset.total_funcs(), asset.imported.funcs, &live.funcs),
             tables: entities(asset.total_tables(), asset.imported.tables, &live.tables),
@@ -270,7 +314,7 @@ impl Remap {
             tags: entities(asset.total_tags(), asset.imported.tags, &live.tags),
             types: entities(asset.types.len() as u32, 0, &live.types),
             elems: entities(asset.elems.len() as u32, 0, &live.elems),
-            datas: entities(asset.datas.len() as u32, 0, &live.datas),
+            datas: datas.first.clone(),
         }
     }
 }

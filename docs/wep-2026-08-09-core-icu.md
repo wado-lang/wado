@@ -305,28 +305,45 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 
 ## Known gaps
 
-- **The prune keeps baked data.** `wado-wasm-embed` drops every function,
-  global, table, tag, type and segment unreachable from the exports it keeps,
-  but marks every active data segment live unconditionally: an active segment
-  initialises memory whether or not anything still reads what it wrote.
+- **The prune keeps baked data.** Closed for the capability axis by
+  `wado-wasm-embed`'s data-reference pruning, piloted on `wado-bundled-libm`.
 
-  Closing it means giving the prune a symbol graph where it has a wasm index
-  graph. The `linking` and `reloc.*` sections carry exactly that — which
-  function references which data symbol — and wasm-ld already collects over it,
-  `--gc-sections` being its default. Measured on the ICU asset kept relocatable,
-  collecting against one program's exports reproduces the from-source rebuild
-  across every capability — 89 KB for locale + casemap against a ~92 KB rebuild
-  — and the slices are runtime-checked, Turkish casing included, so the graph
-  carries the data edges and not only the code.
+  The prune used to drop every function, global, table, tag, type and segment
+  unreachable from the exports it kept, but mark every active data segment live
+  unconditionally: an active segment initialises memory whether or not anything
+  still reads what it wrote. It now prunes an active segment by the byte, from a
+  map of which data ranges each function reads, and emits each surviving run as
+  a segment of its own. Measured on libm, a program calling `sin` keeps 344 of
+  the asset's 5,448 rodata bytes, and every one of the asset's 54 exports
+  answers bit-identically to the unpruned module.
+
+  The map comes from `linking` and `reloc.CODE`, which is what wasm-ld collects
+  over — `--gc-sections` is its default. Where the asset is consumed as a
+  relocatable binary, as ICU's will be, those sections can be read at compile
+  time. libm cannot: it is checked in as `.wat`, and the round trip re-encodes
+  every relocatable immediate to its narrow form, which moves every byte offset
+  a relocation holds. So `mise run update-bundled` resolves the graph once, at
+  asset-build time, into a form that names no offset into code — a function name
+  and the data ranges it reaches — and the asset carries it in a `wado.dataref`
+  custom section. `dataref::resolve` is the shared resolver; only where it runs
+  differs.
 
   Two things follow. Slicing needs no rebuild, so one asset can serve every
   program; and the root set can be finer than any WIT surface a rebuild could
-  express. What remains is implementing the collection in `wado-wasm-embed`,
-  which today reads the wasm index space rather than the symbol table.
+  express. Measured on the ICU asset kept relocatable, collecting against one
+  program's exports reproduces the from-source rebuild across every capability —
+  89 KB for locale + casemap against a ~92 KB rebuild — and the slices are
+  runtime-checked, Turkish casing included, so the graph carries the data edges
+  and not only the code.
 
   This closes the capability axis only. A locale is reached through the same
   symbol whatever the program declares, so no collection separates `ja` from the
   rest — that stays the data image's job.
+
+- **A pointer stored in the data itself.** `reloc.DATA` names a data-to-data or
+  data-to-function edge, which a function-to-data map cannot express. libm has
+  none, so the resolver rejects one rather than resolving halfway. ICU's asset
+  is where the format has to grow to carry them.
 
 ## Open questions
 

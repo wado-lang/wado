@@ -5,13 +5,19 @@
 //! [`Reencode`] hooks, so recording those hooks yields the whole reference
 //! graph — and keeps yielding it as new opcodes land.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 
 use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind, ExternalKind};
 
+use crate::dataref::{DataRange, DataRefs, merge_with_gap};
 use crate::{Asset, Error};
+
+/// Bytes of gap between two live ranges of one segment that are cheaper to keep
+/// than to split around: a second active segment costs a header, an offset
+/// expression and a length.
+const SEGMENT_HEADER_BYTES: u32 = 12;
 
 /// What survives, in the asset's original index space. Imports are not listed:
 /// they are kept whole.
@@ -23,10 +29,18 @@ pub(crate) struct Live {
     pub tags: BTreeSet<u32>,
     pub types: BTreeSet<u32>,
     pub elems: BTreeSet<u32>,
-    pub datas: BTreeSet<u32>,
+    pub datas: BTreeMap<u32, Keep>,
     /// Functions a surviving `ref.func` names that nothing left in the module
     /// declares. They need a declarative segment of their own.
     pub declare: Vec<u32>,
+}
+
+/// How much of a surviving data segment survives.
+pub(crate) enum Keep {
+    Whole,
+    /// Sorted, merged, non-empty byte ranges, each emitted as a segment of its
+    /// own at the matching address.
+    Ranges(Vec<DataRange>),
 }
 
 pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Result<Live, Error> {
@@ -35,6 +49,10 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
         live: Live::default(),
         queue: Vec::new(),
         ref_funcs: BTreeSet::new(),
+        data_refs: match &asset.data_refs {
+            Some(refs) => func_ranges(asset, refs)?,
+            None => BTreeMap::new(),
+        },
     };
 
     // An imported table is kept whole, so the segments filling it are live for
@@ -67,10 +85,14 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
     }
 
     for (i, data) in asset.datas.iter().enumerate() {
-        // Active segments initialise the shared memory whether or not anything
-        // still reads what they wrote.
-        if matches!(data.kind, wasmparser::DataKind::Active { .. }) {
-            walk.mark_data(i as u32);
+        // An active segment initialises the shared memory whether or not
+        // anything still reads what it wrote, so it is live by default. Only a
+        // map saying which of its bytes each function reads can narrow it, and
+        // only where the pieces can name their own addresses.
+        if matches!(data.kind, wasmparser::DataKind::Active { .. })
+            && !(asset.data_refs.is_some() && crate::segment_base(data).is_some())
+        {
+            walk.mark_data_whole(i as u32);
         }
     }
 
@@ -88,6 +110,11 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
 
     let ref_funcs = walk.ref_funcs;
     let mut live = walk.live;
+    for keep in live.datas.values_mut() {
+        if let Keep::Ranges(ranges) = keep {
+            merge_with_gap(ranges, SEGMENT_HEADER_BYTES);
+        }
+    }
     // A declarative segment of function indices is filtered down to the
     // functions that survived, and dropped when none did.
     for (i, elem) in asset.elems.iter().enumerate() {
@@ -143,6 +170,10 @@ struct Walk<'a, 'b> {
     queue: Vec<Item>,
     /// Targets of every `ref.func` reached, live by construction.
     ref_funcs: BTreeSet<u32>,
+    /// The data ranges each function reads, empty where the asset carries no
+    /// map. Reaching a function reaches its ranges, so the data edges close
+    /// over the same worklist the code edges do.
+    data_refs: BTreeMap<u32, &'a [DataRange]>,
 }
 
 impl Walk<'_, '_> {
@@ -265,7 +296,7 @@ impl Walk<'_, '_> {
             self.mark_elem(i);
         }
         for i in refs.datas {
-            self.mark_data(i);
+            self.mark_data_whole(i);
         }
         for i in refs.types {
             self.mark_type(i);
@@ -274,8 +305,12 @@ impl Walk<'_, '_> {
     }
 
     fn mark_func(&mut self, index: u32) {
-        if self.live.funcs.insert(index) {
-            self.queue.push(Item::Func(index));
+        if !self.live.funcs.insert(index) {
+            return;
+        }
+        self.queue.push(Item::Func(index));
+        for range in self.data_refs.get(&index).copied().unwrap_or_default() {
+            self.mark_data_range(*range);
         }
     }
 
@@ -303,9 +338,27 @@ impl Walk<'_, '_> {
         }
     }
 
-    fn mark_data(&mut self, index: u32) {
-        if self.live.datas.insert(index) {
+    /// Keep every byte of a segment: it is passive and something initialises
+    /// memory from it, or it is active and nothing says which of its bytes are
+    /// still read.
+    fn mark_data_whole(&mut self, index: u32) {
+        if self.live.datas.insert(index, Keep::Whole).is_none() {
             self.queue.push(Item::Data(index));
+        }
+    }
+
+    /// Keep one range of a segment. The offset expression still has to be
+    /// walked, so a segment reached this way is queued like any other.
+    fn mark_data_range(&mut self, range: DataRange) {
+        match self.live.datas.entry(range.segment) {
+            std::collections::btree_map::Entry::Vacant(slot) => {
+                slot.insert(Keep::Ranges(vec![range]));
+                self.queue.push(Item::Data(range.segment));
+            }
+            std::collections::btree_map::Entry::Occupied(mut slot) => match slot.get_mut() {
+                Keep::Whole => {}
+                Keep::Ranges(ranges) => ranges.push(range),
+            },
         }
     }
 
@@ -383,4 +436,62 @@ impl Reencode for Recorder<'_> {
         self.0.datas.push(data);
         Ok(data)
     }
+}
+
+/// Resolve the asset's map against its `name` section.
+///
+/// Every name in the map has to land on a function, and every range inside its
+/// segment: a map that has drifted from the module would otherwise prune data
+/// that is still read, and silently produce a module that computes the wrong
+/// answer.
+fn func_ranges<'a>(
+    asset: &'a Asset<'_>,
+    refs: &'a DataRefs,
+) -> Result<BTreeMap<u32, &'a [DataRange]>, Error> {
+    let names = asset.names.clone().ok_or_else(|| {
+        Error::DataRef("the asset has no `name` section to resolve the map against".into())
+    })?;
+
+    let mut resolved = BTreeMap::new();
+    let mut matched: BTreeSet<&str> = BTreeSet::new();
+    for subsection in names {
+        let wasmparser::Name::Function(map) = subsection? else {
+            continue;
+        };
+        for naming in map {
+            let naming = naming?;
+            if let Some(ranges) = refs.get(naming.name) {
+                resolved.insert(naming.index, ranges);
+                matched.insert(naming.name);
+            }
+        }
+    }
+
+    if matched.len() != refs.len() {
+        return Err(Error::DataRef(format!(
+            "names {} functions, of which the asset's `name` section resolves {}",
+            refs.len(),
+            matched.len()
+        )));
+    }
+    for (func, ranges) in &resolved {
+        for range in *ranges {
+            let segment = asset.datas.get(range.segment as usize).ok_or_else(|| {
+                Error::DataRef(format!(
+                    "function {func} reads segment {}, which the asset does not have",
+                    range.segment
+                ))
+            })?;
+            if range.end() as usize > segment.data.len() {
+                return Err(Error::DataRef(format!(
+                    "function {func} reads {}..{} of segment {}, which is {} bytes",
+                    range.offset,
+                    range.end(),
+                    range.segment,
+                    segment.data.len()
+                )));
+            }
+        }
+    }
+    Ok(resolved)
 }
