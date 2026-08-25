@@ -324,11 +324,8 @@ global SLL_POS_OPAQUE: i32 = -1;
 
 struct SllConfig {
     alt_index: i32,
-    /// Borrowed: the walk never writes through it, and a config is rebuilt per
-    /// token per alternative, so owning it would deep-copy every element's
-    /// strings each time. The referent is the grammar's list, the caller's, or
-    /// one the walk built (`replace_element_at`); GC keeps it alive as long as
-    /// a config names it.
+    /// Borrowed: the walk only reads it, and a config is rebuilt per token per
+    /// alternative, so owning it would deep-copy every element per rebuild.
     elements: &List<Element>,
     /// Element index into `elements`, or `SLL_POS_OPAQUE` for an opaque config.
     pos: i32,
@@ -336,7 +333,6 @@ struct SllConfig {
 }
 
 fn push_return(stack: &List<SllReturn>, elements: &List<Element>, pos: i32) -> List<SllReturn> with stores[elements] {
-    // Value semantics deep-copies the list; just append the new frame.
     let mut new_stack = *stack;
     new_stack.push(SllReturn { elements, pos });
     return new_stack;
@@ -589,24 +585,13 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
             }
         },
         Label(lab) => {
-            let replaced = replace_element_at(c.elements, c.pos, &lab.element);
-            let unwrapped = SllConfig { ..*c, elements: &replaced };
+            let mut unlabeled = *c.elements;
+            unlabeled[c.pos] = lab.element;
+            let unwrapped = SllConfig { ..*c, elements: &unlabeled };
             sll_advance(&unwrapped, token, ctx, inline_depth);
         },
         Wildcard(_) | Not(_) => [],
     };
-}
-
-fn replace_element_at(elements: &List<Element>, pos: i32, replacement: &Element) -> List<Element> {
-    let mut result: List<Element> = [];
-    for let mut i = 0; i < elements.len(); i += 1 {
-        if i == pos {
-            result.push(*replacement);
-        } else {
-            result.push(elements[i]);
-        }
-    }
-    return result;
 }
 
 fn sll_unique_alts(configs: &List<SllConfig>) -> List<i32> {
