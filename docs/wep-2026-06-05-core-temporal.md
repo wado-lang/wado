@@ -176,6 +176,11 @@ position is the one that can resolve it:
 | `PlainYearMonth` | years and months           | years or months                   |
 
 Anything outside its row traps with a message naming the type that can do it.
+That is stricter than Temporal in two places, deliberately: Temporal folds a
+`PlainDate.add({hours: 25})` into a day and drops the remainder, and lets a
+`PlainTime.add({days: 1})` wrap to the same clock reading. Both are silent — a
+caller who wrote either almost certainly wanted the date to move, which only
+`PlainDateTime` can do — so here they trap and say so.
 Rounding follows the same rule: an `Instant` counts multiples from the epoch, a
 `ZonedDateTime` and a `PlainTime` from local midnight, so a day-aligned unit
 lands on the civil boundary rather than on an epoch multiple.
