@@ -340,10 +340,9 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   symbol whatever the program declares, so no collection separates `ja` from the
   rest — that stays the data image's job.
 
-- **A pointer stored in the data itself.** `reloc.DATA` names a data-to-data or
-  data-to-function edge, which a function-to-data map cannot express. libm has
-  none, so the resolver rejects one rather than resolving halfway. ICU's asset
-  is where the format has to grow to carry them.
+  What the asset still needs is in Implementation: the collection has to reach
+  inside a component, resolve the map at compile time from the sections a
+  relocatable asset keeps, and carry the `reloc.DATA` edges libm does not have.
 
 ## Open questions
 
@@ -386,6 +385,22 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 - [ ] Promote the spike's ICU component into a first-party prebuilt artifact,
       shipped relocatable, with the locale-bearing capabilities moved onto a
       buffer provider and the rest left baked.
+- [ ] Collect over a **component** asset. `wado-wasm-embed` prunes a core-module
+      asset; a component takes the `wasm-compose` path instead and is composed
+      whole, so nothing prunes ICU's asset today — neither its code nor its
+      data. The root set is the same one the core path already uses: the
+      asset's exports that surviving Wado code calls.
+- [ ] Resolve the data-reference map at compile time. `dataref::resolve` reads
+      `linking` and `reloc.CODE` and is run today only by
+      `mise run update-bundled`, because libm is checked in as `.wat` and the
+      round trip invalidates the offsets a relocation holds. An asset shipped
+      relocatable keeps those sections, so `embed` can resolve from them
+      directly and needs no baked `wado.dataref`.
+- [ ] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
+      data range or a function. The map's shape and the walk both have to grow:
+      a live data range can root a function, so the data and code edges close
+      over one worklist rather than the code seeding the data once. The resolver
+      rejects one today rather than resolving halfway.
 - [ ] Write the facade over it: re-exports, the Wado-native shapes (`Ord`,
       iterators, `Display`), and the one-shot helpers.
 - [ ] Build the data image — per-(capability, locale) zlib entries plus index,
