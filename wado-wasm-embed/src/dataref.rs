@@ -18,9 +18,13 @@ pub struct DataRange {
 }
 
 impl DataRange {
-    /// `None` for a range with no end to reach. Every constructor goes through
-    /// here, so [`end`](Self::end) is total.
+    /// `None` for a range naming no bytes, or with no end to reach. Every
+    /// constructor goes through here, so [`end`](Self::end) is total and a
+    /// surviving range always keeps something.
     fn new(segment: u32, offset: u32, size: u32) -> Option<Self> {
+        if size == 0 {
+            return None;
+        }
         offset.checked_add(size)?;
         Some(DataRange {
             segment,

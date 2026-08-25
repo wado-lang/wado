@@ -638,3 +638,33 @@ fn a_range_that_cannot_end_is_rejected() {
         Error::DataRef(_)
     );
 }
+
+/// A range naming no bytes describes nothing, and honouring one emits a
+/// segment that writes nothing.
+#[test]
+fn a_range_naming_no_bytes_is_rejected() {
+    assert_matches!(embed_err(&quarters(Some("a 0:4+0\n"))), Error::DataRef(_));
+}
+
+/// The map is committed to git, so the normal form it round-trips through has
+/// to be a function of its content alone — not of the order the entries and
+/// ranges happened to arrive in.
+#[test]
+fn the_map_normalises_to_one_form_whatever_order_it_arrives_in() {
+    let canonical = wado_wasm_embed::dataref::DataRefs::parse(
+        "a 0:0+4 0:4+4\nb 0:8+4\nc 0:12+2 0:14+2\n",
+    )
+    .expect("map must parse")
+    .to_text();
+
+    for shuffled in [
+        "c 0:14+2 0:12+2\nb 0:8+4\na 0:4+4 0:0+4\n",
+        "b 0:8+4\nc 0:12+2 0:14+2\na 0:0+4 0:4+4\n",
+        "a 0:4+4 0:0+4\nc 0:12+2 0:14+2\nb 0:8+4\n",
+    ] {
+        let text = wado_wasm_embed::dataref::DataRefs::parse(shuffled)
+            .expect("map must parse")
+            .to_text();
+        assert_eq!(text, canonical, "reordering {shuffled:?} changed the map");
+    }
+}
