@@ -159,8 +159,8 @@ pub(crate) fn compute(
                     // the one the source spells, or the dispatch decision
                     // annotate recorded where it spells none. It is a root only
                     // where the call is minted after this pass: by a synthesis
-                    // pass reading a format specifier or a derive, or by the
-                    // compiler naming an inherent method itself.
+                    // pass reading a format specifier, or by the compiler
+                    // naming an inherent method itself.
                     let synthesis_dispatched = compiler_named
                         .synthesis_dispatched_impls
                         .contains(&impl_block.id);
@@ -1075,7 +1075,7 @@ pub(crate) struct CompilerNamed {
     /// `impl` blocks whose trait a synthesis pass dispatches — see
     /// [`crate::compiler_item::CompilerItem::dispatched_by_synthesis`]. Their
     /// methods are roots: the call reaching one is minted from a format
-    /// specifier or a derive, so no edge here can name it.
+    /// specifier or a reflection face, so no edge here can name it.
     pub(crate) synthesis_dispatched_impls: IndexSet<AstId>,
 }
 

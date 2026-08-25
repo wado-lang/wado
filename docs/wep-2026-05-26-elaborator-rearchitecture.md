@@ -383,11 +383,13 @@ two sources: `bindings.references`, whose def-side is a node (free-function
 calls, global reads, variant-case construction, and the method a spelled call
 dispatched to), and the dispatch facts in `types` for the sites that spell no
 name at all — an overloaded operator, a subscript read or write, a `From`
-conversion, a `for-of` iterator, a literal coercing through `From<Array<…>>`.
-Each such fact carries the `DefId` dispatch selected, recorded at the same
-moment as the decision, so the edge names a declaration rather than re-deriving
-one from a mangled name. Reachability is a single BFS from the root set; the
-node set and edges are static, so no fixed point is needed.
+conversion, a `for-of` iterator, a literal coercing through `From<Array<…>>`,
+and a handler binding, whose target is the whole `impl` block the dispatch
+wrapper may route any of the effect's operations to. Each such fact carries the
+`DefId` dispatch selected, recorded at the same moment as the decision, so the
+edge names a declaration rather than re-deriving one from a mangled name.
+Reachability is a single BFS from the root set; the node set and edges are
+static, so no fixed point is needed.
 
 Fail-loud, not fail-safe: a dispatch fact that cannot be resolved to a
 defining `AstId` is a graph bug, not an over-approximation site. If the graph
@@ -396,8 +398,8 @@ silently miscompiled output — and the fix is the missing edge kind. The dual
 failure, an item that is unused but not reported, is what this design
 optimises against.
 
-Two paths are undecidable at the source level, and each gets a rule rather
-than a blanket over every trait impl.
+Three paths are undecidable at the source level, and each gets a stated rule
+rather than a blanket over every trait impl.
 
 A trait method reached through a generic type parameter
 (`fn show<T: Display>(x: T) { x.fmt() }`, `C::from_iter(self)`, or a projection
@@ -405,12 +407,24 @@ like `S::MapSerializer`): `annotate` records the edge to the trait method, and
 the concrete impl is selected during monomorphization, which the source graph
 does not run. So reaching a trait method reaches the corresponding method on
 every impl of that trait. Broader than "every _reachable_ impl" only because
-impl-block reachability is not itself a question this graph answers.
+impl-block reachability is not itself a question this graph answers. This is
+also what carries the faces a derive expands into — serde, reflection: the
+synthesised body is TIR this graph never sees, but the impls it calls are
+reached through the bound like any other, from a `T: Serialize` entry point
+down through `Serializer::begin_seq`.
+
+A generic impl block standing beside one written for a single instantiation of
+the same head (`impl<T> Tag for Box_<T>` and `impl Tag for Box_<i32>`):
+coherence Rule 1 gives the specific block, and monomorphization settles it by
+mangled-name collision. The source spells only the call through the template,
+so the template's method gets an edge to the specific block's same-named
+method — an edge, not a root: a program that never reaches the template needs
+neither block.
 
 A trait whose calls a synthesis pass mints after this one runs: the format
-traits behind `${x:spec}`, and the serde and reflect faces behind a derive.
-Which trait a site dispatches to is read from a format specifier or a derive,
-neither of which `annotate` interprets, so no fact names the callee. The
+traits behind `${x:spec}`, and the reflection faces `reflect_bridge` mints per
+monomorphized type. Which trait such a site dispatches to is read from a format
+specifier `annotate` does not interpret, so no fact names the callee. The
 methods of a block implementing one are roots. Membership is
 `CompilerItem::dispatched_by_synthesis`, so the registry states the rule once
 and a format trait added later cannot be forgotten.

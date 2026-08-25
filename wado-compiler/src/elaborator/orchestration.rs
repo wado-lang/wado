@@ -3960,7 +3960,7 @@ fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed
     }
     // The traits a synthesis pass dispatches, as declarations — a block
     // implementing one is reached by a call minted after liveness, from a
-    // format specifier or a derive this pass does not interpret.
+    // format specifier this pass does not interpret.
     let defs = tysys.resolutions.defs();
     let synthesis_traits: IndexSet<crate::defs::DefId> = CompilerItem::ALL
         .iter()
