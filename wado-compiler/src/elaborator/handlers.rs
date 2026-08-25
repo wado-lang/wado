@@ -349,7 +349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Collect the impl `trait_type` ASTs first so subsequent
         // `resolve_type` calls (which need `&mut self`) don't fight the
         // borrow on `trait_env.impl_headers`.
-        let mut trait_types: Vec<(crate::defs::DefId, ast::Type)> = Vec::new();
+        let mut trait_types: Vec<(crate::defs::DefId, crate::defs::DefId, ast::Type)> = Vec::new();
         if let Some(entries) = self
             .tysys
             .trait_env
@@ -357,37 +357,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(&self.handler_impl_target(handler_type))
         {
             for key in entries {
-                if let Some(trait_type) = self
-                    .tysys
-                    .trait_env
-                    .impl_headers
-                    .get(key)
-                    .and_then(|header| header.trait_type.as_ref())
+                let Some(header) = self.tysys.trait_env.impl_headers.get(key) else {
+                    continue;
+                };
+                // The header's own resolved reference: `impl Log for Ctx` names
+                // `Log` in the module that wrote the block, which is not this
+                // one and may declare a different `Log`.
+                if let (Some(trait_ref), Some(trait_type)) =
+                    (header.trait_ref, header.trait_type.as_ref())
                 {
-                    trait_types.push((*key, trait_type.clone()));
+                    trait_types.push((*key, trait_ref, trait_type.clone()));
                 }
             }
         }
 
-        for (impl_def, trait_type) in &trait_types {
-            let base_trait_name = self.get_type_name(trait_type);
+        for (impl_def, trait_ref, trait_type) in &trait_types {
             // Accept either an effect or a resource declaration. The
             // dispatch synthesis pass treats both uniformly.
-            //
-            // Canonicalise through the current module's import context
-            // because `trait_type` was just referenced by bare name in an
-            // `impl Foo for T` block we're walking; the decl index is
-            // keyed by `(decl_module, name)` and two modules can declare
-            // a same-named effect / resource.
-            let decl_module = self.decl_key_or_local(&base_trait_name).filter(|key| {
-                self.tysys.trait_env.effect_decl_index.contains(key)
-                    || self.tysys.trait_env.resource_decl_index.contains(key)
-            });
-            let Some(decl_module) =
-                decl_module.map(|key| self.tysys.resolutions.defs().module(key).clone())
-            else {
+            if !(self.tysys.trait_env.effect_decl_index.contains(trait_ref)
+                || self.tysys.trait_env.resource_decl_index.contains(trait_ref))
+            {
                 continue;
-            };
+            }
+            // Name the effect by its declaration, as the explicit form does, so
+            // `use { Random as Rng }` records the entry a plain import would.
+            let defs = self.tysys.resolutions.defs();
+            let base_trait_name = crate::name::FqTraitName::declared(defs, *trait_ref)
+                .base_name()
+                .to_string();
+            let decl_module = defs.module(*trait_ref).clone();
             let type_args: Vec<TypeId> = match trait_type {
                 ast::Type::Generic(generic) => generic
                     .args
