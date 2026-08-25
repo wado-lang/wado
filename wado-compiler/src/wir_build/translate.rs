@@ -1157,6 +1157,62 @@ impl FunctionTranslator<'_, '_> {
             .contains_key(&(func.name.clone(), func.module_source.clone()))
     }
 
+    /// Return the N results by binding the aggregate and reading its fields.
+    ///
+    /// [`lift_struct_new_to_seq`] rewrites the leaves that build the aggregate,
+    /// but a tail it cannot reach — a `break` out of the very block whose value
+    /// it is, say — still yields one, and the signature still promises N.
+    /// Reading the fields back holds the ABI for any shape, at the cost of the
+    /// struct the lift would have avoided.
+    fn multi_value_return_by_fields(&mut self, value: WirInstr) -> WirInstr {
+        let crate::nir::ReturnAbi::MultiValue {
+            result_types,
+            field_names,
+        } = &self.tir_func.return_abi
+        else {
+            panic!("[WIR] `{}` is not under the multi-value ABI", self.tir_func.name);
+        };
+        let result_types = result_types.clone();
+        let field_names = field_names.clone();
+        let aggregate = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, self.tir_func.return_type);
+        let WirType::Ref { type_id, .. } = &aggregate else {
+            panic!(
+                "[WIR] the multi-value return of `{}` is not a struct reference",
+                self.tir_func.name
+            );
+        };
+        let type_id = type_id.clone();
+        let name = "__mv_return".to_string();
+        let fields: Vec<WirInstr> = field_names
+            .iter()
+            .zip(&result_types)
+            .map(|(field_name, result_type)| WirInstr::StructGet {
+                type_id: type_id.clone(),
+                field_name: field_name.clone(),
+                expr: Box::new(WirInstr::LocalGet {
+                    name: name.clone(),
+                    result_ty: aggregate.clone(),
+                }),
+                result_ty: self.ctx.type_id_to_wir_type(self.type_table, *result_type),
+            })
+            .collect();
+        WirInstr::Seq(vec![
+            WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty: aggregate,
+            },
+            WirInstr::LocalSet {
+                name,
+                value: Box::new(value),
+            },
+            WirInstr::Return {
+                value: Some(Box::new(WirInstr::Seq(fields))),
+            },
+        ])
+    }
+
     /// A statement-position call to a `ReturnAbi::MultiValue` function: bind its
     /// N results to wildcards, the `MultiValueLocalBind` form of dropping them.
     /// A single `Drop` could not consume them. `None` for anything else, which
@@ -1760,14 +1816,11 @@ impl FunctionTranslator<'_, '_> {
                             // replaces the whole `Return` rather than nesting.
                             mut other @ (WirInstr::Seq(_)
                             | WirInstr::Block { .. }
-                            | WirInstr::If { .. }) => {
-                                assert!(
-                                    lift_struct_new_to_seq(&mut other, true),
-                                    "[WIR] the multi-value return of `{}` left a tail yielding the aggregate",
-                                    self.tir_func.name
-                                );
-                                Some(other)
-                            }
+                            | WirInstr::If { .. }) => Some(if lifted(&mut other) {
+                                other
+                            } else {
+                                self.multi_value_return_by_fields(other)
+                            }),
                             other => Some(WirInstr::Return {
                                 value: Some(Box::new(other)),
                             }),
@@ -2796,9 +2849,10 @@ impl FunctionTranslator<'_, '_> {
 /// that yield the results.
 ///
 /// Reports whether every path now transfers control itself. A `false` leaves a
-/// tail still yielding the aggregate, which under this ABI is a signature the
-/// body does not satisfy — [`lifts_to_results`] is what the callers check
-/// beforehand, so a `false` is a disagreement between the two.
+/// tail still yielding the aggregate, which the caller must not emit under this
+/// ABI: [`lifted`] rewrites a copy so it can be discarded, and
+/// [`FunctionTranslator::multi_value_return_by_fields`] is what the return site
+/// falls back to.
 fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) -> bool {
     match expr {
         WirInstr::StructNew { .. } => {
@@ -2848,17 +2902,17 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) -> bool {
         // this same ABI (`multi_value_return`'s tail-call rule). The branch it
         // sits in has had its result type cleared, so without a `Return` its
         // results are left on the stack at the end of the block.
-        //
-        // One that already terminates needs no wrapper, and wrapping it would
-        // build `Return { value: Unreachable }` — a `Return` whose operand
-        // leaves nothing on the stack.
-        other if wrap_in_return && !other.ends_with_terminator() => {
-            let value = std::mem::replace(other, WirInstr::Nop);
-            *other = WirInstr::Return {
+        WirInstr::Call { .. } if wrap_in_return => {
+            let value = std::mem::replace(expr, WirInstr::Nop);
+            *expr = WirInstr::Return {
                 value: Some(Box::new(value)),
             };
             true
         }
+        // A tail that already terminates carries no value and needs no lift;
+        // wrapping one would build `Return { value: Unreachable }`, a `Return`
+        // whose operand leaves nothing on the stack. Anything else yields
+        // something that is not the N results.
         other => other.ends_with_terminator(),
     }
 }
@@ -2961,12 +3015,16 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
     let mut all_rewritten = true;
     let mut i = 0;
     while i < instrs.len() {
+        // The value an exit carries can exit to the same target itself, and
+        // that one the lift has not rewritten — so it is still counted.
         if br_follows(instrs, i, target_depth) && lifted(&mut instrs[i]) {
             instrs[i + 1] = WirInstr::Nop;
+            all_rewritten &= !exits_to_target(&instrs[i], target_depth);
             i += 2;
             continue;
         }
         if exit_as_seq(&instrs[i], target_depth) && lift_seq_exit(&mut instrs[i]) {
+            all_rewritten &= !exits_to_target(&instrs[i], target_depth);
             i += 1;
             continue;
         }
@@ -3017,7 +3075,7 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
     if tail == Tail::IsResult
         && let Some(last) = instrs.last_mut()
     {
-        lifted(last);
+        all_rewritten &= lifted(last);
     }
     all_rewritten
 }

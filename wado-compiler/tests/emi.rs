@@ -108,20 +108,33 @@ impl Root {
 
     /// Can an injection into this file be observed at all?
     ///
-    /// The stdlib is a library: a module with no `test` block exports nothing
-    /// the test world runs, so no payload injected into it can move an output.
-    /// A fixture and an example are programs, and every one of them qualifies.
+    /// Only what the world calls can move an output: a `test` block under the
+    /// test world, `export fn run` under the CLI world. A stdlib module or an
+    /// example with neither is a library, and its exclusion belongs here rather
+    /// than in the report, where a compile failure means a regression. A
+    /// fixture is a program by construction.
     fn is_subject(self, path: &Path) -> bool {
-        if self != Root::Stdlib {
+        if self == Root::Fixtures {
             return true;
         }
         let source = std::fs::read_to_string(path).expect("source is readable");
-        wado_compiler::parse(&source)
-            .ast
-            .items
-            .iter()
-            .any(|item| matches!(item, Item::Test(_)))
+        let Ok(spec) = Spec::parse(self, &source) else {
+            // A `__DATA__` key the harness does not understand is an exclusion
+            // to report, not material to hide.
+            return true;
+        };
+        let items = wado_compiler::parse(&source).ast.items;
+        if spec.test_world {
+            items.iter().any(|item| matches!(item, Item::Test(_)))
+        } else {
+            items.iter().any(is_run_export)
+        }
     }
+}
+
+/// The `export fn run` a `wasi:cli/command` program is entered through.
+fn is_run_export(item: &Item) -> bool {
+    matches!(item, Item::Function(f) if f.is_export && f.name == "run")
 }
 
 /// One program in the corpus.
@@ -1800,6 +1813,25 @@ fn a_stdlib_module_is_material_only_with_a_test_block() {
     assert!(
         !Root::Stdlib.is_subject(&dir.join("core/rt.wado")),
         "a module the test world runs nothing in cannot show a divergence"
+    );
+}
+
+/// An example is material only if a world enters it — otherwise its baseline
+/// fails to compile and the report cannot tell that apart from a regression.
+#[test]
+fn an_example_is_material_only_if_a_world_enters_it() {
+    let dir = Root::Example.dir();
+    assert!(
+        Root::Example.is_subject(&dir.join("fizzbuzz.wado")),
+        "a program with `export fn run` is a subject"
+    );
+    assert!(
+        !Root::Example.is_subject(&dir.join("router_common.wado")),
+        "a library the CLI world cannot enter is not material"
+    );
+    assert!(
+        !Root::Example.is_subject(&dir.join("http_server.wado")),
+        "a `wasi:http/service` program is not one the CLI world enters"
     );
 }
 
