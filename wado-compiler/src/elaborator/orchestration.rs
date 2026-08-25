@@ -1952,28 +1952,64 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 named
             };
-            // Which impl methods a trait method stands for, when only
-            // monomorphization can say which one a generic call reaches.
+            // Which impl methods one method stands for, where only
+            // monomorphization can say which block a call actually reaches.
             let trait_method_impls = {
                 let defs = state.tysys.resolutions.defs();
-                let mut by_trait_method: IndexMap<crate::ast::AstId, IndexSet<crate::ast::AstId>> =
+                let mut stands_for: IndexMap<crate::ast::AstId, IndexSet<crate::ast::AstId>> =
                     IndexMap::default();
+                let mut edge = |from: crate::defs::DefId, to: crate::defs::DefId| {
+                    stands_for
+                        .entry(defs.ast_id(from))
+                        .or_default()
+                        .insert(defs.ast_id(to));
+                };
+                // A generic block and one written for a single instantiation of
+                // the same head name the same function once the template is
+                // instantiated, and the specific block wins — coherence Rule 1,
+                // settled at monomorphization by that collision. A call through
+                // the template is the only thing the source spells, so the
+                // specific block's method has to be reachable from it or
+                // monomorphization never sees the block it must yield to.
+                let mut by_head: IndexMap<
+                    (crate::defs::DefId, &super::trait_env::ImplTargetKey),
+                    (Vec<&super::trait_env::ImplHeader>, Vec<&super::trait_env::ImplHeader>),
+                > = IndexMap::default();
                 for header in state.tysys.trait_env.impl_headers.values() {
                     let Some(trait_) = header.trait_ref else {
                         continue;
                     };
+                    // A trait method reached through a generic bound
+                    // (`fn show<T: Display>(x: T) { x.fmt() }`, `C::from_iter`,
+                    // a projection like `S::MapSerializer`) has its block picked
+                    // by monomorphization, so it stands for every impl's.
                     for method in &header.methods {
-                        let Some(declared) = state.tysys.declared_method(trait_, &method.name)
-                        else {
-                            continue;
-                        };
-                        by_trait_method
-                            .entry(defs.ast_id(declared))
-                            .or_default()
-                            .insert(defs.ast_id(method.def));
+                        if let Some(declared) = state.tysys.declared_method(trait_, &method.name) {
+                            edge(declared, method.def);
+                        }
+                    }
+                    let group = by_head.entry((trait_, &header.target)).or_default();
+                    if header.is_concrete() {
+                        group.1.push(header);
+                    } else {
+                        group.0.push(header);
                     }
                 }
-                by_trait_method
+                for (generics, concretes) in by_head.into_values() {
+                    for generic in generics {
+                        for concrete in &concretes {
+                            for method in &generic.methods {
+                                let Some(specific) =
+                                    concrete.methods.iter().find(|m| m.name == method.name)
+                                else {
+                                    continue;
+                                };
+                                edge(method.def, specific.def);
+                            }
+                        }
+                    }
+                }
+                stands_for
             };
             state.liveness = super::liveness::compute(
                 modules,
