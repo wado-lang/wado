@@ -58,6 +58,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
     TirFunction {
         module_source: ModuleSource::default(),
         name,
+        def_id: None,
         visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
@@ -370,6 +371,42 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
         fq,
         method_name,
         assoc_types,
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, module_source, logger);
+    }
+}
+
+/// Register a free function's `#[compiler_item(...)]` annotation, if any.
+/// A CM ABI helper the binding synthesis calls by name lives here: it has no
+/// receiver, so the method form cannot carry it.
+pub(super) fn register_function_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::Function,
+        module_source,
+        span,
+        logger,
+    ) {
+        return;
+    }
+    let resolved = Resolved::Function {
+        module_source: module_source.clone(),
+        name: name.to_string(),
     };
     if let Err(err) = type_table
         .borrow_mut()

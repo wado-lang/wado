@@ -177,6 +177,7 @@ fn generate_copy_function(
 
     let func = TirFunction {
         name,
+        def_id: None,
         module_source,
         visibility: crate::ast::Visibility::Private,
         is_export: false,

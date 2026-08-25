@@ -672,6 +672,7 @@ impl ClosureLowerer {
 
             let call_method = TirFunction {
                 module_source: self.module_source.clone(),
+                def_id: None,
                 is_async: false,
                 name: qualified_method_name,
                 visibility: crate::ast::Visibility::Private,
@@ -971,6 +972,7 @@ impl ClosureLowerer {
     ) -> TirFunction {
         TirFunction {
             module_source: self.module_source.clone(),
+            def_id: None,
             is_async: false,
             name: MethodName::format_local(
                 &FqTypeName::shape(&self.module_source, struct_name),
@@ -1181,6 +1183,7 @@ impl ClosureLowerer {
 
         let specialized_func = TirFunction {
             module_source: self.module_source.clone(),
+            def_id: None,
             is_async: false,
             name: specialized_name.clone(),
             visibility: crate::ast::Visibility::Private, // Specialized functions are always private

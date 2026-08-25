@@ -5194,6 +5194,9 @@ pub struct TirGlobal {
 #[derive(Debug, Clone)]
 pub struct TirFunction {
     pub name: String,
+    /// The source declaration reify emitted this from. `None` for anything the
+    /// compiler synthesizes, which declares nothing and so identifies nothing.
+    pub def_id: Option<crate::defs::DefId>,
     /// Module this function belongs to. Set by the link phase when flattening
     /// per-module TIR into flat lists; before link, the `module_source` is
     /// carried implicitly by the parent `TirModule`.

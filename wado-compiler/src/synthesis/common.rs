@@ -489,6 +489,7 @@ pub fn make_synthetic_free_function(
     TirFunction {
         module_source: ModuleSource::default(),
         name,
+        def_id: None,
         visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_async: false,

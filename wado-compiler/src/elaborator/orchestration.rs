@@ -1528,25 +1528,95 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later; computing it here lets reify gate item emission on the live
         // set and the unused-diagnostics emitter read `dead_items`.
         {
-            let mut references: IndexMap<crate::ast::AstId, crate::ast::AstId> =
+            let mut direct: IndexMap<crate::ast::AstId, crate::ast::AstId> = IndexMap::default();
+            let mut inherited: IndexMap<crate::ast::AstId, IndexSet<crate::ast::AstId>> =
                 IndexMap::default();
             for sem in state.module_semantics.values() {
                 for (use_id, def_key) in &sem.bindings.references {
-                    references.insert(*use_id, *def_key);
+                    direct.insert(*use_id, *def_key);
                 }
             }
+            // A trait's default body is walked once per inheriting impl, each
+            // against its own `ModuleSemantics`, so its edges live there rather
+            // than in the module's own bindings. A snapshot module runs no body
+            // walk this compile, so its share comes from the snapshot's state —
+            // read in place, since cloning it back would cost what the snapshot
+            // saves.
+            let inherit_sems = state
+                .module_semantics
+                .values()
+                .chain(
+                    snapshot
+                        .and_then(|s| s.state.as_ref())
+                        .into_iter()
+                        .flat_map(|s| s.module_semantics.values()),
+                )
+                .flat_map(|sem| sem.default_method_semantics.values());
+            for sem in inherit_sems {
+                for (use_id, def_key) in &sem.bindings.references {
+                    inherited.entry(*use_id).or_default().insert(*def_key);
+                }
+            }
+            let references = super::liveness::References {
+                direct: &direct,
+                inherited: &inherited,
+            };
             let export_names: crate::hashmap::IndexSet<String> = state
                 .world_registry
                 .all_export_names()
                 .map(str::to_string)
                 .collect();
-            state.liveness = super::liveness::compute(modules, &references, &export_names);
+            // The inherent methods and free functions the compiler names itself
+            // — the call reaching one is minted after this pass, so no edge here
+            // can. An entity the compiler reaches for and has not registered as
+            // a `CompilerItem` is a gap in the registry, not in this set.
+            let compiler_named = {
+                let tt = state.tysys.type_table.borrow();
+                let items = tt.compiler_items();
+                let mut named = super::liveness::CompilerNamed::default();
+                for &item in crate::compiler_item::CompilerItem::ALL {
+                    match items.get(item) {
+                        Some(crate::compiler_item::Resolved::Method {
+                            owner_type, name, ..
+                        }) => {
+                            named.methods.insert((owner_type.clone(), name.clone()));
+                        }
+                        Some(crate::compiler_item::Resolved::Function {
+                            module_source,
+                            name,
+                        }) => {
+                            named
+                                .functions
+                                .entry(module_source.clone())
+                                .or_default()
+                                .insert(name.clone());
+                        }
+                        _ => {}
+                    }
+                }
+                named
+            };
+            state.liveness =
+                super::liveness::compute(modules, &references, &export_names, &compiler_named);
         }
 
         // Phase 2 — `reify`: rehydrate stdlib TIR from the snapshot and reify
-        // the eligible user modules, gating free-function / global emission on
-        // `live_items`. Iterating `sorted_sources` keeps `result`'s insertion
-        // order identical to the single-pass form downstream phases expect.
+        // the eligible user modules, gating item emission on `emit_live`.
+        // Iterating `sorted_sources` keeps `result`'s insertion order identical
+        // to the single-pass form downstream phases expect.
+        // The snapshot caches every stdlib declaration, since it is built
+        // before any program that could narrow the set; this compile's liveness
+        // is what narrows it. Building the snapshot itself gates on nothing.
+        let gating = !crate::stdlib_snapshot::is_building();
+        let gate = gating.then_some(&state.liveness.emit_live);
+        // A rehydrated `TirFunction` names its declaration, not the AST node
+        // liveness is keyed by, so the same set is projected once per compile.
+        let live_defs: IndexSet<crate::defs::DefId> = gate
+            .into_iter()
+            .flatten()
+            .filter_map(|id| state.tysys.resolutions.defs().of_ast_id(*id))
+            .collect();
+        let snapshot_gate = gating.then_some(&live_defs);
         if build_tir {
             for module_source in &sorted_sources {
                 if is_stdlib_snapshot_hit(module_source) {
@@ -1558,6 +1628,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         crate::stdlib_snapshot::rehydrate_tir_module(
                             snap_module,
                             &state.tysys.type_table,
+                            snapshot_gate,
                             &mut fn_remap,
                         ),
                     );
@@ -1575,7 +1646,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         modules,
                         logger,
                         Rc::clone(&state.interner),
-                        // Gate dead free-function emission on the live set
+                        // Gate dead function / method emission on the live set
                         // (globals are emitted unconditionally; see
                         // `reify_module`). The semantic diagnostics (effect /
                         // stores / purity) are produced from `Semantics`, not
@@ -1584,7 +1655,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // liveness graph traces bodies, global initializers,
                         // parameter defaults, and struct field defaults so every
                         // reify-emitted call site keeps its callee live.
-                        Some(&state.liveness.live_items),
+                        gate,
                     );
                     if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
                         result.insert(module_source.clone(), reified);

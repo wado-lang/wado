@@ -469,6 +469,7 @@ fn field_schema_method_fn(
     TirFunction {
         module_source: ModuleSource::default(),
         name: MethodName::format_local(type_name, Some(field_schema_trait), method),
+        def_id: None,
         visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,

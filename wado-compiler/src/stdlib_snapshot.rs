@@ -32,6 +32,13 @@ thread_local! {
     static BUILDING: Cell<bool> = const { Cell::new(false) };
 }
 
+/// True while [`build_snapshot`] runs. The cache it produces is consumed by
+/// every later compile, so nothing built under it may be narrowed to what the
+/// synthetic empty entry happens to reach.
+pub(crate) fn is_building() -> bool {
+    BUILDING.with(Cell::get)
+}
+
 /// Return the current thread's stdlib [`Semantics`] snapshot, building it on
 /// first call by driving the loader and [`semantics_with_logger`] over an empty
 /// entry source. [`None`] under [`build_snapshot`] itself, where reading the
@@ -41,7 +48,7 @@ thread_local! {
 /// If the stdlib closure fails to load or analyze — a build-time inconsistency
 /// in the shipped stdlib, which is not recoverable.
 pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
-    if BUILDING.with(Cell::get) {
+    if is_building() {
         return None;
     }
     Some(SNAPSHOT.with(|cell| {
@@ -171,21 +178,35 @@ pub(crate) fn reparsed_snapshot_module<'a>(
 /// corrupt it, so the function `Rc`s are rebuilt fresh — memoised by pointer
 /// identity, preserving aliasing within the module — and `type_table` repointed.
 /// Embedded `TypeId`s stay valid, the per-compile table being a seeded clone.
+///
+/// `live` is this compile's set of reachable declarations, which stands in for
+/// the gating reify would have applied had the module been reified here. A
+/// function the cache carries and this program cannot reach is dropped rather
+/// than cloned.
 pub(crate) fn rehydrate_tir_module(
     snap_module: &TirModule,
     fresh_type_table: &Rc<RefCell<TypeTable>>,
+    live: Option<&IndexSet<crate::defs::DefId>>,
     fn_remap: &mut IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>>,
 ) -> TirModule {
+    // A synthesized function declares nothing, so nothing in the graph can name
+    // it and it is never dropped.
+    let reachable = |f: &Rc<RefCell<TirFunction>>| match (live, f.borrow().def_id) {
+        (Some(live), Some(def)) => live.contains(&def),
+        _ => true,
+    };
     let mut new_module = snap_module.clone();
     new_module.type_table = Rc::clone(fresh_type_table);
     new_module.functions = snap_module
         .functions
         .iter()
+        .filter(|rc| reachable(rc))
         .map(|rc| clone_fn_rc(rc, fn_remap))
         .collect();
     new_module.generic_functions = snap_module
         .generic_functions
         .iter()
+        .filter(|(_, v)| reachable(v))
         .map(|(k, v)| (k.clone(), clone_fn_rc(v, fn_remap)))
         .collect();
     new_module

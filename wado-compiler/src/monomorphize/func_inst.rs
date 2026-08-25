@@ -1882,6 +1882,7 @@ impl Monomorphizer {
 
         Some(TirFunction {
             module_source: key.module_source.clone(),
+            def_id: generic.def_id,
             is_async: generic.is_async,
             name: mangled_name,
             visibility: generic.visibility,

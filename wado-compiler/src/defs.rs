@@ -83,8 +83,13 @@ pub enum DefKind {
     VariantCase,
     /// A `flags` member.
     FlagsMember,
-    /// A method declared by a trait, a resource, or an effect interface.
+    /// A method declared by a trait, a resource, an effect interface, or an
+    /// `impl` block.
     Method,
+    /// An `impl` block. It declares its methods, and it — not the type it is
+    /// on — owns them: the type may be declared in another module, and two
+    /// impls on one type may each declare a method of the same name.
+    Impl,
 }
 
 impl DefKind {
@@ -289,7 +294,35 @@ impl DefTable {
     }
 
     fn declare_item_members(&mut self, module: &ModuleSource, item: &Item) {
+        // An `impl` block names no symbol, so nothing above declared it; the
+        // methods it owns need one to hang from.
+        if let Item::Impl(impl_block) = item
+            && !self.by_ast_id.contains_key(&impl_block.id)
+        {
+            self.declare(Def {
+                ast_id: impl_block.id,
+                module: module.clone(),
+                name: crate::ast::type_head_name(&impl_block.ty)
+                    .unwrap_or_default()
+                    .to_string(),
+                kind: DefKind::Impl,
+                visibility: Visibility::Private,
+                span: Some(impl_block.span),
+                parent: None,
+                function_local: false,
+                members: Vec::new(),
+            });
+        }
         let (owner, members) = match item {
+            Item::Impl(i) => (
+                i.id,
+                members(
+                    DefKind::Method,
+                    i.methods
+                        .iter()
+                        .map(|m| (m.id, &m.name, Some(m.visibility), m.span)),
+                ),
+            ),
             Item::Struct(s) => (
                 s.id,
                 members(

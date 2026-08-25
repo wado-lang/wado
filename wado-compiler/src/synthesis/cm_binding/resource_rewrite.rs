@@ -623,6 +623,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     TirFunction {
         module_source: ModuleSource::default(),
         name: func_name,
+        def_id: None,
         visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
@@ -861,6 +862,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
     TirFunction {
         module_source: ModuleSource::default(),
         name: func_name,
+        def_id: None,
         visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
@@ -1100,6 +1102,7 @@ fn synthesize_future_read_func(
     TirFunction {
         module_source: ModuleSource::default(),
         name: func_name,
+        def_id: None,
         visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
@@ -1464,6 +1467,7 @@ fn synthesize_stream_read_func(
     TirFunction {
         module_source: ModuleSource::default(),
         name: func_name,
+        def_id: None,
         visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,

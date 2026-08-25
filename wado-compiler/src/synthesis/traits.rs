@@ -274,6 +274,7 @@ fn make_trait_method(
     TirFunction {
         module_source: ModuleSource::default(),
         name,
+        def_id: None,
         visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_async: false,
@@ -5109,6 +5110,7 @@ fn generate_display_fallback(
     TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
+        def_id: None,
         visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_async: false,
