@@ -1014,7 +1014,16 @@ impl Graph {
     }
 }
 
-/// Visitor that records every [`AstId`] it traverses.
+/// Visitor that records every [`AstId`] in a body — the ids the walk hands to
+/// `visit_id` (names, fields, method segments) *and* each statement's and
+/// expression's own.
+///
+/// The latter is where a dispatch fact is filed: `method_dispatch` keys on the
+/// call node, `for_of_iterator` on the loop, `operator_dispatch` on the binary
+/// or index expression. `walk_expr` announces almost none of those, so a
+/// collector built on `visit_id` alone would see the method's name segment but
+/// not the call it belongs to, and every edge that only a decision names would
+/// be dropped.
 #[derive(Default)]
 struct IdCollector {
     ids: Vec<AstId>,
@@ -1023,6 +1032,16 @@ struct IdCollector {
 impl AstVisitor for IdCollector {
     fn visit_id(&mut self, id: AstId, _span: Span) {
         self.ids.push(id);
+    }
+
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        self.ids.push(stmt.id());
+        ast::walk_stmt(self, stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        self.ids.push(expr.id());
+        ast::walk_expr(self, expr);
     }
 }
 
