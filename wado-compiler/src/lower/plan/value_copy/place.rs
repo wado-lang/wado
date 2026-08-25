@@ -39,6 +39,11 @@ impl Selector {
 pub struct Place {
     pub root: u32,
     pub selectors: Vec<Selector>,
+    /// The chain read a `&` / `&mut` field, so the root only borrows what it
+    /// ends at. [`Resolver::names`] must set it as it walks — it resolves
+    /// through a local binding and through a callee's [`ReturnPath`], which a
+    /// second walk over the expression's syntax would follow neither of.
+    pub through_borrow: bool,
 }
 
 impl Place {
@@ -47,6 +52,7 @@ impl Place {
         Self {
             root,
             selectors: Vec::new(),
+            through_borrow: false,
         }
     }
 }
@@ -82,44 +88,72 @@ impl Bindings {
     }
 }
 
+/// The projection an accessor returns out of its receiver.
+#[derive(Clone, Debug)]
+pub struct ReturnPath {
+    pub selectors: Vec<Selector>,
+    /// [`Place::through_borrow`] for the place this path lands on, so even a
+    /// fresh receiver does not own it.
+    pub through_borrow: bool,
+}
+
 /// Which projection of its receiver each accessor returns. A call with no
 /// entry returns storage this walk cannot place.
-pub type ReturnPaths = FuncKeyMap<Vec<Selector>>;
+pub type ReturnPaths = FuncKeyMap<ReturnPath>;
 
 /// The projection each function returns out of its first parameter, for the
 /// calls that name storage rather than build it.
+///
+/// A least fixpoint, because an accessor is routinely written over another one
+/// (`fn first(&self) -> &T { return self.rows.get(0) }`) and a single pass
+/// resolves the inner call to [`Names::Unknown`]. Monotone: knowing more only
+/// turns an `Unknown` into a place, so a recorded entry stays valid.
 #[must_use]
 pub fn compute_return_paths(
     flat: &crate::flat_package::FlatPackage,
+    call_graph: &super::callgraph::CallGraph,
     type_table: &TypeTable,
     returns_owned: &FuncKeySet,
 ) -> ReturnPaths {
-    let empty = ReturnPaths::default();
     let mut paths = ReturnPaths::default();
-    for func_rc in &flat.functions {
-        let func = func_rc.borrow();
-        let (Some(body), Some(receiver)) = (&func.body, func.params.first()) else {
-            continue;
-        };
-        if !is_reference(func.return_type, type_table) {
-            continue;
+    call_graph.solve(flat, |id| {
+        let func = flat.functions[id as usize].borrow();
+        if paths.get(&func.module_source, &func.name).is_some() {
+            return false;
         }
-        let resolver = Resolver::new(&func, type_table, &empty, returns_owned);
+        let (Some(body), Some(receiver)) = (&func.body, func.params.first()) else {
+            return false;
+        };
+        // A result that could name storage: a reference, or a value the copy
+        // rules defend — the latter because a returned construction hands its
+        // payload out uncopied.
+        if !is_reference(func.return_type, type_table)
+            && !super::needs_value_copy(func.return_type, type_table)
+        {
+            return false;
+        }
+        let resolver = Resolver::new(&func, type_table, &paths, returns_owned);
         let mut returned = ReturnedPlace {
             resolver: &resolver,
             names: None,
         };
         returned.visit_block(body);
-        if let Some(Names::Place(place)) = returned.names
-            && place.root == receiver.local_index
-        {
-            paths.insert(
-                func.module_source.clone(),
-                func.name.clone(),
-                place.selectors,
-            );
+        let Some(Names::Place(place)) = returned.names else {
+            return false;
+        };
+        if place.root != receiver.local_index {
+            return false;
         }
-    }
+        paths.insert(
+            func.module_source.clone(),
+            func.name.clone(),
+            ReturnPath {
+                selectors: place.selectors,
+                through_borrow: place.through_borrow,
+            },
+        );
+        true
+    });
     paths
 }
 
@@ -132,12 +166,18 @@ struct ReturnedPlace<'r, 'a> {
 impl TirRefVisitor for ReturnedPlace<'_, '_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Return { value: Some(value) } = &stmt.kind {
-            let names = self.resolver.names(value);
-            self.names = match self.names.take() {
-                None => Some(names),
-                Some(seen) if seen == names => Some(seen),
-                Some(_) => Some(Names::Unknown),
-            };
+            // A returned construction hands its payload out uncopied, so the
+            // storage the call names is the payload's; an empty case carries
+            // none and abstains.
+            let value = super::analyze::returned_value(value, true);
+            if !super::analyze::carries_no_storage(value) {
+                let names = self.resolver.names(value);
+                self.names = match self.names.take() {
+                    None => Some(names),
+                    Some(seen) if seen == names => Some(seen),
+                    Some(_) => Some(Names::Unknown),
+                };
+            }
         }
         self.walk_stmt(stmt);
     }
@@ -212,17 +252,35 @@ impl<'a> Resolver<'a> {
                 .get(*index)
                 .cloned()
                 .unwrap_or(Names::Place(Place::local(*index))),
+            // A reference field borrows storage its holder does not own — an
+            // iterator's `repr` borrows the list it walks — so a fresh aggregate
+            // does not make what it points at fresh.
             TirExprKind::FieldAccess {
                 expr: inner,
                 field_index,
                 ..
-            } => self.project(
-                inner,
-                Selector::Field {
-                    owner: self.type_table.peel_refs(inner.type_id),
-                    index: *field_index,
-                },
-            ),
+            } => {
+                let names = self.project(
+                    inner,
+                    Selector::Field {
+                        owner: self.type_table.peel_refs(inner.type_id),
+                        index: *field_index,
+                    },
+                );
+                // `is_reference`, not a `ResolvedType` match: `boxing` has
+                // already rewritten some `&T` onto `Box<T>` in place, and which
+                // ones it reached says nothing about whether the field borrows.
+                if !is_reference(expr.type_id, self.type_table) {
+                    return names;
+                }
+                match names {
+                    Names::Place(mut place) => {
+                        place.through_borrow = true;
+                        Names::Place(place)
+                    }
+                    Names::Value | Names::Unknown => Names::Unknown,
+                }
+            }
             TirExprKind::VariantPayload {
                 expr: inner,
                 case_index,
@@ -241,13 +299,30 @@ impl<'a> Resolver<'a> {
                 Names::Place(p) => Names::Place(p),
                 Names::Value | Names::Unknown => Names::Unknown,
             },
+            // An element read borrows the slot in place, so it names its
+            // container's storage one `Index` further in.
+            TirExprKind::Call { func, args, .. }
+                if func.module_source.is_core_builtin()
+                    && super::ownership::is_container_alias_read(
+                        &func.name,
+                        func.monomorph_info.as_ref(),
+                    ) =>
+            {
+                match args.first() {
+                    Some(arg) => self.project(&arg.expr, Selector::Index),
+                    None => Names::Unknown,
+                }
+            }
             TirExprKind::Call { func, args, .. } => {
                 match self.return_paths.get(&func.module_source, &func.name) {
-                    Some(selectors) => match args.first().map(|r| self.names(&r.expr)) {
+                    Some(path) => match args.first().map(|r| self.names(&r.expr)) {
                         Some(Names::Place(mut place)) => {
-                            place.selectors.extend(selectors.iter().copied());
+                            place.selectors.extend(path.selectors.iter().copied());
+                            place.through_borrow |= path.through_borrow;
                             Names::Place(place)
                         }
+                        // A fresh receiver does not own what it borrows.
+                        Some(Names::Value) if path.through_borrow => Names::Unknown,
                         Some(other) => other,
                         None => Names::Unknown,
                     },
@@ -303,6 +378,12 @@ impl<'a> Resolver<'a> {
                                 owner,
                                 index: field.field_index,
                             });
+                            // A destructured field names the same storage
+                            // `base.field` does, but the pattern carries no
+                            // type to say whether that field borrows. Answer
+                            // borrowed: refusing a share costs a copy, allowing
+                            // one against a borrow costs the value semantics.
+                            place.through_borrow = true;
                             Names::Place(place)
                         }
                         Names::Value => Names::Value,

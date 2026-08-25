@@ -117,7 +117,7 @@ pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken>
     let mut seen: List<String> = [];
     let mut result: List<LitToken> = [];
     for let rule of parser_rules {
-        for let alt of rule.alternatives {
+        for let alt of &rule.alternatives {
             collect_lits_from_elements(&alt.elements, &mut seen, &mut result);
         }
     }
@@ -810,8 +810,8 @@ fn lexer_elem_refs_rule(elem: &LexerElement, name: &String) -> bool {
     return match *elem {
         RuleRef(n) => n == *name,
         Group(alts) => {
-            for let a of alts {
-                if lexer_alt_refs_rule(&a, name) {
+            for let a of &alts {
+                if lexer_alt_refs_rule(a, name) {
                     return true;
                 }
             }

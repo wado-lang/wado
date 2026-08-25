@@ -1,0 +1,24 @@
+// A string-literal pattern compares against the literal in place. Pattern
+// lowering hands `String^Eq::eq` the `&String` it declares, so the fold reads a
+// borrow rather than a value the literal must be defended from — otherwise
+// every arm builds the literal's backing array a second time.
+#[inline("never")]
+fn kind_of(name: &String) -> i32 {
+    return match *name {
+        "alpha" => 1,
+        "beta" => 2,
+        "gamma" => 3,
+        _ => 0,
+    };
+}
+
+test "matches a literal without cloning it" {
+    assert kind_of(&builtin::black_box("beta")) == 2;
+    assert kind_of(&builtin::black_box("delta")) == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": ["array.new_data<u8>(\"alpha\")"]
+}
