@@ -217,17 +217,6 @@ pub fn is_fresh_value(expr: &TirExpr, oracle: &OwnedCalls, type_table: &TypeTabl
     is_owned_value(expr, &IndexSet::default(), oracle, type_table)
 }
 
-/// One step down the spine a returned value is wrapped in.
-fn variant_payload(expr: &TirExpr) -> Option<&TirExpr> {
-    match &expr.kind {
-        TirExprKind::VariantConstruct {
-            payload: Some(inner),
-            ..
-        } => Some(inner),
-        _ => None,
-    }
-}
-
 /// What a `return` actually delivers. `return` is no wrap site, so
 /// `return place` hands a borrow out for the caller to materialize, and
 /// `hands_out_payload` ([`super::hands_out_payload`]) makes
@@ -238,11 +227,13 @@ fn variant_payload(expr: &TirExpr) -> Option<&TirExpr> {
 /// construction, and [`ownership`](super::ownership) judges the same payload for
 /// the return convention and for the receiver-alias set.
 pub fn returned_value(expr: &TirExpr, hands_out_payload: bool) -> &TirExpr {
-    if !hands_out_payload {
-        return expr;
-    }
     let mut expr = expr;
-    while let Some(inner) = variant_payload(expr) {
+    while hands_out_payload
+        && let TirExprKind::VariantConstruct {
+            payload: Some(inner),
+            ..
+        } = &expr.kind
+    {
         expr = inner;
     }
     expr
@@ -258,31 +249,6 @@ pub fn carries_no_storage(expr: &TirExpr) -> bool {
             | TirExprKind::EnumConstruct { .. }
             | TirExprKind::VariantConstruct { payload: None, .. }
     )
-}
-
-/// The spans of the constructions [`returned_value`] descends through, so the
-/// fold can recognize one it is converting.
-pub fn returned_variant_spans(body: &TirBlock) -> IndexSet<crate::token::Span> {
-    struct Walker {
-        spans: IndexSet<crate::token::Span>,
-    }
-    impl TirRefVisitor for Walker {
-        fn visit_stmt(&mut self, stmt: &TirStmt) {
-            if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
-                let mut expr = v;
-                while let Some(inner) = variant_payload(expr) {
-                    self.spans.insert(expr.span);
-                    expr = inner;
-                }
-            }
-            self.walk_stmt(stmt);
-        }
-    }
-    let mut walker = Walker {
-        spans: IndexSet::default(),
-    };
-    walker.visit_block(body);
-    walker.spans
 }
 
 /// Whether `expr` produces an *owned* value in the context of the owned locals

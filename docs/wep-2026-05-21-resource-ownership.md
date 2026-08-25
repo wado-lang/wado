@@ -459,29 +459,26 @@ Verified against the tree.
       pattern lowering puts the copy on a temp that exists for
       `labeled_block_fusion`, so which syntactic position a `match` sits in
       changes whether the binding is defended.
-- [x] Recognize a borrowed projection returned behind a variant construction
-      (2026-08-25). `return` is not a wrap site, so `return place` already hands
-      a borrow out for the caller to materialize; `analyze::returned_value` makes
-      `return Some(place)` do the same, and `ownership` judges that payload for
-      the convention that tells callers so.
+- [x] A borrowed projection returned behind a variant construction. `return` is
+      not a wrap site, so `return place` hands a borrow out for the caller to
+      materialize; `analyze::returned_value` makes `return Some(place)` do the
+      same, and `ownership` judges that payload for the convention that tells
+      callers so.
 
-      The gate is the feature: the callee's one copy is shared by every call
-      site, so moving it out multiplies it unless the callers elide. Ungated on
-      gale-gen it _added_ 192 residual copies (2774 → 2966) and 13 KB of Wasm.
-      So the payload is handed out only where the caller can name what it got —
-      the callee's result is a projection of its receiver (`place::ReturnPaths`)
-      that stays inside the receiver's own storage. Gated: 2774 → 2765, and the
-      Wasm shrank.
+      Only where the caller can name what it got, because one copy in a callee
+      is shared by every call site and moving it out puts a copy on each of them
+      instead. Naming it means a `place::ReturnPath` that stays inside the
+      receiver's own storage; a path leaving through a `&` field lands where the
+      caller cannot follow.
 
-      Three precision fixes it needed, each standing on its own. `ReturnPaths`
-      is a least fixpoint, because an accessor written over another accessor
-      resolved to `Unknown` in a single pass. A container-alias read
-      (`array_get_value`) names its container's slot in the resolver as it
-      already did in the ownership walk. And `Place` carries whether the chain
-      left the root through a `&` field: the resolver reaches a place through a
-      local binding and through a callee's own `ReturnPath`, so a second walk
-      over the returned expression's syntax follows neither — deriving the flag
-      that way let the gate miss, and shared a local across a write.
+      Three things this rests on. `ReturnPaths` is a least fixpoint, since an
+      accessor is routinely written over another accessor. A container-alias
+      read (`array_get_value`) names its container's slot in the resolver as it
+      does in the ownership walk. And `Place` carries whether the chain left the
+      root through a `&` field, set by the walk that builds the place: the
+      resolver reaches one through a local binding and through a callee's own
+      `ReturnPath`, which a walk over the returned expression's syntax follows
+      neither of.
 
 - [ ] Follow a borrowed field back to what it borrows. This is what the item
       above does _not_ reach, and it is the by-value `for` binding: a
@@ -491,8 +488,8 @@ Verified against the tree.
       justify. `stores[...]` already records which parameter a callee persists;
       what is missing is _into which field_, which is what would let a caller
       re-root `it.repr[i]` at the list `into_iter` was handed.
-      Priced on gale-gen (2026-08-25): the copy inside `SliceValueIter::next` is
-      7.9% of the run, ~5% recovered by writing the loops over `&`. Narrow,
+      On gale-gen the copy inside `SliceValueIter::next` is 7.9% of the run, ~5%
+      of which writing the loops over `&` recovers. Narrow,
       though — the same measurement over `syntax_highlight`, `json_catalog` and
       `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
       value pays it.

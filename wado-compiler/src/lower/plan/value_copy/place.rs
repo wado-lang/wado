@@ -267,10 +267,10 @@ impl<'a> Resolver<'a> {
                         index: *field_index,
                     },
                 );
-                if !matches!(
-                    self.type_table.get(expr.type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                ) {
+                // `is_reference`, not a `ResolvedType` match: `boxing` has
+                // already rewritten some `&T` onto `Box<T>` in place, and which
+                // ones it reached says nothing about whether the field borrows.
+                if !is_reference(expr.type_id, self.type_table) {
                     return names;
                 }
                 match names {
