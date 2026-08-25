@@ -395,6 +395,27 @@ impl SymbolTable {
         (!visibility.reachable_from(target.same_package(from))).then_some(visibility)
     }
 
+    /// Every member `from` may name through a namespace import of `target`:
+    /// what `target` declares plus what it re-exports, less what visibility
+    /// bars. `use { x } from` and `ns::x` reach the same set.
+    pub fn reachable_members<'a>(
+        &'a self,
+        from: &'a ModuleSource,
+        target: &'a ModuleSource,
+    ) -> impl Iterator<Item = (String, &'a Symbol)> + 'a {
+        let declared = self
+            .get_module_symbols(target)
+            .into_iter()
+            .map(|sym| sym.name.clone());
+        declared
+            .chain(self.reexport_names(target))
+            .filter(|name| self.visibility_barrier(from, target, name).is_none())
+            .filter_map(|name| {
+                let sym = self.lookup_in_module(target, &name)?;
+                Some((name, sym))
+            })
+    }
+
     fn effective_visibility_with_visited(
         &self,
         module_source: &ModuleSource,

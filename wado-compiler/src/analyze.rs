@@ -1191,34 +1191,15 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // Register each reachable member under its `ns$member`
                             // alias, matching how the elaborator canonicalizes
                             // `ns::member` at lookup time
-                            // (`ModuleImports::canonical_ns_ref`). A re-exported
-                            // name is a member too — `use { x }` reaches one, so
-                            // `ns::x` does.
-                            let members: Vec<String> = self
+                            // (`ModuleImports::canonical_ns_ref`).
+                            let symbols: Vec<(String, crate::ast::AstId)> = self
                                 .symbols
-                                .get_module_symbols(&module_source)
-                                .into_iter()
-                                .map(|s| s.name.clone())
-                                .chain(self.symbols.reexport_names(&module_source))
-                                .collect();
-                            let symbols: Vec<(String, crate::ast::AstId)> = members
-                                .into_iter()
-                                .filter(|name| {
-                                    self.symbols
-                                        .visibility_barrier(
-                                            from_module_source,
-                                            &module_source,
-                                            name,
-                                        )
-                                        .is_none()
-                                })
-                                .filter_map(|name| {
-                                    let sym =
-                                        self.symbols.lookup_in_module(&module_source, &name)?;
-                                    Some((
+                                .reachable_members(from_module_source, &module_source)
+                                .map(|(name, sym)| {
+                                    (
                                         crate::name::namespace_member_alias(ns, &name),
                                         sym.defined_at,
-                                    ))
+                                    )
                                 })
                                 .collect();
                             for (alias, sym_key) in symbols {

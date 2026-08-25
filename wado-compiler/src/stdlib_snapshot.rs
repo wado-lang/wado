@@ -179,10 +179,9 @@ pub(crate) fn reparsed_snapshot_module<'a>(
 /// identity, preserving aliasing within the module — and `type_table` repointed.
 /// Embedded `TypeId`s stay valid, the per-compile table being a seeded clone.
 ///
-/// `live` is this compile's set of reachable declarations, which stands in for
-/// the gating reify would have applied had the module been reified here. A
-/// function the cache carries and this program cannot reach is dropped rather
-/// than cloned.
+/// `live` stands in for the gating reify would have applied had the module been
+/// reified here: a cached function this program cannot reach is dropped, not
+/// cloned.
 pub(crate) fn rehydrate_tir_module(
     snap_module: &TirModule,
     fresh_type_table: &Rc<RefCell<TypeTable>>,

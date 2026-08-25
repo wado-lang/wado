@@ -1353,28 +1353,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     Some(&entry_module_source),
                                     &state.invocations,
                                 );
-                                let members: Vec<String> = symbols
-                                    .get_module_symbols(&source)
-                                    .into_iter()
-                                    .map(|sym| sym.name.clone())
-                                    .chain(symbols.reexport_names(&source))
-                                    .collect();
-                                for name in members {
-                                    if symbols
-                                        .visibility_barrier(module_source, &source, &name)
-                                        .is_some()
-                                    {
-                                        continue;
-                                    }
-                                    let is_function = symbols
-                                        .lookup_in_module(&source, &name)
-                                        .is_some_and(|sym| {
-                                            matches!(
-                                                sym.kind,
-                                                crate::symbol::SymbolKind::Function(_)
-                                            )
-                                        });
-                                    if is_function {
+                                for (name, sym) in symbols.reachable_members(module_source, &source)
+                                {
+                                    if matches!(sym.kind, crate::symbol::SymbolKind::Function(_)) {
                                         imported_functions
                                             .insert(crate::name::namespace_member_alias(ns, &name));
                                     }
@@ -1579,7 +1560,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Some(crate::compiler_item::Resolved::Method {
                             owner_type, name, ..
                         }) => {
-                            named.methods.insert((owner_type.clone(), name.clone()));
+                            named
+                                .methods
+                                .entry(owner_type.clone())
+                                .or_default()
+                                .insert(name.clone());
                         }
                         Some(crate::compiler_item::Resolved::Function {
                             module_source,
@@ -1604,20 +1589,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // the eligible user modules, gating item emission on `emit_live`.
         // Iterating `sorted_sources` keeps `result`'s insertion order identical
         // to the single-pass form downstream phases expect.
-        // The snapshot caches every stdlib declaration, since it is built
-        // before any program that could narrow the set; this compile's liveness
-        // is what narrows it. Building the snapshot itself gates on nothing.
-        let gating = !crate::stdlib_snapshot::is_building();
-        let gate = gating.then_some(&state.liveness.emit_live);
-        // A rehydrated `TirFunction` names its declaration, not the AST node
-        // liveness is keyed by, so the same set is projected once per compile.
-        let live_defs: IndexSet<crate::defs::DefId> = gate
-            .into_iter()
-            .flatten()
-            .filter_map(|id| state.tysys.resolutions.defs().of_ast_id(*id))
-            .collect();
-        let snapshot_gate = gating.then_some(&live_defs);
         if build_tir {
+            // The snapshot caches every stdlib declaration, being built before
+            // any program that could narrow the set; this compile's liveness is
+            // what narrows it. Building the snapshot itself gates on nothing.
+            let gate =
+                (!crate::stdlib_snapshot::is_building()).then_some(&state.liveness.emit_live);
+            // A rehydrated `TirFunction` names its declaration, not the AST node
+            // liveness is keyed by, so the set is projected once per compile.
+            let live_defs: IndexSet<crate::defs::DefId> = gate
+                .into_iter()
+                .flatten()
+                .filter_map(|id| state.tysys.resolutions.defs().of_ast_id(*id))
+                .collect();
+            let snapshot_gate = gate.map(|_| &live_defs);
             for module_source in &sorted_sources {
                 if is_stdlib_snapshot_hit(module_source) {
                     let snap_module = snapshot

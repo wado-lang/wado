@@ -95,10 +95,16 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Global(global) => {
+                    // Reify emits every global, read or not, so its
+                    // initializer is a call site whatever the visibility. Only
+                    // a `pub` one is a *use*, so an unread private global still
+                    // reports dead without masking its callees.
                     let key = global.id;
                     graph.add_expr_edges(&global.initializer, references, &key);
                     if global.visibility.is_public() {
                         graph.seed_world(key);
+                    } else {
+                        graph.seed_emit(key);
                     }
                     if user && !module_allows_dead && !attrs_allow_dead_code(&global.attributes) {
                         graph.report_candidates.push(key);
@@ -126,25 +132,17 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Impl(impl_block) => {
-                    // A trait method is reached by a dispatch decided after this
-                    // pass — monomorphizing a `T: Trait` bound, a derive, an
-                    // operator, a template's `Display` — so no edge here names
-                    // it and the whole impl is a root. An inherent method is
-                    // named by a call the source spells, which `method_call.rs`
-                    // recorded, so it rides the graph; the exceptions are the
-                    // ones the compiler names itself, registered as
-                    // `CompilerItem`s.
+                    // A trait method's dispatch is decided after this pass —
+                    // monomorphizing a bound, a derive, an operator — so no
+                    // edge here names it and the impl is a root. An inherent
+                    // method rides the graph on the call the source spells,
+                    // unless the compiler is the one naming it.
                     let trait_impl = impl_block.trait_type.is_some();
                     let self_name = crate::ast::type_head_name(&impl_block.ty);
                     for method in &impl_block.methods {
                         let key = method.id;
                         graph.add_function_edges(method, references, &key);
-                        let compiler_method = self_name.is_some_and(|owner| {
-                            compiler_named
-                                .methods
-                                .contains(&(owner.to_string(), method.name.clone()))
-                        });
-                        if trait_impl || compiler_method {
+                        if trait_impl || compiler_named.names_method(self_name, &method.name) {
                             graph.seed_world(key);
                         } else {
                             graph.seed_export(key);
@@ -209,14 +207,10 @@ pub(crate) fn compute(
     liveness
 }
 
-/// The use→def edges liveness walks.
-///
-/// A trait's default body is walked once per inheriting `impl`, against its own
-/// `ModuleSemantics`, so one use there resolves to as many definitions as there
-/// are impls. `direct` holds the one-def-per-use edges every other body
-/// records; `inherited` holds those sets. The call graph unions both — a callee
-/// any impl can reach must survive — while the last-use analysis reads only
-/// `direct`, a default body's locals being per-impl and so not decidable here.
+/// The use→def edges liveness walks. A trait's default body is walked once per
+/// inheriting `impl`, so one use there has as many definitions as there are
+/// impls — `inherited` holds those sets, `direct` the single-definition edges
+/// every other body records.
 pub(crate) struct References<'a> {
     pub(crate) direct: &'a IndexMap<AstId, AstId>,
     pub(crate) inherited: &'a IndexMap<AstId, IndexSet<AstId>>,
@@ -225,7 +219,8 @@ pub(crate) struct References<'a> {
 /// Compute local last-use liveness over every function / method body in the
 /// program (WEP 2026-05-21). Fills `last_uses` (the `AstId`-keyed set) and
 /// `moved_spans` (the `(module, span)` projection). Analyzed over all modules —
-/// stdlib bodies benefit from copy elision too.
+/// stdlib bodies benefit from copy elision too. Reads only the single-definition
+/// edges: a trait default body's locals are per-impl, so not decidable here.
 fn compute_last_uses(
     modules: &IndexMap<ModuleSource, Module>,
     references: &IndexMap<AstId, AstId>,
@@ -866,9 +861,9 @@ struct Graph {
     export_seeds: Vec<AstId>,
     /// `test` block roots — seeds of the `T` closure.
     test_seeds: Vec<AstId>,
-    /// Roots that survive into the emitted program. Everything in
-    /// [`Self::export_seeds`] except a method the source can only reach by
-    /// calling it.
+    /// Roots that survive into the emitted program — seeds of the set reify
+    /// gates on. Neither a subset nor a superset of [`Self::export_seeds`]: a
+    /// method enters only when called, an unread private global enters anyway.
     emit_seeds: Vec<AstId>,
     /// User-authored free functions / globals eligible for dead reporting,
     /// in source order.
@@ -884,10 +879,16 @@ impl Graph {
         self.test_seeds.push(key);
     }
 
+    /// Seed a root of the emitted program: reify emits it whether or not
+    /// anything reaches it. Not itself a use, so the `E` closure is unmoved.
+    fn seed_emit(&mut self, key: AstId) {
+        self.emit_seeds.push(key);
+    }
+
     /// Seed a root of both closures: it is emitted, and so counts as used.
     fn seed_world(&mut self, key: AstId) {
-        self.export_seeds.push(key);
-        self.emit_seeds.push(key);
+        self.seed_export(key);
+        self.seed_emit(key);
     }
 
     fn add_function_edges(&mut self, func: &Function, references: &References<'_>, owner: &AstId) {
@@ -920,8 +921,8 @@ impl Graph {
     /// For each id in the owner's body that resolves to a definition, add an
     /// `owner -> def` edge.
     fn link(&mut self, ids: &[AstId], references: &References<'_>, owner: &AstId) {
+        let edges = self.edges.entry(*owner).or_default();
         for &id in ids {
-            let edges = self.edges.entry(*owner).or_default();
             edges.extend(references.direct.get(&id));
             edges.extend(references.inherited.get(&id).into_iter().flatten());
         }
@@ -1014,13 +1015,21 @@ pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
 /// root every method on it.
 #[derive(Default)]
 pub(crate) struct CompilerNamed {
-    /// Inherent methods, by `(owner type, method)`.
-    pub(crate) methods: IndexSet<(String, String)>,
+    /// Inherent methods, by the type that declares them.
+    pub(crate) methods: IndexMap<String, IndexSet<String>>,
     /// Free functions, by the module that declares them — the CM ABI helpers.
     pub(crate) functions: IndexMap<ModuleSource, IndexSet<String>>,
 }
 
 impl CompilerNamed {
+    fn names_method(&self, owner: Option<&str>, name: &str) -> bool {
+        owner.is_some_and(|owner| {
+            self.methods
+                .get(owner)
+                .is_some_and(|names| names.contains(name))
+        })
+    }
+
     fn names_function(&self, source: &ModuleSource, name: &str) -> bool {
         self.functions
             .get(source)

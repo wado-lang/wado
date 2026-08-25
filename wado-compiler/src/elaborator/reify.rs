@@ -247,11 +247,11 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// matching instantiation (a nested inner for-of is instantiated once
     /// per outer element). See [`Self::reify_tuple_for_of`].
     pub(crate) tuple_overlay_visits: IndexMap<crate::ast::AstId, usize>,
-    /// Source-level live set. When `Some`, reify skips emitting free
-    /// functions and globals whose `AstId` is absent — the dead items
-    /// the liveness pass found unreachable from the export boundary, which
-    /// downstream phases would discard anyway. `None` reifies everything.
-    pub(crate) live_items: Option<&'a IndexSet<crate::ast::AstId>>,
+    /// Source-level emit set. When `Some`, reify skips a function or method
+    /// whose `AstId` is absent — one the liveness pass found the emitted
+    /// program cannot reach, which downstream phases would discard anyway.
+    /// `None` reifies everything.
+    pub(crate) emit_live: Option<&'a IndexSet<crate::ast::AstId>>,
     /// Active parameter-name → already-reified-argument substitutions for the
     /// default-argument expression being reified. A default resolves under the
     /// *callee's* perspective, but a reference to an earlier parameter is the
@@ -391,7 +391,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
         interner: Rc<RefCell<ModuleSourceInterner>>,
-        live_items: Option<&'a IndexSet<crate::ast::AstId>>,
+        emit_live: Option<&'a IndexSet<crate::ast::AstId>>,
     ) -> Self {
         Self {
             tysys,
@@ -408,7 +408,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
-            live_items,
+            emit_live,
             default_arg_overrides: IndexMap::default(),
             compound_overrides: IndexMap::default(),
             call_site_location: None,
@@ -638,10 +638,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.tysys.resolutions.defs().of_ast_id(id)
     }
 
-    /// True when liveness gating is active and `id` is unreachable from the
-    /// export boundary, so it never reaches monomorphization.
+    /// True when liveness gating is active and nothing the emitted program
+    /// keeps reaches `id`, so it never reaches monomorphization.
     fn is_dead_item(&self, id: crate::ast::AstId) -> bool {
-        self.live_items.is_some_and(|live| !live.contains(&id))
+        self.emit_live.is_some_and(|live| !live.contains(&id))
     }
 
     pub(crate) fn reify_module(
@@ -1420,13 +1420,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // by a param named like a known type). Methods become concrete fns.
         let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
 
-        let live: Vec<&ast::Function> = impl_block
+        impl_block
             .methods
             .iter()
-            .filter(|method| !self.is_dead_item(method.id))
-            .collect();
-        live.into_iter()
-            .filter_map(|method| self.reify_method(method, &facts, concrete_owner.as_ref()))
+            .filter_map(|method| {
+                if self.is_dead_item(method.id) {
+                    return None;
+                }
+                self.reify_method(method, &facts, concrete_owner.as_ref())
+            })
             .collect()
     }
 

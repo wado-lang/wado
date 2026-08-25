@@ -86,9 +86,9 @@ pub enum DefKind {
     /// A method declared by a trait, a resource, an effect interface, or an
     /// `impl` block.
     Method,
-    /// An `impl` block. It declares its methods, and it — not the type it is
-    /// on — owns them: the type may be declared in another module, and two
-    /// impls on one type may each declare a method of the same name.
+    /// An `impl` block, which owns the methods it declares. The type it is on
+    /// cannot: that type may live in another module, and two impls on one type
+    /// may each declare a method of the same name.
     Impl,
 }
 
@@ -314,15 +314,6 @@ impl DefTable {
             });
         }
         let (owner, members) = match item {
-            Item::Impl(i) => (
-                i.id,
-                members(
-                    DefKind::Method,
-                    i.methods
-                        .iter()
-                        .map(|m| (m.id, &m.name, Some(m.visibility), m.span)),
-                ),
-            ),
             Item::Struct(s) => (
                 s.id,
                 members(
@@ -351,6 +342,15 @@ impl DefTable {
                 members(
                     DefKind::FlagsMember,
                     f.flags.iter().map(|m| (m.id, &m.name, None, m.span)),
+                ),
+            ),
+            Item::Impl(i) => (
+                i.id,
+                members(
+                    DefKind::Method,
+                    i.methods
+                        .iter()
+                        .map(|m| (m.id, &m.name, Some(m.visibility), m.span)),
                 ),
             ),
             Item::Trait(t) => (

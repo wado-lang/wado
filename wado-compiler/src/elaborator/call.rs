@@ -660,18 +660,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // any other module's is.
             if prefix == "builtin" {
                 let builtin_source = ModuleSource::builtin();
-                if let Some(visibility) = self.symbols.visibility_barrier(
-                    &self.current_module_source,
-                    &builtin_source,
-                    suffix,
-                ) {
-                    let _ = self.emit(TypeError::PrivateNamespacedSymbol {
-                        name: suffix.to_string(),
-                        module_source: builtin_source.clone(),
-                        visibility,
-                        span: ident.span,
-                    });
-                }
+                self.check_namespaced_visibility(&builtin_source, suffix, ident.span);
                 (
                     Some(CalleeRef::new(builtin_source, suffix)),
                     effective_name.to_string(),
@@ -1321,17 +1310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // as `ns$member`; this arm looks the module up directly, so it
                 // owes the same visibility check — otherwise a path names what
                 // an import of the identical symbol is refused.
-                if let Some(visibility) =
-                    self.symbols
-                        .visibility_barrier(&self.current_module_source, &ns_source, suffix)
-                {
-                    let _ = self.emit(TypeError::PrivateNamespacedSymbol {
-                        name: suffix.to_string(),
-                        module_source: ns_source.clone(),
-                        visibility,
-                        span: ident.span,
-                    });
-                }
+                self.check_namespaced_visibility(&ns_source, suffix, ident.span);
                 // `ns::func` — a plain free-function call through a namespace
                 // import (the `suffix.find("::")` arm above always returns for
                 // the `Type::method` / `Variant::Case` shapes). Record a use→def
@@ -1340,28 +1319,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // its declared effects. The whole-path `ident.id` is the key the
                 // effect walker resolves free calls on (`check_effects_semantic`),
                 // and the suffix segment id is the key LSP jump-to-def uses.
-                // `lookup_in_module` follows the namespace module's own
-                // `pub use`, so a re-exported member resolves to where it is
-                // defined. The callee must name that module, not the namespace
-                // — the mangled name is keyed by the defining module, and the
-                // namespace only says which door the path came through.
+                // The callee names the module that defines the symbol, not the
+                // namespace it was reached through: `lookup_in_module` follows
+                // that module's own `pub use`, and the mangled name is keyed by
+                // where the declaration lives.
                 let resolved = self
                     .symbols
                     .lookup_in_module(&ns_source, suffix)
                     .map(|sym| {
                         (
                             sym.defined_at,
-                            sym.module_source().clone(),
-                            sym.name.clone(),
+                            CalleeRef::new(sym.module_source().clone(), sym.name.clone()),
                         )
                     });
-                let callee = match &resolved {
-                    Some((def_key, module_source, name)) => {
-                        self.record_reference_to_def(ident.id, *def_key);
+                let callee = match resolved {
+                    Some((def_key, callee)) => {
+                        self.record_reference_to_def(ident.id, def_key);
                         if let Some(seg) = ident.segments.get(1) {
-                            self.record_reference_to_def(seg.id, *def_key);
+                            self.record_reference_to_def(seg.id, def_key);
                         }
-                        CalleeRef::new(module_source.clone(), name.clone())
+                        callee
                     }
                     None => CalleeRef::new(ns_source, suffix),
                 };
