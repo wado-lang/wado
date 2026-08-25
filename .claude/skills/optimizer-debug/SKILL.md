@@ -31,22 +31,22 @@ under your `-Ox` choice.
 
 ```sh
 WADO_DUMP_PASS_AFTER=wir/sroa_multi_value_returns \
-  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm > /tmp/pass.log 2>&1
+  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>/tmp/after.log
 ```
 
-Then read `/tmp/pass.log`. Dumps the full WIR (or NIR, depending on the pass) right after the named
-pass, framed by `=== WIR after <name> ===` / `=== end WIR after <name> ===`
-(NIR passes use `=== NIR after <name> ===`).
+`/tmp/after.log` holds the full WIR (or NIR, depending on the pass) right
+after the named pass, framed by `=== WIR after <name> ===` /
+`=== end WIR after <name> ===` (NIR passes use `=== NIR after <name> ===`).
 
 ### What does pass X consume?
 
 ```sh
 WADO_DUMP_PASS_BEFORE=wir/sroa_multi_value_returns \
-  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm
+  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>/tmp/before.log
 ```
 
-Same framing, but printed before the pass runs. Combine with `--diff` of
-the after-dump to see exactly what the pass rewrote.
+Same framing, before the pass runs. `diff` the two logs to see exactly
+what the pass rewrote.
 
 ### Multiple passes at once
 
