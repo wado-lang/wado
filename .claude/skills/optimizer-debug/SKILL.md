@@ -31,11 +31,10 @@ under your `-Ox` choice.
 
 ```sh
 WADO_DUMP_PASS_AFTER=wir/sroa_multi_value_returns \
-  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>&1 \
-  | sed -n '/=== WIR after/,/=== end WIR/p'
+  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm > /tmp/pass.log 2>&1
 ```
 
-Dumps the full WIR (or NIR, depending on the pass) right after the named
+Then read `/tmp/pass.log`. Dumps the full WIR (or NIR, depending on the pass) right after the named
 pass, framed by `=== WIR after <name> ===` / `=== end WIR after <name> ===`
 (NIR passes use `=== NIR after <name> ===`).
 
