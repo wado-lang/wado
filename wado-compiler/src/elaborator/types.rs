@@ -2595,6 +2595,13 @@ pub(super) struct ArithmeticTraitInfo {
 /// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op
 /// [bop]: crate::elaborator::Elaborator::build_trait_op_method_call_on_resolved
 pub(super) struct ResolvedTraitMethod {
+    /// The declaration dispatch selected — an `impl` block's method, or the
+    /// *trait's* where the receiver is a type parameter and only
+    /// monomorphization can say which block answers. The liveness edge runs to
+    /// it; from a trait method, the generic-context rule reaches the impls.
+    /// `None` where no declaration backs it, as for an auto-derived `Eq` /
+    /// `Ord` on a compound the synthesiser writes later.
+    pub(super) method_def: Option<crate::defs::DefId>,
     /// The implemented trait, named by the module that declares it.
     pub(super) trait_name: crate::name::FqTraitName,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
