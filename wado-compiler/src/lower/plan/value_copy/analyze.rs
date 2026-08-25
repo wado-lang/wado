@@ -217,6 +217,67 @@ pub fn is_fresh_value(expr: &TirExpr, oracle: &OwnedCalls, type_table: &TypeTabl
     is_owned_value(expr, &IndexSet::default(), oracle, type_table)
 }
 
+/// What a `return` actually delivers. `return` is no wrap site, so
+/// `return place` hands a borrow out for the caller to materialize;
+/// `hands_out_payload` (see [`super::hands_out_payload`]) makes
+/// `return Some(place)` do the same.
+///
+/// Its three readers must agree, or the payload aliases undefended or copies
+/// twice: [`translate`](crate::lower::translate) skips the copy at the
+/// construction, and [`ownership`](super::ownership) judges the same payload for
+/// the return convention and for the receiver-alias set.
+pub fn returned_value(expr: &TirExpr, hands_out_payload: bool) -> &TirExpr {
+    match &expr.kind {
+        TirExprKind::VariantConstruct {
+            payload: Some(inner),
+            ..
+        } if hands_out_payload => returned_value(inner, hands_out_payload),
+        _ => expr,
+    }
+}
+
+/// Whether a returned value carries no storage at all — an empty variant case
+/// (`None`) or a null. Nothing can be read or written through one, so it neither
+/// confirms nor contradicts what the function's other returns name.
+pub fn carries_no_storage(expr: &TirExpr) -> bool {
+    matches!(
+        &expr.kind,
+        TirExprKind::Null
+            | TirExprKind::EnumConstruct { .. }
+            | TirExprKind::VariantConstruct { payload: None, .. }
+    )
+}
+
+/// The variant constructions [`returned_value`] descends through, by span, so
+/// the fold can recognize one it is converting. Walks the same spine; the
+/// caller applies the same gate by not calling this at all.
+pub fn returned_variant_spans(body: &TirBlock) -> IndexSet<crate::token::Span> {
+    struct Walker {
+        spans: IndexSet<crate::token::Span>,
+    }
+    impl TirRefVisitor for Walker {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
+                let mut expr = v;
+                while let TirExprKind::VariantConstruct {
+                    payload: Some(inner),
+                    ..
+                } = &expr.kind
+                {
+                    self.spans.insert(expr.span);
+                    expr = inner;
+                }
+            }
+            self.walk_stmt(stmt);
+        }
+    }
+    let mut walker = Walker {
+        spans: IndexSet::default(),
+    };
+    walker.visit_block(body);
+    walker.spans
+}
+
 /// Whether `expr` produces an *owned* value in the context of the owned locals
 /// in `fresh_locals` — a value that aliases nothing the caller can still reach,
 /// so consuming it into an owner is a move. A call is owned iff its callee

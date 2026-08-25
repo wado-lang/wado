@@ -145,7 +145,18 @@ pub fn plan(
     let helpers = synthesize::synthesize_helpers(flat, seed);
     // Computed after synthesis so the value-copy helpers (always owned) are
     // present in `flat.functions` and seed the fixpoint.
-    let conventions = ownership::compute_return_conventions(flat);
+    //
+    // Three passes: the paths gate the conventions ([`hands_out_payload`]) and
+    // the conventions place the paths, so a seed pass without the gate breaks
+    // the knot.
+    let seed_conventions =
+        ownership::compute_return_conventions(flat, &place::ReturnPaths::default());
+    let return_paths = place::compute_return_paths(
+        flat,
+        &flat.type_table.borrow(),
+        &seed_conventions.returns_owned,
+    );
+    let conventions = ownership::compute_return_conventions(flat, &return_paths);
     let stored_params = stores::compute_stored_params(flat);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
@@ -160,9 +171,7 @@ pub fn plan(
             f.params.iter().map(|p| p.is_mut_ref).collect(),
         );
     }
-    let returns_receiver_alias = ownership::compute_receiver_alias(flat);
-    let return_paths =
-        place::compute_return_paths(flat, &flat.type_table.borrow(), &conventions.returns_owned);
+    let returns_receiver_alias = ownership::compute_receiver_alias(flat, &return_paths);
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     ValueCopyPlan {
@@ -193,6 +202,24 @@ fn register_variant_cases(flat: &FlatPackage) {
             .collect();
         type_table.register_variant_cases(variant.def, cases);
     }
+}
+
+/// Whether `func` hands a returned variant's payload out uncopied instead of
+/// defending it — see [`analyze::returned_value`].
+///
+/// It does so only where a caller can name what it got: the callee's one copy is
+/// shared by every call site, so moving it out multiplies it unless the callers
+/// elide. Naming it means the result is a projection of the receiver
+/// ([`place::ReturnPaths`]) that stays inside the receiver's own storage; a path
+/// leaving through a `&` field names something the caller cannot place.
+#[must_use]
+pub fn hands_out_payload(
+    func: &crate::tir::TirFunction,
+    return_paths: &place::ReturnPaths,
+) -> bool {
+    return_paths
+        .get(&func.module_source, &func.name)
+        .is_some_and(|path| !path.through_borrow)
 }
 
 /// True when a value of `type_id` must be deep-copied on assignment

@@ -459,14 +459,39 @@ Verified against the tree.
       pattern lowering puts the copy on a temp that exists for
       `labeled_block_fusion`, so which syntactic position a `match` sits in
       changes whether the binding is defended.
-- [ ] Recognize a borrowed projection returned behind a variant construction, so
-      a by-value `for` binding stops copying each element. It cost the
-      json-canada deserialize benchmark ~37% before its tree walk was written
-      over `&`, which is the workaround this would retire.
-      Priced again on gale-gen (2026-08-25): 7.9% of the run, ~5% recovered by
-      the `&` workaround. Narrow, though — the same measurement over
-      `syntax_highlight`, `json_catalog` and `sqlite_parse` finds 0%. Only a
-      program passing deeply nested aggregates by value pays it.
+- [x] Recognize a borrowed projection returned behind a variant construction
+      (2026-08-25). `return` is not a wrap site, so `return place` already hands
+      a borrow out for the caller to materialize; `analyze::returned_value` makes
+      `return Some(place)` do the same, and `ownership` judges that payload for
+      the convention that tells callers so.
+
+      The gate is the feature: the callee's one copy is shared by every call
+      site, so moving it out multiplies it unless the callers elide. Ungated on
+      gale-gen it _added_ 192 residual copies (2774 → 2966) and 13 KB of Wasm.
+      So the payload is handed out only where
+      the caller can name what it got — the callee's result is a projection of
+      its receiver (`place::ReturnPaths`) that stays inside the receiver's own
+      storage. Gated: 2774 → 2765, and the Wasm shrank.
+
+      Two precision fixes it needed, each standing on its own: `ReturnPaths` is
+      now a least fixpoint (an accessor written over another accessor resolved to
+      `Unknown` in a single pass), and a container-alias read (`array_get_value`)
+      names its container's slot in the resolver as it already did in the
+      ownership walk.
+
+- [ ] Follow a borrowed field back to what it borrows. This is what the item
+      above does _not_ reach, and it is the by-value `for` binding: a
+      `SliceValueIter` holds `repr: &Array<T>`, so the element it hands back is
+      a projection of the _list_, not of the iterator, and `ReturnPath`'s
+      `through_borrow` closes the gate rather than claim a place it cannot
+      justify. `stores[...]` already records which parameter a callee persists;
+      what is missing is _into which field_, which is what would let a caller
+      re-root `it.repr[i]` at the list `into_iter` was handed.
+      Priced on gale-gen (2026-08-25): the copy inside `SliceValueIter::next` is
+      7.9% of the run, ~5% recovered by writing the loops over `&`. Narrow,
+      though — the same measurement over `syntax_highlight`, `json_catalog` and
+      `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
+      value pays it.
 
 ## Deferred: the `move` and `unique` keywords
 

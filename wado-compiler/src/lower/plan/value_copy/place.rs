@@ -82,64 +82,125 @@ impl Bindings {
     }
 }
 
+/// The projection an accessor returns out of its receiver.
+#[derive(Clone, Debug)]
+pub struct ReturnPath {
+    pub selectors: Vec<Selector>,
+    /// The path reads a `&` / `&mut` field, so what it names lives outside the
+    /// receiver — a caller holding even a *fresh* receiver does not own it.
+    pub through_borrow: bool,
+}
+
 /// Which projection of its receiver each accessor returns. A call with no
 /// entry returns storage this walk cannot place.
-pub type ReturnPaths = FuncKeyMap<Vec<Selector>>;
+pub type ReturnPaths = FuncKeyMap<ReturnPath>;
 
 /// The projection each function returns out of its first parameter, for the
 /// calls that name storage rather than build it.
+///
+/// A least fixpoint, because an accessor is routinely written over another one
+/// (`fn first(&self) -> &T { return self.rows.get(0) }`): a single pass resolves
+/// the inner call to [`Names::Unknown`] and the outer accessor gets no path at
+/// all. Monotone — extra knowledge only turns an `Unknown` into a place, so an
+/// entry once recorded stays valid and the loop only adds.
 #[must_use]
 pub fn compute_return_paths(
     flat: &crate::flat_package::FlatPackage,
     type_table: &TypeTable,
     returns_owned: &FuncKeySet,
 ) -> ReturnPaths {
-    let empty = ReturnPaths::default();
     let mut paths = ReturnPaths::default();
-    for func_rc in &flat.functions {
-        let func = func_rc.borrow();
-        let (Some(body), Some(receiver)) = (&func.body, func.params.first()) else {
-            continue;
-        };
-        if !is_reference(func.return_type, type_table) {
-            continue;
+    let call_graph = super::callgraph::CallGraph::build(flat);
+    call_graph.solve(flat, |id| {
+        let func = flat.functions[id as usize].borrow();
+        if paths.get(&func.module_source, &func.name).is_some() {
+            return false;
         }
-        let resolver = Resolver::new(&func, type_table, &empty, returns_owned);
+        let (Some(body), Some(receiver)) = (&func.body, func.params.first()) else {
+            return false;
+        };
+        // A result that could name storage: a reference, or a value the copy
+        // rules defend — the latter because a returned construction hands its
+        // payload out uncopied.
+        if !is_reference(func.return_type, type_table)
+            && !super::needs_value_copy(func.return_type, type_table)
+        {
+            return false;
+        }
+        let resolver = Resolver::new(&func, type_table, &paths, returns_owned);
         let mut returned = ReturnedPlace {
             resolver: &resolver,
+            type_table,
             names: None,
+            through_borrow: false,
         };
         returned.visit_block(body);
-        if let Some(Names::Place(place)) = returned.names
-            && place.root == receiver.local_index
-        {
-            paths.insert(
-                func.module_source.clone(),
-                func.name.clone(),
-                place.selectors,
-            );
+        let Some(Names::Place(place)) = returned.names else {
+            return false;
+        };
+        if place.root != receiver.local_index {
+            return false;
         }
-    }
+        paths.insert(
+            func.module_source.clone(),
+            func.name.clone(),
+            ReturnPath {
+                selectors: place.selectors,
+                through_borrow: returned.through_borrow,
+            },
+        );
+        true
+    });
     paths
 }
 
 /// The single place a body returns, or `None` where it returns more than one.
 struct ReturnedPlace<'r, 'a> {
     resolver: &'r Resolver<'a>,
+    type_table: &'a TypeTable,
     names: Option<Names>,
+    through_borrow: bool,
 }
 
 impl TirRefVisitor for ReturnedPlace<'_, '_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Return { value: Some(value) } = &stmt.kind {
-            let names = self.resolver.names(value);
-            self.names = match self.names.take() {
-                None => Some(names),
-                Some(seen) if seen == names => Some(seen),
-                Some(_) => Some(Names::Unknown),
-            };
+            // A returned construction hands its payload out uncopied, so the
+            // storage the call names is the payload's; an empty case carries
+            // none and abstains.
+            let value = super::analyze::returned_value(value, true);
+            if !super::analyze::carries_no_storage(value) {
+                self.through_borrow |= reads_reference_field(value, self.type_table);
+                let names = self.resolver.names(value);
+                self.names = match self.names.take() {
+                    None => Some(names),
+                    Some(seen) if seen == names => Some(seen),
+                    Some(_) => Some(Names::Unknown),
+                };
+            }
         }
         self.walk_stmt(stmt);
+    }
+}
+
+/// Whether a projection chain reads a `&` / `&mut` field on its way down, so
+/// what it ends at is storage the chain's root only borrows.
+fn reads_reference_field(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    match &expr.kind {
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            matches!(
+                type_table.get(expr.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            ) || reads_reference_field(inner, type_table)
+        }
+        TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. }
+        | TirExprKind::Unary { expr: inner, .. } => reads_reference_field(inner, type_table),
+        TirExprKind::Call { args, .. } => args
+            .first()
+            .is_some_and(|a| reads_reference_field(&a.expr, type_table)),
+        _ => false,
     }
 }
 
@@ -212,17 +273,35 @@ impl<'a> Resolver<'a> {
                 .get(*index)
                 .cloned()
                 .unwrap_or(Names::Place(Place::local(*index))),
+            // A reference-typed field holds a borrow of storage the receiver
+            // does not own, so reading it leaves the place this walk is
+            // following — an iterator's `repr` borrows the list it iterates.
             TirExprKind::FieldAccess {
                 expr: inner,
                 field_index,
                 ..
-            } => self.project(
-                inner,
-                Selector::Field {
-                    owner: self.type_table.peel_refs(inner.type_id),
-                    index: *field_index,
-                },
-            ),
+            } => {
+                let names = self.project(
+                    inner,
+                    Selector::Field {
+                        owner: self.type_table.peel_refs(inner.type_id),
+                        index: *field_index,
+                    },
+                );
+                // A reference field borrows storage its holder does not own, so
+                // a fresh aggregate does not make what it points at fresh — an
+                // iterator's `repr` borrows the list it walks. Rooted at a place
+                // the walk already names, the projection stands.
+                if matches!(names, Names::Value)
+                    && matches!(
+                        self.type_table.get(expr.type_id),
+                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                    )
+                {
+                    return Names::Unknown;
+                }
+                names
+            }
             TirExprKind::VariantPayload {
                 expr: inner,
                 case_index,
@@ -241,13 +320,29 @@ impl<'a> Resolver<'a> {
                 Names::Place(p) => Names::Place(p),
                 Names::Value | Names::Unknown => Names::Unknown,
             },
+            // An element read borrows the slot in place, so it names its
+            // container's storage one `Index` further in.
+            TirExprKind::Call { func, args, .. }
+                if func.module_source.is_core_builtin()
+                    && super::ownership::is_container_alias_read(
+                        &func.name,
+                        func.monomorph_info.as_ref(),
+                    ) =>
+            {
+                match args.first() {
+                    Some(arg) => self.project(&arg.expr, Selector::Index),
+                    None => Names::Unknown,
+                }
+            }
             TirExprKind::Call { func, args, .. } => {
                 match self.return_paths.get(&func.module_source, &func.name) {
-                    Some(selectors) => match args.first().map(|r| self.names(&r.expr)) {
+                    Some(path) => match args.first().map(|r| self.names(&r.expr)) {
                         Some(Names::Place(mut place)) => {
-                            place.selectors.extend(selectors.iter().copied());
+                            place.selectors.extend(path.selectors.iter().copied());
                             Names::Place(place)
                         }
+                        // A fresh receiver does not own what it borrows.
+                        Some(Names::Value) if path.through_borrow => Names::Unknown,
                         Some(other) => other,
                         None => Names::Unknown,
                     },
