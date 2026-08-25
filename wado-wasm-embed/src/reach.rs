@@ -355,6 +355,10 @@ impl Walk<'_, '_> {
     /// expression is walked. A range naming a segment no map can narrow is
     /// dropped: something else already decided that segment's fate.
     fn mark_data_range(&mut self, range: DataRange) {
+        assert!(
+            (range.segment as usize) < self.splittable.len(),
+            "`func_ranges` rejects a map naming a segment the asset does not have"
+        );
         if !self.splittable[range.segment as usize] {
             return;
         }

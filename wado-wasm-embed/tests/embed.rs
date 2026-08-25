@@ -651,11 +651,10 @@ fn a_range_naming_no_bytes_is_rejected() {
 /// ranges happened to arrive in.
 #[test]
 fn the_map_normalises_to_one_form_whatever_order_it_arrives_in() {
-    let canonical = wado_wasm_embed::dataref::DataRefs::parse(
-        "a 0:0+4 0:4+4\nb 0:8+4\nc 0:12+2 0:14+2\n",
-    )
-    .expect("map must parse")
-    .to_text();
+    let canonical =
+        wado_wasm_embed::dataref::DataRefs::parse("a 0:0+4 0:4+4\nb 0:8+4\nc 0:12+2 0:14+2\n")
+            .expect("map must parse")
+            .to_text();
 
     for shuffled in [
         "c 0:14+2 0:12+2\nb 0:8+4\na 0:4+4 0:0+4\n",
