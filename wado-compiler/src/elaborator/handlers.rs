@@ -338,68 +338,61 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// binding each. Dedup by `(module, name, type args)` keeps `Stream<u8>`
     /// and `Stream<i32>` separate.
     fn collect_effect_impls_for_type(
-        &mut self,
+        &self,
         handler_type: TypeId,
     ) -> Vec<super::sem::types::HandlerEffectEntry> {
+        let defs = self.tysys.resolutions.defs();
         let mut out: Vec<super::sem::types::HandlerEffectEntry> = Vec::new();
         // Keyed by the effect's declaration, not its spelling: `Stream<u8>` and
         // `Stream<i32>` stay separate, two modules' same-named effects too.
         let mut seen: crate::hashmap::IndexSet<(crate::defs::DefId, Vec<TypeId>)> =
             crate::hashmap::IndexSet::default();
 
-        // Collect the impl `trait_type` ASTs first so subsequent
-        // `resolve_type` calls (which need `&mut self`) don't fight the
-        // borrow on `trait_env.impl_headers`.
-        let mut trait_types: Vec<(crate::defs::DefId, crate::defs::DefId, ast::Type)> = Vec::new();
-        if let Some(entries) = self
+        let Some(entries) = self
             .tysys
             .trait_env
             .impl_index
             .get(&self.handler_impl_target(handler_type))
-        {
-            for key in entries {
-                let Some(header) = self.tysys.trait_env.impl_headers.get(key) else {
-                    continue;
-                };
-                // The header's own resolved reference: `impl Log for Ctx` names
-                // `Log` in the module that wrote the block, which is not this
-                // one and may declare a different `Log`.
-                if let (Some(trait_ref), Some(trait_type)) =
-                    (header.trait_ref, header.trait_type.as_ref())
-                {
-                    trait_types.push((*key, trait_ref, trait_type.clone()));
-                }
-            }
-        }
-
-        for (impl_def, trait_ref, trait_type) in &trait_types {
+        else {
+            return out;
+        };
+        for &impl_def in entries {
+            // Everything the block says about itself it says in its own frame:
+            // `impl Stream<u8> for Ctx` names `Stream` and resolves `u8` where
+            // the block was written, which is not where it is installed.
+            let Some(trait_ref) = self
+                .tysys
+                .trait_env
+                .impl_headers
+                .get(&impl_def)
+                .and_then(|header| header.trait_ref)
+            else {
+                continue;
+            };
             // Accept either an effect or a resource declaration. The
             // dispatch synthesis pass treats both uniformly.
-            if !(self.tysys.trait_env.effect_decl_index.contains(trait_ref)
-                || self.tysys.trait_env.resource_decl_index.contains(trait_ref))
+            if !(self.tysys.trait_env.effect_decl_index.contains(&trait_ref)
+                || self
+                    .tysys
+                    .trait_env
+                    .resource_decl_index
+                    .contains(&trait_ref))
             {
                 continue;
             }
-            // Name the effect by its declaration, as the explicit form does, so
-            // `use { Random as Rng }` records the entry a plain import would.
-            let defs = self.tysys.resolutions.defs();
-            let base_trait_name = crate::name::FqTraitName::declared(defs, *trait_ref)
-                .base_name()
-                .to_string();
-            let decl_module = defs.module(*trait_ref).clone();
-            let type_args: Vec<TypeId> = match trait_type {
-                ast::Type::Generic(generic) => generic
-                    .args
-                    .iter()
-                    .map(|arg| self.resolve_type(arg))
-                    .collect(),
-                _ => Vec::new(),
-            };
-            if seen.insert((*trait_ref, type_args.clone())) {
+            let type_args = self
+                .tysys
+                .signatures
+                .impl_sig(impl_def)
+                .map(|sig| sig.trait_type_args.clone())
+                .unwrap_or_default();
+            if seen.insert((trait_ref, type_args.clone())) {
                 out.push(super::sem::types::HandlerEffectEntry {
-                    impl_def: Some(*impl_def),
-                    name: base_trait_name,
-                    module_source: decl_module,
+                    impl_def: Some(impl_def),
+                    name: crate::name::FqTraitName::declared(defs, trait_ref)
+                        .base_name()
+                        .to_string(),
+                    module_source: defs.module(trait_ref).clone(),
                     trait_type_args: type_args,
                 });
             }
