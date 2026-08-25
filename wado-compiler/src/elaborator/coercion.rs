@@ -826,6 +826,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let call = self.literal_from_call(
             &super::types::FromArrayInfo {
+                impl_def: Some(info.impl_def),
                 element_type: found_type,
                 array_type: found_type,
                 impl_module_source: info.impl_module_source.clone(),
@@ -860,6 +861,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let info =
             self.find_arithmetic_trait_impl(&name, output_type, trait_, "spread_literal", None)?;
         Some(self.literal_callee(
+            Some(info.impl_def),
             info.impl_module_source,
             info.trait_name,
             output_type,
@@ -878,6 +880,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             from_type: from_info.array_type,
             output_type,
             callee: self.literal_callee(
+                from_info.impl_def,
                 from_info.impl_module_source.clone(),
                 from_info.trait_name.clone(),
                 output_type,
@@ -889,12 +892,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Name the trait method a literal calls on `output_type`, remangled.
     fn literal_callee(
         &mut self,
+        impl_def: Option<crate::defs::DefId>,
         impl_module_source: crate::module_source::ModuleSource,
         trait_name: crate::name::FqTraitName,
         output_type: TypeId,
         method: &'static str,
     ) -> super::sem::types::LiteralCallee {
         let mut callee = super::sem::types::LiteralCallee {
+            method_def: impl_def.and_then(|def| self.tysys.declared_method(def, method)),
             impl_module_source,
             trait_name,
             target_base_name: self.tysys.fq_receiver_head(output_type),

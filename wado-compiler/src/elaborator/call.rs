@@ -1352,6 +1352,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.sem.types.static_method_dispatch.insert(
                         key,
                         super::sem::types::StaticMethodDispatch {
+                            method_def: method_ref.method_id,
                             function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
@@ -1617,6 +1618,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
+                // A free function, whose spelled callee already records the
+                // edge; this fact exists for reify's `FunctionRef` shape.
+                method_def: None,
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: type_args.clone(),
@@ -3055,6 +3059,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.sem.types.static_method_dispatch.insert(
                 key,
                 super::sem::types::StaticMethodDispatch {
+                    method_def: method_info_result.method_def,
                     function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],

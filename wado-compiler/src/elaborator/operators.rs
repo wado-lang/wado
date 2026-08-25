@@ -526,6 +526,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .compiler_trait_fq(CompilerItem::Eq);
                     let resolved = ResolvedTraitMethod {
+                        method_def: info.method_def,
                         trait_name: eq_trait_name,
                         method_name: "eq".to_string(),
                         impl_def: None,
@@ -568,6 +569,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .compiler_trait_fq(CompilerItem::Ord);
                     let resolved = ResolvedTraitMethod {
+                        method_def: info.method_def,
                         trait_name: ord_trait_name,
                         method_name: "cmp".to_string(),
                         impl_def: None,
@@ -680,6 +682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 if let Some(trait_info) = trait_info_opt {
                     let resolved = ResolvedTraitMethod {
+                        method_def: self.tysys.declared_method(trait_info.impl_def, method_name),
                         trait_name: trait_info.trait_name,
                         method_name: method_name.to_string(),
                         impl_def: Some(trait_info.impl_def),
@@ -723,6 +726,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ) {
                     let return_type = self.operator_output_type(operand_type_id, &found_trait);
                     let resolved = ResolvedTraitMethod {
+                        method_def: info.method_def,
                         trait_name: found_trait,
                         method_name: method_name.to_string(),
                         impl_def: None,
@@ -789,6 +793,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let return_type = self.operator_output_type(left.type_id, &found_trait);
                 let resolved = ResolvedTraitMethod {
+                    method_def: info.method_def,
                     trait_name: found_trait,
                     method_name: shift_method.to_string(),
                     impl_def: None,
@@ -873,6 +878,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // shared builder will type-check against u32 and will not
                     // wrap the operand in `&`.
                     let resolved = ResolvedTraitMethod {
+                        method_def: self.tysys.declared_method(trait_info.impl_def, method_name),
                         trait_name: trait_info.trait_name,
                         method_name: method_name.to_string(),
                         impl_def: Some(trait_info.impl_def),
@@ -1165,6 +1171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let return_type = self.operator_output_type(expr_type, &found_trait);
                 let resolved = ResolvedTraitMethod {
+                    method_def: info.method_def,
                     trait_name: found_trait,
                     method_name: method_name.to_string(),
                     impl_def: None,
@@ -1473,13 +1480,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let value_span = value.span();
                         let value_type = match value {
                             AssignValue::Ast(expr) => {
-                                self.resolve_expr(expr, ctx, Some(trait_info.input_type))
+                                self.resolve_expr(expr, ctx, Some(trait_info.output_type))
                             }
                             AssignValue::Resolved { type_id, .. } => type_id,
                         };
 
                         // Check: reject &T/&mut T assigned where non-ref expected
-                        self.typecheck(value_type, trait_info.input_type, value_span);
+                        self.typecheck(value_type, trait_info.output_type, value_span);
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
                         let receiver = self.fq_index_receiver(matched_type_id);
@@ -1510,6 +1517,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             index_expr.id,
                             super::sem::types::OperatorDispatch {
                                 function_ref: func,
+                                method_def: Some(trait_info.method_def),
                                 self_kind: trait_info.self_kind,
                                 arg_ref_wraps: vec![false, false],
                                 return_type: TypeTable::UNIT,
@@ -2009,6 +2017,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ast_id,
                 super::sem::types::OperatorDispatch {
                     function_ref,
+                    method_def: resolved.method_def,
                     self_kind: resolved.self_kind,
                     arg_ref_wraps: wrap_flags,
                     return_type: resolved.return_type,

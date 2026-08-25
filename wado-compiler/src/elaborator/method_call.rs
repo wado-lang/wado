@@ -71,7 +71,7 @@ pub(super) struct MethodCallInput<'a> {
 /// path returned early or method lookup failed.
 pub(super) struct MethodCallOutcome {
     pub expr: TirExpr,
-    pub dispatch: Option<(ast::SelfKind, bool, FunctionRef)>,
+    pub dispatch: Option<DispatchedMethod>,
     /// The resolved signature, for a caller that suppressed
     /// `record_method_dispatch` with `call_id: None` and files its own record.
     /// The qualified-call path files a *static* dispatch, which needs the same
@@ -79,6 +79,18 @@ pub(super) struct MethodCallOutcome {
     /// shape, and the expected types an unannotated closure argument infers
     /// from.
     pub signature: Option<MethodSignatureFacts>,
+}
+
+/// What dispatch selected, for a caller that suppressed
+/// [`Elaborator::record_method_dispatch`] with `call_id: None` and files its
+/// own record — the for-of iterator path and the trait-qualified static path.
+pub(super) struct DispatchedMethod {
+    pub self_kind: ast::SelfKind,
+    pub is_ref_impl: bool,
+    pub func: FunctionRef,
+    /// The declaration dispatch chose. `None` for a builtin or an
+    /// auto-derived method, which no declaration backs.
+    pub method_def: Option<crate::defs::DefId>,
 }
 
 pub(super) struct MethodSignatureFacts {
@@ -1150,6 +1162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let dispatch = if method_found {
             self.record_method_dispatch(
                 call_id,
+                dispatched_method_def,
                 &func,
                 self_kind,
                 is_ref_impl,
@@ -1162,7 +1175,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             // The `method_found` gate keeps the error-recovery placeholder
             // from leaking into the returned dispatch.
-            Some((self_kind, is_ref_impl, func))
+            Some(DispatchedMethod {
+                self_kind,
+                is_ref_impl,
+                func,
+                method_def: dispatched_method_def,
+            })
         } else {
             None
         };
@@ -1296,7 +1314,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_ast.span(),
             );
         }
-        if let (Some((_, _, function_ref)), Some(sig)) = (outcome.dispatch, outcome.signature) {
+        if let (Some(dispatched), Some(sig)) = (outcome.dispatch, outcome.signature) {
+            let function_ref = dispatched.func;
             // The receiver occupies slot 0 of the static shape, so every
             // per-parameter list gains a leading entry for it. It is spelled at
             // the call site and never omitted, hence no default; it is `mut`
@@ -1315,6 +1334,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.sem.types.static_method_dispatch.insert(
                 call_id,
                 super::sem::types::StaticMethodDispatch {
+                    method_def: dispatched.method_def,
                     function_ref,
                     param_is_mut,
                     type_args,
@@ -2297,6 +2317,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
+                method_def: selected.as_ref().and_then(|r| r.method_id),
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: method_type_args,
@@ -2329,7 +2350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TirExpr],
         span: Span,
     ) -> Option<TypeId> {
-        let (trait_name, blanket_param, blanket_module) =
+        let (trait_name, blanket_param, blanket_module, blanket_def) =
             self.find_blanket_static_method(receiver_type_id, method)?;
 
         let template_name = MethodName::format_local(
@@ -2401,6 +2422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             call_id,
             super::sem::types::StaticMethodDispatch {
+                method_def: self.tysys.declared_method(blanket_def, method),
                 function_ref: func_ref,
                 param_is_mut: Vec::new(),
                 type_args: method_type_args.to_vec(),
@@ -2535,11 +2557,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         receiver_type_id: TypeId,
         method_name: &str,
-    ) -> Option<(crate::name::FqTraitName, String, ModuleSource)> {
+    ) -> Option<(
+        crate::name::FqTraitName,
+        String,
+        ModuleSource,
+        crate::defs::DefId,
+    )> {
         let candidates: Vec<(
             crate::name::FqTraitName,
             String,
             ModuleSource,
+            crate::defs::DefId,
             Vec<super::trait_env::BlanketBound>,
         )> = self
             .tysys
@@ -2581,6 +2609,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .fq_trait_of_impl(header, &self.tysys.resolutions)?,
                     b.param.clone(),
                     b.module.clone(),
+                    b.def,
                     b.bounds.clone(),
                 ))
             })
@@ -2588,7 +2617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         candidates
             .into_iter()
-            .find(|(_, _, _, bounds)| {
+            .find(|(_, _, _, _, bounds)| {
                 bounds.iter().all(|bound| {
                     bound.decl_ref.is_some_and(|bound_def| {
                         self.tysys.type_implements_trait(
@@ -2600,7 +2629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     })
                 })
             })
-            .map(|(trait_name, param, module, _)| (trait_name, param, module))
+            .map(|(trait_name, param, module, def, _)| (trait_name, param, module, def))
     }
 
     /// Look up `#[cm("...")]` for a static (no-self) method on the resource
@@ -3923,6 +3952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             call_id,
             super::sem::types::StaticMethodDispatch {
+                method_def: method_ref.method_id,
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: vec![],

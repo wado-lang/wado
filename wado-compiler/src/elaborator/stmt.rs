@@ -2709,20 +2709,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `into_iter()` / `next()` calls without re-dispatching. Only
         // record when both dispatches succeeded (the trait-check error
         // path above bailed without resolving them).
-        if let (
-            Some((into_iter_self_kind, into_iter_is_ref_impl, into_iter_func)),
-            Some((next_self_kind, next_is_ref_impl, next_func)),
-        ) = (into_iter_dispatch, next_dispatch)
-        {
+        if let (Some(into_iter), Some(next)) = (into_iter_dispatch, next_dispatch) {
             self.record_for_of_iterator(
                 for_of.id,
                 super::sem::types::ForOfIteratorInfo {
-                    into_iter: into_iter_func,
-                    into_iter_self_kind,
-                    into_iter_is_ref_impl,
-                    next: next_func,
-                    next_self_kind,
-                    next_is_ref_impl,
+                    into_iter_def: into_iter.method_def,
+                    into_iter: into_iter.func,
+                    into_iter_self_kind: into_iter.self_kind,
+                    into_iter_is_ref_impl: into_iter.is_ref_impl,
+                    next_def: next.method_def,
+                    next: next.func,
+                    next_self_kind: next.self_kind,
+                    next_is_ref_impl: next.is_ref_impl,
                     item_type,
                     iter_type,
                 },

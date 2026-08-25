@@ -1,0 +1,16 @@
+// A handler type declared away from the module that installs it, beside the
+// effect it implements.
+pub interface Log {
+    fn emit() -> i32;
+}
+
+pub struct Ctx {
+    pub seen: i32,
+}
+
+impl Log for Ctx {
+    fn emit(&mut self) -> i32 {
+        self.seen += 1;
+        resume self.seen
+    }
+}
