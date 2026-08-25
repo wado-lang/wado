@@ -425,6 +425,7 @@ impl Instant {
     pub fn to_http_date(&self) -> String {
         let [days, second_of_day] = epoch_days_and_seconds(self.seconds);
         let [year, month, day] = civil_from_days(days);
+        assert year >= 0 && year <= 9999;
         let weekday = floor_mod(days + 3, 7) + 1;
         let hour = second_of_day / 3600;
         let minute = second_of_day % 3600 / 60;
@@ -1390,7 +1391,21 @@ impl Duration {
     /// The sign of the largest non-zero component: `1`, `-1`, or `0` when every
     /// component is zero.
     pub fn sign(&self) -> i32 {
-        let ordered = [
+        for let component of self.components() {
+            if component > 0 {
+                return 1;
+            }
+            if component < 0 {
+                return -1;
+            }
+        }
+        return 0;
+    }
+
+    /// Every component, largest first — the order `sign` and the ISO 8601 form
+    /// read them in.
+    fn components(&self) -> [i64, i64, i64, i64, i64, i64, i64, i64, i64, i64] {
+        return [
             self.years,
             self.months,
             self.weeks,
@@ -1402,15 +1417,6 @@ impl Duration {
             self.microseconds,
             self.nanoseconds,
         ];
-        for let component of ordered {
-            if component > 0 {
-                return 1;
-            }
-            if component < 0 {
-                return -1;
-            }
-        }
-        return 0;
     }
 
     /// Whether every component is zero (`Temporal.Duration.prototype.blank`).
@@ -1552,7 +1558,16 @@ impl Duration {
     /// Whether every non-zero component carries the same sign, the invariant
     /// Temporal enforces at construction and the ISO 8601 form needs.
     fn is_uniformly_signed(&self) -> bool {
-        return self.abs().sign() >= 0 && self.negated().abs().sign() >= 0;
+        let overall = self.sign();
+        for let component of self.components() {
+            if component > 0 && overall < 0 {
+                return false;
+            }
+            if component < 0 && overall > 0 {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// Whether any component measures calendar time, which only a
@@ -3177,11 +3192,11 @@ impl Visitor for ZonedDateTimeVisitor {
     }
 
     fn visit_i64(&mut self, v: i64) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Ok(ZonedDateTime { instant: Instant::from_epoch_seconds(v), time_zone: "UTC" });
+        return Result::Ok(ZonedDateTime::new(Instant::from_epoch_seconds(v), "UTC"));
     }
 
     fn visit_u64(&mut self, v: u64) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Ok(ZonedDateTime { instant: Instant::from_epoch_seconds(v as i64), time_zone: "UTC" });
+        return Result::Ok(ZonedDateTime::new(Instant::from_epoch_seconds(v as i64), "UTC"));
     }
 
     fn visit_i128(&mut self, _v: i128) -> Result<ZonedDateTime, DeserializeError> {
@@ -3195,7 +3210,7 @@ impl Visitor for ZonedDateTimeVisitor {
     fn visit_f64(&mut self, v: f64) -> Result<ZonedDateTime, DeserializeError> {
         let whole = v as i64;
         let nanos = ((v - whole as f64) * 1_000_000_000.0) as i64;
-        return Result::Ok(ZonedDateTime { instant: Instant::new(whole, nanos), time_zone: "UTC" });
+        return Result::Ok(ZonedDateTime::new(Instant::new(whole, nanos), "UTC"));
     }
 
     fn visit_null(&mut self) -> Result<ZonedDateTime, DeserializeError> {

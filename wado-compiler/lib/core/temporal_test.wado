@@ -542,6 +542,19 @@ test "Duration sign follows its largest non-zero field" {
     assert Duration { years: 1, nanoseconds: -5 }.sign() == 1;
 }
 
+#[expect_trap]
+test "the ISO 8601 form asserts a duration's components agree in sign" {
+    // Wado cannot reject the literal the way Temporal's constructor does, so
+    // the invariant is checked where it actually matters.
+    let _ = `${Duration { years: 1, nanoseconds: -5 }}`;
+}
+
+test "a decoded epoch number lands on the canonical UTC zone" {
+    let zdt = from_string::<ZonedDateTime>("1700000000").expect("decode epoch");
+    assert zdt.time_zone == "Z";
+    assert zdt == ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+}
+
 test "Duration negated and abs flip every field together" {
     let d = Duration { years: 1, days: -2, seconds: 3 };
     assert d.negated() == Duration { years: -1, days: 2, seconds: -3 };
