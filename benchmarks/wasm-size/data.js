@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787620384385,
+  "lastUpdate": 1787633133056,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50877,6 +50877,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bce58ff6f33625c36ac1dc1e3c1ea2a7dbbd5edc"
         },
         "date": 1787620383782,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7ea29eef42a1af4a9bf32f0b21fc84eb1d6935cf",
+          "message": "Merge pull request #1894 from wado-lang/compiler-perf-elaborator-liveness\n\nperf(elaborator): drop what the program cannot reach before lowering",
+          "timestamp": "2026-08-25T13:32:24+09:00",
+          "tree_id": "43e4497df266f8c3bbe728016fb57b176070dcec",
+          "url": "https://github.com/wado-lang/wado/commit/7ea29eef42a1af4a9bf32f0b21fc84eb1d6935cf"
+        },
+        "date": 1787633132471,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
