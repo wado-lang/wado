@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787673957371,
+  "lastUpdate": 1787692395532,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50965,6 +50965,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8de52f0726bb7f38b6f966ad004e5e801c78ecfe"
         },
         "date": 1787673956663,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d75586db041bc80f2a1916808286f9abe4bcccc",
+          "message": "Merge pull request #1896 from wado-lang/claude/elaborator-architecture-tasks-y71qfc\n\nrefactor(elaborator): reach an impl method by the dispatch that names it",
+          "timestamp": "2026-08-26T05:59:58+09:00",
+          "tree_id": "5f9bacefd2c3246348d36af6a36fb7c7ee1d1b0f",
+          "url": "https://github.com/wado-lang/wado/commit/6d75586db041bc80f2a1916808286f9abe4bcccc"
+        },
+        "date": 1787692394741,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
