@@ -1157,6 +1157,20 @@ impl FunctionTranslator<'_, '_> {
             .contains_key(&(func.name.clone(), func.module_source.clone()))
     }
 
+    /// `base`, or `base_{n}` for the first `n` no source local answers to.
+    ///
+    /// Codegen keys locals by name and [`crate::wir::WirLocals::scan`] keeps the first
+    /// declaration of each, so a synthetic sharing a source local's name
+    /// silently merges two differently-typed slots into one.
+    fn free_local_name(&mut self, base: &str) -> String {
+        let mut name = base.to_string();
+        while self.resolved_local_names.values().any(|n| *n == name) {
+            self.local_counter += 1;
+            name = format!("{base}_{}", self.local_counter);
+        }
+        name
+    }
+
     /// Return the N results by binding the aggregate and reading its fields —
     /// what a tail [`lift_leaves_to_returns`] cannot reach lowers to instead,
     /// at the cost of the struct the lift would have avoided.
@@ -1183,7 +1197,7 @@ impl FunctionTranslator<'_, '_> {
             );
         };
         let type_id = type_id.clone();
-        let name = "__mv_return".to_string();
+        let name = self.free_local_name("__mv_return");
         let fields: Vec<WirInstr> = field_names
             .iter()
             .zip(&result_types)

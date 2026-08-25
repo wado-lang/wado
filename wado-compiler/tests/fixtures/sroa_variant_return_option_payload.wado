@@ -1,7 +1,8 @@
-// An `Ok` payload that is itself an `Option<T>` shares its slot type with the
-// `Option<T>` wrapper `sroa_variant_return` puts a bare `T` payload in, so the
-// two encodings must not be confused. At -O3 the deserializer below read the
-// slot back the wrong way and trapped.
+// `sroa_variant_return` scalarizes the `Result<Option<Uuid>, _>` below into
+// three results, and `Uuid::deserialize` returns it through a block a `match`
+// exits — a tail the multi-value lift used to miss. The block kept yielding the
+// aggregate while the signature promised three results, so at -O3 the function
+// fell off its end into the appended `unreachable` and trapped.
 
 use { parse } from "core:args";
 use { Deserialize } from "core:serde";

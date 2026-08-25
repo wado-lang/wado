@@ -1,0 +1,29 @@
+// A source local may be named like the one the multi-value return fallback
+// binds the aggregate to. Codegen keys locals by name, so sharing the name
+// merged a `String` slot and a tuple slot into one and the module failed Wasm
+// validation from -O2 up.
+
+#[inline(never)]
+fn pick(x: i32) -> [i32, i32] {
+    let __mv_return: String = "hello";
+    return outer: {
+        break outer: inner: {
+            if x > 0 {
+                break outer: [__mv_return.len() as i32, 2];
+            }
+            [3, 4]
+        };
+    };
+}
+
+test "a source local named after the multi-value return slot" {
+    let [a, b] = pick(builtin::black_box(1));
+    assert a == 5;
+    assert b == 2;
+    let [c, d] = pick(builtin::black_box(-1));
+    assert c == 3;
+    assert d == 4;
+}
+
+__DATA__
+{"test": {}}
