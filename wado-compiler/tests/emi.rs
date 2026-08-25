@@ -39,7 +39,7 @@ const CALIBRATION_LEVELS: [OptLevel; 2] = [OptLevel::O0, OptLevel::O3];
 /// Wrap `payload` in a guard the compiler cannot decide.
 ///
 /// Single-line by construction: an injection must not move the code after it,
-/// or every fixture that reports a source line would drop out of the corpus.
+/// or every source that reports a line of its own would drop out of the corpus.
 fn guard(payload: &str) -> String {
     format!("if builtin::black_box(false) {{ {payload} }} ")
 }
@@ -172,10 +172,10 @@ impl Source {
 /// `test` and `allocator` select the world and the allocator. Every other
 /// understood key states an expectation, which the baseline run supersedes —
 /// EMI compares a mutant against the program it came from, not against the
-/// fixture's recorded output. A key that is *not* understood either feeds the
+/// source's recorded output. A key that is *not* understood either feeds the
 /// runner an input the comparison does not reproduce (a request, a preopen,
 /// stdin, a compile-time parameter) or was added after this list was written;
-/// either way the fixture leaves the corpus instead of being run with the input
+/// either way the source leaves the corpus instead of being run with the input
 /// silently missing.
 fn key_is_understood(key: &str) -> bool {
     matches!(
@@ -195,7 +195,7 @@ fn key_is_understood(key: &str) -> bool {
         || key.starts_with("wir_not_expect:")
 }
 
-/// How a fixture must be compiled and run.
+/// How a source must be compiled and run.
 struct Spec {
     test_world: bool,
     allocator: String,
@@ -237,7 +237,7 @@ impl Spec {
     }
 }
 
-/// Why a fixture cannot serve as an EMI oracle.
+/// Why a source cannot serve as an EMI oracle.
 #[derive(Debug)]
 enum Excluded {
     MalformedData(String),
@@ -259,14 +259,14 @@ enum Excluded {
         level: OptLevel,
         detail: String,
     },
-    /// The empty guard moved the program's output — the fixture observes
+    /// The empty guard moved the program's output — the source observes
     /// something an injection perturbs, so a real mutation could not be told
     /// apart from that.
     GuardChangedOutput {
         level: OptLevel,
         detail: String,
     },
-    /// The fixture's own output moves between runs, so no mutant can be
+    /// The source's own output moves between runs, so no mutant can be
     /// compared against it.
     Nondeterministic {
         level: OptLevel,
@@ -288,14 +288,14 @@ impl Excluded {
             Excluded::MalformedData(_) => "malformed __DATA__",
             Excluded::UnsupportedDataKey(_) => "unsupported __DATA__ key",
             Excluded::Todo => "TODO module",
-            Excluded::FormatFailed(_) => "formatter rejected the fixture",
+            Excluded::FormatFailed(_) => "formatter rejected the source",
             Excluded::NoInjectionSite => "no injection site",
             Excluded::NoBindingInScope => "no binding in scope",
             Excluded::BaselineCompileFailed { .. } => "baseline failed to compile",
             Excluded::BaselineUnhealthy { .. } => "baseline did not pass",
             Excluded::GuardRejected { .. } => "guard failed to compile",
             Excluded::GuardChangedOutput { .. } => "guard changed the output",
-            Excluded::Nondeterministic { .. } => "fixture is nondeterministic",
+            Excluded::Nondeterministic { .. } => "source is nondeterministic",
             Excluded::GuardCrashed { .. } => "guard crashed the compiler",
         }
     }
@@ -854,7 +854,7 @@ enum Evaluation {
     Crashed(String),
 }
 
-/// Compile and run `source`, catching a panic so one bad fixture cannot take
+/// Compile and run `source`, catching a panic so one bad subject cannot take
 /// the campaign down with it.
 fn evaluate(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Evaluation {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -923,7 +923,7 @@ fn panic_message(payload: &dyn std::any::Any) -> String {
 // Calibration
 // ---------------------------------------------------------------------------
 
-/// A fixture that survived calibration, with the number of guards it accepted.
+/// A source that survived calibration, with the number of guards it accepted.
 struct Eligible {
     name: String,
     sites: usize,
@@ -936,7 +936,7 @@ struct Finding {
     detail: String,
 }
 
-/// Re-run the baseline: reached only on a divergence, so a fixture whose own
+/// Re-run the baseline: reached only on a divergence, so a source whose own
 /// output moves is not charged to the guard.
 fn baseline_moved(
     path: &Path,
@@ -1058,7 +1058,7 @@ fn is_finding(excluded: &Excluded) -> bool {
 /// Inject each payload at every site it reaches, and compare the result against
 /// the program it came from.
 ///
-/// A payload the compiler refuses is dropped rather than the fixture, which
+/// A payload the compiler refuses is dropped rather than the source, which
 /// stays a subject as long as one payload survives.
 fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let name = subject.name();
@@ -1212,7 +1212,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         return Err(Excluded::Todo);
     }
 
-    // The baseline is the fixture as the formatter renders it, not the file on
+    // The baseline is the source as the formatter renders it, not the file on
     // disk: mutants are produced the same way, so any difference the formatter
     // itself introduces is charged to the formatter and not to the optimizer.
     let canonical =
@@ -1280,7 +1280,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
 /// Keep the `k`-th of `n` interleaved slices of `paths`, as `WADO_EMI_SHARD=k/n`.
 ///
 /// Interleaved, so a shard's cost does not depend on where the expensive
-/// fixtures cluster alphabetically.
+/// sources cluster alphabetically.
 fn take_shard<T>(items: Vec<T>, spec: &str) -> Vec<T> {
     let (index, count) = spec
         .split_once('/')
@@ -1419,7 +1419,7 @@ impl Drop for SilencedPanics {
 /// Run `stage` over `paths` on a pool of workers, and sort what comes back.
 ///
 /// `is_finding` is where the two stages differ: an empty guard that moves the
-/// output disqualifies a fixture, while a payload that moves it is wrong code.
+/// output disqualifies a source, while a payload that moves it is wrong code.
 fn campaign(
     subjects: &[Source],
     stage: impl Fn(&Source, &str) -> Result<Eligible, Excluded> + Sync,
@@ -1605,13 +1605,13 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
             continue;
         }
         let drawn = |name: &str| Source::from_name(name).root == root;
-        let eligible: Vec<&Eligible> = results
-            .eligible
-            .iter()
-            .filter(|e| drawn(&e.name))
-            .collect();
+        let eligible: Vec<&Eligible> = results.eligible.iter().filter(|e| drawn(&e.name)).collect();
         let sites: usize = eligible.iter().map(|e| e.sites).sum();
-        let excluded = results.excluded.iter().filter(|(name, _)| drawn(name)).count();
+        let excluded = results
+            .excluded
+            .iter()
+            .filter(|(name, _)| drawn(name))
+            .count();
         let findings = results.findings.iter().filter(|f| drawn(&f.name)).count();
         out.push_str(&format!(
             "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s)\n",
@@ -1640,7 +1640,7 @@ fn describe_sites(source: &str, sites: &[Site]) -> String {
     out
 }
 
-/// Write the canonical form and the empty-guard mutant of every fixture
+/// Write the canonical form and the empty-guard mutant of every source
 /// `WADO_EMI_FILTER` selects, so a rejection or a divergence can be read as
 /// source instead of inferred from a line and column.
 ///
@@ -1857,7 +1857,7 @@ fn a_stdlib_module_runs_from_its_own_path() {
     }
 }
 
-/// The mutation stage reports a divergence as a finding, so a fixture whose own
+/// The mutation stage reports a divergence as a finding, so a source whose own
 /// output moves has to be told apart from a guard's doing before it becomes one.
 #[test]
 fn nondeterminism_is_told_apart_from_a_guard_divergence() {
@@ -1879,7 +1879,7 @@ __DATA__
     let excluded = calibrate(&subject, source)
         .err()
         .expect("a printed clock reading cannot be an oracle");
-    assert_eq!(excluded.kind(), "fixture is nondeterministic");
+    assert_eq!(excluded.kind(), "source is nondeterministic");
 }
 
 /// `WADO_EMI_FILTER` selects by substring and `WADO_EMI_LIMIT` truncates the
@@ -1896,7 +1896,7 @@ fn shards_partition_the_corpus() {
     assert_eq!(shards[0], ["0.wado", "4.wado", "8.wado"].map(PathBuf::from));
     let mut union = shards.concat();
     union.sort();
-    assert_eq!(union, paths, "every fixture lands in exactly one shard");
+    assert_eq!(union, paths, "every source lands in exactly one shard");
 }
 
 /// A statement's span is a claim about the AST, not about the text. An offset
