@@ -1,0 +1,49 @@
+// A `&mut` to a variant field is a detached box, so a whole-value write inside
+// the callee lands in the box rather than the field. The call borrows a temp
+// and stores it back, which makes both the whole-value write and the older
+// payload-mutation idiom land at the place. An element borrow (`&mut xs[i]`)
+// lowers to `&mut *xs.index_ref(i)`, whose write-back needs an `index_assign`
+// this pass does not synthesize yet — see the WEP's D1.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+    tick: i32,
+}
+
+#[inline("never")]
+fn replace(p: &mut Payload) {
+    *p = Payload::Text(`xyz`);
+}
+
+#[inline("never")]
+fn mutate_payload(p: &mut Payload) {
+    match p {
+        Text(s) => {
+            *s = `zz`;
+        },
+        Empty => (),
+    }
+}
+
+test "a whole-value write through a variant field borrow lands" {
+    let mut b = Bag { item: Payload::Text(`ab`), tick: 7 };
+    replace(&mut b.item);
+    assert b.item matches { Text(t) && t == `xyz` };
+    assert b.tick == 7;
+}
+
+test "payload mutation through the same borrow still lands" {
+    let mut b = Bag { item: Payload::Text(`ab`), tick: 0 };
+    mutate_payload(&mut b.item);
+    assert b.item matches { Text(t) && t == `zz` };
+}
+
+__DATA__
+{
+    "test": {}
+}

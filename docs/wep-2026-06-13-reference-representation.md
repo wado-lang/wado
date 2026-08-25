@@ -180,15 +180,24 @@ fix to conform; none should be preserved.
   | ------------------------------------------------- | --------------------- |
   | primitive / enum / flags / `fn`, anywhere         | refused at the borrow |
   | `variant`, into a variable / aggregate / `return` | refused               |
-  | `variant`, used where it is taken                 | dropped               |
+  | `variant` field, call argument                    | written back          |
+  | `variant`, call argument at a `stores` position   | refused               |
+  | `variant` element (`&mut xs[i]`), call argument   | dropped               |
 
   The same operations on a value-type _local_ all work, wherever the borrow
-  goes. `variant` is the one referent still dropping: it is exempt from the
-  borrow-site refusal because mutation through its payload lands, so a
-  whole-value write is refused where the borrow is stored instead. The residue —
-  a call argument, a `match` / `if let` scrutinee, a method receiver — is the
-  carve-out's to close: such a borrow cannot outlive its use, so temp +
-  write-back applies.
+  goes. `variant` is exempt from the borrow-site refusal because mutation
+  through its payload lands, so a whole-value write is refused where the borrow
+  is stored, and written back where it is passed.
+
+  The element row is what remains. `&mut xs[i]` lowers to
+  `&mut *xs.index_ref(i)` — a `MutRef` over a deref of a call, not an `Index`
+  place — so its write-back is an `index_assign` to synthesize rather than a
+  field store. That is why the carve-out lists the index-element and
+  struct-field paths separately. Refusing it instead is not open: payload
+  mutation through an element borrow is the
+  `normalize_element(&mut alt.elements[ei])` idiom. Closing it takes either that
+  synthesis, or a per-parameter whole-value-write summary so that only the
+  callees which actually replace are refused.
 
 - [ ] D2 — no shared predicate. The boxed set is inlined in
       `lower/plan/boxing.rs::create_needed_box_types` as

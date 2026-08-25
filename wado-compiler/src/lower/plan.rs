@@ -11,6 +11,7 @@ pub mod boxing;
 pub mod closure;
 pub mod globals;
 pub mod lift_mut;
+pub mod mut_ref_writeback;
 pub mod string;
 pub mod value_copy;
 
@@ -61,6 +62,9 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);
+    // Before boxing, while `&mut T` still names its referent: a detached `&mut`
+    // argument becomes a borrow of a temp that is stored back after the call.
+    mut_ref_writeback::insert_write_backs(flat, errors)?;
     // Confinement and receiver-ref capture run before boxing collapses `&mut T`
     // / `&T` onto `Box<T>`; both results key on parameter position, unchanged by
     // boxing.
