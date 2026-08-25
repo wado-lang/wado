@@ -442,9 +442,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         } else {
             value_copy::last_use::AliasComponents::empty()
         };
-        // The same gate `plan` applies to the return conventions, so the callee
-        // hands its payload out exactly where callers are told to materialize
-        // it. Keyed on the *return* type rather than `needs_copy_analysis`: the
+        // Keyed on the *return* type rather than `needs_copy_analysis`: the
         // payload is read out of the receiver, so it need not be any local's
         // type.
         let hands_out_payload = value_copy::hands_out_payload(func, &base.value_copy.return_paths)

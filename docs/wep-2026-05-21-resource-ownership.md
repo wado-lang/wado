@@ -468,16 +468,20 @@ Verified against the tree.
       The gate is the feature: the callee's one copy is shared by every call
       site, so moving it out multiplies it unless the callers elide. Ungated on
       gale-gen it _added_ 192 residual copies (2774 → 2966) and 13 KB of Wasm.
-      So the payload is handed out only where
-      the caller can name what it got — the callee's result is a projection of
-      its receiver (`place::ReturnPaths`) that stays inside the receiver's own
-      storage. Gated: 2774 → 2765, and the Wasm shrank.
+      So the payload is handed out only where the caller can name what it got —
+      the callee's result is a projection of its receiver (`place::ReturnPaths`)
+      that stays inside the receiver's own storage. Gated: 2774 → 2765, and the
+      Wasm shrank.
 
-      Two precision fixes it needed, each standing on its own: `ReturnPaths` is
-      now a least fixpoint (an accessor written over another accessor resolved to
-      `Unknown` in a single pass), and a container-alias read (`array_get_value`)
-      names its container's slot in the resolver as it already did in the
-      ownership walk.
+      Three precision fixes it needed, each standing on its own. `ReturnPaths`
+      is a least fixpoint, because an accessor written over another accessor
+      resolved to `Unknown` in a single pass. A container-alias read
+      (`array_get_value`) names its container's slot in the resolver as it
+      already did in the ownership walk. And `Place` carries whether the chain
+      left the root through a `&` field: the resolver reaches a place through a
+      local binding and through a callee's own `ReturnPath`, so a second walk
+      over the returned expression's syntax follows neither — deriving the flag
+      that way let the gate miss, and shared a local across a write.
 
 - [ ] Follow a borrowed field back to what it borrows. This is what the item
       above does _not_ reach, and it is the by-value `for` binding: a

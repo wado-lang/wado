@@ -217,9 +217,20 @@ pub fn is_fresh_value(expr: &TirExpr, oracle: &OwnedCalls, type_table: &TypeTabl
     is_owned_value(expr, &IndexSet::default(), oracle, type_table)
 }
 
+/// One step down the spine a returned value is wrapped in.
+fn variant_payload(expr: &TirExpr) -> Option<&TirExpr> {
+    match &expr.kind {
+        TirExprKind::VariantConstruct {
+            payload: Some(inner),
+            ..
+        } => Some(inner),
+        _ => None,
+    }
+}
+
 /// What a `return` actually delivers. `return` is no wrap site, so
-/// `return place` hands a borrow out for the caller to materialize;
-/// `hands_out_payload` (see [`super::hands_out_payload`]) makes
+/// `return place` hands a borrow out for the caller to materialize, and
+/// `hands_out_payload` ([`super::hands_out_payload`]) makes
 /// `return Some(place)` do the same.
 ///
 /// Its three readers must agree, or the payload aliases undefended or copies
@@ -227,13 +238,14 @@ pub fn is_fresh_value(expr: &TirExpr, oracle: &OwnedCalls, type_table: &TypeTabl
 /// construction, and [`ownership`](super::ownership) judges the same payload for
 /// the return convention and for the receiver-alias set.
 pub fn returned_value(expr: &TirExpr, hands_out_payload: bool) -> &TirExpr {
-    match &expr.kind {
-        TirExprKind::VariantConstruct {
-            payload: Some(inner),
-            ..
-        } if hands_out_payload => returned_value(inner, hands_out_payload),
-        _ => expr,
+    if !hands_out_payload {
+        return expr;
     }
+    let mut expr = expr;
+    while let Some(inner) = variant_payload(expr) {
+        expr = inner;
+    }
+    expr
 }
 
 /// Whether a returned value carries no storage at all — an empty variant case
@@ -248,9 +260,8 @@ pub fn carries_no_storage(expr: &TirExpr) -> bool {
     )
 }
 
-/// The variant constructions [`returned_value`] descends through, by span, so
-/// the fold can recognize one it is converting. Walks the same spine; the
-/// caller applies the same gate by not calling this at all.
+/// The spans of the constructions [`returned_value`] descends through, so the
+/// fold can recognize one it is converting.
 pub fn returned_variant_spans(body: &TirBlock) -> IndexSet<crate::token::Span> {
     struct Walker {
         spans: IndexSet<crate::token::Span>,
@@ -259,11 +270,7 @@ pub fn returned_variant_spans(body: &TirBlock) -> IndexSet<crate::token::Span> {
         fn visit_stmt(&mut self, stmt: &TirStmt) {
             if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
                 let mut expr = v;
-                while let TirExprKind::VariantConstruct {
-                    payload: Some(inner),
-                    ..
-                } = &expr.kind
-                {
+                while let Some(inner) = variant_payload(expr) {
                     self.spans.insert(expr.span);
                     expr = inner;
                 }
