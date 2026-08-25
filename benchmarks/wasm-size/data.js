@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787692395532,
+  "lastUpdate": 1787698668946,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51009,6 +51009,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6d75586db041bc80f2a1916808286f9abe4bcccc"
         },
         "date": 1787692394741,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8581e622c03d9a9aaede9d117e22d38112886460",
+          "message": "Merge pull request #1897 from wado-lang/claude/wado-bundled-libm-pilot-scs5ik\n\nfeat(wasm-embed): prune an embedded asset's data segments by the byte",
+          "timestamp": "2026-08-26T07:44:15+09:00",
+          "tree_id": "05a8f10a011c68cb57733d03c9e8f347ebffa7e7",
+          "url": "https://github.com/wado-lang/wado/commit/8581e622c03d9a9aaede9d117e22d38112886460"
+        },
+        "date": 1787698668033,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
