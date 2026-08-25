@@ -2545,20 +2545,17 @@ impl<'a> TypeLookup<'a> {
     }
 }
 
-/// Info about an indexing-trait implementation — `IndexRef`, `IndexRefMut`,
-/// `IndexValue` or `IndexAssign`. One shape for all four: they differ only in
-/// which trait was probed and which method name it declares, both of which the
-/// caller already named to find this.
+/// A matched `IndexRef` / `IndexRefMut` / `IndexValue` / `IndexAssign` impl.
+/// One shape for all four: they differ only in the trait probed and the method
+/// name it declares, both of which the caller named to find this.
 pub(super) struct IndexingTraitInfo {
-    /// The method the matched block declares. Carried so a use site names the
-    /// declaration dispatch chose rather than re-finding one by name — two
-    /// blocks on one type may each declare the method.
+    /// The method the matched block declares — two blocks on one type may each
+    /// declare it, so a use site records this rather than the name.
     pub(super) method_def: crate::defs::DefId,
     /// The `Output` associated type — for `IndexAssign`, the assigned value's
     /// type.
     pub(super) output_type: TypeId,
-    /// Self kind of the trait's method (`&self`, or `&mut self` for the
-    /// mutating traits).
+    /// Self kind of the trait's method.
     pub(super) self_kind: ast::SelfKind,
     /// The implemented trait, named by the module that declares it.
     pub(super) trait_name: crate::name::FqTraitName,
@@ -2597,10 +2594,7 @@ pub(super) struct ArithmeticTraitInfo {
 pub(super) struct ResolvedTraitMethod {
     /// The declaration dispatch selected — an `impl` block's method, or the
     /// *trait's* where the receiver is a type parameter and only
-    /// monomorphization can say which block answers. The liveness edge runs to
-    /// it; from a trait method, the generic-context rule reaches the impls.
-    /// `None` where no declaration backs it, as for an auto-derived `Eq` /
-    /// `Ord` on a compound the synthesiser writes later.
+    /// monomorphization can say which block answers.
     pub(super) method_def: Option<crate::defs::DefId>,
     /// The implemented trait, named by the module that declares it.
     pub(super) trait_name: crate::name::FqTraitName,
@@ -2638,7 +2632,7 @@ pub(super) struct ResolvedTraitMethod {
 #[derive(Clone)]
 pub(super) struct FromArrayInfo {
     /// The `impl From<Array<…>>` block that matched. `None` for an `Array<E>`
-    /// target, which runs no conversion and so calls nothing.
+    /// target, which runs no conversion.
     pub(super) impl_def: Option<crate::defs::DefId>,
     /// `E` — the type every element (or key-value pair) of the literal takes.
     pub(super) element_type: TypeId,

@@ -4996,10 +4996,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find the module that provides `impl From<FromType> for TargetType`.
-    /// The `impl From<from_name> for target_name` block, and the module that
-    /// wrote it. `None` for the block where none exists yet — a `From` impl the
-    /// synthesis pass mints later, which declares nothing this compile can name.
+    /// The `impl From<from_name> for target_name` block and the module that
+    /// wrote it. No block where the synthesis pass mints the impl later.
     fn find_from_impl(
         &self,
         target_name: &str,

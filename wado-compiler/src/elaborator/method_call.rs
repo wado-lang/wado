@@ -88,8 +88,8 @@ pub(super) struct DispatchedMethod {
     pub self_kind: ast::SelfKind,
     pub is_ref_impl: bool,
     pub func: FunctionRef,
-    /// The declaration dispatch chose, for the liveness edge. `None` where no
-    /// declaration backs the signature — a builtin or an auto-derived method.
+    /// The declaration dispatch chose. `None` for a builtin or an
+    /// auto-derived method, which no declaration backs.
     pub method_def: Option<crate::defs::DefId>,
 }
 

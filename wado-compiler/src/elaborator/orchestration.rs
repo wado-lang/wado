@@ -3856,9 +3856,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 }
 
 /// Every `ModuleSemantics` this compile can read: the ones its own body walk
-/// built, plus the snapshot's, which ran theirs when the snapshot was built.
-/// The snapshot's are read in place — cloning them back would cost what the
-/// snapshot saves.
+/// built, plus the snapshot's, read in place.
 fn all_module_semantics<'a>(
     state: &'a AnnotateState,
     snapshot: Option<&'a crate::semantics::Semantics>,
@@ -3871,10 +3869,9 @@ fn all_module_semantics<'a>(
     )
 }
 
-/// The use→def edges the source spells, as `liveness` reads them: `direct`
-/// from each module's own bindings, `inherited` from a trait default body,
-/// which is walked once per inheriting impl against its own `ModuleSemantics`
-/// and so files its edges there rather than in the module's.
+/// The use→def edges the source spells: `direct` from each module's own
+/// bindings, `inherited` from a trait default body, which is walked — and so
+/// files its edges — once per inheriting impl.
 fn spelled_references(
     state: &AnnotateState,
     snapshot: Option<&crate::semantics::Semantics>,
@@ -3899,10 +3896,8 @@ fn spelled_references(
     (direct, inherited)
 }
 
-/// The callees a dispatch fact names — the sites that spell no name for the
-/// graph to follow. Only the facts `Semantics` drains are re-seeded into a
-/// snapshot module's `ModuleSemantics`; the rest stay in the snapshot's own,
-/// so both are read.
+/// The callees a dispatch fact names. Only the facts `Semantics` drains are
+/// re-seeded into a snapshot module's `ModuleSemantics`, so both are read.
 fn dispatched_callee_edges(
     state: &AnnotateState,
     snapshot: Option<&crate::semantics::Semantics>,
@@ -3918,18 +3913,19 @@ fn dispatched_callee_edges(
         // A handler binding installs a whole block: the dispatch wrapper may
         // route any of the effect's operations to it.
         for (use_id, impl_def) in sem.types.handler_impl_blocks() {
-            let entry = edges.entry(use_id).or_default();
-            entry.extend(defs.members(impl_def).iter().map(|&m| defs.ast_id(m)));
+            edges
+                .entry(use_id)
+                .or_default()
+                .extend(defs.members(impl_def).iter().map(|&m| defs.ast_id(m)));
         }
     }
     edges
 }
 
-/// The inherent methods and free functions the compiler names itself — the
-/// call reaching one is minted after `liveness`, so no edge here can — plus
-/// the impl blocks a synthesis pass dispatches to. An entity the compiler
-/// reaches for and has not registered as a `CompilerItem` is a gap in the
-/// registry, not in this set.
+/// What no edge can reach because the compiler names it after `liveness`
+/// runs: its own inherent methods and free functions, plus the impl blocks a
+/// synthesis pass dispatches to. An entity the compiler reaches for and has
+/// not registered as a `CompilerItem` is a gap in the registry, not here.
 fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed {
     let tt = tysys.type_table.borrow();
     let items = tt.compiler_items();
@@ -3958,9 +3954,6 @@ fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed
             _ => {}
         }
     }
-    // The traits a synthesis pass dispatches, as declarations — a block
-    // implementing one is reached by a call minted after liveness, from a
-    // format specifier this pass does not interpret.
     let defs = tysys.resolutions.defs();
     let synthesis_traits: IndexSet<crate::defs::DefId> = CompilerItem::ALL
         .iter()
@@ -3984,7 +3977,7 @@ fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed
 }
 
 /// Which impl methods one method stands for, where only monomorphization can
-/// say which block a call actually reaches.
+/// say which block a call reaches. See the WEP's Liveness section.
 fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::AstId>> {
     let defs = tysys.resolutions.defs();
     let mut stands_for: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
@@ -3994,40 +3987,34 @@ fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::
             .or_default()
             .insert(defs.ast_id(to));
     };
-    // A generic block and one written for a single instantiation of the same
-    // head name the same function once the template is instantiated, and the
-    // specific block wins — coherence Rule 1, settled at monomorphization by
-    // that collision. A call through the template is the only thing the source
-    // spells, so the specific block's method has to be reachable from it or
-    // monomorphization never sees the block it must yield to.
     let mut by_head: IndexMap<
         (crate::defs::DefId, &super::trait_env::ImplTargetKey),
-        (
-            Vec<&super::trait_env::ImplHeader>,
-            Vec<&super::trait_env::ImplHeader>,
-        ),
+        Vec<&super::trait_env::ImplHeader>,
     > = IndexMap::default();
     for header in tysys.trait_env.impl_headers.values() {
         let Some(trait_) = header.trait_ref else {
             continue;
         };
-        // A trait method reached through a generic bound
-        // (`fn show<T: Display>(x: T) { x.fmt() }`, `C::from_iter`, a
-        // projection like `S::MapSerializer`) has its block picked by
-        // monomorphization, so it stands for every impl's.
+        // A call through a generic bound has its block picked by
+        // monomorphization, so the trait's method stands for every impl's.
         for method in &header.methods {
             if let Some(declared) = tysys.declared_method(trait_, &method.name) {
                 edge(declared, method.def);
             }
         }
-        let group = by_head.entry((trait_, &header.target)).or_default();
-        if header.is_concrete() {
-            group.1.push(header);
-        } else {
-            group.0.push(header);
-        }
+        by_head
+            .entry((trait_, &header.target))
+            .or_default()
+            .push(header);
     }
-    for (generics, concretes) in by_head.into_values() {
+    // Coherence Rule 1: a generic block and one written for a single
+    // instantiation of the same head mangle to one name, and the specific block
+    // wins. The source spells only the call through the template, so the
+    // template's method must reach the specific one or monomorphization never
+    // sees the block it has to yield to.
+    for headers in by_head.into_values() {
+        let (concretes, generics): (Vec<_>, Vec<_>) =
+            headers.into_iter().partition(|header| header.is_concrete());
         for generic in generics {
             for concrete in &concretes {
                 for method in &generic.methods {

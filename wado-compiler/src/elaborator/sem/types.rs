@@ -16,12 +16,8 @@ use crate::tir::{FunctionRef, TypeId};
 /// entry: they rewrite the call into a shape reify reads off the receiver type.
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
-    /// The declaration dispatch selected. The spelled method name records a
-    /// use→def edge to the same place, but one node walked more than once
-    /// resolves differently each time — a tuple `for-of` body, once per element
-    /// — and a single-definition map keeps only the last. This is per-walk, so
-    /// the liveness edge reads it instead. `None` where no declaration backs
-    /// the signature: a builtin, an auto-derived method.
+    /// The declaration dispatch selected. Per-walk, unlike the use→def edge the
+    /// spelled name records: a tuple `for-of` body walks one node per element.
     pub(crate) method_def: Option<crate::defs::DefId>,
     pub(crate) function_ref: FunctionRef,
     pub(crate) self_kind: ast::SelfKind,
@@ -320,49 +316,43 @@ fn dispatch_edges<'a>(
     sequence_coercions: &'a IndexMap<AstId, SequenceCoercionFacts>,
     key_value_coercions: &'a IndexMap<AstId, KeyValueCoercionFacts>,
 ) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + 'a {
-    method_dispatch
+    let methods = method_dispatch
         .iter()
-        .filter_map(|(id, d)| Some((*id, d.method_def?)))
+        .filter_map(|(id, d)| Some((*id, d.method_def?)));
+    let statics = static_method_dispatch
+        .iter()
+        .filter_map(|(id, d)| Some((*id, d.method_def?)));
+    let operators = operator_dispatch
+        .iter()
+        .chain(index_assign_dispatch)
+        .filter_map(|(id, op)| Some((*id, op.method_def?)));
+    let iterators = for_of_iterator.iter().flat_map(|(id, info)| {
+        [info.into_iter_def, info.next_def]
+            .into_iter()
+            .flatten()
+            .map(move |def| (*id, def))
+    });
+    let literals = literal_conversions
+        .iter()
+        .map(|(id, call)| (id, &call.callee))
         .chain(
-            static_method_dispatch
+            sequence_coercions
                 .iter()
-                .filter_map(|(id, d)| Some((*id, d.method_def?))),
+                .map(|(id, facts)| (id, &facts.call.callee)),
         )
-        .chain(
-            operator_dispatch
-                .iter()
-                .chain(index_assign_dispatch)
-                .filter_map(|(id, op)| Some((*id, op.method_def?))),
-        )
-        .chain(for_of_iterator.iter().flat_map(|(id, info)| {
-            [info.into_iter_def, info.next_def]
-                .into_iter()
-                .flatten()
-                .map(move |def| (*id, def))
+        // A `..base` member merges through `LiteralSpread`, a second callee at
+        // the same site.
+        .chain(key_value_coercions.iter().flat_map(|(id, facts)| {
+            std::iter::once((id, &facts.call.callee))
+                .chain(facts.spread.as_ref().map(|spread| (id, spread)))
         }))
-        .chain(
-            literal_conversions
-                .iter()
-                .map(|(id, call)| (id, &call.callee))
-                .chain(
-                    sequence_coercions
-                        .iter()
-                        .map(|(id, facts)| (id, &facts.call.callee)),
-                )
-                .chain(
-                    key_value_coercions
-                        .iter()
-                        .map(|(id, facts)| (id, &facts.call.callee)),
-                )
-                // A `..base` member merges through `LiteralSpread`, a second
-                // callee at the same site.
-                .chain(
-                    key_value_coercions
-                        .iter()
-                        .filter_map(|(id, facts)| Some((id, facts.spread.as_ref()?))),
-                )
-                .filter_map(|(id, callee)| Some((*id, callee.method_def?))),
-        )
+        .filter_map(|(id, callee)| Some((*id, callee.method_def?)));
+
+    methods
+        .chain(statics)
+        .chain(operators)
+        .chain(iterators)
+        .chain(literals)
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.
@@ -420,14 +410,8 @@ pub(crate) struct ElementOverlayLens {
 }
 
 impl TypeAnnotations {
-    /// Every callee a recorded dispatch decision names, as `(use site,
-    /// declaration)` pairs — the sites whose source spells no identifier, so
-    /// nothing records a use→def edge for them: an overloaded operator, a
-    /// subscript read or write, a `From` conversion, a `for-of` iterator.
-    ///
-    /// Covers each tuple-`for-of` element overlay too: its facts are peeled off
-    /// this map's tail, so iterating only the map would miss every element but
-    /// the one whose entries were never peeled.
+    /// Every callee a dispatch decision names, as `(use site, declaration)`
+    /// pairs, from this map and every [`ElementOverlay`] peeled off its tail.
     ///
     /// A pair is absent where no declaration backs the callee — an auto-derived
     /// `Eq` / `Ord`, a `From` impl synthesis mints later, a receiver that is a
@@ -471,13 +455,8 @@ impl TypeAnnotations {
     }
 
     /// The `impl <effect> for <handler>` blocks each handler binding installs.
-    /// Every method of such a block is reachable from the binding: dispatch
-    /// synthesis routes the effect's operations to them after `liveness` runs,
-    /// and it is the binding, not any call in the source, that names them.
-    ///
-    /// Kept apart from [`Self::dispatched_callees`] because the target is a
-    /// block, not one method — the caller expands it through the declaration
-    /// table.
+    /// Apart from [`Self::dispatched_callees`] because the target is a block,
+    /// not one method — the caller expands it through the declaration table.
     pub(crate) fn handler_impl_blocks(
         &self,
     ) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + '_ {
@@ -570,9 +549,7 @@ pub(crate) struct MethodNames {
 /// impl's home or re-mangling the method name.
 #[derive(Clone)]
 pub(crate) struct FromCallFacts {
-    /// The `from` method the conversion calls — the liveness edge's target.
-    /// `None` when the `impl From<…>` is synthesized later and so declares
-    /// nothing this pass can name.
+    /// The `from` method the conversion calls.
     pub(crate) method_def: Option<crate::defs::DefId>,
     /// Module that hosts the `impl From<From> for Target` block (or
     /// the auto-derived synthesis site).
@@ -595,9 +572,8 @@ pub(crate) struct FromCallFacts {
 /// `impl From<Array<…>>`'s `from`, or an `impl LiteralSpread`'s `spread_literal`.
 #[derive(Clone)]
 pub(crate) struct LiteralCallee {
-    /// The method the literal calls — the liveness edge's target. A literal
-    /// spells no method name, so nothing else names it. `None` where the
-    /// target is an `Array<E>` itself: no conversion runs.
+    /// The method the literal calls. A literal spells no name, so nothing else
+    /// names it.
     pub(crate) method_def: Option<crate::defs::DefId>,
     /// Module that hosts the impl block.
     pub(crate) impl_module_source: crate::module_source::ModuleSource,
@@ -681,10 +657,9 @@ pub(crate) struct KeyValueCoercionFacts {
 /// [`TypeAnnotations::static_method_dispatch`].
 #[derive(Clone)]
 pub(crate) struct StaticMethodDispatch {
-    /// The declaration dispatch selected — the liveness edge's target. A
-    /// static call through a blanket (`Point::tag()` answered by
-    /// `impl<T: Marker> Tag for T`) names the block only here. `None` where no
-    /// declaration backs it — a builtin or a variant constructor.
+    /// The declaration dispatch selected. A static call through a blanket
+    /// (`Point::tag()` answered by `impl<T: Marker> Tag for T`) names it here
+    /// and nowhere else.
     pub(crate) method_def: Option<crate::defs::DefId>,
     /// The resolved callee — `module_source`, mangled `name`,
     /// `method_info`, `monomorph_info` — as the elaborator constructed
@@ -869,11 +844,8 @@ pub(crate) struct HandlerBindingFacts {
 /// `resolve_bundled_handler_binding`.
 #[derive(Clone)]
 pub(crate) struct HandlerEffectEntry {
-    /// The `impl <effect> for <handler>` block this binding installs. Dispatch
-    /// synthesis routes the effect's operations to its methods after
-    /// `liveness` runs, so the binding is the only thing that names them.
-    /// `None` where the handler resolves to no block — an error path an earlier
-    /// diagnostic already covered.
+    /// The `impl <effect> for <handler>` block this binding installs — the only
+    /// thing naming the methods dispatch synthesis routes operations to.
     pub(crate) impl_def: Option<crate::defs::DefId>,
     pub(crate) name: String,
     pub(crate) module_source: crate::module_source::ModuleSource,
@@ -947,11 +919,7 @@ pub(crate) struct OperatorDispatch {
     /// module source, mangled name, and `LocalMethodName` metadata
     /// the elaborator already populated.
     pub(crate) function_ref: FunctionRef,
-    /// The declaration the dispatch selected — the liveness edge from the
-    /// enclosing item runs to this. `None` where no declaration backs it: an
-    /// auto-derived `Eq` / `Ord`, or a receiver that is a type parameter, whose
-    /// block monomorphization picks (the generic-context rule in
-    /// `liveness` reaches those impls from the trait method instead).
+    /// The declaration the dispatch selected.
     pub(crate) method_def: Option<crate::defs::DefId>,
     /// Self-kind of the trait method's receiver. Reify feeds this
     /// (with `is_ref_impl = false` — operator trait methods are
@@ -990,10 +958,9 @@ pub(crate) struct OperatorDispatch {
 /// without re-dispatching.
 #[derive(Clone)]
 pub(crate) struct ForOfIteratorInfo {
-    /// The `into_iter` declaration dispatch chose — the liveness edge's target.
-    /// The loop spells no method name, so nothing else names it.
+    /// The `into_iter` and `next` declarations dispatch chose. The loop spells
+    /// no method name, so nothing else names them.
     pub(crate) into_iter_def: Option<crate::defs::DefId>,
-    /// The `next` declaration dispatch chose, likewise.
     pub(crate) next_def: Option<crate::defs::DefId>,
     /// Resolved `IntoIterator::into_iter` dispatch target.
     pub(crate) into_iter: FunctionRef,

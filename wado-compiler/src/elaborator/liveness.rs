@@ -1,11 +1,8 @@
 //! Source-level liveness / dead-code analysis (WEP 2026-05-16, 2026-05-26):
 //! between `annotate_bodies` and `reify`, reachability from the
-//! package-external boundary over the call graph annotate recorded, tracing
-//! every site reify can emit a call from. Two kinds of edge make that graph:
-//! the use→def edge of every name the source spells, and the dispatch decision
-//! recorded at the site — for an operator, a subscript, a `From` conversion, a
-//! `for-of` iterator, a literal coercion or a handler binding, the only thing
-//! that names the callee at all.
+//! package-external boundary over the two edges annotate records — the use→def
+//! edge of every name the source spells, and the dispatch decision at every
+//! site that spells none.
 //!
 //! Only free functions and globals are classified for diagnostics; a method
 //! counts as used so a function only it calls is not reported dead, but is
@@ -64,15 +61,9 @@ pub(crate) fn compute(
 ) -> Liveness {
     let mut graph = Graph::default();
 
-    // One path is undecidable at the source level: a trait method reached
-    // through a generic bound (`fn show<T: Display>(x: T) { x.fmt() }`, or a
-    // projection like `S::MapSerializer`). Annotate records the edge to the
-    // *trait's* method, and which impl answers is settled by monomorphization,
-    // which this graph does not run. So reaching a trait method reaches the
-    // corresponding method on every impl of that trait — the rule the language
-    // feature requires, rather than a blanket over every trait impl. Broader
-    // than "every *reachable* impl" only because impl-block reachability is not
-    // itself a question this graph answers.
+    // Which impl a call through a generic bound reaches is settled by
+    // monomorphization, which this graph does not run, so a trait method
+    // reaches every impl's. See the WEP's Liveness section for the two rules.
     for (trait_method, impl_methods) in trait_method_impls {
         graph
             .edges
@@ -156,12 +147,10 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Impl(impl_block) => {
-                    // A method rides the graph on the call that reaches it —
-                    // the one the source spells, or the dispatch decision
-                    // annotate recorded where it spells none. It is a root only
-                    // where the call is minted after this pass: by a synthesis
-                    // pass reading a format specifier, or by the compiler
-                    // naming an inherent method itself.
+                    // A method rides the graph on the call that reaches it. It
+                    // is a root only where that call is minted after this pass:
+                    // by synthesis reading a format specifier, or by the
+                    // compiler naming an inherent method itself.
                     let synthesis_dispatched = compiler_named
                         .synthesis_dispatched_impls
                         .contains(&impl_block.id);
@@ -243,13 +232,10 @@ pub(crate) fn compute(
 pub(crate) struct References<'a> {
     pub(crate) direct: &'a IndexMap<AstId, AstId>,
     pub(crate) inherited: &'a IndexMap<AstId, IndexSet<AstId>>,
-    /// Callees named by a dispatch fact rather than by a `use` of a name: an
-    /// overloaded operator, a subscript, a `From` conversion, a `for-of`
-    /// iterator, a handler binding. Those sites spell no identifier, so
-    /// nothing records a `direct` edge for them. A spelled method call is here
-    /// too: `direct` keeps one definition per node, and a node walked once per
-    /// tuple-`for-of` element resolves differently each time, so only the
-    /// per-walk fact names every callee.
+    /// Callees a dispatch fact names: an operator, a subscript, a `From`
+    /// conversion, a `for-of` iterator, a handler binding — and every method
+    /// call, since `direct` keeps one definition per node while a tuple
+    /// `for-of` resolves the same node once per element.
     pub(crate) dispatch: &'a IndexMap<AstId, IndexSet<AstId>>,
 }
 
@@ -1018,15 +1004,9 @@ impl Graph {
     }
 }
 
-/// Visitor that records every [`AstId`] the walk announces — names, fields and
-/// method segments, and each statement's and expression's own, which
-/// [`ast::walk_stmt`] and [`ast::walk_expr`] hand to `visit_id` before
-/// descending.
-///
-/// The latter is where a dispatch fact is filed: `method_dispatch` keys on the
-/// call node, `for_of_iterator` on the loop, `operator_dispatch` on the binary
-/// or index expression. So the edges only a decision names ride the same
-/// collection as the spelled ones.
+/// Every [`AstId`] the walk announces: names, fields and method segments, plus
+/// each statement's and expression's own — the node a dispatch fact is keyed
+/// under.
 #[derive(Default)]
 struct IdCollector {
     ids: Vec<AstId>,
@@ -1067,8 +1047,7 @@ pub(crate) struct CompilerNamed {
     pub(crate) functions: IndexMap<ModuleSource, IndexSet<String>>,
     /// `impl` blocks whose trait a synthesis pass dispatches — see
     /// [`crate::compiler_item::CompilerItem::dispatched_by_synthesis`]. Their
-    /// methods are roots: the call reaching one is minted from a format
-    /// specifier or a reflection face, so no edge here can name it.
+    /// methods are roots: no edge here can name a call minted after this pass.
     pub(crate) synthesis_dispatched_impls: IndexSet<AstId>,
 }
 

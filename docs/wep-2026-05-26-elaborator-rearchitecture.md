@@ -407,11 +407,10 @@ like `S::MapSerializer`): `annotate` records the edge to the trait method, and
 the concrete impl is selected during monomorphization, which the source graph
 does not run. So reaching a trait method reaches the corresponding method on
 every impl of that trait. Broader than "every _reachable_ impl" only because
-impl-block reachability is not itself a question this graph answers. This is
-also what carries the faces a derive expands into — serde, reflection: the
-synthesised body is TIR this graph never sees, but the impls it calls are
-reached through the bound like any other, from a `T: Serialize` entry point
-down through `Serializer::begin_seq`.
+impl-block reachability is not itself a question this graph answers. It is also
+what carries the faces a derive expands into: the synthesised body is TIR this
+graph never sees, but the impls it calls are reached through the bound like any
+other, from a `T: Serialize` entry point down through `Serializer::begin_seq`.
 
 A generic impl block standing beside one written for a single instantiation of
 the same head (`impl<T> Tag for Box_<T>` and `impl Tag for Box_<i32>`):
@@ -422,12 +421,12 @@ method — an edge, not a root: a program that never reaches the template needs
 neither block.
 
 A trait whose calls a synthesis pass mints after this one runs: the format
-traits behind `${x:spec}`, and the reflection faces `reflect_bridge` mints per
-monomorphized type. Which trait such a site dispatches to is read from a format
-specifier `annotate` does not interpret, so no fact names the callee. The
-methods of a block implementing one are roots. Membership is
+traits behind `${x:spec}`, whose callee is read from a specifier `annotate`
+does not interpret, and the reflection faces `reflect_bridge` mints per
+monomorphized type. No fact names either, so the methods of a block
+implementing one are roots. Membership is
 `CompilerItem::dispatched_by_synthesis`, so the registry states the rule once
-and a format trait added later cannot be forgotten.
+and a trait added later cannot be forgotten.
 
 Gating reify is sound only because every semantic diagnostic that can fire on
 dead code (effect, stores, purity, world-export conformance) is produced from

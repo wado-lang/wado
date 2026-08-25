@@ -327,33 +327,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_handler_binding_facts(
             binding.id,
             super::sem::types::HandlerBindingFacts {
-                effects: effects
-                    .into_iter()
-                    .map(|(impl_def, name, module, type_args)| {
-                        super::sem::types::HandlerEffectEntry {
-                            impl_def: Some(impl_def),
-                            name,
-                            module_source: module,
-                            trait_type_args: type_args,
-                        }
-                    })
-                    .collect(),
+                effects,
                 bundle_group: Some(bundle_group),
                 handler_type,
             },
         );
     }
 
-    /// The `(base_trait_name, defining_module, trait_type_args)` triple for every
-    /// in-scope `impl` whose trait resolves to an effect or resource — both are
-    /// installable, so a bundled `with h do` expands to one binding each. Dedup
-    /// by that triple keeps `Stream<u8>` and `Stream<i32>` separate. Discovery
-    /// runs the impl index first, then the module's own items, in walk order.
+    /// One entry per in-scope `impl` whose trait resolves to an effect or a
+    /// resource — both are installable, so a bundled `with h do` expands to one
+    /// binding each. Dedup by `(module, name, type args)` keeps `Stream<u8>`
+    /// and `Stream<i32>` separate.
     fn collect_effect_impls_for_type(
         &mut self,
         type_name: &str,
-    ) -> Vec<(crate::defs::DefId, String, ModuleSource, Vec<TypeId>)> {
-        let mut out: Vec<(crate::defs::DefId, String, ModuleSource, Vec<TypeId>)> = Vec::new();
+    ) -> Vec<super::sem::types::HandlerEffectEntry> {
+        let mut out: Vec<super::sem::types::HandlerEffectEntry> = Vec::new();
         let mut seen: crate::hashmap::IndexSet<(ModuleSource, String, Vec<TypeId>)> =
             crate::hashmap::IndexSet::default();
 
@@ -412,7 +401,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base_trait_name.clone(),
                 type_args.clone(),
             )) {
-                out.push((*impl_def, base_trait_name, decl_module, type_args));
+                out.push(super::sem::types::HandlerEffectEntry {
+                    impl_def: Some(*impl_def),
+                    name: base_trait_name,
+                    module_source: decl_module,
+                    trait_type_args: type_args,
+                });
             }
         }
 
@@ -420,16 +414,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The `impl <effect> for <handler>` block a `with Effect => h do` clause
-    /// installs. Dispatch synthesis routes the effect's operations to this
-    /// block's methods, and it does so after `liveness` runs — so the binding
-    /// records which block it is, and nothing has to find one by name later.
-    ///
-    /// `trait_type_args` picks between the blocks one type writes for several
-    /// instantiations of one generic effect (`impl Stream<u8> for T` beside
-    /// `impl Stream<i32> for T`): the clause's own arguments name which. A
-    /// generic block writes its slots there rather than a use site's
-    /// arguments, so an unmatched search falls back to the first block
-    /// implementing the effect at all.
+    /// installs, picked by `trait_type_args` where one type implements several
+    /// instantiations of one generic effect.
     fn effect_impl_block(
         &self,
         handler_type: TypeId,
@@ -463,8 +449,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The name an `impl <effect> for <handler>` block is indexed under — the
-    /// bare head, so `impl<T> Log for Ctx<T>` answers for a handler of type
-    /// `Ctx<i32>`.
+    /// bare head, so `impl<T> Log for Ctx<T>` answers for a `Ctx<i32>` handler.
     fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
         let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
         match &resolved {

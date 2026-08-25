@@ -1205,19 +1205,12 @@ impl CompilerItem {
     }
 
     /// Whether a synthesis pass mints the calls to this trait's impls, after
-    /// source-level liveness has run. Such a call leaves no edge for the graph
-    /// to follow — the source spells no method name and annotate records no
-    /// dispatch, because the trait is read from a format specifier that only
-    /// `synthesis::template` interprets. So `liveness` seeds the methods of
-    /// every block implementing one as roots.
+    /// `liveness` has run, leaving no edge for its graph to follow. Such a
+    /// block's methods are roots.
     ///
-    /// The serde and reflect faces a derive expands into are *not* here. Their
-    /// impls are reached the ordinary way: a source body calls the trait
-    /// method through a generic bound (`fn to_string<T: Serialize>`, an
-    /// `impl Serialize` calling `s.begin_seq`), annotate records that dispatch
-    /// against the trait's declared method, and the generic-bound rule carries
-    /// it to every impl. Listing one here would keep its impls alive for
-    /// nothing.
+    /// The serde and reflect faces behind a derive are *not* here: a source
+    /// body calls them through a generic bound, and `liveness` carries that
+    /// edge to every impl. Listing one would keep its impls alive for nothing.
     pub fn dispatched_by_synthesis(self) -> bool {
         matches!(
             self,
@@ -1237,12 +1230,10 @@ impl CompilerItem {
                 | Self::UpperHexAlt
                 | Self::LowerExp
                 | Self::UpperExp
-                // The introspection faces `synthesis::reflect_bridge` mints
-                // calls to per monomorphized type. `Member` is the one whose
-                // impls are hand-written (`VariantCase`, `EnumCase`,
-                // `FlagsBit`, `StructField`); the `Reflect*` traits are sealed
-                // and only ever implemented by that pass, at TIR level, where
-                // this graph cannot see them.
+                // Implemented by `VariantCase`, `EnumCase`, `FlagsBit` and
+                // `StructField` for the calls `synthesis::reflect_bridge`
+                // mints. The sealed `Reflect*` faces need no entry: that pass
+                // writes them at TIR level, where no AST block exists.
                 | Self::Member
         )
     }
