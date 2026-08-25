@@ -1,8 +1,6 @@
-// A generic builtin's type parameter is fixed by the expected type, not by the
-// argument, so a numeric literal argument has to be re-coerced once the
-// substitution is known. Without the declaration's type-param slots the call
-// site cannot substitute, the literal keeps its default width, and the mismatch
-// surfaces as an invalid module at codegen rather than as a diagnostic.
+// A generic builtin takes its type parameter from the expected type, so a
+// literal argument is re-coerced once the substitution is known. Without that
+// the literal keeps its default width and codegen rejects the module.
 
 use { println, Stdout } from "core:cli";
 

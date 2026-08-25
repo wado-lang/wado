@@ -524,10 +524,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_site,
             callee_kind.callee_site(),
         );
-        // Kept in the declaration's own frame, before instantiation replaces
-        // its slots with inference variables: once the type arguments are
-        // known, substituting into these is what gives each argument the
-        // concrete parameter type it is finally checked and coerced against.
+        // The declaration's own frame, before instantiation replaces its slots
+        // with inference variables. Inferred type arguments substitute into
+        // these, not into the variables.
         let declared_param_types = param_types.clone();
 
         // Instantiate the callee's slots before an argument is resolved
@@ -1811,11 +1810,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return (params, slots);
             }
 
-            // Builtin functions: look up param types from core:builtin module.
-            // Its slots come back too — a generic builtin whose parameter is
-            // its own type parameter fixes that parameter from the expected
-            // type, and without the slot a literal argument cannot be
-            // re-coerced to the width the substitution chose.
+            // Builtin functions resolve through the `core:builtin` module,
+            // slots and all: a generic builtin takes its type parameter from
+            // the expected type, and a literal argument is re-coerced to it.
             if prefix == "builtin"
                 && let Some(def) = self.decl_in_module(&ModuleSource::builtin(), suffix)
                 && let Some(sig) = self.tysys.signatures.function_sig(def)

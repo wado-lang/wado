@@ -14,9 +14,8 @@ use wasmparser::{ElementItems, ElementKind, ExternalKind};
 use crate::dataref::{DataRange, DataRefs, merge_with_gap};
 use crate::{Asset, Error};
 
-/// Bytes of gap between two live ranges of one segment that are cheaper to keep
-/// than to split around: a second active segment costs a header, an offset
-/// expression and a length.
+/// A gap this small is cheaper to keep than to split around: a second segment
+/// costs a header, an offset expression and a length.
 const SEGMENT_HEADER_BYTES: u32 = 12;
 
 /// What survives, in the asset's original index space. Imports are not listed:
@@ -345,9 +344,7 @@ impl Walk<'_, '_> {
         }
     }
 
-    /// Keep every byte of a segment: it is passive and something initialises
-    /// memory from it, or it is active and nothing says which of its bytes are
-    /// still read.
+    /// Keep every byte of a segment: nothing says which of them are still read.
     fn mark_data_whole(&mut self, index: u32) {
         if self.live.datas.insert(index, Keep::Whole).is_none() {
             self.queue.push(Item::Data(index));

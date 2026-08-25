@@ -33,9 +33,8 @@ pub fn run(mut parser: lexopt::Parser) {
         .print(&stripped, &mut wasmprinter::PrintFmtWrite(&mut wat))
         .expect("failed to print wasm");
 
-    // A map naming no function would read as one that failed to resolve, and
-    // `wado-wasm-embed` rejects it for that reason. An asset with nothing to
-    // say carries no section, and keeps its data segments whole.
+    // `DataRefs::parse` refuses a map naming no function, so an asset with
+    // nothing to say carries no section at all.
     let block = if refs.is_empty() {
         String::new()
     } else {

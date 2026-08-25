@@ -190,10 +190,8 @@ fn the_bundled_libm_is_pruned_to_what_the_program_calls() {
     );
 }
 
-/// The same asset carries a `wado.dataref` map, so the prune reaches its
-/// rodata too. `sin` needs three of libm's tables and none of `exp2`'s 4 KB
-/// one; without the map every program calling any math function carries all of
-/// it.
+/// The same asset carries a `wado.dataref` map, so the prune reaches its rodata
+/// too: `sin` needs three of libm's tables and none of `exp2`'s 4 KB one.
 #[test]
 fn the_bundled_libm_keeps_only_the_data_the_program_reads() {
     let full = wat::parse_bytes(wado_compiler::stdlib::CORE_LIBM_WAT).expect("libm.wat parses");
@@ -246,8 +244,7 @@ fn the_bundled_libm_carries_its_data_reference_map() {
 }
 
 /// The embedded libm core module of a program that calls `sin` and nothing
-/// else. `black_box` keeps the argument off the constant-folding path, so the
-/// bundled code really is reached.
+/// else.
 fn embedded_libm(entry: &str) -> Vec<u8> {
     let source = r#"
 use { println, Stdout } from "core:cli";

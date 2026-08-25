@@ -1,10 +1,6 @@
-// The bundled libm asset carries a `wado.dataref` map, and the prune keeps only
-// the rodata bytes the surviving functions claim. Every function below reads a
-// table: too narrow a map, and these answers change.
-//
-// `black_box` keeps the arguments away from constant folding, so the bundled
-// code really runs. The huge argument drives the Payne–Hanek reduction, which
-// is the one path that reaches libm's largest shared table.
+// Every function below reads one of libm's rodata tables, so too narrow a
+// `wado.dataref` map changes these answers. The huge argument drives the
+// Payne-Hanek reduction, the one path reaching the largest shared table.
 
 use { println, Stdout } from "core:cli";
 

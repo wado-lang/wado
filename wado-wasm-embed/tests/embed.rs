@@ -285,13 +285,7 @@ fn passive_data_is_kept_only_where_it_is_initialised_from() {
             (memory.init $live (i32.const 0) (i32.const 0) (i32.const 4))))
     "#;
     let pruned = prune(source, &["f"]);
-    let mut datas = 0;
-    for payload in wasmparser::Parser::new(0).parse_all(&pruned) {
-        if let Ok(wasmparser::Payload::DataSection(reader)) = payload {
-            datas += reader.count();
-        }
-    }
-    assert_eq!(datas, 1);
+    assert_eq!(data_segments(&pruned), [(None, b"live".to_vec())]);
 }
 
 /// Active segments initialise the shared memory, so they stay whatever the
@@ -302,13 +296,7 @@ fn active_data_survives_an_empty_keep_set() {
         r#"(module (memory 1) (data (i32.const 0) "hi") (func (export "f")))"#,
         &[],
     );
-    let mut datas = 0;
-    for payload in wasmparser::Parser::new(0).parse_all(&pruned) {
-        if let Ok(wasmparser::Payload::DataSection(reader)) = payload {
-            datas += reader.count();
-        }
-    }
-    assert_eq!(datas, 1);
+    assert_eq!(data_segments(&pruned), [(Some(0), b"hi".to_vec())]);
 }
 
 #[test]
@@ -442,18 +430,21 @@ fn a_broken_name_section_is_dropped_rather_than_failing() {
     assert!(!custom_sections(&pruned).contains(&"name".to_string()));
 }
 
-/// The bytes of an active segment, as `(address, contents)` per emitted piece.
-fn data_segments(wasm: &[u8]) -> Vec<(i32, Vec<u8>)> {
+/// Every emitted data segment as `(address, contents)`. The address is `None`
+/// where it is not a constant — a passive segment, or one at a computed one.
+fn data_segments(wasm: &[u8]) -> Vec<(Option<i32>, Vec<u8>)> {
     let mut segments = Vec::new();
     for payload in wasmparser::Parser::new(0).parse_all(wasm) {
         if let Ok(wasmparser::Payload::DataSection(reader)) = payload {
             for data in reader.into_iter().flatten() {
-                let wasmparser::DataKind::Active { offset_expr, .. } = data.kind else {
-                    continue;
-                };
-                let address = match offset_expr.get_operators_reader().read() {
-                    Ok(wasmparser::Operator::I32Const { value }) => value,
-                    other => panic!("expected a constant address, got {other:?}"),
+                let address = match data.kind {
+                    wasmparser::DataKind::Passive => None,
+                    wasmparser::DataKind::Active { offset_expr, .. } => {
+                        match offset_expr.get_operators_reader().read() {
+                            Ok(wasmparser::Operator::I32Const { value }) => Some(value),
+                            _ => None,
+                        }
+                    }
                 };
                 segments.push((address, data.data.to_vec()));
             }
@@ -488,13 +479,16 @@ const QUARTERS_MAP: &str = "a 0:0+4\nb 0:4+4\nc 0:8+4\nd 0:12+4\n";
 #[test]
 fn a_data_reference_map_prunes_an_active_segment_by_the_byte() {
     let pruned = prune(&quarters(Some(QUARTERS_MAP)), &["b"]);
-    assert_eq!(data_segments(&pruned), [(12, b"BBBB".to_vec())]);
+    assert_eq!(data_segments(&pruned), [(Some(12), b"BBBB".to_vec())]);
 }
 
 #[test]
 fn without_a_map_an_active_segment_stays_whole() {
     let pruned = prune(&quarters(None), &["b"]);
-    assert_eq!(data_segments(&pruned), [(8, b"AAAABBBBCCCCDDDD".to_vec())]);
+    assert_eq!(
+        data_segments(&pruned),
+        [(Some(8), b"AAAABBBBCCCCDDDD".to_vec())]
+    );
 }
 
 /// A second segment costs more header than a short gap costs payload, so
@@ -502,7 +496,10 @@ fn without_a_map_an_active_segment_stays_whole() {
 #[test]
 fn ranges_separated_by_less_than_a_segment_header_are_merged() {
     let pruned = prune(&quarters(Some(QUARTERS_MAP)), &["a", "c"]);
-    assert_eq!(data_segments(&pruned), [(8, b"AAAABBBBCCCC".to_vec())]);
+    assert_eq!(
+        data_segments(&pruned),
+        [(Some(8), b"AAAABBBBCCCC".to_vec())]
+    );
 }
 
 #[test]
@@ -548,7 +545,10 @@ fn passive_segments_keep_their_indices_across_a_split() {
           (@custom "wado.dataref" (after data) "a 0:0+4\n"))
     "#;
     let pruned = prune(source, &["a", "init"]);
-    assert_eq!(data_segments(&pruned), [(8, b"AAAA".to_vec())]);
+    assert_eq!(
+        data_segments(&pruned),
+        [(Some(8), b"AAAA".to_vec()), (None, b"passive".to_vec())]
+    );
     let mut init_targets = Vec::new();
     for payload in wasmparser::Parser::new(0).parse_all(&pruned) {
         if let Ok(wasmparser::Payload::CodeSectionEntry(body)) = payload {
@@ -575,16 +575,11 @@ fn a_segment_at_a_computed_address_is_never_split() {
           (func $a (export "a") (result i32) (i32.load (i32.const 8)))
           (@custom "wado.dataref" (after data) "a 0:0+4\n"))
     "#;
-    let pruned = prune(source, &["a"]);
-    let mut kept = Vec::new();
-    for payload in wasmparser::Parser::new(0).parse_all(&pruned) {
-        if let Ok(wasmparser::Payload::DataSection(reader)) = payload {
-            for data in reader.into_iter().flatten() {
-                kept.push(data.data.to_vec());
-            }
-        }
-    }
-    assert_eq!(kept, [b"AAAABBBB".to_vec()]);
+    assert_eq!(
+        data_segments(&prune(source, &["a"])),
+        [(None, b"AAAABBBB".to_vec())],
+        "the whole segment, at the computed address it already had"
+    );
 }
 
 /// A passive segment is named by index and copied by `memory.init`, so no map
@@ -599,19 +594,10 @@ fn a_map_naming_a_passive_segment_leaves_it_to_memory_init() {
             (memory.init $passive (i32.const 0) (i32.const 0) (i32.const 7)))
           (@custom "wado.dataref" (after data) "a 0:0+4\n"))
     "#;
-    let pruned = prune(source, &["a"]);
-    let mut kept = Vec::new();
-    for payload in wasmparser::Parser::new(0).parse_all(&pruned) {
-        if let Ok(wasmparser::Payload::DataSection(reader)) = payload {
-            for data in reader.into_iter().flatten() {
-                kept.push(data.data.to_vec());
-            }
-        }
-    }
     assert_eq!(
-        kept,
-        [b"passive".to_vec()],
-        "the whole segment, not 4 bytes"
+        data_segments(&prune(source, &["a"])),
+        [(None, b"passive".to_vec())],
+        "the whole segment, not the 4 bytes the map names"
     );
 }
 
@@ -626,11 +612,9 @@ fn a_map_naming_a_passive_segment_does_not_keep_it_alive() {
           (func $a (export "a") (result i32) (i32.const 1))
           (@custom "wado.dataref" (after data) "a 0:0+4\n"))
     "#;
-    assert_eq!(data_segments(&prune(source, &["a"])), []);
-    assert!(
-        !section_ids(&prune(source, &["a"])).contains(&11),
-        "no data section"
-    );
+    let pruned = prune(source, &["a"]);
+    assert_eq!(data_segments(&pruned), []);
+    assert!(!section_ids(&pruned).contains(&11), "no data section");
 }
 
 /// A map that names nothing reads exactly like one that failed to resolve, and
