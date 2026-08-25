@@ -899,9 +899,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // construction, or monomorph-info shaping — facts reify
                 // cannot reconstruct from the AST alone. It returns only a
                 // typed placeholder.
+                // `impl Holder<i32> { fn plain() }` reached as
+                // `Holder::plain()`: the sole concrete impl declaring the
+                // static pins the receiver's arguments, as Rust resolves it.
+                let pinned = match self
+                    .concrete_static_receiver(&self.impl_target_at(receiver_site, prefix), suffix)
+                {
+                    Ok(pinned) => pinned,
+                    Err(candidates) => {
+                        let _ = self.emit(TypeError::AmbiguousConcreteImplStatic {
+                            method: suffix.to_string(),
+                            receiver: prefix.to_string(),
+                            candidates,
+                            span: call.span,
+                        });
+                        return TypeTable::ERROR;
+                    }
+                };
                 return self
                     .resolve_static_method_call_from_qualified(
                         receiver_site,
+                        pinned,
                         prefix,
                         suffix,
                         &args,
@@ -2709,7 +2727,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `(declaring_args, method_args)` — the first from `impl Container<T>`, the
     /// second from `fn make<U>()` — either possibly empty. Reads the signature's
     /// canonical types directly, solving *for* an instantiation's arguments.
-    fn infer_static_method_type_args(
+    pub(super) fn infer_static_method_type_args(
         &mut self,
         struct_name: &str,
         method_name: &str,

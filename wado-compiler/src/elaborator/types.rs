@@ -823,6 +823,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A static reached through a bare generic receiver that more than one
+    /// concrete impl declares. A static has no receiver value to select by, so
+    /// only the written arguments can decide.
+    AmbiguousConcreteImplStatic {
+        method: String,
+        receiver: String,
+        candidates: Vec<String>,
+        span: Span,
+    },
+
     /// A `#[cm(..., type = ...)]` backing the elaborator rejected.
     ResourceBacking {
         message: String,
@@ -1673,6 +1683,30 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousConcreteImplStatic {
+                method,
+                receiver,
+                candidates,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous static '{method}': declared by {}; a static has no receiver to select by, so write the receiver's arguments, e.g. '{}::{method}()'",
+                    candidates
+                        .iter()
+                        .map(|c| format!("'impl {c}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and "),
+                    candidates.first().map_or_else(
+                        || receiver.clone(),
+                        |c| match c.split_once('<') {
+                            Some((head, args)) => format!("{head}::<{args}"),
+                            None => c.clone(),
+                        }
+                    ),
                 ),
                 *span,
             ),

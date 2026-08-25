@@ -1,0 +1,28 @@
+// A static's own type parameter, inferred from the arguments rather than
+// spelled out. `impl<T> Holder<T> { fn tagged<U>(u: U) }` binds `T` at the
+// receiver and leaves `U` to the call; without the inference `U` reached
+// monomorphization unbound, the instantiation was never queued for want of
+// arguments, and the call arrived at WIR build naming a function nothing
+// emitted.
+//
+// `concrete_impl_method_generics.wado` covers the same inference for an
+// instance method, where the receiver value supplies the declaring argument.
+
+struct Holder<T> {
+    value: T,
+}
+
+impl<T> Holder<T> {
+    fn tagged<U>(u: U) -> U {
+        return u;
+    }
+}
+
+test "a static's own slot is inferred from the argument" {
+    assert Holder::<i32>::tagged("hi") == "hi";
+    assert Holder::<bool>::tagged(42) == 42;
+}
+
+test "a turbofish still pins it" {
+    assert Holder::<i32>::tagged::<i32>(7) == 7;
+}

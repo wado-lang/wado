@@ -1,0 +1,33 @@
+// A static declared only by a concrete-instantiation impl. `Holder::plain()`
+// names it: the sole `impl Holder<i32>` pins the receiver's arguments, as Rust
+// resolves it. Without that the receiver mangled without them and the call
+// reached WIR build naming a function nothing emitted.
+//
+// `concrete_impl_inherent.wado` covers the instance-method side, where the
+// receiver value carries the instantiation and nothing needs pinning.
+
+struct Holder<T> {
+    value: T,
+}
+
+impl Holder<i32> {
+    fn plain() -> i32 {
+        return 7;
+    }
+}
+
+impl<T> Holder<T> {
+    fn get(v: T) -> T {
+        return v;
+    }
+}
+
+test "the sole concrete impl pins the receiver" {
+    assert Holder::plain() == 7;
+    assert Holder::<i32>::plain() == 7;
+}
+
+test "a generic impl still answers for every instantiation" {
+    assert Holder::<bool>::get(true) == true;
+    assert Holder::get(9) == 9;
+}

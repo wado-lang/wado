@@ -1,0 +1,29 @@
+// Two concrete-instantiation impls declaring the same static. A static has no
+// receiver value to select by, so neither `Holder<i32>` nor `Holder<bool>` is
+// the one the bare `Holder::plain()` means, and picking either silently would
+// let adding an impl retarget an existing call (WEP 2026-07-31).
+//
+// `concrete_impl_static.wado` covers the unambiguous case, where the sole
+// concrete impl pins the receiver.
+struct Holder<T> {
+    value: T,
+}
+
+impl Holder<i32> {
+    fn plain() -> i32 {
+        return 1;
+    }
+}
+
+impl Holder<bool> {
+    fn plain() -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    assert Holder::plain() == 1;
+}
+
+__DATA__
+{"compile_error": "ambiguous static 'plain': declared by 'impl Holder<i32>' and 'impl Holder<bool>'; a static has no receiver to select by, so write the receiver's arguments, e.g. 'Holder::<i32>::plain()'"}

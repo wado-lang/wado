@@ -1397,7 +1397,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve the target type first to get struct name for parameter type lookup
-        let target_type_id = self.resolve_type(&static_call.target_type);
+        let mut target_type_id = self.resolve_type(&static_call.target_type);
+
+        // `impl Holder<i32> { fn plain() }` makes `Holder::plain()` mean
+        // `Holder::<i32>::plain()`: the sole concrete impl declaring the static
+        // pins the receiver's arguments. Without it the receiver mangles
+        // without them and the call names a function nothing emitted.
+        let receiver_is_bare = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(target_type_id)
+            .is_none_or(|args| args.is_empty());
+        let pinned = match self.type_impl_target(target_type_id) {
+            Some(key) if receiver_is_bare => {
+                self.concrete_static_receiver(&key, &static_call.method)
+            }
+            _ => Ok(None),
+        };
+        match pinned {
+            Ok(Some(pinned)) => target_type_id = pinned,
+            Ok(None) => {}
+            Err(candidates) => {
+                let _ = self.emit(TypeError::AmbiguousConcreteImplStatic {
+                    method: static_call.method.clone(),
+                    receiver: self.tysys.type_table.borrow().type_name(target_type_id),
+                    candidates,
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
+        }
 
         // `Tag::<Point>::tag()` where `Tag` is a trait resolves to no type;
         // unreported it types `unknown` and lowering builds an invalid module.
@@ -1569,7 +1599,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve method-level type arguments
-        let method_type_args: Vec<TypeId> = static_call
+        let mut method_type_args: Vec<TypeId> = static_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
@@ -1645,6 +1675,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args.push(placeholder(resolved, default_expr.span()));
                 subs.insert(pname.clone(), default_expr);
             }
+        }
+
+        // A method-level slot the call does not spell out is inferred from the
+        // arguments, as `resolve_call` infers one for the `Type::method(..)`
+        // spelling. Without it the slot reaches monomorphization unbound, the
+        // instantiation is never queued for want of arguments, and the call
+        // arrives at WIR build naming a function nothing emitted.
+        if method_type_args.is_empty()
+            && let Some(name) = struct_name_for_lookup.clone()
+            && self
+                .static_method_sig(&name, &static_call.method)
+                .is_some_and(|sig| sig.decl.type_params.len() > sig.declaring_split())
+        {
+            let (_, inferred) = self.infer_static_method_type_args(
+                &name,
+                &static_call.method,
+                &static_call.args,
+                &args,
+                None,
+            );
+            method_type_args = inferred;
         }
 
         // Option::Some and Option::None are handled by the generic variant
@@ -3482,6 +3533,90 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// The concrete instantiation a bare generic receiver stands for at a
+    /// static call: `impl Holder<i32> { fn plain() }` makes `Holder::plain()`
+    /// mean `Holder::<i32>::plain()`, as Rust resolves it.
+    ///
+    /// `Ok(None)` leaves the receiver alone — it already carries its
+    /// arguments, or no concrete impl declares the static. `Err` names the
+    /// candidates when more than one does: a static has no receiver value to
+    /// select by, so nothing but the written arguments can decide.
+    pub(super) fn concrete_static_receiver(
+        &mut self,
+        key: &super::trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Result<Option<TypeId>, Vec<String>> {
+        let declarers: Vec<&super::trait_env::ImplHeader> = self
+            .tysys
+            .trait_env
+            .inherent_impl_keys(key)
+            .iter()
+            .filter_map(|impl_key| self.tysys.trait_env.impl_headers.get(impl_key))
+            .filter(|header| {
+                header.methods.iter().any(|method| {
+                    method.name == method_name
+                        && self
+                            .tysys
+                            .signatures
+                            .method_sig(method.ast_id)
+                            .is_some_and(|sig| sig.self_kind == ast::SelfKind::None)
+                })
+            })
+            .collect();
+        let targets: Vec<ast::Type> = declarers
+            .iter()
+            .filter(|header| matches!(&header.ty, ast::Type::Generic(_)))
+            .map(|header| header.ty.clone())
+            .collect();
+        if targets.len() != declarers.len() {
+            // A bare `impl Holder` declaring the static answers for every
+            // instantiation, so the receiver names it as written.
+            return Ok(None);
+        }
+
+        // The header's target was walked in its own module, so its site
+        // carries the answer and no vantage is re-derived here.
+        //
+        // `impl Slice<T>` binds `T` implicitly and writes the same shape as
+        // `impl Holder<i32>`, so what separates them is what the arguments
+        // resolve to, not whether the block spelled its parameters.
+        let mut seen: Vec<(TypeId, String)> = Vec::new();
+        for target in &targets {
+            let id = self.resolve_type(target);
+            if !self.type_is_fully_concrete(id) {
+                return Ok(None);
+            }
+            if !seen.iter().any(|(known, _)| *known == id) {
+                seen.push((id, self.get_type_name_full(target)));
+            }
+        }
+        match seen.len() {
+            0 => Ok(None),
+            1 => Ok(Some(seen[0].0)),
+            _ => Err(seen.into_iter().map(|(_, name)| name).collect()),
+        }
+    }
+
+    /// Whether `type_id` and every argument under it name a real type — no
+    /// type parameter, no inference variable, nothing unresolved.
+    fn type_is_fully_concrete(&self, type_id: TypeId) -> bool {
+        if type_id == TypeTable::UNKNOWN || type_id == TypeTable::ERROR {
+            return false;
+        }
+        let table = self.tysys.type_table.borrow();
+        if matches!(
+            table.get(type_id),
+            ResolvedType::TypeParam { .. }
+                | ResolvedType::InferVar(_)
+                | ResolvedType::TypePack { .. }
+        ) {
+            return false;
+        }
+        let args = table.nominal_type_args(type_id).unwrap_or_default();
+        drop(table);
+        args.iter().all(|&arg| self.type_is_fully_concrete(arg))
+    }
+
     /// The impl target keyed by `type_id`'s own declaration. `None` for a type
     /// that names none — a type parameter, an anonymous shape, a primitive.
     ///
@@ -3680,6 +3815,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_static_method_call_from_qualified(
         &mut self,
         receiver_site: Option<AstId>,
+        pinned_receiver: Option<TypeId>,
         struct_name: &str,
         method_name: &str,
         args: &[TirExpr],
@@ -3756,6 +3892,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 }
             }
+        } else if let Some(pinned) = pinned_receiver {
+            // `impl Holder<i32> { fn plain() }` reached as `Holder::plain()`:
+            // the impl's own target names the method, not the bare receiver.
+            // The head alone renders without arguments, so they are put back.
+            let fq = {
+                let tt = self.tysys.type_table.borrow();
+                let args: Vec<FqTypeName> = tt
+                    .nominal_type_args(pinned)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|arg| tt.fq_type_name(*arg))
+                    .collect();
+                tt.fq_base_type_name(pinned).with_args(args)
+            };
+            let mangled = MethodName::format_local(&fq, None, method_name);
+            (struct_name.to_string(), fq, mangled)
         } else {
             (
                 struct_name.to_string(),
