@@ -378,6 +378,12 @@ impl<'a> Resolver<'a> {
                                 owner,
                                 index: field.field_index,
                             });
+                            // A destructured field names the same storage
+                            // `base.field` does, but the pattern carries no
+                            // type to say whether that field borrows. Answer
+                            // borrowed: refusing a share costs a copy, allowing
+                            // one against a borrow costs the value semantics.
+                            place.through_borrow = true;
                             Names::Place(place)
                         }
                         Names::Value => Names::Value,
