@@ -71,7 +71,7 @@ pub(super) struct MethodCallInput<'a> {
 /// path returned early or method lookup failed.
 pub(super) struct MethodCallOutcome {
     pub expr: TirExpr,
-    pub dispatch: Option<(ast::SelfKind, bool, FunctionRef)>,
+    pub dispatch: Option<DispatchedMethod>,
     /// The resolved signature, for a caller that suppressed
     /// `record_method_dispatch` with `call_id: None` and files its own record.
     /// The qualified-call path files a *static* dispatch, which needs the same
@@ -79,6 +79,18 @@ pub(super) struct MethodCallOutcome {
     /// shape, and the expected types an unannotated closure argument infers
     /// from.
     pub signature: Option<MethodSignatureFacts>,
+}
+
+/// What dispatch selected, for a caller that suppressed
+/// [`Elaborator::record_method_dispatch`] with `call_id: None` and files its
+/// own record — the for-of iterator path and the trait-qualified static path.
+pub(super) struct DispatchedMethod {
+    pub self_kind: ast::SelfKind,
+    pub is_ref_impl: bool,
+    pub func: FunctionRef,
+    /// The declaration dispatch chose, for the liveness edge. `None` where no
+    /// declaration backs the signature — a builtin or an auto-derived method.
+    pub method_def: Option<crate::defs::DefId>,
 }
 
 pub(super) struct MethodSignatureFacts {
@@ -1162,7 +1174,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             // The `method_found` gate keeps the error-recovery placeholder
             // from leaking into the returned dispatch.
-            Some((self_kind, is_ref_impl, func))
+            Some(DispatchedMethod {
+                self_kind,
+                is_ref_impl,
+                func,
+                method_def: dispatched_method_def,
+            })
         } else {
             None
         };
@@ -1296,7 +1313,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_ast.span(),
             );
         }
-        if let (Some((_, _, function_ref)), Some(sig)) = (outcome.dispatch, outcome.signature) {
+        if let (Some(dispatched), Some(sig)) = (outcome.dispatch, outcome.signature) {
+            let function_ref = dispatched.func;
             // The receiver occupies slot 0 of the static shape, so every
             // per-parameter list gains a leading entry for it. It is spelled at
             // the call site and never omitted, hence no default; it is `mut`

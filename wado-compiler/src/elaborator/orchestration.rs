@@ -1847,9 +1847,39 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     inherited.entry(*use_id).or_default().insert(*def_key);
                 }
             }
+            // The callees a dispatch fact names. A snapshot module runs no body
+            // walk this compile, and only the facts `Semantics` drains are
+            // re-seeded into its `ModuleSemantics` — the rest stay in the
+            // snapshot's own, so both are read.
+            let mut dispatch: IndexMap<crate::ast::AstId, IndexSet<crate::ast::AstId>> =
+                IndexMap::default();
+            {
+                let defs = state.tysys.resolutions.defs();
+                let dispatch_sems = state
+                    .module_semantics
+                    .values()
+                    .chain(
+                        snapshot
+                            .and_then(|s| s.state.as_ref())
+                            .into_iter()
+                            .flat_map(|s| s.module_semantics.values()),
+                    )
+                    .flat_map(|sem| {
+                        std::iter::once(sem).chain(sem.default_method_semantics.values())
+                    });
+                for sem in dispatch_sems {
+                    for (use_id, def) in sem.types.dispatched_callees() {
+                        dispatch
+                            .entry(use_id)
+                            .or_default()
+                            .insert(defs.ast_id(def));
+                    }
+                }
+            }
             let references = super::liveness::References {
                 direct: &direct,
                 inherited: &inherited,
+                dispatch: &dispatch,
             };
             let export_names: crate::hashmap::IndexSet<String> = state
                 .world_registry
@@ -1888,10 +1918,64 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         _ => {}
                     }
                 }
+                // The traits a synthesis pass dispatches, as declarations —
+                // a block implementing one is reached by a call minted after
+                // liveness, from a format specifier or a derive this pass does
+                // not interpret.
+                let defs = state.tysys.resolutions.defs();
+                let synthesis_traits: IndexSet<crate::defs::DefId> =
+                    crate::compiler_item::CompilerItem::ALL
+                        .iter()
+                        .filter(|item| item.dispatched_by_synthesis())
+                        .filter_map(|&item| match items.get(item) {
+                            Some(crate::compiler_item::Resolved::Trait { decl, .. }) => {
+                                defs.of_ast_id(*decl)
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                for (impl_def, header) in &state.tysys.trait_env.impl_headers {
+                    if header
+                        .trait_ref
+                        .is_some_and(|trait_| synthesis_traits.contains(&trait_))
+                    {
+                        named
+                            .synthesis_dispatched_impls
+                            .insert(defs.ast_id(*impl_def));
+                    }
+                }
                 named
             };
-            state.liveness =
-                super::liveness::compute(modules, &references, &export_names, &compiler_named);
+            // Which impl methods a trait method stands for, when only
+            // monomorphization can say which one a generic call reaches.
+            let trait_method_impls = {
+                let defs = state.tysys.resolutions.defs();
+                let mut by_trait_method: IndexMap<crate::ast::AstId, IndexSet<crate::ast::AstId>> =
+                    IndexMap::default();
+                for header in state.tysys.trait_env.impl_headers.values() {
+                    let Some(trait_) = header.trait_ref else {
+                        continue;
+                    };
+                    for method in &header.methods {
+                        let Some(declared) = state.tysys.declared_method(trait_, &method.name)
+                        else {
+                            continue;
+                        };
+                        by_trait_method
+                            .entry(defs.ast_id(declared))
+                            .or_default()
+                            .insert(defs.ast_id(method.def));
+                    }
+                }
+                by_trait_method
+            };
+            state.liveness = super::liveness::compute(
+                modules,
+                &references,
+                &export_names,
+                &compiler_named,
+                &trait_method_impls,
+            );
         }
 
         // Phase 2 — `reify`: rehydrate stdlib TIR from the snapshot and reify

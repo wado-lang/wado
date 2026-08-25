@@ -1204,6 +1204,62 @@ impl CompilerItem {
         }
     }
 
+    /// Whether a synthesis pass mints the calls to this trait's impls, after
+    /// source-level liveness has run. Such a call leaves no edge for the graph
+    /// to follow — the source spells no method name and annotate records no
+    /// dispatch, because the trait is picked from a format specifier or a
+    /// derive that only synthesis interprets. So `liveness` seeds the methods
+    /// of every block implementing one as roots.
+    ///
+    /// Every other operator-ish trait is dispatched by annotate and reached
+    /// through the recorded decision instead
+    /// (`TypeAnnotations::dispatched_callees`); listing one here would keep its
+    /// impls alive for nothing.
+    pub fn dispatched_by_synthesis(self) -> bool {
+        matches!(
+            self,
+            // Picked from a `${x:spec}` format specifier, which only
+            // `synthesis::template` reads.
+            Self::Display
+                | Self::DisplayAlt
+                | Self::Inspect
+                | Self::InspectAlt
+                | Self::Binary
+                | Self::BinaryAlt
+                | Self::Octal
+                | Self::OctalAlt
+                | Self::LowerHex
+                | Self::LowerHexAlt
+                | Self::UpperHex
+                | Self::UpperHexAlt
+                | Self::LowerExp
+                | Self::UpperExp
+                // Reached from a `#[derive]`, which `synthesis::serde_synth`
+                // expands into calls no body spells. The protocol traits below
+                // the two entry points come with them: the synthesised bodies
+                // call through them and bind them as `where` clauses, and no
+                // source spells either.
+                | Self::Serialize
+                | Self::Deserialize
+                | Self::FieldSchema
+                | Self::Serializer
+                | Self::Deserializer
+                | Self::SerializeStruct
+                | Self::SerializeSeq
+                | Self::SerializeVariant
+                | Self::DeserializeStruct
+                | Self::DeserializeSeq
+                | Self::DeserializeVariant
+                // Introspection faces `synthesis::reflect_bridge` implements
+                // per type and calls from bodies it mints.
+                | Self::ReflectStruct
+                | Self::ReflectVariant
+                | Self::ReflectEnum
+                | Self::ReflectFlags
+                | Self::Member
+        )
+    }
+
     /// The kind of declaration this item must be attached to. Used by
     /// the elaborator to reject misuse like
     /// `#[compiler_item("option")]` on a trait.

@@ -167,6 +167,23 @@ impl TypeSystem {
         }
     }
 
+    /// The method `name` that `owner` — an `impl` block or a `trait`
+    /// declaration — declares. The owner owns its methods, so this answers from
+    /// the declaration table rather than a name scan over modules: two blocks on
+    /// one type may each declare a method of the same name, and only the owner
+    /// dispatch matched can say which one a call reaches.
+    pub(crate) fn declared_method(
+        &self,
+        owner: crate::defs::DefId,
+        name: &str,
+    ) -> Option<crate::defs::DefId> {
+        let defs = self.resolutions.defs();
+        defs.members(owner)
+            .iter()
+            .copied()
+            .find(|&member| defs.name(member) == name)
+    }
+
     /// Whether an impl target's generic argument names a type parameter of
     /// that impl rather than a concrete type: either the impl declares it, or
     /// the impl's module knows no type by that name. `String` in

@@ -301,6 +301,44 @@ pub(crate) enum AssignPlace {
     Global { name: String, mutable: bool },
 }
 
+/// The dispatch edges of one set of maps, shared by [`TypeAnnotations`] and the
+/// [`ElementOverlay`]s peeled off it — the two hold the same maps.
+fn dispatch_edges<'a>(
+    operator_dispatch: &'a IndexMap<AstId, OperatorDispatch>,
+    index_assign_dispatch: &'a IndexMap<AstId, OperatorDispatch>,
+    for_of_iterator: &'a IndexMap<AstId, ForOfIteratorInfo>,
+    literal_conversions: &'a IndexMap<AstId, LiteralFromCall>,
+    sequence_coercions: &'a IndexMap<AstId, SequenceCoercionFacts>,
+    key_value_coercions: &'a IndexMap<AstId, KeyValueCoercionFacts>,
+) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + 'a {
+    operator_dispatch
+        .iter()
+        .chain(index_assign_dispatch)
+        .filter_map(|(id, op)| Some((*id, op.method_def?)))
+        .chain(for_of_iterator.iter().flat_map(|(id, info)| {
+            [info.into_iter_def, info.next_def]
+                .into_iter()
+                .flatten()
+                .map(move |def| (*id, def))
+        }))
+        .chain(
+            literal_conversions
+                .iter()
+                .map(|(id, call)| (id, &call.callee))
+                .chain(
+                    sequence_coercions
+                        .iter()
+                        .map(|(id, facts)| (id, &facts.call.callee)),
+                )
+                .chain(
+                    key_value_coercions
+                        .iter()
+                        .map(|(id, facts)| (id, &facts.call.callee)),
+                )
+                .filter_map(|(id, callee)| Some((*id, callee.method_def?))),
+        )
+}
+
 /// One tuple-`for-of` element's slice of the body-level annotation maps.
 ///
 /// Holds exactly the `AstId`-keyed maps that can appear inside a for-of
@@ -356,6 +394,52 @@ pub(crate) struct ElementOverlayLens {
 }
 
 impl TypeAnnotations {
+    /// Every callee a recorded dispatch decision names, as `(use site,
+    /// declaration)` pairs — the sites whose source spells no identifier, so
+    /// nothing records a use→def edge for them: an overloaded operator, a
+    /// subscript read or write, a `From` conversion, a `for-of` iterator.
+    ///
+    /// Covers each tuple-`for-of` element overlay too: its facts are peeled off
+    /// this map's tail, so iterating only the map would miss every element but
+    /// the one whose entries were never peeled.
+    ///
+    /// A pair is absent where no declaration backs the callee — an auto-derived
+    /// `Eq` / `Ord`, a `From` impl synthesis mints later, a receiver that is a
+    /// type parameter whose block monomorphization picks.
+    pub(crate) fn dispatched_callees(
+        &self,
+    ) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + '_ {
+        let own = dispatch_edges(
+            &self.operator_dispatch,
+            &self.index_assign_dispatch,
+            &self.for_of_iterator,
+            &self.literal_conversions,
+            &self.sequence_coercions,
+            &self.key_value_coercions,
+        )
+        .chain(
+            self.from_call_facts
+                .iter()
+                .filter_map(|(id, facts)| Some((*id, facts.method_def?))),
+        );
+        let overlaid = self
+            .tuple_overlays
+            .values()
+            .flatten()
+            .flatten()
+            .flat_map(|overlay| {
+                dispatch_edges(
+                    &overlay.operator_dispatch,
+                    &overlay.index_assign_dispatch,
+                    &overlay.for_of_iterator,
+                    &overlay.literal_conversions,
+                    &overlay.sequence_coercions,
+                    &overlay.key_value_coercions,
+                )
+            });
+        own.chain(overlaid)
+    }
+
     /// Snapshot the current lengths of the per-element overlay maps, taken
     /// right before a tuple `for-of` resolves its first element's body.
     pub(crate) fn overlay_base_lens(&self) -> ElementOverlayLens {
@@ -437,6 +521,10 @@ pub(crate) struct MethodNames {
 /// impl's home or re-mangling the method name.
 #[derive(Clone)]
 pub(crate) struct FromCallFacts {
+    /// The `from` method the conversion calls — the liveness edge's target.
+    /// `None` when the `impl From<…>` is synthesized later and so declares
+    /// nothing this pass can name.
+    pub(crate) method_def: Option<crate::defs::DefId>,
     /// Module that hosts the `impl From<From> for Target` block (or
     /// the auto-derived synthesis site).
     pub(crate) module_source: crate::module_source::ModuleSource,
@@ -458,6 +546,10 @@ pub(crate) struct FromCallFacts {
 /// `impl From<Array<…>>`'s `from`, or an `impl LiteralSpread`'s `spread_literal`.
 #[derive(Clone)]
 pub(crate) struct LiteralCallee {
+    /// The method the literal calls — the liveness edge's target. A literal
+    /// spells no method name, so nothing else names it. `None` where the
+    /// target is an `Array<E>` itself: no conversion runs.
+    pub(crate) method_def: Option<crate::defs::DefId>,
     /// Module that hosts the impl block.
     pub(crate) impl_module_source: crate::module_source::ModuleSource,
     /// The trait as the impl block declares it — the spelling the method
@@ -795,6 +887,12 @@ pub(crate) struct OperatorDispatch {
     /// module source, mangled name, and `LocalMethodName` metadata
     /// the elaborator already populated.
     pub(crate) function_ref: FunctionRef,
+    /// The declaration the dispatch selected — the liveness edge from the
+    /// enclosing item runs to this. `None` where no declaration backs it: an
+    /// auto-derived `Eq` / `Ord`, or a receiver that is a type parameter, whose
+    /// block monomorphization picks (the generic-context rule in
+    /// `liveness` reaches those impls from the trait method instead).
+    pub(crate) method_def: Option<crate::defs::DefId>,
     /// Self-kind of the trait method's receiver. Reify feeds this
     /// (with `is_ref_impl = false` — operator trait methods are
     /// always dispatched on the value type, not on a ref-impl) into
@@ -832,6 +930,11 @@ pub(crate) struct OperatorDispatch {
 /// without re-dispatching.
 #[derive(Clone)]
 pub(crate) struct ForOfIteratorInfo {
+    /// The `into_iter` declaration dispatch chose — the liveness edge's target.
+    /// The loop spells no method name, so nothing else names it.
+    pub(crate) into_iter_def: Option<crate::defs::DefId>,
+    /// The `next` declaration dispatch chose, likewise.
+    pub(crate) next_def: Option<crate::defs::DefId>,
     /// Resolved `IntoIterator::into_iter` dispatch target.
     pub(crate) into_iter: FunctionRef,
     /// Receiver-adjustment kind for the `.into_iter()` call.

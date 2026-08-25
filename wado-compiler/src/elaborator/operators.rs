@@ -1473,13 +1473,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let value_span = value.span();
                         let value_type = match value {
                             AssignValue::Ast(expr) => {
-                                self.resolve_expr(expr, ctx, Some(trait_info.input_type))
+                                self.resolve_expr(expr, ctx, Some(trait_info.output_type))
                             }
                             AssignValue::Resolved { type_id, .. } => type_id,
                         };
 
                         // Check: reject &T/&mut T assigned where non-ref expected
-                        self.typecheck(value_type, trait_info.input_type, value_span);
+                        self.typecheck(value_type, trait_info.output_type, value_span);
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
                         let receiver = self.fq_index_receiver(matched_type_id);
@@ -1510,6 +1510,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             index_expr.id,
                             super::sem::types::OperatorDispatch {
                                 function_ref: func,
+                                method_def: Some(trait_info.method_def),
                                 self_kind: trait_info.self_kind,
                                 arg_ref_wraps: vec![false, false],
                                 return_type: TypeTable::UNIT,
@@ -2009,6 +2010,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ast_id,
                 super::sem::types::OperatorDispatch {
                     function_ref,
+                    // A type-parameter receiver names no block; the generic
+                    // rule reaches its impls from the trait method instead.
+                    method_def: resolved
+                        .impl_def
+                        .and_then(|def| self.tysys.declared_method(def, &resolved.method_name)),
                     self_kind: resolved.self_kind,
                     arg_ref_wraps: wrap_flags,
                     return_type: resolved.return_type,

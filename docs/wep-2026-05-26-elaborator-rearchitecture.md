@@ -380,10 +380,14 @@ item.
 
 Each recorded use-site becomes an edge `enclosing-item(use) → target`, from
 two sources: `bindings.references`, whose def-side is a node (free-function
-calls, global reads, variant-case construction), and the dispatch facts in
-`types` — method, static-method, operator, index-assign, `From` — which cover
-the paths that leave no `references` edge. Reachability is a single BFS from
-the root set; the node set and edges are static, so no fixed point is needed.
+calls, global reads, variant-case construction, and the method a spelled call
+dispatched to), and the dispatch facts in `types` for the sites that spell no
+name at all — an overloaded operator, a subscript read or write, a `From`
+conversion, a `for-of` iterator, a literal coercing through `From<Array<…>>`.
+Each such fact carries the `DefId` dispatch selected, recorded at the same
+moment as the decision, so the edge names a declaration rather than re-deriving
+one from a mangled name. Reachability is a single BFS from the root set; the
+node set and edges are static, so no fixed point is needed.
 
 Fail-loud, not fail-safe: a dispatch fact that cannot be resolved to a
 defining `AstId` is a graph bug, not an over-approximation site. If the graph
@@ -392,13 +396,24 @@ silently miscompiled output — and the fix is the missing edge kind. The dual
 failure, an item that is unused but not reported, is what this design
 optimises against.
 
-One path is undecidable at the source level: a trait method reached only
-through a generic type parameter (`fn show<T: Display>(x: T) { x.fmt() }`).
-`annotate` records the edge to the trait method; the concrete impl is selected
-during monomorphization, which the source graph does not run. The rule the
-language feature requires is the edge "a trait method reachable in a generic
-context makes the corresponding method on every reachable impl reachable" —
-added as a rule, never as a blanket over-approximation.
+Two paths are undecidable at the source level, and each gets a rule rather
+than a blanket over every trait impl.
+
+A trait method reached through a generic type parameter
+(`fn show<T: Display>(x: T) { x.fmt() }`, `C::from_iter(self)`, or a projection
+like `S::MapSerializer`): `annotate` records the edge to the trait method, and
+the concrete impl is selected during monomorphization, which the source graph
+does not run. So reaching a trait method reaches the corresponding method on
+every impl of that trait. Broader than "every _reachable_ impl" only because
+impl-block reachability is not itself a question this graph answers.
+
+A trait whose calls a synthesis pass mints after this one runs: the format
+traits behind `${x:spec}`, and the serde and reflect faces behind a derive.
+Which trait a site dispatches to is read from a format specifier or a derive,
+neither of which `annotate` interprets, so no fact names the callee. The
+methods of a block implementing one are roots. Membership is
+`CompilerItem::dispatched_by_synthesis`, so the registry states the rule once
+and a format trait added later cannot be forgotten.
 
 Gating reify is sound only because every semantic diagnostic that can fire on
 dead code (effect, stores, purity, world-export conformance) is produced from

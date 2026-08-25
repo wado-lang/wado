@@ -2545,56 +2545,20 @@ impl<'a> TypeLookup<'a> {
     }
 }
 
-/// Info about an `IndexRef` trait implementation
-pub(super) struct IndexTraitInfo {
-    /// The Output associated type
+/// Info about an indexing-trait implementation — `IndexRef`, `IndexRefMut`,
+/// `IndexValue` or `IndexAssign`. One shape for all four: they differ only in
+/// which trait was probed and which method name it declares, both of which the
+/// caller already named to find this.
+pub(super) struct IndexingTraitInfo {
+    /// The method the matched block declares. Carried so a use site names the
+    /// declaration dispatch chose rather than re-finding one by name — two
+    /// blocks on one type may each declare the method.
+    pub(super) method_def: crate::defs::DefId,
+    /// The `Output` associated type — for `IndexAssign`, the assigned value's
+    /// type.
     pub(super) output_type: TypeId,
-    /// Self kind for the `index_ref` method (&self)
-    pub(super) self_kind: ast::SelfKind,
-    /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
-    /// Module where the impl block is defined
-    pub(super) impl_module_source: ModuleSource,
-    /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
-    /// coercion.
-    pub(super) index_type: Option<TypeId>,
-}
-
-/// Info about an `IndexAssign` trait implementation
-pub(super) struct IndexAssignTraitInfo {
-    /// The Input associated type
-    pub(super) input_type: TypeId,
-    /// Self kind for the `index_assign` method (&mut self)
-    pub(super) self_kind: ast::SelfKind,
-    /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
-    /// Module where the impl block is defined
-    pub(super) impl_module_source: ModuleSource,
-    /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
-    /// coercion.
-    pub(super) index_type: Option<TypeId>,
-}
-
-/// Info about an `IndexRefMut` trait implementation
-pub(super) struct IndexMutTraitInfo {
-    /// The Output associated type
-    pub(super) output_type: TypeId,
-    /// Self kind for the `index_ref_mut` method (&mut self)
-    pub(super) self_kind: ast::SelfKind,
-    /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
-    /// Module where the impl block is defined
-    pub(super) impl_module_source: ModuleSource,
-    /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
-    /// coercion.
-    pub(super) index_type: Option<TypeId>,
-}
-
-/// Info about an `IndexValue` trait implementation
-pub(super) struct IndexValueTraitInfo {
-    /// The Output associated type
-    pub(super) output_type: TypeId,
-    /// Self kind for the `index_value` method (&self)
+    /// Self kind of the trait's method (`&self`, or `&mut self` for the
+    /// mutating traits).
     pub(super) self_kind: ast::SelfKind,
     /// The implemented trait, named by the module that declares it.
     pub(super) trait_name: crate::name::FqTraitName,
@@ -2666,6 +2630,9 @@ pub(super) struct ResolvedTraitMethod {
 /// A `From<Array<E>>` impl a literal can coerce through.
 #[derive(Clone)]
 pub(super) struct FromArrayInfo {
+    /// The `impl From<Array<…>>` block that matched. `None` for an `Array<E>`
+    /// target, which runs no conversion and so calls nothing.
+    pub(super) impl_def: Option<crate::defs::DefId>,
     /// `E` — the type every element (or key-value pair) of the literal takes.
     pub(super) element_type: TypeId,
     /// `Array<E>` — the value the literal materializes and `from` receives.
