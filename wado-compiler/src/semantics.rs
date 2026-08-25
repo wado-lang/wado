@@ -106,8 +106,8 @@ pub struct Semantics {
     /// Empty when `build_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
     /// Source-level liveness produced between `annotate_bodies` and `reify`.
-    /// `dead_items` feeds the unused-diagnostics emitter; `live_items` is the
-    /// set reify will gate emission on. Empty when annotate did not complete.
+    /// `dead_items` feeds the unused-diagnostics emitter; `emit_live` is the
+    /// set reify gates emission on. Empty when annotate did not complete.
     pub(crate) liveness: crate::elaborator::liveness::Liveness,
     /// True when every analysis phase ran to completion without bailing.
     /// Batch compilation refuses to continue when this is false; LSP queries

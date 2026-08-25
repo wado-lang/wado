@@ -196,15 +196,15 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<parser_synth_
 
 type "functype//core:prelude/format.wado/&<core:prelude/string.wado/String,[core:prelude/bytes.wado/ByteArray,i32]>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(74)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<char>::push" = fn(ref "core:prelude//List<char>", char);  // TypeId(75)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<parser_synth_id_collision_test.wado/DescriptorPair>::grow" = fn(ref "core:prelude//List<parser_synth_id_collision_test.wado/DescriptorPair>");  // TypeId(75)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<char>::grow" = fn(ref "core:prelude//List<char>");  // TypeId(76)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(76)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<parser_synth_id_collision_test.wado/DescriptorPair>::grow" = fn(ref "core:prelude//List<parser_synth_id_collision_test.wado/DescriptorPair>");  // TypeId(77)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrCharIter>" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude//List<char>";  // TypeId(77)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(78)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<char>::push" = fn(ref "core:prelude//List<char>", char);  // TypeId(78)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrCharIter>" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude//List<char>";  // TypeId(79)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<char>::grow" = fn(ref "core:prelude//List<char>");  // TypeId(79)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(80)
 
@@ -1949,28 +1949,6 @@ fn "core:prelude/format.wado/&<core:prelude/string.wado/String,[core:prelude/byt
     "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self, f);
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<char>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if @unlikely(used >= builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(self);
-    }
-    builtin::array_set<char>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<char>;
-    let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
-    new_repr = builtin::array_new<char>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<char>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<parser_synth_id_collision_test.wado/DescriptorPair>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -1998,20 +1976,42 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
     let elements: ref Array<char>;
     elements = array.new_fixed<char>();
     result = struct.new "core:prelude//List<char>" { repr: elements, used: 0 };
-    b228: block {
-        l229: loop {
+    b227: block {
+        l228: loop {
             let __match_3_mv_0: i32;
             let __match_3_mv_1: char;
             multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(iter);
             if __match_3_mv_0 == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<char>::push"(result, __match_3_mv_1);
             } else {
-                break b228;
+                break b227;
             }
-            continue l229;
+            continue l228;
         };
     };
     return result;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<char>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(self);
+    }
+    builtin::array_set<char>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref Array<char>;
+    let a: i32;
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<char>(local.tee new_capacity(select i32(a > 4, a, 4)));
+    builtin::array_copy<char>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 fn "core:prelude/primitive.wado/u64::fmt_base$spec0"(self, f, base, upper, prefix) {

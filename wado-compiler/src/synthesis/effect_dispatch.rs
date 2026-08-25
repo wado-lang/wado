@@ -926,6 +926,7 @@ fn build_dispatch_wrapper_function(
     TirFunction {
         module_source: entry_source.clone(),
         name: wrapper_name,
+        def_id: None,
         visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,

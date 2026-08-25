@@ -684,10 +684,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let prefix = &effective_name[..pos];
             let suffix = &effective_name[pos + 2..];
 
-            // Builtin functions: resolve through core:builtin module
+            // Builtin functions: resolve through core:builtin module. The
+            // prefix names the module directly rather than an import, but it
+            // buys no extra reach — a declaration there is visible exactly as
+            // any other module's is.
             if prefix == "builtin" {
+                let builtin_source = ModuleSource::builtin();
+                self.check_namespaced_visibility(&builtin_source, suffix, ident.span);
                 (
-                    self.callee_in_module(&ModuleSource::builtin(), suffix),
+                    self.callee_in_module(&builtin_source, suffix),
                     effective_name.to_string(),
                 )
             }
@@ -718,12 +723,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_def = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
                         .and_then(|r| r.method_id)
-                        .or_else(|| {
-                            self.static_method_decl_id(
-                                &self.impl_target_at(receiver_site, prefix),
-                                suffix,
-                            )
-                        });
+                        .or_else(|| self.static_method_decl_at(receiver_site, prefix, suffix));
                     if let Some(method_def) = method_def {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
@@ -1366,6 +1366,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // only the result type.
                     return return_type;
                 }
+                // `use`'s namespace form registers only the reachable members
+                // as `ns$member`; this arm looks the module up directly, so it
+                // owes the same visibility check — otherwise a path names what
+                // an import of the identical symbol is refused.
+                self.check_namespaced_visibility(&ns_source, suffix, ident.span);
                 // `ns::func` — a plain free-function call through a namespace
                 // import (the `suffix.find("::")` arm above always returns for
                 // the `Type::method` / `Variant::Case` shapes). Record a use→def

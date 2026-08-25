@@ -28,6 +28,7 @@ use {
 /// Split a packed `future.new` result (`readable | writable << 32`) into the
 /// `[Future<T>, FutureWritable<T>]` pair. The parameterized canonical call is
 /// emitted by CM-binding synthesis; this is the Wado-level handle split.
+#[compiler_item("cm_future_pair")]
 internal fn cm_future_pair<T>(packed: i64) -> [Future<T>, FutureWritable<T>] {
     let rx = packed as i32;
     let tx = (packed >> 32) as i32;
@@ -36,6 +37,7 @@ internal fn cm_future_pair<T>(packed: i64) -> [Future<T>, FutureWritable<T>] {
 
 /// Split a packed `stream.new` result into the `[Stream<T>, StreamWritable<T>]`
 /// pair. See [`cm_future_pair`].
+#[compiler_item("cm_stream_pair")]
 internal fn cm_stream_pair<T>(packed: i64) -> [Stream<T>, StreamWritable<T>] {
     let rx = packed as i32;
     let tx = (packed >> 32) as i32;
@@ -69,6 +71,7 @@ internal fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
 }
 
 /// Copies bytes from linear memory to a new GC String.
+#[compiler_item("memory_to_gc_string")]
 internal fn memory_to_gc_string(ptr: i32, len: i32) -> String {
     let arr = memory_to_gc_array(ptr, len);
     return String::internal_from_utf8_raw(arr, len);
@@ -165,6 +168,7 @@ pub fn panic(message: String) -> ! {
 /// so the `-f bare-asserts` lowering can replace assertion failures with a bare
 /// `unreachable` trap (dropping the diagnostic) while leaving explicit
 /// `panic(...)` calls untouched. The `assert` desugar emits this, never `panic`.
+#[compiler_item("assert_failed")]
 internal fn assert_failed(message: String) -> ! {
     panic(message);
 }
@@ -177,6 +181,7 @@ pub fn unreachable() -> ! {
 /// Lowers a GC String to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
+#[compiler_item("cm_lower_string")]
 internal fn cm_lower_string(s: String) -> i64 {
     let len = s.len();
     let bytes = s.internal_raw_bytes();
@@ -196,6 +201,7 @@ internal fn cm_lower_list_u8(data: &Array<u8>, start: i32, len: i32) -> i64 {
 
 /// Lowers a GC List<u8> (e.g., FieldValue) to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
+#[compiler_item("cm_lower_array_u8")]
 internal fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     let len = arr.len();
     return cm_lower_list_u8(arr.internal_raw_data_ref(), 0, len);
@@ -228,6 +234,7 @@ internal fn write_escaped_string(s: String, f: &mut Formatter) {
 ///
 /// The handle must be unjoined before the set is dropped; a set still holding a
 /// waitable cannot be deleted.
+#[compiler_item("cm_await_blocked")]
 internal fn cm_await_blocked(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
@@ -243,6 +250,7 @@ internal fn cm_await_blocked(handle: i32) -> i32 {
 /// CM adapter for stream.read(max) on Stream<u8>.
 /// Allocates linear memory, calls stream-read, handles BLOCKED,
 /// lifts bytes to GC array, constructs List<u8>.
+#[compiler_item("cm_stream_read_u8")]
 internal fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
     let ptr = builtin::realloc(0, 0, 1, max);
     let mut result = builtin::stream_read(handle, ptr, max);
@@ -284,6 +292,7 @@ internal fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i3
 
 /// CM adapter for stream.write(data) on Stream<u8>.
 /// Lowers List<u8> to linear memory, calls stream-write, handles BLOCKED.
+#[compiler_item("cm_stream_write_u8")]
 internal fn cm_stream_write_u8(handle: i32, data: List<u8>) {
     let packed = cm_lower_array_u8(data);
     let ptr = packed as i32;
@@ -315,6 +324,7 @@ internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: 
 /// `#[inline(always)]` so the caller's `Slice` argument is scalarized away
 /// (no intermediate slice `struct.new`) rather than crossing the call boundary.
 #[inline(always)]
+#[compiler_item("cm_stream_write_raw_u8")]
 internal fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) {
     let packed = cm_lower_list_u8(data.internal_repr(), data.internal_start(), data.len());
     let ptr = packed as i32;
@@ -325,6 +335,7 @@ internal fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) {
 
 /// CM adapter for ErrorContext::new(msg).
 /// Lowers String to linear memory, calls error-context-new, frees buffer.
+#[compiler_item("cm_error_context_new")]
 internal fn cm_error_context_new(msg: String) -> i32 {
     let packed = cm_lower_string(msg);
     let ptr = packed as i32;
@@ -336,6 +347,7 @@ internal fn cm_error_context_new(msg: String) -> i32 {
 
 /// CM adapter for error_context.debug_message().
 /// Calls error-context-debug-message, lifts result from linear memory to String.
+#[compiler_item("cm_error_context_debug_message")]
 internal fn cm_error_context_debug_message(handle: i32) -> String {
     let out_ptr = builtin::realloc(0, 0, 4, 8);
     builtin::error_context_debug_message(handle, out_ptr);
@@ -349,6 +361,7 @@ internal fn cm_error_context_debug_message(handle: i32) -> String {
 
 /// CM adapter for waitable_set.wait().
 /// Allocates output buffer, calls waitable-set-wait, constructs WaitEvent.
+#[compiler_item("cm_waitable_set_wait")]
 internal fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     let out_ptr = builtin::realloc(0, 0, 4, 8);
     let code = builtin::waitable_set_wait(ws, out_ptr);
@@ -358,11 +371,13 @@ internal fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     return WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 };
 }
 
+#[compiler_item("cm_waitable_join")]
 internal fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
     builtin::waitable_join(handle, ws);
     return handle;
 }
 
+#[compiler_item("cm_waitable_set_poll")]
 internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     let out_ptr = builtin::realloc(0, 0, 4, 8);
     let code = builtin::waitable_set_poll(ws, out_ptr);

@@ -556,6 +556,42 @@ pub enum CompilerItem {
     /// `DeserializeVariant::end`.
     DeserializeVariantEnd,
 
+    // ── Named by synthesis ───────────────────────────────────────────
+    // Reached by a call the compiler mints, which no source-level
+    // analysis can see, so each is a root of the liveness graph.
+    /// `Formatter::new` — template expansion builds the formatter through it.
+    FormatterNew,
+    /// `core:rt::assert_failed`.
+    AssertFailed,
+    /// `core:rt::cm_future_pair`.
+    CmFuturePair,
+    /// `core:rt::cm_stream_pair`.
+    CmStreamPair,
+    /// `core:rt::memory_to_gc_string`.
+    MemoryToGcString,
+    /// `core:rt::cm_lower_string`.
+    CmLowerString,
+    /// `core:rt::cm_lower_array_u8`.
+    CmLowerArrayU8,
+    /// `core:rt::cm_await_blocked`.
+    CmAwaitBlocked,
+    /// `core:rt::cm_stream_read_u8`.
+    CmStreamReadU8,
+    /// `core:rt::cm_stream_write_u8`.
+    CmStreamWriteU8,
+    /// `core:rt::cm_stream_write_raw_u8`.
+    CmStreamWriteRawU8,
+    /// `core:rt::cm_error_context_new`.
+    CmErrorContextNew,
+    /// `core:rt::cm_error_context_debug_message`.
+    CmErrorContextDebugMessage,
+    /// `core:rt::cm_waitable_set_wait`.
+    CmWaitableSetWait,
+    /// `core:rt::cm_waitable_join`.
+    CmWaitableJoin,
+    /// `core:rt::cm_waitable_set_poll`.
+    CmWaitableSetPoll,
+
     // ── Type families ─────────────────────────────────────────────────
     /// The tuple type family (`pub type [..T];`). The owning module is
     /// recorded so the compiler can synthesise tuple types under the
@@ -737,6 +773,22 @@ impl CompilerItem {
         Self::DeserializeVariantDisc,
         Self::DeserializeVariantPayload,
         Self::DeserializeVariantEnd,
+        Self::FormatterNew,
+        Self::AssertFailed,
+        Self::CmFuturePair,
+        Self::CmStreamPair,
+        Self::MemoryToGcString,
+        Self::CmLowerString,
+        Self::CmLowerArrayU8,
+        Self::CmAwaitBlocked,
+        Self::CmStreamReadU8,
+        Self::CmStreamWriteU8,
+        Self::CmStreamWriteRawU8,
+        Self::CmErrorContextNew,
+        Self::CmErrorContextDebugMessage,
+        Self::CmWaitableSetWait,
+        Self::CmWaitableJoin,
+        Self::CmWaitableSetPoll,
         Self::Tuple,
         Self::Array,
     ];
@@ -862,6 +914,22 @@ impl CompilerItem {
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::ReflectVariantTypeName => "reflect_variant_type_name",
+            Self::FormatterNew => "formatter_new",
+            Self::AssertFailed => "assert_failed",
+            Self::CmFuturePair => "cm_future_pair",
+            Self::CmStreamPair => "cm_stream_pair",
+            Self::MemoryToGcString => "memory_to_gc_string",
+            Self::CmLowerString => "cm_lower_string",
+            Self::CmLowerArrayU8 => "cm_lower_array_u8",
+            Self::CmAwaitBlocked => "cm_await_blocked",
+            Self::CmStreamReadU8 => "cm_stream_read_u8",
+            Self::CmStreamWriteU8 => "cm_stream_write_u8",
+            Self::CmStreamWriteRawU8 => "cm_stream_write_raw_u8",
+            Self::CmErrorContextNew => "cm_error_context_new",
+            Self::CmErrorContextDebugMessage => "cm_error_context_debug_message",
+            Self::CmWaitableSetWait => "cm_waitable_set_wait",
+            Self::CmWaitableJoin => "cm_waitable_join",
+            Self::CmWaitableSetPoll => "cm_waitable_set_poll",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
             Self::ReflectVariantMembers => "reflect_variant_members",
             Self::ReflectVariantWireNamePolicy => "reflect_variant_wire_name_policy",
@@ -936,8 +1004,24 @@ impl CompilerItem {
     /// The scan runs after `annotate_modules`, ahead of any synthesis call.
     pub fn is_required(self, world: &str) -> bool {
         match self {
-            // Always loaded — `core:prelude` is auto-imported.
-            Self::Add
+            // Always loaded — `core:prelude` is auto-imported, and `core:rt`
+            // carries the CM ABI helpers the binding synthesis calls.
+            | Self::AssertFailed
+            | Self::CmFuturePair
+            | Self::CmStreamPair
+            | Self::MemoryToGcString
+            | Self::CmLowerString
+            | Self::CmLowerArrayU8
+            | Self::CmAwaitBlocked
+            | Self::CmStreamReadU8
+            | Self::CmStreamWriteU8
+            | Self::CmStreamWriteRawU8
+            | Self::CmErrorContextNew
+            | Self::CmErrorContextDebugMessage
+            | Self::CmWaitableSetWait
+            | Self::CmWaitableJoin
+            | Self::CmWaitableSetPoll
+            | Self::Add
             | Self::Sub
             | Self::Mul
             | Self::Div
@@ -999,6 +1083,7 @@ impl CompilerItem {
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantTypeName
+            | Self::FormatterNew
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
             | Self::ReflectVariantWireNamePolicy
@@ -1124,6 +1209,22 @@ impl CompilerItem {
     /// `#[compiler_item("option")]` on a trait.
     pub fn expected_kind(self) -> CompilerItemKind {
         match self {
+            Self::FormatterNew => CompilerItemKind::Method,
+            Self::AssertFailed
+            | Self::CmFuturePair
+            | Self::CmStreamPair
+            | Self::MemoryToGcString
+            | Self::CmLowerString
+            | Self::CmLowerArrayU8
+            | Self::CmAwaitBlocked
+            | Self::CmStreamReadU8
+            | Self::CmStreamWriteU8
+            | Self::CmStreamWriteRawU8
+            | Self::CmErrorContextNew
+            | Self::CmErrorContextDebugMessage
+            | Self::CmWaitableSetWait
+            | Self::CmWaitableJoin
+            | Self::CmWaitableSetPoll => CompilerItemKind::Function,
             Self::List
             | Self::Box
             | Self::I128
@@ -1313,6 +1414,8 @@ pub enum CompilerItemKind {
     Newtype,
     /// A `trait` declaration.
     Trait,
+    /// A free `fn` declaration.
+    Function,
     /// A method inside an `impl` block.
     Method,
     /// The `pub type [..T];` declaration that owns the tuple family.
@@ -1334,6 +1437,7 @@ impl fmt::Display for CompilerItemKind {
             Self::Resource => "resource",
             Self::Newtype => "type declaration",
             Self::Trait => "trait",
+            Self::Function => "function",
             Self::Method => "method",
             Self::TupleFamily => "tuple type family",
             Self::BuiltinType => "builtin type",
@@ -1427,6 +1531,13 @@ pub enum Resolved {
         /// via [`CompilerItems::trait_assoc_type_by_bound`].
         assoc_types: Vec<TraitAssocType>,
     },
+    /// A free function the compiler calls by name — the CM ABI helpers the
+    /// binding synthesis reaches for. It has no receiver, so `Method` cannot
+    /// stand in for it.
+    Function {
+        module_source: ModuleSource,
+        name: String,
+    },
     Method {
         module_source: ModuleSource,
         /// The type the method is defined on (e.g. `"String"`).
@@ -1492,6 +1603,7 @@ impl Resolved {
             Self::Resource { .. } => CompilerItemKind::Resource,
             Self::Newtype { .. } => CompilerItemKind::Newtype,
             Self::Trait { .. } => CompilerItemKind::Trait,
+            Self::Function { .. } => CompilerItemKind::Function,
             Self::Method { .. } => CompilerItemKind::Method,
             Self::TupleFamily { .. } => CompilerItemKind::TupleFamily,
             Self::BuiltinType { .. } => CompilerItemKind::BuiltinType,
@@ -1510,6 +1622,7 @@ impl Resolved {
             | Self::Resource { module_source, .. }
             | Self::Newtype { module_source, .. }
             | Self::Trait { module_source, .. }
+            | Self::Function { module_source, .. }
             | Self::Method { module_source, .. }
             | Self::TupleFamily { module_source, .. }
             | Self::BuiltinType { module_source, .. }
@@ -1531,7 +1644,10 @@ impl Resolved {
             | Self::Trait { decl, .. }
             | Self::TupleFamily { decl, .. }
             | Self::BuiltinType { decl, .. } => Some(*decl),
-            Self::Method { .. } | Self::VariantCase { .. } | Self::EnumCase { .. } => None,
+            Self::Function { .. }
+            | Self::Method { .. }
+            | Self::VariantCase { .. }
+            | Self::EnumCase { .. } => None,
         }
     }
 }

@@ -381,6 +381,41 @@ impl SymbolTable {
         self.effective_visibility_with_visited(module_source, name, &mut Vec::new())
     }
 
+    /// The visibility barring `from` from naming `name` in `target`, or `None`
+    /// when it may. The one answer to "can this module reach that symbol",
+    /// asked both by `use` and by a namespace-qualified path — reaching a
+    /// symbol does not depend on which syntax names it.
+    pub fn visibility_barrier(
+        &self,
+        from: &ModuleSource,
+        target: &ModuleSource,
+        name: &str,
+    ) -> Option<Visibility> {
+        let visibility = self.effective_visibility_in_module(target, name)?;
+        (!visibility.reachable_from(target.same_package(from))).then_some(visibility)
+    }
+
+    /// Every member `from` may name through a namespace import of `target`:
+    /// what `target` declares plus what it re-exports, less what visibility
+    /// bars. `use { x } from` and `ns::x` reach the same set.
+    pub fn reachable_members<'a>(
+        &'a self,
+        from: &'a ModuleSource,
+        target: &'a ModuleSource,
+    ) -> impl Iterator<Item = (String, &'a Symbol)> + 'a {
+        let declared = self
+            .get_module_symbols(target)
+            .into_iter()
+            .map(|sym| sym.name.clone());
+        declared
+            .chain(self.reexport_names(target))
+            .filter(|name| self.visibility_barrier(from, target, name).is_none())
+            .filter_map(|name| {
+                let sym = self.lookup_in_module(target, &name)?;
+                Some((name, sym))
+            })
+    }
+
     fn effective_visibility_with_visited(
         &self,
         module_source: &ModuleSource,

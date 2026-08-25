@@ -579,6 +579,67 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Emit `PrivateNamespacedSymbol` when `name` in `target` is out of this
+    /// module's reach. A namespace path looks the module up directly, so it
+    /// owes the check `use`'s member registration already applies.
+    pub(super) fn check_namespaced_visibility(
+        &mut self,
+        target: &ModuleSource,
+        name: &str,
+        span: crate::token::Span,
+    ) {
+        let Some(visibility) =
+            self.symbols
+                .visibility_barrier(&self.current_module_source, target, name)
+        else {
+            return;
+        };
+        let _ = self.emit(types::TypeError::PrivateNamespacedSymbol {
+            name: name.to_string(),
+            module_source: target.clone(),
+            visibility,
+            span,
+        });
+    }
+
+    /// The type a transparent alias or newtype stands for — `ByteList` for
+    /// `pub type ByteList = List<u8>;` — since the alias declares no method of
+    /// its own. `None` when `name` names no such declaration.
+    pub(super) fn newtype_base(&self, name: &str) -> Option<(tir::TypeId, String)> {
+        // `type Buf = ByteList;` chains, so this peels to the type that
+        // declares methods rather than stopping at the first link.
+        let mut current = self.lookup_newtype(name)?;
+        loop {
+            let peeled = match self.tysys.type_table.borrow().get(current).clone() {
+                tir::ResolvedType::Newtype { base_type, .. } => base_type,
+                tir::ResolvedType::Flags { .. } => tir::TypeTable::U32,
+                _ => break,
+            };
+            if peeled == current {
+                break;
+            }
+            current = peeled;
+        }
+        Some((current, self.tysys.get_ultimate_base_struct_name(current)))
+    }
+
+    /// The declaration a `Type::method` call resolves to, seeing through a
+    /// transparent alias. Every site that records the use→def edge for such a
+    /// call ends its ladder here, so none of them stops one alias short.
+    pub(super) fn static_method_decl_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        type_name: &str,
+        method_name: &str,
+    ) -> Option<crate::defs::DefId> {
+        self.static_method_decl_id(&self.impl_target_at(site, type_name), method_name)
+            .or_else(|| {
+                let (base, base_name) = self.newtype_base(type_name)?;
+                let receiver = self.impl_target_of(base, &crate::name::DeclName::new(&base_name));
+                self.static_method_decl_id(&receiver, method_name)
+            })
+    }
+
     /// The declaring node of the static method `receiver::method_name`, from
     /// the static-method index.
     ///

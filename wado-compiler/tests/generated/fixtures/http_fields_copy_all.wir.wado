@@ -381,9 +381,9 @@ type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:pr
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::push" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>", ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]");  // TypeId(95)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>", ref "core:prelude/format.wado//Formatter");  // TypeId(96)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(96)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(97)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>", ref "core:prelude/format.wado//Formatter");  // TypeId(97)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(98)
 
@@ -2320,17 +2320,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado
     self.used = used + 1;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let _av_3: i32;
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>"(self.repr, 0, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: block -> i32 {
-        _av_3 = f.precision;
-        if _av_3 == -2 {
-            break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: 256;
-        }
-        break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: _av_3;
-    });
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -2340,6 +2329,17 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
     }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let _av_3: i32;
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>"(self.repr, 0, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: block -> i32 {
+        _av_3 = f.precision;
+        if _av_3 == -2 {
+            break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: 256;
+        }
+        break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: _av_3;
+    });
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {

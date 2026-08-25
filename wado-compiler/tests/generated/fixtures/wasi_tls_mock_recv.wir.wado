@@ -31,7 +31,7 @@ struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/typ
     mut 1: i32,
 }
 
-struct wasi_tls_mock_recv.wado//__Closure_2 {  // TypeId(6)}
+struct wasi_tls_mock_recv.wado//__Closure_0 {  // TypeId(6)}
 
 struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>> {  // TypeId(7)
     mut __cm_packed: i32,
@@ -179,17 +179,17 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:p
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref Array<u8>;  // TypeId(66)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(67)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to" = fn(ref "core:prelude//List<u8>", i32);  // TypeId(67)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(68)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(68)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to" = fn(ref "core:prelude//List<u8>", i32);  // TypeId(69)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(69)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(70)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> [i32, u8];  // TypeId(70)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> [i32, u8];  // TypeId(71)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(71)
 
-type "functype//wasi_tls_mock_recv.wado/wasi_tls_mock_recv.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(72)
+type "functype//wasi_tls_mock_recv.wado/wasi_tls_mock_recv.wado/__Closure_0::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(72)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(73)
 
@@ -358,7 +358,7 @@ fn "wasi_tls_mock_recv.wado/__cm_binding__Connector_connect"(this, server_name) 
     "core:rt/gc_array_to_memory"(bytes, 0, ptr, len);
     __server_name_packed = builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:tls/Connector::connect"(this, builtin::i32_wrap_i64(__server_name_packed), builtin::i32_wrap_i64(__server_name_packed >> 32_i64), __async_outptr)), __cm_outptr: __async_outptr, __cm_size: 8, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wasi_tls_mock_recv.wado//__Closure_2" {  }, func: ref.func "closure/wasi_tls_mock_recv.wado/__closure_wrapper_0" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:tls/Connector::connect"(this, builtin::i32_wrap_i64(__server_name_packed), builtin::i32_wrap_i64(__server_name_packed >> 32_i64), __async_outptr)), __cm_outptr: __async_outptr, __cm_size: 8, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wasi_tls_mock_recv.wado//__Closure_0" {  }, func: ref.func "closure/wasi_tls_mock_recv.wado/__closure_wrapper_0" } };
 }
 
 fn "wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(self) with Error {
@@ -1104,28 +1104,6 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array"(self) {
     return out;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if @unlikely(used >= builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self);
-    }
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<u8>;
-    let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
@@ -1148,20 +1126,31 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
     let elements: ref Array<u8>;
     elements = array.new_fixed<u8>();
     result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
-    b94: block {
-        l95: loop {
+    b93: block {
+        l94: loop {
             let __match_3_mv_0: i32;
             let __match_3_mv_1: u8;
             multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
             if __match_3_mv_0 == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, __match_3_mv_1);
             } else {
-                break b94;
+                break b93;
             }
-            continue l95;
+            continue l94;
         };
     };
     return result;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self);
+    }
+    builtin::array_set_u8(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
@@ -1176,12 +1165,23 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prel
     return 0, item;
 }
 
-fn "wasi_tls_mock_recv.wado/wasi_tls_mock_recv.wado/__Closure_2::__call"(__outptr) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref Array<u8>;
+    let a: i32;
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "wasi_tls_mock_recv.wado/wasi_tls_mock_recv.wado/__Closure_0::__call"(__outptr) {
     return "wasi_tls_mock_recv.wado/__cm_lift__Connector_connect"(__outptr);
 }
 
 fn "closure/wasi_tls_mock_recv.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wasi_tls_mock_recv.wado/wasi_tls_mock_recv.wado/__Closure_2::__call"(__p0);
+    return "wasi_tls_mock_recv.wado/wasi_tls_mock_recv.wado/__Closure_0::__call"(__p0);
 }
 
 export fn "wasi_tls_mock_recv.wado/__cm_export__run" as "run"

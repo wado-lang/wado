@@ -240,6 +240,7 @@ fn build_module_init_function(
 
     TirFunction {
         module_source,
+        def_id: None,
         is_async: false,
         name: crate::name::MODULE_INIT_FUNCTION.to_string(),
         visibility: crate::ast::Visibility::Public,
@@ -895,6 +896,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
 
     let init_modules_func = TirFunction {
         module_source: entry_source.clone(),
+        def_id: None,
         is_async: false,
         name: crate::name::MODULES_INIT_FUNCTION.to_string(),
         visibility: crate::ast::Visibility::Private,

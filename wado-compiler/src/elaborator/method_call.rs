@@ -2273,6 +2273,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let receiver =
                 self.impl_target_of(target_type_id, &crate::name::DeclName::new(&struct_name));
             self.static_method_decl_id(&receiver, &static_call.method)
+                .or_else(|| self.static_method_decl_at(None, &struct_name, &static_call.method))
         }) {
             self.record_reference_to_decl(static_call.method_id, method_def);
         }
@@ -3633,19 +3634,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // For newtypes/flags, check if the base type has the static method
-        if let Some(newtype_id) = self.lookup_newtype(struct_name) {
-            let base_name = match self.tysys.type_table.borrow().get(newtype_id).clone() {
-                ResolvedType::Newtype { base_type, .. } => {
-                    Some(self.tysys.get_ultimate_base_struct_name(base_type))
-                }
-                ResolvedType::Flags { .. } => Some("u32".to_string()),
-                _ => None,
-            };
-            if let Some(base_name) = base_name
-                && self.is_static_method(&base_name, method_name)
-            {
-                return true;
-            }
+        if let Some((_, base_name)) = self.newtype_base(struct_name)
+            && self.is_static_method(&base_name, method_name)
+        {
+            return true;
         }
 
         // Auto-derived `Default::default()` for structs whose fields all have

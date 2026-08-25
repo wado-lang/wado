@@ -939,3 +939,76 @@ fn namespaced_static_call_definition() {
         assert_range(&result, 2, 11, 15);
     });
 }
+
+#[test]
+fn alias_static_method_call_definition() {
+    futures::executor::block_on(async {
+        // `Alias::make` resolves through the alias to `Pair`, which declares
+        // the method; the alias declares none.
+        let source = concat!(
+            "struct Pair { x: i32 }\n",
+            "impl Pair {\n",
+            "    fn make() -> Pair {\n",
+            "        return Pair { x: 1 };\n",
+            "    }\n",
+            "}\n",
+            "type Alias = Pair;\n",
+            "fn f() -> Pair {\n",
+            "    return Alias::make();\n",
+            "}\n",
+        );
+        let result = def_at(source, 8, 19).await.expect("Alias::make");
+        assert_range(&result, 2, 7, 11);
+    });
+}
+
+#[test]
+fn chained_alias_static_method_call_definition() {
+    futures::executor::block_on(async {
+        // Each alias in the chain declares nothing, so resolution peels all of
+        // them rather than stopping at the first link.
+        let source = concat!(
+            "struct Pair { x: i32 }\n",
+            "impl Pair {\n",
+            "    fn make() -> Pair {\n",
+            "        return Pair { x: 1 };\n",
+            "    }\n",
+            "}\n",
+            "type Mid = Pair;\n",
+            "type Outer = Mid;\n",
+            "fn f() -> Pair {\n",
+            "    return Outer::make();\n",
+            "}\n",
+        );
+        let result = def_at(source, 9, 19).await.expect("Outer::make");
+        assert_range(&result, 2, 7, 11);
+    });
+}
+
+#[test]
+fn index_ref_mut_method_call_definition() {
+    futures::executor::block_on(async {
+        // `w[0].add(..)` on a `&mut self` method routes through `IndexRefMut`,
+        // a path of its own that must record the method name's edge itself.
+        let source = concat!(
+            "struct Acc { sum: i32 }\n",
+            "impl Acc {\n",
+            "    fn add(&mut self, n: i32) {\n",
+            "        self.sum = self.sum + n;\n",
+            "    }\n",
+            "}\n",
+            "struct Wrapper { acc: Acc }\n",
+            "impl<i32> IndexRefMut<i32> for Wrapper {\n",
+            "    type Output = Acc;\n",
+            "    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {\n",
+            "        return &mut self.acc;\n",
+            "    }\n",
+            "}\n",
+            "fn f(w: &mut Wrapper) {\n",
+            "    w[0].add(1);\n",
+            "}\n",
+        );
+        let result = def_at(source, 14, 10).await.expect("w[0].add");
+        assert_range(&result, 2, 7, 10);
+    });
+}

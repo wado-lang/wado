@@ -358,11 +358,11 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// matching instantiation (a nested inner for-of is instantiated once
     /// per outer element). See [`Self::reify_tuple_for_of`].
     pub(crate) tuple_overlay_visits: IndexMap<crate::ast::AstId, usize>,
-    /// Source-level live set. When `Some`, reify skips emitting free
-    /// functions and globals whose `AstId` is absent — the dead items
-    /// the liveness pass found unreachable from the export boundary, which
-    /// downstream phases would discard anyway. `None` reifies everything.
-    pub(crate) live_items: Option<&'a IndexSet<crate::ast::AstId>>,
+    /// Source-level emit set. When `Some`, reify skips a function or method
+    /// whose `AstId` is absent — one the liveness pass found the emitted
+    /// program cannot reach, which downstream phases would discard anyway.
+    /// `None` reifies everything.
+    pub(crate) emit_live: Option<&'a IndexSet<crate::ast::AstId>>,
     /// Active parameter-name → already-reified-argument substitutions for the
     /// default-argument expression being reified. A default resolves under the
     /// *callee's* perspective, but a reference to an earlier parameter is the
@@ -502,7 +502,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
         interner: Rc<RefCell<ModuleSourceInterner>>,
-        live_items: Option<&'a IndexSet<crate::ast::AstId>>,
+        emit_live: Option<&'a IndexSet<crate::ast::AstId>>,
     ) -> Self {
         Self {
             tysys,
@@ -519,7 +519,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
-            live_items,
+            emit_live,
             default_arg_overrides: IndexMap::default(),
             compound_overrides: IndexMap::default(),
             call_site_location: None,
@@ -738,14 +738,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// True when liveness gating is active and `(module, id)` is a user-authored
-    /// free function unreachable from the export boundary, so it never reaches
-    /// monomorphization. Only user-authored modules are gated: a stdlib function
-    /// can be reached by compiler synthesis alone, which the source-level call
-    /// graph cannot see, so optimize-time DCE removes the dead ones instead.
-    fn is_dead_item(&self, module: &ModuleSource, id: crate::ast::AstId) -> bool {
-        super::liveness::is_user_authored(module)
-            && self.live_items.is_some_and(|live| !live.contains(&id))
+    /// The identity of the declaration at `id`, which the emitted `TirFunction`
+    /// carries so a later pass can ask what it was reified from.
+    fn def_of(&self, id: crate::ast::AstId) -> Option<crate::defs::DefId> {
+        self.tysys.resolutions.defs().of_ast_id(id)
+    }
+
+    /// True when liveness gating is active and nothing the emitted program
+    /// keeps reaches `id`, so it never reaches monomorphization.
+    fn is_dead_item(&self, id: crate::ast::AstId) -> bool {
+        self.emit_live.is_some_and(|live| !live.contains(&id))
     }
 
     pub(crate) fn reify_module(
@@ -756,12 +758,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.current_module_source = module_source.clone();
         self.current_module_items = &module.items;
 
-        let mut tir_module = TirModule::new(module_source.clone());
+        let mut tir_module = TirModule::new(module_source);
 
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    if self.is_dead_item(&module_source, func.id) {
+                    // A bodyless function is a declaration — a builtin or an
+                    // import. There is no body to skip emitting, and the call
+                    // that names it may be one synthesis mints later.
+                    if func.body.is_some() && self.is_dead_item(func.id) {
                         continue;
                     }
                     if let Some(tir_func) = self.reify_function(func) {
@@ -1400,6 +1405,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirFunction {
             module_source: ModuleSource::default(),
             name: func.name.clone(),
+            def_id: self.def_of(func.id),
             visibility: func.visibility,
             is_export: func.is_export,
             is_async: func.is_async,
@@ -1523,7 +1529,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         impl_block
             .methods
             .iter()
-            .filter_map(|method| self.reify_method(method, &facts, concrete_owner.as_ref()))
+            .filter_map(|method| {
+                if self.is_dead_item(method.id) {
+                    return None;
+                }
+                self.reify_method(method, &facts, concrete_owner.as_ref())
+            })
             .collect()
     }
 
@@ -1844,6 +1855,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirFunction {
             module_source: ModuleSource::default(),
             name: mangled_name,
+            def_id: self.def_of(func.id),
             visibility: func.visibility,
             is_export: false,
             is_async: func.is_async,
@@ -1935,6 +1947,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let tir_func = TirFunction {
             module_source: ModuleSource::default(),
             name: function_name.clone(),
+            def_id: None,
             visibility: crate::ast::Visibility::Private,
             is_export: false,
             is_async: false,

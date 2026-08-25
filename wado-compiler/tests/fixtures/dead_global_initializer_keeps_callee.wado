@@ -1,0 +1,33 @@
+// A global is reified whether or not anything reads it, so its initializer is
+// a call site the emitted program keeps. Reify must therefore keep what that
+// initializer calls — a free function and an inherent method alike — even
+// though the global itself is dead.
+use { println, Stdout } from "core:cli";
+
+struct Counter { start: i32 }
+
+impl Counter {
+    fn seed() -> i32 {
+        return 7;
+    }
+}
+
+fn free_seed() -> i32 {
+    return 9;
+}
+
+global UNREAD_METHOD: i32 = Counter::seed();
+global UNREAD_FREE: i32 = free_seed();
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "warnings_contains": [
+        "global `UNREAD_METHOD` is never used",
+        "global `UNREAD_FREE` is never used"
+    ]
+}

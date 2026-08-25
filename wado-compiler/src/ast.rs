@@ -425,6 +425,16 @@ pub trait AstVisitor: Sized {
     }
 }
 
+/// The head name a type spells, or `None` for a shape with no nameable head.
+#[must_use]
+pub fn type_head_name(ty: &Type) -> Option<&str> {
+    match ty {
+        Type::Named(n) => Some(n.name.as_str()),
+        Type::Generic(g) => Some(g.name.as_str()),
+        _ => None,
+    }
+}
+
 pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
         Item::Use(u) => {

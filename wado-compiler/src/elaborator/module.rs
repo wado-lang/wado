@@ -292,6 +292,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         },
                     );
                 }
+                Item::Function(func) => {
+                    super::item::register_function_compiler_item(
+                        &self.tysys.type_table,
+                        &func.attrs,
+                        &func.name,
+                        &self.current_module_source,
+                        func.span,
+                        self.logger,
+                    );
+                }
                 Item::Trait(trait_decl) => {
                     super::item::register_trait_compiler_item(
                         &self.tysys.type_table,

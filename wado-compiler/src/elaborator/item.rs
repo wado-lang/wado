@@ -58,6 +58,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
     TirFunction {
         module_source: ModuleSource::default(),
         name,
+        def_id: None,
         visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
@@ -156,6 +157,37 @@ fn check_compiler_item_placement<H: CompilerHost>(
     true
 }
 
+/// The `#[compiler_item(...)]` this declaration carries, or `None` when it
+/// carries none or names an item that may not sit on a `kind` declaration.
+fn compiler_item_on<H: CompilerHost>(
+    attrs: &[crate::ast::Attribute],
+    kind: CompilerItemKind,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) -> Option<CompilerItem> {
+    let item = extract_compiler_item(attrs, span, module_source, logger)?;
+    check_compiler_item_placement(item, kind, module_source, span, logger).then_some(item)
+}
+
+/// Bind `item` to the declaration `resolved` names, reporting a clash.
+fn bind_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    item: CompilerItem,
+    resolved: Resolved,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, module_source, logger);
+    }
+}
+
 /// Register a struct declaration's `#[compiler_item(...)]` annotation, if any.
 pub(super) fn register_struct_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
@@ -166,24 +198,16 @@ pub(super) fn register_struct_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Struct, module_source, span, logger)
+    else {
         return;
     };
-    if !check_compiler_item_placement(item, CompilerItemKind::Struct, module_source, span, logger) {
-        return;
-    }
     let resolved = Resolved::Struct {
         module_source: module_source.clone(),
         name: name.to_string(),
         decl,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register a variant declaration's `#[compiler_item(...)]` annotation, if any.
@@ -196,25 +220,21 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+    let Some(item) = compiler_item_on(
+        attrs,
+        CompilerItemKind::Variant,
+        module_source,
+        span,
+        logger,
+    ) else {
         return;
     };
-    if !check_compiler_item_placement(item, CompilerItemKind::Variant, module_source, span, logger)
-    {
-        return;
-    }
     let resolved = Resolved::Variant {
         module_source: module_source.clone(),
         name: name.to_string(),
         decl,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register an enum declaration's `#[compiler_item(...)]` annotation, if any.
@@ -227,24 +247,16 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Enum, module_source, span, logger)
+    else {
         return;
     };
-    if !check_compiler_item_placement(item, CompilerItemKind::Enum, module_source, span, logger) {
-        return;
-    }
     let resolved = Resolved::Enum {
         module_source: module_source.clone(),
         name: name.to_string(),
         decl,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register a `resource` declaration's `#[compiler_item(...)]` annotation, if any.
@@ -257,30 +269,21 @@ pub(super) fn register_resource_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
-        return;
-    };
-    if !check_compiler_item_placement(
-        item,
+    let Some(item) = compiler_item_on(
+        attrs,
         CompilerItemKind::Resource,
         module_source,
         span,
         logger,
-    ) {
+    ) else {
         return;
-    }
+    };
     let resolved = Resolved::Resource {
         module_source: module_source.clone(),
         name: name.to_string(),
         decl,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register a `type X = Y;` declaration's `#[compiler_item(...)]` annotation, if any.
@@ -293,25 +296,21 @@ pub(super) fn register_newtype_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+    let Some(item) = compiler_item_on(
+        attrs,
+        CompilerItemKind::Newtype,
+        module_source,
+        span,
+        logger,
+    ) else {
         return;
     };
-    if !check_compiler_item_placement(item, CompilerItemKind::Newtype, module_source, span, logger)
-    {
-        return;
-    }
     let resolved = Resolved::Newtype {
         module_source: module_source.clone(),
         name: name.to_string(),
         decl,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
@@ -332,12 +331,10 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Trait, module_source, span, logger)
+    else {
         return;
     };
-    if !check_compiler_item_placement(item, CompilerItemKind::Trait, module_source, span, logger) {
-        return;
-    }
     // Single-method traits cache the method's name so the synthesiser
     // can construct `<Trait>::<method>` calls without hard-coding the
     // source-side spelling. Multi-method traits leave it unset.
@@ -371,13 +368,34 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
         method_name,
         assoc_types,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
+}
+
+/// Register a free function's `#[compiler_item(...)]` annotation, if any.
+/// A CM ABI helper the binding synthesis calls by name lives here: it has no
+/// receiver, so the method form cannot carry it.
+pub(super) fn register_function_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = compiler_item_on(
+        attrs,
+        CompilerItemKind::Function,
+        module_source,
+        span,
+        logger,
+    ) else {
+        return;
+    };
+    let resolved = Resolved::Function {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+    };
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register an impl-block method's `#[compiler_item(...)]` annotation, if any.
@@ -391,25 +409,17 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Method, module_source, span, logger)
+    else {
         return;
     };
-    if !check_compiler_item_placement(item, CompilerItemKind::Method, module_source, span, logger) {
-        return;
-    }
     let resolved = Resolved::Method {
         module_source: module_source.clone(),
         owner_type: owner_type.to_string(),
         owner_head: Some(owner_head.clone()),
         name: method_name.to_string(),
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register a single variant case's `#[compiler_item("...")]` annotation.
@@ -428,31 +438,22 @@ pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
-        return;
-    };
-    if !check_compiler_item_placement(
-        item,
+    let Some(item) = compiler_item_on(
+        attrs,
         CompilerItemKind::VariantCase,
         module_source,
         span,
         logger,
-    ) {
+    ) else {
         return;
-    }
+    };
     let resolved = Resolved::VariantCase {
         module_source: module_source.clone(),
         parent_type: parent_type.to_string(),
         name: case_name.to_string(),
         case_index,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register a single enum case's `#[compiler_item("...")]` annotation.
@@ -468,31 +469,22 @@ pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
-        return;
-    };
-    if !check_compiler_item_placement(
-        item,
+    let Some(item) = compiler_item_on(
+        attrs,
         CompilerItemKind::EnumCase,
         module_source,
         span,
         logger,
-    ) {
+    ) else {
         return;
-    }
+    };
     let resolved = Resolved::EnumCase {
         module_source: module_source.clone(),
         parent_type: parent_type.to_string(),
         name: case_name.to_string(),
         case_index,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register a `pub type [..T];` declaration's `#[compiler_item("tuple")]` annotation.
@@ -504,29 +496,20 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
-        return;
-    };
-    if !check_compiler_item_placement(
-        item,
+    let Some(item) = compiler_item_on(
+        attrs,
         CompilerItemKind::TupleFamily,
         module_source,
         span,
         logger,
-    ) {
+    ) else {
         return;
-    }
+    };
     let resolved = Resolved::TupleFamily {
         module_source: module_source.clone(),
         decl,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Register a named definition-less type (`pub type Array<T>;`) carrying a
@@ -542,30 +525,21 @@ pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
-        return;
-    };
-    if !check_compiler_item_placement(
-        item,
+    let Some(item) = compiler_item_on(
+        attrs,
         CompilerItemKind::BuiltinType,
         module_source,
         span,
         logger,
-    ) {
+    ) else {
         return;
-    }
+    };
     let resolved = Resolved::BuiltinType {
         module_source: module_source.clone(),
         name: name.to_string(),
         decl,
     };
-    if let Err(err) = type_table
-        .borrow_mut()
-        .compiler_items_mut()
-        .register(item, resolved)
-    {
-        report_register_error(err, span, module_source, logger);
-    }
+    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
 
 /// Everything an impl method's signature resolves against: the impl's
