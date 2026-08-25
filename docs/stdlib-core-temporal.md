@@ -516,12 +516,18 @@ The same span with a non-negative sign.
 
 #### `pub fn add(&self, other: &Duration) -> Duration`
 
-Component-wise sum. Neither operand is balanced, so the components stay
-where the caller put them.
+The two spans summed and rebalanced, expressed at the coarser of their
+two top units. A day counts as 24 hours; years, months, and weeks trap,
+since adding one needs the calendar position Temporal's `relativeTo`
+supplies.
+
+Balancing is what keeps the result renderable: a component-wise
+`1 hour - 30 minutes` would be `{ hours: 1, minutes: -30 }`, which has
+no ISO 8601 spelling.
 
 #### `pub fn subtract(&self, other: &Duration) -> Duration`
 
-Component-wise difference.
+The difference of the two spans, rebalanced the same way as `add`.
 
 #### `pub fn total(&self, unit: Unit) -> f64`
 
