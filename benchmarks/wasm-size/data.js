@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787610714897,
+  "lastUpdate": 1787620384385,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50833,6 +50833,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3d2d3cdc7ab71629ee09755102d4aaaa1b93ef5f"
         },
         "date": 1787610714401,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bce58ff6f33625c36ac1dc1e3c1ea2a7dbbd5edc",
+          "message": "Merge pull request #1893 from wado-lang/claude/wado-g4-syntax-test-f6frvw\n\nfeat(highlight): hold the Gale highlighter to the compiler's classification",
+          "timestamp": "2026-08-25T10:01:03+09:00",
+          "tree_id": "b13f069adebe55b15aaeaf9eec00f49e390a2008",
+          "url": "https://github.com/wado-lang/wado/commit/bce58ff6f33625c36ac1dc1e3c1ea2a7dbbd5edc"
+        },
+        "date": 1787620383782,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
