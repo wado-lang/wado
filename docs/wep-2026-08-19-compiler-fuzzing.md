@@ -38,13 +38,13 @@ program. Compiler coverage is therefore bounded by what that material happens to
 exercise, which is the known cost of this choice. The roadmap states the
 condition for lifting it.
 
-A root states what a source does not state about itself: which files under it
-are programs, and how one is run. That is what a fixture's `__DATA__` section
-says, so it is the fixtures' root that reads one, and a source without one is
-not assumed to be a fixture — a stdlib module runs under the test world, an
-example under `wasi:cli/command`. A root also decides what is material at all:
-a stdlib module with no `test` block exports nothing the test world runs, so no
-injection into it could move an output.
+A root states what a source does not: which files under it are programs, and how
+one is run. A fixture's `__DATA__` section says that for the fixtures, so theirs
+is the root that reads one; elsewhere the root decides — a stdlib module under
+the test world, an example under `wasi:cli/command`. It also decides what is
+material: a source the world it runs under cannot enter — a stdlib module with
+no `test` block, an `example/` library with no `export fn run` — exports nothing
+an injection could move, and is not drawn at all.
 
 ### Reach is widened by guard shape and payload shape
 
@@ -123,8 +123,8 @@ each payload reached.
 - [ ] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
 - [x] Draw the corpus from the stdlib and `example/` too. Its first run put the
       stdlib's own tests under `O3`, which nothing else does — `wado test` runs
-      them at `O2` — and the baselines that failed there were bugs the fixtures
-      never reached.
+      them at `O2` — and the baselines that failed there were two wrong-code
+      bugs the fixtures never reached.
 - [ ] Draw the corpus from the packages (`package-gale` and its siblings) too. A
       package is many files behind a manifest, so the runner needs to resolve
       dependencies and to compile an entry while one module below it carries the
