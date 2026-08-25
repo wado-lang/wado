@@ -2952,13 +2952,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let return_type = method_info_result.return_type;
 
-            // `T::method(…)` names the *trait's* method; which impl answers is
-            // settled by monomorphization. The edge to the trait method is what
-            // lets liveness's generic-context rule reach the impls.
-            if let Some(def) = method_info_result.method_def {
-                self.record_reference_to_decl(call.callee.id(), def);
-            }
-
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
             let mut method_type_args: Vec<TypeId> = call
                 .type_args
