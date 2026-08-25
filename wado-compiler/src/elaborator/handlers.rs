@@ -6,7 +6,6 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::module_source::ModuleSource;
 use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -343,7 +342,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         handler_type: TypeId,
     ) -> Vec<super::sem::types::HandlerEffectEntry> {
         let mut out: Vec<super::sem::types::HandlerEffectEntry> = Vec::new();
-        let mut seen: crate::hashmap::IndexSet<(ModuleSource, String, Vec<TypeId>)> =
+        // Keyed by the effect's declaration, not its spelling: `Stream<u8>` and
+        // `Stream<i32>` stay separate, two modules' same-named effects too.
+        let mut seen: crate::hashmap::IndexSet<(crate::defs::DefId, Vec<TypeId>)> =
             crate::hashmap::IndexSet::default();
 
         // Collect the impl `trait_type` ASTs first so subsequent
@@ -394,11 +395,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect(),
                 _ => Vec::new(),
             };
-            if seen.insert((
-                decl_module.clone(),
-                base_trait_name.clone(),
-                type_args.clone(),
-            )) {
+            if seen.insert((*trait_ref, type_args.clone())) {
                 out.push(super::sem::types::HandlerEffectEntry {
                     impl_def: Some(*impl_def),
                     name: base_trait_name,
