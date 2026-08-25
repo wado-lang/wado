@@ -314,6 +314,43 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   across lower / prediction / parse), and prediction (`build_sll_node` ~14%
   inclusive).
 
+- **The IR deep copies were the whole prediction cost (2026-08-25, landed).**
+  A release-host guest profile of `benchmark/gale_gen` (4026 leaf samples) put
+  **23%** of the run inside `$value_copy$` helpers — `RuleRefElement` 5.2%,
+  `TokenRefElement` 3.5%, `Alternative` 2.8% — with prediction alone paying
+  10.1% and `lower` 7.0%. Two shapes account for it, both fixed by naming a
+  borrow where the code only ever read:
+
+  - **`SllConfig.elements` / `SllReturn.elements` are now `&List<Element>`.**
+    Prediction rebuilds a config per token per alternative (`SllConfig { ..*c,
+    pos }`), and value semantics deep-copied the element list — every `String`
+    of every `RuleRefElement` — on each one. Nothing in the walk writes through
+    it, and every list it names outlives the walk (the grammar's, or the
+    caller's local), so the field borrows. `push_return` / `build_prediction`
+    declare the `stores[...]` this needs.
+  - **Five by-value `for` bindings became `for … of &…`** — the loops in
+    `lexer_elem_refs_rule`, `collect_literal_tokens`, `merge_grammars`,
+    `sll_advance` and `try_expand_opaque` whose body only borrows the binding.
+    A by-value binding deep-copies each element inside
+    `SliceValueIter<T>::next`; a by-ref one SROAs to a bare indexed load.
+
+  Release host, alternating A/B best-of-five, `-O2`: **222.6 → 294.5 KB/s**
+  (154.5 → 116.3 ms/iter, **+32%**), 5/5 rounds in favour. The by-ref loops are
+  ~+5% of that and the borrowed element list the rest. Generated Rust parser
+  byte-identical, all 2710 `package-gale` tests pass. Copies fall to 13.9% of
+  the profile and by-value-`for` copies to 1.3%; the top frame is now
+  string-keyed `TreeMap` probing (`String^Ord::cmp` 8.8%, `Eq::eq` 4.3%,
+  `find_index` 3.1%, TreeMap rebalancing ~5%) — the id-carrying lever above,
+  applied to what is left of the name-keyed maps.
+
+  Contrast with the compiler-side dead end in
+  [`benchmark/perf.md`](../benchmark/perf.md) ("Sharing list elements instead of
+  deep-copying them"): forcing *element* clones shallow made gale-gen 3× slower
+  under the copying collector, because it kept nursery-dead objects alive.
+  Borrowing a *whole list that is already a root* adds nothing to the live set,
+  which is why this one pays. Price a share against the live set it creates, not
+  the allocations it removes.
+
   (A `type TokenId = i32` newtype for the id — so a `Display` can format token
   names later — currently trips a `$value_copy` codegen ICE when a
   newtype-valued `TreeMap` coexists with its `i32` base in a value-copied struct

@@ -463,6 +463,12 @@ Verified against the tree.
       a by-value `for` binding stops copying each element. It cost the
       json-canada deserialize benchmark ~37% before its tree walk was written
       over `&`, which is the workaround this would retire.
+      Priced again on gale-gen (2026-08-25, release host): the copy inside
+      `SliceValueIter<T>::next` was **7.9%** of the run, and writing the five
+      hot loops over `&` bought ~5%. It is a narrow lever, though — the same
+      measurement over `syntax_highlight`, `json_catalog` and `sqlite_parse`
+      finds **0%**: only a program that passes deeply nested aggregates by
+      value pays it at all.
 
 ## Deferred: the `move` and `unique` keywords
 

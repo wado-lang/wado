@@ -1033,7 +1033,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     // A lexer split and a parser split each name their own base; keep both.
     let mut lexer_superclass = String::new();
     let mut parser_superclass = String::new();
-    for let g of grammars {
+    for let g of &grammars {
         if !g.action_language matches { Java } {
             action_language = g.action_language;
         }
@@ -1076,8 +1076,8 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         }
         // Build mode index remapping table for this grammar
         let mut remap: List<i32> = [];
-        for let mn of g.mode_names {
-            let idx = find_or_add_mode(&mut mode_names, &mn);
+        for let mn of &g.mode_names {
+            let idx = find_or_add_mode(&mut mode_names, mn);
             remap.push(idx);
         }
         // Build channel id remapping table. User channels start at id 2

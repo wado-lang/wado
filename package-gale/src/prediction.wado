@@ -133,12 +133,12 @@ pub fn build_prediction(
     alt_elements: &List<List<Element>>,
     max_depth: i32,
     ctx: &mut GenContext,
-) -> PredictionNode {
+) -> PredictionNode with stores[alt_elements] {
     let mut configs: List<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
         configs.push(SllConfig {
             alt_index: alt_indices[i],
-            elements: alt_elements[i],
+            elements: &alt_elements[i],
             pos: 0,
             return_stack: [],
         });
@@ -313,7 +313,7 @@ fn prediction_first_ambiguous_reason(node: &PredictionNode) -> AmbiguityReason {
 
 
 struct SllReturn {
-    elements: List<Element>,
+    elements: &List<Element>,
     pos: i32,
 }
 
@@ -324,13 +324,18 @@ global SLL_POS_OPAQUE: i32 = -1;
 
 struct SllConfig {
     alt_index: i32,
-    elements: List<Element>,
+    /// Borrowed: the walk never writes through it, and a config is rebuilt per
+    /// token per alternative, so owning it would deep-copy every element's
+    /// strings each time. The referent is the grammar's list, the caller's, or
+    /// one the walk built (`replace_element_at`); GC keeps it alive as long as
+    /// a config names it.
+    elements: &List<Element>,
     /// Element index into `elements`, or `SLL_POS_OPAQUE` for an opaque config.
     pos: i32,
     return_stack: List<SllReturn>,
 }
 
-fn push_return(stack: &List<SllReturn>, elements: List<Element>, pos: i32) -> List<SllReturn> {
+fn push_return(stack: &List<SllReturn>, elements: &List<Element>, pos: i32) -> List<SllReturn> with stores[elements] {
     // Value semantics deep-copies the list; just append the new frame.
     let mut new_stack = *stack;
     new_stack.push(SllReturn { elements, pos });
@@ -395,7 +400,7 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
         let popped = pop_return(c);
         return sll_config_first(&popped, ctx);
     }
-    return ctx.first_ids_of_elements_from(&c.elements, c.pos);
+    return ctx.first_ids_of_elements_from(c.elements, c.pos);
 }
 
 /// Alternatives to walk into for a nullable `Repeat` whose body can consume
@@ -460,14 +465,14 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
                             entered = true;
                             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
                             let mut body_results: List<SllConfig> = [];
-                            for let alt of inner_alts {
+                            for let alt of &inner_alts {
                                 let mut v2: List<String> = [];
-                                if !ctx.first_ids_of_alt(&alt, &mut v2).contains(&token) {
+                                if !ctx.first_ids_of_alt(alt, &mut v2).contains(&token) {
                                     continue;
                                 }
                                 let exp = SllConfig {
                                     ..*c,
-                                    elements: alt.elements,
+                                    elements: &alt.elements,
                                     pos: 0,
                                     return_stack: new_stack,
                                 };
@@ -584,7 +589,8 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
             }
         },
         Label(lab) => {
-            let unwrapped = SllConfig { ..*c, elements: replace_element_at(&c.elements, c.pos, &lab.element) };
+            let replaced = replace_element_at(c.elements, c.pos, &lab.element);
+            let unwrapped = SllConfig { ..*c, elements: &replaced };
             sll_advance(&unwrapped, token, ctx, inline_depth);
         },
         Wildcard(_) | Not(_) => [],
@@ -839,14 +845,14 @@ fn try_expand_opaque(
                     continue;
                 }
                 let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                for let alt of found_rule.alternatives {
+                for let alt of &found_rule.alternatives {
                     let mut v: List<String> = [];
-                    if !ctx.first_ids_of_alt(&alt, &mut v).contains(&token) {
+                    if !ctx.first_ids_of_alt(alt, &mut v).contains(&token) {
                         continue;
                     }
                     let exp = SllConfig {
                         alt_index: c.alt_index,
-                        elements: alt.elements,
+                        elements: &alt.elements,
                         pos: 0,
                         return_stack: new_stack,
                     };
