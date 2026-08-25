@@ -1,0 +1,14 @@
+// A generic builtin takes its type parameter from the expected type, so a
+// literal argument is re-coerced once the substitution is known. Without that
+// the literal keeps its default width and codegen rejects the module.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let narrow: f32 = builtin::black_box(0.5);
+    let wide: i64 = builtin::black_box(1);
+    println(`${narrow} ${wide}`);
+}
+
+__DATA__
+{"stdout": "0.5 1\n"}
