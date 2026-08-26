@@ -26,13 +26,15 @@ use { to_snake_case } from "./ident.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
-/// `has_args` marks a call site that passes arguments: the rewrite drops them
-/// and the interface has no type to declare them with, so a base carrying one
-/// is refused rather than wired to a signature that loses an argument.
+/// `params` are the Wado types the call sites agree on, inferred from their
+/// literal arguments; `bad_args` marks a name whose sites do not agree, or one
+/// passing an argument no type is evident for — the interface would then have
+/// to invent one, so the base is refused instead.
 pub struct SuperOp {
     pub name: String,
     pub is_predicate: bool,
-    pub has_args: bool,
+    pub params: List<String> = [],
+    pub bad_args: bool = false,
     /// The same name reached from both a predicate and an action body: the two
     /// call forms differ, so one site would mismatch the operation's signature.
     pub mixed_role: bool = false,
@@ -51,8 +53,8 @@ pub enum SuperSite {
 /// One `this.<method>(...)` call site found in a body.
 pub struct SuperCall {
     pub name: String,
-    /// The call passes something — `this.m(2)`, not `this.m()`.
-    pub has_args: bool,
+    /// The arguments as written, one per top-level comma-separated slot.
+    pub args: List<String> = [],
 }
 
 /// One action or predicate body, with the kind that fixes its call form.
@@ -185,7 +187,7 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
         }
         i = match this_call_at(&chars, i, n) {
             Some([name, close]) => {
-                out.push(SuperCall { name, has_args: call_has_args(&chars, i, close) });
+                out.push(SuperCall { name, args: call_args(&chars, i, close) });
                 close;
             },
             None => i + 1,
@@ -279,10 +281,10 @@ fn match_brace(chars: &List<char>, open: i32, n: i32) -> i32 {
     return n;
 }
 
-/// Whether the call spanning `[start, close)` passes anything between its
-/// parentheses. Only the receiver and the method name precede the first `(`,
-/// so that one opens the argument list.
-fn call_has_args(chars: &List<char>, start: i32, close: i32) -> bool {
+/// The arguments the call spanning `[start, close)` passes, split on its
+/// top-level commas. Only the receiver and the method name precede the first
+/// `(`, so that one opens the argument list.
+fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
     let mut open = start;
     for let mut i = start; i < close; i += 1 {
         if chars[i] == '(' {
@@ -290,12 +292,70 @@ fn call_has_args(chars: &List<char>, start: i32, close: i32) -> bool {
             break;
         }
     }
-    for let mut i = open + 1; i + 1 < close; i += 1 {
-        if !chars[i].is_ascii_whitespace() {
-            return true;
+    let mut out: List<String> = [];
+    let mut depth = 0;
+    let mut arg_start = open + 1;
+    let mut i = open + 1;
+    while i + 1 < close {
+        match chars[i] {
+            '"' | '\'' => {
+                i = scan_string(chars, i);
+                continue;
+            },
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' => {
+                if depth == 0 {
+                    out.push(collect_range(chars, arg_start, i).trim());
+                    arg_start = i + 1;
+                }
+            },
+            _ => {
+            },
+        }
+        i += 1;
+    }
+    let last = collect_range(chars, arg_start, close - 1).trim();
+    if !last.is_empty() || !out.is_empty() {
+        out.push(last);
+    }
+    return out;
+}
+
+/// The Wado type a literal argument evidently has, or `null` for anything a
+/// signature would have to guess at. Every real grammar's base call passes a
+/// literal, which is what makes call-site inference enough.
+fn literal_arg_type(text: &String) -> Option<String> {
+    if text.is_empty() {
+        return null;
+    }
+    if text.starts_with("\"") && text.ends_with("\"") && text.len() >= 2 {
+        return Option::Some("String");
+    }
+    if *text == "true" || *text == "false" {
+        return Option::Some("bool");
+    }
+    let digits: List<char> = text.chars().collect();
+    let first = if digits[0] == '-' { 1 } else { 0 };
+    if digits.len() > first && digits.iter_ref().skip(first).all(|c: &char| *c matches { '0'..='9' }) {
+        return Option::Some("i32");
+    }
+    return null;
+}
+
+/// The Wado types of a call's arguments, or `null` when one has no evident
+/// type — the whole call is then unrepresentable, not just that argument.
+fn call_param_types(args: &List<String>) -> Option<List<String>> {
+    let mut out: List<String> = [];
+    for let a of args {
+        match literal_arg_type(a) {
+            Some(t) => out.push(t),
+            None => {
+                return null;
+            },
         }
     }
-    return false;
+    return Option::Some(out);
 }
 
 /// If a `this.<method>(` call starts at `i` (whitespace allowed between
@@ -389,28 +449,53 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
-/// role. A later occurrence still contributes `has_args` and `mixed_role`,
-/// either of which makes the operation unrepresentable.
+/// role and its signature. A later occurrence still contributes `bad_args` and
+/// `mixed_role`, either of which makes the operation unrepresentable: the sites
+/// of one operation must agree on what it takes.
 pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
     let is_predicate = kind matches { Predicate };
+    let params = call_param_types(&call.args);
     for let mut i = 0; i < ops.len(); i += 1 {
         if ops[i].name == call.name {
-            ops[i].has_args = ops[i].has_args || call.has_args;
             ops[i].mixed_role = ops[i].mixed_role || ops[i].is_predicate != is_predicate;
+            match &params {
+                Some(p) => {
+                    if *p != ops[i].params {
+                        ops[i].bad_args = true;
+                    }
+                },
+                None => ops[i].bad_args = true,
+            }
             return;
         }
     }
-    ops.push(SuperOp { name: call.name, is_predicate, has_args: call.has_args });
+    match params {
+        Some(p) => ops.push(SuperOp { name: call.name, is_predicate, params: p }),
+        None => ops.push(SuperOp { name: call.name, is_predicate, bad_args: true }),
+    }
 }
 
-/// Operations called with arguments anywhere in the grammar. A base is wired
-/// only when this is empty (`action.md`, "SuperClass — an effect interface").
+/// Operations whose call sites leave no signature to declare: an argument with
+/// no evident type, or sites that disagree about what the operation takes. A
+/// base is wired only when this is empty (`action.md`, "SuperClass — an effect
+/// interface").
 pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
     let mut out: List<String> = [];
     for let op of ops {
-        if op.has_args {
+        if op.bad_args {
             out.push(op.name);
         }
+    }
+    return out;
+}
+
+/// The parameter list an operation's inferred argument types declare, after the
+/// receiver: `, a0: String`. Empty for a zero-argument operation, which keeps a
+/// grammar that has only those byte-identical.
+fn super_op_params(op: &SuperOp) -> String {
+    let mut out = String::new();
+    for let mut i = 0; i < op.params.len(); i += 1 {
+        out.push_str(&`, a${i}: ${op.params[i]}`);
     }
     return out;
 }
@@ -529,14 +614,15 @@ pub fn parser_super_refusal(ops: &List<SuperOp>) -> String {
     return "";
 }
 
-/// The refusal both recognizers share: the rewrite drops call arguments and the
-/// interface has no type to declare them with.
+/// The refusal both recognizers share: an operation's call sites are its only
+/// signature source, so one passing an argument with no evident type — or sites
+/// that disagree about what it takes — leaves nothing to declare.
 fn args_refusal(ops: &List<SuperOp>) -> String {
     let with_args = super_ops_with_args(ops);
     if with_args.is_empty() {
         return "";
     }
-    return `is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them`;
+    return `is called with arguments (${with_args.join(", ")}) whose types its call sites do not settle; a base operation has no other signature source`;
 }
 
 /// Operations reached from an action body rather than a predicate.
@@ -561,7 +647,7 @@ pub fn collect_parser_super_ops(grammar: &Grammar) -> List<SuperOp> {
 pub fn gen_parser_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
     w.line(&`pub interface ${*name} {`);
     for let op of ops {
-        w.line(&`    fn ${to_snake_case(&op.name)}(p: &Parser) -> bool;`);
+        w.line(&`    fn ${to_snake_case(&op.name)}(p: &Parser${super_op_params(op)}) -> bool;`);
     }
     w.line(&"}");
     w.blank();
@@ -716,9 +802,9 @@ pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp
     w.line(&`pub interface ${*name} {`);
     for let op of ops {
         if op.is_predicate {
-            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView) -> bool;`);
+            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView${super_op_params(op)}) -> bool;`);
         } else {
-            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer);`);
+            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer${super_op_params(op)});`);
         }
     }
     gen_super_hooks(w);
@@ -744,14 +830,20 @@ pub fn super_emit_hook_expr(base_name: &String, channel: &String) -> String {
 
 /// The ambient operation call for a call site, reading the locals in scope
 /// there. Arguments are dropped.
-pub fn super_call_expr(base_name: &String, method: &String, site: SuperSite) -> String {
+pub fn super_call_expr(base_name: &String, method: &String, site: SuperSite, args: &List<String> = &NO_ARGS) -> String {
     let recv = match site {
         LexerPredicate => "LexerView { chars, start, pos }",
         LexerAction => "LexerView { chars, start, pos }, lx",
         ParserPredicate => "p",
     };
-    return `${*base_name}::${to_snake_case(method)}(${recv})`;
+    let mut passed = String::new();
+    for let a of args {
+        passed.push_str(&`, ${*a}`);
+    }
+    return `${*base_name}::${to_snake_case(method)}(${recv}${passed})`;
 }
+
+global NO_ARGS: List<String> = [];
 
 /// Rewrite every lexer action / predicate body in place, turning each
 /// `this.<method>(...)` into `Foo::<method>(...)`. Run after op collection, so
@@ -817,7 +909,7 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
         }
         i = match this_call_at(&chars, i, n) {
             Some([method, close]) => {
-                out.push_str(&super_call_expr(base_name, &method, site));
+                out.push_str(&super_call_expr(base_name, &method, site, &call_args(&chars, i, close)));
                 close;
             },
             None => {

@@ -75,10 +75,22 @@ GT : '>' ;
     assert src.contains("pub fn token_start(&self, i: i32) -> i32"), "and token positions";
 }
 
-test "a parser base called with arguments is refused" {
+test "a parser base call with literal arguments is wired from its call sites" {
     let src = &"grammar C;
 options { superClass = PBase; language = Wado; }
 r : A { this.p(\"of\") }? A ;
+A : 'a' ;
+";
+    assert unsupported_count(src) == 0, "a literal argument settles the signature";
+    let out = gen_source(src);
+    assert out.contains("fn p(p: &Parser, a0: String) -> bool;"), out;
+    assert out.contains("PBase::p(p, \"of\")"), out;
+}
+
+test "a parser base call whose argument has no evident type is refused" {
+    let src = &"grammar C;
+options { superClass = PBase; language = Wado; }
+r : A { this.p(x + 1) }? A ;
 A : 'a' ;
 ";
     assert unsupported_count(src) == 1, "the refusal is reported once";
@@ -111,7 +123,7 @@ test "an alt-initial predicate on a refused base is not extracted either" {
     // same guard as the inline one.
     let src = &"grammar C;
 options { superClass = PBase; language = Wado; }
-r : { this.p(\"of\") }? A | B ;
+r : { this.p(x + 1) }? A | B ;
 A : 'a' ;
 B : 'b' ;
 ";

@@ -447,20 +447,31 @@ WS : ' ' -> skip ;
     assert !src.contains("act_type"), "a predicate-only base emits no action-effect surface";
 }
 
-test "a superClass call with arguments is refused, not silently stripped" {
-    // The call rewrite drops arguments and the generated interface has no type
-    // to declare them with, so wiring the base would run `set_channel` with the
-    // `2` lost. Refuse the base and say so.
+test "a superClass call's literal arguments settle its operation's signature" {
     let src = &"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : 'a' { this.setChannel(2) } ;
 WS : ' ' -> skip ;
 ";
+    assert unsupported_count(src) == 0, "a literal argument needs no other signature source";
+    let out = gen_source(src);
+    assert out.contains("fn set_channel(view: LexerView, lx: &mut Lexer, a0: i32);"), out;
+    assert out.contains("B::set_channel(LexerView { chars, start, pos }, lx, 2)"), out;
+}
+
+test "a superClass call whose argument has no evident type is refused" {
+    // The interface would have to invent the type, so wiring the base would run
+    // `set_channel` against a signature nothing settled. Refuse and say so.
+    let src = &"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.setChannel(n + 1) } ;
+WS : ' ' -> skip ;
+";
     // Two reports: the refused base, and the action that can no longer run.
-    assert unsupported_count(src) == 2, "an argument-passing base call must be reported";
+    assert unsupported_count(src) == 2, "an unsettled base call must be reported";
     let out = gen_source(src);
     assert !out.contains("pub interface B"), "no interface is emitted for a base Gale cannot represent";
-    assert !out.contains("B::set_channel"), "the call must not be emitted with its argument dropped";
+    assert !out.contains("B::set_channel"), "the call must not be emitted against a guessed signature";
     assert !out.contains("this.setChannel"), "a body naming `this` must not reach the generated module";
 }
 
