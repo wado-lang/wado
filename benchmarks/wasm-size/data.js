@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787729954417,
+  "lastUpdate": 1787753120556,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51185,6 +51185,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2e580ad31c01338b9621ded35a6c2040a4787e9e"
         },
         "date": 1787729953854,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254936,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b3995581d007eef2b77ce0502faa151f58e7995",
+          "message": "Merge pull request #1903 from wado-lang/claude/core-temporal-remaining-tasks-ikf1ir\n\nfeat(temporal): the TC39 Temporal model, and the prelude's ASCII family",
+          "timestamp": "2026-08-26T22:53:00+09:00",
+          "tree_id": "c4dd9e3d76c4e9d28678e20ec2677160bb4984f7",
+          "url": "https://github.com/wado-lang/wado/commit/9b3995581d007eef2b77ce0502faa151f58e7995"
+        },
+        "date": 1787753119841,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
