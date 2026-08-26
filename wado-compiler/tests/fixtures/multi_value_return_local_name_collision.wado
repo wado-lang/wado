@@ -1,15 +1,15 @@
 // A source local may be named like the one the multi-value return fallback
-// binds the aggregate to. Codegen keys locals by name, so sharing the name
-// merged a `String` slot and a tuple slot into one and the module failed Wasm
-// validation from -O2 up.
+// binds the aggregate to — the first name it mints here. Codegen keys locals by
+// name, so sharing one merged a `String` slot and a tuple slot into a single
+// slot the module failed Wasm validation over, from -O2 up.
 
 #[inline(never)]
 fn pick(x: i32) -> [i32, i32] {
-    let __mv_return: String = "hello";
+    let __mv_return_1: String = "hello";
     return outer: {
         break outer: inner: {
             if x > 0 {
-                break outer: [__mv_return.len() as i32, 2];
+                break outer: [__mv_return_1.len() as i32, 2];
             }
             [3, 4]
         };

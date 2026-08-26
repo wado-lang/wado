@@ -1729,10 +1729,8 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Rewrites `builtin::copy_value::<T>(x)` markers, which only
-    /// appear inside synthesized helper bodies (user-program TIR
-    /// carries no markers — the fold emits the helper call directly
-    /// at each wrap site via [`Self::wrap_value_copy`]).
+    /// Rewrites a `builtin::copy_value::<T>(x)` marker into the helper that
+    /// copies `T` — one `synthesize_helpers` planted, or one the source wrote.
     fn convert_call(
         &self,
         func: &FunctionRef,
@@ -1743,11 +1741,12 @@ impl FunctionTranslator<'_, '_> {
         if func.module_source.is_core_builtin()
             && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
             && args.len() == 1
-            && let Some(type_id) = func
-                .monomorph_info
-                .as_ref()
-                .and_then(|mi| mi.impl_type_args.first().or(mi.method_type_args.first()).copied())
-                .or_else(|| type_args.first().copied())
+            && let Some(type_id) = func.monomorph_info.as_ref().and_then(|mi| {
+                mi.impl_type_args
+                    .first()
+                    .or(mi.method_type_args.first())
+                    .copied()
+            })
             && let Some((helper_module, helper_name)) = self
                 .base
                 .value_copy

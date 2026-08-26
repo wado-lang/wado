@@ -106,13 +106,12 @@ impl Root {
         }
     }
 
-    /// Can an injection into this file be observed at all?
+    /// Can an injection into this file be observed at all? Only what the world
+    /// enters can move an output, and a library it cannot enter is not material.
     ///
-    /// Only what the world calls can move an output: a `test` block under the
-    /// test world, `export fn run` under the CLI world. A stdlib module or an
-    /// example with neither is a library, and its exclusion belongs here rather
-    /// than in the report, where a compile failure means a regression. A
-    /// fixture is a program by construction.
+    /// A fixture is a program by construction. A stdlib module or an example
+    /// with neither a `test` block nor `export fn run` would fail its baseline
+    /// compile, landing in the report where a regression belongs.
     fn is_subject(self, path: &Path) -> bool {
         if self == Root::Fixtures {
             return true;
@@ -124,17 +123,14 @@ impl Root {
             return true;
         };
         let items = wado_compiler::parse(&source).ast.items;
-        if spec.test_world {
-            items.iter().any(|item| matches!(item, Item::Test(_)))
-        } else {
-            items.iter().any(is_run_export)
-        }
+        items.iter().any(|item| {
+            if spec.test_world {
+                matches!(item, Item::Test(_))
+            } else {
+                matches!(item, Item::Function(f) if f.is_export && f.name == "run")
+            }
+        })
     }
-}
-
-/// The `export fn run` a `wasi:cli/command` program is entered through.
-fn is_run_export(item: &Item) -> bool {
-    matches!(item, Item::Function(f) if f.is_export && f.name == "run")
 }
 
 /// One program in the corpus.

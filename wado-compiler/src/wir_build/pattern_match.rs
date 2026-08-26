@@ -955,8 +955,7 @@ impl FunctionTranslator<'_, '_> {
                     // type check, which is more expensive than a
                     // `local.get`.
                     let cast_local = if consumers >= 2 {
-                        self.local_counter += 1;
-                        let cast_local = format!("__cast_{}", self.local_counter);
+                        let cast_local = self.fresh_local("__cast");
                         instrs.extend(declare_and_set_local(
                             cast_local.clone(),
                             WirType::Ref {
@@ -1052,8 +1051,7 @@ impl FunctionTranslator<'_, '_> {
                             let payload_tid = *payload_type;
                             let payload_wir =
                                 self.ctx.type_id_to_wir_type(self.type_table, payload_tid);
-                            self.local_counter += 1;
-                            let temp_name = format!("__variant_payload_{}", self.local_counter);
+                            let temp_name = self.fresh_local("__variant_payload");
                             instrs.extend(declare_and_set_local(
                                 temp_name.clone(),
                                 payload_wir,
@@ -1122,8 +1120,7 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            self.local_counter += 1;
-                            let temp_name = format!("__tuple_elem_{}", self.local_counter);
+                            let temp_name = self.fresh_local("__tuple_elem");
                             let elem_type = tuple_element_type(&element_types, i);
                             let elem_wir_type =
                                 self.ctx.type_id_to_wir_type(self.type_table, elem_type);
@@ -1161,8 +1158,7 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            self.local_counter += 1;
-                            let temp_name = format!("__struct_field_{}", self.local_counter);
+                            let temp_name = self.fresh_local("__struct_field");
                             let field_type =
                                 self.resolve_struct_field_type(scrut_type, &field.field_name);
                             let field_wir_type =

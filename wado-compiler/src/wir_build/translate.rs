@@ -1157,18 +1157,16 @@ impl FunctionTranslator<'_, '_> {
             .contains_key(&(func.name.clone(), func.module_source.clone()))
     }
 
-    /// `base`, or `base_{n}` for the first `n` no source local answers to.
-    ///
-    /// Codegen keys locals by name and [`crate::wir::WirLocals::scan`] keeps the first
-    /// declaration of each, so a synthetic sharing a source local's name
-    /// silently merges two differently-typed slots into one.
-    fn free_local_name(&mut self, base: &str) -> String {
-        let mut name = base.to_string();
-        while self.resolved_local_names.values().any(|n| *n == name) {
+    /// A synthetic local's name, taken so that no source local holds it:
+    /// codegen keys locals by name and merges two slots that share one.
+    pub(super) fn fresh_local(&mut self, base: &str) -> String {
+        loop {
             self.local_counter += 1;
-            name = format!("{base}_{}", self.local_counter);
+            let name = format!("{base}_{}", self.local_counter);
+            if !self.resolved_local_names.values().any(|n| *n == name) {
+                return name;
+            }
         }
-        name
     }
 
     /// Return the N results by binding the aggregate and reading its fields —
@@ -1197,7 +1195,7 @@ impl FunctionTranslator<'_, '_> {
             );
         };
         let type_id = type_id.clone();
-        let name = self.free_local_name("__mv_return");
+        let name = self.fresh_local("__mv_return");
         let fields: Vec<WirInstr> = field_names
             .iter()
             .zip(&result_types)
@@ -1399,9 +1397,8 @@ impl FunctionTranslator<'_, '_> {
 
         // WIR-unique prefix: codegen dedups `DeclareLocal` by name, so this must
         // not clash with the lower path's `__deref_ref_{nir_idx}` temps.
-        self.local_counter += 1;
-        let ref_local = format!("__expr_deref_ref_{}", self.local_counter);
-        let val_local = format!("__expr_deref_val_{}", self.local_counter);
+        let ref_local = self.fresh_local("__expr_deref_ref");
+        let val_local = self.fresh_local("__expr_deref_val");
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
@@ -2030,8 +2027,7 @@ impl FunctionTranslator<'_, '_> {
                 let ty = self
                     .ctx
                     .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
-                self.local_counter += 1;
-                let name = format!("__arg_spill_{}", self.local_counter);
+                let name = self.fresh_local("__arg_spill");
                 let value = self.translate_operand(op);
                 prelude.extend(declare_and_set_local(name.clone(), ty.clone(), value));
                 call_args.push(WirInstr::LocalGet {
