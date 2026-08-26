@@ -48,6 +48,8 @@ pub struct CmStdlibNames {
     pub index_value: crate::name::FqTraitName,
     /// `List`'s head, likewise the declaration the registry records.
     pub array_fq: crate::name::FqTypeName,
+    /// `TreeMap`'s name, or `None` where `core:collections` was never loaded.
+    pub tree_map: Option<String>,
 }
 
 impl CmStdlibNames {
@@ -78,6 +80,9 @@ impl CmStdlibNames {
             err_index,
             index_value: items.trait_fq(CompilerItem::IndexValue),
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
+            tree_map: items
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string),
         }
     }
 }
@@ -330,6 +335,17 @@ pub fn cm_type_to_type_id(
             if g.name.as_str() == list_name && g.args.len() == 1 {
                 let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_list(elem_type);
+            }
+            // `core:collections` is not auto-imported, so a program that never
+            // names `TreeMap` has no registration to compare against.
+            let tree_map_name = type_table
+                .compiler_items()
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string);
+            if tree_map_name.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 {
+                let key = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let value = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                return type_table.make_tree_map(key, value);
             }
             let option_name = type_table
                 .compiler_variant_name(CompilerItem::Option)
@@ -671,6 +687,21 @@ fn check_cm_boundary_representable_inner(
                         recurse(a, visited)?;
                     }
                     Ok(())
+                } else if type_table
+                    .compiler_item_def(crate::compiler_item::CompilerItem::TreeMap)
+                    .is_some_and(|tree_map| tree_map == *def)
+                {
+                    // `map<K, V>`: the key comes from the CM's `keytype`
+                    // subset, the value from any representable valtype.
+                    let [key, value] = type_args.as_slice() else {
+                        panic!("`TreeMap` is declared with two type parameters");
+                    };
+                    let (key, value) = (*key, *value);
+                    if let Some(reason) = crate::component_model::map_key_rejection(type_table, key)
+                    {
+                        return Err(reason);
+                    }
+                    recurse(value, visited)
                 } else {
                     Err(format!(
                         "generic type `{}` has no Component Model value \
@@ -979,7 +1010,12 @@ fn flatten_export_type_inner(
                 }
             }
         },
-        Type::Generic(generic) if generic.name == names.array => {
+        Type::Generic(generic)
+            if generic.name == names.array
+                || names.tree_map.as_deref() == Some(generic.name.as_str()) =>
+        {
+            // `map<K, V>` despecializes to `list<tuple<K, V>>` and carries that
+            // type's `(ptr, count)`.
             out.push(cm_abi::CmValType::I32); // ptr
             out.push(cm_abi::CmValType::I32); // len
         }
@@ -1156,7 +1192,9 @@ fn flat_types_from_type_id_inner(
                     names,
                 );
                 out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
-            } else if name == &names.array {
+            } else if name == &names.array || names.tree_map.as_deref() == Some(name.as_str()) {
+                // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
+                // carries that type's pair.
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else {

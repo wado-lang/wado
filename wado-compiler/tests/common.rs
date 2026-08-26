@@ -15,9 +15,11 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi_http::{
+    Error as HttpError, RequestOptions, WasiBody, WasiHttpCtx, WasiHttpCtxView, WasiHttpHooks,
+    WasiHttpView,
+};
 use wasmtime_wasi_tls::{
     Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
     WasiTlsCtxView, WasiTlsView,
@@ -337,6 +339,7 @@ pub fn engine() -> &'static Engine {
         config.wasm_component_model_more_async_builtins(true);
         config.wasm_component_model_async_stackful(true);
         config.wasm_component_model_error_context(true);
+        config.wasm_component_model_map(true);
         config.wasm_wide_arithmetic(true);
         // Honor the `metadata.code.branch_hint` custom section the compiler
         // emits for `builtin::cold_path()`, matching the wado CLI runtime so
@@ -344,7 +347,7 @@ pub fn engine() -> &'static Engine {
         config.wasm_branch_hinting(true);
         // Match the wado CLI's default collector so the e2e suite exercises
         // the collector users actually get (see `runtime::DEFAULT_COLLECTOR`).
-        config.collector(wasmtime::Collector::Copying);
+        config.collector(wasmtime::Collector::DeferredReferenceCounting);
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         // Use minimal optimization for faster compilation in tests
         config.cranelift_opt_level(wasmtime::OptLevel::None);
@@ -434,45 +437,21 @@ impl TestHttpCtx {
 impl WasiHttpHooks for TestHttpCtx {
     fn send_request(
         &mut self,
-        request: http::Request<
-            http_body_util::combinators::UnsyncBoxBody<
-                bytes::Bytes,
-                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
-            >,
-        >,
-        _options: Option<wasmtime_wasi_http::p3::RequestOptions>,
-        _fut: Box<
-            dyn Future<
-                    Output = Result<(), wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>,
-                > + Send,
-        >,
+        request: http::Request<WasiBody>,
+        _options: Option<RequestOptions>,
+        _fut: Box<dyn Future<Output = Result<(), HttpError>> + Send>,
     ) -> Box<
         dyn Future<
                 Output = Result<
                     (
-                        http::Response<
-                            http_body_util::combinators::UnsyncBoxBody<
-                                bytes::Bytes,
-                                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
-                            >,
-                        >,
-                        Box<
-                            dyn Future<
-                                    Output = Result<
-                                        (),
-                                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
-                                    >,
-                                > + Send,
-                        >,
+                        http::Response<WasiBody>,
+                        Box<dyn Future<Output = Result<(), HttpError>> + Send>,
                     ),
-                    wasmtime_wasi::TrappableError<
-                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
-                    >,
+                    HttpError,
                 >,
             > + Send,
     > {
         use http_body_util::BodyExt;
-        use wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
 
         let uri = request.uri().to_string();
 
@@ -498,7 +477,7 @@ impl WasiHttpHooks for TestHttpCtx {
                 }
                 let body =
                     http_body_util::Full::new(bytes::Bytes::from(mock_resp.body.into_bytes()))
-                        .map_err(|_: std::convert::Infallible| -> ErrorCode { unreachable!() })
+                        .map_err(|_: std::convert::Infallible| -> HttpError { unreachable!() })
                         .boxed_unsync();
                 let resp = builder.body(body).unwrap();
                 Box::new(async {
@@ -509,12 +488,23 @@ impl WasiHttpHooks for TestHttpCtx {
                 })
             }
             None => Box::new(async move {
-                Err(wasmtime_wasi::TrappableError::trap(wasmtime::Error::msg(
-                    format!("no mock configured for outgoing HTTP request to {uri}"),
-                )))
+                Err(HttpError::InternalError(Some(format!(
+                    "no mock configured for outgoing HTTP request to {uri}"
+                ))))
             }),
         }
     }
+}
+
+/// Finish a fixture's [`WasiCtx`], granting socket *creation* but no network.
+///
+/// wasmtime 48 made creating a TCP/UDP socket a permission of its own, off by
+/// default. A fixture that only constructs a socket — to pattern-match the
+/// `Result` it comes back in, say — would otherwise fail before reaching what
+/// it tests. Reaching the network stays denied: no `inherit_network`, so the
+/// per-address check refuses every connection.
+fn fixture_wasi_ctx(builder: &mut WasiCtxBuilder) -> WasiCtx {
+    builder.allow_tcp(true).allow_udp(true).build()
 }
 
 /// Mock spec for a single `wasi:tls` handshake.
@@ -692,7 +682,7 @@ impl WasiState {
         stdout: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
         stderr: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
     ) -> Self {
-        let ctx = WasiCtxBuilder::new().stdout(stdout).stderr(stderr).build();
+        let ctx = fixture_wasi_ctx(WasiCtxBuilder::new().stdout(stdout).stderr(stderr));
         Self {
             ctx,
             table: ResourceTable::new(),
@@ -704,7 +694,7 @@ impl WasiState {
 
     /// Create a basic state (no I/O capture)
     pub fn new() -> Self {
-        let ctx = WasiCtxBuilder::new().build();
+        let ctx = fixture_wasi_ctx(&mut WasiCtxBuilder::new());
         Self {
             ctx,
             table: ResourceTable::new(),
@@ -1074,9 +1064,9 @@ pub fn run_wasm_with_full_options(
             builder.allow_blocking_current_thread(true);
         }
         for (host_path, guest_path) in dirs {
-            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
-        let ctx = builder.build();
+        let ctx = fixture_wasi_ctx(&mut builder);
         let state = WasiState {
             ctx,
             table: ResourceTable::new(),

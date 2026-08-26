@@ -27,8 +27,8 @@ use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinSet;
 use wasmtime::component::{Accessor, AccessorTask, Component};
 use wasmtime::{AsContextMut, Engine, GuestProfiler, Store, UpdateDeadline};
+use wasmtime_wasi_http::Error as HttpError;
 use wasmtime_wasi_http::p3::Request as WasiRequest;
-use wasmtime_wasi_http::p3::bindings::http::types::ErrorCode as HttpErrorCode;
 use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 
 use crate::args::{self, CliExit};
@@ -349,7 +349,7 @@ fn error_response(status: u16, msg: String) -> HyperResponse<StreamingBody> {
 
 struct RequestJob {
     wasi_req: WasiRequest,
-    io: Pin<Box<dyn Future<Output = Result<(), HttpErrorCode>> + Send>>,
+    io: Pin<Box<dyn Future<Output = Result<(), HttpError>> + Send>>,
     resp_tx: oneshot::Sender<HandlerOutcome>,
 }
 
@@ -568,9 +568,12 @@ async fn dispatch_request(
     req: HyperRequest<hyper::body::Incoming>,
 ) -> Result<HyperResponse<StreamingBody>> {
     let (parts, body) = req.into_parts();
-    let body = body.map_err(HttpErrorCode::from_hyper_request_error);
+    let body = body.map_err(HttpError::from);
     let http_req = http::Request::from_parts(parts, body);
-    let (wasi_req, io) = WasiRequest::from_http(http_req);
+    // The conversion consults the hooks for header policy only; the Wado hooks
+    // customise the *outgoing* path (`send_request`) and nothing an incoming
+    // request is measured against, so the defaults answer identically here.
+    let (wasi_req, io) = WasiRequest::from_http(wasmtime_wasi_http::default_hooks(), http_req);
 
     let (resp_tx, resp_rx) = oneshot::channel::<HandlerOutcome>();
     let job = RequestJob {

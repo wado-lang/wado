@@ -453,7 +453,7 @@ async fn run_http_request_async(
     }
     let http_req = builder.body(Full::new(Bytes::from(body_bytes)))?;
 
-    let (req, io) = Request::from_http(http_req);
+    let (req, io) = Request::from_http(wasmtime_wasi_http::default_hooks(), http_req);
 
     let timeout_duration = Duration::from_secs(1);
 

@@ -384,6 +384,16 @@ impl<'a> Transformer<'a> {
                     .unwrap_or(WadoType::Tuple(vec![]));
                 Ok(WadoType::Future(Box::new(payload)))
             }
+            TypeDefKind::Map(key, value) => {
+                // `TreeMap` lives in `core:collections`, not the prelude, so
+                // naming it only resolves once the module imports it.
+                self.pending_imports
+                    .borrow_mut()
+                    .insert("TreeMap".to_string(), "core:collections".to_string());
+                let key = self.transform_type(*key)?;
+                let value = self.transform_type(*value)?;
+                Ok(WadoType::TreeMap(Box::new(key), Box::new(value)))
+            }
             TypeDefKind::Handle(h) => match h {
                 Handle::Borrow(id) => Ok(WadoType::Borrow(Box::new(self.transform_type_id(*id)?))),
                 Handle::Own(id) => self.transform_type_id(*id),

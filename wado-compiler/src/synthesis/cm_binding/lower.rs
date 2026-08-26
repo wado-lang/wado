@@ -15,8 +15,8 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
-    generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, split_packed_ptr_len, synth_span,
+    generic_method_call, generic_method_call_monomorphized, i32_const, i64_const, if_stmt,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
@@ -669,16 +669,16 @@ pub(super) fn synthesize_lower_list_to_buffer(
 
     // Materialize the list so we can call len/index_value on it repeatedly.
     let list_local = alloc_local(next_local, locals, list_type_id);
-    stmts.push(let_stmt("__list_val", list_local, list_type_id, value));
+    stmts.push(let_stmt("__val", list_local, list_type_id, value));
 
     // __len = List::len(list)
     let len_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
-        "__list_len",
+        "__len",
         len_local,
         TypeTable::I32,
         generic_method_call(
-            local_ref(list_local, "__list_val", list_type_id),
+            local_ref(list_local, "__val", list_type_id),
             &names.array_fq,
             "len",
             ModuleSource::list(),
@@ -690,7 +690,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     // __base = realloc(0, 0, elem_align, __len * elem_size)
     let base_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
-        "__list_base",
+        "__base",
         base_local,
         TypeTable::I32,
         builtin_call(
@@ -701,7 +701,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
                 i32_const(elem_align),
                 binary(
                     TirBinaryOp::Mul,
-                    local_ref(len_local, "__list_len", TypeTable::I32),
+                    local_ref(len_local, "__len", TypeTable::I32),
                     i32_const(elem_size),
                     TypeTable::I32,
                 ),
@@ -712,19 +712,14 @@ pub(super) fn synthesize_lower_list_to_buffer(
 
     // __i = 0; loop { if __i >= __len break; lower elem[__i] at __base + __i*size; __i += 1 }
     let i_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_mut_stmt(
-        "__list_i",
-        i_local,
-        TypeTable::I32,
-        i32_const(0),
-    ));
+    stmts.push(let_mut_stmt("__i", i_local, TypeTable::I32, i32_const(0)));
 
     let mut loop_body = Vec::new();
     loop_body.push(if_stmt(
         binary(
             TirBinaryOp::GtEq,
-            local_ref(i_local, "__list_i", TypeTable::I32),
-            local_ref(len_local, "__list_len", TypeTable::I32),
+            local_ref(i_local, "__i", TypeTable::I32),
+            local_ref(len_local, "__len", TypeTable::I32),
             TypeTable::BOOL,
         ),
         block(vec![break_stmt()]),
@@ -732,15 +727,15 @@ pub(super) fn synthesize_lower_list_to_buffer(
     ));
     let addr_local = alloc_local(next_local, locals, TypeTable::I32);
     loop_body.push(let_stmt(
-        "__list_addr",
+        "__elem_addr",
         addr_local,
         TypeTable::I32,
         binary(
             TirBinaryOp::Add,
-            local_ref(base_local, "__list_base", TypeTable::I32),
+            local_ref(base_local, "__base", TypeTable::I32),
             binary(
                 TirBinaryOp::Mul,
-                local_ref(i_local, "__list_i", TypeTable::I32),
+                local_ref(i_local, "__i", TypeTable::I32),
                 i32_const(elem_size),
                 TypeTable::I32,
             ),
@@ -766,7 +761,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
         elem_type_id,
         TirExpr::new(
             TirExprKind::method_call(
-                Box::new(local_ref(list_local, "__list_val", list_type_id)),
+                Box::new(local_ref(list_local, "__val", list_type_id)),
                 FunctionRef {
                     module_source: ModuleSource::list(),
                     name: iv_mangled,
@@ -775,7 +770,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
                 },
                 vec![],
                 vec![CallArg::new(
-                    local_ref(i_local, "__list_i", TypeTable::I32),
+                    local_ref(i_local, "__i", TypeTable::I32),
                     false,
                 )],
             ),
@@ -786,16 +781,363 @@ pub(super) fn synthesize_lower_list_to_buffer(
     loop_body.extend(synthesize_lower_wasi_type_to_memory(
         &elem_resolved,
         local_ref(elem_local, "__list_elem", elem_type_id),
-        local_ref(addr_local, "__list_addr", TypeTable::I32),
+        local_ref(addr_local, "__elem_addr", TypeTable::I32),
         next_local,
         locals,
         ctx,
     ));
     loop_body.push(expr_stmt(assign(
-        local_ref(i_local, "__list_i", TypeTable::I32),
+        local_ref(i_local, "__i", TypeTable::I32),
         binary(
             TirBinaryOp::Add,
-            local_ref(i_local, "__list_i", TypeTable::I32),
+            local_ref(i_local, "__i", TypeTable::I32),
+            i32_const(1),
+            TypeTable::I32,
+        ),
+    )));
+    stmts.push(loop_stmt(block(loop_body)));
+
+    (stmts, base_local, len_local)
+}
+
+/// Store a lowered buffer's `(ptr, count)` at `addr` — the tail every CM
+/// `list`, and the `map` that despecializes to one, ends with.
+fn store_ptr_len(addr: TirExpr, base_local: u32, len_local: u32, stmts: &mut Vec<TirStmt>) {
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            addr.clone(),
+            local_ref(base_local, "__base", TypeTable::I32),
+        ],
+        TypeTable::UNIT,
+    )));
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            binary_add(addr, i32_const(4)),
+            local_ref(len_local, "__len", TypeTable::I32),
+        ],
+        TypeTable::UNIT,
+    )));
+}
+
+/// Lower a `TreeMap<K, V>` (GC value) to a CM `map` at `addr`.
+///
+/// The walk drives `entries()` rather than an index: a removal leaves a
+/// tombstone, so position and index part ways. Its `[&K, &V]` is read through,
+/// so no key or value is copied on the way to memory.
+pub(super) fn synthesize_lower_map_to_memory(
+    key_type: &Type,
+    value_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LowerContext<'_>,
+) -> Vec<TirStmt> {
+    let (mut stmts, base_local, len_local) =
+        synthesize_lower_map_to_buffer(key_type, value_type, value, next_local, locals, ctx);
+    store_ptr_len(addr, base_local, len_local, &mut stmts);
+    stmts
+}
+
+/// The pair buffer behind [`synthesize_lower_map_to_memory`], in the shape
+/// [`synthesize_lower_list_to_buffer`] has, so the flat path can take the two
+/// slots without going through linear memory first.
+pub(super) fn synthesize_lower_map_to_buffer(
+    key_type: &Type,
+    value_type: &Type,
+    value: TirExpr,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LowerContext<'_>,
+) -> (Vec<TirStmt>, u32, u32) {
+    let pair = [
+        ctx.cm_interface_registry.resolve_type(key_type),
+        ctx.cm_interface_registry.resolve_type(value_type),
+    ];
+    let layout = cm_abi::layout_tuple_with_registry_scoped(
+        &pair,
+        ctx.cm_interface_registry,
+        Some(ctx.wasi_package),
+    );
+    let pair_size = layout.size as i32;
+    let pair_align = layout.align as i32;
+
+    let map_type_id = value.type_id;
+    let (key_tid, value_tid) = {
+        let tt = ctx.type_table.borrow();
+        match tt.get(map_type_id) {
+            crate::tir::ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+                (type_args[0], type_args[1])
+            }
+            other => panic!("a `map` lower needs a two-argument TreeMap, got {other:?}"),
+        }
+    };
+
+    let (
+        map_head,
+        map_source,
+        iter_tid,
+        iter_source,
+        next_method,
+        len_method,
+        entries_method,
+        pair_tid,
+        opt_tid,
+    ) = {
+        let mut tt = ctx.type_table.borrow_mut();
+        let ref_pair = {
+            let key_ref = tt.make_ref(key_tid);
+            let value_ref = tt.make_ref(value_tid);
+            tt.make_tuple(vec![key_ref, value_ref])
+        };
+        let opt = tt.make_option(ref_pair);
+        let iter_def = tt
+            .compiler_item_def(crate::compiler_item::CompilerItem::TreeMapEntriesIter)
+            .expect("the TreeMap entries iterator is a registered compiler item");
+        let iter = tt.make_generic_instance(iter_def, vec![key_tid, value_tid]);
+        let map_head = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::TreeMap);
+        let iter_head =
+            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::TreeMapEntriesIter);
+        let items = tt.compiler_items();
+        let map_source = items
+            .require_struct(crate::compiler_item::CompilerItem::TreeMap)
+            .0
+            .clone();
+        let iter_source = items
+            .require_struct(crate::compiler_item::CompilerItem::TreeMapEntriesIter)
+            .0
+            .clone();
+        let next = crate::name::LocalMethodName::new(
+            iter_head,
+            Some(items.trait_fq(crate::compiler_item::CompilerItem::Iterator)),
+            items
+                .method_name(crate::compiler_item::CompilerItem::TreeMapEntriesIterNext)
+                .to_string(),
+        );
+        let len_method = items
+            .method_name(crate::compiler_item::CompilerItem::TreeMapLen)
+            .to_string();
+        let entries_method = items
+            .method_name(crate::compiler_item::CompilerItem::TreeMapEntries)
+            .to_string();
+        (
+            map_head,
+            map_source,
+            iter,
+            iter_source,
+            next,
+            len_method,
+            entries_method,
+            ref_pair,
+            opt,
+        )
+    };
+
+    let mut stmts = Vec::new();
+
+    let map_local = alloc_local(next_local, locals, map_type_id);
+    stmts.push(let_stmt("__val", map_local, map_type_id, value));
+
+    // `len` counts live pairs, so it both sizes the buffer and bounds the walk.
+    let len_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__len",
+        len_local,
+        TypeTable::I32,
+        generic_method_call_monomorphized(
+            local_ref(map_local, "__val", map_type_id),
+            &map_head,
+            &len_method,
+            map_source.clone(),
+            vec![key_tid, value_tid],
+            vec![],
+            TypeTable::I32,
+        ),
+    ));
+
+    let base_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__base",
+        base_local,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                i32_const(0),
+                i32_const(0),
+                i32_const(pair_align),
+                binary(
+                    TirBinaryOp::Mul,
+                    local_ref(len_local, "__len", TypeTable::I32),
+                    i32_const(pair_size),
+                    TypeTable::I32,
+                ),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    let iter_local = alloc_local(next_local, locals, iter_tid);
+    stmts.push(let_mut_stmt(
+        "__map_iter",
+        iter_local,
+        iter_tid,
+        generic_method_call_monomorphized(
+            local_ref(map_local, "__val", map_type_id),
+            &map_head,
+            &entries_method,
+            map_source,
+            vec![key_tid, value_tid],
+            vec![],
+            iter_tid,
+        ),
+    ));
+
+    let i_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_mut_stmt("__i", i_local, TypeTable::I32, i32_const(0)));
+
+    let mut loop_body = Vec::new();
+    loop_body.push(if_stmt(
+        binary(
+            TirBinaryOp::GtEq,
+            local_ref(i_local, "__i", TypeTable::I32),
+            local_ref(len_local, "__len", TypeTable::I32),
+            TypeTable::BOOL,
+        ),
+        block(vec![break_stmt()]),
+        None,
+    ));
+
+    let next_local_slot = alloc_local(next_local, locals, opt_tid);
+    let next_mangled = next_method.to_mangled_name();
+    loop_body.push(let_stmt(
+        "__map_next",
+        next_local_slot,
+        opt_tid,
+        TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(local_ref(iter_local, "__map_iter", iter_tid)),
+                FunctionRef {
+                    module_source: iter_source,
+                    name: next_mangled,
+                    monomorph_info: None,
+                    method_info: Some(next_method),
+                },
+                vec![],
+                vec![],
+            ),
+            opt_tid,
+            synth_span(),
+        ),
+    ));
+
+    let pair_addr_local = alloc_local(next_local, locals, TypeTable::I32);
+    loop_body.push(let_stmt(
+        "__elem_addr",
+        pair_addr_local,
+        TypeTable::I32,
+        binary(
+            TirBinaryOp::Add,
+            local_ref(base_local, "__base", TypeTable::I32),
+            binary(
+                TirBinaryOp::Mul,
+                local_ref(i_local, "__i", TypeTable::I32),
+                i32_const(pair_size),
+                TypeTable::I32,
+            ),
+            TypeTable::I32,
+        ),
+    ));
+
+    // `None` cannot occur under the `len` bound above — `entries` yields
+    // exactly the live pairs `len` counts — so its arm is empty.
+    let pair_binding_local = alloc_local(next_local, locals, pair_tid);
+    let pair_binding_name = format!("__map_pair_{pair_binding_local}");
+    let mut case_stmts = Vec::new();
+    for (slot, slot_ty) in pair.iter().enumerate() {
+        let slot_tid = if slot == 0 { key_tid } else { value_tid };
+        let slot_ref_tid = ctx.type_table.borrow_mut().make_ref(slot_tid);
+        let field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(local_ref(pair_binding_local, &pair_binding_name, pair_tid)),
+                field_index: slot as u32,
+                field_name: slot.to_string(),
+            },
+            slot_ref_tid,
+            synth_span(),
+        );
+        let deref = TirExpr::new(
+            TirExprKind::Unary {
+                op: crate::tir::TirUnaryOp::Deref,
+                expr: Box::new(field),
+            },
+            slot_tid,
+            synth_span(),
+        );
+        let slot_addr = binary_add(
+            local_ref(pair_addr_local, "__elem_addr", TypeTable::I32),
+            i32_const(layout.offsets[slot] as i32),
+        );
+        case_stmts.extend(synthesize_lower_wasi_type_to_memory(
+            slot_ty, deref, slot_addr, next_local, locals, ctx,
+        ));
+    }
+
+    let span = synth_span();
+    let names = &ctx.names;
+    let some_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: opt_tid,
+            variant_name: names.some_name.clone(),
+            bindings: vec![TirPattern::Binding {
+                name: pair_binding_name,
+                local_index: pair_binding_local,
+                type_id: pair_tid,
+            }],
+            payload_type: pair_tid,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    let none_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: opt_tid,
+            variant_name: names.none_name.clone(),
+            bindings: Vec::new(),
+            payload_type: TypeTable::UNIT,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    loop_body.push(TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(local_ref(next_local_slot, "__map_next", opt_tid)),
+                arms: vec![some_arm, none_arm],
+            },
+            TypeTable::UNIT,
+            span,
+        )),
+        span,
+    ));
+
+    loop_body.push(expr_stmt(assign(
+        local_ref(i_local, "__i", TypeTable::I32),
+        binary(
+            TirBinaryOp::Add,
+            local_ref(i_local, "__i", TypeTable::I32),
             i32_const(1),
             TypeTable::I32,
         ),
@@ -817,22 +1159,7 @@ pub(super) fn synthesize_lower_list_to_memory(
 ) -> Vec<TirStmt> {
     let (mut stmts, base_local, len_local) =
         synthesize_lower_list_to_buffer(elem_type, value, next_local, locals, ctx);
-    stmts.push(expr_stmt(builtin_call(
-        "i32_store",
-        vec![
-            addr.clone(),
-            local_ref(base_local, "__list_base", TypeTable::I32),
-        ],
-        TypeTable::UNIT,
-    )));
-    stmts.push(expr_stmt(builtin_call(
-        "i32_store",
-        vec![
-            binary_add(addr, i32_const(4)),
-            local_ref(len_local, "__list_len", TypeTable::I32),
-        ],
-        TypeTable::UNIT,
-    )));
+    store_ptr_len(addr, base_local, len_local, &mut stmts);
     stmts
 }
 
@@ -1084,8 +1411,8 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             let (list_stmts, base_local, len_local) =
                 synthesize_lower_list_to_buffer(&g.args[0], value, next_local, locals, ctx);
             stmts.extend(list_stmts);
-            flat_args.push(local_ref(base_local, "__list_base", TypeTable::I32));
-            flat_args.push(local_ref(len_local, "__list_len", TypeTable::I32));
+            flat_args.push(local_ref(base_local, "__base", TypeTable::I32));
+            flat_args.push(local_ref(len_local, "__len", TypeTable::I32));
         }
         Type::Tuple(elems) if !elems.is_empty() => synthesize_flatten_tuple_to_flat_args(
             elems, value, prefix, next_local, stmts, locals, flat_args, ctx,
@@ -1667,6 +1994,13 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
         }
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             synthesize_lower_list_to_memory(&g.args[0], value, addr, next_local, locals, ctx)
+        }
+        Type::Generic(g)
+            if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 =>
+        {
+            synthesize_lower_map_to_memory(
+                &g.args[0], &g.args[1], value, addr, next_local, locals, ctx,
+            )
         }
         Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             let ok = ctx.cm_interface_registry.resolve_type(&g.args[0]);

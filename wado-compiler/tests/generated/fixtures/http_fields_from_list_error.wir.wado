@@ -1174,9 +1174,9 @@ fn "http_fields_from_list_error.wado/__cm_binding__Fields_from_list"(entries) wi
     let __entries_i: i32;
     let __entries_addr: i32;
     let __packed: i64;
-    let __list_base: i32;
-    let __list_i: i32;
-    let __list_addr: i32;
+    let __base: i32;
+    let __i: i32;
+    let __elem_addr: i32;
     let __list_elem: u8;
     let __outptr: i32;
     let __disc_15: i32;
@@ -1227,19 +1227,19 @@ fn "http_fields_from_list_error.wado/__cm_binding__Fields_from_list"(entries) wi
             __packed = builtin::i64_extend_i32_s(ptr_52) | (builtin::i64_extend_i32_s(__sroa___sroa___entries_elem_0_used) << 32_i64);
             builtin::store_i32(__entries_addr, builtin::i32_wrap_i64(__packed));
             builtin::store_i32(__entries_addr + 4, builtin::i32_wrap_i64(__packed >> 32_i64));
-            __list_base = "mem/realloc"(0, 0, 1, __sroa___sroa___entries_elem_1_used * 1);
-            __list_i = 0;
+            __base = "mem/realloc"(0, 0, 1, __sroa___sroa___entries_elem_1_used * 1);
+            __i = 0;
             b98: block {
                 l99: loop {
-                    break_if b98 __list_i >= __sroa___sroa___entries_elem_1_used;
-                    __list_addr = __list_base + (__list_i * 1);
-                    __list_elem = builtin::array_get_value<u8>(__array_clone_dst_5, __list_i);
-                    builtin::store_u8(__list_addr, __list_elem);
-                    __list_i = __list_i + 1;
+                    break_if b98 __i >= __sroa___sroa___entries_elem_1_used;
+                    __elem_addr = __base + (__i * 1);
+                    __list_elem = builtin::array_get_value<u8>(__array_clone_dst_5, __i);
+                    builtin::store_u8(__elem_addr, __list_elem);
+                    __i = __i + 1;
                     continue l99;
                 };
             };
-            builtin::store_i32(__entries_addr + 8, __list_base);
+            builtin::store_i32(__entries_addr + 8, __base);
             builtin::store_i32((__entries_addr + 8) + 4, __sroa___sroa___entries_elem_1_used);
             __entries_i = __entries_i + 1;
             continue l97;

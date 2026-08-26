@@ -1,6 +1,11 @@
-// Verifies that Client::send traps when the request targets an unmocked
-// path. The outgoing-mock harness raises a trap rather than synthesizing
-// a concrete ErrorCode, asserted via `trapped: true` in __DATA__.
+// Verifies that a failed outgoing request surfaces to the guest as
+// `Err(ErrorCode)` from `Client::send`, and that the guest can match on it.
+//
+// The harness has no mock for this path, so its `send_request` hook fails.
+// wasmtime 48 renders an embedder hook's error through `error_to_p3` into a
+// guest-visible `ErrorCode` — the hook signature carries no trap channel — so
+// what this pins is the guest's own view of the failure. The 502 below can
+// only come from the `Err` arm, which is the assertion.
 
 use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
@@ -19,13 +24,21 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     let result = Client::send(out_req).wait();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
-    task return result;
+    let [reply_trailers_future, reply_trailers_tx] =
+        Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let reply_headers = Fields::new();
+    let [reply, _reply_future] = Response::new(reply_headers, null, reply_trailers_future);
+    match result {
+        Result::Ok(_) => reply.set_status_code(200),
+        Result::Err(_) => reply.set_status_code(502),
+    }
+    task return Result::<Response, ErrorCode>::Ok(reply);
+    reply_trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 __DATA__
 {
     "wasi:http/service": {
-        "status": 200
-    },
-    "trapped": true
+        "status": 502
+    }
 }

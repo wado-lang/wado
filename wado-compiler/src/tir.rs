@@ -3234,6 +3234,14 @@ impl TypeTable {
         self.make_generic_instance(def, vec![element])
     }
 
+    /// Create a `TreeMap<K, V>` type — the Wado spelling of CM `map<K, V>`.
+    pub fn make_tree_map(&mut self, key: TypeId, value: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(crate::compiler_item::CompilerItem::TreeMap)
+            .expect("the TreeMap declaration is a registered compiler item");
+        self.make_generic_instance(def, vec![key, value])
+    }
+
     /// Create the `ByteList` newtype (`type ByteList = List<u8>`).
     pub fn make_byte_list(&mut self) -> TypeId {
         let base = self.make_list(TypeTable::U8);

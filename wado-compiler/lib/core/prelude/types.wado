@@ -163,6 +163,8 @@ pub resource Future<T> {
     fn read(&self) -> Option<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
+    /// Traps if this end is still joined to a `WaitableSet` — leave the set
+    /// first.
     #[cm("future-cancel-read")]
     fn cancel_read(&self);
 
@@ -180,6 +182,8 @@ pub resource FutureWritable<T> {
     fn write(&self, value: T);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
+    /// Traps if this end is still joined to a `WaitableSet` — leave the set
+    /// first.
     #[cm("future-cancel-write")]
     fn cancel_write(&self);
 
@@ -205,6 +209,8 @@ pub resource Stream<T> {
     fn read(&self, max: i32) -> List<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
+    /// Traps if this end is still joined to a `WaitableSet` — leave the set
+    /// first.
     #[cm("stream-cancel-read")]
     fn cancel_read(&self);
 
@@ -229,6 +235,8 @@ pub resource StreamWritable<T> {
     fn write_raw(&self, data: Slice<T>);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
+    /// Traps if this end is still joined to a `WaitableSet` — leave the set
+    /// first.
     #[cm("stream-cancel-write")]
     fn cancel_write(&self);
 
@@ -401,6 +409,12 @@ impl AsyncCall<T> {
     pub fn cancel(&self) {
         let handle = self.__cm_packed >> 4;
         if handle != 0 {
+            // A synchronous `subtask.cancel` traps on a waitable still in a
+            // set, and `join` is a documented step before `cancel` here. The
+            // CM's `waitable.join` removes from any set before adding to the
+            // one given, so passing none is an unconditional "leave the set"
+            // whether or not the caller ever joined.
+            builtin::waitable_join(handle, 0);
             let raw = handle as Subtask;
             raw.cancel();
             raw.drop();

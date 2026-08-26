@@ -70,6 +70,7 @@ struct TreeMapNode<K> {
 ///
 /// This is similar to Rust's `indexmap::IndexMap` but uses a tree instead
 /// of a hash table for key lookups.
+#[compiler_item("tree_map")]
 pub struct TreeMap<K, V> {
     root: Option<i32>,
     nodes: List<TreeMapNode<K>>,
@@ -91,6 +92,7 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// Returns the number of key-value pairs in the map.
+    #[compiler_item("tree_map_len")]
     pub fn len(&self) -> i32 {
         return self.size;
     }
@@ -321,6 +323,7 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// The key-value pairs, in insertion order.
+    #[compiler_item("tree_map_entries")]
     pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self] {
         return TreeMapEntriesRefIter { entries: &self.entries, index: 0 };
     }
@@ -339,6 +342,7 @@ impl<K: Ord> TreeMap<K, V> {
 impl<K: Ord> IndexAssign<K> for TreeMap<K, V> {
     type Output = V;
 
+    #[compiler_item("tree_map_index_assign")]
     fn index_assign(&mut self, key: K, value: Self::Output) {
         self.insert(key, value);
     }
@@ -551,6 +555,7 @@ impl<K, V> Iterator for TreeMapValuesValueIter<K, V> {
     }
 }
 
+#[compiler_item("tree_map_entries_iter")]
 struct TreeMapEntriesRefIter<K, V> {
     entries: &List<TreeMapEntry<K, V>>,
     index: i32,
@@ -559,6 +564,7 @@ struct TreeMapEntriesRefIter<K, V> {
 impl<K, V> Iterator for TreeMapEntriesRefIter<K, V> {
     type Item = [&K, &V];
 
+    #[compiler_item("tree_map_entries_iter_next")]
     fn next(&mut self) -> Option<[&K, &V]> with stores[self] {
         while self.index < self.entries.len() {
             let i = self.index;

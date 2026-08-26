@@ -9,9 +9,8 @@ use wasmtime::{
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 use wasmtime_wasi_tls::{
     Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
     WasiTlsCtxView, WasiTlsView,
@@ -200,7 +199,7 @@ impl WasiState {
         }
         builder.args(args);
         for (host_path, guest_path) in preopened_dirs {
-            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
         // `wado run` and `wado test` are invoked directly by the developer,
         // so mirror native CLI tools by letting `wasi:sockets`/`wasi:tls`
@@ -210,6 +209,12 @@ impl WasiState {
         // Hermetic test harnesses (compiler `tests/common.rs`) build their
         // own `WasiCtx` and are unaffected.
         builder.inherit_network();
+        // wasmtime 48 denies socket *creation* by default, and
+        // `inherit_network` only relaxes the per-address check, so the two
+        // uses have to be granted explicitly for the address check to be
+        // reached at all.
+        builder.allow_tcp(true);
+        builder.allow_udp(true);
         builder.allow_ip_name_lookup(true);
         let ctx = builder.build();
         let table = ResourceTable::new();
@@ -249,7 +254,7 @@ impl Preopens {
     pub fn open(preopened_dirs: &[(String, String)]) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         for (host_path, guest_path) in preopened_dirs {
-            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
         // We only need the filesystem half of the WasiCtx; the rest is
         // rebuilt fresh per request. `WasiFilesystemCtx` is `Clone` (with
@@ -348,11 +353,22 @@ pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
 
 /// wado's default GC collector.
 ///
-/// wasmtime's own default ([`Collector::Auto`]) still resolves to the deferred
-/// reference-counting collector in this generation. We prefer the copying
-/// collector: on allocation-heavy / small-live-set workloads it is several
-/// times faster at the same resident set size, and it collects cycles.
-pub const DEFAULT_COLLECTOR: Collector = Collector::Copying;
+/// The copying collector is the one we want at run time: on allocation-heavy /
+/// small-live-set workloads it is several times faster at the same resident set
+/// size, and it collects cycles. It is not the default because of a
+/// _compile_-time regression in wasmtime 48: cranelift 0.135 rewrote
+/// `alias_analysis` (adding dead-store and idempotent-store elimination over a
+/// whole-function `observed_stores` pre-pass), and that pass goes superlinear on
+/// the store-dense code the copying collector's write barriers produce. On
+/// `benchmark/gale_gen/gale_gen.wado` (a 1.8 MB generated parser),
+/// `Component::new` costs 5.2 s on wasmtime 47 and had not finished after 14
+/// minutes on 48 — while
+/// the same module under the deferred reference-counting collector, whose
+/// barriers are far sparser, takes 8 s on 48.
+///
+/// Restore [`Collector::Copying`] once wasmtime fixes it; `--collector copying`
+/// selects it meanwhile.
+pub const DEFAULT_COLLECTOR: Collector = Collector::DeferredReferenceCounting;
 
 /// Parse a `--collector` argument value into a wasmtime [`Collector`].
 ///
@@ -378,6 +394,7 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Coll
     config.wasm_component_model_async(true);
     config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
+    config.wasm_component_model_map(true);
     config.wasm_wide_arithmetic(true);
     // config.wasm_stack_switching(true); // Not supported on macOS
     // Honor the `metadata.code.branch_hint` custom section so Cranelift can
