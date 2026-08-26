@@ -185,44 +185,40 @@ impl WriteBack<'_> {
     /// Refuse a detached borrow put into storage outliving the expression that
     /// took it, which no point in this body is late enough to write back.
     fn refuse_stored(&mut self, expr: &TirExpr, sink: &str) {
-        for place in self.detached_in_value_position(expr) {
+        if let Some(place) = self.detached_in_value_position(expr) {
             self.refuse(place, format!("{sink} holds it past the borrow"));
         }
     }
 
-    /// The detached borrows `expr` can yield, following the value positions one
-    /// reaches storage through.
-    fn detached_in_value_position(&self, expr: &TirExpr) -> Vec<Span> {
+    /// A detached borrow `expr` can yield, following the value positions one
+    /// reaches storage through. The first is the whole answer: [`Self::refuse`]
+    /// keeps the first refusal, and every other caller only asks whether there
+    /// is one. This runs on every argument of every call in the program, so it
+    /// allocates nothing.
+    fn detached_in_value_position(&self, expr: &TirExpr) -> Option<Span> {
         if let Some(place) = self.detached_borrow(expr) {
-            return vec![place.span];
+            return Some(place.span);
         }
-        if let TirExprKind::Local { index, .. } = &expr.kind {
-            return if self.detached_locals.contains(index) {
-                vec![expr.span]
-            } else {
-                Vec::new()
-            };
-        }
-        let blocks: Vec<&TirBlock> = match &expr.kind {
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => vec![block],
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => {
+                self.detached_locals.contains(index).then_some(expr.span)
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                block_value(block).and_then(|value| self.detached_in_value_position(value))
+            }
             TirExprKind::If {
                 then_branch,
                 else_branch,
                 ..
-            } => std::iter::once(then_branch).chain(else_branch).collect(),
-            TirExprKind::Match { arms, .. } => {
-                return arms
-                    .iter()
-                    .flat_map(|arm| self.detached_in_value_position(&arm.body))
-                    .collect();
-            }
-            _ => return Vec::new(),
-        };
-        blocks
-            .into_iter()
-            .filter_map(block_value)
-            .flat_map(|value| self.detached_in_value_position(value))
-            .collect()
+            } => std::iter::once(then_branch)
+                .chain(else_branch)
+                .filter_map(block_value)
+                .find_map(|value| self.detached_in_value_position(value)),
+            TirExprKind::Match { arms, .. } => arms
+                .iter()
+                .find_map(|arm| self.detached_in_value_position(&arm.body)),
+            _ => None,
+        }
     }
 
     /// Walk a closure body against its own local namespace: its parameters hold
@@ -284,7 +280,7 @@ impl WriteBack<'_> {
     /// whether that detached is the caller's question. This is the safety test;
     /// the shape tests below only decide whether a write-back can be emitted.
     fn takes_a_detached_borrow(&self, arg: &TirExpr) -> bool {
-        !self.detached_in_value_position(arg).is_empty()
+        self.detached_in_value_position(arg).is_some()
     }
 
     /// The place a detached `&mut` borrows, if `arg` is one. Of the places only
@@ -641,7 +637,7 @@ impl TirOptVisitor for WriteBack<'_> {
                 value, local_index, ..
             } => {
                 let local_index = *local_index;
-                if !self.detached_in_value_position(value).is_empty() {
+                if self.detached_in_value_position(value).is_some() {
                     if self.replaced_locals.contains(&local_index) {
                         self.refuse_stored(value, "a variable");
                     }
