@@ -1081,6 +1081,7 @@ The table below is the Wadoâ†”CM correspondence, read in both directions: Wadoâ†
 | `f32`, `f64`              | `f32`, `f64`                 | `f32`, `f64`                         | Floating point                                                           |
 | `String`                  | GC `array i8` (UTF-8)        | `string`                             | UTF-8 string, GC-managed internally                                      |
 | `List<T>`                 | GC `array T`                 | `list<T>`                            | Dynamic array, GC-managed internally                                     |
+| `TreeMap<K, V>`           | GC `struct` (AA tree)        | `map<K, V>`                          | `K` is `bool`, `char`, `String`, or an integer; a repeated key takes the last pair's value |
 | `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`    | `tuple<T1, T2, ...>`                 | Tuple types                                                              |
 | `Option<T>`               | GC variant                   | `option<T>`                          | Optional value                                                           |
 | `Result<T, E>`            | GC variant                   | `result<T, E>`                       | Result type; `result<ok>` and bare `result` are the payload-elided forms |

@@ -128,3 +128,10 @@ run` / `test` / `serve` accept what the compiler emits.
   rows pin the *specialization*: same bytes, different type constructor.
 - A `TreeMap` key outside `keytype` is a boundary diagnostic, not a silent
   fallback.
+- Every method the binding calls — `new`, `index_assign`, `len`, `entries`, and
+  the entry iterator's `next` — is a registered `CompilerItem`. That is not
+  bookkeeping: `liveness` prunes on the call graph, and a call the compiler
+  mints afterwards has no edge for that graph to follow, so an unregistered
+  method is simply absent by the time the binding names it. Registering it is
+  also what lets the binding ask the registry for the name instead of spelling
+  it.

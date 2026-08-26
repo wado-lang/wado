@@ -1357,6 +1357,11 @@ if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 `TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See
 [`core:collections`](./stdlib-core-collections.md).
 
+`TreeMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
+it crosses a component boundary. There `K` is restricted to the CM key types —
+`bool`, `char`, `String`, or an integer — and a repeated key on the wire takes
+the last pair's value.
+
 ```wado
 use { TreeMap, TreeSet } from "core:collections";
 

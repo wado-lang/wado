@@ -383,6 +383,7 @@ ones.
 | WIT                | Wado           | Notes          |
 | ------------------ | -------------- | -------------- |
 | `list<T>`          | `List<T>`      | Dynamic array  |
+| `map<K, V>`        | `TreeMap<K, V>`| Associative container; `K` is drawn from the CM `keytype` subset |
 | `option<T>`        | `Option<T>`    | Optional value |
 | `result<T, E>`     | `Result<T, E>` | Result type    |
 | `tuple<T, U, ...>` | `[T, U, ...]`  | Tuple type     |
