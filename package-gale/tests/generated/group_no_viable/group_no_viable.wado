@@ -1192,11 +1192,12 @@ pub fn token_kind_name(kind: i32) -> String {
 
 pub global RK_TOK: NodeKind = 0;
 pub global RK_GATED: NodeKind = 1;
-pub global RK_REFS: NodeKind = 2;
-pub global RK_RA: NodeKind = 3;
-pub global RK_RB: NodeKind = 4;
+pub global RK_PLUS_GATED: NodeKind = 2;
+pub global RK_REFS: NodeKind = 3;
+pub global RK_RA: NodeKind = 4;
+pub global RK_RB: NodeKind = 5;
 
-global RULE_NAMES: List<String> = ["tok", "gated", "refs", "ra", "rb"];
+global RULE_NAMES: List<String> = ["tok", "gated", "plus_gated", "refs", "ra", "rb"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1591,7 +1592,7 @@ fn scan_gated(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_refs(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_plus_gated(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_2 = pos;
     let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1599,17 +1600,71 @@ fn scan_refs(tokens: &Array<i32>, pos: i32) -> i32 {
         sg_2: {
             pos = gp_2;
             sg_2_0: {
-                pos = scan_ra(tokens, pos);
-                if pos < 0 { break sg_2_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_2_0; }
+                pos += 1;
                 break sg_2;
             }
             pos = gp_2;
             sg_2_1: {
-                pos = scan_rb(tokens, pos);
-                if pos < 0 { break sg_2_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sg_2_1; }
+                pos += 1;
                 break sg_2;
             }
             pos = gp_2;
+        }
+    }
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
+        let sp = pos;
+        let gp_3 = pos;
+        let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_0(sgk_3) {
+            sg_3: {
+                pos = gp_3;
+                sg_3_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_3_0; }
+                    pos += 1;
+                    break sg_3;
+                }
+                pos = gp_3;
+                sg_3_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_3_1; }
+                    pos += 1;
+                    break sg_3;
+                }
+                pos = -1;
+            }
+        } else {
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_refs(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_4 = pos;
+    let sgk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(sgk_4) {
+        sg_4: {
+            pos = gp_4;
+            sg_4_0: {
+                pos = scan_ra(tokens, pos);
+                if pos < 0 { break sg_4_0; }
+                break sg_4;
+            }
+            pos = gp_4;
+            sg_4_1: {
+                pos = scan_rb(tokens, pos);
+                if pos < 0 { break sg_4_1; }
+                break sg_4;
+            }
+            pos = gp_4;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
@@ -1689,6 +1744,69 @@ fn _parse_gated(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_plus_gated__inner(p: &mut Parser) -> () {
+    let mut _plus_first = true;
+    loop {
+        if p.recovering { break; }
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                let gp_5 = pos;
+                let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_0(sgk_5) {
+                    sg_5: {
+                        pos = gp_5;
+                        sg_5_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_5_0; }
+                            pos += 1;
+                            break sg_5;
+                        }
+                        pos = gp_5;
+                        sg_5_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_5_1; }
+                            pos += 1;
+                            break sg_5;
+                        }
+                        pos = gp_5;
+                    }
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        if !_plus_first && !((p.peek_kind() == TK_A && (pred_3(p))) || (p.peek_kind() == TK_B)) { break; }
+        _plus_first = false;
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_A && (pred_3(p)) {
+            let a = p.expect(TK_A, &EMPTY_SYNC);
+            if !p.speculating {
+                 p.emit("x") 
+            }
+        } else if grp_kind == TK_B {
+            let b = p.expect(TK_B, &EMPTY_SYNC);
+        } else {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+        }
+    }
+    let a = p.expect(TK_A, &SYNC_1);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_plus_gated(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_PLUS_GATED, _start);
+    _parse_plus_gated__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("plus_gated");
+    }
+}
+
 fn _parse_refs__inner(p: &mut Parser) -> () {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_A {
@@ -1750,6 +1868,10 @@ fn pred_1(p: &Parser) -> bool {
     return  false ;
 }
 
+fn pred_3(p: &Parser) -> bool {
+    return  false ;
+}
+
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -1778,6 +1900,10 @@ pub fn parse_tok(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 
 pub fn parse_gated(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_gated(p));
+}
+
+pub fn parse_plus_gated(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_plus_gated(p));
 }
 
 pub fn parse_refs(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

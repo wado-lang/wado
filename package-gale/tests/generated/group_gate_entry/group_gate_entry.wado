@@ -1197,8 +1197,10 @@ pub global RK_LIST_LABEL: NodeKind = 3;
 pub global RK_NESTED: NodeKind = 4;
 pub global RK_SOLO_STAR: NodeKind = 5;
 pub global RK_SOLO_OPT: NodeKind = 6;
+pub global RK_SHAPE_OPT: NodeKind = 7;
+pub global RK_RA: NodeKind = 8;
 
-global RULE_NAMES: List<String> = ["opt", "star", "nongreedy", "list_label", "nested", "solo_star", "solo_opt"];
+global RULE_NAMES: List<String> = ["opt", "star", "nongreedy", "list_label", "nested", "solo_star", "solo_opt", "shape_opt", "ra"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1728,26 +1730,93 @@ fn scan_solo_opt(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
+fn scan_shape_opt(tokens: &Array<i32>, pos: i32) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    scan_alts: {
+        if alt_kind == TK_A {
+            pos = start;
+            try_0: {
+                osl_6_done: {
+                    if pos < tokens.len() && tokens[pos] == TK_A && pos + 1 < tokens.len() && tokens[pos + 1] == TK_B && pos + 2 < tokens.len() && tokens[pos + 2] == TK_A {
+                        let sol_7_save = pos;
+                        sol_7: {
+                            pos = scan_ra(tokens, pos);
+                            if pos < 0 { break sol_7; }
+                            if pos >= tokens.len() || tokens[pos] != TK_B { break sol_7; }
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_A { break sol_7; }
+                            pos += 1;
+                            break osl_6_done;
+                        }
+                        pos = sol_7_save;
+                        break osl_6_done;
+                    }
+                    if pos < tokens.len() && tokens[pos] == TK_A && pos + 1 < tokens.len() && tokens[pos + 1] == TK_A {
+                        let sol_8_save = pos;
+                        sol_8: {
+                            pos = scan_ra(tokens, pos);
+                            if pos < 0 { break sol_8; }
+                            if pos >= tokens.len() || tokens[pos] != TK_A { break sol_8; }
+                            pos += 1;
+                            break osl_6_done;
+                        }
+                        pos = sol_8_save;
+                        break osl_6_done;
+                    }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_A { break try_0; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_0; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_C {
+            pos = start;
+            try_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_C { break try_1; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_1; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else {
+            return -1;
+        }
+    }
+    return pos;
+}
+
+fn scan_ra(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_opt__inner(p: &mut Parser) -> () {
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_6 = pos;
-        let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_0(sgk_6) {
-            sg_6: {
-                pos = gp_6;
-                sg_6_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6_0; }
+        let gp_9 = pos;
+        let sgk_9 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_0(sgk_9) {
+            sg_9: {
+                pos = gp_9;
+                sg_9_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_9_0; }
                     pos += 1;
-                    break sg_6;
+                    break sg_9;
                 }
-                pos = gp_6;
-                sg_6_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_6_1; }
+                pos = gp_9;
+                sg_9_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_9_1; }
                     pos += 1;
-                    break sg_6;
+                    break sg_9;
                 }
                 break opt_scan;
             }
@@ -1788,23 +1857,23 @@ fn _parse_star__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_7 = pos;
-            let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_7) {
-                sg_7: {
-                    pos = gp_7;
-                    sg_7_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_0; }
+            let gp_10 = pos;
+            let sgk_10 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if _kind_set_0(sgk_10) {
+                sg_10: {
+                    pos = gp_10;
+                    sg_10_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_10_0; }
                         pos += 1;
-                        break sg_7;
+                        break sg_10;
                     }
-                    pos = gp_7;
-                    sg_7_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_7_1; }
+                    pos = gp_10;
+                    sg_10_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_10_1; }
                         pos += 1;
-                        break sg_7;
+                        break sg_10;
                     }
-                    pos = gp_7;
+                    pos = gp_10;
                 }
             }
             if pos <= p.pos { break rep_scan; }
@@ -1870,23 +1939,23 @@ fn _parse_list_label__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_8 = pos;
-            let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_8) {
-                sg_8: {
-                    pos = gp_8;
-                    sg_8_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_8_0; }
+            let gp_11 = pos;
+            let sgk_11 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if _kind_set_0(sgk_11) {
+                sg_11: {
+                    pos = gp_11;
+                    sg_11_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_11_0; }
                         pos += 1;
-                        break sg_8;
+                        break sg_11;
                     }
-                    pos = gp_8;
-                    sg_8_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_8_1; }
+                    pos = gp_11;
+                    sg_11_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_11_1; }
                         pos += 1;
-                        break sg_8;
+                        break sg_11;
                     }
-                    pos = gp_8;
+                    pos = gp_11;
                 }
             }
             if pos <= p.pos { break rep_scan; }
@@ -1955,13 +2024,13 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_9_done: {
-                sg_9: {
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_9; }
+            sg_12_done: {
+                sg_12: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_12; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_9; }
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_12; }
                     pos += 1;
-                    break sg_9_done;
+                    break sg_12_done;
                 }
                 break rep_scan;
             }
@@ -2007,6 +2076,63 @@ fn _parse_solo_opt(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_shape_opt__inner(p: &mut Parser) -> () {
+    let kind = p.peek_kind();
+    if kind == TK_A {
+        if p.peek_kind() == TK_A && p.peek_at(1) == TK_B && p.peek_at(2) == TK_A && (pred_7(p)) {
+            let ra = _parse_ra(p);
+            if p.peek_kind() == TK_B {
+                let b = p.expect(TK_B, &EMPTY_SYNC);
+            }
+            let a = p.expect(TK_A, &EMPTY_SYNC);
+        } else if p.peek_kind() == TK_A && p.peek_at(1) == TK_A && (pred_7(p)) {
+            let ra = _parse_ra(p);
+            let a = p.expect(TK_A, &EMPTY_SYNC);
+        }
+        let a = p.expect(TK_A, &SYNC_3);
+        let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+        return;
+    }
+    if kind == TK_C {
+        let c = p.expect(TK_C, &SYNC_3);
+        let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+        return;
+    }
+    p.no_viable(
+        "no alternative of shape_opt matches",
+        p.peek_span(),
+        &SYNC_2,
+    );
+    return;
+}
+
+fn _parse_shape_opt(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_SHAPE_OPT, _start);
+    _parse_shape_opt__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("shape_opt");
+    }
+}
+
+fn _parse_ra__inner(p: &mut Parser) -> () {
+    let a = p.expect(TK_A, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_ra(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_RA, _start);
+    _parse_ra__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("ra");
+    }
+}
+
 fn pred_0(p: &Parser) -> bool {
     return  false ;
 }
@@ -2028,6 +2154,10 @@ fn pred_5(p: &Parser) -> bool {
 }
 
 fn pred_6(p: &Parser) -> bool {
+    return  false ;
+}
+
+fn pred_7(p: &Parser) -> bool {
     return  false ;
 }
 
@@ -2081,6 +2211,14 @@ pub fn parse_solo_opt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_solo_opt(p));
 }
 
+pub fn parse_shape_opt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_shape_opt(p));
+}
+
+pub fn parse_ra(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_ra(p));
+}
+
 fn _token_names() -> List<String> {
     let mut v: List<String> = List::with_capacity(6);
     for let mut k = 0; k < 6; k += 1 {
@@ -2123,4 +2261,5 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_A, TK_B];
 global SYNC_1: List<i32> = [TK_B];
 global SYNC_2: List<i32> = [TK_A, TK_C];
+global SYNC_3: List<i32> = [TK_EOF];
 
