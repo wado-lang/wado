@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787756707550,
+  "lastUpdate": 1787788704695,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51273,6 +51273,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/076d36cbea303fc1ee3dcd7836da607e3053efdb"
         },
         "date": 1787756706749,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254936,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8de31a0317adc879cf1b4284e5cd2fe34129e99c",
+          "message": "Merge pull request #1904 from wado-lang/gfx/npm12\n\nchore: require npm 12, and update deps",
+          "timestamp": "2026-08-27T08:44:43+09:00",
+          "tree_id": "164cdb05e5910ee37e7159a3166566a764cc853d",
+          "url": "https://github.com/wado-lang/wado/commit/8de31a0317adc879cf1b4284e5cd2fe34129e99c"
+        },
+        "date": 1787788703815,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
