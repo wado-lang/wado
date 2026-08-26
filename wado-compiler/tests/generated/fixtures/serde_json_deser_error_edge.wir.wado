@@ -2691,7 +2691,7 @@ fn "core:prelude/primitive.wado/fmt_float_special$spec0"(f, is_neg, kind, zero_r
 }
 
 fn "core:prelude/primitive.wado/char::hex_digit_value"(self) {
-    if select i32(self >=u 48, self <=u 57, 0) {
+    if (self - 48) <u 10 {
         return self - 48;
     }
     if select i32(self >=u 97, self <=u 102, 0) {
@@ -3715,12 +3715,12 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     let _licm_input_11: ref "core:prelude/slice.wado//Slice<u8>";
     let _licm_repr_12: ref Array<u8>;
     let _licm_start_13: i32;
-    let _av_14: i32;
+    let _av_15: i32;
     start = self.pos;
-    _av_14 = self.pos;
-    if @unlikely((_av_14 + 4) > (self.input.end - self.input.start)) {
+    _av_15 = self.pos;
+    if @unlikely((_av_15 + 4) > (self.input.end - self.input.start)) {
         cold_path;
-        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(_av_14));
+        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(_av_15));
     }
     code = 0;
     i = 0;
@@ -3732,7 +3732,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
         l342: loop {
             break_if b341 i >= 4;
             c_4 = builtin::array_get_value<u8>(_licm_repr_12, _licm_start_13 + (_licm_pos_10 + i)) & 255;
-            if @unlikely((if (if select i32(c_4 >=u 48, c_4 <=u 57, 0) -> i32 {
+            if @unlikely((if (if (c_4 - 48) <u 10 -> i32 {
                 1;
             } else {
                 select i32(c_4 >=u 97, c_4 <=u 102, 0);
@@ -3749,7 +3749,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
             continue l342;
         };
     };
-    self.pos = _av_14 + 4;
+    self.pos = _av_15 + 4;
     return 0, code, ref.null none;
 }
 

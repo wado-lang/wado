@@ -1,0 +1,14 @@
+// Regression: module B's `Span` derives `Inspect` through the `ReflectStruct`
+// blanket, which records nothing under B's module-qualified head. The lookup
+// fell through to the module-blind declaration namespace, found module A's
+// same-named newtype there, and lowering minted an extern stub in A's module
+// for a function B's module defines — tripping the interner's shadow assert.
+
+use { Span, anchored, is_flat } from "./sub/cross_module_same_name_inspect_newtype_b.wado";
+use { Anchor } from "./sub/cross_module_same_name_inspect_newtype_a.wado";
+
+test "a blanket-derived Inspect picks the receiver's own declaration" {
+    let s = anchored(Anchor { at: 3 });
+    assert is_flat(&Span {});
+    assert `${s:?}` == "Span { hours: 3 }";
+}

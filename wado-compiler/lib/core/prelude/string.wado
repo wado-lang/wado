@@ -13,14 +13,6 @@ use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
 use { i32_min, i32_max } from "core:rt";
 
-fn byte_to_ascii_lowercase(b: u8) -> u8 {
-    return b | (b >= b'A' && b <= b'Z') as u8 * (b'A' ^ b'a');
-}
-
-fn is_ascii_whitespace_byte(b: u8) -> bool {
-    return (b as char).is_ascii_whitespace();
-}
-
 /// Byte length (1–4) of the UTF-8 sequence led by `b0`, assuming valid UTF-8.
 #[inline]
 fn utf8_seq_len(b0: u8) -> i32 {
@@ -359,14 +351,14 @@ impl Iterator for StrSplitWhitespaceIter {
     type Item = String;
 
     pub fn next(&mut self) -> Option<Self::Item> {
-        while self.pos < self.used && is_ascii_whitespace_byte(self.repr[self.pos]) {
+        while self.pos < self.used && self.repr[self.pos].is_ascii_whitespace() {
             self.pos += 1;
         }
         if self.pos >= self.used {
             return null;
         }
         let start = self.pos;
-        while self.pos < self.used && !is_ascii_whitespace_byte(self.repr[self.pos]) {
+        while self.pos < self.used && !self.repr[self.pos].is_ascii_whitespace() {
             self.pos += 1;
         }
         return Option::Some(substring(self.repr, start, self.pos - start));
@@ -745,7 +737,7 @@ impl String {
     /// Returns a new string with leading ASCII whitespace removed.
     pub fn trim_ascii_start(&self) -> String {
         let mut start = 0;
-        while start < self.used && is_ascii_whitespace_byte(self.repr[start]) {
+        while start < self.used && self.repr[start].is_ascii_whitespace() {
             start += 1;
         }
         return self.substr_bytes(start, self.used);
@@ -754,7 +746,7 @@ impl String {
     /// Returns a new string with trailing ASCII whitespace removed.
     pub fn trim_ascii_end(&self) -> String {
         let mut end = self.used;
-        while end > 0 && is_ascii_whitespace_byte(self.repr[end - 1]) {
+        while end > 0 && self.repr[end - 1].is_ascii_whitespace() {
             end -= 1;
         }
         return self.substr_bytes(0, end);
@@ -820,7 +812,7 @@ impl String {
         let a = &self.repr as &Array<u8>;
         let b = &other.repr as &Array<u8>;
         for let mut i = 0; i < len; i += 1 {
-            if byte_to_ascii_lowercase(a[i]) != byte_to_ascii_lowercase(b[i]) {
+            if !a[i].eq_ignore_ascii_case(&b[i]) {
                 return false;
             }
         }

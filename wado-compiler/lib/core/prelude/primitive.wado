@@ -329,31 +329,23 @@ impl char {
         return buf;
     }
 
-    /// Returns true if the character is an ASCII whitespace character:
-    /// SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
-    /// Matches POSIX isspace() for the ASCII range.
+    /// Returns true if the character is ASCII whitespace, as POSIX `isspace()`
+    /// has it: SP, HT, LF, VT, FF, CR.
     pub fn is_ascii_whitespace(&self) -> bool {
         return match *self {
-            ' ' => true,  // SP
-            '\t' => true,  // HT
-            '\n' => true,  // LF
-            '\r' => true,  // CR
-            '\u{0B}' => true,  // VT
-            '\u{0C}' => true,  // FF
+            ' ' | '\t' | '\n' | '\r' => true,
+            '\u{0B}' | '\u{0C}' => true,  // VT, FF
             _ => false,
         };
     }
 
-    /// Returns true if the character is a Unicode whitespace character.
-    /// Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
+    /// Returns true if the character is Unicode whitespace: ASCII whitespace,
+    /// U+0085 (NEXT LINE), and the Zs/Zl/Zp code points.
     pub fn is_whitespace(&self) -> bool {
+        if self.is_ascii_whitespace() {
+            return true;
+        }
         return match *self {
-            ' ' => true,  // SP
-            '\t' => true,  // HT
-            '\n' => true,  // LF
-            '\r' => true,  // CR
-            '\u{0B}' => true,  // VT
-            '\u{0C}' => true,  // FF
             '\u{85}' => true,  // NEXT LINE
             '\u{A0}' => true,  // NO-BREAK SPACE
             '\u{1680}' => true,  // OGHAM SPACE MARK
@@ -405,24 +397,36 @@ impl char {
     }
 
     /// Checks that two characters are an ASCII case-insensitive match.
-    ///
-    /// Equivalent to `to_ascii_lowercase() == other.to_ascii_lowercase()`,
-    /// but implemented branchlessly.
     pub fn eq_ignore_ascii_case(&self, other: &char) -> bool {
         return self.to_ascii_lowercase() == other.to_ascii_lowercase();
+    }
+
+    /// Returns true if the character is an ASCII digit: 0-9.
+    pub fn is_ascii_digit(&self) -> bool {
+        return (*self as u32 - '0' as u32) < 10;
+    }
+
+    /// Returns true if the character is an ASCII letter: a-z or A-Z.
+    pub fn is_ascii_alphabetic(&self) -> bool {
+        return self.is_ascii_lowercase() || self.is_ascii_uppercase();
+    }
+
+    /// Returns true if the character is an ASCII letter or digit: a-z, A-Z, 0-9.
+    pub fn is_ascii_alphanumeric(&self) -> bool {
+        return self.is_ascii_alphabetic() || self.is_ascii_digit();
     }
 
     /// Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
     pub fn is_hexdigit(&self) -> bool {
         let c = *self;
-        return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+        return c.is_ascii_digit() || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
     }
 
     /// Returns the numeric value of an ASCII hexadecimal digit (0–15).
     /// Panics if the character is not a valid hex digit.
     pub fn hex_digit_value(&self) -> i32 {
         let c = *self;
-        if c >= '0' && c <= '9' {
+        if c.is_ascii_digit() {
             return c as i32 - '0' as i32;
         }
         if c >= 'a' && c <= 'f' {
@@ -565,6 +569,58 @@ impl u8 {
 
     pub fn min(a: u8, b: u8) -> u8 {
         return builtin::select(a < b, a, b);
+    }
+
+    /// Returns true if the byte is an ASCII digit: 0-9.
+    pub fn is_ascii_digit(&self) -> bool {
+        return (*self as char).is_ascii_digit();
+    }
+
+    /// Returns true if the byte is an ASCII letter: a-z or A-Z.
+    pub fn is_ascii_alphabetic(&self) -> bool {
+        return (*self as char).is_ascii_alphabetic();
+    }
+
+    /// Returns true if the byte is an ASCII letter or digit: a-z, A-Z, 0-9.
+    pub fn is_ascii_alphanumeric(&self) -> bool {
+        return (*self as char).is_ascii_alphanumeric();
+    }
+
+    /// Returns true if the byte is an ASCII lowercase letter: a-z.
+    pub fn is_ascii_lowercase(&self) -> bool {
+        return (*self as char).is_ascii_lowercase();
+    }
+
+    /// Returns true if the byte is an ASCII uppercase letter: A-Z.
+    pub fn is_ascii_uppercase(&self) -> bool {
+        return (*self as char).is_ascii_uppercase();
+    }
+
+    /// Returns true if the byte is ASCII whitespace: SP, HT, LF, VT, FF, CR.
+    pub fn is_ascii_whitespace(&self) -> bool {
+        return (*self as char).is_ascii_whitespace();
+    }
+
+    /// Returns true if the byte is a hexadecimal digit: 0-9, a-f, A-F.
+    pub fn is_hexdigit(&self) -> bool {
+        return (*self as char).is_hexdigit();
+    }
+
+    /// Converts an ASCII uppercase letter to lowercase, leaving every other
+    /// byte unchanged.
+    pub fn to_ascii_lowercase(&self) -> u8 {
+        return (*self as char).to_ascii_lowercase() as u8;
+    }
+
+    /// Converts an ASCII lowercase letter to uppercase, leaving every other
+    /// byte unchanged.
+    pub fn to_ascii_uppercase(&self) -> u8 {
+        return (*self as char).to_ascii_uppercase() as u8;
+    }
+
+    /// Checks that two bytes are an ASCII case-insensitive match.
+    pub fn eq_ignore_ascii_case(&self, other: &u8) -> bool {
+        return (*self as char).eq_ignore_ascii_case(&(*other as char));
     }
 
     fn fmt_into(&self, f: &mut Formatter) {

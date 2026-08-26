@@ -104,7 +104,7 @@ internal fn lenient_float_preprocess(s: &String) -> String {
         return *s;
     }
     let first = s.get_byte_unchecked(head);
-    let is_numeric = first >= b'0' && first <= b'9' || first == b'.';
+    let is_numeric = first.is_ascii_digit() || first == b'.';
     if !is_numeric {
         return *s;
     }

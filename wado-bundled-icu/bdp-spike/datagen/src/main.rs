@@ -132,6 +132,9 @@ fn main() -> Result<()> {
             m.extend_from_slice(icu_segmenter::provider::MARKERS);
             (m, DataLocaleFamily::FULL)
         }
+        // Time zones: IANA/Windows identifiers plus the offset periods, for
+        // `core:temporal`'s question of what zone data ICU4X actually carries.
+        "tz" => (icu_time::provider::MARKERS.to_vec(), DataLocaleFamily::FULL),
         other => anyhow::bail!("unknown marker set: {other}"),
     };
 

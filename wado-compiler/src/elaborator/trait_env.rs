@@ -630,12 +630,17 @@ impl ImplModuleIndex {
     fn get(&self, receiver: ImplReceiver<'_>, trait_name: &str) -> Option<&Vec<ModuleSource>> {
         let key = |spelling: String| (spelling, trait_name.to_string());
         match receiver {
-            // One identity, so both namespaces are this receiver's own — no
-            // choice to get wrong, and no reason to prefer either.
-            ImplReceiver::Of(r) => self
-                .by_mangled
-                .get(&key(r.head_key().into_string()))
-                .or_else(|| self.by_declared.get(&key(r.decl_key().into_string()))),
+            ImplReceiver::Of(r) => {
+                let mangled = self.by_mangled.get(&key(r.head_key().into_string()));
+                // `record` writes both namespaces together, so for a receiver
+                // whose mangled key carries its module a miss is a real
+                // absence — falling through would reach another module's
+                // same-named type under the bare declared key.
+                if mangled.is_some() || r.is_module_qualified() {
+                    return mangled;
+                }
+                self.by_declared.get(&key(r.decl_key().into_string()))
+            }
             ImplReceiver::Instantiated(m) => {
                 self.by_mangled.get(&key(m.as_mangled_str().to_string()))
             }
