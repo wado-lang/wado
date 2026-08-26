@@ -1495,6 +1495,10 @@ impl Parser {
     }
 }
 
+struct SVals {
+    _node_r: i32 = -1,
+}
+
 fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
@@ -1520,25 +1524,26 @@ fn scan_b(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
-    let mut _node_r = -1;
-    _node_r = p.b.checkpoint();
+fn _parse_s__inner(p: &mut Parser) -> SVals {
+    let mut vals = SVals {};
+    vals._node_r = p.b.checkpoint();
     let r = _parse_a(p);
     if !p.speculating {
-        p.emit(`${p.rule_tree_at(_node_r)}\n`);
+        p.emit(`${p.rule_tree_at(vals._node_r)}\n`);
     }
-    return;
+    return vals;
 }
 
-fn _parse_s(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_s(p: &mut Parser) -> SVals {
+    if p.recovering { return SVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    let __vals = _parse_s__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");
     }
+    return __vals;
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
@@ -1597,7 +1602,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_s(p); });
 }
 
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

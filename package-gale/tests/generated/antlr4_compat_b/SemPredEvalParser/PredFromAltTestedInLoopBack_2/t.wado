@@ -1725,11 +1725,12 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         if !_plus_first && !((p.peek_kind() == TK_LIT_S) || (p.peek_kind() == TK_X) || (p.peek_kind() == TK_NL && (p.la(2) != TK_NL))) { break; }
         _plus_first = false;
-        if p.peek_kind() == TK_LIT_S {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LIT_S {
             let lit_s = p.expect(TK_LIT_S, &EMPTY_SYNC);
-        } else if p.peek_kind() == TK_X {
+        } else if grp_kind == TK_X {
             let x = p.expect(TK_X, &EMPTY_SYNC);
-        } else if p.peek_kind() == TK_NL && (p.la(2) != TK_NL) {
+        } else if grp_kind == TK_NL && (p.la(2) != TK_NL) {
             let nl = p.expect(TK_NL, &EMPTY_SYNC);
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &SYNC_1);

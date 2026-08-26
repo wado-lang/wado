@@ -1639,7 +1639,8 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        if p.peek_kind() == TK_LIT_A {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LIT_A {
             let a = _parse_a(p, &EMPTY_FOLLOW);
         } else {
             let b = _parse_b(p, &EMPTY_FOLLOW);

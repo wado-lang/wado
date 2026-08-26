@@ -1570,7 +1570,8 @@ fn _parse_a__inner(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if p.peek_kind() == TK_LIT_B {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LIT_B {
             let lit_b = p.expect(TK_LIT_B, &EMPTY_SYNC);
         } else {
             let lit_z = p.expect(TK_LIT_Z, &EMPTY_SYNC);

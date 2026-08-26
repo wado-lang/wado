@@ -1916,9 +1916,10 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            if p.peek_kind() == TK_OPT1 {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_OPT1 {
                 let opt1 = p.expect(TK_OPT1, &EMPTY_SYNC);
-            } else if p.peek_kind() == TK_OPT2 {
+            } else if grp_kind == TK_OPT2 {
                 let opt2 = p.expect(TK_OPT2, &EMPTY_SYNC);
             } else {
                 let opt3 = p.expect(TK_OPT3, &EMPTY_SYNC);

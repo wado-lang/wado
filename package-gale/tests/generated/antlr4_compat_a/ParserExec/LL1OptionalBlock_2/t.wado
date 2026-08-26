@@ -1655,7 +1655,8 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if p.peek_kind() == TK_ID {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_ID {
             let id = p.expect(TK_ID, &EMPTY_SYNC);
         } else {
             if !p.speculating {

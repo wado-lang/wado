@@ -1543,6 +1543,11 @@ impl Parser {
     }
 }
 
+struct AVals {
+    _span_lo_label: i32 = 0,
+    _span_hi_label: i32 = -1,
+}
+
 fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
@@ -1635,19 +1640,18 @@ fn _parse_start(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_a__inner(p: &mut Parser) -> () {
+fn _parse_a__inner(p: &mut Parser) -> AVals {
+    let mut vals = AVals {};
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
         p.b.set_alt(0);
-        let mut _span_lo_label = 0;
-        let mut _span_hi_label = -1;
-        _span_lo_label = p.pos;
+        vals._span_lo_label = p.pos;
         let label = _parse_subrule(p);
-        _span_hi_label = p.pos - 1;
+        vals._span_hi_label = p.pos - 1;
         if !p.speculating {
-            p.emit(`${p.text_between(_span_lo_label, _span_hi_label)}\n`);
+            p.emit(`${p.text_between(vals._span_lo_label, vals._span_hi_label)}\n`);
         }
-        return;
+        return vals;
     }
     if kind == TK_LIT_Y {
         p.b.set_alt(1);
@@ -1655,25 +1659,26 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         if !p.speculating {
             p.emit(`${p.token_text(label)}\n`);
         }
-        return;
+        return vals;
     }
     p.no_viable(
         "no alternative of a matches",
         p.peek_span(),
         &SYNC_0,
     );
-    return;
+    return vals;
 }
 
-fn _parse_a(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_a(p: &mut Parser) -> AVals {
+    if p.recovering { return AVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    _parse_a__inner(p);
+    let __vals = _parse_a__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("a");
     }
+    return __vals;
 }
 
 fn _parse_subrule__inner(p: &mut Parser) -> () {
@@ -1719,7 +1724,7 @@ pub fn parse_start(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_a(p); });
 }
 
 pub fn parse_subrule(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

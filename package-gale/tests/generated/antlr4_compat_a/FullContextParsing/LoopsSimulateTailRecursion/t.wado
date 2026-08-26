@@ -2446,6 +2446,11 @@ impl Parser {
     }
 }
 
+struct ExprOrAssignVals {
+    _span_lo_expr: i32 = 0,
+    _span_hi_expr: i32 = -1,
+}
+
 fn scan_prog(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
@@ -2606,17 +2611,16 @@ fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     }
 }
 
-fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let mut _span_lo_expr = 0;
-    let mut _span_hi_expr = -1;
-    _span_lo_expr = p.pos;
+fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, vals: ExprOrAssignVals = ExprOrAssignVals {}) -> ExprOrAssignVals {
+    let mut vals = vals;
+    vals._span_lo_expr = p.pos;
     p.atn_ret_pending = 25;
     let expr = _parse_expr(p, follow);
-    _span_hi_expr = p.pos - 1;
+    vals._span_hi_expr = p.pos - 1;
     if !p.speculating {
-        p.emit(`pass: ${p.text_between(_span_lo_expr, _span_hi_expr)}\n`);
+        p.emit(`pass: ${p.text_between(vals._span_lo_expr, vals._span_hi_expr)}\n`);
     }
-    return;
+    return vals;
 }
 
 fn _parse_expr_or_assign__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -2626,14 +2630,17 @@ fn _parse_expr_or_assign__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &L
     return pos;
 }
 
-fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, vals: ExprOrAssignVals = ExprOrAssignVals {}) -> ExprOrAssignVals {
+    let mut vals = vals;
+    vals._span_lo_expr = p.pos;
     p.atn_ret_pending = 20;
     let expr = _parse_expr(p, &FOLLOW_MASK_0);
+    vals._span_hi_expr = p.pos - 1;
     let lit_plusplus = p.expect(TK_LIT_PLUSPLUS, &EMPTY_SYNC);
     if !p.speculating {
         p.emit(`fail.\n`);
     }
-    return;
+    return vals;
 }
 
 fn _parse_expr_or_assign__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -2645,7 +2652,8 @@ fn _parse_expr_or_assign__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &L
     return pos;
 }
 
-fn _parse_expr_or_assign__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_expr_or_assign__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ExprOrAssignVals {
+    let mut vals = ExprOrAssignVals {};
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         if _kind_set_0(kind) {
@@ -2664,9 +2672,9 @@ fn _parse_expr_or_assign__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
-                return _parse_expr_or_assign__inner_alt_1(p, follow);
+                return _parse_expr_or_assign__inner_alt_1(p, follow, vals);
             }
-            return _parse_expr_or_assign__inner_alt_0(p, follow);
+            return _parse_expr_or_assign__inner_alt_0(p, follow, vals);
         }
     }
     p.no_viable(
@@ -2674,22 +2682,23 @@ fn _parse_expr_or_assign__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         p.peek_span(),
         &SYNC_0,
     );
-    return;
+    return vals;
 }
 
-fn _parse_expr_or_assign(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_expr_or_assign(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ExprOrAssignVals {
+    if p.recovering { return ExprOrAssignVals {}; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     p.atn_stack.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR_OR_ASSIGN, _start);
-    _parse_expr_or_assign__inner(p, follow);
+    let __vals = _parse_expr_or_assign__inner(p, follow);
     p.b.finish_node(p.last_end());
     p.atn_stack.pop();
     if p.recovering {
         p.push_rule_stack("expr_or_assign");
     }
+    return __vals;
 }
 
 fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
@@ -2815,7 +2824,7 @@ pub fn parse_prog(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_expr_or_assign(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr_or_assign(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_expr_or_assign(p); });
 }
 
 pub fn parse_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

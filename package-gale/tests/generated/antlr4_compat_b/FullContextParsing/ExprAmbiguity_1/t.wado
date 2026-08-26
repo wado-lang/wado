@@ -1592,6 +1592,10 @@ impl Parser {
     }
 }
 
+struct SVals {
+    _node_expr: i32 = -1,
+}
+
 struct ExprVals {
     _p: i32 = 0,
 }
@@ -1642,25 +1646,26 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let mut _node_expr = -1;
-    _node_expr = p.b.checkpoint();
+fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> SVals {
+    let mut vals = SVals {};
+    vals._node_expr = p.b.checkpoint();
     let expr = _parse_expr(p, follow, 0);
     if !p.speculating {
-        p.emit(`${p.rule_tree_at(_node_expr)}\n`);
+        p.emit(`${p.rule_tree_at(vals._node_expr)}\n`);
     }
-    return;
+    return vals;
 }
 
-fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> SVals {
+    if p.recovering { return SVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p, follow);
+    let __vals = _parse_s__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");
     }
+    return __vals;
 }
 
 fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, _p: i32 = 0) -> ExprVals {
@@ -1702,10 +1707,11 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
         }
         if rep_scan_pos < 0 { break; }
         if !((p.peek_kind() == TK_LIT_STAR && (5 >= vals._p)) || (p.peek_kind() == TK_LIT_PLUS && (4 >= vals._p))) { break; }
-        if p.peek_kind() == TK_LIT_STAR && (5 >= vals._p) {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LIT_STAR && (5 >= vals._p) {
             let star = p.expect(TK_LIT_STAR, &SYNC_1);
             let expr = _parse_expr(p, follow, 6);
-        } else if p.peek_kind() == TK_LIT_PLUS && (4 >= vals._p) {
+        } else if grp_kind == TK_LIT_PLUS && (4 >= vals._p) {
             let plus = p.expect(TK_LIT_PLUS, &SYNC_1);
             let expr = _parse_expr(p, follow, 5);
         } else {
@@ -1750,7 +1756,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_s(p); });
 }
 
 pub fn parse_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
