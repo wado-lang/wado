@@ -114,6 +114,7 @@ use {
     gen_rule_span_decls,
     gen_vals_structs,
     join_gate_conds,
+    mark_alt_gate_predicates,
     mark_gated_predicates,
     result_type_carries_vals,
     rule_call_span_field,
@@ -4336,10 +4337,105 @@ fn gen_op_transparent_optional_with_cond(
     let mut nc: List<[String, i32]> = [];
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
+    let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
+        gen_alt_actions_at(w, &alt.actions, i, ctx);
         gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
     }
+    gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx);
+    leave_group_alt_bindings(&outer, &alt.actions, ctx);
     w.end();
+}
+
+/// Whether any of `alts` carries an alt-initial predicate the dispatch gates on.
+fn any_alt_gated(alts: &List<Alternative>, ctx: &GenContext) -> bool {
+    return alts.iter_ref().any(|a: &Alternative| !alt_gate_and_suffix(a, ctx).is_empty());
+}
+
+/// The alternatives of a repeat's group body, or `null` when the body is not a
+/// group (a leaf or a rule call has no per-alternative gate).
+fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with stores[inner] {
+    if let Group(g) = peel_scalar_label(inner) {
+        return Option::Some(&g.alternatives);
+    }
+    return null;
+}
+
+/// The viability condition of a repeat whose group body has a predicate-gated
+/// alternative: `(kind ∈ FIRST(alt) && gate) || …`. `null` when nothing is
+/// gated, so every other repeat emits exactly what it did before.
+///
+/// The dispatch inside the body gates each branch with the same
+/// `alt_gate_and_suffix`, so an iteration this condition admits always takes an
+/// arm, and one it rejects is never entered — which is what keeps a gated loop
+/// from spinning on an iteration that consumes nothing.
+fn repeat_gate_condition(inner: &Element, ctx: &mut GenContext) -> Option<String> {
+    if !ctx.emit_actions() {
+        return null;
+    }
+    let alts = repeat_body_group_alts(inner)?;
+    let mut parts: List<String> = [];
+    let mut gated = false;
+    for let alt of alts {
+        let gate = alt_gate_and_suffix(alt, ctx);
+        if !gate.is_empty() {
+            gated = true;
+        }
+        let mut visiting: List<String> = [];
+        let first = ctx.first_of_alt(alt, &mut visiting);
+        parts.push(`(${ctx.first_check_str(&first)}${gate})`);
+    }
+    if !gated {
+        return null;
+    }
+    let mut cond = String::with_capacity(64);
+    for let mut i = 0; i < parts.len(); i += 1 {
+        if i > 0 {
+            cond.push_str(&" || ");
+        }
+        cond.push_str(&parts[i]);
+    }
+    return Option::Some(cond);
+}
+
+/// Break a repeat whose gated group body admits no alternative at this
+/// position. `plus_flag` names the mandatory-first-iteration flag when the
+/// caller has one: the first iteration of a `+` is a choice among the
+/// alternatives, not a loop-exit decision, so it falls through to the dispatch
+/// (which reports no viable alternative) instead of exiting.
+fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, plus_flag: &String) {
+    if let Some(cond) = repeat_gate_condition(inner, ctx) {
+        if plus_flag.is_empty() {
+            w.line(&`if !(${cond}) \{ break; \}`);
+        } else {
+            w.line(&`if !${*plus_flag} && !(${cond}) \{ break; \}`);
+        }
+    }
+}
+
+/// Scope an inlined group alternative's label bindings to its own ops while its
+/// actions are emitted, and hand back the enclosing body's bindings to restore.
+/// A no-op (and byte-identical) for an alternative carrying no action.
+fn enter_group_alt_bindings(
+    ops: &List<Op>,
+    actions: &List<AltAction>,
+    ctx: &mut GenContext,
+) -> List<[bool, String, String]> {
+    let outer = *ctx.alt_bindings();
+    if ctx.emit_actions() && !actions.is_empty() {
+        ctx.set_alt_bindings(collect_alt_bindings(ops));
+    }
+    return outer;
+}
+
+fn leave_group_alt_bindings(
+    outer: &List<[bool, String, String]>,
+    actions: &List<AltAction>,
+    ctx: &mut GenContext,
+) {
+    if ctx.emit_actions() && !actions.is_empty() {
+        ctx.set_alt_bindings(*outer);
+    }
 }
 
 /// Op-driven shape-lookahead emit for the storable Optional + SingleAlt
@@ -4384,7 +4480,11 @@ fn gen_op_optional_with_shape_lookahead_storable(
         }
 
         let mut nc: List<[String, i32]> = [];
+        let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
         for let mut i = 0; i < elements.len(); i += 1 {
+            // The actions are the alternative's, not the skipped element's, so
+            // every shape branch runs them; only the element is conditional.
+            gen_alt_actions_at(w, &alt.actions, i, ctx);
             let mut in_shape = false;
             for let mut k = 0; k < entry.positions.len(); k += 1 {
                 if entry.positions[k] == i {
@@ -4395,6 +4495,8 @@ fn gen_op_optional_with_shape_lookahead_storable(
                 gen_op_dispatch_element(w, &body.ops[i], &elements[i], ctx, &mut nc);
             }
         }
+        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx);
+        leave_group_alt_bindings(&outer, &alt.actions, ctx);
     }
     if !is_first {
         w.end();
@@ -4437,8 +4539,17 @@ fn gen_op_optional_with_shape_lookahead_transparent(
         }
 
         let mut nc: List<[String, i32]> = [];
-        for let mut k = 0; k < entry.positions.len(); k += 1 {
-            let idx = entry.positions[k];
+        let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
+        // Actions are the alternative's own, so they run in every shape branch
+        // (`gen_op_optional_with_shape_lookahead_storable` says the same); the
+        // positions decide only which elements are parsed.
+        let mut k = 0;
+        for let mut idx = 0; idx < elements.len(); idx += 1 {
+            gen_alt_actions_at(w, &alt.actions, idx, ctx);
+            if k >= entry.positions.len() || entry.positions[k] != idx {
+                continue;
+            }
+            k += 1;
             let elem = &elements[idx];
             let body_op = &body.ops[idx];
             let actual_elem = unwrap_optional(elem);
@@ -4448,9 +4559,13 @@ fn gen_op_optional_with_shape_lookahead_transparent(
                     if let Group(inner_g_op) = actual_op {
                         let inner_body = &inner_g_op.alts[0];
                         let inner_alt = &g.alternatives[0];
+                        let inner_outer = enter_group_alt_bindings(&inner_body.ops, &inner_alt.actions, ctx);
                         for let mut j = 0; j < inner_alt.elements.len(); j += 1 {
+                            gen_alt_actions_at(w, &inner_alt.actions, j, ctx);
                             gen_op_dispatch_element(w, &inner_body.ops[j], &inner_alt.elements[j], ctx, &mut nc);
                         }
+                        gen_alt_actions_at(w, &inner_alt.actions, inner_alt.elements.len(), ctx);
+                        leave_group_alt_bindings(&inner_outer, &inner_alt.actions, ctx);
                     } else {
                         panic(
                             "gen_op_optional_with_shape_lookahead_transparent: single-alt Group surface but non-Group op",
@@ -4463,6 +4578,8 @@ fn gen_op_optional_with_shape_lookahead_transparent(
                 gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
             }
         }
+        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx);
+        leave_group_alt_bindings(&outer, &alt.actions, ctx);
     }
     if !is_first {
         w.end();
@@ -4636,7 +4753,7 @@ fn gen_consume_single_alt_group_op(
     // Nested General-group emitters consume `GeneralShape.variant_type`
     // / `alt_struct_names` baked by `lower_single_alt_group` under
     // the SingleAlt's owner rule, so no walker-field swap is needed here.
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow);
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow, &alt.actions);
     // the inner elements already appended; no struct.
 }
 
@@ -5370,6 +5487,7 @@ fn gen_op_repeat_star_plus_storable(
             gen_caller_follow_gate(w, rep_op);
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
+            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.end();
@@ -5377,6 +5495,7 @@ fn gen_op_repeat_star_plus_storable(
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
             // Same caller-FOLLOW gate for the non-scannable while loop.
             gen_caller_follow_gate(w, rep_op);
+            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.end();
@@ -5397,6 +5516,7 @@ fn gen_op_repeat_star_plus_storable(
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
             w.end();
+            gen_repeat_gate_break(w, inner, ctx, &plus_flag);
             w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
@@ -5414,6 +5534,7 @@ fn gen_op_repeat_star_plus_storable(
                 gen_caller_follow_gate(w, rep_op);
                 w.end();
             }
+            gen_repeat_gate_break(w, inner, ctx, &plus_flag);
             w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
@@ -5946,11 +6067,22 @@ fn gen_general_overlap_loop(
             }
         }
 
+        // A group's alternatives are a decision like a rule's, so an alt-initial
+        // predicate joins the branch condition here exactly as
+        // `gen_multi_alt_body_alt` joins it at rule level. Marking must precede
+        // the body emit, so the gated predicate is not re-emitted as an inline
+        // guard inside it.
+        let gate = if group.len() == 1 {
+            mark_alt_gate_predicates(&alts[group[0]], ctx);
+            alt_gate_and_suffix(&alts[group[0]], ctx);
+        } else {
+            String::new();
+        };
         let cond = ctx.kind_check_str(&union_first, &grp_var);
         if g == 0 {
-            w.begin(&`if ${cond}`);
+            w.begin(&`if ${cond}${gate}`);
         } else {
-            w.else_begin(&`else if ${cond}`);
+            w.else_begin(&`else if ${cond}${gate}`);
         }
 
         if group.len() == 1 {
@@ -6015,12 +6147,21 @@ fn gen_general_group_store_op(
     // the `let {var}: {type} = if … ` value-binding collapses to a plain
     // `if … ` statement and the overlap loop needs no accumulator.
     if !has_overlaps {
+        // A gated alternative needs its own condition, so the last branch can
+        // only fall through unconditionally when nothing here is gated —
+        // otherwise a false predicate would land in the `else` arm it is meant
+        // to exclude. `no_viable` closes the gated chain, matching what a rule
+        // dispatch reports when every predicate is false.
+        let gated = any_alt_gated(alts, ctx);
         for let mut g = 0; g < groups.len(); g += 1 {
             let alt_index = groups[g][0];
+            mark_alt_gate_predicates(&alts[alt_index], ctx);
+            let gate = alt_gate_and_suffix(&alts[alt_index], ctx);
+            let cond = `${ctx.first_check_str(&first_sets[alt_index])}${gate}`;
             if g == 0 {
-                w.begin(&`if ${ctx.first_check_str(&first_sets[alt_index])}`);
-            } else if g < groups.len() - 1 {
-                w.else_begin(&`else if ${ctx.first_check_str(&first_sets[alt_index])}`);
+                w.begin(&`if ${cond}`);
+            } else if gated || g < groups.len() - 1 {
+                w.else_begin(&`else if ${cond}`);
             } else {
                 w.else_begin(&"else");
             }
@@ -6032,6 +6173,10 @@ fn gen_general_group_store_op(
                 ctx,
                 name_counts,
             );
+        }
+        if gated {
+            w.else_begin(&"else");
+            w.line(&`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
         }
         w.end();
     } else {
@@ -6114,7 +6259,11 @@ fn gen_general_alt_parse_and_store(
     let alt = &alts[alt_index];
 
     let mut nc: List<[String, i32]> = [];
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
+    // An alt-initial predicate in here selects this alternative, so one the
+    // dispatch could not gate must be reported rather than guarded inline.
+    ctx.enter_multi_alt_group();
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>), &alt.actions);
+    ctx.leave_multi_alt_group();
 }
 
 /// First-success-wins scan dispatch wrapper for overlapping general-group

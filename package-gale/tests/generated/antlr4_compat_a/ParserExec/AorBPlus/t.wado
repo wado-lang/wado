@@ -1561,6 +1561,7 @@ impl Parser {
 }
 
 fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1578,10 +1579,8 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
                 pos += 1;
                 break sg_0;
             }
-            return -1;
+            pos = gp_0;
         }
-    } else {
-        return -1;
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -1609,6 +1608,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -1639,10 +1639,8 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                             pos += 1;
                             break sg_2;
                         }
-                        break rep_scan;
+                        pos = gp_2;
                     }
-                } else {
-                    break rep_scan;
                 }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
@@ -1650,7 +1648,14 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let id_or_int = p.expect_set(&SYNC_0);
+        if p.peek_kind() == TK_ID {
+            let id = p.expect(TK_ID, &EMPTY_SYNC);
+        } else {
+            let int = p.expect(TK_INT, &EMPTY_SYNC);
+            if !p.speculating {
+                
+            }
+        }
     }
     if !p.speculating {
         p.emit(`${p.rule_text(_rule_start_tok)}\n`);
@@ -1730,5 +1735,4 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID, TK_INT];
 

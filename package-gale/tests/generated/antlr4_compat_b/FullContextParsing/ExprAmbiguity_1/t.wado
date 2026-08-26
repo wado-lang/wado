@@ -1661,12 +1661,15 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if p.peek_kind() == TK_LIT_STAR {
+        if !((p.peek_kind() == TK_LIT_STAR && (5 >= vals._p)) || (p.peek_kind() == TK_LIT_PLUS && (4 >= vals._p))) { break; }
+        if p.peek_kind() == TK_LIT_STAR && (5 >= vals._p) {
             let star = p.expect(TK_LIT_STAR, &SYNC_1);
             let expr = _parse_expr(p, follow, 6);
-        } else {
+        } else if p.peek_kind() == TK_LIT_PLUS && (4 >= vals._p) {
             let plus = p.expect(TK_LIT_PLUS, &SYNC_1);
             let expr = _parse_expr(p, follow, 5);
+        } else {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         }
     }
     return vals;

@@ -1632,6 +1632,13 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, _p:
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
+        if !((p.peek_kind() == TK_LIT_PLUS && (3 >= vals._p))) { break; }
+        if !p.speculating {
+            if !(3 >= vals._p) {
+                p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
+                return vals;
+            }
+        }
         let plus = p.expect(TK_LIT_PLUS, &SYNC_0);
         let e = _parse_e(p, follow, 4);
     }

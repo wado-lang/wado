@@ -1539,6 +1539,7 @@ fn scan_para(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1562,10 +1563,8 @@ fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 pos += 1;
                 break sg_0;
             }
-            return -1;
+            pos = gp_0;
         }
-    } else {
-        return -1;
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -1599,6 +1598,7 @@ fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -1680,18 +1680,25 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                             pos += 1;
                             break sg_2;
                         }
-                        break rep_scan;
+                        pos = gp_2;
                     }
-                } else {
-                    break rep_scan;
                 }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
         }
+        if !_plus_first && !((p.peek_kind() == TK_LIT_S) || (p.peek_kind() == TK_X) || (p.peek_kind() == TK_NL && (p.la(2) != TK_NL))) { break; }
         _plus_first = false;
-        let lit_s_or_x_or_nl = p.expect_set(&SYNC_1);
+        if p.peek_kind() == TK_LIT_S {
+            let lit_s = p.expect(TK_LIT_S, &EMPTY_SYNC);
+        } else if p.peek_kind() == TK_X {
+            let x = p.expect(TK_X, &EMPTY_SYNC);
+        } else if p.peek_kind() == TK_NL && (p.la(2) != TK_NL) {
+            let nl = p.expect(TK_NL, &EMPTY_SYNC);
+        } else {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+        }
     }
     return;
 }
@@ -1797,7 +1804,6 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_NL];
-global SYNC_1: List<i32> = [TK_LIT_S, TK_NL, TK_X];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_S, TK_NL, TK_X]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_EOF]];

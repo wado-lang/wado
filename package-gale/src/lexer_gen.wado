@@ -19,7 +19,6 @@ use {
     find_lexer_rule,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
-use { translate_lexer_predicate, translate_lexer_action } from "./action_translate.wado";
 use {
     CodeWriter,
     StructSpec,
@@ -884,9 +883,8 @@ fn gen_lexer_match_fn(
 
 /// Emit each semantic predicate at position `before` as a guard
 /// (`if !(cond) { <fail_action>; }`) in a lexer rule's match fn. The condition
-/// runs through the identity translator (`translate_lexer_predicate`), resolving
-/// lexer `$`-attributes (`$text`) against the match fn's `chars` / `start` /
-/// `pos`; an unresolvable reference is a loud codegen error. `fail_action` is
+/// is the staged body (`stage_lexer_bodies` resolved its lexer `$`-attributes
+/// against the match fn's `chars` / `start` / `pos` before emit). `fail_action` is
 /// `return -1` for a single-alt rule and `break <label>` inside a multi-alt
 /// rule / group / fragment (a false predicate falls through to the next alt).
 /// `gen_lexer_alt_seq` drives this over every `before_index` (alt-initial, mid,
@@ -900,18 +898,14 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
             continue;
         }
         if a.kind matches { Predicate } {
-            let cond = match translate_lexer_predicate(&a.source.text) {
-                Ok(c) => c,
-                Err(e) => panic(`lexer predicate: ${e}`),
-            };
-            w.line(&`if !(${cond}) \{ ${fail_action}; \}`);
+            w.line(&`if !(${a.source.text}) \{ ${fail_action}; \}`);
         }
     }
 }
 
 /// Whether codegen runs `{ ... }` action bodies for this grammar's lexer at
 /// all. A `language = Java` lexer qualifies because codegen stages its bodies
-/// into Wado before emit (`rewrite_lexer_java_bodies`), which carves out a
+/// into Wado before emit (`stage_lexer_bodies`), which carves out a
 /// `superClass` grammar. Such a grammar still qualifies when every action body
 /// is nothing but `this.<method>()` base calls: the rewrite turns those into
 /// Wado on its own, with no host translator involved.
@@ -1092,7 +1086,7 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
 
 /// Emit the replay fn per executing rule: `apply_<rule>_actions(lx, start, end)`,
 /// called post-tournament for the winner only, so a losing candidate's actions
-/// never run. Bodies are identity-translated.
+/// never run. Bodies arrive staged (`stage_lexer_bodies`).
 ///
 /// A replayable rule (`lexer_rule_replayable`) re-runs its own match with the
 /// actions dropped in at their cursors. One the replay cannot follow keeps the
@@ -1220,17 +1214,13 @@ fn lexer_alt_has_action(alt: &LexerAlternative) -> bool {
     return alt.actions.iter_ref().any(|a| a.kind matches { Action });
 }
 
-/// Emit an alt's top-level actions (identity-translated) as statements.
+/// Emit an alt's top-level actions (staged) as statements.
 fn gen_lexer_alt_action_stmts(w: &mut CodeWriter, alt: &LexerAlternative) {
     for let a of &alt.actions {
         if !a.kind matches { Action } {
             continue;
         }
-        let body = match translate_lexer_action(&a.source.text) {
-            Ok(b) => b,
-            Err(e) => panic(`lexer action: ${e}`),
-        };
-        emit_lexer_action_stmt(w, &body);
+        emit_lexer_action_stmt(w, &a.source.text);
     }
 }
 
@@ -1295,8 +1285,8 @@ fn gen_lexer_winning_alt_fn(
     w.blank();
 }
 
-/// Emit a translated lexer-action body as a statement. The identity translator
-/// hands back a Wado expression/statement; normalize the trailing separator so
+/// Emit a staged lexer-action body as a statement. Staging hands back a Wado
+/// expression/statement; normalize the trailing separator so
 /// a body written with or without `;` yields exactly one statement.
 fn emit_lexer_action_stmt(w: &mut CodeWriter, body: &String) {
     let trimmed = body.trim();
@@ -1376,6 +1366,71 @@ pub fn collect_unhandled_lexer_alt_action_ids(
             continue;
         }
         push_all_lexer_element_action_ids(e, out);
+    }
+}
+
+/// Every semantic-predicate id `rule` carries: its own alternatives, the groups
+/// nested in them, and the rules it references (the lexer ATN inlines those, so
+/// their predicates share the rule's fate). Drives the ATN-class refusal in
+/// `codegen` — the lexer ATN has no predicate transition, so a predicate under
+/// `latn_match` would be dropped where nothing can report it.
+pub fn collect_lexer_predicate_ids(rule: &LexerRule, all_rules: &List<LexerRule>, out: &mut List<i32>) {
+    let mut visiting: List<String> = [];
+    push_lexer_rule_predicate_ids(rule, all_rules, &mut visiting, out);
+}
+
+fn push_lexer_rule_predicate_ids(
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    visiting: &mut List<String>,
+    out: &mut List<i32>,
+) {
+    if visiting.contains(&rule.name) {
+        return;
+    }
+    visiting.push(rule.name);
+    for let alt of &rule.body {
+        push_lexer_alt_predicate_ids(alt, all_rules, visiting, out);
+    }
+}
+
+fn push_lexer_alt_predicate_ids(
+    alt: &LexerAlternative,
+    all_rules: &List<LexerRule>,
+    visiting: &mut List<String>,
+    out: &mut List<i32>,
+) {
+    for let a of &alt.actions {
+        if a.kind matches { Predicate } {
+            out.push(a.source.action_id);
+        }
+    }
+    for let e of &alt.elements {
+        push_lexer_element_predicate_ids(e, all_rules, visiting, out);
+    }
+}
+
+fn push_lexer_element_predicate_ids(
+    elem: &LexerElement,
+    all_rules: &List<LexerRule>,
+    visiting: &mut List<String>,
+    out: &mut List<i32>,
+) {
+    match *elem {
+        Group(alts) => {
+            for let alt of &alts {
+                push_lexer_alt_predicate_ids(alt, all_rules, visiting, out);
+            }
+        },
+        Repeat(rep) => push_lexer_element_predicate_ids(&rep.element, all_rules, visiting, out),
+        Not(n) => push_lexer_element_predicate_ids(&n.element, all_rules, visiting, out),
+        RuleRef(name) => {
+            if let Some(r) = find_lexer_rule(all_rules, &name) {
+                push_lexer_rule_predicate_ids(r, all_rules, visiting, out);
+            }
+        },
+        _ => {
+        },
     }
 }
 
@@ -1966,11 +2021,7 @@ fn gen_lexer_alt_seq(
 fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32) {
     for let a of actions {
         if a.kind matches { Action } && a.before_index == before {
-            let body = match translate_lexer_action(&a.source.text) {
-                Ok(b) => b,
-                Err(e) => panic(`lexer action: ${e}`),
-            };
-            emit_lexer_action_stmt(w, &body);
+            emit_lexer_action_stmt(w, &a.source.text);
         }
     }
 }

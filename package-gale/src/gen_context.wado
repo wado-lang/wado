@@ -218,6 +218,10 @@ pub struct GenContext {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32>,
+    /// Nesting depth of the multi-alternative group bodies being emitted: an
+    /// alt-initial predicate inside one selects an alternative rather than
+    /// guarding a sequence.
+    multi_alt_group_depth: i32,
     /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
     /// fns: `[action_id, body]`. The dispatch calls `pred_<id>(p)` instead of
     /// inlining the condition, so the same fn is callable from every decision
@@ -282,6 +286,7 @@ impl GenContext {
             parser_superclass_declared: false,
             action_seen: [],
             predicate_gated: [],
+            multi_alt_group_depth: 0,
             predicate_fns: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
@@ -630,6 +635,23 @@ impl GenContext {
 
     pub fn is_predicate_gated(&self, id: i32) -> bool {
         return self.predicate_gated.contains(&id);
+    }
+
+    /// Enter / leave a multi-alternative group's body. An alt-initial predicate
+    /// there decides which alternative the group takes, exactly as one in a
+    /// multi-alt rule does — so one the dispatch could not gate must be reported
+    /// rather than emitted as an inline guard that would fail the parse.
+    pub fn enter_multi_alt_group(&mut self) {
+        self.multi_alt_group_depth += 1;
+    }
+
+    pub fn leave_multi_alt_group(&mut self) {
+        self.multi_alt_group_depth -= 1;
+        assert self.multi_alt_group_depth >= 0, "leave_multi_alt_group without a matching enter";
+    }
+
+    pub fn in_multi_alt_group(&self) -> bool {
+        return self.multi_alt_group_depth > 0;
     }
 
     /// Record a prediction-strategy diagnostic, deduped on `(owner, message)`

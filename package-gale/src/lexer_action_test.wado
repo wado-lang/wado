@@ -202,6 +202,40 @@ WS : ' ' -> skip ;
     assert out.contains("sel_alt_"), "the replay selects the winning arm first";
 }
 
+test "a predicate in an ATN-class lexer rule is refused, not silently dropped" {
+    // The rule routes to `latn_match`, and the lexer ATN has no predicate
+    // transition — so without a refusal the rule matches input the predicate
+    // rejects, with nothing in the output to show for it.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+CMT : '/*' ( CMT | . )+? { false }? '*/' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 1, "an ATN-class rule's predicate must surface UnsupportedAction";
+}
+
+test "an ATN-class lexer rule with no predicate stays byte-identical" {
+    let src = &"lexer grammar L;
+options { language = Wado; }
+CMT : '/*' ( CMT | . )+? '*/' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "the refusal must not fire on a predicate-free ATN-class rule";
+}
+
+test "an unresolvable lexer $-attribute is reported, not a generator panic" {
+    // The identity translator used to run at emit time, where there is no
+    // `ctx` to warn through, so an unresolvable reference took the generator
+    // down with it.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type($nope) } ;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "an unresolvable $-attribute must surface UnsupportedAction";
+    assert !gen_source(src).contains("$nope"), "the untranslatable body must not be emitted";
+}
+
 test "a lexer action under a Repeat still warns (the replay cannot place it)" {
     assert unsupported_count(&"lexer grammar L;
 options { language = Wado; }

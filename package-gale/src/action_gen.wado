@@ -454,12 +454,14 @@ pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before:
     }
 }
 
-/// An alt-initial predicate in a multi-alt rule chooses which alternative the
-/// prediction takes. Gale's prediction ignores predicates, so this shape is
-/// not an inline guard but a prediction gate — surfaced loudly until
-/// prediction-time gating lands (Phase 2).
+/// An alt-initial predicate in a multi-alt rule — or in a multi-alt group,
+/// which is the same decision one level down — chooses which alternative is
+/// taken. Reached here only when the dispatch could not gate it (`gate_condition_for`
+/// refused the body, or the dispatch shape has no per-alternative condition),
+/// so it is surfaced loudly rather than emitted as an inline guard that would
+/// fail the parse instead of selecting the other alternative.
 fn predicate_selects_alternative(before: i32, ctx: &GenContext) -> bool {
-    return before == 0 && current_rule_is_multi_alt(ctx);
+    return before == 0 && (current_rule_is_multi_alt(ctx) || ctx.in_multi_alt_group());
 }
 
 /// Owner for a diagnostic about action body `id`, attributed to the rule
@@ -721,7 +723,11 @@ pub fn mark_gated_predicates(
     }
 }
 
-fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
+/// Register `alt`'s gateable alt-initial predicates as gated, so the dispatch
+/// about to be emitted carries them as its condition and the alternative's body
+/// does not repeat them as an inline guard. Called per rule alternative by the
+/// rule-level marking pass, and per group alternative at the group dispatch.
+pub fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
     for let a of &alt.actions {
         if is_gateable_alt_initial_predicate(a, ctx) {
             ctx.mark_predicate_gated(a.source.action_id);

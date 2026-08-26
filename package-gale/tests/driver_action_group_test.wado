@@ -1,0 +1,44 @@
+//! Stage C group-scoped actions and predicates: an action in a group's
+//! alternative runs when that alternative is taken (once per iteration under a
+//! repeat), and an alt-initial predicate inside a group selects the branch
+//! rather than failing the parse.
+
+use ga from "./grammars/wado_group_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_group" },
+    };
+
+test "each group alternative runs its own action, once per iteration" {
+    let r = ga::parse_alts(&"a b a");
+    assert r.ok(), "clean parse";
+    assert r.output == "aba", `output: '${r.output}'`;
+}
+
+test "a single-alt group runs its action" {
+    let r = ga::parse_one(&"a b");
+    assert r.ok(), "clean parse";
+    assert r.output == "ab", `output: '${r.output}'`;
+}
+
+test "an optional group runs its action only when taken" {
+    let taken = ga::parse_opt(&"a b");
+    assert taken.ok(), "clean parse with the optional present";
+    assert taken.output == "opt", `output: '${taken.output}'`;
+
+    let skipped = ga::parse_opt(&"b");
+    assert skipped.ok(), "clean parse with the optional absent";
+    assert skipped.output == "", `output: '${skipped.output}'`;
+}
+
+test "a group alternative's predicate selects the branch" {
+    // The last B fails `p.la(2) == TK_B`, so the repeat exits and the trailing
+    // B matches it. Ungated, the loop would eat it and the trailing B would be
+    // missing.
+    let two = ga::parse_gated(&"a b b");
+    assert two.ok(), "clean parse";
+    assert two.output == "ingatedout", `output: '${two.output}'`;
+
+    let one = ga::parse_gated(&"a b");
+    assert one.ok(), "clean parse";
+    assert one.output == "inout", `output: '${one.output}'`;
+}

@@ -1620,7 +1620,14 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        let id_or_int = p.expect_set(&SYNC_0);
+        if p.peek_kind() == TK_ID {
+            let id = p.expect(TK_ID, &EMPTY_SYNC);
+        } else {
+            if !p.speculating {
+                
+            }
+            let int = p.expect(TK_INT, &EMPTY_SYNC);
+        }
     }
     if !p.speculating {
         p.emit(`${p.rule_text(_rule_start_tok)}\n`);
@@ -1700,5 +1707,4 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID, TK_INT];
 

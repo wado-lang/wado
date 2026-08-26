@@ -1539,16 +1539,21 @@ fn _parse_a__inner(p: &mut Parser) -> () {
                         pos += 1;
                         break sg_1;
                     }
-                    break rep_scan;
+                    pos = gp_1;
                 }
-            } else {
-                break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let lit_b_or_lit_z = p.expect_set(&SYNC_1);
+        if p.peek_kind() == TK_LIT_B {
+            let lit_b = p.expect(TK_LIT_B, &EMPTY_SYNC);
+        } else {
+            let lit_z = p.expect(TK_LIT_Z, &EMPTY_SYNC);
+            if !p.speculating {
+                
+            }
+        }
     }
     let lit_c = p.expect(TK_LIT_C, &EMPTY_SYNC);
     return;
@@ -1627,5 +1632,4 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LIT_B, TK_LIT_C, TK_LIT_Z];
-global SYNC_1: List<i32> = [TK_LIT_B, TK_LIT_Z];
 
