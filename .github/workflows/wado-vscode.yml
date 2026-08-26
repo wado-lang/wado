@@ -42,6 +42,14 @@ jobs:
           cache: npm
           cache-dependency-path: wado-vscode/package-lock.json
 
+      # Node 26 bundles npm 11, and `engines.npm` asks for 12. Resolve the
+      # version from package.json so it stays the single source of truth;
+      # `engine-strict` in .npmrc turns a mismatch into a failure.
+      - name: Install the npm required by package.json
+        shell: bash
+        working-directory: wado-vscode
+        run: npm install -g "npm@$(node -p "require('./package.json').engines.npm")"
+
       # Build the bundled Wasm language server that the extension loads on
       # activation. See docs/wep-2026-04-18-lsp-architecture.md for rationale.
       # The TS bundle is compiled by the explicit `npm ci` + `npm run compile`
