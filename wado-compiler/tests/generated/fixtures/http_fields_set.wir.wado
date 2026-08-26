@@ -1161,9 +1161,9 @@ fn "http_fields_set.wado/__cm_binding__Fields_set"(self, name, value) with Field
     let __value_base: i32;
     let __value_i: i32;
     let __value_addr: i32;
-    let __list_base: i32;
-    let __list_i: i32;
-    let __list_addr: i32;
+    let __base: i32;
+    let __i: i32;
+    let __elem_addr: i32;
     let __list_elem: u8;
     let __outptr: i32;
     let __disc_16: i32;
@@ -1203,19 +1203,19 @@ fn "http_fields_set.wado/__cm_binding__Fields_set"(self, name, value) with Field
             __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3);
             builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3);
             __sroa___value_elem_used = v.used;
-            __list_base = "mem/realloc"(0, 0, 1, __sroa___value_elem_used * 1);
-            __list_i = 0;
+            __base = "mem/realloc"(0, 0, 1, __sroa___value_elem_used * 1);
+            __i = 0;
             b101: block {
                 l102: loop {
-                    break_if b101 __list_i >= __sroa___value_elem_used;
-                    __list_addr = __list_base + (__list_i * 1);
-                    __list_elem = builtin::array_get_value<u8>(__array_clone_dst_2, __list_i);
-                    builtin::store_u8(__list_addr, __list_elem);
-                    __list_i = __list_i + 1;
+                    break_if b101 __i >= __sroa___value_elem_used;
+                    __elem_addr = __base + (__i * 1);
+                    __list_elem = builtin::array_get_value<u8>(__array_clone_dst_2, __i);
+                    builtin::store_u8(__elem_addr, __list_elem);
+                    __i = __i + 1;
                     continue l102;
                 };
             };
-            builtin::store_i32(__value_addr, __list_base);
+            builtin::store_i32(__value_addr, __base);
             builtin::store_i32(__value_addr + 4, __sroa___value_elem_used);
             __value_i = __value_i + 1;
             continue l100;
