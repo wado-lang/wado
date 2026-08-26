@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PreToolUse hook for the Bash tool: enforce the License hygiene rule in
 # `package-gale/AGENTS.md`. `permissions.deny` covers the Read tool; this covers
-# `cat`, `grep`, `sed`, `find -exec` and friends, which reach the same bytes.
+# `cat`, `grep`, `find -exec` and friends, which reach the same bytes.
 
 set -euo pipefail
 

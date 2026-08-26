@@ -31,10 +31,20 @@ is why the oracle transfers unchanged to inputs from any source.
 
 ### Inputs are transformed, not generated
 
-The corpus is the e2e fixture set. Every mutant is an existing program plus
-guards; nothing invents a program. Compiler coverage is therefore bounded by
-what the fixtures happen to exercise, which is the known cost of this choice.
-The roadmap states the condition for lifting it.
+The corpus is the repository's own Wado, drawn from a set of roots: the e2e
+fixtures, the stdlib modules that carry `test` blocks, and the `example/`
+programs. Every mutant is an existing program plus guards; nothing invents a
+program. Compiler coverage is therefore bounded by what that material happens to
+exercise, which is the known cost of this choice. The roadmap states the
+condition for lifting it.
+
+A root states what a source does not: which files under it are programs, and how
+one is run. A fixture's `__DATA__` section says that for the fixtures, so theirs
+is the root that reads one; elsewhere the root decides — a stdlib module under
+the test world, an example under `wasi:cli/command`. It also decides what is
+material: a source the world it runs under cannot enter — a stdlib module with
+no `test` block, an `example/` library with no `export fn run` — exports nothing
+an injection could move, and is not drawn at all.
 
 ### Reach is widened by guard shape and payload shape
 
@@ -111,9 +121,14 @@ each payload reached.
       compare the Wasm byte for byte. Catches what no output comparison can see.
 - [ ] `while builtin::black_box(false) { … }` as a second guard shape.
 - [ ] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
-- [ ] Draw the corpus from `package-gale`, the stdlib and `example/` too. The
-      runner assumes one file carrying a `__DATA__` spec, so this needs the
-      harness widened first.
+- [x] Draw the corpus from the stdlib and `example/` too. Its first run put the
+      stdlib's own tests under `O3`, which nothing else does — `wado test` runs
+      them at `O2` — and the baselines that failed there were two wrong-code
+      bugs the fixtures never reached.
+- [ ] Draw the corpus from the packages (`package-gale` and its siblings) too. A
+      package is many files behind a manifest, so the runner needs to resolve
+      dependencies and to compile an entry while one module below it carries the
+      injection — neither of which a single-file subject asks for.
 - [ ] Harvested-statement payload.
 - [ ] Name the pass behind a finding by bisecting `WADO_LIST_PASSES` with
       `WADO_SKIP_PASS`, and write the reduced program out as a fixture.
