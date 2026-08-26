@@ -35,9 +35,9 @@ Empty right now.
 
 ## Stage C — action / predicate execution
 
-Design in [`action.md`](./action.md). The largest remaining block, and a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.
+Design in [`action.md`](./action.md). A hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.
 
-Work the entries in the order below. Each states the symptom and how it was reproduced; the design for all of them is in `action.md`.
+What is left is one path that still warns and a surface nothing in the corpus or the real-world grammars asks for. Each entry states the symptom and how it was reproduced; the design for all of them is in `action.md`.
 
 ### Lexer actions under a restructured `Repeat`
 
