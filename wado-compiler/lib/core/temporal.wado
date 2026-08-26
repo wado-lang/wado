@@ -339,11 +339,15 @@ impl Instant {
     /// of `epoch_nanoseconds`, and like it spanning the whole `i64`-second
     /// range.
     pub fn from_epoch_nanoseconds(nanoseconds: i128) -> Instant {
-        let whole_seconds = nanoseconds / 1_000_000_000;
+        // Floor, so the sub-second part is never negative and `whole_seconds`
+        // is already the second count the instant will carry — which makes the
+        // range below the exact one, where a truncating pair would leave the
+        // decrement `Instant::new` still owes it.
+        let whole_seconds = floor_div_i128(nanoseconds, 1_000_000_000);
         // A count past the i64 second range is an overflow, not something to
         // wrap — the same rule `duration_from_nanoseconds` holds.
-        assert whole_seconds >= -9_223_372_036_854_775_807 && whole_seconds <= 9_223_372_036_854_775_807;
-        return Instant::new(whole_seconds as i64, (nanoseconds % 1_000_000_000) as i64);
+        assert whole_seconds >= -9_223_372_036_854_775_808 && whole_seconds <= 9_223_372_036_854_775_807;
+        return Instant::new(whole_seconds as i64, (nanoseconds - whole_seconds * 1_000_000_000) as i64);
     }
 
     /// Construct an instant from fractional seconds since the Unix epoch (CBOR

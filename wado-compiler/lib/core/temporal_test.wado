@@ -1211,9 +1211,16 @@ test "ISO week numbering keeps its anchor days across -400..=400" {
 }
 
 test "from_epoch_nanoseconds round-trips the whole i64 second range" {
-    let bounds: List<i64> = [-9_223_372_036_854_775_807, -1, 0, 1, 9_223_372_036_854_775_806];
+    let bounds: List<i64> = [
+        -9_223_372_036_854_775_808, -9_223_372_036_854_775_807, -1, 0, 1, 9_223_372_036_854_775_806,
+    ];
+    // A zero sub-second is the case a truncating division cannot walk back
+    // from, so both spellings of each bound have to round-trip.
+    let fractions: List<u32> = [0, 500_000_000, 999_999_999];
     for let seconds of bounds {
-        let i = Instant { seconds: seconds, nanoseconds: 500_000_000 };
-        assert Instant::from_epoch_nanoseconds(i.epoch_nanoseconds()) == i;
+        for let nanoseconds of fractions {
+            let i = Instant { seconds: seconds, nanoseconds: nanoseconds };
+            assert Instant::from_epoch_nanoseconds(i.epoch_nanoseconds()) == i;
+        }
     }
 }
