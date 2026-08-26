@@ -111,10 +111,8 @@ impl FunctionTranslator<'_, '_> {
     /// a `StructNew` reading the locals back as the struct fields.
     fn wrap_multivalue_i64(&mut self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
         let type_id = self.ref_type_id(result_type_id);
-        self.local_counter += 1;
-        let n = self.local_counter;
-        let lo = format!("__mv_lo_{n}");
-        let hi = format!("__mv_hi_{n}");
+        let lo = self.fresh_local("__mv_lo");
+        let hi = self.fresh_local("__mv_hi");
         WirInstr::Seq(vec![
             WirInstr::DeclareLocal {
                 name: lo.clone(),
@@ -256,9 +254,9 @@ impl FunctionTranslator<'_, '_> {
         len: Option<WirInstr>,
     ) -> WirInstr {
         let idx = type_id.index();
-        let src_name = format!("__array_clone_src_{idx}");
-        let dst_name = format!("__array_clone_dst_{idx}");
-        let len_name = format!("__array_clone_len_{idx}");
+        let src_name = self.unshadowed(format!("__array_clone_src_{idx}"));
+        let dst_name = self.unshadowed(format!("__array_clone_dst_{idx}"));
+        let len_name = self.unshadowed(format!("__array_clone_len_{idx}"));
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
@@ -1153,8 +1151,7 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // Generate a temp local for the callee as canonical closure struct ref
-        let temp_name = format!("__indirect_call_{}", self.local_counter);
-        self.local_counter += 1;
+        let temp_name = self.fresh_local("__indirect_call");
         let callee_ref_type = WirType::Ref {
             type_id: closure_struct_type_id.clone(),
             nullable: false,

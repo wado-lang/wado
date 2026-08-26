@@ -128,12 +128,12 @@ fn "closure_two_mut_captures_one_binding.wado/run"() with Stdout {
     a = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
     f_2 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_two_mut_captures_one_binding.wado//__Closure_0" { __capture_0: a }, func: ref.func "closure/closure_two_mut_captures_one_binding.wado/__closure_wrapper_0" };
     g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_two_mut_captures_one_binding.wado//__Closure_1" { __capture_0: a }, func: ref.func "closure/closure_two_mut_captures_one_binding.wado/__closure_wrapper_1" };
-    let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(f_2);
-    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
     let __indirect_call_1: ref "canonical//CanonicalClosure_0";
-    __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(g);
+    __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(f_2);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
+    let __indirect_call_2: ref "canonical//CanonicalClosure_0";
+    __indirect_call_2 = ref.cast "canonical//CanonicalClosure_0"(g);
+    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_2.func, __indirect_call_2.env);
     __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(a.value, __local_6);

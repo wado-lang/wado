@@ -135,7 +135,9 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 
 `wado-compiler/tests/emi.rs` checks the optimizer against itself: a block behind `builtin::black_box(false)` is unreachable at run time but visible to every pass, so injecting one must leave the program's output unchanged. The design is in [WEP: Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md).
 
-`mise run emi-calibrate` keeps the fixtures an empty guard leaves alone, writing the corpus to `target/emi/corpus.txt` and every exclusion with its reason to `target/emi/calibration.txt`. `mise run emi-mutate` then injects a payload behind the guard over that corpus, and delta-debugs a finding down to the guards that carry it under `target/emi/findings/`.
+The material comes from three roots — the e2e fixtures, the stdlib modules carrying `test` blocks, and the `example/` programs — which `WADO_EMI_ROOTS` selects among.
+
+`mise run emi-calibrate` keeps the sources an empty guard leaves alone, writing the corpus to `target/emi/corpus.txt` and every exclusion with its reason to `target/emi/calibration.txt`. `mise run emi-mutate` then injects a payload behind the guard over that corpus, and delta-debugs a finding down to the guards that carry it under `target/emi/findings/`.
 
 `.github/workflows/emi.yml` runs both stages nightly over `WADO_EMI_SHARD=k/n` shards.
 
