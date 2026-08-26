@@ -70,6 +70,7 @@ struct TreeMapNode<K> {
 ///
 /// This is similar to Rust's `indexmap::IndexMap` but uses a tree instead
 /// of a hash table for key lookups.
+#[compiler_item("tree_map")]
 pub struct TreeMap<K, V> {
     root: Option<i32>,
     nodes: List<TreeMapNode<K>>,
@@ -323,6 +324,29 @@ impl<K: Ord> TreeMap<K, V> {
     /// The key-value pairs, in insertion order.
     pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self] {
         return TreeMapEntriesRefIter { entries: &self.entries, index: 0 };
+    }
+
+    /// Builds a map from `pairs` in list order; a repeated key keeps the last
+    /// pair's value. This is how the Component Model `map<K, V>` lifts, whose
+    /// despecialization `list<tuple<K, V>>` carries no uniqueness guarantee.
+    #[compiler_item("tree_map_from_pairs")]
+    pub fn from_pairs(pairs: List<[K, V]>) -> TreeMap<K, V> {
+        let mut map = TreeMap::<K, V>::new();
+        for let [key, value] of pairs {
+            map.insert(key, value);
+        }
+        return map;
+    }
+
+    /// The pairs, in insertion order and without a repeated key. This is how
+    /// the Component Model `map<K, V>` lowers.
+    #[compiler_item("tree_map_to_pairs")]
+    pub fn to_pairs(&self) -> List<[K, V]> {
+        let mut pairs: List<[K, V]> = [];
+        for let [key, value] of self.entries() {
+            pairs.push([*key, *value]);
+        }
+        return pairs;
     }
 
     /// Removes all key-value pairs from the map.

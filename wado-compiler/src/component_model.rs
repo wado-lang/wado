@@ -69,6 +69,65 @@ pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Opti
         })
 }
 
+/// Why `key` cannot be a `map<K, V>` key, or `None` when it can.
+///
+/// The Component Model's `keytype` is a deliberate subset of `valtype` — the
+/// integers, `bool`, `char`, and `string` — chosen so a bindings generator can
+/// key an associative container without a general equality. `f32` / `f64` are
+/// absent from it, as is every aggregate.
+pub fn map_key_rejection(type_table: &TypeTable, key: TypeId) -> Option<String> {
+    let peeled = peel_newtypes(type_table, key);
+    let admissible = match type_table.get(peeled) {
+        ResolvedType::Primitive(prim) => matches!(
+            prim,
+            PrimitiveType::Bool
+                | PrimitiveType::Char
+                | PrimitiveType::I8
+                | PrimitiveType::I16
+                | PrimitiveType::I32
+                | PrimitiveType::I64
+                | PrimitiveType::U8
+                | PrimitiveType::U16
+                | PrimitiveType::U32
+                | PrimitiveType::U64
+        ),
+        ResolvedType::Struct { def, .. } => matches!(
+            (
+                def.decl(),
+                type_table.compiler_item_def(crate::compiler_item::CompilerItem::String),
+            ),
+            (Some(found), Some(string)) if found == string
+        ),
+        ResolvedType::Unit
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::GenericResource { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Newtype { .. }
+        | ResolvedType::Never
+        | ResolvedType::Ref(_)
+        | ResolvedType::MutRef(_)
+        | ResolvedType::Function { .. }
+        | ResolvedType::Reactive(_)
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::InferVar(_)
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Unknown
+        | ResolvedType::Error => false,
+    };
+    (!admissible).then(|| {
+        format!(
+            "`{}` is not a Component Model `map` key — a key is `bool`, \
+             `char`, `String`, or an integer",
+            type_table.type_name(key)
+        )
+    })
+}
+
 /// A WIT alias has no representation of its own. The AST classifier's
 /// `resolve_type` peels too, and the two must agree.
 ///

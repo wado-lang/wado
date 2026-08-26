@@ -1847,6 +1847,37 @@ fn cm_lib_rejects_two_types_sharing_a_cm_name() {
     );
 }
 
+/// WASI 0.3.1 requires the Component Model `map<K, V>` type, and `TreeMap` is
+/// its Wado spelling. The despecialized `list<tuple<K, V>>` already crosses the
+/// boundary, so what this pins is the specialization: the same bytes under a
+/// distinct type constructor.
+#[test]
+fn cm_lib_accepts_a_tree_map_boundary_type() {
+    try_compile_lib(
+        "use { TreeMap } from \"core:collections\";\n\
+         export fn id_map(v: TreeMap<String, u32>) -> TreeMap<String, u32> {\n    return v;\n}\n",
+    )
+    .expect("a `TreeMap` export should compile as `map<string, u32>`");
+}
+
+/// The Component Model's `keytype` is a deliberate subset of `valtype` — the
+/// primitives plus `string`. A record key has no `map` encoding, so it must be
+/// a diagnostic naming the key, not a silent fall back to `list<tuple<K, V>>`
+/// that would make the emitted WIT disagree with the source.
+#[test]
+fn cm_lib_rejects_a_map_key_outside_the_component_model_key_types() {
+    let err = try_compile_lib(
+        "use { TreeMap } from \"core:collections\";\n\
+         pub struct Point {\n    x: u32,\n    y: u32,\n}\n\
+         export fn id_map(v: TreeMap<Point, u32>) -> TreeMap<Point, u32> {\n    return v;\n}\n",
+    )
+    .expect_err("a record-keyed map export should fail to compile");
+    assert!(
+        err.contains("Point") && err.contains("key"),
+        "expected a map-key diagnostic naming the key type, got: {err}"
+    );
+}
+
 /// The fixture is the published package source reused verbatim, so it must stay
 /// byte-identical to `package-cm-catalog/src/lib.wado`; otherwise the test
 /// corpus and the shipped package could drift apart.
