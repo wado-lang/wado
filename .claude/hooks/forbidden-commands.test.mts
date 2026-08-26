@@ -55,6 +55,12 @@ const DENIED = [
   "cat <<EOF\n`awk 1 f`\nEOF",
   "bash <<'EOF'\nsed -i x f\nEOF",
   "sh <<EOF\nawk 1 f\nEOF",
+  'tool=sed; "$tool" -i x f',
+  "c=sed; $c -i x f",
+  "${tool} -i x f",
+  "$(which sed) -i x f",
+  "$HOME/bin/sed -i x f",
+  "cat <<-EOF\n\tEOF\nsed -i x f\n\tEOF",
 ];
 
 const ALLOWED = [
@@ -87,6 +93,8 @@ const ALLOWED = [
   "cat <<'EOF' > note.md\n$(sed -i x f)\nEOF",
   "cat <<EOF > note.md\n\\$(sed -i x f)\nEOF",
   "node <<'EOF'\nconsole.log(1)\nEOF",
+  '"$HOME/.cargo/bin/cargo" test',
+  "cat <<EOF\n EOF\nsed -i x f\nEOF",
 ];
 
 test("denies a forbidden command word", () => {

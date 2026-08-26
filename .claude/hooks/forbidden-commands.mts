@@ -11,6 +11,12 @@ const FORBIDDEN = [
       " site; script in Node.js.",
   },
   {
+    pattern: /\$/,
+    reason:
+      "a command word that is only known once the shell expands it — $var, ${var}, $(…) —" +
+      " cannot be read, so it is denied. Name the command itself.",
+  },
+  {
     pattern: /^nohup$/,
     reason:
       "nohup is forbidden (AGENTS.md > Tooling): it notifies nobody when the job exits. Run" +
@@ -58,6 +64,7 @@ const DURATION = /^\d+(\.\d+)?[smhd]?$/;
 const BREAKS_WORD = " \t\n\r;&|()<>";
 
 type Word = { value: string; subs: string[]; end: number };
+type Heredoc = { delimiter: string; stripsTabs: boolean; expands: boolean; script: boolean };
 
 /** Text between `open` and its matching `close`, skipping quoted spans. */
 function balanced(src: string, start: number, open: string, close: string): [string, number] {
@@ -213,18 +220,20 @@ function readWord(src: string, start: number): Word {
 }
 
 /** The heredoc body, and the index past its delimiter line. */
-function readHeredoc(src: string, start: number, delimiter: string): [string, number] {
+function readHeredoc(src: string, start: number, heredoc: Heredoc): [string, number] {
+  // The line must be the delimiter itself; `<<-` allows leading tabs before it.
+  const closes = (line: string) =>
+    (heredoc.stripsTabs ? line.replace(/^\t+/, "") : line) === heredoc.delimiter;
   let i = start;
   while (i < src.length) {
     const newline = src.indexOf("\n", i);
     if (newline < 0) {
-      const closed = src.slice(i).trim() === delimiter;
-      return [src.slice(start, closed ? i : src.length), src.length];
+      return [src.slice(start, closes(src.slice(i)) ? i : src.length), src.length];
     }
     const lineStart = i;
-    const line = src.slice(i, newline).trim();
+    const line = src.slice(i, newline);
     i = newline + 1;
-    if (line === delimiter) return [src.slice(start, lineStart), i];
+    if (closes(line)) return [src.slice(start, lineStart), i];
   }
   return [src.slice(start), i];
 }
@@ -255,7 +264,7 @@ const basename = (word: string) => word.slice(word.lastIndexOf("/") + 1);
 export function commandNames(src: string): string[] {
   const names: string[] = [];
   const nested: string[] = [];
-  const heredocs: { delimiter: string; expands: boolean; script: boolean }[] = [];
+  const heredocs: Heredoc[] = [];
   let atCommand = true;
   let runner = "";
   let skipValue = false;
@@ -277,10 +286,10 @@ export function commandNames(src: string): string[] {
     } else if (c === "\n" || c === "\r") {
       i++;
       while (heredocs.length > 0) {
-        const { delimiter, expands, script } = heredocs.shift()!;
-        const [body, end] = readHeredoc(src, i, delimiter);
-        if (script) nested.push(body);
-        else if (expands) nested.push(...expansions(body));
+        const heredoc = heredocs.shift()!;
+        const [body, end] = readHeredoc(src, i, heredoc);
+        if (heredoc.script) nested.push(body);
+        else if (heredoc.expands) nested.push(...expansions(body));
         i = end;
       }
       startCommand();
@@ -303,7 +312,12 @@ export function commandNames(src: string): string[] {
       i = word.end;
       nested.push(...word.subs);
       const ioNumber = /^\d+$/.test(word.value) && (src[i] === "<" || src[i] === ">");
-      if (word.value !== "" && !ioNumber) classify(word.value);
+      // A word that is only a substitution runs whatever the substitution prints.
+      if (word.value === "") {
+        if (word.subs.length > 0) classify("$()");
+      } else if (!ioNumber) {
+        classify(word.value);
+      }
     }
   }
 
@@ -322,12 +336,18 @@ export function commandNames(src: string): string[] {
       return end;
     }
     if (src.startsWith("<<", at) && !src.startsWith("<<<", at)) {
-      const start = skipBlanks(src, at + (src[at + 2] === "-" ? 3 : 2));
+      const stripsTabs = src[at + 2] === "-";
+      const start = skipBlanks(src, at + (stripsTabs ? 3 : 2));
       const word = readWord(src, start);
       // A quoted delimiter turns the body into data; an unquoted one expands.
       // Fed to a shell, the body is the script it runs.
       const expands = !/['"\\]/.test(src.slice(start, word.end));
-      heredocs.push({ delimiter: word.value, expands, script: SHELLS.has(previous) });
+      heredocs.push({
+        delimiter: word.value,
+        stripsTabs,
+        expands,
+        script: SHELLS.has(previous),
+      });
       return word.end;
     }
     let i = at + (src.startsWith("<<<", at) ? 3 : 1);
