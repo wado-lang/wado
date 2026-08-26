@@ -420,6 +420,9 @@ pub fn install_rule_captures(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
         let bodies = rule_action_bodies(rule);
+        if bodies.is_empty() {
+            continue;
+        }
         let mut c = RuleCaptures {};
         for let call of &rule_call_bindings(&lowered.parser_rules[i]) {
             if body_reads_any(&bodies, &call.0, false) && !c.spans.contains(&call.1) {
@@ -436,9 +439,8 @@ pub fn install_rule_captures(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &
     ctx.set_rule_captures(captures);
 }
 
-/// Every action and predicate body that runs in the rule's own frame: its
-/// prequels', its alternatives', and those of every group nested in them. They
-/// all read the same captures.
+/// Every action and predicate body running in the rule's own frame: its
+/// prequels', its alternatives', and those of the groups nested in them.
 fn rule_action_bodies(rule: &ParserRule) -> List<String> {
     let mut out: List<String> = [];
     for let a of &[rule.init_action, rule.after_action] {

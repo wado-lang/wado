@@ -234,8 +234,7 @@ pub struct GenContext {
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32>,
     /// Whether the group body being emitted has alternatives to choose between,
-    /// or null outside every group. An alt-initial predicate selects only where
-    /// there is a choice — see `enter_group_body`.
+    /// or null outside every group — an alt-initial predicate selects only there.
     alt_choice: Option<bool>,
     /// Vocabulary display names by kind id (`vocab_display_names`), the names an
     /// expected-token set renders through.
@@ -701,10 +700,8 @@ impl GenContext {
         return self.predicate_gated.contains(&id);
     }
 
-    /// Enter a group's body, saying whether the group has alternatives to
-    /// choose between; returns the enclosing answer to restore on the way out.
-    /// A group answers for the body inside it, so a single-alternative group
-    /// nested in a multi-alt one leaves nothing for a predicate to select.
+    /// Enter a group's body, saying whether the group has alternatives to choose
+    /// between; returns the enclosing answer to restore on the way out.
     pub fn enter_group_body(&mut self, multi_alt: bool) -> Option<bool> {
         let outer = self.alt_choice;
         self.alt_choice = Option::Some(multi_alt);

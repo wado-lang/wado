@@ -4270,8 +4270,7 @@ fn gen_op_storable_optional_with_first(
     cond: &String,
 ) {
     // Whatever the strategy proved, a gated body is entered only where its
-    // dispatch has an arm — otherwise the optional would report instead of
-    // matching nothing.
+    // dispatch has an arm; otherwise the optional reports instead of skipping.
     let entry = match group_entry_condition(inner_elem, ctx) {
         Some(gate) => `${*cond} && (${gate})`,
         None => *cond,
@@ -4410,14 +4409,9 @@ fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with st
     return null;
 }
 
-/// What admits a group at all: `(kind ∈ FIRST(alt) && gate) || …` over its
-/// alternatives — the same disjunction its dispatch branches on. `null` when no
-/// alternative is gated, where a plain first-set test already agrees with it.
-///
-/// A construct deciding whether to enter a group tests first sets alone, so
-/// without this it admits a token only a gated alternative could take and the
-/// dispatch inside then has no arm for it. Every such construct conjoins this:
-/// a loop breaks on it, an optional skips on it.
+/// What admits a group at all: `(kind ∈ FIRST(alt) && gate) || …`, the same
+/// disjunction its dispatch branches on. `null` when no alternative is gated,
+/// where the caller's own first-set test already agrees with it.
 fn group_entry_condition(inner: &Element, ctx: &mut GenContext) -> Option<String> {
     if !ctx.emit_actions() {
         return null;
@@ -4441,8 +4435,7 @@ fn group_entry_condition(inner: &Element, ctx: &mut GenContext) -> Option<String
 }
 
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s
-/// mandatory first iteration (`plus_flag`) chooses instead of exiting, so it
-/// falls through to the dispatch and its no-viable-alternative report.
+/// mandatory first iteration (`plus_flag`) chooses instead of exiting.
 fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, plus_flag: &String) {
     if let Some(cond) = group_entry_condition(inner, ctx) {
         if plus_flag.is_empty() {
@@ -5907,8 +5900,7 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
 }
 
 /// The branch body for alternatives sharing a first token: scan them all from
-/// the same start and commit to the winner. The tournament is the same for both
-/// shapes; only what a winner's body emits differs.
+/// the same start and commit to the winner.
 fn gen_group_scan_dispatch(
     w: &mut CodeWriter,
     alts: &List<Alternative>,
@@ -5941,10 +5933,8 @@ fn gen_group_scan_dispatch(
     w.end();
 }
 
-/// What the dispatch owes a token none of the alternatives admits.
-/// `Guaranteed` is for a caller that scanned the group before entering — a
-/// repeat's loop guard, an optional's entry check — so the last branch needs no
-/// condition and there is nothing to report.
+/// What the dispatch owes a token none of the alternatives admits. `Guaranteed`
+/// is for a caller that scanned the group before entering.
 variant GroupEntry {
     Required,
     Guaranteed,
@@ -5959,11 +5949,8 @@ variant GroupBranchKind {
 
 /// Emit a group's alternative dispatch: one branch per overlap group, each
 /// alternative's alt-initial predicate folded into its condition, closed by
-/// what `entry` owes a token no alternative admits.
-///
-/// Every group decision goes through here — general or rule-reference shape,
-/// overlapping or not, standing alone or as a repeat's body — so the branch
-/// conditions, the gate, and the no-match answer cannot disagree between them.
+/// what `entry` owes a token no alternative admits. Every group decision goes
+/// through here (`antlr4-compatibility.md`, "One dispatch emitter").
 fn gen_group_dispatch(
     w: &mut CodeWriter,
     groups: &List<List<i32>>,
