@@ -41,7 +41,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-- `sed`, `awk`, `python` and `python3` are denied in `.claude/` — edit with the editing tools, script in Node.js. For a rename too wide to do one call at a time, agree on the approach first.
+- `sed`, `awk`, `python`, `python3` and `nohup` are denied in `.claude/` — edit with the editing tools, script in Node.js. For a rename too wide to do one call at a time, agree on the approach first.
 - Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, each in its own invocation. Chaining one behind a slow step (`{ mise run format; mise run test; }`) puts both under one timeout, and the kill takes the job with it.
 - Redirect a job's output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards what you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
 - Have the job record its own completion — `cmd > run.log 2>&1; echo "exit=$?" >> run.log` — and wait on `grep -q "^exit=" run.log`. Nothing else tells you it finished: `pgrep` matches the watcher's own command line, a wrapper's exit code is its last command (`grep -c failures` exits 1 on a clean run), and a log left by a timeout-killed command reads like a run still in progress.

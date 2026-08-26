@@ -1,20 +1,21 @@
 #!/usr/bin/env node
-// PreToolUse hook for the Bash tool: deny `sed`, `awk`, `python` and `python3`.
+// PreToolUse hook for the Bash tool: deny the command words below.
 // The command is read the way a shell reads it — quoting, substitutions,
 // heredocs, redirections — so a command word is caught wherever it runs.
 
-const FORBIDDEN = /^(sed|awk|python(3(\.\d+)?)?)$/;
-
-const REASON =
-  "sed, awk, python and python3 are forbidden in this repository (AGENTS.md > Tooling)." +
-  " Edit files with the editing tools, one call per change site; read with the Read tool" +
-  " and search with the Grep tool; script in Node.js (node, or an executable .mts as in" +
-  " .claude/hooks/). The ban is about the tool, not the care taken with it: exact-match" +
-  " asserts do not save it. A sed -i or a python3 heredoc that rewrites a file keeps" +
-  " matching where it was not aimed — a CLAUDE.md symlink replaced by a regular file, a" +
-  " migration table rewritten into nonsense, .rs hit when only .wado was meant — and each" +
-  " miss costs a diagnosis-and-revert cycle. For a rename too wide to do one call at a" +
-  " time, agree on the approach first.";
+const FORBIDDEN: [RegExp, string][] = [
+  [
+    /^(sed|awk|python(3(\.\d+)?)?)$/,
+    "sed, awk, python and python3 are forbidden (AGENTS.md > Tooling): a rewrite keeps" +
+      " matching where it was not aimed. Edit with the editing tools, one call per change" +
+      " site; script in Node.js.",
+  ],
+  [
+    /^nohup$/,
+    "nohup is forbidden (AGENTS.md > Tooling): it notifies nobody when the job exits. Run a" +
+      " long job through the harness's background mechanism.",
+  ],
+];
 
 // Words that pass their argument on to another command, so the command word is
 // the first of their arguments that is neither a flag nor a duration.
@@ -253,8 +254,14 @@ export function commandNames(src: string): string[] {
   }
 }
 
-export const forbiddenCommand = (command: string): boolean =>
-  commandNames(command).some((name) => FORBIDDEN.test(name));
+/** Why the command is denied, or null when it runs nothing forbidden. */
+export function denialReason(command: string): string | null {
+  for (const name of commandNames(command)) {
+    const match = FORBIDDEN.find(([pattern]) => pattern.test(name));
+    if (match) return match[1];
+  }
+  return null;
+}
 
 if (import.meta.main) {
   let input = "";
@@ -265,13 +272,14 @@ if (import.meta.main) {
   } catch {
     command = "";
   }
-  if (forbiddenCommand(command)) {
+  const reason = denialReason(command);
+  if (reason) {
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
-          permissionDecisionReason: REASON,
+          permissionDecisionReason: reason,
         },
       }),
     );

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { forbiddenCommand } from "./no-sed-awk-python.mts";
+import { denialReason } from "./forbidden-commands.mts";
 
 const DENIED = [
   "sed -i 's/a/b/' f.rs",
@@ -29,6 +29,8 @@ const DENIED = [
   "cargo build > out.log 2>&1 && awk 1 out.log",
   "2>err.log sed -i x f",
   "python - <<'PY'\nprint(1)\nPY",
+  "nohup cargo test &",
+  "nohup mise run test > run.log 2>&1 &",
 ];
 
 const ALLOWED = [
@@ -47,12 +49,18 @@ const ALLOWED = [
   "cat <<'EOF' > note.md\nuse sed | awk here\nEOF",
   "gawk --version",
   "grep -rn 'python3 -c' .claude",
+  "grep -n nohup AGENTS.md",
 ];
 
 test("denies a forbidden command word", () => {
-  for (const command of DENIED) assert.ok(forbiddenCommand(command), command);
+  for (const command of DENIED) assert.ok(denialReason(command), command);
 });
 
 test("allows a command that only mentions one", () => {
-  for (const command of ALLOWED) assert.ok(!forbiddenCommand(command), command);
+  for (const command of ALLOWED) assert.equal(denialReason(command), null, command);
+});
+
+test("gives the reason of the ban that applies", () => {
+  assert.match(denialReason("sed -i x f")!, /editing tools/);
+  assert.match(denialReason("nohup cargo test &")!, /background/);
 });
