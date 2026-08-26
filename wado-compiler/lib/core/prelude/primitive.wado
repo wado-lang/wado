@@ -412,17 +412,22 @@ impl char {
         return self.to_ascii_lowercase() == other.to_ascii_lowercase();
     }
 
+    /// Returns true if the character is an ASCII digit: 0-9.
+    pub fn is_ascii_digit(&self) -> bool {
+        return (*self as u32 - '0' as u32) < 10;
+    }
+
     /// Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
     pub fn is_hexdigit(&self) -> bool {
         let c = *self;
-        return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+        return c.is_ascii_digit() || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
     }
 
     /// Returns the numeric value of an ASCII hexadecimal digit (0–15).
     /// Panics if the character is not a valid hex digit.
     pub fn hex_digit_value(&self) -> i32 {
         let c = *self;
-        if c >= '0' && c <= '9' {
+        if c.is_ascii_digit() {
             return c as i32 - '0' as i32;
         }
         if c >= 'a' && c <= 'f' {

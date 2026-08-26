@@ -308,6 +308,21 @@ test "is_whitespace false for non-space" {
     assert !'\u{200B}'.is_whitespace();  // ZERO WIDTH SPACE is NOT whitespace
 }
 
+test "is_ascii_digit true cases" {
+    assert '0'.is_ascii_digit();
+    assert '5'.is_ascii_digit();
+    assert '9'.is_ascii_digit();
+}
+
+test "is_ascii_digit false cases" {
+    assert !'a'.is_ascii_digit();
+    assert !'A'.is_ascii_digit();
+    assert !'/'.is_ascii_digit();  // just below '0'
+    assert !':'.is_ascii_digit();  // just above '9'
+    assert !' '.is_ascii_digit();
+    assert !'\u{FF10}'.is_ascii_digit();  // FULLWIDTH DIGIT ZERO
+}
+
 test "is_hexdigit true cases" {
     assert '0'.is_hexdigit();
     assert '9'.is_hexdigit();
