@@ -3513,7 +3513,7 @@ fn lower_repeat_op(
         FollowArg::NoFollow,
         gate_caller_follow,
     );
-    let body_is_single_alt_group = if let Group(g) = &rep.element {
+    let body_is_single_alt_group = if let Group(g) = peel_repeat_body_label(&rep.element) {
         g.alternatives.len() == 1;
     } else {
         false;
@@ -3984,6 +3984,20 @@ fn repeat_inner_is_list_label(elem: &Element) -> bool {
         return lab.list;
     }
     return false;
+}
+
+/// The surface element a Repeat's body op was lowered from. A Repeat supplies
+/// the `List<>` typing itself, so both label forms lose their wrapper on the op
+/// side — the list form explicitly below, the scalar form inside
+/// `lower_label_op`'s `rebind_op_field`. Every reader that pairs the body op
+/// with its surface element peels through this, or the two disagree about the
+/// shape.
+pub fn peel_repeat_body_label(elem: &Element) -> &Element with stores[elem] {
+    let mut cur = elem;
+    while let Label(lab) = cur {
+        cur = &lab.element;
+    }
+    return cur;
 }
 
 /// Outer struct field base name for a Repeat. `Star` / `Plus`

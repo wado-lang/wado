@@ -50,6 +50,21 @@ A : 'a' ;
     assert out.contains("if true && (pred_0(p))"), "the empty alternative is taken only while the predicate holds";
 }
 
+test "a `+` over a single-alternative gated group answers the predicate on its first iteration" {
+    // The loop gate exits later iterations, but the mandatory first one runs
+    // past it. A single-alternative body has no dispatch to report from, so
+    // without an answer here the predicate is dropped and `A B` matches.
+    let src = &"grammar T;
+options { language = Wado; }
+r : ( {false}? A B )+ A ;
+A : 'a' ;
+B : 'b' ;
+";
+    assert !has_unsupported_action(&gen_diagnostics(src)), "a gated group predicate must not warn";
+    let out = gen_source(src);
+    assert out.contains("failed semantic predicate"), `the first iteration must answer the predicate: ${out}`;
+}
+
 fn gen_source(src: &String) -> String {
     let mut g = parse(*src).unwrap();
     return generate(&mut g, &OPTS).source;

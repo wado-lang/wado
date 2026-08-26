@@ -148,7 +148,7 @@ use {
     gen_scan_lookahead_condition,
     sync_set_ref,
 } from "./kind_set_gen.wado";
-use { rebind_op_field, non_greedy_static_undecided } from "./lower.wado";
+use { rebind_op_field, non_greedy_static_undecided, peel_repeat_body_label } from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -3971,18 +3971,7 @@ fn gen_op_inner_for_storable_repeat(
 ) {
     let entry = open_group_entry(w, elem, group_branch_kind(&rep_op.body), ctx, entry);
     let op = &rep_op.body;
-    // `lower_repeat_op`'s list-label branch unwraps `Label(Group)` on
-    // the body op; mirror the unwrap on the surface side so
-    // `gen_op_storable_group_inner` sees a Group, not a Label.
-    let unwrapped_elem = if let Label(lab) = elem {
-        if lab.list {
-            &lab.element;
-        } else {
-            elem;
-        }
-    } else {
-        elem;
-    };
+    let unwrapped_elem = peel_repeat_body_label(elem);
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts),
         StorableGroup => gen_op_storable_group_inner(w, op, unwrapped_elem, ctx, name_counts, outer_follow, entry),
@@ -4419,14 +4408,9 @@ fn any_alt_gated(groups: &List<List<i32>>, alts: &List<Alternative>, ctx: &GenCo
 }
 
 /// The alternatives of a repeat's group body, or `null` when the body is not a
-/// group (a leaf or a rule call has no per-alternative gate). A label of either
-/// kind is peeled: `xs+=( … )*` iterates the group, as the body emit does.
+/// group (a leaf or a rule call has no per-alternative gate).
 fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with stores[inner] {
-    let mut cur = inner;
-    while let Label(lab) = cur {
-        cur = &lab.element;
-    }
-    if let Group(g) = cur {
+    if let Group(g) = peel_repeat_body_label(inner) {
         return Option::Some(&g.alternatives);
     }
     return null;
@@ -4514,7 +4498,11 @@ fn open_group_entry(
 }
 
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s
-/// mandatory first iteration (`plus_flag`) chooses instead of exiting.
+/// mandatory first iteration (`plus_flag`) is a required position, so it does
+/// not exit on the gate: it runs on to a dispatch that reports, or — with a
+/// single-alternative body, which is emitted straight through and has no
+/// dispatch — reports here, the answer its suppressed inline guard would have
+/// given.
 fn gen_repeat_gate_break(
     w: &mut CodeWriter,
     inner: &Element,
@@ -4522,13 +4510,32 @@ fn gen_repeat_gate_break(
     ctx: &mut GenContext,
     plus_flag: &String,
 ) {
-    if let Some(cond) = group_entry_condition(inner, kind, ctx) {
-        if plus_flag.is_empty() {
-            w.line(&`if !(${cond}) \{ break; \}`);
-        } else {
-            w.line(&`if !${*plus_flag} && !(${cond}) \{ break; \}`);
-        }
+    let Some(cond) = group_entry_condition(inner, kind, ctx) else {
+        return;
+    };
+    if plus_flag.is_empty() {
+        w.line(&`if !(${cond}) \{ break; \}`);
+        return;
     }
+    if group_dispatch_reports(inner) {
+        w.line(&`if !${*plus_flag} && !(${cond}) \{ break; \}`);
+        return;
+    }
+    w.begin(&`if !(${cond})`);
+    w.line(&`if ${*plus_flag} \{ p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); \}`);
+    w.line(&"break;");
+    w.end();
+}
+
+/// Whether the group's own emit reports a position no alternative admits. Only
+/// a group of several has the dispatch that does (`gen_group_dispatch`); one
+/// alternative is emitted straight through, so its gate is the only place its
+/// predicate is answered.
+fn group_dispatch_reports(inner: &Element) -> bool {
+    return match repeat_body_group_alts(inner) {
+        Some(alts) => alts.len() > 1,
+        None => true,
+    };
 }
 
 /// Open a labeled rule call's captures: the token the call starts at, and the

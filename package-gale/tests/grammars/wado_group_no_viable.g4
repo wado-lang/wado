@@ -14,6 +14,10 @@ gated : ( { false }? A { p.emit("x") } | B ) A EOF ;
 // not exit it, so a token no alternative admits is reported there.
 plus_gated : ( { false }? A { p.emit("x") } | B )+ A EOF ;
 
+// One alternative, so there is no dispatch to report from: the loop gate is the
+// only place the predicate is answered, and the first iteration runs past it.
+plus_solo : ( { false }? A B )+ A EOF ;
+
 // Rule-reference alternatives (SimpleCst).
 refs : ( ra | rb ) C EOF ;
 

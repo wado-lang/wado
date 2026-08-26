@@ -37,6 +37,11 @@ test "a repeat's mandatory first iteration reports rather than exiting" {
     assert bad.output.is_empty(), `the gated alternative's action must not run: '${bad.output}'`;
 }
 
+test "a single-alternative group's predicate is answered on the mandatory iteration" {
+    let ok = gnv::parse_plus_solo(&"aba");
+    assert ok.has_errors(), "the predicate never holds, so the first iteration cannot match";
+}
+
 test "a rule-reference group reports the token no alternative admits" {
     let ok = gnv::parse_refs(&"ac");
     assert ok.ok(), `clean parse: ${ok.diagnostics.len()} diagnostics`;

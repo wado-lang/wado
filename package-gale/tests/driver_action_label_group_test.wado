@@ -18,3 +18,10 @@ test "a list label over a transparent group repeats the inner leaf" {
     let actual = lg::to_string_tree(&result);
     assert actual == "(s a b c)", `actual: ${actual}`;
 }
+
+test "a scalar label over a repeated multi-element group repeats the group" {
+    let result = lg::parse_t(&"a, b,");
+    assert result.ok(), "clean parse";
+    let actual = lg::to_string_tree(&result);
+    assert actual == "(t a , b ,)", `actual: ${actual}`;
+}

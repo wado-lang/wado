@@ -495,6 +495,12 @@ policy, stated once per call site, and it has two values:
   Required: a false predicate must not land in an unconditional `else` meant
   for the alternative it excludes.
 
+A single-alternative body has no dispatch to force back, so a `+`'s mandatory
+first iteration — the one position its loop gate does not cover — reports at
+the gate instead. Without that the gate registers the predicate, the body drops
+its inline guard, and the first iteration matches whatever the predicate
+excludes.
+
 Splitting the policy across per-shape emitters is what let a required group
 take no alternative, append nothing, and report nothing while the sequence
 continued as though it had matched — the shape reached first-set-only
@@ -654,6 +660,12 @@ relevant sites.
     `('>' '>')?` is measurable from what follows only when one token wide. A
     shape no K-prefix walk measures falls back to the candidate's own suffix
     scan. Fixtures `lr_overlap_{multi_token,opaque_op,nullable_carrier}.g4`.
+12. A repeat's body op and its surface element are paired through
+    `peel_repeat_body_label`. The Repeat supplies the `List<>` typing itself, so
+    both label forms lose their wrapper on the op side; peeling one form and not
+    the other left the pair disagreeing about the shape, which aborted codegen
+    for `n=( A B )+` and narrowed the iter-follow of every `xs+=( … )*`.
+    Fixture `wado_label_group.g4`.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a

@@ -1193,11 +1193,12 @@ pub fn token_kind_name(kind: i32) -> String {
 pub global RK_TOK: NodeKind = 0;
 pub global RK_GATED: NodeKind = 1;
 pub global RK_PLUS_GATED: NodeKind = 2;
-pub global RK_REFS: NodeKind = 3;
-pub global RK_RA: NodeKind = 4;
-pub global RK_RB: NodeKind = 5;
+pub global RK_PLUS_SOLO: NodeKind = 3;
+pub global RK_REFS: NodeKind = 4;
+pub global RK_RA: NodeKind = 5;
+pub global RK_RB: NodeKind = 6;
 
-global RULE_NAMES: List<String> = ["tok", "gated", "plus_gated", "refs", "ra", "rb"];
+global RULE_NAMES: List<String> = ["tok", "gated", "plus_gated", "plus_solo", "refs", "ra", "rb"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1646,25 +1647,59 @@ fn scan_plus_gated(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
+fn scan_plus_solo(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    sg_4_done: {
+        sg_4: {
+            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_4; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_4; }
+            pos += 1;
+            break sg_4_done;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos] == TK_A {
+        let sp = pos;
+        sg_5_done: {
+            sg_5: {
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_5; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sg_5; }
+                pos += 1;
+                break sg_5_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_refs(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    let gp_4 = pos;
-    let sgk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(sgk_4) {
-        sg_4: {
-            pos = gp_4;
-            sg_4_0: {
+    let gp_6 = pos;
+    let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(sgk_6) {
+        sg_6: {
+            pos = gp_6;
+            sg_6_0: {
                 pos = scan_ra(tokens, pos);
-                if pos < 0 { break sg_4_0; }
-                break sg_4;
+                if pos < 0 { break sg_6_0; }
+                break sg_6;
             }
-            pos = gp_4;
-            sg_4_1: {
+            pos = gp_6;
+            sg_6_1: {
                 pos = scan_rb(tokens, pos);
-                if pos < 0 { break sg_4_1; }
-                break sg_4;
+                if pos < 0 { break sg_6_1; }
+                break sg_6;
             }
-            pos = gp_4;
+            pos = gp_6;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
@@ -1753,23 +1788,23 @@ fn _parse_plus_gated__inner(p: &mut Parser) -> () {
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                let gp_5 = pos;
-                let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(sgk_5) {
-                    sg_5: {
-                        pos = gp_5;
-                        sg_5_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_5_0; }
+                let gp_7 = pos;
+                let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_0(sgk_7) {
+                    sg_7: {
+                        pos = gp_7;
+                        sg_7_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_0; }
                             pos += 1;
-                            break sg_5;
+                            break sg_7;
                         }
-                        pos = gp_5;
-                        sg_5_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_5_1; }
+                        pos = gp_7;
+                        sg_7_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_7_1; }
                             pos += 1;
-                            break sg_5;
+                            break sg_7;
                         }
-                        pos = gp_5;
+                        pos = gp_7;
                     }
                 }
                 if pos <= p.pos { break rep_scan; }
@@ -1804,6 +1839,54 @@ fn _parse_plus_gated(p: &mut Parser) -> () {
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("plus_gated");
+    }
+}
+
+fn _parse_plus_solo__inner(p: &mut Parser) -> () {
+    let mut _plus_first = true;
+    loop {
+        if p.recovering { break; }
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_8_done: {
+                    sg_8: {
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_8; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_8; }
+                        pos += 1;
+                        break sg_8_done;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        if !((p.peek_kind() == TK_A && (pred_5(p)))) {
+            if _plus_first { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }
+            break;
+        }
+        _plus_first = false;
+        let a = p.expect(TK_A, &SYNC_2);
+        let b = p.expect(TK_B, &EMPTY_SYNC);
+    }
+    let a = p.expect(TK_A, &SYNC_1);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_plus_solo(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_PLUS_SOLO, _start);
+    _parse_plus_solo__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("plus_solo");
     }
 }
 
@@ -1872,6 +1955,10 @@ fn pred_3(p: &Parser) -> bool {
     return  false ;
 }
 
+fn pred_5(p: &Parser) -> bool {
+    return  false ;
+}
+
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -1904,6 +1991,10 @@ pub fn parse_gated(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 
 pub fn parse_plus_gated(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_plus_gated(p));
+}
+
+pub fn parse_plus_solo(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_plus_solo(p));
 }
 
 pub fn parse_refs(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
@@ -1955,4 +2046,5 @@ fn _kind_set_0(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_A, TK_B];
 global SYNC_1: List<i32> = [TK_EOF];
+global SYNC_2: List<i32> = [TK_B];
 

@@ -1084,6 +1084,7 @@ pub global TK_WS: i32 = 1;
 pub global TK_EOF: i32 = 2;
 pub global TK_ERROR: i32 = 3;
 pub global TK_LIT_PLUS: i32 = 4;
+pub global TK_LIT_COMMA: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -1136,6 +1137,12 @@ fn try_lit_plus(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
+fn try_lit_comma(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
+    return pos + 1;
+}
+
 pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1152,6 +1159,9 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '+' } {
             end = try_lit_plus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
+        } else if first_char matches { ',' } {
+            end = try_lit_comma(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
         } else if first_char matches { 'a'..='z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
@@ -1186,14 +1196,16 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         TK_LIT_PLUS => "'+'",
+        TK_LIT_COMMA => "','",
         _ => "Unknown",
     };
 }
 
 pub global RK_R: NodeKind = 0;
 pub global RK_S: NodeKind = 1;
+pub global RK_T: NodeKind = 2;
 
-global RULE_NAMES: List<String> = ["r", "s"];
+global RULE_NAMES: List<String> = ["r", "s", "t"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1555,6 +1567,38 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
+fn scan_t(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    sg_0_done: {
+        sg_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
+            pos += 1;
+            break sg_0_done;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos] == TK_ID {
+        let sp = pos;
+        sg_1_done: {
+            sg_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
+                pos += 1;
+                break sg_1_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_r__inner(p: &mut Parser) -> () {
     let x = p.expect(TK_ID, &SYNC_0);
     let plus = p.expect(TK_LIT_PLUS, &SYNC_1);
@@ -1610,6 +1654,49 @@ fn _parse_s(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_t__inner(p: &mut Parser) -> () {
+    let mut _plus_first = true;
+    loop {
+        if p.recovering { break; }
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_2_done: {
+                    sg_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_2; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_2; }
+                        pos += 1;
+                        break sg_2_done;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let id = p.expect(TK_ID, &SYNC_2);
+        let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+    }
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_t(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_T, _start);
+    _parse_t__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("t");
+    }
+}
+
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -1640,9 +1727,13 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
 }
 
+pub fn parse_t(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_t(p));
+}
+
 fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(5);
-    for let mut k = 0; k < 5; k += 1 {
+    let mut v: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;
@@ -1673,4 +1764,5 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LIT_PLUS];
 global SYNC_1: List<i32> = [TK_ID];
+global SYNC_2: List<i32> = [TK_LIT_COMMA];
 
