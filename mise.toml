@@ -41,6 +41,7 @@ mise run doc-stdlib
 mise run format
 mise run test
 mise run test-wado
+mise run test-hooks
 mise run check-grammar
 """
 
@@ -186,6 +187,10 @@ if [ -n "${CI:-}" ]; then
 fi
 cargo run -p wado-cli -- test -O2 "${extra_args[@]}"
 """
+
+[tasks.test-hooks]
+description = "Run the Claude Code hook tests"
+run = "node --test .claude/hooks/*.test.mts"
 
 [tasks.test-gale-o3]
 description = "Run package-gale tests with -O3"
