@@ -849,6 +849,8 @@ Returns Some(value) when fulfilled, None if the writer dropped without writing.
 #### `fn cancel_read(&self)`
 
 Cancel an in-progress read. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -866,6 +868,8 @@ Fulfill the future with a value.
 #### `fn cancel_write(&self)`
 
 Cancel an in-progress write. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -891,6 +895,8 @@ Returns an empty array on end-of-stream.
 #### `fn cancel_read(&self)`
 
 Cancel an in-progress read. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -915,6 +921,8 @@ only the CM lowering copy remains.
 #### `fn cancel_write(&self)`
 
 Cancel an in-progress write. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
