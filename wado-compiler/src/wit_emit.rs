@@ -895,6 +895,7 @@ impl<'a> Emitter<'a> {
             ResolvedType::GenericInstance { def, type_args } => match self.types.def_name(*def) {
                 "Option" if type_args.len() == 1 => CmShape::Option(type_args[0]),
                 "List" if type_args.len() == 1 => CmShape::List(type_args[0]),
+                "TreeMap" if type_args.len() == 2 => CmShape::Map(type_args[0], type_args[1]),
                 n if TypeTable::is_tuple_type(n) => CmShape::Tuple(type_args.clone()),
                 "Result" if type_args.len() == 2 => CmShape::Result {
                     ok: self.non_unit(type_args[0]),
@@ -976,6 +977,9 @@ impl<'a> Emitter<'a> {
 pub(crate) enum CmShape<T> {
     Option(T),
     List(T),
+    /// 🗺️ `map<K, V>` — the `list<tuple<K, V>>` bytes under their own
+    /// constructor, so a consumer reads an associative container.
+    Map(T, T),
     Tuple(Vec<T>),
     Result { ok: Option<T>, err: Option<T> },
     Future(Option<T>),
@@ -997,6 +1001,7 @@ fn assemble<T>(
         CmShape::Leaf => unreachable!("leaves are rendered by the front-end, not assembled"),
         CmShape::Option(t) => Type::option(render(t)?),
         CmShape::List(t) => Type::list(render(t)?),
+        CmShape::Map(k, v) => Type::map(render(k)?, render(v)?),
         CmShape::Tuple(ts) => {
             let mut elems = Vec::with_capacity(ts.len());
             for t in ts {
@@ -1036,6 +1041,9 @@ fn classify_ast(ty: &crate::ast::Type) -> CmShape<crate::ast::Type> {
         AstType::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => CmShape::Option(g.args[0].clone()),
             "List" if g.args.len() == 1 => CmShape::List(g.args[0].clone()),
+            "TreeMap" if g.args.len() == 2 => {
+                CmShape::Map(g.args[0].clone(), g.args[1].clone())
+            }
             "Result" if g.args.len() == 2 => CmShape::Result {
                 ok: non_unit_ast(&g.args[0]),
                 err: non_unit_ast(&g.args[1]),

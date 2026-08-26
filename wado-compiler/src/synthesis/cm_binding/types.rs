@@ -48,6 +48,8 @@ pub struct CmStdlibNames {
     pub index_value: crate::name::FqTraitName,
     /// `List`'s head, likewise the declaration the registry records.
     pub array_fq: crate::name::FqTypeName,
+    /// `TreeMap`'s name, or `None` where `core:collections` was never loaded.
+    pub tree_map: Option<String>,
 }
 
 impl CmStdlibNames {
@@ -78,6 +80,7 @@ impl CmStdlibNames {
             err_index,
             index_value: items.trait_fq(CompilerItem::IndexValue),
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
+            tree_map: items.struct_name_opt(CompilerItem::TreeMap).map(str::to_string),
         }
     }
 }

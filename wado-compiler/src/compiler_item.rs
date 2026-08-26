@@ -128,6 +128,10 @@ pub enum CompilerItem {
     /// spelling of the Component Model `map<K, V>`. Recognised by the CM
     /// binding synthesis, which lifts and lowers it through its pair list.
     TreeMap,
+    /// `TreeMapEntriesRefIter<K, V>` — what `TreeMap::entries` returns. The
+    /// `map<K, V>` lower walks it, so it names the declaration rather than
+    /// reaching into the map's own entry list and tombstone flag.
+    TreeMapEntriesIter,
     /// `Box<T>` — boxes primitive values into a struct that
     /// participates in GC tracing.
     Box,
@@ -401,6 +405,10 @@ pub enum CompilerItem {
     /// `TreeMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
     /// insert behind `map[k] = v`. The `map<K, V>` lift builds its pairs with it.
     TreeMapIndexAssign,
+    /// `TreeMapEntriesRefIter`'s `Iterator::next`. The `map<K, V>` lower walks
+    /// the pairs with it. `Iterator` carries an associated type, so the trait
+    /// item records no single method name to reach for.
+    TreeMapEntriesIterNext,
     /// `ReflectStruct::type_name` — the per-struct type name.
     ReflectStructTypeName,
     /// `ReflectStruct::members` — the per-field member tuple.
@@ -617,6 +625,7 @@ impl CompilerItem {
     pub const ALL: &'static [CompilerItem] = &[
         Self::List,
         Self::TreeMap,
+        Self::TreeMapEntriesIter,
         Self::Box,
         Self::I128,
         Self::U128,
@@ -718,6 +727,7 @@ impl CompilerItem {
         Self::ListPush,
         Self::ListFromTuple,
         Self::TreeMapIndexAssign,
+        Self::TreeMapEntriesIterNext,
         Self::ReflectStructTypeName,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
@@ -815,6 +825,7 @@ impl CompilerItem {
         match self {
             Self::List => "list",
             Self::TreeMap => "tree_map",
+            Self::TreeMapEntriesIter => "tree_map_entries_iter",
             Self::Box => "box",
             Self::I128 => "i128",
             Self::U128 => "u128",
@@ -916,6 +927,7 @@ impl CompilerItem {
             Self::ListPush => "list_push",
             Self::ListFromTuple => "list_from_tuple",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
+            Self::TreeMapEntriesIterNext => "tree_map_entries_iter_next",
             Self::ReflectStructTypeName => "reflect_struct_type_name",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
@@ -1166,7 +1178,10 @@ impl CompilerItem {
             // Kiln generator world only.
             Self::KilnRequest => world == "core:kiln/generator",
             // Loaded only when the user imports `core:collections`.
-            Self::TreeMap | Self::TreeMapIndexAssign => false,
+            Self::TreeMap
+            | Self::TreeMapEntriesIter
+            | Self::TreeMapIndexAssign
+            | Self::TreeMapEntriesIterNext => false,
             // Loaded only when the user imports `core:serde` (which
             // happens implicitly for kiln-options decoding). The
             // validator skips the check; downstream synthesis ICEs
@@ -1274,6 +1289,7 @@ impl CompilerItem {
             | Self::CmWaitableSetPoll => CompilerItemKind::Function,
             Self::List
             | Self::TreeMap
+            | Self::TreeMapEntriesIter
             | Self::Box
             | Self::I128
             | Self::U128
@@ -1354,6 +1370,7 @@ impl CompilerItem {
             Self::ListPush
             | Self::ListFromTuple
             | Self::TreeMapIndexAssign
+            | Self::TreeMapEntriesIterNext
             | Self::ReflectStructTypeName
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields

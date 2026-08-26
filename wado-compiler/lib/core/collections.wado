@@ -553,6 +553,7 @@ impl<K, V> Iterator for TreeMapValuesValueIter<K, V> {
     }
 }
 
+#[compiler_item("tree_map_entries_iter")]
 struct TreeMapEntriesRefIter<K, V> {
     entries: &List<TreeMapEntry<K, V>>,
     index: i32,
@@ -561,6 +562,7 @@ struct TreeMapEntriesRefIter<K, V> {
 impl<K, V> Iterator for TreeMapEntriesRefIter<K, V> {
     type Item = [&K, &V];
 
+    #[compiler_item("tree_map_entries_iter_next")]
     fn next(&mut self) -> Option<[&K, &V]> with stores[self] {
         while self.index < self.entries.len() {
             let i = self.index;

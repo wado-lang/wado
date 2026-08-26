@@ -500,6 +500,11 @@ impl Builder {
                 let inner = self.map_type(resolve, t, current_fq);
                 self.generic("List", vec![inner])
             }
+            CmShape::Map(k, v) => {
+                let key = self.map_type(resolve, k, current_fq);
+                let value = self.map_type(resolve, v, current_fq);
+                self.generic("TreeMap", vec![key, value])
+            }
             CmShape::Tuple(ts) => {
                 let mut elems = Vec::with_capacity(ts.len());
                 for t in ts {
@@ -607,6 +612,7 @@ fn classify_wit(resolve: &Resolve, ty: WitType) -> CmShape<WitType> {
     match &td.kind {
         TypeDefKind::Option(t) => CmShape::Option(*t),
         TypeDefKind::List(t) => CmShape::List(*t),
+        TypeDefKind::Map(k, v) => CmShape::Map(*k, *v),
         TypeDefKind::Tuple(t) => CmShape::Tuple(t.types.clone()),
         TypeDefKind::Result(r) => CmShape::Result {
             ok: r.ok,

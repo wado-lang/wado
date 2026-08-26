@@ -369,6 +369,11 @@ impl WadoCodeGenerator {
                 format!("Result<{ok_ty}, {err_ty}>")
             }
             WadoType::List(inner) => format!("List<{}>", Self::format_type(inner)),
+            WadoType::TreeMap(key, value) => format!(
+                "TreeMap<{}, {}>",
+                Self::format_type(key),
+                Self::format_type(value)
+            ),
             WadoType::Tuple(types) => {
                 if types.is_empty() {
                     "()".to_string()

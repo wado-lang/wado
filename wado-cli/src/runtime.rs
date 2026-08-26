@@ -378,6 +378,7 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Coll
     config.wasm_component_model_async(true);
     config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
+    config.wasm_component_model_map(true);
     config.wasm_wide_arithmetic(true);
     // config.wasm_stack_switching(true); // Not supported on macOS
     // Honor the `metadata.code.branch_hint` custom section so Cranelift can

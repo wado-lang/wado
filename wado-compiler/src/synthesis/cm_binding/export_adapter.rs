@@ -453,6 +453,50 @@ fn lower_to_flat_inner(
             result
         }
         ResolvedType::GenericInstance { def, type_args }
+            if ctx
+                .type_table
+                .borrow()
+                .compiler_item_def(crate::compiler_item::CompilerItem::TreeMap)
+                == Some(*def)
+                && type_args.len() == 2 =>
+        {
+            // `map<K, V>` flat ABI: the `list<tuple<K, V>>` `(ptr, len)`, over
+            // the pair buffer the map lower writes.
+            let lower_ctx = LowerContext {
+                cm_interface_registry: ctx.cm_interface_registry,
+                type_table: ctx.type_table,
+                wasi_package: ctx.cm_package,
+                names: names.clone(),
+            };
+            let (key_ast, value_ast) = {
+                let tt = ctx.type_table.borrow();
+                (
+                    type_id_to_ast_type(type_args[0], &tt, ctx.cm_interface_registry),
+                    type_id_to_ast_type(type_args[1], &tt, ctx.cm_interface_registry),
+                )
+            };
+            let (buffer_stmts, base_local, len_local) =
+                super::lower::synthesize_lower_map_to_buffer(
+                    &key_ast,
+                    &value_ast,
+                    value,
+                    next_local,
+                    locals,
+                    &lower_ctx,
+                );
+            stmts.extend(buffer_stmts);
+            vec![
+                FlatLocal {
+                    index: base_local,
+                    cm_type: cm_abi::CmValType::I32,
+                },
+                FlatLocal {
+                    index: len_local,
+                    cm_type: cm_abi::CmValType::I32,
+                },
+            ]
+        }
+        ResolvedType::GenericInstance { def, type_args }
             if ctx.type_table.borrow().def_name(*def) == names.result && type_args.len() == 2 =>
         {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
