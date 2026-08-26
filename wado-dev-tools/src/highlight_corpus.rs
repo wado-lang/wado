@@ -279,11 +279,12 @@ fn to_byte_offsets(source: &str, pieces: &[Piece]) -> Vec<Piece> {
 
 /// 1-based line number of byte offset `at`.
 fn line_of(source: &str, at: usize) -> u32 {
-    source.as_bytes()[..at.min(source.len())]
-        .iter()
-        .filter(|b| **b == b'\n')
-        .count() as u32
-        + 1
+    let end = at.min(source.len());
+    assert!(
+        source.is_char_boundary(end),
+        "offset {end} splits a character"
+    );
+    source[..end].matches('\n').count() as u32 + 1
 }
 
 /// The source text a span covers, on one line and bounded, for the report.

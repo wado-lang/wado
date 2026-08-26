@@ -1,6 +1,9 @@
 //! EMI (equivalence modulo inputs) harness for the optimizer: [`calibrate_corpus`]
-//! keeps the fixtures an injected `builtin::black_box(false)` guard leaves
+//! keeps the sources an injected `builtin::black_box(false)` guard leaves
 //! alone, and [`mutate_corpus`] reports the ones a [`Payload`] behind it moves.
+//!
+//! The material comes from every [`Root`]: the e2e fixtures, the stdlib modules
+//! that carry `test` blocks, and the `example/` programs.
 //!
 //! The design and what is left to build are in
 //! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
@@ -9,8 +12,8 @@
 //! cargo test --test emi -- --ignored --nocapture
 //! ```
 //!
-//! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_SHARD` (`k/n`),
-//! `WADO_EMI_LIMIT`, `WADO_EMI_OUT`.
+//! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_ROOTS`,
+//! `WADO_EMI_SHARD` (`k/n`), `WADO_EMI_LIMIT`, `WADO_EMI_OUT`.
 
 mod common;
 
@@ -36,7 +39,7 @@ const CALIBRATION_LEVELS: [OptLevel; 2] = [OptLevel::O0, OptLevel::O3];
 /// Wrap `payload` in a guard the compiler cannot decide.
 ///
 /// Single-line by construction: an injection must not move the code after it,
-/// or every fixture that reports a source line would drop out of the corpus.
+/// or every source that reports a line of its own would drop out of the corpus.
 fn guard(payload: &str) -> String {
     format!("if builtin::black_box(false) {{ {payload} }} ")
 }
@@ -45,15 +48,131 @@ fn guard(payload: &str) -> String {
 // Corpus
 // ---------------------------------------------------------------------------
 
+/// Where the campaign draws its material from.
+///
+/// A root supplies what a `.wado` file does not state about itself: which files
+/// under it are programs, and how one is run.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Root {
+    /// The e2e fixtures — one file, one program, `__DATA__` carrying the spec.
+    Fixtures,
+    /// The standard library, whose `test` blocks are the observable output.
+    Stdlib,
+    /// The examples: CLI programs observed through stdout. Only the top-level
+    /// files; the directories under it are packages, which the runner cannot
+    /// draw from yet.
+    Example,
+}
+
+const ROOTS: [Root; 3] = [Root::Fixtures, Root::Stdlib, Root::Example];
+
+impl Root {
+    fn name(self) -> &'static str {
+        match self {
+            Root::Fixtures => "fixtures",
+            Root::Stdlib => "stdlib",
+            Root::Example => "example",
+        }
+    }
+
+    /// The root's directory, relative to the repository root — which is also
+    /// the prefix every name under it carries.
+    fn rel_dir(self) -> &'static str {
+        match self {
+            Root::Fixtures => "wado-compiler/tests/fixtures",
+            Root::Stdlib => "wado-compiler/lib",
+            Root::Example => "example",
+        }
+    }
+
+    fn dir(self) -> PathBuf {
+        repo_root().join(self.rel_dir())
+    }
+
+    /// The stdlib is a tree; the other two are flat.
+    fn is_recursive(self) -> bool {
+        self == Root::Stdlib
+    }
+
+    /// How a source here runs when it carries no `__DATA__` section.
+    ///
+    /// An example is a `wasi:cli/command` program — the world it declares
+    /// `export fn run()` for. Everything else is run under the test world, the
+    /// e2e harness's default.
+    fn default_spec(self) -> Spec {
+        Spec {
+            test_world: self != Root::Example,
+            allocator: "debug".to_string(),
+        }
+    }
+
+    /// Can an injection into this file be observed at all? Only what the world
+    /// enters can move an output, and a library it cannot enter is not material.
+    ///
+    /// A fixture is a program by construction. A stdlib module or an example
+    /// with neither a `test` block nor `export fn run` would fail its baseline
+    /// compile, landing in the report where a regression belongs.
+    fn is_subject(self, path: &Path) -> bool {
+        if self == Root::Fixtures {
+            return true;
+        }
+        let source = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        let Ok(spec) = Spec::parse(self, &source) else {
+            // A `__DATA__` key the harness does not understand is an exclusion
+            // to report, not material to hide.
+            return true;
+        };
+        let items = wado_compiler::parse(&source).ast.items;
+        items.iter().any(|item| {
+            if spec.test_world {
+                matches!(item, Item::Test(_))
+            } else {
+                matches!(item, Item::Function(f) if f.is_export && f.name == "run")
+            }
+        })
+    }
+}
+
+/// One program in the corpus.
+struct Source {
+    path: PathBuf,
+    root: Root,
+}
+
+impl Source {
+    /// The corpus identity: the path relative to the repository root. A bare
+    /// file name would not do — `json_test.wado` names two programs.
+    fn name(&self) -> String {
+        self.path
+            .strip_prefix(repo_root())
+            .expect("a corpus path is under the repository root")
+            .to_string_lossy()
+            .to_string()
+    }
+
+    /// Recover a source from the name [`Source::name`] wrote.
+    fn from_name(name: &str) -> Self {
+        let root = ROOTS
+            .into_iter()
+            .find(|root| name.starts_with(root.rel_dir()))
+            .unwrap_or_else(|| panic!("`{name}` is under no corpus root"));
+        Self {
+            path: repo_root().join(name),
+            root,
+        }
+    }
+}
+
 /// Is this `__DATA__` key one the harness understands?
 ///
 /// `test` and `allocator` select the world and the allocator. Every other
 /// understood key states an expectation, which the baseline run supersedes —
 /// EMI compares a mutant against the program it came from, not against the
-/// fixture's recorded output. A key that is *not* understood either feeds the
+/// source's recorded output. A key that is *not* understood either feeds the
 /// runner an input the comparison does not reproduce (a request, a preopen,
 /// stdin, a compile-time parameter) or was added after this list was written;
-/// either way the fixture leaves the corpus instead of being run with the input
+/// either way the source leaves the corpus instead of being run with the input
 /// silently missing.
 fn key_is_understood(key: &str) -> bool {
     matches!(
@@ -73,21 +192,17 @@ fn key_is_understood(key: &str) -> bool {
         || key.starts_with("wir_not_expect:")
 }
 
-/// How a fixture must be compiled and run.
+/// How a source must be compiled and run.
 struct Spec {
     test_world: bool,
     allocator: String,
 }
 
 impl Spec {
-    /// A fixture with no `__DATA__` section is a library-shaped source run
-    /// under the test world, matching the e2e harness.
-    fn parse(source: &str) -> Result<Self, Excluded> {
+    /// A source with no `__DATA__` section runs the way its root says.
+    fn parse(root: Root, source: &str) -> Result<Self, Excluded> {
         let Some(data) = common::extract_data_section(source) else {
-            return Ok(Self {
-                test_world: true,
-                allocator: "debug".to_string(),
-            });
+            return Ok(root.default_spec());
         };
         let value: serde_json::Value =
             serde_json::from_str(data).map_err(|e| Excluded::MalformedData(e.to_string()))?;
@@ -119,7 +234,7 @@ impl Spec {
     }
 }
 
-/// Why a fixture cannot serve as an EMI oracle.
+/// Why a source cannot serve as an EMI oracle.
 #[derive(Debug)]
 enum Excluded {
     MalformedData(String),
@@ -141,14 +256,14 @@ enum Excluded {
         level: OptLevel,
         detail: String,
     },
-    /// The empty guard moved the program's output — the fixture observes
+    /// The empty guard moved the program's output — the source observes
     /// something an injection perturbs, so a real mutation could not be told
     /// apart from that.
     GuardChangedOutput {
         level: OptLevel,
         detail: String,
     },
-    /// The fixture's own output moves between runs, so no mutant can be
+    /// The source's own output moves between runs, so no mutant can be
     /// compared against it.
     Nondeterministic {
         level: OptLevel,
@@ -170,14 +285,14 @@ impl Excluded {
             Excluded::MalformedData(_) => "malformed __DATA__",
             Excluded::UnsupportedDataKey(_) => "unsupported __DATA__ key",
             Excluded::Todo => "TODO module",
-            Excluded::FormatFailed(_) => "formatter rejected the fixture",
+            Excluded::FormatFailed(_) => "formatter rejected the source",
             Excluded::NoInjectionSite => "no injection site",
             Excluded::NoBindingInScope => "no binding in scope",
             Excluded::BaselineCompileFailed { .. } => "baseline failed to compile",
             Excluded::BaselineUnhealthy { .. } => "baseline did not pass",
             Excluded::GuardRejected { .. } => "guard failed to compile",
             Excluded::GuardChangedOutput { .. } => "guard changed the output",
-            Excluded::Nondeterministic { .. } => "fixture is nondeterministic",
+            Excluded::Nondeterministic { .. } => "source is nondeterministic",
             Excluded::GuardCrashed { .. } => "guard crashed the compiler",
         }
     }
@@ -736,7 +851,7 @@ enum Evaluation {
     Crashed(String),
 }
 
-/// Compile and run `source`, catching a panic so one bad fixture cannot take
+/// Compile and run `source`, catching a panic so one bad subject cannot take
 /// the campaign down with it.
 fn evaluate(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Evaluation {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -805,7 +920,7 @@ fn panic_message(payload: &dyn std::any::Any) -> String {
 // Calibration
 // ---------------------------------------------------------------------------
 
-/// A fixture that survived calibration, with the number of guards it accepted.
+/// A source that survived calibration, with the number of guards it accepted.
 struct Eligible {
     name: String,
     sites: usize,
@@ -818,7 +933,7 @@ struct Finding {
     detail: String,
 }
 
-/// Re-run the baseline: reached only on a divergence, so a fixture whose own
+/// Re-run the baseline: reached only on a divergence, so a source whose own
 /// output moves is not charged to the guard.
 fn baseline_moved(
     path: &Path,
@@ -940,11 +1055,11 @@ fn is_finding(excluded: &Excluded) -> bool {
 /// Inject each payload at every site it reaches, and compare the result against
 /// the program it came from.
 ///
-/// A payload the compiler refuses is dropped rather than the fixture, which
+/// A payload the compiler refuses is dropped rather than the source, which
 /// stays a subject as long as one payload survives.
-fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
-    let name = fixture_name(path);
-    let spec = Spec::parse(source)?;
+fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
+    let name = subject.name();
+    let spec = Spec::parse(subject.root, source)?;
     let canonical =
         wado_compiler::format(source).map_err(|e| Excluded::FormatFailed(e.to_string()))?;
 
@@ -957,6 +1072,7 @@ fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
         return Err(Excluded::NoBindingInScope);
     }
     let mut refused = None;
+    let path = &subject.path;
 
     for level in CALIBRATION_LEVELS {
         let baseline = match evaluate(path, &canonical, &spec, level) {
@@ -1077,22 +1193,23 @@ fn write_finding(name: &str, mutant: &str) {
     let dir = out_dir().join("findings");
     std::fs::create_dir_all(&dir)
         .unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
-    std::fs::write(dir.join(name), mutant).expect("cannot write the reduced mutant");
+    std::fs::write(dir.join(flat_name(name)), mutant).expect("cannot write the reduced mutant");
 }
 
-fn calibrate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
-    let name = path
-        .file_name()
-        .expect("fixture path has a file name")
-        .to_string_lossy()
-        .to_string();
+/// A corpus name as one path component, for a file named after a source.
+fn flat_name(name: &str) -> String {
+    name.replace('/', "-")
+}
 
-    let spec = Spec::parse(source)?;
+fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
+    let name = subject.name();
+    let path = &subject.path;
+    let spec = Spec::parse(subject.root, source)?;
     if wado_compiler::parse(source).ast.has_todo() || source.contains("#[TODO]") {
         return Err(Excluded::Todo);
     }
 
-    // The baseline is the fixture as the formatter renders it, not the file on
+    // The baseline is the source as the formatter renders it, not the file on
     // disk: mutants are produced the same way, so any difference the formatter
     // itself introduces is charged to the formatter and not to the optimizer.
     let canonical =
@@ -1160,8 +1277,8 @@ fn calibrate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
 /// Keep the `k`-th of `n` interleaved slices of `paths`, as `WADO_EMI_SHARD=k/n`.
 ///
 /// Interleaved, so a shard's cost does not depend on where the expensive
-/// fixtures cluster alphabetically.
-fn take_shard(paths: Vec<PathBuf>, spec: &str) -> Vec<PathBuf> {
+/// sources cluster alphabetically.
+fn take_shard<T>(items: Vec<T>, spec: &str) -> Vec<T> {
     let (index, count) = spec
         .split_once('/')
         .unwrap_or_else(|| panic!("WADO_EMI_SHARD must read `k/n`, got `{spec}`"));
@@ -1175,57 +1292,86 @@ fn take_shard(paths: Vec<PathBuf>, spec: &str) -> Vec<PathBuf> {
         index < count,
         "WADO_EMI_SHARD index {index} is out of range for {count} shard(s)"
     );
-    paths
+    items
         .into_iter()
         .enumerate()
         .filter(|(i, _)| i % count == index)
-        .map(|(_, path)| path)
+        .map(|(_, item)| item)
         .collect()
 }
 
-fn fixtures_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
-fn fixture_name(path: &Path) -> String {
-    path.file_name()
-        .expect("fixture path has a file name")
-        .to_string_lossy()
-        .to_string()
-}
-
-fn fixture_paths() -> Vec<PathBuf> {
-    let dir = fixtures_dir();
-    let filter = std::env::var("WADO_EMI_FILTER").unwrap_or_default();
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
-        .map(|entry| entry.expect("directory entry").path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "wado"))
-        .filter(|path| filter.is_empty() || path.to_string_lossy().contains(filter.as_str()))
-        .collect();
-    paths.sort();
-    if let Ok(shard) = std::env::var("WADO_EMI_SHARD") {
-        paths = take_shard(paths, &shard);
-    }
-    if let Ok(limit) = std::env::var("WADO_EMI_LIMIT") {
-        let limit: usize = limit.parse().expect("WADO_EMI_LIMIT must be a number");
-        paths.truncate(limit);
+/// Every `.wado` file under `dir`, the tree below it included when `recursive`.
+fn wado_files(dir: &Path, recursive: bool) -> Vec<PathBuf> {
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    let mut paths = Vec::new();
+    for entry in entries {
+        let path = entry.expect("directory entry").path();
+        if path.is_dir() {
+            if recursive {
+                paths.extend(wado_files(&path, true));
+            }
+        } else if path.extension().is_some_and(|ext| ext == "wado") {
+            paths.push(path);
+        }
     }
     paths
 }
 
-/// The fixtures the calibration left in `corpus.txt`, all of them.
+/// The roots `WADO_EMI_ROOTS` selects by name, all of them by default.
+fn selected_roots() -> Vec<Root> {
+    let Ok(spec) = std::env::var("WADO_EMI_ROOTS") else {
+        return ROOTS.to_vec();
+    };
+    spec.split(',')
+        .map(|name| {
+            let name = name.trim();
+            ROOTS
+                .into_iter()
+                .find(|root| root.name() == name)
+                .unwrap_or_else(|| panic!("WADO_EMI_ROOTS names no root `{name}`"))
+        })
+        .collect()
+}
+
+fn corpus_sources() -> Vec<Source> {
+    let filter = std::env::var("WADO_EMI_FILTER").unwrap_or_default();
+    let mut sources: Vec<Source> = selected_roots()
+        .into_iter()
+        .flat_map(|root| {
+            wado_files(&root.dir(), root.is_recursive())
+                .into_iter()
+                .filter(move |path| root.is_subject(path))
+                .map(move |path| Source { path, root })
+        })
+        .filter(|source| filter.is_empty() || source.name().contains(filter.as_str()))
+        .collect();
+    sources.sort_by_key(Source::name);
+    if let Ok(shard) = std::env::var("WADO_EMI_SHARD") {
+        sources = take_shard(sources, &shard);
+    }
+    if let Ok(limit) = std::env::var("WADO_EMI_LIMIT") {
+        let limit: usize = limit.parse().expect("WADO_EMI_LIMIT must be a number");
+        sources.truncate(limit);
+    }
+    sources
+}
+
+/// The sources the calibration left in `corpus.txt`, all of them.
 ///
 /// The selection knobs act on the calibration, which is what writes this file,
 /// so applying them again here would shard an already-sharded list.
-fn corpus_paths() -> Vec<PathBuf> {
+fn corpus_subjects() -> Vec<Source> {
     let path = out_dir().join("corpus.txt");
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {} — calibrate first: {e}", path.display()));
-    let dir = fixtures_dir();
     text.lines()
         .filter_map(|line| line.split_whitespace().next())
-        .map(|name| dir.join(name))
+        .map(Source::from_name)
         .collect()
 }
 
@@ -1270,16 +1416,16 @@ impl Drop for SilencedPanics {
 /// Run `stage` over `paths` on a pool of workers, and sort what comes back.
 ///
 /// `is_finding` is where the two stages differ: an empty guard that moves the
-/// output disqualifies a fixture, while a payload that moves it is wrong code.
+/// output disqualifies a source, while a payload that moves it is wrong code.
 fn campaign(
-    paths: &[PathBuf],
-    stage: impl Fn(&Path, &str) -> Result<Eligible, Excluded> + Sync,
+    subjects: &[Source],
+    stage: impl Fn(&Source, &str) -> Result<Eligible, Excluded> + Sync,
     is_finding: impl Fn(&Excluded) -> bool + Sync,
 ) -> Results {
-    let total = paths.len();
+    let total = subjects.len();
     assert!(
         total > 0,
-        "no fixtures left after WADO_EMI_FILTER / WADO_EMI_SHARD"
+        "no sources left after WADO_EMI_ROOTS / WADO_EMI_FILTER / WADO_EMI_SHARD"
     );
 
     let results = Mutex::new(Results::default());
@@ -1293,11 +1439,14 @@ fn campaign(
             scope.spawn(|| {
                 loop {
                     let index = next.fetch_add(1, Ordering::Relaxed);
-                    let Some(path) = paths.get(index) else { break };
-                    let source = std::fs::read_to_string(path).expect("fixture is readable");
-                    let name = fixture_name(path);
+                    let Some(subject) = subjects.get(index) else {
+                        break;
+                    };
+                    let source =
+                        std::fs::read_to_string(&subject.path).expect("source is readable");
+                    let name = subject.name();
 
-                    let outcome = stage(path, &source);
+                    let outcome = stage(subject, &source);
                     let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
                     if finished.is_multiple_of(50) {
                         eprintln!("[emi] {finished}/{total}");
@@ -1331,28 +1480,28 @@ fn campaign(
     results
 }
 
-/// Calibrate the fixture corpus: keep the fixtures an empty guard leaves alone.
+/// Calibrate the corpus: keep the sources an empty guard leaves alone.
 ///
 /// `#[ignore]`d because it compiles and runs the whole corpus several times
 /// over; run it on demand with `cargo test --test emi -- --ignored --nocapture`.
 #[test]
 #[ignore = "EMI campaign — minutes to hours over the full corpus"]
 fn calibrate_corpus() {
-    let paths = fixture_paths();
-    let results = campaign(&paths, calibrate, |excluded| {
+    let subjects = corpus_sources();
+    let results = campaign(&subjects, calibrate, |excluded| {
         matches!(excluded, Excluded::GuardCrashed { .. })
     });
     write_corpus(&results);
-    write_report(&results, paths.len(), "calibration");
+    write_report(&results, &subjects, "calibration");
 
     assert!(
         results.findings.is_empty(),
-        "an unreachable guard crashed the compiler on {} fixture(s); see the report",
+        "an unreachable guard crashed the compiler on {} source(s); see the report",
         results.findings.len()
     );
     assert!(
         !results.eligible.is_empty(),
-        "calibration left no fixtures in the corpus"
+        "calibration left no sources in the corpus"
     );
 }
 
@@ -1363,13 +1512,13 @@ fn calibrate_corpus() {
 #[test]
 #[ignore = "EMI campaign — minutes to hours over the calibrated corpus"]
 fn mutate_corpus() {
-    let paths = corpus_paths();
-    let results = campaign(&paths, mutate, is_finding);
-    write_report(&results, paths.len(), "mutation");
+    let subjects = corpus_subjects();
+    let results = campaign(&subjects, mutate, is_finding);
+    write_report(&results, &subjects, "mutation");
 
     assert!(
         results.findings.is_empty(),
-        "a payload behind an undecidable guard changed {} fixture(s); see the report",
+        "a payload behind an undecidable guard changed {} source(s); see the report",
         results.findings.len()
     );
 }
@@ -1392,19 +1541,21 @@ fn write_corpus(results: &Results) {
     std::fs::write(dir.join("corpus.txt"), &corpus).expect("cannot write corpus.txt");
 }
 
-fn write_report(results: &Results, total: usize, stage: &str) {
+fn write_report(results: &Results, subjects: &[Source], stage: &str) {
     let dir = out_dir();
     std::fs::create_dir_all(&dir)
         .unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
 
+    let total = subjects.len();
     let mut report = String::new();
     let sites: usize = results.eligible.iter().map(|e| e.sites).sum();
     report.push_str(&format!(
-        "fixtures scanned: {total}\neligible: {} ({sites} injection sites)\nexcluded: {}\nfindings: {}\n",
+        "sources scanned: {total}\neligible: {} ({sites} injection sites)\nexcluded: {}\nfindings: {}\n",
         results.eligible.len(),
         results.excluded.len(),
         results.findings.len(),
     ));
+    report.push_str(&per_root(results, subjects));
 
     if !results.findings.is_empty() {
         report.push_str("\n=== findings ===\n");
@@ -1441,6 +1592,33 @@ fn write_report(results: &Results, total: usize, stage: &str) {
     );
 }
 
+/// What each root contributed, so material that pays for its compile time can
+/// be told from material that does not.
+fn per_root(results: &Results, subjects: &[Source]) -> String {
+    let mut out = String::from("\n=== corpus ===\n");
+    for root in ROOTS {
+        let scanned = subjects.iter().filter(|s| s.root == root).count();
+        if scanned == 0 {
+            continue;
+        }
+        let drawn = |name: &str| Source::from_name(name).root == root;
+        let eligible: Vec<&Eligible> = results.eligible.iter().filter(|e| drawn(&e.name)).collect();
+        let sites: usize = eligible.iter().map(|e| e.sites).sum();
+        let excluded = results
+            .excluded
+            .iter()
+            .filter(|(name, _)| drawn(name))
+            .count();
+        let findings = results.findings.iter().filter(|f| drawn(&f.name)).count();
+        out.push_str(&format!(
+            "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s)\n",
+            root.name(),
+            eligible.len(),
+        ));
+    }
+    out
+}
+
 /// One line per site: offset, the line and column it lands on, the statement
 /// kind, and the text that follows it. A site whose text does not look like the
 /// statement it claims to be is a span the collector should not have trusted.
@@ -1459,7 +1637,7 @@ fn describe_sites(source: &str, sites: &[Site]) -> String {
     out
 }
 
-/// Write the canonical form and the empty-guard mutant of every fixture
+/// Write the canonical form and the empty-guard mutant of every source
 /// `WADO_EMI_FILTER` selects, so a rejection or a divergence can be read as
 /// source instead of inferred from a line and column.
 ///
@@ -1470,13 +1648,9 @@ fn describe_sites(source: &str, sites: &[Site]) -> String {
 #[ignore = "inspection aid — writes files, asserts nothing"]
 fn dump_mutants() {
     let dir = out_dir().join("dump");
-    for path in fixture_paths() {
-        let name = path
-            .file_stem()
-            .expect("fixture path has a file name")
-            .to_string_lossy()
-            .to_string();
-        let source = std::fs::read_to_string(&path).expect("fixture is readable");
+    for subject in corpus_sources() {
+        let name = flat_name(&subject.name());
+        let source = std::fs::read_to_string(&subject.path).expect("source is readable");
         let Ok(canonical) = wado_compiler::format(&source) else {
             eprintln!("[emi] {name}: the formatter rejected it");
             continue;
@@ -1580,17 +1754,107 @@ fn injection_preserves_line_count_and_parses() {
 #[test]
 fn unsupported_data_key_leaves_the_corpus() {
     let source = "fn f() {}\n\n__DATA__\n{\"stdin\": \"x\"}\n";
-    let excluded = Spec::parse(source).err().expect("stdin is not understood");
+    let excluded = Spec::parse(Root::Fixtures, source)
+        .err()
+        .expect("stdin is not understood");
     assert_eq!(excluded.kind(), "unsupported __DATA__ key");
 }
 
 #[test]
-fn missing_data_section_runs_the_test_world() {
-    let spec = Spec::parse("fn f() {}\n").expect("a source without __DATA__ is eligible");
-    assert!(spec.test_world);
+fn missing_data_section_runs_the_root_s_world() {
+    let fixture = Spec::parse(Root::Fixtures, "fn f() {}\n").expect("a fixture is eligible");
+    assert!(fixture.test_world);
+    let example = Spec::parse(Root::Example, "fn f() {}\n").expect("an example is eligible");
+    assert!(
+        !example.test_world,
+        "an example exports `run()` for the CLI world"
+    );
 }
 
-/// The mutation stage reports a divergence as a finding, so a fixture whose own
+/// The corpus spans roots, so a bare file name no longer identifies a source —
+/// `json_test.wado` is both a fixture and a stdlib module.
+#[test]
+fn a_corpus_name_names_its_root() {
+    let source = Source {
+        path: Root::Stdlib.dir().join("core/json_test.wado"),
+        root: Root::Stdlib,
+    };
+    assert_eq!(source.name(), "wado-compiler/lib/core/json_test.wado");
+    let recovered = Source::from_name(&source.name());
+    assert_eq!(recovered.root, Root::Stdlib);
+    assert_eq!(recovered.path, source.path);
+}
+
+/// Every root must reach the disk: a typo in a directory would otherwise show
+/// up as a quietly smaller corpus.
+#[test]
+fn every_root_draws_material() {
+    for root in ROOTS {
+        assert!(
+            !wado_files(&root.dir(), root.is_recursive()).is_empty(),
+            "{} drew nothing from {}",
+            root.name(),
+            root.dir().display()
+        );
+    }
+}
+
+/// A stdlib module is material only if the test world runs something in it.
+#[test]
+fn a_stdlib_module_is_material_only_with_a_test_block() {
+    let dir = Root::Stdlib.dir();
+    assert!(
+        Root::Stdlib.is_subject(&dir.join("core/base64_test.wado")),
+        "a module with `test` blocks is a subject"
+    );
+    assert!(
+        !Root::Stdlib.is_subject(&dir.join("core/rt.wado")),
+        "a module the test world runs nothing in cannot show a divergence"
+    );
+}
+
+/// An example is material only if a world enters it — otherwise its baseline
+/// fails to compile and the report cannot tell that apart from a regression.
+#[test]
+fn an_example_is_material_only_if_a_world_enters_it() {
+    let dir = Root::Example.dir();
+    assert!(
+        Root::Example.is_subject(&dir.join("fizzbuzz.wado")),
+        "a program with `export fn run` is a subject"
+    );
+    assert!(
+        !Root::Example.is_subject(&dir.join("router_common.wado")),
+        "a library the CLI world cannot enter is not material"
+    );
+    assert!(
+        !Root::Example.is_subject(&dir.join("http_server.wado")),
+        "a `wasi:http/service` program is not one the CLI world enters"
+    );
+}
+
+/// The premise of drawing from the stdlib: a module compiled from its own path,
+/// rather than as the built-in `core:*` it also is, still runs.
+#[test]
+fn a_stdlib_module_runs_from_its_own_path() {
+    let subject = Source {
+        path: Root::Stdlib.dir().join("core/base64_test.wado"),
+        root: Root::Stdlib,
+    };
+    let source = std::fs::read_to_string(&subject.path).expect("source is readable");
+    let spec = Spec::parse(subject.root, &source).expect("the stdlib carries no __DATA__");
+    match evaluate(&subject.path, &source, &spec, OptLevel::O0) {
+        Evaluation::Ran(outcome) => assert!(
+            !outcome.test_failed,
+            "the stdlib's own tests must pass: {}",
+            outcome.detail
+        ),
+        Evaluation::CompileError(detail) | Evaluation::Crashed(detail) => {
+            panic!("a stdlib module must compile from its own path: {detail}")
+        }
+    }
+}
+
+/// The mutation stage reports a divergence as a finding, so a source whose own
 /// output moves has to be told apart from a guard's doing before it becomes one.
 #[test]
 fn nondeterminism_is_told_apart_from_a_guard_divergence() {
@@ -1605,12 +1869,14 @@ export fn run() with (Stdout, MonotonicClock) {
 __DATA__
 {}
 "#;
-    let path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/emi_clock_nondeterminism.wado");
-    let excluded = calibrate(&path, source)
+    let subject = Source {
+        path: Root::Fixtures.dir().join("emi_clock_nondeterminism.wado"),
+        root: Root::Fixtures,
+    };
+    let excluded = calibrate(&subject, source)
         .err()
         .expect("a printed clock reading cannot be an oracle");
-    assert_eq!(excluded.kind(), "fixture is nondeterministic");
+    assert_eq!(excluded.kind(), "source is nondeterministic");
 }
 
 /// `WADO_EMI_FILTER` selects by substring and `WADO_EMI_LIMIT` truncates the
@@ -1627,7 +1893,7 @@ fn shards_partition_the_corpus() {
     assert_eq!(shards[0], ["0.wado", "4.wado", "8.wado"].map(PathBuf::from));
     let mut union = shards.concat();
     union.sort();
-    assert_eq!(union, paths, "every fixture lands in exactly one shard");
+    assert_eq!(union, paths, "every source lands in exactly one shard");
 }
 
 /// A statement's span is a claim about the AST, not about the text. An offset

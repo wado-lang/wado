@@ -1157,6 +1157,86 @@ impl FunctionTranslator<'_, '_> {
             .contains_key(&(func.name.clone(), func.module_source.clone()))
     }
 
+    /// A synthetic local's name, out of the way of every source local: codegen
+    /// keys locals by name and merges two slots that share one.
+    ///
+    /// Stable in its input, so a name that carries its own identity — one per
+    /// match, one per cloned array type — keeps it.
+    pub(super) fn unshadowed(&self, mut name: String) -> String {
+        while self.resolved_local_names.values().any(|n| *n == name) {
+            name.push('_');
+        }
+        name
+    }
+
+    /// An [`Self::unshadowed`] name no other synthetic local in this function
+    /// holds either.
+    pub(super) fn fresh_local(&mut self, base: &str) -> String {
+        self.local_counter += 1;
+        self.unshadowed(format!("{base}_{}", self.local_counter))
+    }
+
+    /// Return the N results by binding the aggregate and reading its fields —
+    /// what a tail [`lift_leaves_to_returns`] cannot reach lowers to instead,
+    /// at the cost of the struct the lift would have avoided.
+    fn multi_value_return_by_fields(&mut self, value: WirInstr) -> WirInstr {
+        let crate::nir::ReturnAbi::MultiValue {
+            result_types,
+            field_names,
+        } = &self.tir_func.return_abi
+        else {
+            panic!(
+                "[WIR] `{}` is not under the multi-value ABI",
+                self.tir_func.name
+            );
+        };
+        let result_types = result_types.clone();
+        let field_names = field_names.clone();
+        assert_eq!(
+            field_names.len(),
+            result_types.len(),
+            "[WIR] the multi-value ABI of `{}` pairs its field names with its result types",
+            self.tir_func.name
+        );
+        let aggregate = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, self.tir_func.return_type);
+        let WirType::Ref { type_id, .. } = &aggregate else {
+            panic!(
+                "[WIR] the multi-value return of `{}` is not a struct reference",
+                self.tir_func.name
+            );
+        };
+        let type_id = type_id.clone();
+        let name = self.fresh_local("__mv_return");
+        let fields: Vec<WirInstr> = field_names
+            .iter()
+            .zip(&result_types)
+            .map(|(field_name, result_type)| WirInstr::StructGet {
+                type_id: type_id.clone(),
+                field_name: field_name.clone(),
+                expr: Box::new(WirInstr::LocalGet {
+                    name: name.clone(),
+                    result_ty: aggregate.clone(),
+                }),
+                result_ty: self.ctx.type_id_to_wir_type(self.type_table, *result_type),
+            })
+            .collect();
+        WirInstr::Seq(vec![
+            WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty: aggregate,
+            },
+            WirInstr::LocalSet {
+                name,
+                value: Box::new(value),
+            },
+            WirInstr::Return {
+                value: Some(Box::new(WirInstr::Seq(fields))),
+            },
+        ])
+    }
+
     /// A statement-position call to a `ReturnAbi::MultiValue` function: bind its
     /// N results to wildcards, the `MultiValueLocalBind` form of dropping them.
     /// A single `Drop` could not consume them. `None` for anything else, which
@@ -1330,9 +1410,8 @@ impl FunctionTranslator<'_, '_> {
 
         // WIR-unique prefix: codegen dedups `DeclareLocal` by name, so this must
         // not clash with the lower path's `__deref_ref_{nir_idx}` temps.
-        self.local_counter += 1;
-        let ref_local = format!("__expr_deref_ref_{}", self.local_counter);
-        let val_local = format!("__expr_deref_val_{}", self.local_counter);
+        let ref_local = self.fresh_local("__expr_deref_ref");
+        let val_local = self.fresh_local("__expr_deref_val");
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
@@ -1754,16 +1833,16 @@ impl FunctionTranslator<'_, '_> {
                                 value: Some(Box::new(WirInstr::Seq(fields))),
                             }),
                             // A scaffolded return value: a sequential block, or
-                            // nested control flow. `lift_struct_new_to_seq`
-                            // turns each leaf `StructNew` into its own
+                            // nested control flow. Each leaf becomes its own
                             // `Return { Seq(fields) }`, so the lifted expression
                             // replaces the whole `Return` rather than nesting.
                             mut other @ (WirInstr::Seq(_)
                             | WirInstr::Block { .. }
-                            | WirInstr::If { .. }) => {
-                                lift_struct_new_to_seq(&mut other, true);
-                                Some(other)
-                            }
+                            | WirInstr::If { .. }) => Some(if lifted(&mut other) {
+                                other
+                            } else {
+                                self.multi_value_return_by_fields(other)
+                            }),
                             other => Some(WirInstr::Return {
                                 value: Some(Box::new(other)),
                             }),
@@ -1961,8 +2040,7 @@ impl FunctionTranslator<'_, '_> {
                 let ty = self
                     .ctx
                     .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
-                self.local_counter += 1;
-                let name = format!("__arg_spill_{}", self.local_counter);
+                let name = self.fresh_local("__arg_spill");
                 let value = self.translate_operand(op);
                 prelude.extend(declare_and_set_local(name.clone(), ty.clone(), value));
                 call_args.push(WirInstr::LocalGet {
@@ -2784,30 +2862,21 @@ impl FunctionTranslator<'_, '_> {
     }
 }
 
-/// Rewrite the leaf `StructNew` nodes of a `Return` value so the function pushes
-/// its N fields instead of building a heap struct — only for a
-/// `ReturnAbi::MultiValue` function. Recurses into a `Seq` tail, both `If`
-/// branch tails (clearing the `If`'s `result`, since branches now transfer
-/// control themselves), and each `StructNew; Br depth` exit of a `match` block.
-fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
+/// Turn every leaf that builds the aggregate into a `Return` of the N fields,
+/// so a `ReturnAbi::MultiValue` function pushes them instead of a heap struct.
+///
+/// Reports whether every path now transfers control itself; see [`lifted`],
+/// which is how a caller runs this without having to keep a `false`.
+fn lift_leaves_to_returns(expr: &mut WirInstr) -> bool {
     match expr {
-        WirInstr::StructNew { .. } => {
-            if let WirInstr::StructNew { fields, .. } = std::mem::replace(expr, WirInstr::Nop) {
-                let payload = WirInstr::Seq(fields);
-                *expr = if wrap_in_return {
-                    WirInstr::Return {
-                        value: Some(Box::new(payload)),
-                    }
-                } else {
-                    payload
-                };
-            }
+        WirInstr::StructNew { fields, .. } => {
+            let fields = std::mem::take(fields);
+            *expr = WirInstr::Return {
+                value: Some(Box::new(WirInstr::Seq(fields))),
+            };
+            true
         }
-        WirInstr::Seq(items) => {
-            if let Some(last) = items.last_mut() {
-                lift_struct_new_to_seq(last, wrap_in_return);
-            }
-        }
+        WirInstr::Seq(items) => items.last_mut().is_some_and(lift_leaves_to_returns),
         WirInstr::If {
             then_body,
             else_body,
@@ -2816,36 +2885,54 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
         } => {
             // Branches now Return directly; the If no longer produces a value.
             *result = None;
-            if let Some(last) = then_body.last_mut() {
-                lift_struct_new_to_seq(last, true);
-            }
-            if let Some(eb) = else_body
-                && let Some(last) = eb.last_mut()
-            {
-                lift_struct_new_to_seq(last, true);
-            }
+            let then_lifted = then_body.last_mut().is_some_and(lift_leaves_to_returns);
+            let else_lifted = else_body
+                .as_mut()
+                .and_then(|eb| eb.last_mut())
+                .is_some_and(lift_leaves_to_returns);
+            then_lifted && else_lifted
         }
         WirInstr::Block { body, result, .. } => {
-            if result.is_some() && return_every_exit(body, 0, Tail::IsResult) {
+            if result.is_none() {
+                return true;
+            }
+            let reached_every_exit = return_every_exit(body, 0, Tail::IsResult);
+            if reached_every_exit {
                 *result = None;
             }
+            reached_every_exit
         }
         // A tail that already yields the N results — a call to a callee under
         // this same ABI (`multi_value_return`'s tail-call rule). The branch it
         // sits in has had its result type cleared, so without a `Return` its
         // results are left on the stack at the end of the block.
-        //
-        // One that already terminates needs no wrapper, and wrapping it would
-        // build `Return { value: Unreachable }` — a `Return` whose operand
-        // leaves nothing on the stack.
-        other if wrap_in_return && !other.ends_with_terminator() => {
-            let value = std::mem::replace(other, WirInstr::Nop);
-            *other = WirInstr::Return {
+        WirInstr::Call { .. } => {
+            let value = std::mem::replace(expr, WirInstr::Nop);
+            *expr = WirInstr::Return {
                 value: Some(Box::new(value)),
             };
+            true
         }
-        _ => {}
+        // A tail that already terminates carries no value and needs no lift;
+        // wrapping one would build `Return { value: Unreachable }`, a `Return`
+        // whose operand leaves nothing on the stack. Anything else yields
+        // something that is not the N results.
+        other => other.ends_with_terminator(),
     }
+}
+
+/// [`lift_leaves_to_returns`] on a copy, kept only when it reached every path.
+///
+/// The rewrite descends as it goes, so a value it cannot finish has to be left
+/// exactly as it was: the exit stays an exit, and the block keeps the result
+/// type it was built with.
+fn lifted(value: &mut WirInstr) -> bool {
+    let mut trial = value.clone();
+    if !lift_leaves_to_returns(&mut trial) {
+        return false;
+    }
+    *value = trial;
+    true
 }
 
 /// Where the last instruction of a list ends up: yielding the block's result, or
@@ -2895,62 +2982,48 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
         }
     }
 
-    /// The two values an exit may carry: the aggregate itself, or a call to a
-    /// callee under this same ABI, which `multi_value_return`'s tail-call rule
-    /// accepts wherever it accepts the aggregate.
-    fn yields_results(instr: &WirInstr) -> bool {
-        matches!(instr, WirInstr::StructNew { .. } | WirInstr::Call { .. })
+    /// An exit written as the value and the `Br` side by side.
+    fn br_follows(instrs: &[WirInstr], i: usize, target_depth: u32) -> bool {
+        instrs
+            .get(i + 1)
+            .is_some_and(|next| matches!(next, WirInstr::Br { depth } if *depth == target_depth))
     }
 
-    fn exit_as_siblings(instrs: &[WirInstr], i: usize, target_depth: u32) -> bool {
-        yields_results(&instrs[i])
-            && instrs.get(i + 1).is_some_and(
-                |next| matches!(next, WirInstr::Br { depth } if *depth == target_depth),
-            )
-    }
-
+    /// An exit written as one `Seq` ending in the value and the `Br`.
     fn exit_as_seq(instr: &WirInstr, target_depth: u32) -> bool {
         let WirInstr::Seq(seq) = instr else {
             return false;
         };
-        exits_to_target(instr, target_depth)
-            && seq
-                .get(seq.len().wrapping_sub(2))
-                .is_some_and(yields_results)
+        seq.len() >= 2
+            && matches!(seq.last(), Some(WirInstr::Br { depth }) if *depth == target_depth)
     }
 
-    fn returning(value: WirInstr) -> WirInstr {
-        let payload = match value {
-            WirInstr::StructNew { fields, .. } => WirInstr::Seq(fields),
-            already_results => already_results,
+    /// Lift the value such a `Seq` carries and drop the `Br` it ends with.
+    fn lift_seq_exit(instr: &mut WirInstr) -> bool {
+        let WirInstr::Seq(seq) = instr else {
+            return false;
         };
-        WirInstr::Return {
-            value: Some(Box::new(payload)),
+        let value = seq.len() - 2;
+        if !lifted(&mut seq[value]) {
+            return false;
         }
+        seq.pop();
+        true
     }
 
     let mut all_rewritten = true;
     let mut i = 0;
     while i < instrs.len() {
-        if exit_as_siblings(instrs, i, target_depth) {
-            let value = std::mem::replace(&mut instrs[i], WirInstr::Nop);
-            instrs[i] = returning(value);
+        // The value an exit carries can exit to the same target itself, and
+        // that one the lift has not rewritten — so it is still counted.
+        if br_follows(instrs, i, target_depth) && lifted(&mut instrs[i]) {
             instrs[i + 1] = WirInstr::Nop;
+            all_rewritten &= !exits_to_target(&instrs[i], target_depth);
             i += 2;
             continue;
         }
-        if exit_as_seq(&instrs[i], target_depth) {
-            if let WirInstr::Seq(mut seq) = std::mem::replace(&mut instrs[i], WirInstr::Nop) {
-                let _br = seq.pop();
-                if let Some(value) = seq.pop() {
-                    instrs[i] = if seq.is_empty() {
-                        returning(value)
-                    } else {
-                        seq.push(returning(value));
-                        WirInstr::Seq(seq)
-                    };
-                }
-            }
+        if exit_as_seq(&instrs[i], target_depth) && lift_seq_exit(&mut instrs[i]) {
+            all_rewritten &= !exits_to_target(&instrs[i], target_depth);
             i += 1;
             continue;
         }
@@ -2998,12 +3071,13 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
         i += 1;
     }
 
+    // A tail that leaves nothing on the stack has no aggregate to lift — the
+    // `Nop` a rewritten exit leaves behind, or a store the block ends with.
     if tail == Tail::IsResult
         && let Some(last) = instrs.last_mut()
-        && yields_results(last)
+        && last.produces_stack_value()
     {
-        let value = std::mem::replace(last, WirInstr::Nop);
-        *last = returning(value);
+        all_rewritten &= lifted(last);
     }
     all_rewritten
 }

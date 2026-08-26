@@ -228,7 +228,7 @@ jobs:
   # feedback — a Cargo.lock drift or a wasm32 break fails here in under a minute
   # — while removing a runner slot.
   check:
-    name: Check (deps + wasm32)
+    name: Check (deps + wasm32 + hooks)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -246,6 +246,7 @@ jobs:
           MISE_VERBOSE: ${{ runner.debug }}
 
       - run: mise run check-deps
+      - run: mise run test-hooks
       # wado-compiler, wado-lsp, and wado-manifest must all compile for wasm32
       # (see CLAUDE.md / wado-manifest). This is deliberate: the compiler and
       # LSP engine stay OS-independent so they can run in the browser (the

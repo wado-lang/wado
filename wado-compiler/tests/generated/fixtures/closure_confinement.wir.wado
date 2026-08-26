@@ -188,7 +188,7 @@ fn "closure_confinement.wado/__test_0_a_parameter_the_callee_stores_is_copied_at
     kept = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: elements_14, used: 0 };
     elements_15 = array.new_fixed<i32>(1);
     src = struct.new "core:prelude//List<i32>" { repr: elements_15, used: 1 };
-    xs = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_10: ref Array<i32>; __array_clone_src_10 = src.repr; let __array_clone_dst_10: ref Array<i32>; __array_clone_dst_10 = builtin::array_new<i32>(1); builtin::array_copy<i32>(__array_clone_dst_10, 0, __array_clone_src_10, 0, 1); __array_clone_dst_10), used: 1 };
+    xs = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<i32>; __array_clone_src_1 = src.repr; let __array_clone_dst_2: ref Array<i32>; __array_clone_dst_2 = builtin::array_new<i32>(1); builtin::array_copy<i32>(__array_clone_dst_2, 0, __array_clone_src_1, 0, 1); __array_clone_dst_2), used: 1 };
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::push"(kept, xs);
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(src, 3);
     __v1_25 = kept.used;
@@ -248,20 +248,16 @@ fn "closure_confinement.wado/__test_2_a_parameter_both_captured_and_stored_is_co
     let __v1_25: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __sroa_xs_repr: ref Array<i32>;
     elements_14 = array.new_fixed<ref "core:prelude//List<i32>">();
     kept = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: elements_14, used: 0 };
     elements_15 = array.new_fixed<i32>(1);
     src = struct.new "core:prelude//List<i32>" { repr: elements_15, used: 1 };
-    let __array_clone_src_10: ref Array<i32>;
-    __array_clone_src_10 = src.repr;
-    let __array_clone_len_10: i32;
-    __array_clone_len_10 = 1;
-    let __array_clone_dst_10: ref Array<i32>;
-    __array_clone_dst_10 = builtin::array_new<i32>(__array_clone_len_10);
-    builtin::array_copy<i32>(__array_clone_dst_10, 0, __array_clone_src_10, 0, __array_clone_len_10);
-    __sroa_xs_repr = __array_clone_dst_10;
-    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::push"(kept, struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_10: ref Array<i32>; __array_clone_src_10 = __sroa_xs_repr; let __array_clone_len_10: i32; __array_clone_len_10 = 1; let __array_clone_dst_10: ref Array<i32>; __array_clone_dst_10 = builtin::array_new<i32>(__array_clone_len_10); builtin::array_copy<i32>(__array_clone_dst_10, 0, __array_clone_src_10, 0, __array_clone_len_10); __array_clone_dst_10), used: 1 });
+    let __array_clone_src_1: ref Array<i32>;
+    __array_clone_src_1 = src.repr;
+    let __array_clone_dst_2: ref Array<i32>;
+    __array_clone_dst_2 = builtin::array_new<i32>(1);
+    builtin::array_copy<i32>(__array_clone_dst_2, 0, __array_clone_src_1, 0, 1);
+    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::push"(kept, struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_dst_5: ref Array<i32>; __array_clone_dst_5 = builtin::array_new<i32>(1); builtin::array_copy<i32>(__array_clone_dst_5, 0, __array_clone_dst_2, 0, 1); __array_clone_dst_5), used: 1 });
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(src, 3);
     if @unlikely(1 != 1) {
         cold_path;
