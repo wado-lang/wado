@@ -107,8 +107,9 @@ truncating.
 
 ### ISO 8601 only
 
-Non-ISO calendars are not supported. Because the calendar is fixed, no type stores a calendar field —
-one fewer string per value and no calendar-resolution machinery. `era` and
+Non-ISO calendars are not supported. Because the calendar is fixed, no type
+stores a calendar field — one fewer string per value and no calendar-resolution
+machinery. `era` and
 `era_year` are undefined for ISO 8601 and are not offered; `month_code` is,
 since it is part of the Temporal field vocabulary.
 
@@ -329,9 +330,9 @@ a decision about what it accepts — a `PlainDate`, a `ZonedDateTime`, or either
 ### The system time zone
 
 `Temporal.Now.timeZoneId` has no counterpart: `ZonedDateTime::now` takes the
-zone from the caller. Reading the host's zone needs the unstable `wasi:clocks`
-`timezone` interface (`iana-id()`), and an IANA name is exactly what the module
-cannot yet interpret — so this gap closes with, not before, the zone database.
+zone from the caller. It is the one question WASI's `timezone` could answer, and
+it needs the zone database regardless — an IANA name is exactly what the module
+cannot yet interpret.
 
 ### Formatting beyond ISO 8601
 
