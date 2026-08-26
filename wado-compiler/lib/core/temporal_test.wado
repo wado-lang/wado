@@ -1198,8 +1198,9 @@ test "ISO week numbering keeps its anchor days across -400..=400" {
         let jan4 = PlainDate::new(y, 1, 4);
         assert jan4.week_of_year() == 1 && jan4.year_of_week() == y;
 
-        let weeks = PlainDate::new(y, 12, 28).week_of_year();
-        assert PlainDate::new(y, 12, 28).year_of_week() == y;
+        let dec28 = PlainDate::new(y, 12, 28);
+        let weeks = dec28.week_of_year();
+        assert dec28.year_of_week() == y;
         assert weeks == 52 || weeks == 53;
 
         // Every ISO year runs a whole number of weeks, so week 1 plus that count

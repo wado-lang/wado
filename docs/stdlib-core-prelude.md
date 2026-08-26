@@ -1089,14 +1089,13 @@ in string operations.
 
 #### `pub fn is_ascii_whitespace(&self) -> bool`
 
-Returns true if the character is an ASCII whitespace character:
-SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
-Matches POSIX isspace() for the ASCII range.
+Returns true if the character is ASCII whitespace, as POSIX `isspace()`
+has it: SP, HT, LF, VT, FF, CR.
 
 #### `pub fn is_whitespace(&self) -> bool`
 
-Returns true if the character is a Unicode whitespace character.
-Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
+Returns true if the character is Unicode whitespace: ASCII whitespace
+plus the Zs/Zl/Zp code points.
 
 #### `pub fn is_ascii_lowercase(&self) -> bool`
 
@@ -1119,9 +1118,6 @@ non-lowercase characters are returned unchanged.
 #### `pub fn eq_ignore_ascii_case(&self, other: &char) -> bool`
 
 Checks that two characters are an ASCII case-insensitive match.
-
-Equivalent to `to_ascii_lowercase() == other.to_ascii_lowercase()`,
-but implemented branchlessly.
 
 #### `pub fn is_ascii_digit(&self) -> bool`
 

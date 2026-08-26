@@ -839,21 +839,20 @@ fn difference_zoned(offset: i64, start: Instant, end: Instant, largest_unit: Uni
     }
 
     let date = calendar_difference(start_days, date_days, largest_unit);
-    // The date walk fills years through days and the remainder fills hours and
-    // below, so the two never overlap and nothing needs rebalancing.
+    assert date.time_nanoseconds() == 0;
     return date.merge_components(&duration_from_nanoseconds(time_nanoseconds, Unit::Hour));
 }
 
 /// The date part of a difference, in whole weeks, months, or years plus a day
-/// remainder. Signed: the walk always anchors at `start_days`, so a backwards
-/// span steps back through the months the receiver actually has.
+/// remainder. Signed, and always anchored at `start_days`.
 fn calendar_difference(start_days: i64, end_days: i64, largest_unit: Unit) -> Duration {
     let span = end_days - start_days;
     if largest_unit matches { Week } {
         return Duration { weeks: span / 7, days: span % 7 };
     }
+    let sign: i64 = if span >= 0 { 1 } else { -1 };
     let [year, month, day] = civil_from_days(start_days);
-    let months = whole_months_between(year, month, day, end_days);
+    let months = whole_months_between(year, month, day, end_days, sign);
     let [base_year, base_month, base_day] = add_months_to_civil(year, month, day, months);
     let days = end_days - days_from_civil(base_year, base_month, base_day);
     if largest_unit matches { Month } {
@@ -862,13 +861,11 @@ fn calendar_difference(start_days: i64, end_days: i64, largest_unit: Unit) -> Du
     return Duration { years: months / 12, months: months % 12, days: days };
 }
 
-/// Whole months from a civil date to `end_days`, the largest count whose
-/// constrained sum does not pass it. Signed, and negative when `end_days`
-/// precedes the date; the year/month estimate is only a starting point because
-/// a constrained month end can move the sum by a day either way.
-fn whole_months_between(year: i64, month: i64, day: i64, end_days: i64) -> i64 {
-    let sign: i64 = if end_days >= days_from_civil(year, month, day) { 1 } else { -1 };
+/// Whole months from a civil date to `end_days`, travelling in the direction of
+/// `sign`: the largest count whose constrained sum does not pass the target.
+fn whole_months_between(year: i64, month: i64, day: i64, end_days: i64, sign: i64) -> i64 {
     let [end_year, end_month, _] = civil_from_days(end_days);
+    // Only an estimate — a constrained month end moves the sum by up to a day.
     let mut months = (end_year - year) * 12 + (end_month - month);
     if months * sign < 0 {
         months = 0;
@@ -882,16 +879,11 @@ fn whole_months_between(year: i64, month: i64, day: i64, end_days: i64) -> i64 {
     return months;
 }
 
-/// Whether shifting a civil date by `months` lands past `end_days`, travelling
-/// in the direction of `sign`.
+/// Whether a civil date shifted by `months`, constrained at the month end, lands
+/// past `end_days` travelling in the direction of `sign`.
 fn overshoots(year: i64, month: i64, day: i64, months: i64, end_days: i64, sign: i64) -> bool {
-    return (civil_days_after_months(year, month, day, months) - end_days) * sign > 0;
-}
-
-/// Day count of a civil date shifted by `months`, constrained at the month end.
-fn civil_days_after_months(year: i64, month: i64, day: i64, months: i64) -> i64 {
     let [shifted_year, shifted_month, shifted_day] = add_months_to_civil(year, month, day, months);
-    return days_from_civil(shifted_year, shifted_month, shifted_day);
+    return (days_from_civil(shifted_year, shifted_month, shifted_day) - end_days) * sign > 0;
 }
 
 /// Split an epoch-nanosecond count into the local day and the nanosecond of
@@ -1466,10 +1458,8 @@ impl Duration {
         return self.add(&other.negated());
     }
 
-    /// Component-wise sum, for the parser folding a fraction into the
-    /// components below the designator it was written on. Those are provably
-    /// zero, so nothing needs balancing — and unlike `add` it admits the
-    /// calendar components a duration string may already carry.
+    /// Component-wise sum of two durations that do not overlap, so nothing
+    /// needs balancing. Unlike `add` it admits calendar components.
     fn merge_components(&self, other: &Duration) -> Duration {
         return Duration {
             years: self.years + other.years,

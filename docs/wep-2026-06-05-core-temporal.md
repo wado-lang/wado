@@ -273,7 +273,7 @@ that way, or trap, is open, as is which year.
 
 #### ICU4X supplies the identifiers, not the offsets
 
-Measured against `icu_time` 2.3, which carries four markers and no more:
+Measured against `icu_time` 2.2, which carries four markers and no more:
 
 | marker                              |  baked | serves                          |
 | ----------------------------------- | -----: | ------------------------------- |
@@ -350,10 +350,12 @@ here either.
 ### Test coverage
 
 `temporal_test.wado` covers each type's construction, ordering, text forms,
-accessors, arithmetic, rounding, and serde. There is no property-style
-round-trip over a wide instant range, no fixture pinning the CBOR tag-0 byte
-encoding beyond the tag itself, and no test at the extremes of the `i64` second
-range where the renderer produces years far outside four digits.
+accessors, arithmetic, rounding, and serde, plus property round-trips of
+`until` through `add` over random pairs and a sweep of the ISO week anchors
+across -400..=400. There is still no property round-trip of the _text_ forms
+over a wide instant range, no fixture pinning the CBOR tag-0 byte encoding
+beyond the tag itself, and no test at the extremes of the `i64` second range
+where the renderer produces years far outside four digits.
 
 ## Consequences
 
