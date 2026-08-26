@@ -937,12 +937,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let c0 = s.get_byte_unchecked(i);
 
     // "inf" or "infinity"
-    if c0.eq_ignore_ascii_case(&b'i') && remaining >= 3 {
+    if (c0 == b'i' || c0 == b'I') && remaining >= 3 {
         builtin::cold_path();
 
         let c1 = s.get_byte_unchecked(i + 1);
         let c2 = s.get_byte_unchecked(i + 2);
-        if c1.eq_ignore_ascii_case(&b'n') && c2.eq_ignore_ascii_case(&b'f') {
+        if (c1 == b'n' || c1 == b'N') && (c2 == b'f' || c2 == b'F') {
             if remaining == 3 {
                 return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
             }
@@ -952,11 +952,11 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
                 let c5 = s.get_byte_unchecked(i + 5);
                 let c6 = s.get_byte_unchecked(i + 6);
                 let c7 = s.get_byte_unchecked(i + 7);
-                if c3.eq_ignore_ascii_case(&b'i')
-                    && c4.eq_ignore_ascii_case(&b'n')
-                    && c5.eq_ignore_ascii_case(&b'i')
-                    && c6.eq_ignore_ascii_case(&b't')
-                    && c7.eq_ignore_ascii_case(&b'y') {
+                if (c3 == b'i' || c3 == b'I')
+                    && (c4 == b'n' || c4 == b'N')
+                    && (c5 == b'i' || c5 == b'I')
+                    && (c6 == b't' || c6 == b'T')
+                    && (c7 == b'y' || c7 == b'Y') {
                     return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
                 }
             }
@@ -965,12 +965,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     }
 
     // "nan" (sign is ignored for NaN)
-    if c0.eq_ignore_ascii_case(&b'n') && remaining == 3 {
+    if (c0 == b'n' || c0 == b'N') && remaining == 3 {
         builtin::cold_path();
 
         let c1 = s.get_byte_unchecked(i + 1);
         let c2 = s.get_byte_unchecked(i + 2);
-        if c1.eq_ignore_ascii_case(&b'a') && c2.eq_ignore_ascii_case(&b'n') {
+        if (c1 == b'a' || c1 == b'A') && (c2 == b'n' || c2 == b'N') {
             return Option::Some(f64::NAN);
         }
         return null;
