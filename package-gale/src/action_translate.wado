@@ -132,22 +132,41 @@ fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &S
 /// `$start` / `$stop` substitution.
 pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
-/// The locals a labeled rule call captures around itself so `$<label>.text` can
-/// read that invocation's own token range. Emitted only where an action reads it
-/// (`action_reads_rule_span`), so every other call site is unchanged.
-pub fn rule_span_lo_local(field: &String) -> String {
+/// The value-struct fields a labeled rule call is captured into: the token
+/// range `$<label>.text` reads, and the builder row `$<label>.ctx` renders.
+pub fn rule_span_lo_field(field: &String) -> String {
     return `_span_lo_${*field}`;
 }
 
-pub fn rule_span_hi_local(field: &String) -> String {
+pub fn rule_span_hi_field(field: &String) -> String {
     return `_span_hi_${*field}`;
 }
 
-/// The builder row a labeled rule call opens at, captured before the call so
-/// `$<label>.ctx` renders that invocation's own node.
-pub fn rule_node_local(field: &String) -> String {
+pub fn rule_node_field(field: &String) -> String {
     return `_node_${*field}`;
 }
+
+/// Those fields as an expression. They live on the value struct because a
+/// capture outlives the block it is written in — see `action.md`, "The value
+/// channel is the context object".
+pub fn rule_span_lo_ref(field: &String) -> String {
+    return vals_field_ref(&rule_span_lo_field(field));
+}
+
+pub fn rule_span_hi_ref(field: &String) -> String {
+    return vals_field_ref(&rule_span_hi_field(field));
+}
+
+pub fn rule_node_ref(field: &String) -> String {
+    return vals_field_ref(&rule_node_field(field));
+}
+
+fn vals_field_ref(field: &String) -> String {
+    return `${VALS_LOCAL}.${*field}`;
+}
+
+/// The value-struct local every rule that emits a value channel binds.
+pub global VALS_LOCAL: String = "vals";
 
 /// Whether `body` reads `$<label>.text` for the rule-call binding `dedup_base`,
 /// the one reference that needs the call's token range captured.
@@ -405,13 +424,13 @@ fn rule_member_expr(
     // `.text` is the invocation's own span, not a value-channel field.
     if let Some(m) = &r.member && *m == "text" {
         return Result::Ok(
-            `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,
+            `${*handle}.text_between(${rule_span_lo_ref(&binding)}, ${rule_span_hi_ref(&binding)})`,
         );
     }
     // Only `toStringTree` is modelled on ANTLR's context object, so `.ctx`
     // resolves straight to the rendering (java2wado drops the call above it).
     if let Some(m) = &r.member && *m == "ctx" {
-        return Result::Ok(`${*handle}.rule_tree_at(${rule_node_local(&binding)})`);
+        return Result::Ok(`${*handle}.rule_tree_at(${rule_node_ref(&binding)})`);
     }
     let target = match rules.iter_ref().find(|c| c.name == r.rule_name) {
         Some(t) => t,

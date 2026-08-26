@@ -477,6 +477,39 @@ the same predicate limit as the repeat path. Fixtures:
 `lexer_alt_suffix_longest.g4`, `lexer_alt_suffix_shapes.g4`,
 `lexer_suffix_peek_limits.g4`.
 
+### One dispatch emitter, one no-match policy
+
+Every decision over a group's alternatives — general or rule-reference shape,
+overlapping first sets or not, standing alone or as a repeat's body — is
+emitted by one function, and the only thing its callers vary is the body of a
+branch and what happens when no branch is taken. That no-match answer is the
+policy, stated once per call site, and it has two values:
+
+- **Required** — the group must match here, so a token no alternative admits is
+  a no-viable-alternative, over the union of the alternatives' first sets.
+- **Guaranteed** — the caller has already proved a match is viable, so the last
+  branch needs no condition of its own and there is no report to make. Both
+  callers scan before entering: a repeat's loop guard, and an optional's entry
+  check. An optional group therefore never needs a policy of its own — its own
+  guard is what skips it. A gated alternative forces Guaranteed back to
+  Required: a false predicate must not land in an unconditional `else` meant
+  for the alternative it excludes.
+
+Splitting the policy across per-shape emitters is what let a required group
+take no alternative, append nothing, and report nothing while the sequence
+continued as though it had matched — the shape reached first-set-only
+positions for years and reached predicate-gated ones as soon as gating landed.
+
+Two decisions are deliberately not that emitter, because their inputs are not
+a group's alternatives:
+
+- **A rule's own alternatives** are independent attempts that fall through to
+  the next on a body failure, closing with the rule's error fallback, rather
+  than a chain that commits on a condition.
+- **A group inside a left-recursive suffix** is walked by the GIR walker off
+  the dispatch plan lower baked (`MultiAltDispatch`), not off first sets, and
+  closes with `expect_set` over the union — a report, but not the same one.
+
 ### Static LL prediction — the runtime FOLLOW gate
 
 Gale's parser-side prediction is a static FOLLOW-based repair on top of

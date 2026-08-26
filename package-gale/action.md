@@ -37,6 +37,16 @@ A rule declaring any of args / `returns` / `locals` gets a generated value struc
 
 A cast `$ctx` member reaching a name the enclosing alternative already binds needs no typed CST: `((XContext)$ctx).INC()` names the alternative's own `INC` token, so it resolves to whatever `$INC` resolves to there, and `!= null` on it becomes the token-presence test. A name the alternative does not bind stays a loud error rather than a guess.
 
+### The value channel is the context object
+
+What ANTLR keeps on a context object, Gale keeps in the value struct: both live exactly as long as one rule invocation. So every per-invocation capture an action can read — the rule's own start token (`$text` / `$start` / `$stop`), a labeled rule call's token range (`$x.text`), the builder row its node opens at (`$x.ctx`) — is a field of `<Rule>Vals`, written where the element matches and read wherever an action sits.
+
+This is what makes the reads well-scoped by construction. A rule's body is not one block: an alternative is a block, a repeat body is a block, and a multi-alt or left-recursive rule spreads its alternatives across `_alt_<n>` / `_atom` / `_lr_<n>` functions. A capture held in a local is visible only inside the block that declares it, so a prequel (`@init` before the body, `@after` after it), an action in a sibling branch, or anything in another function reads a local that is not there — a generated module that does not compile, or a silently empty value. A field has none of those cases: the struct is threaded into every helper and returned from it (each mutates its own copy and hands it back), so a write anywhere in the invocation is visible to every later read in it.
+
+The channel therefore opens for a rule that captures anything, not only one declaring args / `returns` / `locals`. Grammars whose actions are off stay byte-identical: the capture, the field, and the struct are all gated on action emission.
+
+A repeat writes its capture once per iteration, so a reference reads the last match — ANTLR's `$x` for a looped label.
+
 ## Runtime context API
 
 Actions and predicates call a small API; both Wado-written and translated bodies target it. Parser side:

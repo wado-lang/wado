@@ -55,6 +55,21 @@ pub struct FollowMaskEntry {
 /// truncation hurts precision rather than correctness).
 pub global FOLLOW_MASK_MAX_K: i32 = 4;
 
+/// The labeled rule calls of one rule whose capture an action reads: `spans`
+/// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
+pub struct RuleCaptures {
+    pub spans: List<String> = [],
+    pub nodes: List<String> = [],
+}
+
+impl RuleCaptures {
+    pub fn is_empty(&self) -> bool {
+        return self.spans.is_empty() && self.nodes.is_empty();
+    }
+}
+
+global NO_CAPTURES: RuleCaptures = RuleCaptures {};
+
 /// Codegen-time context shared across emit walkers. Holds the
 /// first / nullable / single-token / scannable caches, the
 /// `single_alt_owner` and `kind_set` registries, and the
@@ -234,6 +249,9 @@ pub struct GenContext {
     predicate_fns: List<[i32, String]>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
+    /// Per rule, the labeled rule calls whose capture an action reads. Their
+    /// value-struct fields are what `$x.text` / `$x.ctx` resolve to.
+    rule_captures: TreeMap<String, RuleCaptures>,
     /// Actual post-dedup bindings for the alternative currently being emitted:
     /// `[is_token, base, field]`. The action translator maps a `$ref` to its
     /// real local (`e_2`) instead of re-deriving `binding_name`, which diverges
@@ -297,6 +315,7 @@ impl GenContext {
             predicate_fns: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
+            rule_captures: TreeMap::new(),
             alt_bindings: [],
         };
     }
@@ -351,6 +370,37 @@ impl GenContext {
     /// exists. (`ATN_SIM` itself is emitted whenever `needs_atn`.)
     pub fn needs_scan_atn(&self) -> bool {
         return self.needs_scan_atn_seen;
+    }
+
+    /// Install what each rule's actions read off its labeled rule calls
+    /// (`install_rule_captures`), before any value-struct decision is taken.
+    pub fn set_rule_captures(&mut self, captures: TreeMap<String, RuleCaptures>) {
+        self.rule_captures = captures;
+    }
+
+    pub fn rule_captures(&self, rule_name: &String) -> &RuleCaptures with stores[self] {
+        if !self.rule_captures.contains_key(*rule_name) {
+            return &NO_CAPTURES;
+        }
+        return &self.rule_captures[*rule_name];
+    }
+
+    /// Whether the rule being emitted captures `field`'s token range / builder
+    /// row — the gate on emitting the capture and on resolving a reference.
+    pub fn captures_span(&self, field: &String) -> bool {
+        return self.current_captures().spans.contains(field);
+    }
+
+    pub fn captures_node(&self, field: &String) -> bool {
+        return self.current_captures().nodes.contains(field);
+    }
+
+    fn current_captures(&self) -> &RuleCaptures with stores[self] {
+        let ridx = self.current_rule_index();
+        if ridx < 0 {
+            return &NO_CAPTURES;
+        }
+        return self.rule_captures(&self.parser_rules[ridx].name);
     }
 
     pub fn set_rule_follow(&mut self, kinds: TreeMap<String, List<String>>, exact: bool) {

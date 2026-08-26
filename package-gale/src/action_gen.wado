@@ -3,8 +3,9 @@
 //! capture. All inert when `emit_actions()` is off.
 
 use { ActionSource, AltAction, Alternative, AttrDecl, Element, Grammar, ParserRule } from "./ir.wado";
-use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, Rule, RuleCallOp } from "./gir.wado";
-use { GenContext } from "./gen_context.wado";
+use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, LoweredGrammar, Op, Rule, RuleCallOp } from "./gir.wado";
+use { GenContext, RuleCaptures } from "./gen_context.wado";
+use { TreeMap } from "core:collections";
 use { elements_match, follow_sep, to_snake_case } from "./gen_util.wado";
 use { CodeWriter, FnSpec, ImplSpec, ParamSpec, str_lit } from "./wadopoet.wado";
 use {
@@ -18,10 +19,10 @@ use {
     action_reads_rule_ctx,
     action_reads_rule_span,
     field_in_vals,
-    rule_node_local,
+    rule_node_field,
     rule_returns_vals,
-    rule_span_hi_local,
-    rule_span_lo_local,
+    rule_span_hi_field,
+    rule_span_lo_field,
     rule_threads_args,
     rule_is_left_recursive,
     rule_uses_rule_span,
@@ -294,9 +295,9 @@ pub fn entry_emits_vals(ctx: &GenContext, rule_name: &String) -> bool {
 /// Emit a `<Rule>Vals` struct per rule that exposes a value channel. Fields
 /// are the rule's returns then locals, each with a defaulted Wado type, so
 /// the rule function can default-construct `<Rule>Vals {}`.
-pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
+pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &GenContext) {
     for let rule of &grammar.parser_rules {
-        if !rule_returns_vals(rule) {
+        if !rule_emits_vals(ctx, rule) {
             continue;
         }
         w.begin(&`struct ${vals_struct_name(rule)}`);
@@ -305,8 +306,22 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
         }
         gen_vals_fields(w, &rule.returns_decls);
         gen_vals_fields(w, &rule.locals_decls);
+        gen_capture_fields(w, ctx.rule_captures(&rule.name));
         w.end();
         w.blank();
+    }
+}
+
+/// The captured token range / builder row of each labeled rule call an action
+/// reads. Zero-valued so a read before the call yields the empty span ANTLR's
+/// null `$label` renders as empty text.
+fn gen_capture_fields(w: &mut CodeWriter, captures: &RuleCaptures) {
+    for let f of &captures.spans {
+        w.line(&`${rule_span_lo_field(f)}: i32 = 0,`);
+        w.line(&`${rule_span_hi_field(f)}: i32 = -1,`);
+    }
+    for let f of &captures.nodes {
+        w.line(&`${rule_node_field(f)}: i32 = -1,`);
     }
 }
 
@@ -380,10 +395,11 @@ pub fn result_type_carries_vals(result_type: &String) -> bool {
 }
 
 /// Whether `rule` gets a value channel emitted: action execution is on and the
-/// rule exposes one. The single source of truth for the `vals` struct, local,
-/// return type, and `$v` substitution.
+/// rule either declares args / `returns` / `locals` or captures a labeled call
+/// for an action to read. The single source of truth for the `vals` struct,
+/// local, return type, and `$v` substitution.
 pub fn rule_emits_vals(ctx: &GenContext, rule: &ParserRule) -> bool {
-    return ctx.emit_actions() && rule_returns_vals(rule);
+    return ctx.emit_actions() && (rule_returns_vals(rule) || !ctx.rule_captures(&rule.name).is_empty());
 }
 
 pub fn current_rule_emits_vals(ctx: &GenContext) -> bool {
@@ -394,156 +410,99 @@ pub fn current_rule_emits_vals(ctx: &GenContext) -> bool {
     return rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
 }
 
-/// The binding field of a `RuleCall` op whose matched text one of `actions`
-/// reads through `$<label>.text`, or null. Gates the token-range capture so a
-/// grammar that never reads a rule label's text stays byte-identical. Predicate
-/// bodies count: they resolve `$`-references through the same path.
-pub fn rule_call_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
-    return rule_call_read_field(op, actions, ctx, false, true);
-}
-
-/// The field of a labeled rule call whose node an action renders (`$x.ctx`).
-/// Twin of `rule_call_span_field`, for the builder row not the token range.
-pub fn rule_call_ctx_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
-    return rule_call_read_field(op, actions, ctx, true, true);
-}
-
-/// The two above restricted to what `actions` themselves read: a reference a
-/// prequel also reads is declared once at rule scope instead.
-fn alt_scope_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
-    return rule_call_read_field(op, actions, ctx, false, false);
-}
-
-fn alt_scope_ctx_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
-    return rule_call_read_field(op, actions, ctx, true, false);
-}
-
-fn rule_call_read_field(
-    op: &Op,
-    actions: &List<AltAction>,
-    ctx: &GenContext,
-    want_ctx: bool,
-    include_prequel: bool,
-) -> Option<String> {
+/// Install what every rule's actions read off its labeled rule calls, so the
+/// value struct, the capture emit, and the reference all read one answer.
+pub fn install_rule_captures(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     if !ctx.emit_actions() {
-        return null;
+        return;
     }
+    let mut captures: TreeMap<String, RuleCaptures> = TreeMap::new();
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        let rule = &grammar.parser_rules[i];
+        let bodies = rule_action_bodies(rule);
+        let mut c = RuleCaptures {};
+        for let call of &rule_call_bindings(&lowered.parser_rules[i]) {
+            if body_reads_any(&bodies, &call.0, false) && !c.spans.contains(&call.1) {
+                c.spans.push(call.1);
+            }
+            if body_reads_any(&bodies, &call.0, true) && !c.nodes.contains(&call.1) {
+                c.nodes.push(call.1);
+            }
+        }
+        if !c.is_empty() {
+            captures[rule.name] = c;
+        }
+    }
+    ctx.set_rule_captures(captures);
+}
+
+/// Every action and predicate body that runs in the rule's own frame: its
+/// prequels', its alternatives', and those of every group nested in them. They
+/// all read the same captures.
+fn rule_action_bodies(rule: &ParserRule) -> List<String> {
+    let mut out: List<String> = [];
+    for let a of &[rule.init_action, rule.after_action] {
+        if let Some(src) = a {
+            out.push(src.text);
+        }
+    }
+    for let alt of &rule.alternatives {
+        push_alt_action_bodies(alt, &mut out);
+    }
+    return out;
+}
+
+fn push_alt_action_bodies(alt: &Alternative, out: &mut List<String>) {
+    for let a of &alt.actions {
+        out.push(a.source.text);
+    }
+    for let e of &alt.elements {
+        push_element_action_bodies(e, out);
+    }
+}
+
+fn push_element_action_bodies(elem: &Element, out: &mut List<String>) {
+    match elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                push_alt_action_bodies(alt, out);
+            }
+        },
+        Repeat(rep) => push_element_action_bodies(&rep.element, out),
+        Label(lab) => push_element_action_bodies(&lab.element, out),
+        Not(n) => push_element_action_bodies(&n.element, out),
+        _ => {
+        },
+    }
+}
+
+fn body_reads_any(bodies: &List<String>, base: &String, want_node: bool) -> bool {
+    return bodies.iter_ref().any(|b: &String| if want_node {
+        action_reads_rule_ctx(b, base);
+    } else {
+        action_reads_rule_span(b, base);
+    });
+}
+
+/// The value-struct field a labeled rule call's token range / builder row is
+/// captured into, or null where no action reads it.
+pub fn rule_call_span_field(op: &Op, ctx: &GenContext) -> Option<String> {
+    return captured_field(op, ctx, false);
+}
+
+pub fn rule_call_ctx_field(op: &Op, ctx: &GenContext) -> Option<String> {
+    return captured_field(op, ctx, true);
+}
+
+fn captured_field(op: &Op, ctx: &GenContext, want_node: bool) -> Option<String> {
     let rc = match op {
         RuleCall(r) => *r,
         _ => {
             return null;
         },
     };
-    if prequel_reads(ctx, &rc.dedup_base, want_ctx) {
-        return if include_prequel { Option::Some(rc.field) } else { null };
-    }
-    for let a of actions {
-        if action_reads(&a.source.text, &rc.dedup_base, want_ctx) {
-            return Option::Some(rc.field);
-        }
-    }
-    return null;
-}
-
-/// Whether `body` reads `$<base>.text` (`want_ctx` false) or `$<base>.ctx`.
-fn action_reads(body: &String, base: &String, want_ctx: bool) -> bool {
-    return if want_ctx { action_reads_rule_ctx(body, base) } else { action_reads_rule_span(body, base) };
-}
-
-/// Whether the rule's `@init` / `@after` reads that reference — a prequel runs
-/// in the same fn and off the same locals as an alternative's actions.
-fn prequel_reads(ctx: &GenContext, base: &String, want_ctx: bool) -> bool {
-    let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return false;
-    }
-    let rule = &ctx.parser_rules()[ridx];
-    // A left-recursive rule holds its calls in the atom / suffix functions, out
-    // of the entry function's scope: no local to capture, and the body that
-    // reads one is reported by `prequel_spans_reachable`.
-    if rule_is_left_recursive(rule) {
-        return false;
-    }
-    for let a of &[rule.init_action, rule.after_action] {
-        if let Some(src) = a {
-            if action_reads(&src.text, base, want_ctx) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-/// Declare the token-range and node locals an action reads, ahead of every
-/// assignment, so a read before the call is in scope and yields empty text.
-pub fn gen_rule_span_decls(w: &mut CodeWriter, ops: &List<Op>, actions: &List<AltAction>, ctx: &GenContext) {
-    for let op of ops {
-        // A reference the prequel also reads is declared at rule scope
-        // (`gen_prequel_span_decls`); re-declaring it here would shadow it, and
-        // the prequel would then read a local nothing assigned.
-        if let Some(f) = alt_scope_span_field(op, actions, ctx) {
-            w.line(&`let mut ${rule_span_lo_local(&f)} = 0;`);
-            w.line(&`let mut ${rule_span_hi_local(&f)} = -1;`);
-        }
-        if let Some(f) = alt_scope_ctx_field(op, actions, ctx) {
-            w.line(&`let mut ${rule_node_local(&f)} = -1;`);
-        }
-    }
-}
-
-/// Declare at rule scope every local a prequel reads. An `@init` runs before
-/// the body and an `@after` may run outside the block holding the call, so the
-/// alternative's own scope does not reach either.
-pub fn gen_prequel_span_decls(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
-    if !ctx.emit_actions() {
-        return;
-    }
-    let mut spans: List<String> = [];
-    let mut nodes: List<String> = [];
-    for let call of &rule_call_bindings(rule) {
-        if prequel_reads(ctx, &call.0, false) && !spans.contains(&call.1) {
-            spans.push(call.1);
-        }
-        if prequel_reads(ctx, &call.0, true) && !nodes.contains(&call.1) {
-            nodes.push(call.1);
-        }
-    }
-    for let f of &spans {
-        w.line(&`let mut ${rule_span_lo_local(f)} = 0;`);
-        w.line(&`let mut ${rule_span_hi_local(f)} = -1;`);
-    }
-    for let f of &nodes {
-        w.line(&`let mut ${rule_node_local(f)} = -1;`);
-    }
-}
-
-/// Whether a prequel's `$x.text` / `$x.ctx` reads can reach the locals holding
-/// them. A left-recursive rule's atom and suffix are functions of their own, so
-/// its prequel is reported and dropped rather than emitted against a local that
-/// is not in the entry function it runs in.
-pub fn prequel_spans_reachable(rule: &ParserRule, lowered: &Rule, ctx: &mut GenContext) -> bool {
-    if !ctx.emit_actions() || !lowered matches { LeftRecursive(_) } {
-        return true;
-    }
-    let calls = rule_call_bindings(lowered);
-    let mut reachable = true;
-    for let a of &[rule.init_action, rule.after_action] {
-        if let Some(src) = a {
-            for let call of &calls {
-                if action_reads(&src.text, &call.0, false) || action_reads(&src.text, &call.0, true) {
-                    ctx.mark_action_seen(src.action_id);
-                    ctx.warn(
-                        &action_owner(src.action_id, ctx),
-                        DiagnosticKind::UnsupportedAction,
-                        `$${call.0}.text / .ctx in a left-recursive rule's @init / @after reads a local held by its atom and suffix functions (not yet supported)`,
-                    );
-                    reachable = false;
-                    break;
-                }
-            }
-        }
-    }
-    return reachable;
+    let captured = if want_node { ctx.captures_node(&rc.field) } else { ctx.captures_span(&rc.field) };
+    return if captured { Option::Some(rc.field) } else { null };
 }
 
 /// Every rule call in the rule's bodies, as `[dedup_base, field]`.
