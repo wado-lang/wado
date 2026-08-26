@@ -8989,7 +8989,8 @@ fn _parse_parse__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if _kind_set_0(p.peek_kind()) {
+        let grp_kind = p.peek_kind();
+        if _kind_set_0(grp_kind) {
             _parse_sql_stmt_list(p, &EMPTY_FOLLOW);
         } else {
             _parse_error(p, &EMPTY_FOLLOW);
@@ -10168,9 +10169,10 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
         opt_scan_pos_3 = pos;
     }
     if opt_scan_pos_3 >= 0 {
-        if p.peek_kind() == TK_K_BEFORE {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_K_BEFORE {
             p.expect(TK_K_BEFORE, &EMPTY_SYNC);
-        } else if p.peek_kind() == TK_K_AFTER {
+        } else if grp_kind == TK_K_AFTER {
             p.expect(TK_K_AFTER, &EMPTY_SYNC);
         } else {
             p.expect(TK_K_INSTEAD, &SYNC_27);
@@ -11433,7 +11435,8 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         opt_scan_pos_2 = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos_2 >= 0) {
-        if p.peek_kind() == TK_ASSIGN {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_ASSIGN {
             p.expect(TK_ASSIGN, &SYNC_49);
             _parse_pragma_value(p, follow);
         } else {
@@ -13475,7 +13478,8 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        if _kind_set_13(p.peek_kind()) {
+        let grp_kind = p.peek_kind();
+        if _kind_set_13(grp_kind) {
             if p.peek_kind() == TK_K_DISTINCT {
                 p.expect(TK_K_DISTINCT, &EMPTY_SYNC);
             }
@@ -15445,7 +15449,8 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: &List<List<i32>> =
         opt_scan_pos_2 = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos_2 >= 0) {
-        if p.peek_kind() == TK_K_INDEXED {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_K_INDEXED {
             p.expect(TK_K_INDEXED, &SYNC_13);
             p.expect(TK_K_BY, &SYNC_4);
             _parse_index_name(p, follow);
@@ -16142,7 +16147,8 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: &List<List<i32>
         opt_scan_pos_2 = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos_2 >= 0) {
-        if p.peek_kind() == TK_K_INDEXED {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_K_INDEXED {
             p.expect(TK_K_INDEXED, &SYNC_13);
             p.expect(TK_K_BY, &SYNC_4);
             _parse_index_name(p, follow);
@@ -16398,12 +16404,13 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            if p.peek_kind() == TK_K_LEFT {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_K_LEFT {
                 p.expect(TK_K_LEFT, &SYNC_89);
                 if p.peek_kind() == TK_K_OUTER {
                     p.expect(TK_K_OUTER, &EMPTY_SYNC);
                 }
-            } else if p.peek_kind() == TK_K_INNER {
+            } else if grp_kind == TK_K_INNER {
                 p.expect(TK_K_INNER, &EMPTY_SYNC);
             } else {
                 p.expect(TK_K_CROSS, &EMPTY_SYNC);
@@ -16483,7 +16490,8 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if p.peek_kind() == TK_K_ON {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_K_ON {
             p.expect(TK_K_ON, &SYNC_7);
             _parse_expr(p, follow);
         } else {

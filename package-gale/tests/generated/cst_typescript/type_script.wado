@@ -16723,7 +16723,8 @@ fn _parse_constructor_declaration__inner(p: &mut Parser, follow: &List<List<i32>
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if p.peek_kind() == TK_OpenBrace {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_OpenBrace {
             let openbrace = p.expect(TK_OpenBrace, &SYNC_29);
             p.atn_ret_pending = 1050;
             let function_body = _parse_function_body(p, &FOLLOW_MASK_9);

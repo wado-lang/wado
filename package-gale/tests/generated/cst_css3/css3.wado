@@ -33398,13 +33398,14 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            if p.peek_kind() == TK_Hash {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_Hash {
                 p.expect(TK_Hash, &EMPTY_SYNC);
-            } else if p.peek_kind() == TK_Dot {
+            } else if grp_kind == TK_Dot {
                 _parse_class_name(p, follow);
-            } else if p.peek_kind() == TK_OpenBracket {
+            } else if grp_kind == TK_OpenBracket {
                 _parse_attrib(p, follow);
-            } else if p.peek_kind() == TK_Colon {
+            } else if grp_kind == TK_Colon {
                 _parse_pseudo(p, follow);
             } else {
                 _parse_negation(p, follow);
@@ -33465,13 +33466,14 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                 if rep_scan_pos < 0 { break; }
             }
             _plus_first = false;
-            if p.peek_kind() == TK_Hash {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_Hash {
                 p.expect(TK_Hash, &EMPTY_SYNC);
-            } else if p.peek_kind() == TK_Dot {
+            } else if grp_kind == TK_Dot {
                 _parse_class_name(p, follow);
-            } else if p.peek_kind() == TK_OpenBracket {
+            } else if grp_kind == TK_OpenBracket {
                 _parse_attrib(p, follow);
-            } else if p.peek_kind() == TK_Colon {
+            } else if grp_kind == TK_Colon {
                 _parse_pseudo(p, follow);
             } else {
                 _parse_negation(p, follow);
@@ -33559,7 +33561,8 @@ fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> 
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        if _kind_set_4(p.peek_kind()) {
+        let grp_kind = p.peek_kind();
+        if _kind_set_4(grp_kind) {
             _parse_ident(p, follow);
         } else {
             p.expect(TK_Multiply, &EMPTY_SYNC);
@@ -34594,9 +34597,10 @@ fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        if _kind_set_20(p.peek_kind()) {
+        let grp_kind = p.peek_kind();
+        if _kind_set_20(grp_kind) {
             _parse_any_(p, follow);
-        } else if p.peek_kind() == TK_OpenBrace {
+        } else if grp_kind == TK_OpenBrace {
             _parse_block(p, follow);
         } else {
             p.expect(TK_AtKeyword, &SYNC_3);
@@ -35287,7 +35291,8 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            if _kind_set_20(p.peek_kind()) {
+            let grp_kind = p.peek_kind();
+            if _kind_set_20(grp_kind) {
                 _parse_any_(p, &EMPTY_FOLLOW);
             } else {
                 _parse_unused(p, &EMPTY_FOLLOW);
@@ -35329,7 +35334,8 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            if _kind_set_20(p.peek_kind()) {
+            let grp_kind = p.peek_kind();
+            if _kind_set_20(grp_kind) {
                 _parse_any_(p, &EMPTY_FOLLOW);
             } else {
                 _parse_unused(p, &EMPTY_FOLLOW);
@@ -35371,7 +35377,8 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            if _kind_set_20(p.peek_kind()) {
+            let grp_kind = p.peek_kind();
+            if _kind_set_20(grp_kind) {
                 _parse_any_(p, &EMPTY_FOLLOW);
             } else {
                 _parse_unused(p, &EMPTY_FOLLOW);
@@ -36206,7 +36213,8 @@ fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if _kind_set_20(p.peek_kind()) {
+        let grp_kind = p.peek_kind();
+        if _kind_set_20(grp_kind) {
             _parse_any_(p, &EMPTY_FOLLOW);
         } else {
             _parse_unused(p, &EMPTY_FOLLOW);
@@ -36417,7 +36425,8 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if p.peek_kind() == TK_Multiply {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_Multiply {
             p.expect(TK_Multiply, &SYNC_57);
             _parse_ws(p, &FOLLOW_MASK_24);
             _parse_calc_value(p, follow);

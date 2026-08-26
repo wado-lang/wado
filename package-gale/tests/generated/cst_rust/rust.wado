@@ -17423,9 +17423,10 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if p.peek_kind() == TK_LPAREN {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LPAREN {
             let enum_item_tuple = _parse_enum_item_tuple(p, &EMPTY_FOLLOW);
-        } else if p.peek_kind() == TK_LCURLYBRACE {
+        } else if grp_kind == TK_LCURLYBRACE {
             let enum_item_struct = _parse_enum_item_struct(p, &EMPTY_FOLLOW);
         } else {
             let enum_item_discriminant = _parse_enum_item_discriminant(p, &EMPTY_FOLLOW);
@@ -20636,7 +20637,8 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: &List<List<i32>> = &
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        if _kind_set_56(p.peek_kind()) {
+        let grp_kind = p.peek_kind();
+        if _kind_set_56(grp_kind) {
             let struct_expr_fields = _parse_struct_expr_fields(p, &EMPTY_FOLLOW);
         } else {
             let struct_base = _parse_struct_base(p, &EMPTY_FOLLOW);
@@ -25574,7 +25576,8 @@ fn _parse_type_path_segment__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if p.peek_kind() == TK_LT {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LT {
             let generic_args = _parse_generic_args(p, &EMPTY_FOLLOW);
         } else {
             let type_path_fn = _parse_type_path_fn(p, &EMPTY_FOLLOW);

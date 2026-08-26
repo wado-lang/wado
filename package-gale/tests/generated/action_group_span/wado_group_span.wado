@@ -1589,6 +1589,30 @@ impl Parser {
     }
 }
 
+struct WholeVals {
+    _span_lo_r: i32 = 0,
+    _span_hi_r: i32 = -1,
+}
+
+struct OptVals {
+    _node_r: i32 = -1,
+}
+
+struct BeforeVals {
+    _span_lo_r: i32 = 0,
+    _span_hi_r: i32 = -1,
+}
+
+struct LoopSpanVals {
+    _span_lo_r: i32 = 0,
+    _span_hi_r: i32 = -1,
+}
+
+struct DeepVals {
+    _span_lo_r: i32 = 0,
+    _span_hi_r: i32 = -1,
+}
+
 fn scan_whole(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     sg_0_done: {
@@ -1697,31 +1721,32 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return pos;
 }
 
-fn _parse_whole__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let mut _span_lo_r = 0;
-    let mut _span_hi_r = -1;
-    _span_lo_r = p.pos;
+fn _parse_whole__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> WholeVals {
+    let mut vals = WholeVals {};
+    vals._span_lo_r = p.pos;
     let r = _parse_a(p, &FOLLOW_MASK_0);
-    _span_hi_r = p.pos - 1;
+    vals._span_hi_r = p.pos - 1;
     let b = p.expect(TK_B, &EMPTY_SYNC);
     if !p.speculating {
-         p.emit(p.text_between(_span_lo_r, _span_hi_r)) 
+         p.emit(p.text_between(vals._span_lo_r, vals._span_hi_r)) 
     }
-    return;
+    return vals;
 }
 
-fn _parse_whole(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_whole(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> WholeVals {
+    if p.recovering { return WholeVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_WHOLE, _start);
-    _parse_whole__inner(p, follow);
+    let __vals = _parse_whole__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("whole");
     }
+    return __vals;
 }
 
-fn _parse_opt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_opt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> OptVals {
+    let mut vals = OptVals {};
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -1730,55 +1755,54 @@ fn _parse_opt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    let mut _node_r = -1;
     if opt_scan_pos >= 0 {
-        _node_r = p.b.checkpoint();
+        vals._node_r = p.b.checkpoint();
         let r = _parse_a(p, &EMPTY_FOLLOW);
         if !p.speculating {
-             p.emit(p.rule_tree_at(_node_r)) 
+             p.emit(p.rule_tree_at(vals._node_r)) 
         }
     }
     let b = p.expect(TK_B, &EMPTY_SYNC);
-    return;
+    return vals;
 }
 
-fn _parse_opt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_opt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> OptVals {
+    if p.recovering { return OptVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_OPT, _start);
-    _parse_opt__inner(p, follow);
+    let __vals = _parse_opt__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("opt");
     }
+    return __vals;
 }
 
-fn _parse_before__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let mut _span_lo_r = 0;
-    let mut _span_hi_r = -1;
+fn _parse_before__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> BeforeVals {
+    let mut vals = BeforeVals {};
     if !p.speculating {
-         p.emit(p.text_between(_span_lo_r, _span_hi_r)) 
+         p.emit(p.text_between(vals._span_lo_r, vals._span_hi_r)) 
     }
-    _span_lo_r = p.pos;
+    vals._span_lo_r = p.pos;
     let r = _parse_a(p, follow);
-    _span_hi_r = p.pos - 1;
-    return;
+    vals._span_hi_r = p.pos - 1;
+    return vals;
 }
 
-fn _parse_before(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_before(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> BeforeVals {
+    if p.recovering { return BeforeVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_BEFORE, _start);
-    _parse_before__inner(p, follow);
+    let __vals = _parse_before__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("before");
     }
+    return __vals;
 }
 
-fn _parse_loop_span__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let mut _span_lo_r = 0;
-    let mut _span_hi_r = -1;
+fn _parse_loop_span__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> LoopSpanVals {
+    let mut vals = LoopSpanVals {};
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1804,31 +1828,31 @@ fn _parse_loop_span__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        _span_lo_r = p.pos;
+        vals._span_lo_r = p.pos;
         let r = _parse_a(p, &FOLLOW_MASK_0);
-        _span_hi_r = p.pos - 1;
+        vals._span_hi_r = p.pos - 1;
         let b = p.expect(TK_B, &EMPTY_SYNC);
     }
     if !p.speculating {
-         p.emit(p.text_between(_span_lo_r, _span_hi_r)) 
+         p.emit(p.text_between(vals._span_lo_r, vals._span_hi_r)) 
     }
-    return;
+    return vals;
 }
 
-fn _parse_loop_span(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_loop_span(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> LoopSpanVals {
+    if p.recovering { return LoopSpanVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_LOOP_SPAN, _start);
-    _parse_loop_span__inner(p, follow);
+    let __vals = _parse_loop_span__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("loop_span");
     }
+    return __vals;
 }
 
-fn _parse_deep__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let mut _span_lo_r = 0;
-    let mut _span_hi_r = -1;
+fn _parse_deep__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> DeepVals {
+    let mut vals = DeepVals {};
     if p.peek_kind() == TK_A {
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -1841,9 +1865,9 @@ fn _parse_deep__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            _span_lo_r = p.pos;
+            vals._span_lo_r = p.pos;
             let r = _parse_a(p, &FOLLOW_MASK_0);
-            _span_hi_r = p.pos - 1;
+            vals._span_hi_r = p.pos - 1;
             let b = p.expect(TK_B, &EMPTY_SYNC);
         }
         let c = p.expect(TK_C, &EMPTY_SYNC);
@@ -1852,20 +1876,21 @@ fn _parse_deep__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     }
     let d = p.expect(TK_D, &EMPTY_SYNC);
     if !p.speculating {
-         p.emit(p.text_between(_span_lo_r, _span_hi_r)) 
+         p.emit(p.text_between(vals._span_lo_r, vals._span_hi_r)) 
     }
-    return;
+    return vals;
 }
 
-fn _parse_deep(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_deep(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> DeepVals {
+    if p.recovering { return DeepVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_DEEP, _start);
-    _parse_deep__inner(p, follow);
+    let __vals = _parse_deep__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("deep");
     }
+    return __vals;
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
@@ -1908,23 +1933,23 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_whole(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_whole(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_whole(p); });
 }
 
 pub fn parse_opt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_opt(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_opt(p); });
 }
 
 pub fn parse_before(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_before(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_before(p); });
 }
 
 pub fn parse_loop_span(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_loop_span(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_loop_span(p); });
 }
 
 pub fn parse_deep(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_deep(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_deep(p); });
 }
 
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

@@ -1934,7 +1934,8 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if p.peek_kind() == TK_LIT_IDX {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LIT_IDX {
             p.expect(TK_LIT_IDX, &SYNC_0);
             _parse_name(p, follow);
         } else {

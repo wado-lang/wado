@@ -1671,7 +1671,8 @@ fn _parse_alts__inner(p: &mut Parser) -> () {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        if p.peek_kind() == TK_A {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_A {
             let a = p.expect(TK_A, &EMPTY_SYNC);
             if !p.speculating {
                  p.emit("a") 
@@ -1773,12 +1774,13 @@ fn _parse_gated__inner(p: &mut Parser) -> () {
         }
         if rep_scan_pos < 0 { break; }
         if !((p.peek_kind() == TK_A) || (p.peek_kind() == TK_B && (pred_6(p)))) { break; }
-        if p.peek_kind() == TK_A {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_A {
             let a = p.expect(TK_A, &EMPTY_SYNC);
             if !p.speculating {
                  p.emit("in") 
             }
-        } else if p.peek_kind() == TK_B && (pred_6(p)) {
+        } else if grp_kind == TK_B && (pred_6(p)) {
             let b = p.expect(TK_B, &EMPTY_SYNC);
             if !p.speculating {
                  p.emit("gated") 
