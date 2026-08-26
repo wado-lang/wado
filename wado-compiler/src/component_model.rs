@@ -724,7 +724,7 @@ impl CmFunctionInfo {
     /// Check if a parameter type requires Memory + Realloc in canon lower.
     fn type_requires_memory(ty: &Type) -> bool {
         match ty {
-            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "List"),
+            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "List" | "TreeMap"),
             Type::Named(named) => named.name == "String",
             _ => false,
         }
@@ -760,7 +760,7 @@ impl CmFunctionInfo {
             Type::Named(named) => named.name == "String",
             Type::Generic(generic) => matches!(
                 generic.name.as_str(),
-                "List" | "Option" | "Result" | "Stream" | "Future"
+                "List" | "TreeMap" | "Option" | "Result" | "Stream" | "Future"
             ),
             Type::Tuple(elems) => !elems.is_empty(),
             _ => false,
@@ -3265,7 +3265,9 @@ impl CmInterfaceRegistry {
                 }
             },
             Type::Generic(g) => match g.name.as_str() {
-                "List" => {
+                // `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
+                // carries that type's `(ptr, count)` pair.
+                "List" | "TreeMap" => {
                     out.push(CmValType::I32);
                     out.push(CmValType::I32);
                 }
@@ -3488,6 +3490,12 @@ pub enum CmDefined<'a> {
     Enum(&'a [&'a str]),
     Flags(&'a [&'a str]),
     List(ComponentValType),
+    /// 🗺️ `map<K, V>` — the `list<tuple<K, V>>` bytes under their own type
+    /// constructor, so the intent survives into the WIT a consumer reads.
+    Map {
+        key: ComponentValType,
+        value: ComponentValType,
+    },
     Tuple(&'a [ComponentValType]),
     Option(ComponentValType),
     Result {
@@ -3590,6 +3598,7 @@ pub(crate) fn emit_cm_defined(
         CmDefined::Enum(names) => enc.enum_type(names.iter().copied()),
         CmDefined::Flags(names) => enc.flags(names.iter().copied()),
         CmDefined::List(elem) => enc.list(elem),
+        CmDefined::Map { key, value } => enc.map(key, value),
         CmDefined::Tuple(elems) => enc.tuple(elems.iter().copied()),
         CmDefined::Option(inner) => enc.option(inner),
         CmDefined::Result { ok, err } => enc.result(ok, err),
@@ -3846,6 +3855,23 @@ impl CmTypeGen {
             return idx;
         }
         let idx = sink.define(CmDefined::List(elem_type));
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a map type, returning the type index.
+    fn define_map(
+        &mut self,
+        sink: &mut dyn CmTypeSink,
+        key: ComponentValType,
+        value: ComponentValType,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("map:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        let idx = sink.define(CmDefined::Map { key, value });
         self.cache.insert(cache_key, idx);
         idx
     }
@@ -4147,6 +4173,27 @@ impl CmTypeGen {
                     let idx = self.define_list(sink, elem_cm, &key);
                     ComponentValType::Type(idx)
                 }
+                "TreeMap" => {
+                    let key_cm = self.ast_type_to_cm(
+                        sink,
+                        &generic.args[0],
+                        cm_interface_registry,
+                        resource_exports,
+                    );
+                    let value_cm = self.ast_type_to_cm(
+                        sink,
+                        &generic.args[1],
+                        cm_interface_registry,
+                        resource_exports,
+                    );
+                    let key = format!(
+                        "{},{}",
+                        Self::type_key(&generic.args[0]),
+                        Self::type_key(&generic.args[1])
+                    );
+                    let idx = self.define_map(sink, key_cm, value_cm, &key);
+                    ComponentValType::Type(idx)
+                }
                 "Result" => {
                     let is_ok_unit = matches!(&generic.args[0], Type::Tuple(t) if t.is_empty())
                         || matches!(&generic.args[0], Type::Named(n) if n.name == "()");
@@ -4282,8 +4329,8 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
             "Result" => ValType::I32,
             // Future<T> is represented as i32 handle
             "Future" => ValType::I32,
-            // List<T> is represented as a GC array reference (handled as i32 in WASI context)
-            "List" => ValType::I32,
+            // List<T> / TreeMap<K, V> are GC references (i32 in a WASI context)
+            "List" | "TreeMap" => ValType::I32,
             // Option<T> is represented as i32 discriminant
             "Option" => ValType::I32,
             other => panic!("unknown generic type in cm_type_to_valtype: {other}"),
@@ -4386,7 +4433,7 @@ fn is_param_type_supported_with_types(
         Type::Generic(generic) => {
             matches!(
                 generic.name.as_str(),
-                "Stream" | "Result" | "Future" | "Option" | "List"
+                "Stream" | "Result" | "Future" | "Option" | "List" | "TreeMap"
             )
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
@@ -4453,7 +4500,11 @@ fn is_return_type_supported_with_types(
                         is_return_type_supported_with_types(arg, enums, resources, structs)
                     })
                 }
-                "List" | "Option" => {
+                // A `TreeMap<K, V>` is `map<K, V>`; its key is narrowed to
+                // the CM `keytype` subset by the boundary representability
+                // check, which holds the resolved types this name-level pass
+                // does not.
+                "List" | "Option" | "TreeMap" => {
                     // A list/option element is any supported value type (e.g.
                     // `list<list<u8>>`, `list<[field-name, field-value]>`).
                     generic.args.iter().all(|arg| {

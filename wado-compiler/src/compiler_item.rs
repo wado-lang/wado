@@ -398,6 +398,9 @@ pub enum CompilerItem {
     /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
     /// call it.
     ListFromTuple,
+    /// `TreeMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
+    /// insert behind `map[k] = v`. The `map<K, V>` lift builds its pairs with it.
+    TreeMapIndexAssign,
     /// `ReflectStruct::type_name` — the per-struct type name.
     ReflectStructTypeName,
     /// `ReflectStruct::members` — the per-field member tuple.
@@ -714,6 +717,7 @@ impl CompilerItem {
         Self::AlignmentRight,
         Self::ListPush,
         Self::ListFromTuple,
+        Self::TreeMapIndexAssign,
         Self::ReflectStructTypeName,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
@@ -911,6 +915,7 @@ impl CompilerItem {
             Self::AlignmentRight => "alignment_right",
             Self::ListPush => "list_push",
             Self::ListFromTuple => "list_from_tuple",
+            Self::TreeMapIndexAssign => "tree_map_index_assign",
             Self::ReflectStructTypeName => "reflect_struct_type_name",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
@@ -1161,7 +1166,7 @@ impl CompilerItem {
             // Kiln generator world only.
             Self::KilnRequest => world == "core:kiln/generator",
             // Loaded only when the user imports `core:collections`.
-            Self::TreeMap => false,
+            Self::TreeMap | Self::TreeMapIndexAssign => false,
             // Loaded only when the user imports `core:serde` (which
             // happens implicitly for kiln-options decoding). The
             // validator skips the check; downstream synthesis ICEs
@@ -1348,6 +1353,7 @@ impl CompilerItem {
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListFromTuple
+            | Self::TreeMapIndexAssign
             | Self::ReflectStructTypeName
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
@@ -2045,6 +2051,16 @@ impl CompilerItems {
     /// Name-only convenience for a [`CompilerItemKind::Struct`] item.
     pub fn struct_name(&self, item: CompilerItem) -> &str {
         self.require_struct(item).1
+    }
+
+    /// [`Self::struct_name`] for an item whose module may not be loaded —
+    /// `core:collections` is not auto-imported, so `TreeMap` is absent from a
+    /// program that never names it.
+    pub fn struct_name_opt(&self, item: CompilerItem) -> Option<&str> {
+        if let Resolved::Struct { name, .. } = self.get(item)? {
+            return Some(name.as_str());
+        }
+        None
     }
 
     /// Name-only convenience for a [`CompilerItemKind::Variant`] item.

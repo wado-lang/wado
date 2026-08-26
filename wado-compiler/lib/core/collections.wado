@@ -340,6 +340,7 @@ impl<K: Ord> TreeMap<K, V> {
 impl<K: Ord> IndexAssign<K> for TreeMap<K, V> {
     type Output = V;
 
+    #[compiler_item("tree_map_index_assign")]
     fn index_assign(&mut self, key: K, value: Self::Output) {
         self.insert(key, value);
     }

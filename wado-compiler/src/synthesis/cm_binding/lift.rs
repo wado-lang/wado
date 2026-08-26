@@ -27,6 +27,11 @@ use super::types::{
     disc_load_op, is_unit_type, kebab_to_pascal,
 };
 
+/// The type-parameter binder `impl<K: Ord> IndexAssign<K> for TreeMap<K, V>`
+/// declares. It is the impl's own name for the key, so it is what the mangled
+/// `index_assign` carries — the concrete key type appears only on the receiver.
+const TREE_MAP_KEY_BINDER: &str = "K";
+
 /// Synthesize a TIR expression that loads a CM value from linear memory.
 ///
 /// For primitives, returns a single expression (no setup statements).
@@ -101,7 +106,7 @@ fn synthesize_lift_inner(
     // Resolve stdlib struct names through the compiler-item registry so
     // a rename of `String` / `List` / `Option` / `Result` flows through
     // CM lifting without code changes here.
-    let (string_name, list_name, option_name, result_name) = {
+    let (string_name, list_name, tree_map_name, option_name, result_name) = {
         let tt = ctx.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -111,6 +116,9 @@ fn synthesize_lift_inner(
             items
                 .struct_name(crate::compiler_item::CompilerItem::List)
                 .to_string(),
+            items
+                .struct_name_opt(crate::compiler_item::CompilerItem::TreeMap)
+                .map(str::to_string),
             items
                 .variant_name(crate::compiler_item::CompilerItem::Option)
                 .to_string(),
@@ -222,6 +230,10 @@ fn synthesize_lift_inner(
                 synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
             } else if gname == result_name && g.args.len() == 2 {
                 synthesize_lift_result_inner(
+                    &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
+                )
+            } else if tree_map_name.as_deref() == Some(gname) && g.args.len() == 2 {
+                synthesize_lift_map(
                     &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
                 )
             } else if matches!(gname, "Stream" | "Future" | "Own" | "Borrow") {
@@ -754,6 +766,215 @@ pub(super) fn synthesize_lift_list(
     ));
 
     local_ref(result_local, "__result", array_type_id)
+}
+
+/// Lift a `map<K, V>` from linear memory at `addr`.
+///
+/// The buffer is the `list<tuple<K, V>>` buffer — the type `map` despecializes
+/// to — so the walk is [`synthesize_lift_list`]'s, with the accumulator
+/// swapped: each pair is inserted with `map[k] = v`, whose last-wins update is
+/// the rule the Component Model states for a repeated key. Nothing
+/// materialises the pair itself; the key and the value are lifted straight
+/// from their offsets.
+pub(super) fn synthesize_lift_map(
+    key_ty: &Type,
+    value_ty: &Type,
+    addr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LiftContext<'_>,
+) -> TirExpr {
+    let pair = [key_ty.clone(), value_ty.clone()];
+    let layout = cm_abi::layout_tuple_with_registry_scoped(
+        &pair,
+        ctx.cm_interface_registry,
+        Some(ctx.cm_package),
+    );
+    let pair_size = layout.size;
+    let pair_align = layout.align;
+
+    let (map_type_id, key_tid, value_tid, map_head, map_source, index_assign) = {
+        let mut tt = ctx.type_table.borrow_mut();
+        let key_tid = ctx.cm_type_id(key_ty, &mut tt);
+        let value_tid = ctx.cm_type_id(value_ty, &mut tt);
+        let map_type_id = tt.make_tree_map(key_tid, value_tid);
+        let map_head = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::TreeMap);
+        let items = tt.compiler_items();
+        let map_source = items
+            .require_struct(crate::compiler_item::CompilerItem::TreeMap)
+            .0
+            .clone();
+        // `impl<K: Ord> IndexAssign<K> for TreeMap<K, V>` — the trait argument
+        // is the impl's own binder, so the mangled name carries `K`, not the
+        // key this instantiation was made with.
+        let index_assign = items
+            .trait_fq(crate::compiler_item::CompilerItem::IndexAssign)
+            .with_args(vec![crate::name::FqTypeName::binder(TREE_MAP_KEY_BINDER)]);
+        let method = items
+            .method_name(crate::compiler_item::CompilerItem::TreeMapIndexAssign)
+            .to_string();
+        (
+            map_type_id,
+            key_tid,
+            value_tid,
+            map_head,
+            map_source,
+            (index_assign, method),
+        )
+    };
+
+    let base_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__map_base",
+        base_local,
+        TypeTable::I32,
+        builtin_call("i32_load", vec![addr.clone()], TypeTable::I32),
+    ));
+
+    let count_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__map_count",
+        count_local,
+        TypeTable::I32,
+        builtin_call(
+            "i32_load",
+            vec![binary_add(addr, i32_const(4))],
+            TypeTable::I32,
+        ),
+    ));
+
+    let result_local = alloc_local(next_local, locals, map_type_id);
+    stmts.push(let_mut_stmt(
+        "__map",
+        result_local,
+        map_type_id,
+        generic_static_call(
+            &map_head,
+            "new",
+            map_source.clone(),
+            vec![key_tid, value_tid],
+            vec![],
+            map_type_id,
+        ),
+    ));
+
+    let i_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_mut_stmt("__map_i", i_local, TypeTable::I32, i32_const(0)));
+
+    let mut loop_stmts: Vec<TirStmt> = Vec::new();
+    loop_stmts.push(if_stmt(
+        binary(
+            TirBinaryOp::GtEq,
+            local_ref(i_local, "__map_i", TypeTable::I32),
+            local_ref(count_local, "__map_count", TypeTable::I32),
+            TypeTable::BOOL,
+        ),
+        block(vec![break_stmt()]),
+        None,
+    ));
+
+    let pair_addr_local = alloc_local(next_local, locals, TypeTable::I32);
+    loop_stmts.push(let_stmt(
+        "__pair_addr",
+        pair_addr_local,
+        TypeTable::I32,
+        binary_add(
+            local_ref(base_local, "__map_base", TypeTable::I32),
+            binary(
+                TirBinaryOp::Mul,
+                local_ref(i_local, "__map_i", TypeTable::I32),
+                i32_const(pair_size as i32),
+                TypeTable::I32,
+            ),
+        ),
+    ));
+
+    let string_name = string_name_for_free(ctx);
+    let mut lifted = Vec::new();
+    for (slot, slot_ty) in pair.iter().enumerate() {
+        let slot_addr = binary_add(
+            local_ref(pair_addr_local, "__pair_addr", TypeTable::I32),
+            i32_const(layout.offsets[slot] as i32),
+        );
+        let mut slot_stmts: Vec<TirStmt> = Vec::new();
+        let value = synthesize_lift_inner(
+            slot_ty,
+            slot_addr.clone(),
+            next_local,
+            &mut slot_stmts,
+            locals,
+            ctx,
+        );
+        loop_stmts.extend(slot_stmts);
+        let value = materialize_if_needed(value, next_local, &mut loop_stmts, locals);
+        loop_stmts.extend(synthesize_free_element(
+            slot_ty, slot_addr, &string_name, ctx,
+        ));
+        lifted.push(value);
+    }
+    let [key, value] = <[TirExpr; 2]>::try_from(lifted)
+        .unwrap_or_else(|_| panic!("a map pair lifts exactly a key and a value"));
+
+    let (index_assign_trait, index_assign_method) = index_assign;
+    let info = crate::name::LocalMethodName::new(
+        map_head.clone(),
+        Some(index_assign_trait),
+        index_assign_method,
+    );
+    let mangled = info.to_mangled_name();
+    loop_stmts.push(expr_stmt(TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(local_ref(result_local, "__map", map_type_id)),
+            crate::tir::FunctionRef {
+                module_source: map_source,
+                name: mangled,
+                monomorph_info: None,
+                method_info: Some(info),
+            },
+            vec![],
+            vec![
+                crate::tir::CallArg::new(key, false),
+                crate::tir::CallArg::new(value, false),
+            ],
+        ),
+        TypeTable::UNIT,
+        synth_span(),
+    )));
+
+    loop_stmts.push(expr_stmt(assign(
+        local_ref(i_local, "__map_i", TypeTable::I32),
+        binary_add(local_ref(i_local, "__map_i", TypeTable::I32), i32_const(1)),
+    )));
+
+    stmts.push(loop_stmt(block(loop_stmts)));
+
+    stmts.push(if_stmt(
+        binary(
+            TirBinaryOp::Gt,
+            local_ref(count_local, "__map_count", TypeTable::I32),
+            i32_const(0),
+            TypeTable::BOOL,
+        ),
+        block(vec![expr_stmt(builtin_call(
+            "realloc",
+            vec![
+                local_ref(base_local, "__map_base", TypeTable::I32),
+                binary(
+                    TirBinaryOp::Mul,
+                    local_ref(count_local, "__map_count", TypeTable::I32),
+                    i32_const(pair_size as i32),
+                    TypeTable::I32,
+                ),
+                i32_const(pair_align as i32),
+                i32_const(0),
+            ],
+            TypeTable::I32,
+        ))]),
+        None,
+    ));
+
+    local_ref(result_local, "__map", map_type_id)
 }
 
 /// Lift an `option<T>` from linear memory at `addr`.

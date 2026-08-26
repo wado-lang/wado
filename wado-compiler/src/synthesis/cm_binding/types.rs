@@ -331,6 +331,14 @@ pub fn cm_type_to_type_id(
                 let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_list(elem_type);
             }
+            let tree_map_name = type_table
+                .compiler_struct_name(CompilerItem::TreeMap)
+                .to_string();
+            if g.name.as_str() == tree_map_name && g.args.len() == 2 {
+                let key = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let value = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                return type_table.make_tree_map(key, value);
+            }
             let option_name = type_table
                 .compiler_variant_name(CompilerItem::Option)
                 .to_string();
