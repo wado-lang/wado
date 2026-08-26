@@ -45,6 +45,11 @@ const DENIED = [
   "__proto__ -x; sed -i x f",
   "$'sed' -i x f",
   '$"sed" -i x f',
+  "$'\\x73ed' -i x f",
+  "$'\\163ed' -i x f",
+  "env -S 'sed -i x f'",
+  "env -S'awk 1 f'",
+  "env --split-string='sed -i x f'",
 ];
 
 const ALLOWED = [
@@ -72,6 +77,8 @@ const ALLOWED = [
   "git rev-parse 'HEAD^{commit}'",
   "{ cargo build; cargo test; }",
   "trap 'echo bye' EXIT; echo hi",
+  "env FOO=1 cargo test",
+  "env -u RUSTFLAGS cargo build",
 ];
 
 test("denies a forbidden command word", () => {

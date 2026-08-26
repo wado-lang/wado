@@ -22,7 +22,7 @@ const FORBIDDEN = [
 // first argument that is neither a flag, a listed flag's value, nor a duration.
 const RUNNERS = new Map([
   ["command", ["-v", "-V"]],
-  ["env", ["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]],
+  ["env", ["-u", "--unset", "-C", "--chdir"]],
   ["exec", ["-a"]],
   ["ionice", ["-c", "-n", "-p", "-P", "-u"]],
   ["nice", ["-n", "--adjustment"]],
@@ -38,6 +38,8 @@ const RUNNERS = new Map([
 const SHELLS = new Set(["bash", "dash", "ksh", "sh", "zsh"]);
 // `bash -c`, `sh -ec`, `zsh -lic`: the script follows when `c` ends the flag.
 const SHELL_FLAG = /^-[A-Za-z]*c$/;
+// `env -S 'cmd'`, `env -S'cmd'`, `env --split-string=cmd`: a command line of its own.
+const ENV_SPLIT = /^(?:-S|--split-string)=?([\s\S]*)$/;
 const OPENS_COMMAND = new Set(["!", "do", "elif", "else", "if", "then", "until", "while"]);
 const NOT_A_COMMAND = new Set([
   "case",
@@ -79,6 +81,52 @@ function balanced(src: string, start: number, open: string, close: string): [str
     }
   }
   return [src.slice(start), i];
+}
+
+const ANSI_C_ESCAPES = new Map([
+  ["a", "\x07"],
+  ["b", "\b"],
+  ["e", "\x1b"],
+  ["E", "\x1b"],
+  ["f", "\f"],
+  ["n", "\n"],
+  ["r", "\r"],
+  ["t", "\t"],
+  ["v", "\v"],
+  ["\\", "\\"],
+  ["'", "'"],
+  ['"', '"'],
+  ["?", "?"],
+]);
+
+/** The text `$'…'` expands to, and the index past its close. */
+function ansiCQuoted(src: string, start: number): [string, number] {
+  let value = "";
+  let i = start;
+  while (i < src.length && src[i] !== "'") {
+    if (src[i] !== "\\") {
+      value += src[i++];
+      continue;
+    }
+    const escape = src[i + 1] ?? "";
+    const named = ANSI_C_ESCAPES.get(escape);
+    const numeric = /^(x[0-9a-fA-F]{1,2}|u[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{1,8}|[0-7]{1,3})/.exec(
+      src.slice(i + 1),
+    );
+    if (named !== undefined) {
+      value += named;
+      i += 2;
+    } else if (numeric) {
+      const digits = numeric[0];
+      const radix = /^[xuU]/.test(digits) ? 16 : 8;
+      value += String.fromCodePoint(parseInt(radix === 16 ? digits.slice(1) : digits, radix));
+      i += 1 + digits.length;
+    } else {
+      value += src.slice(i, i + 2);
+      i += 2;
+    }
+  }
+  return [value, i < src.length ? i + 1 : i];
 }
 
 /** Text up to the next `close`, and the index past it. */
@@ -137,8 +185,12 @@ function readWord(src: string, start: number): Word {
     } else if (c === "\\") {
       if (src[i + 1] !== "\n") value += src[i + 1] ?? "";
       i += 2;
-    } else if (c === "$" && (src[i + 1] === "'" || src[i + 1] === '"')) {
-      i++; // `$'…'` and `$"…"` run as their contents
+    } else if (c === "$" && src[i + 1] === "'") {
+      const [quoted, end] = ansiCQuoted(src, i + 2);
+      value += quoted;
+      i = end;
+    } else if (c === "$" && src[i + 1] === '"') {
+      i++; // a locale-translated string runs as its contents
     } else if (c === "'") {
       const [quoted, end] = delimited(src, i + 1, "'");
       value += quoted;
@@ -186,7 +238,7 @@ export function commandNames(src: string): string[] {
   let atCommand = true;
   let runner = "";
   let skipValue = false;
-  let shellFlag = false;
+  let nestNext = false;
   let previous = "";
   let i = 0;
 
@@ -194,7 +246,7 @@ export function commandNames(src: string): string[] {
     atCommand = true;
     runner = "";
     skipValue = false;
-    shellFlag = false;
+    nestNext = false;
   };
 
   while (i < src.length) {
@@ -255,6 +307,11 @@ export function commandNames(src: string): string[] {
   }
 
   function classify(value: string): void {
+    if (nestNext) {
+      nested.push(value);
+      nestNext = false;
+      return;
+    }
     if (atCommand || runner) {
       if (skipValue) {
         skipValue = false;
@@ -263,7 +320,13 @@ export function commandNames(src: string): string[] {
       if (ASSIGNMENT.test(value)) return;
       if (runner) {
         if (value.startsWith("-")) {
-          skipValue = RUNNERS.get(runner)!.includes(value);
+          const split = runner === "env" ? ENV_SPLIT.exec(value) : null;
+          if (split) {
+            if (split[1] === "") nestNext = true;
+            else nested.push(split[1]);
+          } else {
+            skipValue = RUNNERS.get(runner)!.includes(value);
+          }
           return;
         }
         if (DURATION.test(value)) return;
@@ -282,10 +345,9 @@ export function commandNames(src: string): string[] {
     } else if (EXEC_FLAGS.has(value)) {
       startCommand();
     } else if (SHELL_FLAG.test(value) && SHELLS.has(previous)) {
-      shellFlag = true;
-    } else if (shellFlag || previous === "eval") {
+      nestNext = true;
+    } else if (previous === "eval") {
       nested.push(value);
-      shellFlag = false;
     }
   }
 }
