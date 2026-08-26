@@ -3071,8 +3071,11 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
         i += 1;
     }
 
+    // A tail that leaves nothing on the stack has no aggregate to lift — the
+    // `Nop` a rewritten exit leaves behind, or a store the block ends with.
     if tail == Tail::IsResult
         && let Some(last) = instrs.last_mut()
+        && last.produces_stack_value()
     {
         all_rewritten &= lifted(last);
     }
