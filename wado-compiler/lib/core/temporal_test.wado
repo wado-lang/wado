@@ -1209,3 +1209,11 @@ test "ISO week numbering keeps its anchor days across -400..=400" {
         assert jan4.add(&Duration { weeks: weeks as i64 }).year_of_week() == y + 1;
     }
 }
+
+test "from_epoch_nanoseconds round-trips the whole i64 second range" {
+    let bounds: List<i64> = [-9_223_372_036_854_775_807, -1, 0, 1, 9_223_372_036_854_775_806];
+    for let seconds of bounds {
+        let i = Instant { seconds: seconds, nanoseconds: 500_000_000 };
+        assert Instant::from_epoch_nanoseconds(i.epoch_nanoseconds()) == i;
+    }
+}
