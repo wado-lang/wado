@@ -69,7 +69,7 @@ fn writes_in(
         .enumerate()
         .map(|(i, p)| (p.local_index, u32::try_from(i).unwrap()))
         .collect();
-    replaced_locals(body, computed, types)
+    replaced_locals(Body::Block(body), computed, types)
         .iter()
         .filter_map(|local| positions.get(local).copied())
         .collect()
@@ -77,25 +77,25 @@ fn writes_in(
 
 /// The local slots a whole-value write reaches inside one body, so a borrow
 /// bound to one is refused only when something actually replaces through it.
+/// A function's body is a block; a closure's is an expression.
 pub fn replaced_locals(
-    body: &crate::tir::TirBlock,
+    body: Body<'_>,
     computed: &WholeValueWrites,
     types: &TypeTable,
 ) -> IndexSet<u32> {
     let mut walker = WriteWalker::new(computed, types);
-    walker.visit_block(body);
+    match body {
+        Body::Block(block) => walker.visit_block(block),
+        Body::Expr(expr) => walker.visit_expr(expr),
+    }
     walker.found
 }
 
-/// The same, for a closure body, which is an expression rather than a block.
-pub fn replaced_locals_in_expr(
-    body: &TirExpr,
-    computed: &WholeValueWrites,
-    types: &TypeTable,
-) -> IndexSet<u32> {
-    let mut walker = WriteWalker::new(computed, types);
-    walker.visit_expr(body);
-    walker.found
+/// What a body is spelled as, which differs between a function and a closure.
+#[derive(Clone, Copy)]
+pub enum Body<'a> {
+    Block(&'a crate::tir::TirBlock),
+    Expr(&'a TirExpr),
 }
 
 /// The storage a write reaches, in the namespace of the body being walked.

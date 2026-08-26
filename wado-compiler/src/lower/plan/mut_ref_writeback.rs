@@ -17,12 +17,15 @@ use crate::token::Span;
 
 /// Runs before [`super::boxing::prepare_types`], while `&mut T` is still
 /// distinguishable from `&T` and the referent type is readable.
-pub fn insert_write_backs(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bail> {
+pub fn insert_write_backs(
+    flat: &mut FlatPackage,
+    call_graph: &CallGraph,
+    errors: &dyn ErrorSink,
+) -> Result<(), Bail> {
     let escaping = escaping_params(flat);
-    let call_graph = CallGraph::build(flat);
     let type_table = flat.type_table.clone();
     let type_table = type_table.borrow();
-    let replaced = whole_value_writes::compute(flat, &call_graph, &type_table);
+    let replaced = whole_value_writes::compute(flat, call_graph, &type_table);
     for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();
         let local_count = func.local_count;
@@ -30,7 +33,13 @@ pub fn insert_write_backs(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Res
         let replaced_locals = func
             .body
             .as_ref()
-            .map(|body| whole_value_writes::replaced_locals(body, &replaced, &type_table))
+            .map(|body| {
+                whole_value_writes::replaced_locals(
+                    whole_value_writes::Body::Block(body),
+                    &replaced,
+                    &type_table,
+                )
+            })
             .unwrap_or_default();
         let mut pass = WriteBack {
             type_table: &type_table,
@@ -191,10 +200,8 @@ impl WriteBack<'_> {
     }
 
     /// A detached borrow `expr` can yield, following the value positions one
-    /// reaches storage through. The first is the whole answer: [`Self::refuse`]
-    /// keeps the first refusal, and every other caller only asks whether there
-    /// is one. This runs on every argument of every call in the program, so it
-    /// allocates nothing.
+    /// reaches storage through. The first is the whole answer, since only the
+    /// first refusal is reported.
     fn detached_in_value_position(&self, expr: &TirExpr) -> Option<Span> {
         if let Some(place) = self.detached_borrow(expr) {
             return Some(place.span);
@@ -221,9 +228,8 @@ impl WriteBack<'_> {
         }
     }
 
-    /// Walk a closure body against its own local namespace: its parameters hold
-    /// the slots below `body_locals`, and the temps it borrows belong to its
-    /// own address-taken set, which is what `boxing` reads on the way in.
+    /// Walk a closure body against its own local namespace, seeding its own
+    /// address-taken set — which is what `boxing` reads on the way in.
     fn visit_closure(
         &mut self,
         param_count: usize,
@@ -238,8 +244,8 @@ impl WriteBack<'_> {
             replaced: self.replaced,
             // A closure body's slots are its own, so what it replaces through
             // is its own question too.
-            replaced_locals: whole_value_writes::replaced_locals_in_expr(
-                body,
+            replaced_locals: whole_value_writes::replaced_locals(
+                whole_value_writes::Body::Expr(body),
                 self.replaced,
                 self.type_table,
             ),

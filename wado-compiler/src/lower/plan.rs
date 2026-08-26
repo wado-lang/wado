@@ -63,13 +63,16 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);
+    // The pre-boxing analyses share one graph: what follows rewrites bodies but
+    // adds no function, so the callee sets do not move until closure lifting.
+    let pre_boxing_calls = value_copy::callgraph::CallGraph::build(flat);
     // Before boxing, while `&mut T` still names its referent: a detached `&mut`
     // argument becomes a borrow of a temp that is stored back after the call.
-    mut_ref_writeback::insert_write_backs(flat, errors)?;
+    mut_ref_writeback::insert_write_backs(flat, &pre_boxing_calls, errors)?;
     // Confinement and receiver-ref capture run before boxing collapses `&mut T`
     // / `&T` onto `Box<T>`; both results key on parameter position, unchanged by
     // boxing.
-    let confined_params = value_copy::confine::compute_confined_params(flat);
+    let confined_params = value_copy::confine::compute_confined_params(flat, &pre_boxing_calls);
     let ref_receiver_methods = ref_receiver_methods(flat);
     let box_plan = boxing::prepare_types(flat);
     boxing::shadow_params(flat, &box_plan);

@@ -205,57 +205,45 @@ fix to conform; none should be preserved.
   type parameter alike, and reading a rewritten call's callee and each of its
   arguments in source order so a preceding one's write is not read past.
 
-  Both halves follow the borrow rather than its spelling. A variable bound to
-  one carries it, so the sink that variable reaches is the sink the borrow
-  reaches; a whole-value write names the storage it lands on through the
-  `&mut *r` reborrow that forwarding spells, through the capture a closure
-  names an enclosing local by, and through the `&mut` bindings that carry a
-  parameter on (`let q = p; *q = v` replaces what the caller handed in); and a
-  closure numbers its locals in its own namespace, so what it replaces there
-  says nothing about the enclosing slot of the same index.
+  Both halves follow the borrow, not its spelling: a variable bound to one
+  carries it to whatever sink it reaches, and a whole-value write names its
+  storage through a `&mut *r` reborrow, through a capture, and through the
+  `&mut` bindings that carry a parameter on (`let q = p; *q = v`). A closure
+  numbers its locals in its own namespace, so what it replaces there says
+  nothing about the enclosing slot of the same index.
 
-  The `&mut *p` row is the borrow-site refusal's own gap: it keys on a
-  `FieldAccess` / `Index` operand, so a reborrow slips past it for every replace
-  type. `variant` is covered from the other side, by the write-back; the rest
-  drop silently until the refusal matches the deref too.
+  What still drops, and what closing it takes:
 
-  The element row is the other. `&mut xs[i]` lowers to
-  `&mut *xs.index_ref(i)` — a `MutRef` over a deref of a call, not an `Index`
-  place — so its write-back is an `index_assign` to synthesize rather than a
-  field store, and `index_assign` resolves in the elaborator: the trait impl,
-  the mangled name, and the recorded dispatch. A lowering pass would have to
-  repeat trait resolution to reach it, which is why the carve-out lists the
-  index-element and struct-field paths separately and why closing this one means
-  desugaring at elaboration time. Refusing it outright is not open: payload
-  mutation through an element borrow is the
-  `normalize_element(&mut alt.elements[ei])` idiom, and that lands. The refusal
-  is narrowed to a position the callee replaces or stores — code that was
-  already losing the write — so it rejects rather than miscompiles.
+  - `&mut *p` for every replace type but `variant`. The borrow-site refusal keys
+    on a `FieldAccess` / `Index` operand, so a reborrow slips past it. `variant`
+    is covered from the other side by the write-back; the rest need that refusal
+    to match the deref too.
+  - A `variant` element as a call argument, where the callee neither replaces
+    nor stores. `&mut xs[i]` lowers to `&mut *xs.index_ref(i)`, so its
+    write-back is an `index_assign` to synthesize, and that resolves in the
+    elaborator — trait impl, mangled name, recorded dispatch. Reaching it from a
+    lowering pass means repeating trait resolution, so closing it means
+    desugaring at elaboration time; hence the carve-out lists index-element and
+    struct-field separately. Refusing outright is not open, since
+    `normalize_element(&mut alt.elements[ei])` lands.
+  - A call argument that _yields_ a borrow (`f(if c { &mut b.l } else
+    { &mut b.r })`), for the mirrored reason: which place it borrowed is not
+    known until it runs. Both want the write-back to follow the borrow to
+    whichever place it named — the points-to answer neither half has.
+  - A whole capture, where a store back would land in the closure's environment:
+    closure lowering filled that with a copy of the enclosing slot, and the
+    capture mode is its decision, not this pass's. A projection _through_ a
+    capture is fine — it lands on the object the capture copied.
 
-  A call argument that _yields_ a borrow rather than being one —
-  `f(if c { &mut b.left } else { &mut b.right })` — is refused on the same
-  terms, and for the mirrored reason: which place it borrowed is not known until
-  it runs, so there is no one place to store the temp back to. Both want the
-  write-back to follow the borrow to whichever place it named, which is the
-  points-to answer neither half has.
+  Where the callee does replace or store, all four are refused rather than
+  dropped: that code was already losing the write.
 
-  The capture row is a third. A store back to a whole capture lands in the
-  closure's environment, which closure lowering filled with a copy of the
-  enclosing slot before this pass runs — a closure that only takes `&mut` of a
-  captured local, never assigning it, still captures it by value, and the
-  capture-mode decision is the closure lowering's, not this one's. So a whole
-  capture is no write-back point and is refused on the same terms as an element.
-  A projection _through_ a capture is not: it lands on the object the capture
-  copied, which is the one the read came from.
-
-  Two sinks are refused wider than the rule asks, because neither can be gated
-  on a whole-value write the way a `let` is. Rebinding a variable (`r = &mut
-  b.item`) is refused even where nothing replaces through `r`, since the
-  detached-local set is filled in visit order and an assignment need not
-  dominate its reads; gating it takes computing that set as a fixpoint before
-  the walk. A `break` carrying one is refused for the mirrored reason: the
-  labeled block's value is read from its tail alone, so nothing else would see
-  the borrow the break yields.
+  Two sinks are refused wider than the rule asks, neither gateable on a
+  whole-value write the way a `let` is. Rebinding (`r = &mut b.item`) is refused
+  even where nothing replaces through `r`, since the detached-local set is
+  filled in visit order and an assignment need not dominate its reads; gating it
+  takes that set as a fixpoint before the walk. A `break` carrying one is
+  refused because a labeled block's value is read from its tail alone.
 
   The write-back stores the temp back only when the callee replaced it — the
   temp aliases the place, so an unconditional store would also undo a write the
