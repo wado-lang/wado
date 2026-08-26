@@ -125,12 +125,10 @@ pub enum CompilerItem {
     /// compiler always points at the right concrete `List` struct.
     List,
     /// `TreeMap<K, V>` — the insertion-ordered map struct, and the Wado
-    /// spelling of the Component Model `map<K, V>`. Recognised by the CM
-    /// binding synthesis, which lifts and lowers it through its pair list.
+    /// spelling of the Component Model `map<K, V>`.
     TreeMap,
-    /// `TreeMapEntriesRefIter<K, V>` — what `TreeMap::entries` returns. The
-    /// `map<K, V>` lower walks it, so it names the declaration rather than
-    /// reaching into the map's own entry list and tombstone flag.
+    /// `TreeMapEntriesRefIter<K, V>` — what `TreeMap::entries` returns, and
+    /// what the `map<K, V>` lower walks.
     TreeMapEntriesIter,
     /// `Box<T>` — boxes primitive values into a struct that
     /// participates in GC tracing.
@@ -403,14 +401,12 @@ pub enum CompilerItem {
     /// call it.
     ListFromTuple,
     /// `TreeMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
-    /// insert behind `map[k] = v`. The `map<K, V>` lift builds its pairs with it.
+    /// insert behind `map[k] = v`, which the `map<K, V>` lift builds pairs with.
     TreeMapIndexAssign,
-    /// `TreeMapEntriesRefIter`'s `Iterator::next`. The `map<K, V>` lower walks
-    /// the pairs with it. `Iterator` carries an associated type, so the trait
-    /// item records no single method name to reach for.
+    /// `TreeMapEntriesRefIter`'s `Iterator::next`. `Iterator` carries an
+    /// associated type, so the trait item records no method name to reach for.
     TreeMapEntriesIterNext,
-    /// `TreeMap::len` — the live pair count, which sizes the `map<K, V>`
-    /// lower's buffer.
+    /// `TreeMap::len` — the live pair count, sizing the `map<K, V>` buffer.
     TreeMapLen,
     /// `TreeMap::entries` — the pair traversal the `map<K, V>` lower walks.
     TreeMapEntries,

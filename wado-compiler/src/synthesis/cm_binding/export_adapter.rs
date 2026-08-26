@@ -460,8 +460,7 @@ fn lower_to_flat_inner(
                 == Some(*def)
                 && type_args.len() == 2 =>
         {
-            // `map<K, V>` flat ABI: the `list<tuple<K, V>>` `(ptr, len)`, over
-            // the pair buffer the map lower writes.
+            // `map<K, V>` flattens as the `list<tuple<K, V>>` it despecializes to.
             let lower_ctx = LowerContext {
                 cm_interface_registry: ctx.cm_interface_registry,
                 type_table: ctx.type_table,
@@ -980,8 +979,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                 (lifted, 2)
             }
             n if names.tree_map.as_deref() == Some(n) && generic.args.len() == 2 => {
-                // map<K, V> flat ABI: the `list<tuple<K, V>>` `(ptr, len)`, so
-                // the same spill-and-lift the list arm uses.
                 let tmp_ptr_local =
                     spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
                 let lifted = super::lift::synthesize_lift_map(
@@ -1230,8 +1227,7 @@ fn coerce_payload_slots(
 }
 
 /// Spill a `(ptr, len)` flat pair into an 8-byte scratch block, so a lift that
-/// reads a list-shaped value from memory can be reused on flat parameters.
-/// Returns the local holding the block's address.
+/// reads from memory can be reused on flat parameters.
 fn spill_ptr_len_to_temp(
     flat_param_locals: &[u32],
     next_local: &mut u32,

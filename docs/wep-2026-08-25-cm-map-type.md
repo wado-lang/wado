@@ -8,35 +8,29 @@ type (🗺️), and [WASI 0.3.1](https://github.com/WebAssembly/WASI/blob/main/s
 longer a proposal Wado can wait out: an interface in the 0.3.1 line may use it,
 and a component claiming 0.3.1 must lift and lower it.
 
-`map<K, V>` is a *specialized* value type. The Component Model despecializes it
+`map<K, V>` is a _specialized_ value type. The Component Model despecializes it
 to `list<tuple<K, V>>` (`Explainer.md`, "Specialized value types"), so it shares
 that type's canonical ABI exactly — only the type-constructor byte differs
 (`0x63`). What the specialization buys is intent: a bindings generator is told
 to present an associative container rather than a list of pairs. The spec adds
-no key-uniqueness or ordering guarantee, and states that a generator *may*
+no key-uniqueness or ordering guarantee, and states that a generator _may_
 deduplicate and reorder as long as the last pair for a key wins.
 
-Wado has the container this is asking for. `TreeMap<K, V>` (`core:collections`)
-already iterates in insertion order and already answers `{ k: v, … }` literals
-through `From<Array<[String, V]>>`. What it does not do is cross the component
-boundary: `is_param_type_supported` / `is_return_type_supported`
-(`wado-compiler/src/component_model.rs`) admit only `List`, `Option`, `Result`,
-`Tuple`, `Stream`, `Future`, so `export fn f(m: TreeMap<String, u32>)` is
-rejected. On the way in, `wado-from-idl` drops `TypeDefKind::Map` into its
-`Named("Unknown")` fallback.
+Wado has the container this is asking for: `TreeMap<K, V>` (`core:collections`)
+iterates in insertion order and already answers `{ k: v, … }` literals through
+`From<Array<[String, V]>>`. What it does not do is cross the component boundary.
 
-The toolchain is ready. `wit-parser`, `wasmparser`, and `wasm-encoder` at the
-pinned 0.252 generation all carry `map`, and wasmtime 47 implements
-`InterfaceType::Map`. Nothing here waits on the wasmtime upgrade.
+The toolchain is ready — `wit-parser`, `wasmparser`, `wasm-encoder`, and
+wasmtime all carry `map` — so nothing here waits on a runtime upgrade.
 
 ## Decision
 
 ### `TreeMap<K, V>` is the Wado spelling of `map<K, V>`
 
-| Direction         | Mapping                        |
-| ----------------- | ------------------------------ |
-| Wado → WIT / CM   | `TreeMap<K, V>` → `map<k, v>`  |
-| WIT / CM → Wado   | `map<k, v>` → `TreeMap<K, V>`  |
+| Direction       | Mapping                       |
+| --------------- | ----------------------------- |
+| Wado → WIT / CM | `TreeMap<K, V>` → `map<k, v>` |
+| WIT / CM → Wado | `map<k, v>` → `TreeMap<K, V>` |
 
 No new Wado type. `TreeMap` is what a Wado author already reaches for, and
 insertion-order iteration is exactly the "last write wins, order unspecified"
@@ -69,22 +63,19 @@ type's, unchanged:
 - elements at `ptr + i * cm_size(tuple<K, V>)`
 
 `cm_size` / `cm_align` / `cm_flatten` answer for `TreeMap<K, V>` exactly what
-they answer for `List<[K, V]>`. Only the component *type section* differs, where
-`CmDefined::Map(k, v)` encodes `0x63` instead of a list of a tuple.
+they answer for `List<[K, V]>`. Only the component _type section_ differs, where
+`CmDefined::Map` encodes `0x63` instead of a list of a tuple.
 
 ### Lift and lower go straight through `TreeMap`'s public API
 
-No intermediate `List<[K, V]>`. Materializing one would deep-copy every key and
-value — Wado's assignment is a copy, so a pair list is a second full copy of the
-map's contents, built and discarded on every crossing. The despecialization
-`list<tuple<K, V>>` describes the *bytes*, and reusing it for the *bytes* is
-right; reusing it as a Wado value in between is not.
+No intermediate `List<[K, V]>`: Wado's assignment is a copy, so a pair list is a
+second full copy of the map's contents on every crossing. The despecialization
+describes the _bytes_; reusing it as a Wado value in between is not the same
+thing.
 
-The binding also does not learn `TreeMap`'s representation. `TreeMap` is an
-AA-tree over two backing lists with a tombstone flag, and encoding that into the
-ABI layer would break the moment the tree is retuned. Both are avoidable at
-once, because everything the binding needs is already public and is what user
-code writes:
+The binding also does not learn `TreeMap`'s representation — an AA-tree over two
+backing lists with a tombstone flag, which would break the moment the tree is
+retuned. Everything it needs is public, and is what user code writes:
 
 - **Lift** (`map` → `TreeMap`): `TreeMap::new()`, then the list-lift loop with
   its accumulator swapped — each iteration lifts `K` at the pair's offset and
@@ -102,13 +93,10 @@ never carries a duplicate. Round-tripping a `TreeMap` is therefore the identity,
 and round-tripping a duplicate-bearing `map` normalizes it, both of which the
 spec permits.
 
-The lower is the one place this costs new machinery: the existing loop is
+The lower is the one place this costs new machinery. The existing loop is
 index-driven (`len` + `index_value`), and a `TreeMap` has no positional accessor
 over live pairs — a tombstone breaks the correspondence between position and
-index. So the CM binding gains an iterator-driven loop. That is worth building
-rather than routing around: the alternative that avoids it is either the extra
-full copy above, or reaching into `entries` and `deleted` directly, which is the
-coupling this section exists to prevent.
+index — so the CM binding gains an iterator-driven loop.
 
 ### Feature gating
 
@@ -125,7 +113,7 @@ run` / `test` / `serve` accept what the compiler emits.
   so the `wasi:*` stdlib regenerates cleanly when a 0.3.1 interface adopts one.
 - `package-cm-catalog` gains `map` rows. The catalog already carries
   `id_assoc_array(List<[String, u32]>)` — the despecialized shape — so the new
-  rows pin the *specialization*: same bytes, different type constructor.
+  rows pin the _specialization_: same bytes, different type constructor.
 - A `TreeMap` key outside `keytype` is a boundary diagnostic, not a silent
   fallback.
 - Every method the binding calls — `new`, `index_assign`, `len`, `entries`, and
@@ -135,3 +123,13 @@ run` / `test` / `serve` accept what the compiler emits.
   method is simply absent by the time the binding names it. Registering it is
   also what lets the binding ask the registry for the name instead of spelling
   it.
+
+## Known gap
+
+A `map` parameter on an _imported_ function is not lowered. `classify_param`
+(`import_adapter.rs`), `cm_param_store_plan`, and `is_gc_passthrough_param`
+grew no `TreeMap` arm, so such a signature reaches the import path's
+`unsupported param type shape` panic. Closing it takes a `ParamLowering` case
+carrying the `(ptr, count)` pair, matching store-plan and type-fixup arms, and
+a catalog import row to test it against. Export signatures — what the catalog
+covers — are unaffected.

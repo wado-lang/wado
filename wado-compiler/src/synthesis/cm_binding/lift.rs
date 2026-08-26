@@ -27,9 +27,8 @@ use super::types::{
     disc_load_op, is_unit_type, kebab_to_pascal,
 };
 
-/// The type-parameter binder `impl<K: Ord> IndexAssign<K> for TreeMap<K, V>`
-/// declares. It is the impl's own name for the key, so it is what the mangled
-/// `index_assign` carries — the concrete key type appears only on the receiver.
+/// The binder `impl<K: Ord> IndexAssign<K> for TreeMap<K, V>` declares, which is
+/// what the mangled `index_assign` carries — the concrete key is on the receiver.
 const TREE_MAP_KEY_BINDER: &str = "K";
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -580,6 +579,132 @@ fn synthesize_lift_wasi_enum(
     local_ref(result_local, "__eresult", enum_type)
 }
 
+/// The `(ptr, count)` pair a CM `list` — and the `map` that despecializes to
+/// one — stores at its address, with the stride its elements sit at.
+struct CmBuffer {
+    base: u32,
+    count: u32,
+    elem_size: u32,
+    elem_align: u32,
+}
+
+impl CmBuffer {
+    /// Read the pair at `addr` into fresh locals.
+    fn read(
+        addr: &TirExpr,
+        elem_size: u32,
+        elem_align: u32,
+        next_local: &mut u32,
+        stmts: &mut Vec<TirStmt>,
+        locals: &mut Vec<TirLocal>,
+    ) -> Self {
+        let base = alloc_local(next_local, locals, TypeTable::I32);
+        stmts.push(let_stmt(
+            "__base",
+            base,
+            TypeTable::I32,
+            builtin_call("i32_load", vec![addr.clone()], TypeTable::I32),
+        ));
+        let count = alloc_local(next_local, locals, TypeTable::I32);
+        stmts.push(let_stmt(
+            "__count",
+            count,
+            TypeTable::I32,
+            builtin_call(
+                "i32_load",
+                vec![binary_add(addr.clone(), i32_const(4))],
+                TypeTable::I32,
+            ),
+        ));
+        Self {
+            base,
+            count,
+            elem_size,
+            elem_align,
+        }
+    }
+
+    fn count_ref(&self) -> TirExpr {
+        local_ref(self.count, "__count", TypeTable::I32)
+    }
+
+    /// `if __i >= __count { break }`, the walk's bound.
+    fn break_when_done(&self, i_local: u32) -> TirStmt {
+        if_stmt(
+            binary(
+                TirBinaryOp::GtEq,
+                local_ref(i_local, "__i", TypeTable::I32),
+                self.count_ref(),
+                TypeTable::BOOL,
+            ),
+            block(vec![break_stmt()]),
+            None,
+        )
+    }
+
+    /// Bind `__base + __i * elem_size` and return its local.
+    fn element_addr(
+        &self,
+        i_local: u32,
+        next_local: &mut u32,
+        stmts: &mut Vec<TirStmt>,
+        locals: &mut Vec<TirLocal>,
+    ) -> u32 {
+        let addr = alloc_local(next_local, locals, TypeTable::I32);
+        stmts.push(let_stmt(
+            "__elem_addr",
+            addr,
+            TypeTable::I32,
+            binary_add(
+                local_ref(self.base, "__base", TypeTable::I32),
+                binary(
+                    TirBinaryOp::Mul,
+                    local_ref(i_local, "__i", TypeTable::I32),
+                    i32_const(self.elem_size as i32),
+                    TypeTable::I32,
+                ),
+            ),
+        ));
+        addr
+    }
+
+    /// `__i += 1`.
+    fn advance(i_local: u32) -> TirStmt {
+        expr_stmt(assign(
+            local_ref(i_local, "__i", TypeTable::I32),
+            binary_add(local_ref(i_local, "__i", TypeTable::I32), i32_const(1)),
+        ))
+    }
+
+    /// Release the element buffer once the walk has read it.
+    fn free(&self, stmts: &mut Vec<TirStmt>) {
+        stmts.push(if_stmt(
+            binary(
+                TirBinaryOp::Gt,
+                self.count_ref(),
+                i32_const(0),
+                TypeTable::BOOL,
+            ),
+            block(vec![expr_stmt(builtin_call(
+                "realloc",
+                vec![
+                    local_ref(self.base, "__base", TypeTable::I32),
+                    binary(
+                        TirBinaryOp::Mul,
+                        self.count_ref(),
+                        i32_const(self.elem_size as i32),
+                        TypeTable::I32,
+                    ),
+                    i32_const(self.elem_align as i32),
+                    i32_const(0),
+                ],
+                TypeTable::I32,
+            ))]),
+            None,
+        ));
+    }
+}
+
 /// Lift a `list<T>` from linear memory at `addr`.
 ///
 /// Layout: `[base_ptr: i32, count: i32]` at addr.
@@ -631,25 +756,7 @@ pub(super) fn synthesize_lift_list(
         (elem_tid, list_tid, list_head)
     };
 
-    let base_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_stmt(
-        "__base",
-        base_local,
-        TypeTable::I32,
-        builtin_call("i32_load", vec![addr.clone()], TypeTable::I32),
-    ));
-
-    let count_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_stmt(
-        "__count",
-        count_local,
-        TypeTable::I32,
-        builtin_call(
-            "i32_load",
-            vec![binary_add(addr, i32_const(4))],
-            TypeTable::I32,
-        ),
-    ));
+    let buffer = CmBuffer::read(&addr, elem_size, elem_align, next_local, stmts, locals);
 
     let result_local = alloc_local(next_local, locals, array_type_id);
     stmts.push(let_mut_stmt(
@@ -661,7 +768,7 @@ pub(super) fn synthesize_lift_list(
             "with_capacity",
             ModuleSource::list(),
             vec![elem_type_id],
-            vec![local_ref(count_local, "__count", TypeTable::I32)],
+            vec![buffer.count_ref()],
             array_type_id,
         ),
     ));
@@ -672,34 +779,8 @@ pub(super) fn synthesize_lift_list(
     // Build loop body
     let mut loop_stmts: Vec<TirStmt> = Vec::new();
 
-    // if __i >= __count { break; }
-    loop_stmts.push(if_stmt(
-        binary(
-            TirBinaryOp::GtEq,
-            local_ref(i_local, "__i", TypeTable::I32),
-            local_ref(count_local, "__count", TypeTable::I32),
-            TypeTable::BOOL,
-        ),
-        block(vec![break_stmt()]),
-        None,
-    ));
-
-    // __elem_addr = __base + __i * elem_size
-    let elem_addr_local = alloc_local(next_local, locals, TypeTable::I32);
-    loop_stmts.push(let_stmt(
-        "__elem_addr",
-        elem_addr_local,
-        TypeTable::I32,
-        binary_add(
-            local_ref(base_local, "__base", TypeTable::I32),
-            binary(
-                TirBinaryOp::Mul,
-                local_ref(i_local, "__i", TypeTable::I32),
-                i32_const(elem_size as i32),
-                TypeTable::I32,
-            ),
-        ),
-    ));
+    loop_stmts.push(buffer.break_when_done(i_local));
+    let elem_addr_local = buffer.element_addr(i_local, next_local, &mut loop_stmts, locals);
 
     // Lift element (recursive: inner lists, options, etc. will also get proper types)
     let mut elem_lift_stmts: Vec<TirStmt> = Vec::new();
@@ -731,39 +812,9 @@ pub(super) fn synthesize_lift_list(
         ctx,
     ));
 
-    // __i = __i + 1
-    loop_stmts.push(expr_stmt(assign(
-        local_ref(i_local, "__i", TypeTable::I32),
-        binary_add(local_ref(i_local, "__i", TypeTable::I32), i32_const(1)),
-    )));
-
+    loop_stmts.push(CmBuffer::advance(i_local));
     stmts.push(loop_stmt(block(loop_stmts)));
-
-    // Free list buffer: realloc(__base, __count * elem_size, elem_align, 0)
-    stmts.push(if_stmt(
-        binary(
-            TirBinaryOp::Gt,
-            local_ref(count_local, "__count", TypeTable::I32),
-            i32_const(0),
-            TypeTable::BOOL,
-        ),
-        block(vec![expr_stmt(builtin_call(
-            "realloc",
-            vec![
-                local_ref(base_local, "__base", TypeTable::I32),
-                binary(
-                    TirBinaryOp::Mul,
-                    local_ref(count_local, "__count", TypeTable::I32),
-                    i32_const(elem_size as i32),
-                    TypeTable::I32,
-                ),
-                i32_const(elem_align as i32),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        ))]),
-        None,
-    ));
+    buffer.free(stmts);
 
     local_ref(result_local, "__result", array_type_id)
 }
@@ -783,15 +834,9 @@ fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, Typ
 
 /// Lift a `map<K, V>` from linear memory at `addr`.
 ///
-/// The buffer is the `list<tuple<K, V>>` buffer — the type `map` despecializes
-/// to — so the walk is [`synthesize_lift_list`]'s, with the accumulator
-/// swapped: each pair is inserted with `map[k] = v`, whose last-wins update is
-/// the rule the Component Model states for a repeated key. Nothing
-/// materialises the pair itself; the key and the value are lifted straight
-/// from their offsets.
-///
-/// `override_map_ty` is the caller's own `TreeMap<K, V>` where it has one, so
-/// the lift produces the parameter's exact GC type rather than a rebuilt one.
+/// Each pair is inserted with `map[k] = v`, whose last-wins update is the rule
+/// the Component Model states for a repeated key. `override_map_ty` is the
+/// caller's own `TreeMap<K, V>`, so the lift yields the parameter's exact type.
 pub(super) fn synthesize_lift_map(
     key_ty: &Type,
     value_ty: &Type,
@@ -813,11 +858,6 @@ pub(super) fn synthesize_lift_map(
 
     let (map_type_id, key_tid, value_tid, map_head, map_source, index_assign) = {
         let mut tt = ctx.type_table.borrow_mut();
-        // Lift into the caller's exact `TreeMap<K, V>` where it knows one (an
-        // export param's type from the user signature), not a rebuilt one: a
-        // registry-shared key or value would otherwise resolve to a second GC
-        // `TypeId` and mismatch the parameter, the same hazard the list lift's
-        // `override_list_ty` exists for.
         let (map_type_id, key_tid, value_tid) =
             if let Some(found) = override_map_ty.and_then(|tid| tree_map_instance(&tt, tid)) {
                 found
@@ -832,9 +872,6 @@ pub(super) fn synthesize_lift_map(
             .require_struct(crate::compiler_item::CompilerItem::TreeMap)
             .0
             .clone();
-        // `impl<K: Ord> IndexAssign<K> for TreeMap<K, V>` — the trait argument
-        // is the impl's own binder, so the mangled name carries `K`, not the
-        // key this instantiation was made with.
         let index_assign = items
             .trait_fq(crate::compiler_item::CompilerItem::IndexAssign)
             .with_args(vec![crate::name::FqTypeName::binder(TREE_MAP_KEY_BINDER)]);
@@ -851,25 +888,7 @@ pub(super) fn synthesize_lift_map(
         )
     };
 
-    let base_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_stmt(
-        "__map_base",
-        base_local,
-        TypeTable::I32,
-        builtin_call("i32_load", vec![addr.clone()], TypeTable::I32),
-    ));
-
-    let count_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_stmt(
-        "__map_count",
-        count_local,
-        TypeTable::I32,
-        builtin_call(
-            "i32_load",
-            vec![binary_add(addr, i32_const(4))],
-            TypeTable::I32,
-        ),
-    ));
+    let buffer = CmBuffer::read(&addr, pair_size, pair_align, next_local, stmts, locals);
 
     let result_local = alloc_local(next_local, locals, map_type_id);
     stmts.push(let_mut_stmt(
@@ -887,46 +906,16 @@ pub(super) fn synthesize_lift_map(
     ));
 
     let i_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_mut_stmt(
-        "__map_i",
-        i_local,
-        TypeTable::I32,
-        i32_const(0),
-    ));
+    stmts.push(let_mut_stmt("__i", i_local, TypeTable::I32, i32_const(0)));
 
-    let mut loop_stmts: Vec<TirStmt> = Vec::new();
-    loop_stmts.push(if_stmt(
-        binary(
-            TirBinaryOp::GtEq,
-            local_ref(i_local, "__map_i", TypeTable::I32),
-            local_ref(count_local, "__map_count", TypeTable::I32),
-            TypeTable::BOOL,
-        ),
-        block(vec![break_stmt()]),
-        None,
-    ));
-
-    let pair_addr_local = alloc_local(next_local, locals, TypeTable::I32);
-    loop_stmts.push(let_stmt(
-        "__pair_addr",
-        pair_addr_local,
-        TypeTable::I32,
-        binary_add(
-            local_ref(base_local, "__map_base", TypeTable::I32),
-            binary(
-                TirBinaryOp::Mul,
-                local_ref(i_local, "__map_i", TypeTable::I32),
-                i32_const(pair_size as i32),
-                TypeTable::I32,
-            ),
-        ),
-    ));
+    let mut loop_stmts: Vec<TirStmt> = vec![buffer.break_when_done(i_local)];
+    let pair_addr_local = buffer.element_addr(i_local, next_local, &mut loop_stmts, locals);
 
     let string_name = string_name_for_free(ctx);
     let mut lifted = Vec::new();
     for (slot, slot_ty) in pair.iter().enumerate() {
         let slot_addr = binary_add(
-            local_ref(pair_addr_local, "__pair_addr", TypeTable::I32),
+            local_ref(pair_addr_local, "__elem_addr", TypeTable::I32),
             i32_const(layout.offsets[slot] as i32),
         );
         let mut slot_stmts: Vec<TirStmt> = Vec::new();
@@ -974,37 +963,10 @@ pub(super) fn synthesize_lift_map(
         synth_span(),
     )));
 
-    loop_stmts.push(expr_stmt(assign(
-        local_ref(i_local, "__map_i", TypeTable::I32),
-        binary_add(local_ref(i_local, "__map_i", TypeTable::I32), i32_const(1)),
-    )));
+    loop_stmts.push(CmBuffer::advance(i_local));
 
     stmts.push(loop_stmt(block(loop_stmts)));
-
-    stmts.push(if_stmt(
-        binary(
-            TirBinaryOp::Gt,
-            local_ref(count_local, "__map_count", TypeTable::I32),
-            i32_const(0),
-            TypeTable::BOOL,
-        ),
-        block(vec![expr_stmt(builtin_call(
-            "realloc",
-            vec![
-                local_ref(base_local, "__map_base", TypeTable::I32),
-                binary(
-                    TirBinaryOp::Mul,
-                    local_ref(count_local, "__map_count", TypeTable::I32),
-                    i32_const(pair_size as i32),
-                    TypeTable::I32,
-                ),
-                i32_const(pair_align as i32),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        ))]),
-        None,
-    ));
+    buffer.free(stmts);
 
     local_ref(result_local, "__map", map_type_id)
 }

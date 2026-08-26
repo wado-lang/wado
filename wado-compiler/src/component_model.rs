@@ -69,12 +69,9 @@ pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Opti
         })
 }
 
-/// Why `key` cannot be a `map<K, V>` key, or `None` when it can.
-///
-/// The Component Model's `keytype` is a deliberate subset of `valtype` — the
-/// integers, `bool`, `char`, and `string` — chosen so a bindings generator can
-/// key an associative container without a general equality. `f32` / `f64` are
-/// absent from it, as is every aggregate.
+/// Why `key` cannot be a `map<K, V>` key, or `None` when it can. The Component
+/// Model's `keytype` admits the integers, `bool`, `char`, and `string` — no
+/// float, no aggregate.
 pub fn map_key_rejection(type_table: &TypeTable, key: TypeId) -> Option<String> {
     let peeled = peel_newtypes(type_table, key);
     let admissible = match type_table.get(peeled) {
