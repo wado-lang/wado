@@ -1,0 +1,37 @@
+// The write-back rests on the borrow not outliving the call. A parameter the
+// callee declares `stores[...]` keeps it, so no point in the caller is late
+// enough to store the temp back and the call is refused instead.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct Keep {
+    held: &mut Payload,
+}
+
+#[inline("never")]
+fn keep(p: &mut Payload) -> Keep with stores[p] {
+    return Keep { held: p };
+}
+
+fn hand_over_a_field(b: &mut Bag) -> Keep with stores[b] {
+    return keep(&mut b.item);
+}
+
+test "unreachable" {
+    let mut b = Bag { item: Payload::Empty };
+    let k = hand_over_a_field(&mut b);
+    assert k.held matches { Empty };
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "stores it, so it outlives the call"
+}

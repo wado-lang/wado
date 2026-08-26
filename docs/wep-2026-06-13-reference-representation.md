@@ -108,6 +108,12 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
   assign the whole element / field (`xs[i] = …`, `s.f = …`). Covers both `Index`
   and `FieldAccess` operands and generalizes (replaces) the existing partial
   primitive-struct-field guard.
+- `variant` is the exception, because it is the one replace type whose _interior_
+  can still be mutated through the borrow: a payload write lands on the shared
+  payload object. Taking the borrow is therefore allowed, and the refusal moves
+  to where the borrow is put into storage outliving the expression that took it
+  — a variable, an aggregate, a `return` — which is exactly where no write-back
+  point exists.
 - `&` (immutable, read-only) to such a place is permitted: it reads a snapshot
   copy, and there is no write to lose.
 - Carve-out: when the `&mut <place>` is a call argument to a parameter that does
@@ -132,22 +138,41 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
 In-place places — `&mut <local>` of any type, and `&mut` of a struct / `List` /
 `String` reference mutated in place — are always allowed and unaffected.
 
+What the two rules above rest on:
+
+- `Option<T>` is a variant, so `if let Some(e) = &mut self.f` is a detached
+  borrow, and payload mutation through it is how the language is written: every
+  gale-generated parser, `normalize_element(&mut lab.element)` at 5
+  `package-gale` sites, and the `value_copy_*` fixtures. A borrow-site refusal
+  for `variant` deletes all of it, which is why that refusal fits the other
+  replace types and not this one.
+- The rule keys on the place being non-local, not on the borrow escaping. A
+  `&mut` rooted at a local _is_ that local's box, so a whole-value write through
+  it lands even when the borrow is stored in an aggregate and written much
+  later: `ValueSerializer { out: &mut v }` in `core:value`, written through by
+  `SerializeSeq::end`, is load-bearing across `core:value` / `core:json` /
+  `wasi:http`. Only a non-local root detaches.
+
 ## Decision
 
 - [x] The representation (in-place shared handle vs `Box<T>`) is normative, keyed
       on the in-place-vs-replace dividing line, not scalar-vs-heap.
 - [ ] Extract the boxed-as-value classification into one predicate shared by
       boxing / forbid / carve-out.
-- [ ] Forbid `&mut` to a non-local replace-on-assign place (compile error),
-      subsuming the partial primitive-struct-field guard. Ship `compile_error`
-      fixtures: variant / primitive / enum / flags / `fn` list element, and
-      variant / enum struct field.
+- [x] Forbid `&mut` to a non-local place of `primitive` / `enum` / `flags` /
+      `fn` at the borrow itself, over both `Index` and `FieldAccess` operands,
+      subsuming the partial primitive-struct-field guard.
+- [x] For `variant`, forbid only where the borrow is put into storage outliving
+      the expression that took it — a variable, an aggregate, a `return`. The
+      borrow itself stays legal, since payload mutation through it lands.
+- [ ] Ship the remaining `compile_error` fixtures: `primitive` / `enum` /
+      `flags` list element. Covered today: `fn` list element, `primitive` /
+      `enum` struct field, and the `variant` storing positions.
 - [ ] Carve out the `stores`-gated temp + write-back, one call path at a time:
-  - [ ] `List` index element (`&mut xs[i]`) — validated by a throwaway prototype
-        on the free-function / static-dispatch path; reuses the existing
+  - [ ] `List` index element (`&mut xs[i]`) — reuses the existing
         `index_assign` dispatch.
-  - [ ] struct field (`&mut s.f`) — write-back is a plain field assign.
-  - [ ] remaining call paths (method-call / indirect-call arguments).
+  - [x] struct field (`&mut s.f`) — write-back is a plain field assign.
+  - [x] remaining call paths (method-call / indirect-call arguments).
 
 Each carve-out narrows the forbid for the case it handles; the escaping case is
 never carved out.
@@ -157,21 +182,81 @@ never carved out.
 These are gaps between the design above and the current tree. Each is a bug to
 fix to conform; none should be preserved.
 
-- [ ] D1 — silent write-back drop. `&mut` to a non-local replace-on-assign place
-      compiles but discards the write, for _every_ replace type. Verified by
-      probe (HEAD):
+- [ ] D1 — a whole-value write through a `&mut` to a non-local place is dropped
+      behind `&mut *p` for every replace type but `variant`, and for two
+      `variant` shapes is refused rather than written back. Probe (HEAD):
 
-  | place                             | result  |
-  | --------------------------------- | ------- |
-  | `&mut xs[i]` — primitive element  | dropped |
-  | `&mut xs[i]` — enum element       | dropped |
-  | `&mut xs[i]` — flags element      | dropped |
-  | `&mut xs[i]` — variant element    | dropped |
-  | `&mut fns[i]` — `fn` element      | dropped |
-  | `&mut s.f` — enum / variant field | dropped |
+  | place, by referent and by where the borrow goes                   | result                |
+  | ----------------------------------------------------------------- | --------------------- |
+  | primitive / enum / flags / `fn` field or element, anywhere        | refused at the borrow |
+  | primitive / enum / flags / `fn` behind `&mut *p`                  | dropped               |
+  | `variant`, into a variable / aggregate / payload / `return`       | refused               |
+  | `variant`, reaching one of those through a variable               | refused               |
+  | `variant` field / `&mut *p`, call argument                        | written back          |
+  | `variant`, call argument at a `stores` position                   | refused               |
+  | `variant` element / whole capture / branch, at a written position | refused               |
 
-  The same operations on a value-type _local_ all work. Resolved by the forbid +
-  carve-out.
+  The same operations on a value-type _local_ all work, wherever the borrow
+  goes; nothing else is the storage itself, since `&mut` of any other place
+  re-boxes what it names — a capture and a `&mut *p` reborrow included.
+  `variant` is exempt from the borrow-site refusal because mutation through its
+  payload lands. A rewritten call reads its callee and each of its arguments in
+  source order, so a preceding one's write is not read past.
+
+  Both halves follow the borrow, not its spelling: a variable bound to one
+  carries it to whatever sink it reaches, and a whole-value write names its
+  storage through a `&mut *r` reborrow, through a capture, and through the
+  `&mut` bindings that carry a parameter on (`let q = p; *q = v`). A closure
+  numbers its locals in its own namespace, so what it replaces there says
+  nothing about the enclosing slot of the same index.
+
+  What still drops, and what closing it takes:
+
+  - `&mut *p` for every replace type but `variant`. The borrow-site refusal keys
+    on a `FieldAccess` / `Index` operand, so a reborrow slips past it. `variant`
+    is covered from the other side by the write-back; the rest need that refusal
+    to match the deref too.
+  - A `variant` element as a call argument, where the callee neither replaces
+    nor stores. `&mut xs[i]` lowers to `&mut *xs.index_ref(i)`, so its
+    write-back is an `index_assign` to synthesize, and that resolves in the
+    elaborator — trait impl, mangled name, recorded dispatch. Reaching it from a
+    lowering pass means repeating trait resolution, so closing it means
+    desugaring at elaboration time; hence the carve-out lists index-element and
+    struct-field separately. Refusing outright is not open, since
+    `normalize_element(&mut alt.elements[ei])` lands.
+  - A call argument that _yields_ a borrow (`f(if c { &mut b.l } else
+    { &mut b.r })`), for the mirrored reason: which place it borrowed is not
+    known until it runs. Both want the write-back to follow the borrow to
+    whichever place it named — the points-to answer neither half has.
+  - A whole capture, where a store back would land in the closure's environment:
+    closure lowering filled that with a copy of the enclosing slot, and the
+    capture mode is its decision, not this pass's. A projection _through_ a
+    capture is fine — it lands on the object the capture copied.
+
+  Where the callee does replace or store, all four are refused rather than
+  dropped: that code was already losing the write.
+
+  Two sinks are refused wider than the rule asks, neither gateable on a
+  whole-value write the way a `let` is. Rebinding (`r = &mut b.item`) is refused
+  even where nothing replaces through `r`, since the detached-local set is
+  filled in visit order and an assignment need not dominate its reads; gating it
+  takes that set as a fixpoint before the walk. A `break` carrying one is
+  refused because a labeled block's value is read from its tail alone.
+
+  The write-back stores the temp back only when the callee replaced it — the
+  temp aliases the place, so an unconditional store would also undo a write the
+  callee made through another route to the same place (`self`, a sibling `&mut`
+  argument), which lands on its own.
+
+  Two costs come with running the refusal after monomorphization, where the
+  types are concrete enough to see a `variant` behind a type parameter:
+
+  - Liveness drops unreachable functions first, so a detached borrow in dead
+    code is not reported. It cannot execute, so nothing miscompiles.
+  - The refusals reach `wado check`, which lowers, but not
+    `wado query diagnostics`, which does not; and only the first per function is
+    reported. Raising them where the LSP sees them takes the callee's declared
+    `stores` at the call site, which `effect_check.rs` already computes.
 
 - [ ] D2 — no shared predicate. The boxed set is inlined in
       `lower/plan/boxing.rs::create_needed_box_types` as
