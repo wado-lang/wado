@@ -23,6 +23,7 @@ use {
     rule_span_hi_local,
     rule_span_lo_local,
     rule_threads_args,
+    rule_is_left_recursive,
     rule_uses_rule_span,
     vals_struct_name,
     wado_type_default,
@@ -398,16 +399,32 @@ pub fn current_rule_emits_vals(ctx: &GenContext) -> bool {
 /// grammar that never reads a rule label's text stays byte-identical. Predicate
 /// bodies count: they resolve `$`-references through the same path.
 pub fn rule_call_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
-    return rule_call_read_field(op, actions, ctx, false);
+    return rule_call_read_field(op, actions, ctx, false, true);
 }
 
 /// The field of a labeled rule call whose node an action renders (`$x.ctx`).
 /// Twin of `rule_call_span_field`, for the builder row not the token range.
 pub fn rule_call_ctx_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
-    return rule_call_read_field(op, actions, ctx, true);
+    return rule_call_read_field(op, actions, ctx, true, true);
 }
 
-fn rule_call_read_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext, want_ctx: bool) -> Option<String> {
+/// The two above restricted to what `actions` themselves read: a reference a
+/// prequel also reads is declared once at rule scope instead.
+fn alt_scope_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
+    return rule_call_read_field(op, actions, ctx, false, false);
+}
+
+fn alt_scope_ctx_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
+    return rule_call_read_field(op, actions, ctx, true, false);
+}
+
+fn rule_call_read_field(
+    op: &Op,
+    actions: &List<AltAction>,
+    ctx: &GenContext,
+    want_ctx: bool,
+    include_prequel: bool,
+) -> Option<String> {
     if !ctx.emit_actions() {
         return null;
     }
@@ -417,13 +434,13 @@ fn rule_call_read_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext, wa
             return null;
         },
     };
+    if prequel_reads(ctx, &rc.dedup_base, want_ctx) {
+        return if include_prequel { Option::Some(rc.field) } else { null };
+    }
     for let a of actions {
         if action_reads(&a.source.text, &rc.dedup_base, want_ctx) {
             return Option::Some(rc.field);
         }
-    }
-    if prequel_reads(ctx, &rc.dedup_base, want_ctx) {
-        return Option::Some(rc.field);
     }
     return null;
 }
@@ -441,6 +458,12 @@ fn prequel_reads(ctx: &GenContext, base: &String, want_ctx: bool) -> bool {
         return false;
     }
     let rule = &ctx.parser_rules()[ridx];
+    // A left-recursive rule holds its calls in the atom / suffix functions, out
+    // of the entry function's scope: no local to capture, and the body that
+    // reads one is reported by `prequel_spans_reachable`.
+    if rule_is_left_recursive(rule) {
+        return false;
+    }
     for let a of &[rule.init_action, rule.after_action] {
         if let Some(src) = a {
             if action_reads(&src.text, base, want_ctx) {
@@ -455,12 +478,109 @@ fn prequel_reads(ctx: &GenContext, base: &String, want_ctx: bool) -> bool {
 /// assignment, so a read before the call is in scope and yields empty text.
 pub fn gen_rule_span_decls(w: &mut CodeWriter, ops: &List<Op>, actions: &List<AltAction>, ctx: &GenContext) {
     for let op of ops {
-        if let Some(f) = rule_call_span_field(op, actions, ctx) {
+        // A reference the prequel also reads is declared at rule scope
+        // (`gen_prequel_span_decls`); re-declaring it here would shadow it, and
+        // the prequel would then read a local nothing assigned.
+        if let Some(f) = alt_scope_span_field(op, actions, ctx) {
             w.line(&`let mut ${rule_span_lo_local(&f)} = 0;`);
             w.line(&`let mut ${rule_span_hi_local(&f)} = -1;`);
         }
-        if let Some(f) = rule_call_ctx_field(op, actions, ctx) {
+        if let Some(f) = alt_scope_ctx_field(op, actions, ctx) {
             w.line(&`let mut ${rule_node_local(&f)} = -1;`);
+        }
+    }
+}
+
+/// Declare at rule scope every local a prequel reads. An `@init` runs before
+/// the body and an `@after` may run outside the block holding the call, so the
+/// alternative's own scope does not reach either.
+pub fn gen_prequel_span_decls(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    let mut spans: List<String> = [];
+    let mut nodes: List<String> = [];
+    for let call of &rule_call_bindings(rule) {
+        if prequel_reads(ctx, &call.0, false) && !spans.contains(&call.1) {
+            spans.push(call.1);
+        }
+        if prequel_reads(ctx, &call.0, true) && !nodes.contains(&call.1) {
+            nodes.push(call.1);
+        }
+    }
+    for let f of &spans {
+        w.line(&`let mut ${rule_span_lo_local(f)} = 0;`);
+        w.line(&`let mut ${rule_span_hi_local(f)} = -1;`);
+    }
+    for let f of &nodes {
+        w.line(&`let mut ${rule_node_local(f)} = -1;`);
+    }
+}
+
+/// Whether a prequel's `$x.text` / `$x.ctx` reads can reach the locals holding
+/// them. A left-recursive rule's atom and suffix are functions of their own, so
+/// its prequel is reported and dropped rather than emitted against a local that
+/// is not in the entry function it runs in.
+pub fn prequel_spans_reachable(rule: &ParserRule, lowered: &Rule, ctx: &mut GenContext) -> bool {
+    if !ctx.emit_actions() || !lowered matches { LeftRecursive(_) } {
+        return true;
+    }
+    let calls = rule_call_bindings(lowered);
+    let mut reachable = true;
+    for let a of &[rule.init_action, rule.after_action] {
+        if let Some(src) = a {
+            for let call of &calls {
+                if action_reads(&src.text, &call.0, false) || action_reads(&src.text, &call.0, true) {
+                    ctx.mark_action_seen(src.action_id);
+                    ctx.warn(
+                        &action_owner(src.action_id, ctx),
+                        DiagnosticKind::UnsupportedAction,
+                        `$${call.0}.text / .ctx in a left-recursive rule's @init / @after reads a local held by its atom and suffix functions (not yet supported)`,
+                    );
+                    reachable = false;
+                    break;
+                }
+            }
+        }
+    }
+    return reachable;
+}
+
+/// Every rule call in the rule's bodies, as `[dedup_base, field]`.
+fn rule_call_bindings(rule: &Rule) -> List<[String, String]> {
+    let mut out: List<[String, String]> = [];
+    match rule {
+        Simple(s) => push_rule_call_bindings(&s.body.ops, &mut out),
+        MultiAlt(m) => {
+            for let a of &m.alts {
+                push_rule_call_bindings(&a.ops, &mut out);
+            }
+        },
+        LeftRecursive(l) => {
+            for let a of &l.atom.alts {
+                push_rule_call_bindings(&a.ops, &mut out);
+            }
+            for let lr of &l.lr_alts {
+                push_rule_call_bindings(&lr.suffix.ops, &mut out);
+            }
+        },
+    }
+    return out;
+}
+
+fn push_rule_call_bindings(ops: &List<Op>, out: &mut List<[String, String]>) {
+    for let op of ops {
+        match op {
+            RuleCall(rc) => out.push([rc.dedup_base, rc.field]),
+            Repeat(rep) => push_rule_call_bindings(&[rep.body], out),
+            ListLabel(ll) => push_rule_call_bindings(&[ll.inner], out),
+            Group(g) => {
+                for let a of &g.alts {
+                    push_rule_call_bindings(&a.ops, out);
+                }
+            },
+            _ => {
+            },
         }
     }
 }

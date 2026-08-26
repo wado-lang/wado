@@ -1,0 +1,35 @@
+//! A required group that takes no alternative must report, not append nothing
+//! and let the sequence continue as though the group had matched.
+
+use gnv from "./grammars/wado_group_no_viable.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/group_no_viable" },
+    };
+
+test "a token-only group with an action reports the token no alternative admits" {
+    let ok = gnv::parse_tok(&"ac");
+    assert ok.ok(), `clean parse: ${ok.diagnostics.len()} diagnostics`;
+    assert ok.output == "a", `output: '${ok.output}'`;
+
+    let bad = gnv::parse_tok(&"c");
+    assert bad.has_errors(), "a token outside every alternative is an error";
+}
+
+test "a group whose alt-initial predicate is false reports" {
+    let ok = gnv::parse_gated(&"ba");
+    assert ok.ok(), `clean parse: ${ok.diagnostics.len()} diagnostics`;
+
+    // The group takes nothing, and the `A` after it consumes the one token —
+    // so a silent no-match reads as a clean parse of the whole input.
+    let bad = gnv::parse_gated(&"a");
+    assert bad.has_errors(), "no alternative is viable once the predicate is false";
+    assert bad.output.is_empty(), `the gated alternative's action must not run: '${bad.output}'`;
+}
+
+test "a rule-reference group reports the token no alternative admits" {
+    let ok = gnv::parse_refs(&"ac");
+    assert ok.ok(), `clean parse: ${ok.diagnostics.len()} diagnostics`;
+
+    let bad = gnv::parse_refs(&"c");
+    assert bad.has_errors(), "a token outside every alternative is an error";
+}

@@ -1566,6 +1566,8 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         } else {
             _parse_a(p, follow);
         }
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
     }
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;
@@ -1583,7 +1585,7 @@ fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_X, &SYNC_0);
+    p.expect(TK_X, &SYNC_1);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Y) {
         p.expect(TK_Y, &EMPTY_SYNC);
     }
@@ -1679,7 +1681,8 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_Y];
+global SYNC_0: List<i32> = [TK_X];
+global SYNC_1: List<i32> = [TK_Y];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_Y]];
 

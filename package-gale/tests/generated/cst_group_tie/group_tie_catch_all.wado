@@ -1696,6 +1696,8 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 _parse_item(p, follow);
             }
         }
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
     }
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;

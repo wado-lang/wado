@@ -117,7 +117,9 @@ use {
     gen_member_methods,
     gen_predicate_fns,
     gen_predicate_gated_dispatch,
+    gen_prequel_span_decls,
     gen_rule_span_decls,
+    prequel_spans_reachable,
     gen_vals_structs,
     join_gate_conds,
     mark_alt_gate_predicates,
@@ -2266,6 +2268,7 @@ fn gen_parse_fn_simple_named(
     }
     emit_arg_stores(w, rule, ctx);
     emit_span_capture(w, rule, ctx);
+    gen_prequel_span_decls(w, lowered_rule, ctx);
     if ctx.emit_actions() {
         if let Some(a) = &rule.init_action {
             gen_prequel_action(w, a, &rule.name, true, ctx);
@@ -2554,9 +2557,19 @@ fn gen_parse_fn_named(
             false;
         };
         let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
-        gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec, lr_mid_operand_gated(
-            lowered_rule,
-        ));
+        let prequel_ok = prequel_spans_reachable(rule, lowered_rule, ctx);
+        gen_lr_fn(
+            w,
+            rule,
+            lr_alts,
+            lr_dispatch,
+            ctx,
+            fn_name,
+            h_atn_class,
+            h_loop_dec,
+            prequel_ok,
+            lr_mid_operand_gated(lowered_rule),
+        );
         return;
     } else {
         let mut f = FnSpec::new(fn_name);
@@ -2573,6 +2586,7 @@ fn gen_parse_fn_named(
         }
         emit_arg_stores(w, rule, ctx);
         emit_span_capture(w, rule, ctx);
+        gen_prequel_span_decls(w, lowered_rule, ctx);
         // `@init` shares the inner fn's `vals`; the seed is threaded into the
         // `_alt_<n>` helpers (see `alt_vals_arg`), so overlap-group dispatch
         // preserves it.
@@ -3206,6 +3220,7 @@ fn gen_lr_fn(
     fn_name: &String,
     atn_class: bool,
     loop_dec: i32,
+    prequel_ok: bool,
     mid_operand_gated: bool = false,
 ) {
     let rk = rule_kind_const(&rule.name);
@@ -3245,7 +3260,7 @@ fn gen_lr_fn(
     emit_span_capture(w, rule, ctx);
     if ctx.emit_actions() {
         emit_arg_stores(w, rule, ctx);
-        if let Some(a) = &rule.init_action {
+        if let Some(a) = &rule.init_action && prequel_ok {
             gen_prequel_action(w, a, &rule.name, true, ctx);
         }
     }
@@ -3265,7 +3280,7 @@ fn gen_lr_fn(
     // `atn_lr_loop_decision`, so the per-branch precedence gate is dropped.
     if atn_class && loop_dec >= 0 {
         gen_lr_fn_atn(w, rule, lr_alts, lr_dispatch, ctx, &rk, loop_dec);
-        emit_lr_after_return(w, rule, emits_vals, ctx);
+        emit_lr_after_return(w, rule, emits_vals, ctx, prequel_ok);
         w.end();
         w.blank();
         return;
@@ -3318,7 +3333,7 @@ fn gen_lr_fn(
         w.end();
     }
     w.end();
-    emit_lr_after_return(w, rule, emits_vals, ctx);
+    emit_lr_after_return(w, rule, emits_vals, ctx, prequel_ok);
     w.end();
     w.blank();
 }
@@ -3327,8 +3342,8 @@ fn gen_lr_fn(
 /// `$v` reads the whole expression's value), run `@after`, and return. ANTLR
 /// runs `@after` once at `exitRule`, on the outermost (final) context. For a
 /// channel-less rule this is just the `@after` side effect and a bare return.
-fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool, ctx: &mut GenContext) {
-    let has_after = ctx.emit_actions() && rule.after_action matches { Some(_) };
+fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool, ctx: &mut GenContext, prequel_ok: bool) {
+    let has_after = ctx.emit_actions() && prequel_ok && rule.after_action matches { Some(_) };
     if emits_vals && has_after {
         // `@after` reads (and may write) the final value under the name `vals`.
         // The entry `vals` is still in scope (value semantics copied it into the
@@ -3342,7 +3357,7 @@ fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool,
         w.line(&"return _lr_acc;");
     } else {
         if let Some(a) = &rule.after_action {
-            if ctx.emit_actions() {
+            if ctx.emit_actions() && prequel_ok {
                 gen_prequel_action(w, a, &rule.name, false, ctx);
             }
         }
@@ -4711,6 +4726,7 @@ fn gen_op_group(
     elem: &Element,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    required: bool = true,
 ) {
     // Scalar `name=(a | b | …)` lowers via `rebind_op_field` so the
     // resulting op is `Op::Group` even though the surface element is
@@ -4739,6 +4755,7 @@ fn gen_op_group(
                 &g_elem.alternatives,
                 ctx,
                 name_counts,
+                required,
             ),
             General(gen_shape) => gen_general_group_store_optional_op(
                 w,
@@ -4748,6 +4765,7 @@ fn gen_op_group(
                 &g_elem.alternatives,
                 ctx,
                 name_counts,
+                required,
             ),
             Transparent => {
                 // Transparent groups inline their inner alt; walk
@@ -5091,22 +5109,24 @@ fn gen_op_repeat_non_greedy_transparent(
     };
     let _ = dedup_name(&rep_op.field, name_counts);
     if is_plus {
+        // The mandatory first iteration is a required position: no loop guard
+        // has run, so a token no alternative admits is this group's to report.
         begin_plus_first_iteration(w, name_counts);
         let mut nc: List<[String, i32]> = [];
-        gen_op_group(w, g_op, inner, ctx, &mut nc);
+        gen_op_group(w, g_op, inner, ctx, &mut nc, true);
         w.end();
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
         let mut nc: List<[String, i32]> = [];
-        gen_op_group(w, g_op, inner, ctx, &mut nc);
+        gen_op_group(w, g_op, inner, ctx, &mut nc, false);
         w.end();
         return;
     }
     if *while_cond != "false" {
         w.begin(&`while ${*while_cond}`);
         let mut nc: List<[String, i32]> = [];
-        gen_op_group(w, g_op, inner, ctx, &mut nc);
+        gen_op_group(w, g_op, inner, ctx, &mut nc, false);
         w.end();
     }
 }
@@ -5400,13 +5420,13 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc);
+            gen_op_group(w, g_op, inner, ctx, &mut nc, false);
             w.end();
         } else {
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc);
+            gen_op_group(w, g_op, inner, ctx, &mut nc, false);
             w.end();
         }
         return;
@@ -5426,7 +5446,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.end();
             w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc);
+            gen_op_group(w, g_op, inner, ctx, &mut nc, false);
             w.end();
         } else {
             // Plus + non-scannable + no-field: emit the first iteration
@@ -5434,12 +5454,12 @@ fn gen_op_repeat_star_plus_non_storable_group(
             // loop. The K-prefix gate goes inside the while loop (after
             // the mandatory first iter ran above).
             begin_plus_first_iteration(w, name_counts);
-            gen_op_group(w, g_op, inner, ctx, name_counts);
+            gen_op_group(w, g_op, inner, ctx, name_counts, true);
             w.end();
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&inner_first)})`);
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc);
+            gen_op_group(w, g_op, inner, ctx, &mut nc, false);
             w.end();
         }
     }
@@ -5924,6 +5944,23 @@ fn gen_rule_ref_group_scan_dispatch(
 
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the
 // dedup/grp_kind/loop name-counter order is preserved.
+/// Close a group's branch chain with the report ANTLR4 makes when the group is
+/// required and none of its alternatives is viable. The caller's `w.end()`
+/// closes the `else` this opens; an optional group passes `required` false and
+/// keeps taking no arm.
+fn gen_group_no_viable_else(w: &mut CodeWriter, required: bool, first_sets: &List<List<String>>, ctx: &mut GenContext) {
+    if !required {
+        return;
+    }
+    let mut expected: List<String> = [];
+    for let f of first_sets {
+        dedup_append_arr(&mut expected, f);
+    }
+    let expected_ref = sync_set_ref(ctx, &expected);
+    w.else_begin(&"else");
+    w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
+}
+
 fn gen_simplecst_overlap_loop(
     w: &mut CodeWriter,
     acc_var: &String,
@@ -5934,10 +5971,9 @@ fn gen_simplecst_overlap_loop(
     g_op_scan_alts: &List<ScanBody>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    required: bool,
 ) {
-    // each alt's RuleRef appends, so no accumulator and no
-    // fail on no-match — the dispatch simply takes no arm (matching the typed
-    // standalone-group path, which yields `null` rather than erroring).
+    // Each alt's RuleRef appends, so there is no accumulator.
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let ${grp_var} = p.peek_kind();`);
 
@@ -5977,6 +6013,7 @@ fn gen_simplecst_overlap_loop(
             );
         }
     }
+    gen_group_no_viable_else(w, required, first_sets, ctx);
     w.end();
 }
 
@@ -6031,16 +6068,14 @@ fn gen_consume_group_store_op(
             g_op_scan_alts,
             ctx,
             name_counts,
+            false,
         );
     }
 }
 
-/// Op-driven SimpleCst-group emitter. Reads the outer field name and
-/// variant type from the lowered `SimpleCstShape`, and dispatches each
-/// alt through the lowered `Op::RuleCall` data (variant id, dedupped
-/// field). The retired surface-IR fallback (when `scst`/`g_op_alts`
-/// were `null`) flowed from `gen_element`'s Group arm — that path no
-/// longer exists post Phase 2-G.
+/// Op-driven SimpleCst-group emitter, for a group standing on its own rather
+/// than as a repeat's body. `required` decides what a token no alternative
+/// admits means: a report, or nothing at all where the group is optional.
 fn gen_consume_group_store_optional_op(
     w: &mut CodeWriter,
     scst: &SimpleCstShape,
@@ -6049,6 +6084,7 @@ fn gen_consume_group_store_optional_op(
     alts: &List<Alternative>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    required: bool,
 ) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     let var_name = scst.field;
@@ -6061,7 +6097,6 @@ fn gen_consume_group_store_optional_op(
 
     let groups = compute_overlap_groups(&first_sets);
 
-    // Use Option wrapper — None when no branch matches (standalone Group).
     let inner_var = dedup_name(&`${var_name}_inner`, name_counts);
     gen_simplecst_overlap_loop(
         w,
@@ -6073,6 +6108,7 @@ fn gen_consume_group_store_optional_op(
         g_op_scan_alts,
         ctx,
         name_counts,
+        required,
     );
 }
 
@@ -6101,14 +6137,11 @@ fn gen_general_overlap_loop(
     g_op_scan_alts: &List<ScanBody>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    required: bool,
 ) {
-    // the chosen alt appends to the builder, so there is
-    // no `Option<type>` accumulator. A no-match leaves the dispatch with no
-    // arm taken and appends nothing — matching the typed standalone-group
-    // (`_optional_op`) path, which yields `null` rather than failing. (The
-    // required `store_op` caller adds its own post-loop check on the typed
-    // side; the repeat-guard already verified a match before
-    // entry, so no fail is emitted here.)
+    // The chosen alt appends to the builder, so there is no `Option<type>`
+    // accumulator. A no-match reports only where the group is required; inside
+    // a repeat the loop guard has already decided the iteration is viable.
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let ${grp_var} = p.peek_kind();`);
 
@@ -6180,6 +6213,7 @@ fn gen_general_overlap_loop(
             );
         }
     }
+    gen_group_no_viable_else(w, required, first_sets, ctx);
     w.end();
 }
 
@@ -6240,10 +6274,7 @@ fn gen_general_group_store_op(
                 name_counts,
             );
         }
-        if gated {
-            w.else_begin(&"else");
-            w.line(&`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
-        }
+        gen_group_no_viable_else(w, gated, &first_sets, ctx);
         w.end();
     } else {
         let opt_var = dedup_name(&`${var_name}_opt`, name_counts);
@@ -6259,15 +6290,14 @@ fn gen_general_group_store_op(
             g_op_scan_alts,
             ctx,
             name_counts,
+            false,
         );
     }
 }
 
-/// Op-driven General-group emitter. Reads the outer field name, group
-/// index, and scan bodies from the lowered `GeneralShape`/`AltBody`
-/// graph. The retired surface-IR fallback (when `gs`/`g_op_alts` were
-/// `null`) flowed from `gen_element`'s Group arm — that path no longer
-/// exists post Phase 2-G.
+/// Op-driven General-group emitter, for a group standing on its own rather than
+/// as a repeat's body. `required` decides what a token no alternative admits
+/// means: a report, or nothing at all where the group is optional.
 fn gen_general_group_store_optional_op(
     w: &mut CodeWriter,
     gs: &GeneralShape,
@@ -6276,6 +6306,7 @@ fn gen_general_group_store_optional_op(
     alts: &List<Alternative>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    required: bool,
 ) {
     let group_index = gs.group_index;
     let _ = dedup_name(&general_group_field_name(group_index), name_counts);
@@ -6306,9 +6337,8 @@ fn gen_general_group_store_optional_op(
         g_op_scan_alts,
         ctx,
         name_counts,
+        required,
     );
-    // no accumulator to forward — the optional group's
-    // alt (if any matched) already appended.
 }
 
 /// Parse one alt's elements; the chosen alt's elements append to the

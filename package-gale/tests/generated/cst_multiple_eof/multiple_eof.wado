@@ -1475,8 +1475,10 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
         } else {
             p.expect(TK_LIT_X, &EMPTY_SYNC);
         }
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_1);
     }
-    p.expect(TK_EOF, &SYNC_1);
+    p.expect(TK_EOF, &SYNC_2);
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
@@ -1547,5 +1549,6 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LIT_Y];
-global SYNC_1: List<i32> = [TK_EOF];
+global SYNC_1: List<i32> = [TK_LIT_X];
+global SYNC_2: List<i32> = [TK_EOF];
 

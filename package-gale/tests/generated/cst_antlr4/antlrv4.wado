@@ -8127,6 +8127,8 @@ fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>>
         p.expect(TK_INT, &EMPTY_SYNC);
     } else if grp_kind == TK_STRING_LITERAL {
         p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_27);
     }
     return;
 }
@@ -8216,6 +8218,8 @@ fn _parse_labeled_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         _parse_atom(p, &EMPTY_FOLLOW);
     } else if grp_kind == TK_LPAREN {
         _parse_block(p, &EMPTY_FOLLOW);
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_29);
     }
     return;
 }
@@ -8269,21 +8273,21 @@ fn _parse_block_suffix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
-        p.expect(TK_QUESTION, &SYNC_29);
+        p.expect(TK_QUESTION, &SYNC_30);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
         return;
     }
     if kind == TK_STAR {
-        p.expect(TK_STAR, &SYNC_29);
+        p.expect(TK_STAR, &SYNC_30);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
         return;
     }
     if kind == TK_PLUS {
-        p.expect(TK_PLUS, &SYNC_29);
+        p.expect(TK_PLUS, &SYNC_30);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
@@ -8292,7 +8296,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.no_viable(
         "no alternative of ebnfSuffix matches",
         p.peek_span(),
-        &SYNC_30,
+        &SYNC_31,
     );
     return;
 }
@@ -8381,7 +8385,7 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     p.no_viable(
         "no alternative of lexerAtom matches",
         p.peek_span(),
-        &SYNC_31,
+        &SYNC_32,
     );
     return;
 }
@@ -8418,7 +8422,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     p.no_viable(
         "no alternative of atom matches",
         p.peek_span(),
-        &SYNC_32,
+        &SYNC_33,
     );
     return;
 }
@@ -8435,7 +8439,7 @@ fn _parse_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_wildcard__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_DOT, &SYNC_33);
+    p.expect(TK_DOT, &SYNC_34);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
         _parse_element_options(p, &EMPTY_FOLLOW);
     }
@@ -8454,13 +8458,13 @@ fn _parse_wildcard(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_not_set__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_NOT, &SYNC_34);
+    p.expect(TK_NOT, &SYNC_35);
     _parse_set_element(p, follow);
     return;
 }
 
 fn _parse_not_set__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_NOT, &SYNC_35);
+    p.expect(TK_NOT, &SYNC_36);
     _parse_block_set(p, follow);
     return;
 }
@@ -8480,7 +8484,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     p.no_viable(
         "no alternative of notSet matches",
         p.peek_span(),
-        &SYNC_36,
+        &SYNC_37,
     );
     return;
 }
@@ -8497,7 +8501,7 @@ fn _parse_not_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_LPAREN, &SYNC_34);
+    p.expect(TK_LPAREN, &SYNC_35);
     _parse_set_element(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -8519,7 +8523,7 @@ fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_OR, &SYNC_34);
+        p.expect(TK_OR, &SYNC_35);
         _parse_set_element(p, follow);
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC);
@@ -8538,7 +8542,7 @@ fn _parse_block_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_STRING_LITERAL, &SYNC_33);
+    p.expect(TK_STRING_LITERAL, &SYNC_34);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
         _parse_element_options(p, &EMPTY_FOLLOW);
     }
@@ -8572,7 +8576,7 @@ fn _parse_set_element__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List
 fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
-        p.expect(TK_TOKEN_REF, &SYNC_33);
+        p.expect(TK_TOKEN_REF, &SYNC_34);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             _parse_element_options(p, &EMPTY_FOLLOW);
         }
@@ -8607,7 +8611,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.no_viable(
         "no alternative of setElement matches",
         p.peek_span(),
-        &SYNC_34,
+        &SYNC_35,
     );
     return;
 }
@@ -8624,7 +8628,7 @@ fn _parse_set_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_LPAREN, &SYNC_37);
+    p.expect(TK_LPAREN, &SYNC_38);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -8695,7 +8699,7 @@ fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_ruleref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_RULE_REF, &SYNC_38);
+    p.expect(TK_RULE_REF, &SYNC_39);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_BEGIN_ARGUMENT) {
         _parse_arg_action_block(p, &EMPTY_FOLLOW);
     }
@@ -8717,8 +8721,8 @@ fn _parse_ruleref(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_character_range__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    p.expect(TK_STRING_LITERAL, &SYNC_39);
-    p.expect(TK_RANGE, &SYNC_40);
+    p.expect(TK_STRING_LITERAL, &SYNC_40);
+    p.expect(TK_RANGE, &SYNC_41);
     p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
     return;
 }
@@ -8737,14 +8741,14 @@ fn _parse_character_range(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
-        p.expect(TK_TOKEN_REF, &SYNC_33);
+        p.expect(TK_TOKEN_REF, &SYNC_34);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             _parse_element_options(p, &EMPTY_FOLLOW);
         }
         return;
     }
     if kind == TK_STRING_LITERAL {
-        p.expect(TK_STRING_LITERAL, &SYNC_33);
+        p.expect(TK_STRING_LITERAL, &SYNC_34);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             _parse_element_options(p, &EMPTY_FOLLOW);
         }
@@ -8753,7 +8757,7 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     p.no_viable(
         "no alternative of terminalDef matches",
         p.peek_span(),
-        &SYNC_41,
+        &SYNC_42,
     );
     return;
 }
@@ -8824,7 +8828,7 @@ fn _parse_element_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &L
 
 fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     _parse_identifier(p, &FOLLOW_MASK_2);
-    p.expect(TK_ASSIGN, &SYNC_42);
+    p.expect(TK_ASSIGN, &SYNC_43);
     let grp_kind = p.peek_kind();
     if _kind_set_1(grp_kind) {
         _parse_qualified_identifier(p, follow);
@@ -8832,6 +8836,8 @@ fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> =
         p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
     } else if grp_kind == TK_INT {
         p.expect(TK_INT, &EMPTY_SYNC);
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_43);
     }
     return;
 }
@@ -9417,20 +9423,21 @@ global SYNC_25: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_RUL
 global SYNC_26: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
 global SYNC_27: List<i32> = [TK_ACTION, TK_INT, TK_STRING_LITERAL];
 global SYNC_28: List<i32> = [TK_ASSIGN, TK_PLUS_ASSIGN];
-global SYNC_29: List<i32> = [TK_QUESTION];
-global SYNC_30: List<i32> = [TK_PLUS, TK_QUESTION, TK_STAR];
-global SYNC_31: List<i32> = [TK_DOT, TK_LEXER_CHAR_SET, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_32: List<i32> = [TK_DOT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_33: List<i32> = [TK_LT];
-global SYNC_34: List<i32> = [TK_LEXER_CHAR_SET, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_35: List<i32> = [TK_LPAREN];
-global SYNC_36: List<i32> = [TK_NOT];
-global SYNC_37: List<i32> = [TK_ACTION, TK_AT, TK_COLON, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_OPTIONS, TK_OR, TK_RPAREN, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_38: List<i32> = [TK_BEGIN_ARGUMENT, TK_LT];
-global SYNC_39: List<i32> = [TK_RANGE];
-global SYNC_40: List<i32> = [TK_STRING_LITERAL];
-global SYNC_41: List<i32> = [TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_42: List<i32> = [TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_29: List<i32> = [TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_30: List<i32> = [TK_QUESTION];
+global SYNC_31: List<i32> = [TK_PLUS, TK_QUESTION, TK_STAR];
+global SYNC_32: List<i32> = [TK_DOT, TK_LEXER_CHAR_SET, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_33: List<i32> = [TK_DOT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_34: List<i32> = [TK_LT];
+global SYNC_35: List<i32> = [TK_LEXER_CHAR_SET, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_36: List<i32> = [TK_LPAREN];
+global SYNC_37: List<i32> = [TK_NOT];
+global SYNC_38: List<i32> = [TK_ACTION, TK_AT, TK_COLON, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_OPTIONS, TK_OR, TK_RPAREN, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_39: List<i32> = [TK_BEGIN_ARGUMENT, TK_LT];
+global SYNC_40: List<i32> = [TK_RANGE];
+global SYNC_41: List<i32> = [TK_STRING_LITERAL];
+global SYNC_42: List<i32> = [TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_43: List<i32> = [TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_RULE_REF, TK_TOKEN_REF]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_SEMI]];
