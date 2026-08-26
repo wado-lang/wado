@@ -20,21 +20,21 @@ const FORBIDDEN = [
 
 // Words that pass their argument on to another command: the command word is the
 // first argument that is neither a flag, a listed flag's value, nor a duration.
-const RUNNERS: Record<string, string[]> = {
-  command: ["-v", "-V"],
-  env: ["-u", "--unset", "-C", "--chdir", "-S", "--split-string"],
-  exec: ["-a"],
-  ionice: ["-c", "-n", "-p", "-P", "-u"],
-  nice: ["-n", "--adjustment"],
-  nohup: [],
-  setsid: [],
-  stdbuf: ["-e", "-i", "-o", "--error", "--input", "--output"],
-  sudo: ["-C", "-D", "-g", "-p", "-R", "-r", "-t", "-U", "-u", "--chdir", "--group", "--user"],
-  time: ["-f", "--format", "-o", "--output"],
-  timeout: ["-k", "--kill-after", "-s", "--signal"],
-  watch: ["-d", "-n", "--interval"],
-  xargs: ["-a", "-d", "-E", "-I", "-i", "-L", "-l", "-n", "-P", "-s", "--arg-file", "--delimiter"],
-};
+const RUNNERS = new Map([
+  ["command", ["-v", "-V"]],
+  ["env", ["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]],
+  ["exec", ["-a"]],
+  ["ionice", ["-c", "-n", "-p", "-P", "-u"]],
+  ["nice", ["-n", "--adjustment"]],
+  ["nohup", []],
+  ["setsid", []],
+  ["stdbuf", ["-e", "-i", "-o", "--error", "--input", "--output"]],
+  ["sudo", ["-C", "-D", "-g", "-p", "-R", "-r", "-t", "-U", "-u", "--chdir", "--group", "--user"]],
+  ["time", ["-f", "--format", "-o", "--output"]],
+  ["timeout", ["-k", "--kill-after", "-s", "--signal"]],
+  ["watch", ["-d", "-n", "--interval"]],
+  ["xargs", ["-a", "-d", "-E", "-I", "-i", "-L", "-l", "-n", "-P", "-s", "--arg-file", "--delimiter"]],
+]);
 const SHELLS = new Set(["bash", "dash", "ksh", "sh", "zsh"]);
 // `bash -c`, `sh -ec`, `zsh -lic`: the script follows when `c` ends the flag.
 const SHELL_FLAG = /^-[A-Za-z]*c$/;
@@ -137,6 +137,8 @@ function readWord(src: string, start: number): Word {
     } else if (c === "\\") {
       if (src[i + 1] !== "\n") value += src[i + 1] ?? "";
       i += 2;
+    } else if (c === "$" && (src[i + 1] === "'" || src[i + 1] === '"')) {
+      i++; // `$'…'` and `$"…"` run as their contents
     } else if (c === "'") {
       const [quoted, end] = delimited(src, i + 1, "'");
       value += quoted;
@@ -261,7 +263,7 @@ export function commandNames(src: string): string[] {
       if (ASSIGNMENT.test(value)) return;
       if (runner) {
         if (value.startsWith("-")) {
-          skipValue = RUNNERS[runner].includes(value);
+          skipValue = RUNNERS.get(runner)!.includes(value);
           return;
         }
         if (DURATION.test(value)) return;
@@ -275,7 +277,7 @@ export function commandNames(src: string): string[] {
       }
       names.push(name);
       previous = name;
-      runner = name in RUNNERS ? name : "";
+      runner = RUNNERS.has(name) ? name : "";
       atCommand = false;
     } else if (EXEC_FLAGS.has(value)) {
       startCommand();

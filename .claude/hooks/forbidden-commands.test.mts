@@ -42,6 +42,9 @@ const DENIED = [
   "eval 'sed -i x f'",
   "( sed -i x f )",
   "cat f | while read l; do sed -i x $l; done",
+  "__proto__ -x; sed -i x f",
+  "$'sed' -i x f",
+  '$"sed" -i x f',
 ];
 
 const ALLOWED = [
