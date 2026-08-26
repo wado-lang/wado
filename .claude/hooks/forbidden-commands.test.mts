@@ -61,6 +61,8 @@ const DENIED = [
   "$(which sed) -i x f",
   "$HOME/bin/sed -i x f",
   "cat <<-EOF\n\tEOF\nsed -i x f\n\tEOF",
+  "env -S bash <<'EOF'\nsed -i x f\nEOF",
+  "sudo sh <<'EOF'\nawk 1 f\nEOF",
 ];
 
 const ALLOWED = [

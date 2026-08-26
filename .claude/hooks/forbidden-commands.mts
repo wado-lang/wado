@@ -361,6 +361,8 @@ export function commandNames(src: string): string[] {
     if (nestNext) {
       nested.push(value);
       nestNext = false;
+      // What that payload starts is what a following redirection feeds.
+      previous = basename(readWord(value, skipBlanks(value, 0)).value);
       return;
     }
     if (atCommand || runner) {
