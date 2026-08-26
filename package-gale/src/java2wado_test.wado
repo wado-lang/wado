@@ -360,3 +360,40 @@ a : A ;
 ").unwrap();
     assert !grammar_has_superclass(&plain), "grammar without superClass must not be detected";
 }
+
+test "a ctx token accessor folds only for a token the alternative always matches" {
+    // `((SContext)$ctx).A() != null` asks whether the alternative matched `A`.
+    // A mandatory element always is matched, so the answer is a constant; an
+    // optional one is not bound at the alternative's level and has no answer,
+    // so the body is refused rather than told `true`.
+    let bindings: List<[bool, String, String]> = [[true, "a", "a"]];
+    let g = parse("grammar T;
+s : ID A ;
+ID : [a-z]+ ;
+A : '!' ;
+").unwrap();
+    let lang = ActionLanguage::Java;
+    let mandatory = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"((SContext)$ctx).A() != null",
+        false,
+        &bindings,
+        &g.name,
+        &NO_METHODS,
+    );
+    assert mandatory matches { Ok(code) && code == "true" }, `${mandatory:?}`;
+
+    let optional = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"((SContext)$ctx).A() != null",
+        false,
+        &NO_BINDINGS,
+        &g.name,
+        &NO_METHODS,
+    );
+    assert optional matches { Err(_) }, `an unbound token must not fold: ${optional:?}`;
+}

@@ -16,3 +16,13 @@ test "an action under a repeat runs once per iteration" {
     assert one.ok(), "clean parse";
     assert one.output == "ab", `one iteration leaves B alone, got '${one.output}'`;
 }
+
+test "an action in a fragment the repeat inlines runs once per iteration too" {
+    let three = lr::parse_t(&"dddb");
+    assert three.ok(), "clean parse";
+    assert three.output == "dc", `three iterations retype B to C, got '${three.output}'`;
+
+    let one = lr::parse_t(&"db");
+    assert one.ok(), "clean parse";
+    assert one.output == "db", `one iteration leaves B alone, got '${one.output}'`;
+}

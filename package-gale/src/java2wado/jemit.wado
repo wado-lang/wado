@@ -386,10 +386,11 @@ fn emit_call(
 }
 
 /// `((XContext)$ctx).TOK() != null` / `== null`: ANTLR asks whether the
-/// alternative matched that token. Gale binds every element the alternative
-/// matches, so a token the current alternative binds is always there and the
-/// test is a constant. A name it does not bind has no binding to answer with —
-/// `null` folds nothing, and the general path reports the body.
+/// alternative matched that token. A token the alternative binds at its top
+/// level is one it always matches, so the test is a constant. An optional or
+/// repeated one is not bound there (`collect_op_binding`) and nothing folds —
+/// the general path then reports the body rather than answering `true` for a
+/// token that may be absent.
 fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<[bool, String, String]>) -> Option<String> {
     if b.op != "!=" && b.op != "==" {
         return null;

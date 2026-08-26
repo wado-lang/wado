@@ -359,17 +359,18 @@ impl GenContext {
         self.rule_follow_exact = exact;
     }
 
+    /// Whether the FOLLOW fixed point converged exactly, so a per-rule set is
+    /// the real one rather than an over-approximation.
+    pub fn rule_follow_is_exact(&self) -> bool {
+        return self.rule_follow_exact;
+    }
+
     /// The rule's classical FOLLOW, for a probe whose scan ends at the
     /// rule's tail — there, "can the caller continue" is exactly membership
     /// in this set. Empty when the fixed point is not exact, which keeps the
     /// probe on its previous answer. The set over-approximates (a union over
     /// every call site), so conjoining it can only move a verdict from
     /// "exit" to "iterate": a token it excludes cannot continue any caller.
-    /// Whether the FOLLOW fixed point converged exactly, so a per-rule set is
-    /// the real one rather than an over-approximation.
-    pub fn rule_follow_is_exact(&self) -> bool {
-        return self.rule_follow_exact;
-    }
 
     pub fn rule_follow_for_probe(&self, rule_name: &String) -> List<String> {
         if !self.rule_follow_exact || !self.rule_follow_kinds.contains_key(*rule_name) {

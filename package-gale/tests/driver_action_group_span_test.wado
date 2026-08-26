@@ -1,0 +1,25 @@
+//! `$x.text` / `$x.ctx` read from outside the body that captures them: a rule
+//! prequel, and an action in an optional group. The capture and the declaration
+//! are emitted by different walkers, so this pins that they agree — a missing
+//! declaration is a generated module that does not compile.
+
+use gs from "./grammars/wado_group_span.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_group_span" },
+    };
+
+test "a prequel reads the span of a call inside a group" {
+    let r = gs::parse_whole(&"aab");
+    assert r.ok(), "clean parse";
+    assert r.output == "aa", `output: '${r.output}'`;
+}
+
+test "an action in an optional group renders that call's node" {
+    let taken = gs::parse_opt(&"aab");
+    assert taken.ok(), "clean parse with the optional present";
+    assert taken.output == "(a a a)", `output: '${taken.output}'`;
+
+    let skipped = gs::parse_opt(&"b");
+    assert skipped.ok(), "clean parse with the optional absent";
+    assert skipped.output == "", `output: '${skipped.output}'`;
+}

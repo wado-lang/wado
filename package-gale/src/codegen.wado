@@ -455,11 +455,19 @@ fn unhandled_lexer_action_reason(grammar_executes: bool, rule: &LexerRule) -> St
 /// unconditionally: a dropped predicate changes what the lexer accepts, whether
 /// or not the grammar's actions execute.
 fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<String>, ctx: &mut GenContext) {
+    // One predicate, one report: an ATN-class rule that references another
+    // reaches the same ids twice, and the message they would carry names a
+    // different rule each time, so the diagnostic dedup would not catch it.
+    let mut reported: List<i32> = [];
     for let name of atn_class_rules {
         if let Some(rule) = find_lexer_rule(&grammar.lexer_rules, name) {
             let mut ids: List<i32> = [];
             collect_lexer_predicate_ids(rule, &grammar.lexer_rules, &mut ids);
             for let id of &ids {
+                if reported.contains(id) {
+                    continue;
+                }
+                reported.push(*id);
                 ctx.warn(
                     &DiagnosticOwner { site: DiagnosticSite::LexerAction(*id) },
                     DiagnosticKind::UnsupportedAction,

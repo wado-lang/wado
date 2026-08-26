@@ -2769,7 +2769,13 @@ fn collect_op_binding(op: &Op, out: &mut List<[bool, String, String]>) {
         Excluded(e) => out.push([true, e.dedup_base, e.field]),
         Wildcard(wop) => out.push([true, wop.dedup_base, wop.field]),
         RuleCall(rc) => out.push([false, rc.dedup_base, rc.field]),
-        Repeat(rep) => collect_op_binding(&rep.body, out),
+        // A repeat's body binds inside the loop / `if` it is emitted in, so its
+        // local is not in scope where this alternative's actions run — and it
+        // may not be bound at all, which is what makes `A?` different from `A`
+        // to an action asking whether the alternative matched it. A body nested
+        // in a repeat gets its own bindings from its own ops.
+        Repeat(_) => {
+        },
         ListLabel(_) => {
         },
         Group(_) => {
@@ -2867,8 +2873,13 @@ fn gen_elements_with_non_greedy(
     // An inlined body's labels bind to its own ops. Restored on the way out so a
     // nested group does not leave the outer scope pointing at its bindings.
     let outer_bindings = *ctx.alt_bindings();
-    if ctx.emit_actions() && !actions.is_empty() {
-        ctx.set_alt_bindings(collect_alt_bindings(ops));
+    if ctx.emit_actions() {
+        if !actions.is_empty() {
+            ctx.set_alt_bindings(collect_alt_bindings(ops));
+        }
+        // Not gated on the alternative carrying an action: the enclosing rule's
+        // `@init` / `@after` reads the same locals from the same fn, and the
+        // capture below fires for it either way.
         gen_rule_span_decls(w, ops, actions, ctx);
     }
     for let mut i = 0; i < elements.len(); i += 1 {
@@ -4351,9 +4362,12 @@ fn gen_op_transparent_optional_with_cond(
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
+    if ctx.emit_actions() {
+        gen_rule_span_decls(w, &body.ops, &alt.actions, ctx);
+    }
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         gen_alt_actions_at(w, &alt.actions, i, ctx);
-        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
+        gen_element_with_capture(w, &body.ops[i], &alt.elements[i], &alt.actions, ctx, &mut nc);
     }
     gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx);
     leave_group_alt_bindings(&outer, &alt.actions, ctx);
@@ -4455,6 +4469,31 @@ fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenConte
     }
 }
 
+/// Dispatch one element, capturing the token range and the builder row a
+/// labeled rule call's `$x.text` / `$x.ctx` read. The walkers do the same around
+/// `gen_op_leaf`; the shape-driven emitters go through here, so an action in one
+/// of their bodies reads the same locals `gen_rule_span_decls` declared.
+fn gen_element_with_capture(
+    w: &mut CodeWriter,
+    op: &Op,
+    elem: &Element,
+    actions: &List<AltAction>,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+) {
+    let span_field = rule_call_span_field(op, actions, ctx);
+    if let Some(f) = &span_field {
+        w.line(&`${rule_span_lo_local(f)} = p.pos;`);
+    }
+    if let Some(f) = rule_call_ctx_field(op, actions, ctx) {
+        w.line(&`${rule_node_local(&f)} = p.b.checkpoint();`);
+    }
+    gen_op_dispatch_element(w, op, elem, ctx, name_counts);
+    if let Some(f) = &span_field {
+        w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
+    }
+}
+
 /// Scope an inlined group alternative's label bindings to its own ops while its
 /// actions are emitted, and hand back the enclosing body's bindings to restore.
 /// A no-op (and byte-identical) for an alternative carrying no action.
@@ -4523,6 +4562,9 @@ fn gen_op_optional_with_shape_lookahead_storable(
 
         let mut nc: List<[String, i32]> = [];
         let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
+        if ctx.emit_actions() {
+            gen_rule_span_decls(w, &body.ops, &alt.actions, ctx);
+        }
         for let mut i = 0; i < elements.len(); i += 1 {
             // The actions are the alternative's, not the skipped element's, so
             // every shape branch runs them; only the element is conditional.
@@ -4534,7 +4576,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
                 }
             }
             if in_shape {
-                gen_op_dispatch_element(w, &body.ops[i], &elements[i], ctx, &mut nc);
+                gen_element_with_capture(w, &body.ops[i], &elements[i], &alt.actions, ctx, &mut nc);
             }
         }
         gen_alt_actions_at(w, &alt.actions, elements.len(), ctx);
@@ -4582,6 +4624,9 @@ fn gen_op_optional_with_shape_lookahead_transparent(
 
         let mut nc: List<[String, i32]> = [];
         let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
+        if ctx.emit_actions() {
+            gen_rule_span_decls(w, &body.ops, &alt.actions, ctx);
+        }
         // Actions are the alternative's own, so they run in every shape branch
         // (`gen_op_optional_with_shape_lookahead_storable` says the same); the
         // positions decide only which elements are parsed.
@@ -4602,9 +4647,12 @@ fn gen_op_optional_with_shape_lookahead_transparent(
                         let inner_body = &inner_g_op.alts[0];
                         let inner_alt = &g.alternatives[0];
                         let inner_outer = enter_group_alt_bindings(&inner_body.ops, &inner_alt.actions, ctx);
+                        if ctx.emit_actions() {
+                            gen_rule_span_decls(w, &inner_body.ops, &inner_alt.actions, ctx);
+                        }
                         for let mut j = 0; j < inner_alt.elements.len(); j += 1 {
                             gen_alt_actions_at(w, &inner_alt.actions, j, ctx);
-                            gen_op_dispatch_element(w, &inner_body.ops[j], &inner_alt.elements[j], ctx, &mut nc);
+                            gen_element_with_capture(w, &inner_body.ops[j], &inner_alt.elements[j], &inner_alt.actions, ctx, &mut nc);
                         }
                         gen_alt_actions_at(w, &inner_alt.actions, inner_alt.elements.len(), ctx);
                         leave_group_alt_bindings(&inner_outer, &inner_alt.actions, ctx);
@@ -4614,10 +4662,10 @@ fn gen_op_optional_with_shape_lookahead_transparent(
                         );
                     }
                 } else {
-                    gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
+                    gen_element_with_capture(w, actual_op, actual_elem, &alt.actions, ctx, &mut nc);
                 }
             } else {
-                gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
+                gen_element_with_capture(w, actual_op, actual_elem, &alt.actions, ctx, &mut nc);
             }
         }
         gen_alt_actions_at(w, &alt.actions, elements.len(), ctx);

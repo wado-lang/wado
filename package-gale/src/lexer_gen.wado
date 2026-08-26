@@ -2838,7 +2838,7 @@ fn gen_lexer_repeat_iteration(
         gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
         return;
     }
-    if !lexer_element_has_action(&rep.element) {
+    if !lexer_element_has_action(&rep.element, all_rules) {
         gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
         // Same bound as the action-carrying form below: the replay stops where
         // the match did, whatever the match consulted to stop there.
@@ -2862,16 +2862,27 @@ fn gen_lexer_repeat_iteration(
 }
 
 /// Whether `elem` carries an action anywhere inside it — the only reason a
-/// replayed iteration needs its match-only probe.
-fn lexer_element_has_action(elem: &LexerElement) -> bool {
+/// replayed iteration needs its match-only probe. A rule reference counts what
+/// it inlines: the emit walks a non-recursive fragment's body in place, so its
+/// actions are this element's too.
+fn lexer_element_has_action(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
     return match *elem {
-        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_action(a) || a.elements.iter_ref().any(
-            |e: &LexerElement| lexer_element_has_action(e),
-        )),
-        Repeat(rep) => lexer_element_has_action(&rep.element),
-        Not(n) => lexer_element_has_action(&n.element),
-        Literal(_) | CharRange(_) | CharClass(_) | AnyChar | RuleRef(_) => false,
+        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules)),
+        Repeat(rep) => lexer_element_has_action(&rep.element, all_rules),
+        Not(n) => lexer_element_has_action(&n.element, all_rules),
+        RuleRef(name) => match find_fragment(all_rules, &name) {
+            Some(f) => !fragment_is_recursive(f, all_rules) && f.body.iter_ref().any(
+                |a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules),
+            ),
+            None => false,
+        },
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => false,
     };
+}
+
+fn lexer_alt_has_any_action(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
+    return lexer_alt_has_action(alt)
+        || alt.elements.iter_ref().any(|e: &LexerElement| lexer_element_has_action(e, all_rules));
 }
 
 fn gen_lexer_non_greedy_repeat(
