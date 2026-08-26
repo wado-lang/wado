@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787698668946,
+  "lastUpdate": 1787712438756,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51053,6 +51053,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8581e622c03d9a9aaede9d117e22d38112886460"
         },
         "date": 1787698668033,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7cd8f7eff9d24a3b839ab08f778f2359e61aaa53",
+          "message": "Merge pull request #1898 from wado-lang/claude/disable-sed-awk-python-86jpst\n\nchore(claude): forbid sed, awk, python and nohup",
+          "timestamp": "2026-08-26T11:34:42+09:00",
+          "tree_id": "ff361fd518f24a3d789ff80fa371710a8a2f8155",
+          "url": "https://github.com/wado-lang/wado/commit/7cd8f7eff9d24a3b839ab08f778f2359e61aaa53"
+        },
+        "date": 1787712437897,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
