@@ -14,7 +14,8 @@ struct RunCli {
 impl Deserialize for RunCli;
 
 test "an option-typed field parsed from argv" {
-    assert parse::<RunCli>(["--trace", "ffffffff-ffff-4fff-bfff-ffffffffffff"]) matches { Ok(_) };
+    let argv: List<String> = ["--trace", "ffffffff-ffff-4fff-bfff-ffffffffffff"];
+    assert parse::<RunCli>(builtin::black_box(argv)) matches { Ok(_) };
 }
 
 __DATA__

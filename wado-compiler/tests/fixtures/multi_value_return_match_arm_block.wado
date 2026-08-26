@@ -10,10 +10,10 @@ test "a u64 read back through the cbor deserializer" {
     let two: ByteList = [0x19, 0x01, 0x00];
     let four: ByteList = [0x1a, 0x00, 0x01, 0x00, 0x00];
     let truncated: ByteList = [0x18];
-    assert from_bytes::<u64, ByteList>(one) matches { Ok(42) };
-    assert from_bytes::<u64, ByteList>(two) matches { Ok(256) };
-    assert from_bytes::<u64, ByteList>(four) matches { Ok(65536) };
-    assert from_bytes::<u64, ByteList>(truncated) matches { Err(_) };
+    assert from_bytes::<u64, ByteList>(builtin::black_box(one)) matches { Ok(42) };
+    assert from_bytes::<u64, ByteList>(builtin::black_box(two)) matches { Ok(256) };
+    assert from_bytes::<u64, ByteList>(builtin::black_box(four)) matches { Ok(65536) };
+    assert from_bytes::<u64, ByteList>(builtin::black_box(truncated)) matches { Err(_) };
 }
 
 __DATA__

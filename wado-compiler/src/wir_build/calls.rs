@@ -254,9 +254,9 @@ impl FunctionTranslator<'_, '_> {
         len: Option<WirInstr>,
     ) -> WirInstr {
         let idx = type_id.index();
-        let src_name = format!("__array_clone_src_{idx}");
-        let dst_name = format!("__array_clone_dst_{idx}");
-        let len_name = format!("__array_clone_len_{idx}");
+        let src_name = self.unshadowed(format!("__array_clone_src_{idx}"));
+        let dst_name = self.unshadowed(format!("__array_clone_dst_{idx}"));
+        let len_name = self.unshadowed(format!("__array_clone_len_{idx}"));
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,

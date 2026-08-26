@@ -116,7 +116,8 @@ impl Root {
         if self == Root::Fixtures {
             return true;
         }
-        let source = std::fs::read_to_string(path).expect("source is readable");
+        let source = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
         let Ok(spec) = Spec::parse(self, &source) else {
             // A `__DATA__` key the harness does not understand is an exclusion
             // to report, not material to hide.

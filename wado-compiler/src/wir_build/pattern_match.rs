@@ -264,7 +264,7 @@ impl FunctionTranslator<'_, '_> {
                 let type_id = self.ref_type_id(value_ty);
                 let mut instrs = Vec::new();
 
-                let temp_name = format!("__let_pattern_{}", self.match_counter);
+                let temp_name = self.unshadowed(format!("__let_pattern_{}", self.match_counter));
                 self.match_counter += 1;
                 instrs.extend(declare_and_set_local(
                     temp_name.clone(),
@@ -322,7 +322,7 @@ impl FunctionTranslator<'_, '_> {
         let scrut = self.translate_operand(scrutinee);
         let match_id = self.match_counter;
         self.match_counter += 1;
-        let scrut_local_name = format!("__match_scrut_{match_id}");
+        let scrut_local_name = self.unshadowed(format!("__match_scrut_{match_id}"));
         let scrut_wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, self.operand_type_id(scrutinee));

@@ -1157,16 +1157,23 @@ impl FunctionTranslator<'_, '_> {
             .contains_key(&(func.name.clone(), func.module_source.clone()))
     }
 
-    /// A synthetic local's name, taken so that no source local holds it:
-    /// codegen keys locals by name and merges two slots that share one.
-    pub(super) fn fresh_local(&mut self, base: &str) -> String {
-        loop {
-            self.local_counter += 1;
-            let name = format!("{base}_{}", self.local_counter);
-            if !self.resolved_local_names.values().any(|n| *n == name) {
-                return name;
-            }
+    /// A synthetic local's name, out of the way of every source local: codegen
+    /// keys locals by name and merges two slots that share one.
+    ///
+    /// Stable in its input, so a name that carries its own identity — one per
+    /// match, one per cloned array type — keeps it.
+    pub(super) fn unshadowed(&self, mut name: String) -> String {
+        while self.resolved_local_names.values().any(|n| *n == name) {
+            name.push('_');
         }
+        name
+    }
+
+    /// An [`Self::unshadowed`] name no other synthetic local in this function
+    /// holds either.
+    pub(super) fn fresh_local(&mut self, base: &str) -> String {
+        self.local_counter += 1;
+        self.unshadowed(format!("{base}_{}", self.local_counter))
     }
 
     /// Return the N results by binding the aggregate and reading its fields —
@@ -1185,6 +1192,12 @@ impl FunctionTranslator<'_, '_> {
         };
         let result_types = result_types.clone();
         let field_names = field_names.clone();
+        assert_eq!(
+            field_names.len(),
+            result_types.len(),
+            "[WIR] the multi-value ABI of `{}` pairs its field names with its result types",
+            self.tir_func.name
+        );
         let aggregate = self
             .ctx
             .type_id_to_wir_type(self.type_table, self.tir_func.return_type);
