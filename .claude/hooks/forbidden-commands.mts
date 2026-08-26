@@ -18,23 +18,26 @@ const FORBIDDEN: [RegExp, string][] = [
 ];
 
 // Words that pass their argument on to another command, so the command word is
-// the first of their arguments that is neither a flag nor a duration.
-const RUNNERS = new Set([
-  "command",
-  "env",
-  "exec",
-  "ionice",
-  "nice",
-  "nohup",
-  "setsid",
-  "stdbuf",
-  "sudo",
-  "time",
-  "timeout",
-  "watch",
-  "xargs",
-]);
+// the first of their arguments that is neither a flag nor a duration. The flags
+// listed take a value, which is that argument without being the command.
+const RUNNERS: Record<string, string[]> = {
+  command: ["-v", "-V"],
+  env: ["-u", "--unset", "-C", "--chdir", "-S", "--split-string"],
+  exec: ["-a"],
+  ionice: ["-c", "-n", "-p", "-P", "-u"],
+  nice: ["-n", "--adjustment"],
+  nohup: [],
+  setsid: [],
+  stdbuf: ["-e", "-i", "-o", "--error", "--input", "--output"],
+  sudo: ["-C", "-D", "-g", "-p", "-R", "-r", "-t", "-U", "-u", "--chdir", "--group", "--user"],
+  time: ["-f", "--format", "-o", "--output"],
+  timeout: ["-k", "--kill-after", "-s", "--signal"],
+  watch: ["-d", "-n", "--interval"],
+  xargs: ["-a", "-d", "-E", "-I", "-i", "-L", "-l", "-n", "-P", "-s", "--arg-file", "--delimiter"],
+};
 const SHELLS = new Set(["bash", "dash", "ksh", "sh", "zsh"]);
+// `bash -c`, `sh -ec`, `zsh -lic`: the script follows when `c` ends the flag.
+const SHELL_FLAG = /^-[A-Za-z]*c$/;
 const OPENS_COMMAND = new Set(["!", "do", "elif", "else", "if", "then", "until", "while"]);
 const NOT_A_COMMAND = new Set([
   "case",
@@ -83,7 +86,7 @@ function doubleQuoted(src: string, start: number, subs: string[]): [string, numb
     if (c === '"') return [value, i + 1];
     if (c === "\\") {
       const next = src[i + 1] ?? "";
-      value += '$`"\\\n'.includes(next) ? next : c + next;
+      if (next !== "\n") value += '$`"\\'.includes(next) ? next : c + next;
       i += 2;
     } else if (c === "$" && src[i + 1] === "(") {
       const [inner, end] = balanced(src, i + 2, "(", ")");
@@ -110,7 +113,7 @@ function readWord(src: string, start: number): Word {
     const c = src[i];
     if (BREAKS_WORD.includes(c)) break;
     if (c === "\\") {
-      value += src[i + 1] ?? "";
+      if (src[i + 1] !== "\n") value += src[i + 1] ?? "";
       i += 2;
     } else if (c === "'") {
       const close = src.indexOf("'", i + 1);
@@ -165,14 +168,16 @@ export function commandNames(src: string): string[] {
   const nested: string[] = [];
   const heredocs: string[] = [];
   let atCommand = true;
-  let afterRunner = false;
+  let runner = "";
+  let skipValue = false;
   let shellFlag = false;
   let previous = "";
   let i = 0;
 
   const startCommand = () => {
     atCommand = true;
-    afterRunner = false;
+    runner = "";
+    skipValue = false;
     shellFlag = false;
   };
 
@@ -187,10 +192,10 @@ export function commandNames(src: string): string[] {
     } else if (c === "#") {
       const newline = src.indexOf("\n", i);
       i = newline < 0 ? src.length : newline;
-    } else if (c === ";" || c === "&" || c === "|" || c === "(" || c === "{") {
+    } else if (c === ";" || c === "&" || c === "|" || c === "(" || c === ")" || isGroup(i)) {
       i++;
       startCommand();
-    } else if (c === ")" || c === "}") {
+    } else if (c === "}") {
       i++;
     } else if (c === "<" || c === ">") {
       i = readRedirection(i);
@@ -203,12 +208,17 @@ export function commandNames(src: string): string[] {
       i = word.end;
       nested.push(...word.subs);
       const ioNumber = /^\d+$/.test(word.value) && (src[i] === "<" || src[i] === ">");
-      if (!ioNumber) classify(word.value);
+      if (word.value !== "" && !ioNumber) classify(word.value);
     }
   }
 
   for (const source of nested) names.push(...commandNames(source));
   return names;
+
+  /** `{` opens a group only as a word of its own; `{}` is find's placeholder. */
+  function isGroup(at: number): boolean {
+    return src[at] === "{" && (at + 1 === src.length || " \t\n\r".includes(src[at + 1]));
+  }
 
   function readRedirection(at: number): number {
     if (src[at + 1] === "(") {
@@ -229,25 +239,35 @@ export function commandNames(src: string): string[] {
   }
 
   function classify(value: string): void {
-    if (atCommand || afterRunner) {
+    if (atCommand || runner) {
+      if (skipValue) {
+        skipValue = false;
+        return;
+      }
       if (ASSIGNMENT.test(value)) return;
-      if (afterRunner && (value.startsWith("-") || DURATION.test(value))) return;
+      if (runner) {
+        if (value.startsWith("-")) {
+          skipValue = RUNNERS[runner].includes(value);
+          return;
+        }
+        if (DURATION.test(value)) return;
+      }
       const name = basename(value);
       if (OPENS_COMMAND.has(name)) return startCommand();
       if (NOT_A_COMMAND.has(name)) {
         atCommand = false;
-        afterRunner = false;
+        runner = "";
         return;
       }
       names.push(name);
       previous = name;
-      afterRunner = RUNNERS.has(name);
+      runner = name in RUNNERS ? name : "";
       atCommand = false;
     } else if (EXEC_FLAGS.has(value)) {
       startCommand();
-    } else if (value === "-c" && SHELLS.has(previous)) {
+    } else if (SHELL_FLAG.test(value) && SHELLS.has(previous)) {
       shellFlag = true;
-    } else if (shellFlag) {
+    } else if (shellFlag || previous === "eval") {
       nested.push(value);
       shellFlag = false;
     }

@@ -31,6 +31,17 @@ const DENIED = [
   "python - <<'PY'\nprint(1)\nPY",
   "nohup cargo test &",
   "nohup mise run test > run.log 2>&1 &",
+  "find . -name '*.rs' | \\\n  xargs sed -i 's/a/b/'",
+  "a=1 \\\n sed -i x f",
+  "case $x in *) sed -i s/a/b/ f;; esac",
+  "bash -lc 'sed -i x f'",
+  "sh -ec 'awk 1 f'",
+  "env -u FOO python3 x.py",
+  "sudo -u root sed -i x f",
+  "xargs -a list sed -i x f",
+  "eval 'sed -i x f'",
+  "( sed -i x f )",
+  "cat f | while read l; do sed -i x $l; done",
 ];
 
 const ALLOWED = [
@@ -50,6 +61,14 @@ const ALLOWED = [
   "gawk --version",
   "grep -rn 'python3 -c' .claude",
   "grep -n nohup AGENTS.md",
+  "find . -name '*.log' -exec mv {} /tmp/awk \\;",
+  "cp x {} /tmp/sed",
+  "command -v python3",
+  "cargo build \\\n  --release",
+  "mkdir -p /tmp/{a,b}",
+  "git rev-parse 'HEAD^{commit}'",
+  "{ cargo build; cargo test; }",
+  "trap 'echo bye' EXIT; echo hi",
 ];
 
 test("denies a forbidden command word", () => {
