@@ -149,10 +149,7 @@ fn char_at(cur: &StrCursor, idx: i32) -> char {
 }
 
 fn is_escapable(cur: &StrCursor, idx: i32) -> bool {
-    return match cur.at(idx) {
-        Some(c) => is_ascii_punct(c),
-        None => false,
-    };
+    return opt_is_punct(cur.at(idx));
 }
 
 /// Appends `node` to the arena and pushes a token referencing it.
@@ -196,10 +193,7 @@ fn push_delim(cur: &StrCursor, i: i32, d: char, toks: &mut List<InlineTok>) -> i
     let n = run_length(cur, i, d);
     let prev = cur.at(i - 1);
     let next = cur.at(i + n);
-    let next_is_alnum = match next {
-        Some(c) => c.is_ascii_alphanumeric(),
-        None => false,
-    };
+    let next_is_alnum = opt_is_alnum(next);
     toks.push(InlineTok::Delim(DelimTok {
         ch: d,
         count: n,
