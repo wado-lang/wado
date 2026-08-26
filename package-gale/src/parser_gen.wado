@@ -3969,7 +3969,7 @@ fn gen_op_inner_for_storable_repeat(
     outer_follow: &List<String>,
     entry: GroupEntry,
 ) {
-    let entry = open_group_entry(w, elem, ctx, entry);
+    let entry = open_group_entry(w, elem, group_branch_kind(&rep_op.body), ctx, entry);
     let op = &rep_op.body;
     // `lower_repeat_op`'s list-label branch unwraps `Label(Group)` on
     // the body op; mirror the unwrap on the surface side so
@@ -4271,7 +4271,7 @@ fn gen_op_storable_optional_with_first(
     ctx: &mut GenContext,
     cond: &String,
 ) {
-    let entry = optional_entry_test(cond, inner_elem, ctx);
+    let entry = optional_entry_test(cond, inner_elem, group_branch_kind(&rep_op.body), ctx);
     // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
     w.begin(&`if ${entry}`);
@@ -4365,7 +4365,7 @@ fn gen_op_transparent_optional_with_cond(
 ) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
-    w.begin(&`if ${optional_entry_test(cond, inner, ctx)}`);
+    w.begin(&`if ${optional_entry_test(cond, inner, GroupBranchKind::RuleRef, ctx)}`);
     let mut nc: List<[String, i32]> = [];
     let outer_choice = ctx.enter_group_body(false);
     let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
@@ -4408,11 +4408,14 @@ fn prequel_expected_names(rule_name: &String, at_entry: bool, ctx: &mut GenConte
     return ctx.render_expected(&first);
 }
 
-/// Whether any of `alts` carries an alt-initial predicate the dispatch gates on.
-/// Off with action execution, so a grammar whose predicates are inert keeps the
-/// dispatch `alt_gate_and_suffix` would emit for it — byte-identical.
-fn any_alt_gated(alts: &List<Alternative>, ctx: &GenContext) -> bool {
-    return ctx.emit_actions() && alts.iter_ref().any(|a: &Alternative| alt_has_gate(a, ctx));
+/// Whether any overlap group carries an alt-initial predicate the dispatch
+/// gates on. Only a lone alternative has a branch of its own to hang one on
+/// (`group_gate`), so an alternative sharing its branch with another is not
+/// gated however gateable its predicate reads. Off with action execution, so a
+/// grammar whose predicates are inert keeps the dispatch `alt_gate_and_suffix`
+/// would emit for it — byte-identical.
+fn any_alt_gated(groups: &List<List<i32>>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
+    return ctx.emit_actions() && groups.iter_ref().any(|g: &List<i32>| g.len() == 1 && alt_has_gate(&alts[g[0]], ctx));
 }
 
 /// The alternatives of a repeat's group body, or `null` when the body is not a
@@ -4429,24 +4432,26 @@ fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with st
     return null;
 }
 
-/// What admits a group at all: `(kind ∈ FIRST(alt) && gate) || …`, the same
-/// disjunction its dispatch branches on. `null` when no alternative is gated,
-/// where the caller's own first-set test already agrees with it.
-fn group_entry_condition(inner: &Element, ctx: &mut GenContext) -> Option<String> {
+/// What admits a group at all: `(kind ∈ FIRST(branch) && gate) || …`, branch for
+/// branch the same disjunction its dispatch tests. Reading it per alternative
+/// instead would gate one the dispatch cannot: alternatives sharing a branch are
+/// picked by the scan tournament, which no predicate reaches, and registering a
+/// gate there suppresses the inline guard that was enforcing it. `null` when no
+/// branch is gated, where the caller's own first-set test already agrees.
+fn group_entry_condition(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> Option<String> {
     if !ctx.emit_actions() {
         return null;
     }
     let alts = repeat_body_group_alts(inner)?;
+    let [first_sets, groups] = group_partition(alts, kind, ctx);
     let mut parts: List<String> = [];
     let mut gated = false;
-    for let alt of alts {
-        let gate = alt_gate_and_suffix(alt, ctx);
+    for let group of &groups {
+        let gate = group_gate(group, alts, ctx);
         if !gate.is_empty() {
             gated = true;
         }
-        let mut visiting: List<String> = [];
-        let first = ctx.first_of_alt(alt, &mut visiting);
-        parts.push(`(${ctx.first_check_str(&first)}${gate})`);
+        parts.push(`(${group_branch_cond(group, &first_sets, alts, &"p.peek_kind()", ctx)}${gate})`);
     }
     if !gated {
         return null;
@@ -4462,11 +4467,23 @@ fn looped() -> GroupEntry {
 /// The test an optional enters its body on: what its strategy proved, and what
 /// the body's dispatch will accept. Building one any other way is how an
 /// optional comes to admit a token its gated body then has no arm for.
-fn optional_entry_test(own: &String, inner: &Element, ctx: &mut GenContext) -> String {
-    return match group_entry_condition(inner, ctx) {
+fn optional_entry_test(own: &String, inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> String {
+    return match group_entry_condition(inner, kind, ctx) {
         Some(gate) => `${*own} && (${gate})`,
         None => *own,
     };
+}
+
+/// Which branch shape a group op's dispatch takes, so a caller reading its
+/// entry condition partitions the alternatives the same way it will. Only the
+/// General shape holds a wildcard-led alternative; every other has one branch.
+fn group_branch_kind(op: &Op) -> GroupBranchKind {
+    if let Group(g) = op {
+        if let General(_) = &g.shape {
+            return GroupBranchKind::General;
+        }
+    }
+    return GroupBranchKind::RuleRef;
 }
 
 
@@ -4476,14 +4493,20 @@ fn optional_entry_test(own: &String, inner: &Element, ctx: &mut GenContext) -> S
 /// loop cannot also forget to guard it. Clearing the mandatory-first flag is
 /// owed here too, and only here: cleared at the loop shape it would already read
 /// false at the break, which is the one place its whole point is to read true.
-fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, entry: GroupEntry) -> GroupEntry {
+fn open_group_entry(
+    w: &mut CodeWriter,
+    elem: &Element,
+    kind: GroupBranchKind,
+    ctx: &mut GenContext,
+    entry: GroupEntry,
+) -> GroupEntry {
     let plus_flag = match &entry {
         Looped(flag) => *flag,
         _ => {
             return entry;
         },
     };
-    gen_repeat_gate_break(w, elem, ctx, &plus_flag);
+    gen_repeat_gate_break(w, elem, kind, ctx, &plus_flag);
     if !plus_flag.is_empty() {
         w.line(&`${plus_flag} = false;`);
     }
@@ -4492,8 +4515,14 @@ fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, en
 
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s
 /// mandatory first iteration (`plus_flag`) chooses instead of exiting.
-fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, plus_flag: &String) {
-    if let Some(cond) = group_entry_condition(inner, ctx) {
+fn gen_repeat_gate_break(
+    w: &mut CodeWriter,
+    inner: &Element,
+    kind: GroupBranchKind,
+    ctx: &mut GenContext,
+    plus_flag: &String,
+) {
+    if let Some(cond) = group_entry_condition(inner, kind, ctx) {
         if plus_flag.is_empty() {
             w.line(&`if !(${cond}) \{ break; \}`);
         } else {
@@ -4764,7 +4793,7 @@ fn gen_op_group(
     // `peel_scalar_label` helper handles theoretical multi-level
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
-    let entry = open_group_entry(w, elem, ctx, entry);
+    let entry = open_group_entry(w, elem, group_branch_kind(&Op::Group(*g_op)), ctx, entry);
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts),
@@ -6039,7 +6068,7 @@ fn gen_group_dispatch(
     // A gated alternative needs a condition of its own, so it takes the last
     // branch's `else` away and brings the report back with it: a false
     // predicate must not land in the arm meant for the alternative it excludes.
-    let gated = any_alt_gated(alts, ctx);
+    let gated = any_alt_gated(groups, alts, ctx);
     let report = gated || entry matches { Required };
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let ${grp_var} = p.peek_kind();`);
@@ -6169,8 +6198,7 @@ fn gen_general_group(
     name_counts: &mut List<[String, i32]>,
 ) {
     let _ = dedup_name(&general_group_field_name(gs.group_index), name_counts);
-    let first_sets = group_first_sets(alts, ctx);
-    let groups = compute_overlap_groups_with_wildcard(alts, &first_sets);
+    let [first_sets, groups] = group_partition(alts, GroupBranchKind::General, ctx);
     gen_group_dispatch(
         w,
         &groups,
@@ -6197,8 +6225,7 @@ fn gen_rule_ref_group(
     name_counts: &mut List<[String, i32]>,
 ) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
-    let first_sets = group_first_sets(alts, ctx);
-    let groups = compute_overlap_groups(&first_sets);
+    let [first_sets, groups] = group_partition(alts, GroupBranchKind::RuleRef, ctx);
     gen_group_dispatch(
         w,
         &groups,
@@ -6213,13 +6240,27 @@ fn gen_rule_ref_group(
     );
 }
 
-fn group_first_sets(alts: &List<Alternative>, ctx: &mut GenContext) -> List<List<String>> {
-    let mut out: List<List<String>> = [];
+/// A group's first sets and the branches its dispatch takes over them, as
+/// `[first_sets, groups]`. The one place a group is partitioned: the dispatch,
+/// and anything deciding whether to enter it, must read the same branches or
+/// they disagree about which alternative a gate belongs to.
+fn group_partition(
+    alts: &List<Alternative>,
+    kind: GroupBranchKind,
+    ctx: &mut GenContext,
+) -> [List<List<String>>, List<List<i32>>] {
+    let mut first_sets: List<List<String>> = [];
     for let alt of alts {
         let mut visiting: List<String> = [];
-        out.push(ctx.first_of_alt(alt, &mut visiting));
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
-    return out;
+    // Only a General group can hold a wildcard-led alternative; a rule-ref one
+    // is a single call per alternative.
+    let groups = match kind {
+        General => compute_overlap_groups_with_wildcard(alts, &first_sets),
+        RuleRef => compute_overlap_groups(&first_sets),
+    };
+    return [first_sets, groups];
 }
 
 /// Parse one alt's elements; the chosen alt's elements append to the
