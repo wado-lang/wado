@@ -185,63 +185,47 @@ fix to conform; none should be preserved.
 - [ ] D1 — silent write-back drop, `variant` only. `&mut` to a non-local place
       compiles but discards a whole-value write. Probe (HEAD):
 
-  | place, by referent and by where the borrow goes   | result                |
-  | ------------------------------------------------- | --------------------- |
-  | primitive / enum / flags / `fn`, anywhere         | refused at the borrow |
-  | `variant`, into a variable / aggregate / `return` | refused               |
-  | `variant` field, call argument                    | written back          |
-  | `variant`, call argument at a `stores` position   | refused               |
-  | `variant` element (`&mut xs[i]`), call argument   | dropped               |
+  | place, by referent and by where the borrow goes             | result                |
+  | ----------------------------------------------------------- | --------------------- |
+  | primitive / enum / flags / `fn`, anywhere                   | refused at the borrow |
+  | `variant`, into a variable / aggregate / payload / `return` | refused               |
+  | `variant` field, call argument                              | written back          |
+  | `variant`, call argument at a `stores` position             | refused               |
+  | `variant` element (`&mut xs[i]`), call argument             | dropped               |
 
   The same operations on a value-type _local_ all work, wherever the borrow
   goes. `variant` is exempt from the borrow-site refusal because mutation
   through its payload lands, so a whole-value write is refused where the borrow
-  is stored, and written back where it is passed.
+  is stored, and written back where it is passed — through a branch, a closure
+  body, or a type parameter alike, and reading each argument of a rewritten call
+  in source order so a preceding one's write is not read past.
 
-  The element row is the largest of what remains. `&mut xs[i]` lowers to
+  The element row is what remains. `&mut xs[i]` lowers to
   `&mut *xs.index_ref(i)` — a `MutRef` over a deref of a call, not an `Index`
   place — so its write-back is an `index_assign` to synthesize rather than a
-  field store. That is why the carve-out lists the index-element and
-  struct-field paths separately. Refusing it instead is not open: payload
+  field store, and `index_assign` resolves in the elaborator: the trait impl,
+  the mangled name, and the recorded dispatch. A lowering pass would have to
+  repeat trait resolution to reach it, which is why the carve-out lists the
+  index-element and struct-field paths separately and why closing this one means
+  desugaring at elaboration time. Refusing it instead is not open: payload
   mutation through an element borrow is the
-  `normalize_element(&mut alt.elements[ei])` idiom. Closing it takes either that
-  synthesis, or a per-parameter whole-value-write summary so that only the
-  callees which actually replace are refused.
+  `normalize_element(&mut alt.elements[ei])` idiom. The refusals do recognise
+  the shape, so only a call argument still drops.
 
   The write-back stores the temp back only when the callee replaced it — the
   temp aliases the place, so an unconditional store would also undo a write the
   callee made through another route to the same place (`self`, a sibling `&mut`
   argument), which lands on its own.
 
-  Narrower paths still drop — the same defect, reached by a shape neither half
-  recognises:
+  Two costs come with running the refusal after monomorphization, where the
+  types are concrete enough to see a `variant` behind a type parameter:
 
-  - A borrow reaching a binding through a branch — `let r = if c { &mut b.f }
-    else { &mut b.g }` — is not the syntactically direct `&mut place` the
-    refusal matches. The refusal must follow value positions (branches, block
-    tails, `match` arms) to its operand.
-  - A borrow stored in a variant payload (`Slot::Held(&mut b.f)`) is a `Call` in
-    the AST and a `VariantConstruct` in TIR, so it looks like neither a storing
-    position nor a call argument. Its struct-literal twin is refused.
-  - A borrow whose place has a type-parameter type is invisible: the refusal
-    runs before monomorphization, so `&mut b.item` at `T` is never tested, and
-    `Bag<Payload>` drops the write.
-  - A call inside a closure body is skipped: the body numbers its locals in its
-    own namespace, so the temp the write-back needs cannot be drawn from the
-    enclosing function's counter. Closing it takes a closure-scoped allocator
-    that also seeds the closure's own `address_taken_locals`.
-  - A borrow reads its place before the whole call rather than at its own
-    argument position, so in `f(g(&mut b), &mut b.item)` where `g` writes
-    `b.item`, `f` sees the pre-`g` payload. Closing it takes hoisting every
-    preceding argument into a temp too.
-  - An indirect callee whose type records no `stores` reads as storing nothing,
-    so a borrow it keeps is written back rather than refused. The positions have
-    to come from what the functor's slot declares, and be treated as unknown —
-    all of them — when it declares nothing.
-  - The `stores` refusal is raised by a lowering pass, so it reaches a batch
-    compile but not `wado query diagnostics`, and it reports only the first
-    offending function. Moving it to the elaborator needs the callee's declared
-    `stores` at the call site.
+  - Liveness drops unreachable functions first, so a detached borrow in dead
+    code is not reported. It cannot execute, so nothing miscompiles.
+  - The refusals reach `wado check`, which lowers, but not
+    `wado query diagnostics`, which does not; and only the first per function is
+    reported. Raising them where the LSP sees them takes the callee's declared
+    `stores` at the call site, which `effect_check.rs` already computes.
 
 - [ ] D2 — no shared predicate. The boxed set is inlined in
       `lower/plan/boxing.rs::create_needed_box_types` as
