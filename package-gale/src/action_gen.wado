@@ -398,6 +398,16 @@ pub fn current_rule_emits_vals(ctx: &GenContext) -> bool {
 /// grammar that never reads a rule label's text stays byte-identical. Predicate
 /// bodies count: they resolve `$`-references through the same path.
 pub fn rule_call_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
+    return rule_call_read_field(op, actions, ctx, false);
+}
+
+/// The field of a labeled rule call whose node an action renders (`$x.ctx`).
+/// Twin of `rule_call_span_field`, for the builder row not the token range.
+pub fn rule_call_ctx_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
+    return rule_call_read_field(op, actions, ctx, true);
+}
+
+fn rule_call_read_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext, want_ctx: bool) -> Option<String> {
     if !ctx.emit_actions() {
         return null;
     }
@@ -408,20 +418,23 @@ pub fn rule_call_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext
         },
     };
     for let a of actions {
-        if action_reads_rule_span(&a.source.text, &rc.dedup_base) {
+        if action_reads(&a.source.text, &rc.dedup_base, want_ctx) {
             return Option::Some(rc.field);
         }
     }
-    if prequel_reads(ctx, &rc.dedup_base, false) {
+    if prequel_reads(ctx, &rc.dedup_base, want_ctx) {
         return Option::Some(rc.field);
     }
     return null;
 }
 
-/// Whether the enclosing rule's `@init` / `@after` reads `$<base>.text`
-/// (`want_ctx` false) or `$<base>.ctx` (true). A prequel is not in any
-/// alternative's action list, but it runs in the same fn and reads the same
-/// locals, so it decides whether they are captured.
+/// Whether `body` reads `$<base>.text` (`want_ctx` false) or `$<base>.ctx`.
+fn action_reads(body: &String, base: &String, want_ctx: bool) -> bool {
+    return if want_ctx { action_reads_rule_ctx(body, base) } else { action_reads_rule_span(body, base) };
+}
+
+/// Whether the rule's `@init` / `@after` reads that reference — a prequel runs
+/// in the same fn and off the same locals as an alternative's actions.
 fn prequel_reads(ctx: &GenContext, base: &String, want_ctx: bool) -> bool {
     let ridx = ctx.current_rule_index();
     if ridx < 0 {
@@ -430,12 +443,7 @@ fn prequel_reads(ctx: &GenContext, base: &String, want_ctx: bool) -> bool {
     let rule = &ctx.parser_rules()[ridx];
     for let a of &[rule.init_action, rule.after_action] {
         if let Some(src) = a {
-            let reads = if want_ctx {
-                action_reads_rule_ctx(&src.text, base);
-            } else {
-                action_reads_rule_span(&src.text, base);
-            };
-            if reads {
+            if action_reads(&src.text, base, want_ctx) {
                 return true;
             }
         }
@@ -443,35 +451,8 @@ fn prequel_reads(ctx: &GenContext, base: &String, want_ctx: bool) -> bool {
     return false;
 }
 
-/// The field of a labeled rule call whose node an action renders (`$x.ctx`), or
-/// `null`. Twin of `rule_call_span_field`, for the builder row rather than the
-/// token range.
-pub fn rule_call_ctx_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
-    if !ctx.emit_actions() {
-        return null;
-    }
-    let rc = match op {
-        RuleCall(r) => *r,
-        _ => {
-            return null;
-        },
-    };
-    for let a of actions {
-        if action_reads_rule_ctx(&a.source.text, &rc.dedup_base) {
-            return Option::Some(rc.field);
-        }
-    }
-    if prequel_reads(ctx, &rc.dedup_base, true) {
-        return Option::Some(rc.field);
-    }
-    return null;
-}
-
-/// Declare the token-range and node locals for every labeled rule call in this
-/// scope whose text or node an action reads, before any of them is assigned.
-/// Declaring up front rather than at the call keeps the read in scope wherever
-/// the action sits — including before the call, where the label is not bound yet
-/// and the empty range yields empty text (ANTLR's `$label` is null there).
+/// Declare the token-range and node locals an action reads, ahead of every
+/// assignment, so a read before the call is in scope and yields empty text.
 pub fn gen_rule_span_decls(w: &mut CodeWriter, ops: &List<Op>, actions: &List<AltAction>, ctx: &GenContext) {
     for let op of ops {
         if let Some(f) = rule_call_span_field(op, actions, ctx) {
@@ -511,12 +492,8 @@ pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before:
     }
 }
 
-/// An alt-initial predicate in a multi-alt rule — or in a multi-alt group,
-/// which is the same decision one level down — chooses which alternative is
-/// taken. Reached here only when the dispatch could not gate it (`gate_condition_for`
-/// refused the body, or the dispatch shape has no per-alternative condition),
-/// so it is surfaced loudly rather than emitted as an inline guard that would
-/// fail the parse instead of selecting the other alternative.
+/// Whether a predicate here chooses an alternative rather than guarding a
+/// sequence — true in a multi-alt rule and in a multi-alt group alike.
 fn predicate_selects_alternative(before: i32, ctx: &GenContext) -> bool {
     return before == 0 && (current_rule_is_multi_alt(ctx) || ctx.in_multi_alt_group());
 }
@@ -781,9 +758,7 @@ pub fn mark_gated_predicates(
 }
 
 /// Register `alt`'s gateable alt-initial predicates as gated, so the dispatch
-/// about to be emitted carries them as its condition and the alternative's body
-/// does not repeat them as an inline guard. Called per rule alternative by the
-/// rule-level marking pass, and per group alternative at the group dispatch.
+/// carries them as its condition and the body does not repeat them as a guard.
 pub fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
     for let a of &alt.actions {
         if is_gateable_alt_initial_predicate(a, ctx) {

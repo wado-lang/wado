@@ -1,6 +1,5 @@
-//! A superClass operation that takes an argument. The call sites settle the
-//! signature — one `String` here — so the base is wired and the handler reads
-//! the literal the grammar passed.
+//! A superClass operation that takes an argument: the call sites settle the
+//! signature — one `String` here — so the base is wired.
 
 use sa from "./grammars/wado_super_arg.g4"
     with {
@@ -8,7 +7,8 @@ use sa from "./grammars/wado_super_arg.g4"
     };
 use { ArgBase, Parser } from "./grammars/wado_super_arg.g4";
 
-struct WordBase {}
+struct WordBase {
+}
 
 impl ArgBase for WordBase {
     fn word(&self, p: &Parser, a0: String) -> bool {

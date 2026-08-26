@@ -219,11 +219,10 @@ pub struct GenContext {
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32>,
     /// Nesting depth of the multi-alternative group bodies being emitted: an
-    /// alt-initial predicate inside one selects an alternative rather than
-    /// guarding a sequence.
+    /// alt-initial predicate inside one selects an alternative.
     multi_alt_group_depth: i32,
-    /// Vocabulary display names by kind id (`vocab_display_names`), for
-    /// rendering an expected-token set the way ANTLR4's does.
+    /// Vocabulary display names by kind id (`vocab_display_names`), the names an
+    /// expected-token set renders through.
     vocab_names: List<String>,
     /// The rendered expected-token set at the action site being emitted, or
     /// empty where codegen cannot answer — a body reading it there is reported.
@@ -651,10 +650,8 @@ impl GenContext {
         return self.predicate_gated.contains(&id);
     }
 
-    /// Enter / leave a multi-alternative group's body. An alt-initial predicate
-    /// there decides which alternative the group takes, exactly as one in a
-    /// multi-alt rule does — so one the dispatch could not gate must be reported
-    /// rather than emitted as an inline guard that would fail the parse.
+    /// Enter / leave a multi-alternative group's body, where an alt-initial
+    /// predicate decides which alternative the group takes.
     pub fn enter_multi_alt_group(&mut self) {
         self.multi_alt_group_depth += 1;
     }
@@ -668,9 +665,8 @@ impl GenContext {
         return self.multi_alt_group_depth > 0;
     }
 
-    /// The expected-token set the action about to be emitted would see, as
-    /// `render_expected` rendered it. Set around a site codegen can answer for
-    /// (a rule prequel), cleared everywhere else.
+    /// The rendered expected-token set the action about to be emitted would see.
+    /// Set around a site codegen can answer for, cleared everywhere else.
     pub fn set_expected_names(&mut self, rendered: String) {
         self.expected_names = rendered;
     }
@@ -750,53 +746,36 @@ impl GenContext {
         return &self.token_kinds.names;
     }
 
-    /// Install the vocabulary display names (`vocab_display_names`), indexed by
-    /// kind id, that `render_expected` renders an expected set through.
+    /// Install the vocabulary display names (`vocab_display_names`) by kind id.
     pub fn set_vocab_names(&mut self, names: List<String>) {
         self.vocab_names = names;
     }
 
-    /// ANTLR4's `getExpectedTokens().toString(getVocabulary())` for `kinds`:
-    /// the display names in kind order, `{'a', 'b'}`. A one-element set renders
-    /// bare (`'a'`), and EOF renders `<EOF>` ahead of the rest — its type is -1
-    /// upstream, so it sorts before every real kind. Empty when the vocabulary
-    /// is not installed, which is the signal to report a body reading it rather
-    /// than print a wrong set.
+    /// ANTLR4's `getExpectedTokens().toString(getVocabulary())` for `kinds`: the
+    /// display names in kind order, braced unless the set holds one.
     pub fn render_expected(&mut self, kinds: &List<String>) -> String {
         if self.vocab_names.is_empty() {
             return String::new();
         }
+        // EOF is type -1 upstream, so it renders `<EOF>` before every real kind.
         let eof = self.eof_kind_id();
         let mut ids: List<i32> = [];
-        let mut has_eof = false;
+        let mut names: List<String> = [];
         for let k of kinds {
             let id = self.token_kinds.intern(k);
             if id == eof {
-                has_eof = true;
+                names = ["<EOF>"];
             } else if id < self.vocab_names.len() && !ids.contains(&id) {
                 ids.push(id);
             }
         }
-        let sorted = ids.sorted();
-        let mut names: List<String> = [];
-        if has_eof {
-            names.push("<EOF>");
-        }
-        for let mut i = 0; i < sorted.len(); i += 1 {
-            names.push(self.vocab_names[sorted[i]]);
+        for let id of &ids.sorted() {
+            names.push(self.vocab_names[*id]);
         }
         if names.len() == 1 {
             return names[0];
         }
-        let mut out = String::from("{");
-        for let mut i = 0; i < names.len(); i += 1 {
-            if i > 0 {
-                out.push_str(&", ");
-            }
-            out.push_str(&names[i]);
-        }
-        out.push_str(&"}");
-        return out;
+        return `\{${names.join(", ")}\}`;
     }
 
     /// Kind id of the EOF terminal (`TK_EOF`). Always present in a production

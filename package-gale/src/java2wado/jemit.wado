@@ -32,12 +32,9 @@ pub struct JEnv {
     pub this_bind: String,
     pub grammar: String,
     pub methods: List<String>,
-    /// The expected-token set at this site, already rendered
-    /// (`GenContext::render_expected`) — `getExpectedTokens().toString(...)` is
-    /// a generation-time constant in Gale. Empty where codegen cannot answer,
-    /// which reports the body instead.
+    /// The rendered expected-token set at this site — a generation-time
+    /// constant in Gale. Empty where codegen cannot answer, which reports.
     pub expected: String = "",
-
     /// True inside a lexer action / predicate body, where the recognizer API is
     /// the lexer's: `getText()` is the matched slice rather than a rule's token
     /// span, and a `$`-attribute resolves against the match fn's cursor.
@@ -176,15 +173,14 @@ fn emit_stmt(
             },
             None => Result::Ok("return;"),
         },
-        // Java's assertions are off unless the JVM is run with `-ea`; Wado's
-        // always run. Translating to a live assert is the stronger reading and
-        // the one Gale takes everywhere else.
+        // Java's assertions need `-ea`; Wado's always run. A live assert is the
+        // stronger reading, and the one Gale takes everywhere else.
         Assert(a) => {
             let cond = emit_expr(rule, rules, &a.cond, vals_in_scope, bindings, env)?;
             match &a.message {
                 Some(m) => Result::Ok(`assert ${cond}, ${str_lit(*m)};`),
                 None => Result::Ok(`assert ${cond};`),
-            };
+            }
         },
     };
 }
@@ -340,10 +336,8 @@ fn emit_call(
         if is_ctx_expr(&m.recv) {
             return emit_ctx_child(rule, m, &c.args, bindings);
         }
-        // `getExpectedTokens().toString(getVocabulary())`: the whole idiom is
-        // one constant in Gale — the set is a property of the site, the
-        // vocabulary of the grammar — so it collapses to the rendering codegen
-        // computed, and neither call is emitted on its own.
+        // `getExpectedTokens().toString(getVocabulary())`: the site fixes the
+        // set and the grammar the vocabulary, so the idiom is one constant.
         if m.name == "toString" && call_names(&m.recv, &"getExpectedTokens") {
             if env.expected.is_empty() {
                 return Result::Err(
@@ -385,12 +379,8 @@ fn emit_call(
     };
 }
 
-/// `((XContext)$ctx).TOK() != null` / `== null`: ANTLR asks whether the
-/// alternative matched that token. A token the alternative binds at its top
-/// level is one it always matches, so the test is a constant. An optional or
-/// repeated one is not bound there (`collect_op_binding`) and nothing folds —
-/// the general path then reports the body rather than answering `true` for a
-/// token that may be absent.
+/// `((XContext)$ctx).TOK() != null` asks whether the alternative matched that
+/// token — a constant for one it binds, and unfoldable for any other.
 fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<[bool, String, String]>) -> Option<String> {
     if b.op != "!=" && b.op != "==" {
         return null;
@@ -474,9 +464,8 @@ fn emit_member_call(
     env: &JEnv,
 ) -> Result<String, String> {
     let meth = m.name;
-    // `$x.ctx.toStringTree(this)`: the `$`-attr scanner stops at `$x.ctx`, so
-    // the rendering call lands here. `$x.ctx` already resolves to the rendered
-    // node, and the recognizer argument has no Wado counterpart — drop both.
+    // `$x.ctx.toStringTree(this)`: `$x.ctx` already resolves to the rendered
+    // node, so the call the `$`-attr scanner left behind is dropped.
     if meth == "toStringTree" {
         if let Attr(t) = &m.recv {
             return resolve_attr_ref(rule, rules, t, vals_in_scope, bindings, &env.this_bind);

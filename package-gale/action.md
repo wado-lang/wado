@@ -47,15 +47,15 @@ Actions and predicates call a small API; both Wado-written and translated bodies
 | `p.token_text(i)`      | `.getText()` on a token                                         |
 | `p.rule_text()`        | `$text` — input consumed by the current rule so far             |
 | `p.input_text()`       | `_input.getText()` — the whole input                            |
-| `p.expected_names()`   | `getExpectedTokens().toString(getVocabulary())`                 |
 | `p.rule_stack()`       | `getRuleInvocationStack()` — the open nodes, innermost first    |
 | `p.rule_string_tree()` | `$ctx.toStringTree(this)` — renders the node under construction |
+| `p.rule_tree_at(row)`  | `$x.ctx` — renders one labeled rule call's own node             |
 | `p.emit(s)`            | action prints (see Effects and printing)                        |
 
-Two of those read recognizer state Gale does not keep the way ANTLR does:
+Two ANTLR reads have no API row, because Gale does not keep that state the way ANTLR does:
 
 - The rule-invocation stack is already in the tree builder — the nodes open at the action's site, rendered innermost first as rule names. No new recognizer state.
-- The expected-token set at an action's site is a generation-time property in Gale, not a runtime query: it is the same kind set the site's `expect` / sync emit already computes, so `p.expected_names()` takes it as a constant and renders it through a vocabulary table (a token's literal name when it has one, else its symbolic name). Where the set depends on the call site and the runtime FOLLOW gate is on, the gate's mask is the answer instead. The table is emitted only when a body reads it, so a grammar that does not stays byte-identical.
+- The expected-token set is a generation-time property, not a runtime query: `getExpectedTokens().toString(getVocabulary())` folds to the rendering codegen computed, through the vocabulary names ANTLR's `Vocabulary` gives (a token's literal when it has one, else its symbolic name). Codegen answers at a rule prequel, where the set is the rule's FIRST (plus FOLLOW when the rule is nullable) at entry and its FOLLOW at exit; anywhere else, and for a rule whose FOLLOW fixed point is not exact, the body is reported rather than given a set that is not ANTLR's.
 
 `PredictionMode` and `dumpDFA` describe ANTLR's simulator rather than the grammar, so they are out of scope permanently: a descriptor that prints one is not a Stage C gap.
 

@@ -176,19 +176,16 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // A wired parser base's bodies are Wado once the rewrite has run, so they
     // execute even under a host language java2wado carves out.
     ctx.set_emit_actions(should_emit_actions(grammar) || ctx.has_parser_superclass());
-    // Stage the lexer bodies into Wado up front, on exactly the grammars whose
-    // lexer bodies `gen_lexer` emits (its `ea`), so the emitters splice ready
-    // text: they run without a `GenContext`, so a translation failure reaching
-    // one could only panic.
+    // Stage the lexer bodies into Wado on exactly the grammars whose lexer
+    // bodies `gen_lexer` emits (its `ea`), so the emitters splice ready text:
+    // they hold no `GenContext`, so a failure reaching one could only panic.
     if lexer_grammar_executes_actions(grammar) || ctx.has_superclass() {
         // A Java lexer gets no members (see `collect_lexer_members`), so nothing
         // resolves against them and a reference is reported.
         let none: List<String> = [];
-        // A body under a wired base is Wado already — the call rewrite made it
-        // one — so it stages through the identity translator whatever the
-        // grammar's language says. That is the same carve-out
-        // `action_language_is_emittable` names: java2wado never sees a
-        // `superClass` grammar's bodies.
+        // The call rewrite already turned a body under a wired base into Wado,
+        // so it stages through the identity translator whatever the grammar
+        // declares — the carve-out `action_language_is_emittable` names.
         let lang = if action_language_is_emittable(grammar) { grammar.action_language } else { ActionLanguage::Wado };
         for let msg of &stage_lexer_bodies(grammar, &lang, &none, &none) {
             ctx.warn(&DiagnosticOwner::host(&"lexer action"), DiagnosticKind::UnsupportedAction, *msg);
@@ -448,16 +445,11 @@ fn unhandled_lexer_action_reason(grammar_executes: bool, rule: &LexerRule) -> St
     return "nested inside an element; only top-level rule/alt actions and predicates run today";
 }
 
-/// Refuse a semantic predicate in an ATN-class lexer rule. Such a rule's
-/// `try_` body is `latn_match`, and the lexer ATN carries no predicate
-/// transition — so without this the rule matches input its predicate rejects,
-/// with nothing in the output or the diagnostics to show for it. Runs
-/// unconditionally: a dropped predicate changes what the lexer accepts, whether
-/// or not the grammar's actions execute.
+/// Refuse a semantic predicate in an ATN-class lexer rule: the lexer ATN carries
+/// no predicate transition, so the rule would match input its predicate rejects.
 fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<String>, ctx: &mut GenContext) {
-    // One predicate, one report: an ATN-class rule that references another
-    // reaches the same ids twice, and the message they would carry names a
-    // different rule each time, so the diagnostic dedup would not catch it.
+    // One predicate, one report: an ATN-class rule referencing another reaches
+    // the same ids under a different rule name, which the diagnostic dedup misses.
     let mut reported: List<i32> = [];
     for let name of atn_class_rules {
         if let Some(rule) = find_lexer_rule(&grammar.lexer_rules, name) {

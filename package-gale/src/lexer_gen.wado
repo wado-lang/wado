@@ -885,7 +885,7 @@ fn gen_lexer_match_fn(
 /// Emit each semantic predicate at position `before` as a guard
 /// (`if !(cond) { <fail_action>; }`) in a lexer rule's match fn. The condition
 /// is the staged body (`stage_lexer_bodies` resolved its lexer `$`-attributes
-/// against the match fn's `chars` / `start` / `pos` before emit). `fail_action` is
+/// against the match fn's `chars` / `start` / `pos`). `fail_action` is
 /// `return -1` for a single-alt rule and `break <label>` inside a multi-alt
 /// rule / group / fragment (a false predicate falls through to the next alt).
 /// `gen_lexer_alt_seq` drives this over every `before_index` (alt-initial, mid,
@@ -940,19 +940,12 @@ pub fn lexer_rule_executes_actions(grammar_executes: bool, rule: &LexerRule) -> 
 }
 
 /// Whether the action replay can interleave `alt`'s actions with its match, so
-/// each runs at the cursor it was written at. A `Group` is fine — the replay
-/// re-selects the arm that won. A plain `Repeat` is too: the replay probes each
-/// iteration match-only before running it with actions, so an iteration that
-/// does not match leaves no trace. A `Repeat` the non-greedy or lookahead-aware
-/// emitters restructure the sequence around is not — those rewrite the sequence
-/// the replay would have to walk, so an alt carrying one keeps the flat emit.
+/// each runs at the cursor it was written at. A restructured `Repeat` cannot.
 pub fn lexer_alt_replayable(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool) -> bool {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let e = &alt.elements[i];
         if let Repeat(rep) = e {
-            if !lexer_repeat_emit(alt, i, all_rules, ci) matches {
-                PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable
-            } {
+            if !lexer_repeat_emit(alt, i, all_rules, ci) matches { PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable } {
                 return false;
             }
             if !lexer_element_replayable(&rep.element, all_rules, ci) {
@@ -970,9 +963,8 @@ pub fn lexer_alt_replayable(alt: &LexerAlternative, all_rules: &List<LexerRule>,
 fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool) -> bool {
     return match *elem {
         Literal(_) | CharRange(_) | CharClass(_) | AnyChar => true,
-        // A bare Repeat reached through another element has no alternative to
-        // read a strategy from; the alt-level walk above is where one is
-        // admitted.
+        // A Repeat reached through another element has no alternative to read a
+        // strategy from; the alt-level walk above is where one is admitted.
         Repeat(_) => false,
         Not(n) => lexer_element_replayable(&n.element, all_rules, ci),
         Group(alts) => {
@@ -1044,9 +1036,7 @@ fn collect_lexer_run_action_ids(alt: &LexerAlternative, replays: bool, all_rules
 }
 
 /// The alternatives `elem` inlines into its enclosing sequence: a `Group`'s
-/// arms, a non-recursive fragment's body, or what a `Repeat` iterates (the
-/// replay runs each iteration's body in place). A `Not` / rule call keeps its
-/// contents to itself as far as action placement is concerned.
+/// arms, a non-recursive fragment's body, or what a `Repeat` iterates.
 fn inlined_alts_of(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<LexerAlternative> {
     return match *elem {
         Group(alts) => alts,
@@ -1305,9 +1295,8 @@ fn gen_lexer_winning_alt_fn(
     w.blank();
 }
 
-/// Emit a staged lexer-action body as a statement. Staging hands back a Wado
-/// expression/statement; normalize the trailing separator so
-/// a body written with or without `;` yields exactly one statement.
+/// Emit a staged lexer-action body as a statement, normalizing the trailing
+/// separator so a body written with or without `;` yields exactly one.
 fn emit_lexer_action_stmt(w: &mut CodeWriter, body: &String) {
     let trimmed = body.trim();
     if trimmed.ends_with(";") || trimmed.ends_with("}") {
@@ -1389,11 +1378,8 @@ pub fn collect_unhandled_lexer_alt_action_ids(
     }
 }
 
-/// Every semantic-predicate id `rule` carries: its own alternatives, the groups
-/// nested in them, and the rules it references (the lexer ATN inlines those, so
-/// their predicates share the rule's fate). Drives the ATN-class refusal in
-/// `codegen` — the lexer ATN has no predicate transition, so a predicate under
-/// `latn_match` would be dropped where nothing can report it.
+/// Every semantic-predicate id `rule` carries, its referenced rules included:
+/// the lexer ATN inlines those, so their predicates share the rule's fate.
 pub fn collect_lexer_predicate_ids(rule: &LexerRule, all_rules: &List<LexerRule>, out: &mut List<i32>) {
     let mut visiting: List<String> = [];
     push_lexer_rule_predicate_ids(rule, all_rules, &mut visiting, out);
@@ -2817,12 +2803,8 @@ fn gen_lexer_repeat(
     }
 }
 
-/// One iteration of a repeat. Off the replay path this is the inner element,
-/// emitted where it stands. On it, an iteration that turns out not to match
-/// must leave no trace, so the inner runs twice: a match-only probe decides
-/// whether the iteration is part of the match, then the same cursor is replayed
-/// with the actions on. Only a body that matches gets to run an action, which
-/// is the same guarantee the winner replay gives a losing alternation arm.
+/// One iteration of a repeat: the inner element, and on the replay path a
+/// match-only probe of it first, so a non-matching iteration runs no action.
 fn gen_lexer_repeat_iteration(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
@@ -2853,25 +2835,22 @@ fn gen_lexer_repeat_iteration(
     w.line(&`${probe}_ok = true;`);
     w.end();
     // The winner's extent bounds the replay: an iteration reaching past `end`
-    // is not part of the match this replay is placing actions in, however the
-    // match pass came to stop there (a predicate it evaluated and the replay
-    // does not, for one).
+    // is not part of the match, however the match pass came to stop there.
     w.line(&`if !${probe}_ok || pos > end \{ pos = ${probe}_saved; ${*fail_action}; \}`);
     w.line(&`pos = ${probe}_saved;`);
     gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, true);
 }
 
-/// Whether `elem` carries an action anywhere inside it — the only reason a
-/// replayed iteration needs its match-only probe. A rule reference counts what
-/// it inlines: the emit walks a non-recursive fragment's body in place, so its
-/// actions are this element's too.
+/// Whether `elem` carries an action anywhere inside it, counting what a rule
+/// reference inlines — the only reason an iteration needs its match-only probe.
 fn lexer_element_has_action(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
     return match *elem {
         Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules)),
         Repeat(rep) => lexer_element_has_action(&rep.element, all_rules),
         Not(n) => lexer_element_has_action(&n.element, all_rules),
         RuleRef(name) => match find_fragment(all_rules, &name) {
-            Some(f) => !fragment_is_recursive(f, all_rules) && f.body.iter_ref().any(
+            Some(f) => !fragment_is_recursive(f, all_rules)
+                && f.body.iter_ref().any(
                 |a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules),
             ),
             None => false,
@@ -4594,12 +4573,8 @@ fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &St
     w.line(&"triv_lo = ts.trivia_mark();");
 }
 
-/// The display names ANTLR4's `Vocabulary` gives the token kinds, indexed by
-/// kind id: a token defined by a single literal prints that literal
-/// (`'hardware'`), every other one its name. This is what
-/// `getExpectedTokens().toString(getVocabulary())` renders through, and it is
-/// deliberately not `token_kind_name`: that one names a *rule* by its name,
-/// which is what Gale's own diagnostics read.
+/// The display names ANTLR4's `Vocabulary` gives the token kinds, by kind id: a
+/// token defined by a single literal prints that literal, every other its name.
 pub fn vocab_display_names(
     lexer_rules: &List<LexerRule>,
     lit_tokens: &List<LitToken>,

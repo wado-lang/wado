@@ -362,11 +362,11 @@ a : A ;
 }
 
 test "a ctx token accessor folds only for a token the alternative always matches" {
-    // `((SContext)$ctx).A() != null` asks whether the alternative matched `A`.
-    // A mandatory element always is matched, so the answer is a constant; an
-    // optional one is not bound at the alternative's level and has no answer,
-    // so the body is refused rather than told `true`.
-    let bindings: List<[bool, String, String]> = [[true, "a", "a"]];
+    // `((SContext)$ctx).A() != null` asks whether the alternative matched `A`:
+    // a constant for a mandatory element, unanswerable for an optional one.
+    let bindings: List<[bool, String, String]> = [
+        [true, "a", "a"],
+    ];
     let g = parse("grammar T;
 s : ID A ;
 ID : [a-z]+ ;

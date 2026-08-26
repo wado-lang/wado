@@ -2769,11 +2769,8 @@ fn collect_op_binding(op: &Op, out: &mut List<[bool, String, String]>) {
         Excluded(e) => out.push([true, e.dedup_base, e.field]),
         Wildcard(wop) => out.push([true, wop.dedup_base, wop.field]),
         RuleCall(rc) => out.push([false, rc.dedup_base, rc.field]),
-        // A repeat's body binds inside the loop / `if` it is emitted in, so its
-        // local is not in scope where this alternative's actions run — and it
-        // may not be bound at all, which is what makes `A?` different from `A`
-        // to an action asking whether the alternative matched it. A body nested
-        // in a repeat gets its own bindings from its own ops.
+        // A repeat's body binds inside the loop / `if` it is emitted in, out of
+        // scope here — and `A?` may not bind at all, unlike `A`.
         Repeat(_) => {
         },
         ListLabel(_) => {
@@ -2830,17 +2827,9 @@ fn gen_alt_elements(
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            let span_field = rule_call_span_field(op, actions, ctx);
-            if let Some(f) = &span_field {
-                w.line(&`${rule_span_lo_local(f)} = p.pos;`);
-            }
-            if let Some(f) = rule_call_ctx_field(op, actions, ctx) {
-                w.line(&`${rule_node_local(&f)} = p.b.checkpoint();`);
-            }
+            let span_field = open_call_capture(w, op, actions, ctx);
             gen_op_leaf(w, op, ctx, &mut name_counts, &sync);
-            if let Some(f) = &span_field {
-                w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
-            }
+            close_call_capture(w, &span_field);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -2877,9 +2866,8 @@ fn gen_elements_with_non_greedy(
         if !actions.is_empty() {
             ctx.set_alt_bindings(collect_alt_bindings(ops));
         }
-        // Not gated on the alternative carrying an action: the enclosing rule's
-        // `@init` / `@after` reads the same locals from the same fn, and the
-        // capture below fires for it either way.
+        // Not gated on the alternative carrying an action: the rule's `@init` /
+        // `@after` reads the same locals from the same fn.
         gen_rule_span_decls(w, ops, actions, ctx);
     }
     for let mut i = 0; i < elements.len(); i += 1 {
@@ -2900,17 +2888,9 @@ fn gen_elements_with_non_greedy(
             // only deleted-or-unwound (recovery quality is uniform with the
             // top-level sequence).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            let span_field = rule_call_span_field(op, actions, ctx);
-            if let Some(f) = &span_field {
-                w.line(&`${rule_span_lo_local(f)} = p.pos;`);
-            }
-            if let Some(f) = rule_call_ctx_field(op, actions, ctx) {
-                w.line(&`${rule_node_local(&f)} = p.b.checkpoint();`);
-            }
+            let span_field = open_call_capture(w, op, actions, ctx);
             gen_op_leaf(w, op, ctx, name_counts, &sync);
-            if let Some(f) = &span_field {
-                w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
-            }
+            close_call_capture(w, &span_field);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -4376,12 +4356,8 @@ fn gen_op_transparent_optional_with_cond(
     w.end();
 }
 
-/// Emit a rule prequel (`@init` / `@after`) with the expected-token set its
-/// body may print in scope: at rule entry that is what the rule can start with
-/// (plus what may follow it when it can match nothing), at exit what may follow
-/// it. Gale answers this statically, so a rule whose FOLLOW is not exact leaves
-/// the set empty and a body reading it is reported instead of printing a set
-/// that is not the one ANTLR would.
+/// Emit a rule prequel (`@init` / `@after`) with the expected-token set its body
+/// may print in scope. Empty for a rule whose FOLLOW is not exact.
 fn gen_prequel_action(w: &mut CodeWriter, src: &ActionSource, rule_name: &String, at_entry: bool, ctx: &mut GenContext) {
     ctx.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
     gen_action_body(w, src, ctx);
@@ -4420,13 +4396,9 @@ fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with st
 }
 
 /// The viability condition of a repeat whose group body has a predicate-gated
-/// alternative: `(kind ∈ FIRST(alt) && gate) || …`. `null` when nothing is
-/// gated, so every other repeat emits exactly what it did before.
-///
-/// The dispatch inside the body gates each branch with the same
-/// `alt_gate_and_suffix`, so an iteration this condition admits always takes an
-/// arm, and one it rejects is never entered — which is what keeps a gated loop
-/// from spinning on an iteration that consumes nothing.
+/// alternative: `(kind ∈ FIRST(alt) && gate) || …`, or `null` when none is.
+/// The body's dispatch gates each branch with the same `alt_gate_and_suffix`,
+/// so an iteration this admits always takes an arm.
 fn repeat_gate_condition(inner: &Element, ctx: &mut GenContext) -> Option<String> {
     if !ctx.emit_actions() {
         return null;
@@ -4446,21 +4418,12 @@ fn repeat_gate_condition(inner: &Element, ctx: &mut GenContext) -> Option<String
     if !gated {
         return null;
     }
-    let mut cond = String::with_capacity(64);
-    for let mut i = 0; i < parts.len(); i += 1 {
-        if i > 0 {
-            cond.push_str(&" || ");
-        }
-        cond.push_str(&parts[i]);
-    }
-    return Option::Some(cond);
+    return Option::Some(parts.join(" || "));
 }
 
-/// Break a repeat whose gated group body admits no alternative at this
-/// position. `plus_flag` names the mandatory-first-iteration flag when the
-/// caller has one: the first iteration of a `+` is a choice among the
-/// alternatives, not a loop-exit decision, so it falls through to the dispatch
-/// (which reports no viable alternative) instead of exiting.
+/// Break a repeat whose gated group body admits no alternative here. A `+`'s
+/// mandatory first iteration (`plus_flag`) chooses instead of exiting, so it
+/// falls through to the dispatch and its no-viable-alternative report.
 fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, plus_flag: &String) {
     if let Some(cond) = repeat_gate_condition(inner, ctx) {
         if plus_flag.is_empty() {
@@ -4472,9 +4435,7 @@ fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenConte
 }
 
 /// Dispatch one element, capturing the token range and the builder row a
-/// labeled rule call's `$x.text` / `$x.ctx` read. The walkers do the same around
-/// `gen_op_leaf`; the shape-driven emitters go through here, so an action in one
-/// of their bodies reads the same locals `gen_rule_span_decls` declared.
+/// labeled rule call's `$x.text` / `$x.ctx` read.
 fn gen_element_with_capture(
     w: &mut CodeWriter,
     op: &Op,
@@ -4483,6 +4444,14 @@ fn gen_element_with_capture(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
+    let span_field = open_call_capture(w, op, actions, ctx);
+    gen_op_dispatch_element(w, op, elem, ctx, name_counts);
+    close_call_capture(w, &span_field);
+}
+
+/// Open a labeled rule call's captures: the token the call starts at, and the
+/// builder row its node opens at. Returns the span field to close after it.
+fn open_call_capture(w: &mut CodeWriter, op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
     let span_field = rule_call_span_field(op, actions, ctx);
     if let Some(f) = &span_field {
         w.line(&`${rule_span_lo_local(f)} = p.pos;`);
@@ -4490,8 +4459,11 @@ fn gen_element_with_capture(
     if let Some(f) = rule_call_ctx_field(op, actions, ctx) {
         w.line(&`${rule_node_local(&f)} = p.b.checkpoint();`);
     }
-    gen_op_dispatch_element(w, op, elem, ctx, name_counts);
-    if let Some(f) = &span_field {
+    return span_field;
+}
+
+fn close_call_capture(w: &mut CodeWriter, span_field: &Option<String>) {
+    if let Some(f) = span_field {
         w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
     }
 }
@@ -4511,11 +4483,7 @@ fn enter_group_alt_bindings(
     return outer;
 }
 
-fn leave_group_alt_bindings(
-    outer: &List<[bool, String, String]>,
-    actions: &List<AltAction>,
-    ctx: &mut GenContext,
-) {
+fn leave_group_alt_bindings(outer: &List<[bool, String, String]>, actions: &List<AltAction>, ctx: &mut GenContext) {
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(*outer);
     }
@@ -4633,9 +4601,8 @@ fn gen_op_optional_with_shape_lookahead_transparent(
 
         let mut nc: List<[String, i32]> = [];
         let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
-        // Actions are the alternative's own, so they run in every shape branch
-        // (`gen_op_optional_with_shape_lookahead_storable` says the same); the
-        // positions decide only which elements are parsed.
+        // Actions are the alternative's own, so they run in every shape branch;
+        // the positions decide only which elements are parsed.
         let mut k = 0;
         for let mut idx = 0; idx < elements.len(); idx += 1 {
             gen_alt_actions_at(w, &alt.actions, idx, ctx);
@@ -4658,7 +4625,14 @@ fn gen_op_optional_with_shape_lookahead_transparent(
                         }
                         for let mut j = 0; j < inner_alt.elements.len(); j += 1 {
                             gen_alt_actions_at(w, &inner_alt.actions, j, ctx);
-                            gen_element_with_capture(w, &inner_body.ops[j], &inner_alt.elements[j], &inner_alt.actions, ctx, &mut nc);
+                            gen_element_with_capture(
+                                w,
+                                &inner_body.ops[j],
+                                &inner_alt.elements[j],
+                                &inner_alt.actions,
+                                ctx,
+                                &mut nc,
+                            );
                         }
                         gen_alt_actions_at(w, &inner_alt.actions, inner_alt.elements.len(), ctx);
                         leave_group_alt_bindings(&inner_outer, &inner_alt.actions, ctx);
@@ -6163,11 +6137,9 @@ fn gen_general_overlap_loop(
             }
         }
 
-        // A group's alternatives are a decision like a rule's, so an alt-initial
-        // predicate joins the branch condition here exactly as
-        // `gen_multi_alt_body_alt` joins it at rule level. Marking must precede
-        // the body emit, so the gated predicate is not re-emitted as an inline
-        // guard inside it.
+        // A group's alternatives decide like a rule's, so an alt-initial
+        // predicate joins the branch condition. Mark before the body emit, or
+        // the gated predicate is re-emitted as an inline guard inside it.
         let gate = if group.len() == 1 {
             mark_alt_gate_predicates(&alts[group[0]], ctx);
             alt_gate_and_suffix(&alts[group[0]], ctx);
@@ -6243,11 +6215,9 @@ fn gen_general_group_store_op(
     // the `let {var}: {type} = if … ` value-binding collapses to a plain
     // `if … ` statement and the overlap loop needs no accumulator.
     if !has_overlaps {
-        // A gated alternative needs its own condition, so the last branch can
-        // only fall through unconditionally when nothing here is gated —
-        // otherwise a false predicate would land in the `else` arm it is meant
-        // to exclude. `no_viable` closes the gated chain, matching what a rule
-        // dispatch reports when every predicate is false.
+        // A gated alternative needs its own condition: an unconditional last
+        // branch would take the input a false predicate excludes. `no_viable`
+        // closes the gated chain, as a rule dispatch does.
         let gated = any_alt_gated(alts, ctx);
         for let mut g = 0; g < groups.len(); g += 1 {
             let alt_index = groups[g][0];

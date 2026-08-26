@@ -33,12 +33,19 @@ use {
     TK_MinusMinus,
 } from "./grammars/TypeScriptLexer.g4";
 use { TypeScriptLexerBase, LexerView, Lexer } from "./grammars/TypeScriptLexer.g4";
-use { TypeScriptParserBase, Parser, TK_OpenBrace, TK_CloseBrace, TK_Function_, TK_Interface } from "./grammars/TypeScriptLexer.g4";
+use {
+    TypeScriptParserBase,
+    Parser,
+    TK_OpenBrace,
+    TK_CloseBrace,
+    TK_Function_,
+    TK_Interface,
+} from "./grammars/TypeScriptLexer.g4";
 
-// The parser's base. Every operation is a question about the tokens around the
-// decision, which the recognizer answers directly — upstream reads the same
-// facts off its token stream, so the base carries no state of its own.
-struct TsParserBase {}
+// The parser's base. Every operation asks about the tokens around the decision,
+// which the recognizer answers directly, so the base carries no state.
+struct TsParserBase {
+}
 
 impl TypeScriptParserBase for TsParserBase {
     /// No line break between the token just consumed and the next one — what
@@ -58,7 +65,7 @@ impl TypeScriptParserBase for TsParserBase {
     /// An expression statement may not start with `{`, `function` or
     /// `interface` — those open a block, a declaration and a type instead.
     fn not_open_brace_and_not_function_and_not_interface(&self, p: &Parser) -> bool {
-        resume !(p.la(1) matches { TK_OpenBrace | TK_Function_ | TK_Interface });
+        resume !p.la(1) matches { TK_OpenBrace | TK_Function_ | TK_Interface };
     }
 
     /// The token just consumed is `a0` — `for (x of xs)` asks it of `of`.

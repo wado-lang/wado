@@ -111,9 +111,8 @@
 
 # Stage C — action-print output-compare (result.output vs descriptor [output]).
 # These execute action bodies but do not yet match; each names the gap.
-# Both entries below are held by something other than action execution —
-# ambiguity reporting and error recovery — so neither is closed by Stage C
-# work; they are here because this is the axis whose comparison they fail.
+# Both entries below are held by ambiguity reporting and error recovery, not by
+# action execution: no Stage C work closes them.
 [stage_c_todo]
 "FullContextParsing/AmbiguityNoLoop" = "the grammar is ambiguous and its `@init` asks for LL_EXACT_AMBIG_DETECTION; Gale commits to an alternative without reporting the ambiguity, so the action on the reported alt never runs."
 "ParseTrees/ExtraTokensAndAltLabels" = "recovery diverges, not just rendering: ANTLR4 deletes both extraneous `?` and keeps `(v ? a)`, Gale abandons `v` and prints `(s ${ v)`. The `<skip>` marker is already normalised away here, so this is the recovery decision itself."

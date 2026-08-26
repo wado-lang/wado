@@ -27,9 +27,7 @@ use { to_snake_case } from "./ident.wado";
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
 /// `params` are the Wado types the call sites agree on, inferred from their
-/// literal arguments; `bad_args` marks a name whose sites do not agree, or one
-/// passing an argument no type is evident for — the interface would then have
-/// to invent one, so the base is refused instead.
+/// literal arguments; `bad_args` marks sites that settle no signature at all.
 pub struct SuperOp {
     pub name: String,
     pub is_predicate: bool,
@@ -323,8 +321,7 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
 }
 
 /// The Wado type a literal argument evidently has, or `null` for anything a
-/// signature would have to guess at. Every real grammar's base call passes a
-/// literal, which is what makes call-site inference enough.
+/// signature would have to guess at.
 fn literal_arg_type(text: &String) -> Option<String> {
     if text.is_empty() {
         return null;
@@ -450,8 +447,7 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
 /// role and its signature. A later occurrence still contributes `bad_args` and
-/// `mixed_role`, either of which makes the operation unrepresentable: the sites
-/// of one operation must agree on what it takes.
+/// `mixed_role`, either of which makes the operation unrepresentable.
 pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
     let is_predicate = kind matches { Predicate };
     let params = call_param_types(&call.args);
@@ -475,11 +471,9 @@ pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind
     }
 }
 
-/// Operations whose call sites leave no signature to declare: an argument with
-/// no evident type, or sites that disagree about what the operation takes. A
-/// base is wired only when this is empty (`action.md`, "SuperClass — an effect
-/// interface").
-pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
+/// A base is wired only when this is empty (`action.md`, "SuperClass — an
+/// effect interface").
+pub fn super_ops_without_signature(ops: &List<SuperOp>) -> List<String> {
     let mut out: List<String> = [];
     for let op of ops {
         if op.bad_args {
@@ -490,14 +484,21 @@ pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
 }
 
 /// The parameter list an operation's inferred argument types declare, after the
-/// receiver: `, a0: String`. Empty for a zero-argument operation, which keeps a
-/// grammar that has only those byte-identical.
+/// receiver: `, a0: String`. Empty for a zero-argument operation.
 fn super_op_params(op: &SuperOp) -> String {
-    let mut out = String::new();
+    let mut typed: List<String> = [];
     for let mut i = 0; i < op.params.len(); i += 1 {
-        out.push_str(&`, a${i}: ${op.params[i]}`);
+        typed.push(`a${i}: ${op.params[i]}`);
     }
-    return out;
+    return after_receiver(&typed);
+}
+
+/// What an operation's signature or call site appends after the receiver.
+fn after_receiver(items: &List<String>) -> String {
+    if items.is_empty() {
+        return String::new();
+    }
+    return `, ${items.join(", ")}`;
 }
 
 /// The recognizer methods a base may override.
@@ -614,15 +615,14 @@ pub fn parser_super_refusal(ops: &List<SuperOp>) -> String {
     return "";
 }
 
-/// The refusal both recognizers share: an operation's call sites are its only
-/// signature source, so one passing an argument with no evident type — or sites
-/// that disagree about what it takes — leaves nothing to declare.
+/// The refusal both recognizers share: a call site is an operation's only
+/// signature source, so sites that settle none leave nothing to declare.
 fn args_refusal(ops: &List<SuperOp>) -> String {
-    let with_args = super_ops_with_args(ops);
-    if with_args.is_empty() {
+    let unsettled = super_ops_without_signature(ops);
+    if unsettled.is_empty() {
         return "";
     }
-    return `is called with arguments (${with_args.join(", ")}) whose types its call sites do not settle; a base operation has no other signature source`;
+    return `is called with arguments (${unsettled.join(", ")}) whose types its call sites do not settle; a base operation has no other signature source`;
 }
 
 /// Operations reached from an action body rather than a predicate.
@@ -829,21 +829,15 @@ pub fn super_emit_hook_expr(base_name: &String, channel: &String) -> String {
 }
 
 /// The ambient operation call for a call site, reading the locals in scope
-/// there. Arguments are dropped.
-pub fn super_call_expr(base_name: &String, method: &String, site: SuperSite, args: &List<String> = &NO_ARGS) -> String {
+/// there and passing `args` after the receiver.
+pub fn super_call_expr(base_name: &String, method: &String, site: SuperSite, args: &List<String>) -> String {
     let recv = match site {
         LexerPredicate => "LexerView { chars, start, pos }",
         LexerAction => "LexerView { chars, start, pos }, lx",
         ParserPredicate => "p",
     };
-    let mut passed = String::new();
-    for let a of args {
-        passed.push_str(&`, ${*a}`);
-    }
-    return `${*base_name}::${to_snake_case(method)}(${recv}${passed})`;
+    return `${*base_name}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;
 }
-
-global NO_ARGS: List<String> = [];
 
 /// Rewrite every lexer action / predicate body in place, turning each
 /// `this.<method>(...)` into `Foo::<method>(...)`. Run after op collection, so

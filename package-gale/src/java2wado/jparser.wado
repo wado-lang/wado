@@ -93,9 +93,8 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
     if ident_at(tokens, *pos) matches { Some("assert") } {
         *pos += 1;
         let cond = parse_or(tokens, pos)?;
-        // `assert c : msg;` — Java's detail message. Wado's takes a string, so
-        // a literal one carries over and anything else is dropped rather than
-        // translated into a value the assert cannot render.
+        // `assert c : msg;` — Wado's message is a string, so a literal one
+        // carries over and any other expression is dropped.
         let mut msg: Option<String> = null;
         if punct_is(tokens, *pos, &":") {
             *pos += 1;

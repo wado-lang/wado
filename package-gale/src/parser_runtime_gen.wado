@@ -551,8 +551,7 @@ pub fn gen_parser_struct(
         w.blank();
 
         // `getRuleInvocationStack()` — the rules entered and not yet finished,
-        // innermost first. The tree builder's open nodes already are that stack,
-        // so the recognizer keeps no second copy.
+        // innermost first; the tree builder's open nodes already are that stack.
         let mut frs = FnSpec::new(&"rule_stack", api);
         frs.set_receiver(&"&self");
         frs.set_return_type(&"String");

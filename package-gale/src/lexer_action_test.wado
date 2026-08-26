@@ -204,8 +204,7 @@ WS : ' ' -> skip ;
 
 test "a predicate in an ATN-class lexer rule is refused, not silently dropped" {
     // The rule routes to `latn_match`, and the lexer ATN has no predicate
-    // transition — so without a refusal the rule matches input the predicate
-    // rejects, with nothing in the output to show for it.
+    // transition, so without a refusal it matches input the predicate rejects.
     let src = &"lexer grammar L;
 options { language = Wado; }
 CMT : '/*' ( CMT | . )+? { false }? '*/' ;
@@ -224,9 +223,7 @@ WS : ' ' -> skip ;
 }
 
 test "an unresolvable lexer $-attribute is reported, not a generator panic" {
-    // The identity translator used to run at emit time, where there is no
-    // `ctx` to warn through, so an unresolvable reference took the generator
-    // down with it.
+    // Staging runs where a `ctx` is in hand; emit has none to warn through.
     let src = &"lexer grammar L;
 options { language = Wado; }
 A : 'a' { lx.set_type($nope) } ;
@@ -269,10 +266,8 @@ WS : ' ' -> skip ;
 }
 
 test "a rule the replay cannot follow keeps the winning_alt helper" {
-    // A lookahead-aware repeat restructures the sequence the replay would have
-    // to walk (the loop records where the suffix could start and resumes
-    // there), so alt selection falls back to the match-only helper and the
-    // actions run flat, at the end of the match.
+    // A lookahead-aware repeat rewrites the sequence the replay would walk, so
+    // alt selection falls back to the helper and the actions run flat.
     let src = gen_source(&"lexer grammar L;
 options { language = Wado; }
 A : 'a' ~('b')+ 'c' { lx.set_type(TK_X) } | 'd' { lx.set_type(TK_Y) } ;

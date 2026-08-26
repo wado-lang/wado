@@ -94,11 +94,8 @@ pub fn translate_predicate(
 }
 
 /// Stage every lexer action / predicate body in place into its Wado form, so
-/// the `lexer_gen` emitters splice ready text — the same staging the superClass
-/// call rewrite uses, which keeps them free of an action-language parameter.
-/// Emit has no `GenContext` to report through, so a body that reaches it must
-/// already be emittable: one that is not is dropped here and reported, never
-/// silently kept and never a panic from inside the emitter.
+/// the `lexer_gen` emitters splice ready text. A body that will not translate
+/// is dropped here and reported, never left to panic from inside an emitter.
 pub fn stage_lexer_bodies(
     grammar: &mut Grammar,
     lang: &ActionLanguage,
@@ -116,10 +113,7 @@ pub fn stage_lexer_bodies(
 }
 
 /// One body, in the grammar's action language. `Wado` is the identity
-/// translator (`$`-references resolved, the rest verbatim); a body the
-/// superClass rewrite already turned into base calls arrives here as Wado
-/// whatever the grammar's language says, which is why an unknown language is
-/// only an error for a body that still needs translating.
+/// translator: `$`-references resolved, the rest verbatim.
 fn stage_lexer_body(a: &AltAction, lang: &ActionLanguage, env: &JEnv) -> Result<String, String> {
     let is_pred = a.kind matches { Predicate };
     return match lang {
@@ -128,11 +122,7 @@ fn stage_lexer_body(a: &AltAction, lang: &ActionLanguage, env: &JEnv) -> Result<
         } else {
             translate_java_lexer_stmts(&a.source.text, env);
         },
-        Wado => if is_pred {
-            translate_lexer_predicate(&a.source.text);
-        } else {
-            translate_lexer_action(&a.source.text);
-        },
+        Wado => if is_pred { translate_lexer_predicate(&a.source.text) } else { translate_lexer_action(&a.source.text) },
         Other(name) => Result::Err(`no translator for action language '${name}'`),
     };
 }
@@ -157,12 +147,7 @@ fn stage_lexer_alt(alt: &mut LexerAlternative, lang: &ActionLanguage, env: &JEnv
     }
 }
 
-fn stage_lexer_elem(
-    elem: &LexerElement,
-    lang: &ActionLanguage,
-    env: &JEnv,
-    errors: &mut List<String>,
-) -> LexerElement {
+fn stage_lexer_elem(elem: &LexerElement, lang: &ActionLanguage, env: &JEnv, errors: &mut List<String>) -> LexerElement {
     return match elem {
         Group(alts) => {
             let mut new_alts: List<LexerAlternative> = [];

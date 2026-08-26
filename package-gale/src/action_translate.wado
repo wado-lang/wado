@@ -143,9 +143,8 @@ pub fn rule_span_hi_local(field: &String) -> String {
     return `_span_hi_${*field}`;
 }
 
-/// The local a labeled rule call captures before itself so `$<label>.ctx` can
-/// render that invocation's own node: the builder row the callee opens at.
-/// Emitted only where an action reads it (`action_reads_rule_ctx`).
+/// The builder row a labeled rule call opens at, captured before the call so
+/// `$<label>.ctx` renders that invocation's own node.
 pub fn rule_node_local(field: &String) -> String {
     return `_node_${*field}`;
 }
@@ -409,10 +408,8 @@ fn rule_member_expr(
             `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,
         );
     }
-    // `.ctx` is the invocation's own node, rendered. ANTLR's `$x.ctx` is the
-    // context object and only `toStringTree` is modelled on it, so the
-    // reference resolves straight to the rendering — java2wado drops the
-    // `.toStringTree(this)` call that sits on top of it.
+    // Only `toStringTree` is modelled on ANTLR's context object, so `.ctx`
+    // resolves straight to the rendering (java2wado drops the call above it).
     if let Some(m) = &r.member && *m == "ctx" {
         return Result::Ok(`${*handle}.rule_tree_at(${rule_node_local(&binding)})`);
     }
