@@ -203,7 +203,6 @@ fn "mut_param.wado/run"() with Stdout {
     let packed: i64;
     let rx_218: i32;
     let tx_219: i32;
-    let __sroa_arr_repr: ref Array<i32>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:mut_param.wado::__modules_initialized);
         cold_path;
@@ -222,7 +221,7 @@ fn "mut_param.wado/run"() with Stdout {
         unreachable;
     }
     elements_148 = array.new_fixed<i32>(1, 2, 3);
-    arr_149 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_15: ref Array<i32>; __array_clone_src_15 = elements_148; let __array_clone_len_15: i32; __array_clone_len_15 = 3; let __array_clone_dst_15: ref Array<i32>; __array_clone_dst_15 = builtin::array_new<i32>(__array_clone_len_15); builtin::array_copy<i32>(__array_clone_dst_15, 0, __array_clone_src_15, 0, __array_clone_len_15); __array_clone_dst_15), used: 3 };
+    arr_149 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_dst_2: ref Array<i32>; __array_clone_dst_2 = builtin::array_new<i32>(3); builtin::array_copy<i32>(__array_clone_dst_2, 0, elements_148, 0, 3); __array_clone_dst_2), used: 3 };
     elements_151 = array.new_fixed<i32>(99, 88);
     arr_149 = struct.new "core:prelude//List<i32>" { repr: elements_151, used: 2 };
     b = arr_149;
@@ -235,16 +234,11 @@ fn "mut_param.wado/run"() with Stdout {
         unreachable;
     }
     elements_168 = array.new_fixed<i32>(10, 20, 30);
-    let __array_clone_src_15: ref Array<i32>;
-    __array_clone_src_15 = elements_168;
-    let __array_clone_len_15: i32;
-    __array_clone_len_15 = 3;
-    let __array_clone_dst_15: ref Array<i32>;
-    __array_clone_dst_15 = builtin::array_new<i32>(__array_clone_len_15);
-    builtin::array_copy<i32>(__array_clone_dst_15, 0, __array_clone_src_15, 0, __array_clone_len_15);
-    __sroa_arr_repr = __array_clone_dst_15;
-    value_173 = builtin::array_get_value<i32>(__sroa_arr_repr, 0) * 2;
-    builtin::array_set<i32>(__sroa_arr_repr, 0, value_173);
+    let __array_clone_dst_5: ref Array<i32>;
+    __array_clone_dst_5 = builtin::array_new<i32>(3);
+    builtin::array_copy<i32>(__array_clone_dst_5, 0, elements_168, 0, 3);
+    value_173 = builtin::array_get_value<i32>(__array_clone_dst_5, 0) * 2;
+    builtin::array_set<i32>(__array_clone_dst_5, 0, value_173);
     "mut_param.wado/countdown"(3);
     rx_218 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_219 = builtin::i32_wrap_i64(packed >> 32_i64);

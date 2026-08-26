@@ -319,6 +319,33 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   newtype-valued `TreeMap` coexists with its `i32` base in a value-copied struct
   (minimal repro saved). A compiler P0; use plain `i32` until it is fixed.)
 
+- **Borrow the IR the generator only reads (2026-08-25, landed).** A
+  release-host guest profile of `benchmark/gale_gen` (4026 leaf samples) put
+  **23%** of the run in `$value_copy$` helpers — `RuleRefElement` 5.2%,
+  `TokenRefElement` 3.5%, `Alternative` 2.8% — prediction paying 10.1% of it and
+  `lower` 7.0%. Two shapes:
+
+  - `SllConfig.elements` / `SllReturn.elements` are now `&List<Element>`.
+    Prediction rebuilds a config per token per alternative (`SllConfig { ..*c,
+    pos }`) and deep-copied the element list — every `String` of every
+    `RuleRefElement` — per rebuild. `push_return` / `build_prediction` declare
+    the `stores[...]` the borrow needs.
+  - Five by-value `for` bindings became `for … of &…` (`lexer_elem_refs_rule`,
+    `collect_literal_tokens`, `merge_grammars`, `sll_advance`,
+    `try_expand_opaque`). A by-value binding deep-copies each element inside
+    `SliceValueIter<T>::next`; a by-ref one SROAs to a bare indexed load.
+
+  Alternating A/B best-of-five, `-O2`: **222.6 → 294.5 KB/s** (154.5 → 116.3
+  ms/iter, **+32%**), 5/5 rounds; the by-ref loops are ~5 points of it. Generated
+  Rust parser byte-identical. Copies fall to 13.9% of the profile and
+  by-value-`for` copies to 1.3%; the top frame is now string-keyed `TreeMap`
+  probing (`String^Ord::cmp` 8.8%, `Eq::eq` 4.3%, `find_index` 3.1%,
+  rebalancing ~5%) — the id-carrying lever above, applied to the name-keyed maps
+  that are left.
+
+  This borrows a list that is already a root, so it adds nothing to the live set
+  — unlike sharing its _elements_, which cost 3× ([`benchmark/perf.md`](../benchmark/perf.md)).
+
 ## Tried and didn't pan out
 
 ### Flat green-tree + cursor CST — NO-GO (2026-06), later done right

@@ -167,6 +167,21 @@ impl TypeSystem {
         }
     }
 
+    /// The method `name` that `owner` — an `impl` block or a `trait`
+    /// declaration — declares. Answered from the declaration table, so two
+    /// blocks on one type each declaring `name` stay distinct.
+    pub(crate) fn declared_method(
+        &self,
+        owner: crate::defs::DefId,
+        name: &str,
+    ) -> Option<crate::defs::DefId> {
+        let defs = self.resolutions.defs();
+        defs.members(owner)
+            .iter()
+            .copied()
+            .find(|&member| defs.name(member) == name)
+    }
+
     /// Whether an impl target's generic argument names a type parameter of
     /// that impl rather than a concrete type: either the impl declares it, or
     /// the impl's module knows no type by that name. `String` in

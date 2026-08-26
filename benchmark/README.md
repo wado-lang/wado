@@ -268,8 +268,8 @@ per second (higher is better).
 
 | Implementation  |  Throughput |    ms/iter | vs best |
 | --------------- | ----------: | ---------: | ------- |
-| Java (ANTLR4)   | 588.02 KB/s |  58.485 ms | 1.00x   |
-| **Wado** (Gale) | 236.78 KB/s | 145.238 ms | 2.48x   |
+| Java (ANTLR4)   | 604.77 KB/s |  56.864 ms | 1.00x   |
+| **Wado** (Gale) | 288.99 KB/s | 118.998 ms | 2.09x   |
 
 Both rows run in-process and warm, emitting a parser and no listeners: Gale a
 Wado recursive-descent one from memory, ANTLR4 Java onto disk.

@@ -744,6 +744,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn record_method_dispatch(
         &mut self,
         ast_id: Option<crate::ast::AstId>,
+        method_def: Option<crate::defs::DefId>,
         function_ref: &tir::FunctionRef,
         self_kind: ast::SelfKind,
         is_ref_impl: bool,
@@ -759,6 +760,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.method_dispatch.insert(
             key,
             sem::types::MethodDispatch {
+                method_def,
                 function_ref: function_ref.clone(),
                 self_kind,
                 is_ref_impl,

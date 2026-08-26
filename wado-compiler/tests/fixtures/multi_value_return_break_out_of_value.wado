@@ -1,0 +1,27 @@
+// The value a labeled block breaks with can itself break out of that block. The
+// multi-value lift has to notice the exit it did not rewrite and leave the block
+// its result type; dropping it made the function fall off its end.
+
+#[inline(never)]
+fn pick(x: i32) -> [i32, i32] {
+    return outer: {
+        break outer: inner: {
+            if x > 0 {
+                break outer: [1, 2];
+            }
+            [3, 4]
+        };
+    };
+}
+
+test "a break out of a nested block value" {
+    let [a, b] = pick(builtin::black_box(1));
+    assert a == 1;
+    assert b == 2;
+    let [c, d] = pick(builtin::black_box(-1));
+    assert c == 3;
+    assert d == 4;
+}
+
+__DATA__
+{"test": {}}

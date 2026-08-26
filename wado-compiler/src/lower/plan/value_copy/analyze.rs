@@ -121,6 +121,11 @@ impl TirRefVisitor for SeedWalker<'_> {
                 expr: scrutinee, ..
             } => self.record_if_wrap(scrutinee),
             TirExprKind::Call { args, .. } => {
+                // A `copy_value::<T>` the source wrote needs the same helper
+                // the fold's markers do, and no wrap site seeds it.
+                if is_copy_value_call(expr) {
+                    self.out.insert(expr.type_id);
+                }
                 // Every by-value argument is copied — value semantics: passing
                 // a value to a function deep-copies it. `should_wrap` already
                 // excludes references (`&T` / `&mut T`), fresh values, and
@@ -215,6 +220,40 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
 /// copy is needed. `oracle` decides a call's return convention interprocedurally.
 pub fn is_fresh_value(expr: &TirExpr, oracle: &OwnedCalls, type_table: &TypeTable) -> bool {
     is_owned_value(expr, &IndexSet::default(), oracle, type_table)
+}
+
+/// What a `return` actually delivers. `return` is no wrap site, so
+/// `return place` hands a borrow out for the caller to materialize, and
+/// `hands_out_payload` ([`super::hands_out_payload`]) makes
+/// `return Some(place)` do the same.
+///
+/// Its three readers must agree, or the payload aliases undefended or copies
+/// twice: [`translate`](crate::lower::translate) skips the copy at the
+/// construction, and [`ownership`](super::ownership) judges the same payload for
+/// the return convention and for the receiver-alias set.
+pub fn returned_value(expr: &TirExpr, hands_out_payload: bool) -> &TirExpr {
+    let mut expr = expr;
+    while hands_out_payload
+        && let TirExprKind::VariantConstruct {
+            payload: Some(inner),
+            ..
+        } = &expr.kind
+    {
+        expr = inner;
+    }
+    expr
+}
+
+/// Whether a returned value carries no storage at all — an empty variant case
+/// (`None`) or a null. Nothing can be read or written through one, so it neither
+/// confirms nor contradicts what the function's other returns name.
+pub fn carries_no_storage(expr: &TirExpr) -> bool {
+    matches!(
+        &expr.kind,
+        TirExprKind::Null
+            | TirExprKind::EnumConstruct { .. }
+            | TirExprKind::VariantConstruct { payload: None, .. }
+    )
 }
 
 /// Whether `expr` produces an *owned* value in the context of the owned locals

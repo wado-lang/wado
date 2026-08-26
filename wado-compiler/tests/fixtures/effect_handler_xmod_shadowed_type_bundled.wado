@@ -1,0 +1,22 @@
+// [`effect_handler_xmod_shadowed_type`]'s shape for the bundled form. The
+// enumeration that expands `with &mut h do` into one binding per effect keys
+// the impl index the same way, so it needs the handler's own declaration too.
+use { println, Stdout } from "core:cli";
+use { Log, Ctx as Handler } from "./sub/effect_handler_xmod_shadowed_handler.wado";
+
+struct Ctx {
+    label: String,
+}
+
+export fn run() with Stdout {
+    let local = Ctx { label: "local" };
+    let mut h = Handler { seen: 0 };
+    with &mut h do {
+        let n = Log::emit();
+        println(`n=${n}, local=${local.label}`);
+    }
+    println(`seen=${h.seen}`);
+}
+
+__DATA__
+{"stdout_contains": ["n=1, local=local", "seen=1"]}

@@ -182,10 +182,10 @@ fn "deref_assign_rhs_copy.wado/__test_0_deref_assign_deep_copies_the_rhs_list"()
     elements_13 = array.new_fixed<i32>(0, 0);
     __sroa_a_repr = elements_13;
     elements_14 = array.new_fixed<i32>(5, 6);
-    let __array_clone_dst_11: ref Array<i32>;
-    __array_clone_dst_11 = builtin::array_new<i32>(2);
-    builtin::array_copy<i32>(__array_clone_dst_11, 0, elements_14, 0, 2);
-    __sroa_a_repr = __array_clone_dst_11;
+    let __array_clone_dst_2: ref Array<i32>;
+    __array_clone_dst_2 = builtin::array_new<i32>(2);
+    builtin::array_copy<i32>(__array_clone_dst_2, 0, elements_14, 0, 2);
+    __sroa_a_repr = __array_clone_dst_2;
     builtin::array_set<i32>(elements_14, 0, 999);
     __v1_3 = builtin::array_get_value<i32>(__sroa_a_repr, 0);
     if @unlikely(__v1_3 != 5) {
@@ -218,7 +218,7 @@ fn "deref_assign_rhs_copy.wado/__test_1_deref_assign_deep_copies_a_reference_ele
     __sroa_a_repr = __sroa___deref_val_12_repr;
     builtin::array_set<ref "core:prelude/string.wado//String">(elements_14, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mutated"), used: 7 });
     v_27 = builtin::array_get_value<ref "core:prelude/string.wado//String">(__sroa_a_repr, 0);
-    __v1_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v_27.repr; let __array_clone_len_5: i32; __array_clone_len_5 = v_27.used; let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: v_27.used };
+    __v1_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_27.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_27.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: v_27.used };
     __cond_6 = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__v1_5, global:deref_assign_rhs_copy.wado::__const_obj_34);
     if @unlikely(__cond_6 == 0) {
         cold_path;
@@ -252,7 +252,7 @@ fn "deref_assign_rhs_copy.wado/__cm_export____test_1_deref_assign_deep_copies_a_
 fn "deref_assign_rhs_copy.wado/$value_copy$core:prelude/string.wado/String"(v) {
     let _av_1: i32;
     _av_1 = v.used;
-    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v.repr; let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(_av_1); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, _av_1); __array_clone_dst_5), used: _av_1 };
+    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v.repr; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(_av_1); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, _av_1); __array_clone_dst_2), used: _av_1 };
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {

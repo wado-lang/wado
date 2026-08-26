@@ -1775,6 +1775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     index.id,
                     super::sem::types::OperatorDispatch {
                         function_ref: func,
+                        method_def: Some(trait_info.method_def),
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: ref_output_type,
@@ -1826,6 +1827,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     index.id,
                     super::sem::types::OperatorDispatch {
                         function_ref: func,
+                        method_def: Some(trait_info.method_def),
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: trait_info.output_type,
@@ -4953,13 +4955,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target_receiver = self.qualified_receiver_name(&target_name);
         let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
 
-        // Find the module source that provides the From impl
-        let module_source = self.find_from_impl_module(&target_name, &from_name);
+        // The block that provides the `From` impl, and where its body lives.
+        let (impl_def, module_source) = self.find_from_impl(&target_name, &from_name);
 
         let key = caller_id;
         self.sem.types.from_call_facts.insert(
             key,
             super::sem::types::FromCallFacts {
+                method_def: impl_def.and_then(|def| self.tysys.declared_method(def, "from")),
                 module_source: module_source.clone(),
                 mangled_name: method_name.clone(),
                 target_name: target_receiver.clone(),
@@ -4993,12 +4996,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find the module that provides `impl From<FromType> for TargetType`.
-    fn find_from_impl_module(
+    /// The `impl From<from_name> for target_name` block and the module that
+    /// wrote it. No block where the synthesis pass mints the impl later.
+    fn find_from_impl(
         &self,
         target_name: &str,
         from_name: &crate::name::FqTypeName,
-    ) -> ModuleSource {
+    ) -> (Option<crate::defs::DefId>, ModuleSource) {
         let from_trait_name = self
             .tysys
             .type_table
@@ -5035,9 +5039,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         keys.iter()
             .find(|key| *defs.module(**key) == self.current_module_source && declares_from(key))
             .or_else(|| keys.iter().find(|key| declares_from(key)))
-            .map(|key| defs.module(*key).clone())
+            .map(|key| (Some(*key), defs.module(*key).clone()))
             // The `From` impl may be synthesized later, so a miss is not an error.
-            .unwrap_or_else(|| self.current_module_source.clone())
+            .unwrap_or_else(|| (None, self.current_module_source.clone()))
     }
 }
 

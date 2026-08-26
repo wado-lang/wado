@@ -822,9 +822,14 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::WithHandler(w) => {
             for binding in &w.handlers {
-                if let Some(effect) = &binding.effect {
-                    v.visit_id(binding.id, effect.span());
-                    v.visit_type(effect);
+                // A bundled binding (`with &mut h do`) writes no effect type,
+                // so it answers with its own span.
+                match &binding.effect {
+                    Some(effect) => {
+                        v.visit_id(binding.id, effect.span());
+                        v.visit_type(effect);
+                    }
+                    None => v.visit_id(binding.id, binding.span),
                 }
                 v.visit_expr(&binding.handler);
             }

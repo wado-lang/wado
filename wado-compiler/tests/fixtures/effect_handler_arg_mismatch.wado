@@ -1,0 +1,32 @@
+// A handler installed at effect arguments no `impl` block on its type fills.
+// The bound check answers by declaration alone, so `impl Sink<u8> for Ctx`
+// satisfies it for `with Sink<i32> => …`; dispatch synthesis would then find
+// no plan for the instantiation the clause names.
+use { Stdout } from "core:cli";
+
+resource Sink<T> {
+    fn put(this: &Sink<T>, value: T);
+}
+
+struct Ctx {
+    seen: i32 = 0,
+}
+
+impl Sink<u8> for Ctx {
+    fn put(&mut self, this: &Sink<u8>, value: u8) {
+        let _ = this;
+        self.seen += value as i32;
+    }
+
+    ..trap
+}
+
+export fn run() with Stdout {
+    let mut c = Ctx {};
+    with Sink<i32> => &mut c do {
+        let _ = c.seen;
+    }
+}
+
+__DATA__
+{"compile_error": "does not implement interface 'Sink'"}

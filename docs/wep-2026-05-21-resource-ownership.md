@@ -459,10 +459,37 @@ Verified against the tree.
       pattern lowering puts the copy on a temp that exists for
       `labeled_block_fusion`, so which syntactic position a `match` sits in
       changes whether the binding is defended.
-- [ ] Recognize a borrowed projection returned behind a variant construction, so
-      a by-value `for` binding stops copying each element. It cost the
-      json-canada deserialize benchmark ~37% before its tree walk was written
-      over `&`, which is the workaround this would retire.
+- [x] A borrowed projection returned behind a variant construction. `return` is
+      not a wrap site, so `return place` hands a borrow out for the caller to
+      materialize; `analyze::returned_value` makes `return Some(place)` do the
+      same, and `ownership` judges that payload for the convention that tells
+      callers so.
+
+      Only where the caller can name what it got, because one copy in a callee
+      is shared by every call site and moving it out puts a copy on each of them
+      instead. Naming it means a `place::ReturnPath` that stays inside the
+      receiver's own storage; a path leaving through a `&` field lands where the
+      caller cannot follow.
+
+      Whether a place is reached through a borrow is decided by the walk that
+      resolves it, never re-derived from an expression's syntax. The walk
+      follows local bindings and callee return paths that the syntax does not,
+      so the two disagree, and a caller told a borrow is owned shares across a
+      write.
+
+- [ ] Follow a borrowed field back to what it borrows. This is what the item
+      above does _not_ reach, and it is the by-value `for` binding: a
+      `SliceValueIter` holds `repr: &Array<T>`, so the element it hands back is
+      a projection of the _list_, not of the iterator, and `ReturnPath`'s
+      `through_borrow` closes the gate rather than claim a place it cannot
+      justify. `stores[...]` already records which parameter a callee persists;
+      what is missing is _into which field_, which is what would let a caller
+      re-root `it.repr[i]` at the list `into_iter` was handed.
+      On gale-gen the copy inside `SliceValueIter::next` is 7.9% of the run, ~5%
+      of which writing the loops over `&` recovers. Narrow,
+      though — the same measurement over `syntax_highlight`, `json_catalog` and
+      `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
+      value pays it.
 
 ## Deferred: the `move` and `unique` keywords
 

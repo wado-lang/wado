@@ -349,6 +349,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             call_id,
             super::sem::types::StaticMethodDispatch {
+                // Reflection dispatches to an impl the reflect-bridge
+                // synthesis mints; there is no declaration to name.
+                method_def: None,
                 function_ref,
                 param_is_mut,
                 param_types: Vec::new(),

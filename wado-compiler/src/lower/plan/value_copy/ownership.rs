@@ -19,7 +19,9 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
+/// The element reads that borrow a slot of their first argument in place,
+/// rather than building a value of their own.
+pub(super) fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
     matches_builtin(name, monomorph_info, "array_get_value")
         || matches_builtin(name, monomorph_info, "array_get_ref")
         || matches_builtin(name, monomorph_info, "array_get_ref_mut")
@@ -112,8 +114,11 @@ pub struct ReturnConventions {
 /// (a *borrowed* projection, through `array_get_value` and nested accessor calls).
 /// Because it admits borrowed projections it must NOT feed the move / owned
 /// decision; the read-only-share analysis and pattern lowering consume it.
-pub fn compute_receiver_alias(project: &FlatPackage) -> FuncKeySet {
-    let call_graph = CallGraph::build(project);
+pub fn compute_receiver_alias(
+    project: &FlatPackage,
+    call_graph: &CallGraph,
+    return_paths: &super::place::ReturnPaths,
+) -> FuncKeySet {
     let mut set = FuncKeySet::default();
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
@@ -121,7 +126,8 @@ pub fn compute_receiver_alias(project: &FlatPackage) -> FuncKeySet {
             return false;
         }
         let Some(body) = &func.body else { return false };
-        if function_returns_receiver_alias(body, &set) {
+        let hands_out_payload = super::hands_out_payload(&func, return_paths);
+        if function_returns_receiver_alias(body, &set, hands_out_payload) {
             set.insert(func.module_source.clone(), func.name.clone());
             true
         } else {
@@ -131,9 +137,14 @@ pub fn compute_receiver_alias(project: &FlatPackage) -> FuncKeySet {
     set
 }
 
-fn function_returns_receiver_alias(body: &TirBlock, set: &FuncKeySet) -> bool {
+fn function_returns_receiver_alias(
+    body: &TirBlock,
+    set: &FuncKeySet,
+    hands_out_payload: bool,
+) -> bool {
     struct W<'a> {
         set: &'a FuncKeySet,
+        hands_out_payload: bool,
         all_alias: bool,
         saw_return: bool,
     }
@@ -141,6 +152,7 @@ fn function_returns_receiver_alias(body: &TirBlock, set: &FuncKeySet) -> bool {
         fn visit_stmt(&mut self, stmt: &TirStmt) {
             if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
                 self.saw_return = true;
+                let v = super::analyze::returned_value(v, self.hands_out_payload);
                 if !is_receiver_projection(v, 0, self.set) {
                     self.all_alias = false;
                 }
@@ -150,6 +162,7 @@ fn function_returns_receiver_alias(body: &TirBlock, set: &FuncKeySet) -> bool {
     }
     let mut w = W {
         set,
+        hands_out_payload,
         all_alias: true,
         saw_return: false,
     };
@@ -190,7 +203,11 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
 /// and self-projecting once every value it returns is owned *or* a projection of
 /// its first parameter (`return *self`). `returns_owned` is a subset of
 /// `returns_self_projection`.
-pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
+pub fn compute_return_conventions(
+    project: &FlatPackage,
+    call_graph: &CallGraph,
+    return_paths: &super::place::ReturnPaths,
+) -> ReturnConventions {
     let type_table = project.type_table.borrow();
 
     let mut owned = FuncKeySet::default();
@@ -206,7 +223,6 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
     }
     let mut self_proj = owned.clone();
 
-    let call_graph = CallGraph::build(project);
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
         let already_owned = owned.contains(&func.module_source, &func.name);
@@ -220,7 +236,8 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
         let (ret_owned, ret_self_proj) = {
             let oracle =
                 OwnedCalls::new(&owned, &self_proj).assuming_owned(&func.module_source, &func.name);
-            function_return_convention(body, &func.params, &oracle, &type_table)
+            let hands_out_payload = super::hands_out_payload(&func, return_paths);
+            function_return_convention(body, &func.params, &oracle, &type_table, hands_out_payload)
         };
         let mut changed = false;
         if !already_owned && ret_owned {
@@ -277,12 +294,14 @@ fn function_return_convention(
     params: &[crate::tir::TirParam],
     oracle: &OwnedCalls,
     type_table: &TypeTable,
+    hands_out_payload: bool,
 ) -> (bool, bool) {
     let fresh = compute_fresh_locals(body, params, oracle, type_table);
     let mut walker = ReturnWalker {
         fresh: &fresh,
         oracle,
         type_table,
+        hands_out_payload,
         all_owned: true,
         all_owned_or_self_proj: true,
     };
@@ -302,18 +321,20 @@ struct ReturnWalker<'a> {
     fresh: &'a IndexSet<u32>,
     oracle: &'a OwnedCalls<'a>,
     type_table: &'a TypeTable,
+    hands_out_payload: bool,
     all_owned: bool,
     all_owned_or_self_proj: bool,
 }
 
 impl TirRefVisitor for ReturnWalker<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::Return { value: Some(v) } = &stmt.kind
-            && !super::analyze::is_owned_value(v, self.fresh, self.oracle, self.type_table)
-        {
-            self.all_owned = false;
-            if !is_projection_of_param(v, 0) {
-                self.all_owned_or_self_proj = false;
+        if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
+            let v = super::analyze::returned_value(v, self.hands_out_payload);
+            if !super::analyze::is_owned_value(v, self.fresh, self.oracle, self.type_table) {
+                self.all_owned = false;
+                if !is_projection_of_param(v, 0) {
+                    self.all_owned_or_self_proj = false;
+                }
             }
         }
         self.walk_stmt(stmt);

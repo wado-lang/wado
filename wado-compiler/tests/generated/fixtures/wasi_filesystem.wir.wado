@@ -180,7 +180,6 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     let packed_66: i64;
     let rx_67: i32;
     let tx_68: i32;
-    let __sroa___sroa_first_1_repr: ref Array<u8>;
     let __sroa___sroa_first_1_used: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wasi_filesystem.wado::__modules_initialized);
@@ -209,23 +208,18 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         }
         v_22 = builtin::array_get_value<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0);
         v_31 = v_22.1;
-        let __array_clone_src_3: ref Array<u8>;
-        __array_clone_src_3 = v_31.repr;
+        let __array_clone_src_1: ref Array<u8>;
+        __array_clone_src_1 = v_31.repr;
         let __array_clone_len_3: i32;
         __array_clone_len_3 = v_31.used;
-        let __array_clone_dst_3: ref Array<u8>;
-        __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3);
-        builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3);
-        __sroa___sroa_first_1_repr = __array_clone_dst_3;
+        let __array_clone_dst_2: ref Array<u8>;
+        __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3);
+        builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3);
         __sroa___sroa_first_1_used = v_31.used;
-        let __array_clone_src_3: ref Array<u8>;
-        __array_clone_src_3 = __sroa___sroa_first_1_repr;
-        let __array_clone_len_3: i32;
-        __array_clone_len_3 = __sroa___sroa_first_1_used;
-        let __array_clone_dst_3: ref Array<u8>;
-        __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3);
-        builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3);
-        drop(__array_clone_dst_3);
+        let __array_clone_dst_5: ref Array<u8>;
+        __array_clone_dst_5 = builtin::array_new<u8>(__sroa___sroa_first_1_used);
+        builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_dst_2, 0, __sroa___sroa_first_1_used);
+        drop(__array_clone_dst_5);
         rx_39 = builtin::i32_wrap_i64(local.tee packed_38("wasi/stream-new"()));
         tx_40 = builtin::i32_wrap_i64(packed_38 >> 32_i64);
         handle_36 = "wasi_filesystem.wado/__cm_binding__Stdout_write_via_stream"(rx_39);

@@ -1,0 +1,24 @@
+// The installing module declares its own `Ctx`, unrelated to the handler's.
+// The impl index must be keyed by the handler's own declaration: resolving
+// the written name here lands on this module's `Ctx`, which implements no
+// effect, so nothing names the block `with Log => &mut h do` installs and
+// liveness drops the method dispatch synthesis is about to call.
+use { println, Stdout } from "core:cli";
+use { Log, Ctx as Handler } from "./sub/effect_handler_xmod_shadowed_handler.wado";
+
+struct Ctx {
+    label: String,
+}
+
+export fn run() with Stdout {
+    let local = Ctx { label: "local" };
+    let mut h = Handler { seen: 0 };
+    with Log => &mut h do {
+        let n = Log::emit();
+        println(`n=${n}, local=${local.label}`);
+    }
+    println(`seen=${h.seen}`);
+}
+
+__DATA__
+{"stdout_contains": ["n=1, local=local", "seen=1"]}

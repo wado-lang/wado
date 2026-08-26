@@ -1,0 +1,22 @@
+// `sroa_variant_return` scalarizes the `Result<Option<Uuid>, _>` below into
+// three results, and `Uuid::deserialize` returns it through a block a `match`
+// exits — a tail the multi-value lift used to miss. The block kept yielding the
+// aggregate while the signature promised three results, so at -O3 the function
+// fell off its end into the appended `unreachable` and trapped.
+
+use { parse } from "core:args";
+use { Deserialize } from "core:serde";
+use { Uuid } from "core:uuid";
+
+struct RunCli {
+    trace: Option<Uuid> = null,
+}
+impl Deserialize for RunCli;
+
+test "an option-typed field parsed from argv" {
+    let argv: List<String> = ["--trace", "ffffffff-ffff-4fff-bfff-ffffffffffff"];
+    assert parse::<RunCli>(builtin::black_box(argv)) matches { Ok(_) };
+}
+
+__DATA__
+{"test": {}}

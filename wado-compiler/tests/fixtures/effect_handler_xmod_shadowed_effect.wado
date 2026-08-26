@@ -1,0 +1,25 @@
+// The installing module declares its own effect named `Remote`, unrelated to
+// the one the handler implements. Bundled enumeration reads the effect off
+// the impl header's own resolved reference: re-resolving the written name
+// here binds the local `Remote`, and dispatch synthesis then finds no plan
+// for the instantiation the binding claims.
+use { println, Stdout } from "core:cli";
+use { Remote as RemoteLog, Ctx as Handler } from "./sub/effect_handler_xmod_shadowed_effect_handler.wado";
+
+interface Remote {
+    fn note() -> i32 {
+        return 0;
+    }
+}
+
+export fn run() with Stdout {
+    let mut h = Handler { seen: 0 };
+    with &mut h do {
+        let n = RemoteLog::emit();
+        println(`n=${n}`);
+    }
+    println(`seen=${h.seen}`);
+}
+
+__DATA__
+{"stdout_contains": ["n=1", "seen=1"]}

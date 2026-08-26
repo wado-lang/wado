@@ -41,6 +41,7 @@ mise run doc-stdlib
 mise run format
 mise run test
 mise run test-wado
+mise run test-hooks
 mise run check-grammar
 """
 
@@ -187,6 +188,10 @@ fi
 cargo run -p wado-cli -- test -O2 "${extra_args[@]}"
 """
 
+[tasks.test-hooks]
+description = "Run the Claude Code hook tests"
+run = "node --test .claude/hooks/*.test.mts"
+
 [tasks.test-gale-o3]
 description = "Run package-gale tests with -O3"
 run = """
@@ -210,9 +215,11 @@ run = "cargo llvm-cov --all-features --workspace --html"
 [tasks.emi-calibrate]
 description = """\
 Calibrate the EMI corpus: inject an empty `builtin::black_box(false)` guard at \
-every statement boundary of every e2e fixture and keep the ones whose output \
-is unmoved. Writes target/emi/{corpus,calibration}.txt. Knobs: WADO_EMI_JOBS, \
-WADO_EMI_FILTER, WADO_EMI_SHARD (k/n), WADO_EMI_LIMIT, WADO_EMI_OUT.\
+every statement boundary of every e2e fixture, stdlib test module and example, \
+and keep the ones whose output is unmoved. Writes \
+target/emi/{corpus,calibration}.txt. Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
+WADO_EMI_ROOTS (fixtures,stdlib,example), WADO_EMI_SHARD (k/n), \
+WADO_EMI_LIMIT, WADO_EMI_OUT.\
 """
 run = "cargo test -p wado-compiler --test emi -- --ignored --nocapture calibrate_corpus"
 
@@ -220,7 +227,7 @@ run = "cargo test -p wado-compiler --test emi -- --ignored --nocapture calibrate
 description = """\
 Mutate the calibrated EMI corpus: behind an undecidable guard, write to and \
 read every binding in scope at every statement boundary, and report any \
-fixture whose output moves. Reads target/emi/corpus.txt, so run emi-calibrate \
+source whose output moves. Reads target/emi/corpus.txt, so run emi-calibrate \
 first. Writes target/emi/mutation.txt and the reduced mutants under \
 target/emi/findings/.\
 """
@@ -448,11 +455,11 @@ description = "Rebuild bundled libm Wasm module"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# STRIP=none keeps the name section the workspace release profile strips.
+# STRIP=none keeps the name section, which the `wado.dataref` map is keyed by.
 cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_STRIP=none cargo build --release && cd ..
 WAT_FILE="wado-compiler/lib/core/libm.wat"
 WAT_TMP="${WAT_FILE}.tmp"
-cargo run --bin wado-dev-tools -- wasm2wat target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > "$WAT_TMP"
+cargo run --bin wado-dev-tools -- bundled-asset target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > "$WAT_TMP"
 if cmp -s "$WAT_TMP" "$WAT_FILE"; then
   rm "$WAT_TMP"
   echo "  bundled libm WAT unchanged, skipping update"

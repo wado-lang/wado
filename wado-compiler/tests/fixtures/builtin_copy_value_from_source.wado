@@ -1,0 +1,21 @@
+// `copy_value` is the marker the value-copy fold plants, so one the source
+// writes has no helper seeded for its type and no impl-level type argument.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "a copy_value the source wrote" {
+    let n: i64 = builtin::copy_value(4);
+    assert n == 4;
+
+    let a = Point { x: 1, y: 2 };
+    let mut b = builtin::copy_value(a);
+    b.x = 9;
+    assert a.x == 1;
+    assert b.x == 9;
+}
+
+__DATA__
+{"test": {}}

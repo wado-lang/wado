@@ -2579,6 +2579,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         };
         Some(ResolvedTraitMethod {
+            // The block's own method where one is written; an auto-derived
+            // match names no block and so no declaration.
+            method_def: impl_def.and_then(|def| self.tysys.declared_method(def, method_name)),
             trait_name: info_trait_name,
             method_name: method_name.to_string(),
             impl_def,

@@ -1204,6 +1204,40 @@ impl CompilerItem {
         }
     }
 
+    /// Whether a synthesis pass mints the calls to this trait's impls, after
+    /// `liveness` has run, leaving no edge for its graph to follow. Such a
+    /// block's methods are roots.
+    ///
+    /// The serde and reflect faces behind a derive are *not* here: a source
+    /// body calls them through a generic bound, and `liveness` carries that
+    /// edge to every impl. Listing one would keep its impls alive for nothing.
+    pub fn dispatched_by_synthesis(self) -> bool {
+        matches!(
+            self,
+            // Picked from a `${x:spec}` format specifier, which only
+            // `synthesis::template` reads.
+            Self::Display
+                | Self::DisplayAlt
+                | Self::Inspect
+                | Self::InspectAlt
+                | Self::Binary
+                | Self::BinaryAlt
+                | Self::Octal
+                | Self::OctalAlt
+                | Self::LowerHex
+                | Self::LowerHexAlt
+                | Self::UpperHex
+                | Self::UpperHexAlt
+                | Self::LowerExp
+                | Self::UpperExp
+                // Implemented by `VariantCase`, `EnumCase`, `FlagsBit` and
+                // `StructField` for the calls `synthesis::reflect_bridge`
+                // mints. The sealed `Reflect*` faces need no entry: that pass
+                // writes them at TIR level, where no AST block exists.
+                | Self::Member
+        )
+    }
+
     /// The kind of declaration this item must be attached to. Used by
     /// the elaborator to reject misuse like
     /// `#[compiler_item("option")]` on a trait.
