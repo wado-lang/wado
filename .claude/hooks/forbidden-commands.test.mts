@@ -53,6 +53,8 @@ const DENIED = [
   "$'\\UFFFFFFFF'; sed -i x f",
   "cat <<EOF\n$(sed -i x f)\nEOF",
   "cat <<EOF\n`awk 1 f`\nEOF",
+  "bash <<'EOF'\nsed -i x f\nEOF",
+  "sh <<EOF\nawk 1 f\nEOF",
 ];
 
 const ALLOWED = [
@@ -84,6 +86,7 @@ const ALLOWED = [
   "env -u RUSTFLAGS cargo build",
   "cat <<'EOF' > note.md\n$(sed -i x f)\nEOF",
   "cat <<EOF > note.md\n\\$(sed -i x f)\nEOF",
+  "node <<'EOF'\nconsole.log(1)\nEOF",
 ];
 
 test("denies a forbidden command word", () => {

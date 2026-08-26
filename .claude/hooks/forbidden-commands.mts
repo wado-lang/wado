@@ -217,10 +217,14 @@ function readHeredoc(src: string, start: number, delimiter: string): [string, nu
   let i = start;
   while (i < src.length) {
     const newline = src.indexOf("\n", i);
-    if (newline < 0) return [src.slice(start), src.length];
+    if (newline < 0) {
+      const closed = src.slice(i).trim() === delimiter;
+      return [src.slice(start, closed ? i : src.length), src.length];
+    }
+    const lineStart = i;
     const line = src.slice(i, newline).trim();
     i = newline + 1;
-    if (line === delimiter) return [src.slice(start, newline), i];
+    if (line === delimiter) return [src.slice(start, lineStart), i];
   }
   return [src.slice(start), i];
 }
@@ -251,7 +255,7 @@ const basename = (word: string) => word.slice(word.lastIndexOf("/") + 1);
 export function commandNames(src: string): string[] {
   const names: string[] = [];
   const nested: string[] = [];
-  const heredocs: { delimiter: string; expands: boolean }[] = [];
+  const heredocs: { delimiter: string; expands: boolean; script: boolean }[] = [];
   let atCommand = true;
   let runner = "";
   let skipValue = false;
@@ -273,9 +277,10 @@ export function commandNames(src: string): string[] {
     } else if (c === "\n" || c === "\r") {
       i++;
       while (heredocs.length > 0) {
-        const { delimiter, expands } = heredocs.shift()!;
+        const { delimiter, expands, script } = heredocs.shift()!;
         const [body, end] = readHeredoc(src, i, delimiter);
-        if (expands) nested.push(...expansions(body));
+        if (script) nested.push(body);
+        else if (expands) nested.push(...expansions(body));
         i = end;
       }
       startCommand();
@@ -320,8 +325,9 @@ export function commandNames(src: string): string[] {
       const start = skipBlanks(src, at + (src[at + 2] === "-" ? 3 : 2));
       const word = readWord(src, start);
       // A quoted delimiter turns the body into data; an unquoted one expands.
+      // Fed to a shell, the body is the script it runs.
       const expands = !/['"\\]/.test(src.slice(start, word.end));
-      heredocs.push({ delimiter: word.value, expands });
+      heredocs.push({ delimiter: word.value, expands, script: SHELLS.has(previous) });
       return word.end;
     }
     let i = at + (src.startsWith("<<<", at) ? 3 : 1);
