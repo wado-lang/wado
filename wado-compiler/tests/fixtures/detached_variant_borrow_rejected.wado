@@ -1,8 +1,6 @@
 // A `&mut` to a variant field or element is a fresh box, not the place's
-// storage, so a whole-value write through it never reaches the place. Storage
-// outliving the expression that took it may not hold one — a variable, an
-// aggregate, a return. Using it where it is taken stays legal, because mutation
-// through the payload lands: ref_field_ref_variant and
+// storage, so no storage outliving the expression that took it may hold one.
+// Using it where it is taken stays legal — ref_field_ref_variant and
 // value_copy_variant_in_aggregate guard that side.
 
 variant Payload {

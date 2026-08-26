@@ -199,8 +199,8 @@ fix to conform; none should be preserved.
   synthesis, or a per-parameter whole-value-write summary so that only the
   callees which actually replace are refused.
 
-  Four narrower paths still drop, each because the borrow reaches storage by a
-  shape neither half recognises. They are the same defect, not new ones:
+  Four narrower paths still drop — the same defect, reached by a shape neither
+  half recognises:
 
   - A borrow reaching a binding through a branch — `let r = if c { &mut b.f }
     else { &mut b.g }` — is not the syntactically direct `&mut place` the

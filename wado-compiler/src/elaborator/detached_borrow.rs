@@ -18,16 +18,11 @@ const DETACHED_BORROW: &str = "cannot store a mutable reference to a field or el
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report every detached borrow put somewhere that outlives the expression
-    /// taking it. A borrow consumed in place — a call argument, a `match` or
-    /// `if let` scrutinee — is left alone: it cannot outlive its use, which is
-    /// what the WEP's temp + write-back carve-out rests on.
+    /// taking it. One used where it is taken is left to the write-back pass.
     pub(super) fn check_detached_borrows(&mut self, body: &Block) {
-        let stored = {
-            let mut walker = DetachedBorrowWalker::default();
-            walker.visit_block(body);
-            walker.stored
-        };
-        for (place, span) in stored {
+        let mut walker = DetachedBorrowWalker::default();
+        walker.visit_block(body);
+        for (place, span) in walker.stored {
             let Some(place_type) = self.sem.types.expression_types.get(&place).copied() else {
                 continue;
             };
@@ -41,8 +36,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether a `&mut` to a place of this type is a box rather than the place
-    /// itself: it is for a referent that is replaced on assign (`Ref` but not
-    /// `RefMut`) — see the WEP's classification table.
+    /// itself — true of a referent that replaces on assign: `Ref`, not `RefMut`.
     fn borrow_detaches_from(&self, place_type: TypeId) -> bool {
         let resolved = self.tysys.type_table.borrow().get(place_type).clone();
         self.tysys.is_ref_identity(&resolved)
@@ -52,9 +46,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// Collects `&mut <field-or-element>` borrows put into storage that outlives
-/// them, as `(place expression, borrow span)`. Types are left to
-/// [`Elaborator::check_detached_borrows`], so this walk borrows nothing.
+/// `&mut <field-or-element>` borrows put into storage that outlives them, as
+/// `(place expression, borrow span)`. Deciding which detach needs types.
 #[derive(Default)]
 struct DetachedBorrowWalker {
     stored: Vec<(AstId, Span)>,
@@ -63,10 +56,15 @@ struct DetachedBorrowWalker {
 impl AstVisitor for DetachedBorrowWalker {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            // Only a plain binding keeps the borrow. A destructuring pattern
-            // binds through it — `let Text(s) = &mut b.item else { … }` binds
-            // the payload, and the borrow dies with the statement.
-            Stmt::Let(let_stmt) if binds_the_whole_value(&let_stmt.pattern) => {
+            // A destructuring pattern binds *through* the borrow — in
+            // `let Text(s) = &mut b.item else { … }`, `s` is the payload and
+            // the borrow dies with the statement.
+            Stmt::Let(let_stmt)
+                if matches!(
+                    let_stmt.pattern,
+                    Pattern::Ident { .. } | Pattern::MutIdent { .. }
+                ) =>
+            {
                 self.record(let_stmt.value.as_ref());
             }
             Stmt::Return(ret) => self.record(ret.value.as_ref()),
@@ -95,13 +93,8 @@ impl AstVisitor for DetachedBorrowWalker {
     }
 }
 
-fn binds_the_whole_value(pattern: &Pattern) -> bool {
-    matches!(pattern, Pattern::Ident { .. } | Pattern::MutIdent { .. })
-}
-
 impl DetachedBorrowWalker {
-    /// Record `expr` if it is a `&mut` of a field or element. What that place's
-    /// type is decides whether it detaches, and this walk cannot see types.
+    /// Record `expr` if it is a `&mut` of a field or element.
     fn record(&mut self, expr: Option<&Expr>) {
         let Some(Expr::Unary(unary)) = expr else {
             return;

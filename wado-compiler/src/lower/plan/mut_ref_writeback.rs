@@ -1,13 +1,11 @@
-//! `f(&mut s.field)` on a replace-on-assign field hands the callee a detached
-//! box — a whole-value write inside `f` lands in the box, not the field. Borrow
-//! a temp instead and store it back after the call. See
-//! `docs/wep-2026-06-13-reference-representation.md`.
+//! Borrow a temp for a `&mut` to a variant field and store it back after the
+//! call. See `docs/wep-2026-06-13-reference-representation.md`.
 
+use super::value_copy::funcset::FuncKeyMap;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
-use crate::module_source::ModuleSource;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
@@ -31,20 +29,19 @@ pub fn insert_write_backs(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Res
             local_count,
             locals,
             borrowed_temps: Vec::new(),
-            escaped: Vec::new(),
+            escaped: None,
         };
         if let Some(body) = func.body.as_mut() {
             pass.visit_block(body);
         }
         func.local_count = pass.local_count;
         func.locals = pass.locals;
-        // `reify` marked the address-taken locals before this pass existed, so
-        // each temp this pass borrows has to join them — that mark is what makes
-        // `boxing` promote the slot to the box the borrow hands out.
+        // `reify` marks the address-taken locals before this pass runs, and that
+        // mark is what makes `boxing` promote a slot to the box a borrow needs.
         for temp in pass.borrowed_temps {
             func.address_taken_locals.insert(temp);
         }
-        if let Some((span, callee)) = pass.escaped.first() {
+        if let Some((span, callee)) = &pass.escaped {
             return Err(errors.fatal_in(
                 &func.module_source,
                 Diagnostic {
@@ -63,11 +60,10 @@ pub fn insert_write_backs(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Res
     Ok(())
 }
 
-/// Parameter positions each function declares in `stores[...]`. Such a borrow
-/// outlives the call, so the call is no place to write back — the elaborator
-/// refuses a detached borrow there instead.
-fn escaping_params(flat: &FlatPackage) -> IndexMap<(ModuleSource, String), IndexSet<u32>> {
-    let mut out: IndexMap<(ModuleSource, String), IndexSet<u32>> = IndexMap::default();
+/// Parameter positions each function declares in `stores[...]`: a borrow handed
+/// to one outlives the call, so the call is no place to write it back.
+fn escaping_params(flat: &FlatPackage) -> FuncKeyMap<IndexSet<u32>> {
+    let mut out = FuncKeyMap::default();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
         if func.stores.is_empty() {
@@ -80,19 +76,19 @@ fn escaping_params(flat: &FlatPackage) -> IndexMap<(ModuleSource, String), Index
             .filter(|(_, p)| func.stores.contains(&p.name))
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
-        out.insert((func.module_source.clone(), func.name.clone()), positions);
+        out.insert(func.module_source.clone(), func.name.clone(), positions);
     }
     out
 }
 
 struct WriteBack<'a> {
     type_table: &'a TypeTable,
-    escaping: &'a IndexMap<(ModuleSource, String), IndexSet<u32>>,
+    escaping: &'a FuncKeyMap<IndexSet<u32>>,
     local_count: u32,
     locals: Vec<TirLocal>,
     borrowed_temps: Vec<u32>,
-    /// Detached borrows handed to a `stores` parameter, to report as errors.
-    escaped: Vec<(Span, String)>,
+    /// The first detached borrow handed to a `stores` parameter, to report.
+    escaped: Option<(Span, String)>,
 }
 
 impl WriteBack<'_> {
@@ -103,10 +99,8 @@ impl WriteBack<'_> {
         index
     }
 
-    /// Whether a `&mut` to a place of this type is a detached box rather than
-    /// the place itself. A `variant` is the only one that reaches a call: the
-    /// elaborator refuses the borrow outright for the other replace-on-assign
-    /// types.
+    /// Whether a `&mut` to a place of this type is a detached box. Only a
+    /// `variant` reaches a call; the elaborator refuses the other replace types.
     fn detaches(&self, place_type: TypeId) -> bool {
         let peeled = self.type_table.get_ultimate_base_type(place_type);
         matches!(self.type_table.get(peeled), ResolvedType::Variant { .. })
@@ -128,39 +122,28 @@ impl WriteBack<'_> {
         (is_projection && self.detaches(place.type_id)).then_some(place.as_ref())
     }
 
-    /// The callee's name and the positions it keeps its borrows past the call.
-    /// A direct callee declares them; an indirect one carries them on its
-    /// function type, and a callee that is not a function type at all keeps
-    /// nothing this pass can name.
-    fn callee_stores(&self, call: &TirExpr) -> Option<(String, IndexSet<u32>)> {
-        match &call.kind {
-            TirExprKind::Call { func, .. } => Some((
-                func.name.clone(),
-                self.escaping
-                    .get(&(func.module_source.clone(), func.name.clone()))
-                    .cloned()
-                    .unwrap_or_default(),
-            )),
-            TirExprKind::IndirectCall { callee, .. } => {
-                let stores = match self.type_table.get(callee.type_id) {
-                    ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
-                    _ => IndexSet::default(),
-                };
-                Some(("a function value".to_string(), stores))
-            }
-            _ => None,
-        }
-    }
-
     /// `{ let t = place; let r = f(&mut t); place = t; r }` — the call keeps its
     /// position, so a `?` on it still sees the write-back run first.
     fn wrap(&mut self, call: &mut TirExpr) {
-        let Some((callee, escaping)) = self.callee_stores(call) else {
-            return;
-        };
-        let args: Vec<&mut TirExpr> = match &mut call.kind {
-            TirExprKind::Call { args, .. } => args.iter_mut().map(|a| &mut a.expr).collect(),
-            TirExprKind::IndirectCall { args, .. } => args.iter_mut().collect(),
+        // A direct callee declares the positions it keeps a borrow past the
+        // call; an indirect one carries them on its function type.
+        let (callee, escaping, args): (_, _, Vec<&mut TirExpr>) = match &mut call.kind {
+            TirExprKind::Call { func, args, .. } => (
+                func.name.clone(),
+                self.escaping
+                    .get(&func.module_source, &func.name)
+                    .cloned()
+                    .unwrap_or_default(),
+                args.iter_mut().map(|a| &mut a.expr).collect(),
+            ),
+            TirExprKind::IndirectCall { callee, args } => (
+                "a function value".to_string(),
+                match self.type_table.get(callee.type_id) {
+                    ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
+                    _ => IndexSet::default(),
+                },
+                args.iter_mut().collect(),
+            ),
             _ => return,
         };
         let mut prefix: Vec<TirStmt> = Vec::new();
@@ -169,10 +152,9 @@ impl WriteBack<'_> {
             let Some(place) = self.detached_place(arg) else {
                 continue;
             };
-            // A `stores` parameter keeps the borrow past the call, so no point
-            // in the caller is late enough to store the temp back.
             if escaping.contains(&u32::try_from(position).unwrap()) {
-                self.escaped.push((arg.span, callee.clone()));
+                self.escaped
+                    .get_or_insert_with(|| (arg.span, callee.clone()));
                 continue;
             }
             let span = arg.span;
@@ -180,11 +162,12 @@ impl WriteBack<'_> {
             let place = place.clone();
             let temp = self.alloc_local(place_type);
             self.borrowed_temps.push(temp);
+            let name = format!("__write_back_{temp}");
             let read_temp = || {
                 TirExpr::new(
                     TirExprKind::Local {
                         index: temp,
-                        name: format!("__write_back_{temp}"),
+                        name: name.clone(),
                     },
                     place_type,
                     span,
@@ -192,7 +175,7 @@ impl WriteBack<'_> {
             };
             prefix.push(TirStmt::new(
                 TirStmtKind::Let {
-                    name: format!("__write_back_{temp}"),
+                    name: name.clone(),
                     local_index: temp,
                     is_mut: true,
                     is_reactive: false,
