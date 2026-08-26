@@ -50,6 +50,9 @@ const DENIED = [
   "env -S 'sed -i x f'",
   "env -S'awk 1 f'",
   "env --split-string='sed -i x f'",
+  "$'\\UFFFFFFFF'; sed -i x f",
+  "cat <<EOF\n$(sed -i x f)\nEOF",
+  "cat <<EOF\n`awk 1 f`\nEOF",
 ];
 
 const ALLOWED = [
@@ -79,6 +82,8 @@ const ALLOWED = [
   "trap 'echo bye' EXIT; echo hi",
   "env FOO=1 cargo test",
   "env -u RUSTFLAGS cargo build",
+  "cat <<'EOF' > note.md\n$(sed -i x f)\nEOF",
+  "cat <<EOF > note.md\n\\$(sed -i x f)\nEOF",
 ];
 
 test("denies a forbidden command word", () => {

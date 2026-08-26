@@ -119,7 +119,8 @@ function ansiCQuoted(src: string, start: number): [string, number] {
     } else if (numeric) {
       const digits = numeric[0];
       const radix = /^[xuU]/.test(digits) ? 16 : 8;
-      value += String.fromCodePoint(parseInt(radix === 16 ? digits.slice(1) : digits, radix));
+      const code = parseInt(radix === 16 ? digits.slice(1) : digits, radix);
+      value += code <= 0x10ffff ? String.fromCodePoint(code) : src.slice(i, i + 1 + digits.length);
       i += 1 + digits.length;
     } else {
       value += src.slice(i, i + 2);
@@ -211,16 +212,32 @@ function readWord(src: string, start: number): Word {
   return { value, subs, end: i };
 }
 
-function skipHeredoc(src: string, start: number, delimiter: string): number {
+/** The heredoc body, and the index past its delimiter line. */
+function readHeredoc(src: string, start: number, delimiter: string): [string, number] {
   let i = start;
   while (i < src.length) {
     const newline = src.indexOf("\n", i);
-    const line = src.slice(i, newline < 0 ? src.length : newline).trim();
-    if (newline < 0) return src.length;
+    if (newline < 0) return [src.slice(start), src.length];
+    const line = src.slice(i, newline).trim();
     i = newline + 1;
-    if (line === delimiter) return i;
+    if (line === delimiter) return [src.slice(start, newline), i];
   }
-  return i;
+  return [src.slice(start), i];
+}
+
+/** The substitutions an unquoted heredoc body expands, which the shell runs. */
+function expansions(body: string): string[] {
+  const subs: string[] = [];
+  let i = 0;
+  while (i < body.length) {
+    if (body[i] === "\\") {
+      i += 2;
+      continue;
+    }
+    const end = readSubstitution(body, i, subs);
+    i = end < 0 ? i + 1 : end;
+  }
+  return subs;
 }
 
 const skipBlanks = (src: string, i: number) => {
@@ -234,7 +251,7 @@ const basename = (word: string) => word.slice(word.lastIndexOf("/") + 1);
 export function commandNames(src: string): string[] {
   const names: string[] = [];
   const nested: string[] = [];
-  const heredocs: string[] = [];
+  const heredocs: { delimiter: string; expands: boolean }[] = [];
   let atCommand = true;
   let runner = "";
   let skipValue = false;
@@ -255,7 +272,12 @@ export function commandNames(src: string): string[] {
       i++;
     } else if (c === "\n" || c === "\r") {
       i++;
-      while (heredocs.length > 0) i = skipHeredoc(src, i, heredocs.shift()!);
+      while (heredocs.length > 0) {
+        const { delimiter, expands } = heredocs.shift()!;
+        const [body, end] = readHeredoc(src, i, delimiter);
+        if (expands) nested.push(...expansions(body));
+        i = end;
+      }
       startCommand();
     } else if (c === "#") {
       const newline = src.indexOf("\n", i);
@@ -295,8 +317,11 @@ export function commandNames(src: string): string[] {
       return end;
     }
     if (src.startsWith("<<", at) && !src.startsWith("<<<", at)) {
-      const word = readWord(src, skipBlanks(src, at + (src[at + 2] === "-" ? 3 : 2)));
-      heredocs.push(word.value);
+      const start = skipBlanks(src, at + (src[at + 2] === "-" ? 3 : 2));
+      const word = readWord(src, start);
+      // A quoted delimiter turns the body into data; an unquoted one expands.
+      const expands = !/['"\\]/.test(src.slice(start, word.end));
+      heredocs.push({ delimiter: word.value, expands });
       return word.end;
     }
     let i = at + (src.startsWith("<<<", at) ? 3 : 1);
@@ -373,7 +398,13 @@ function payloadCommand(input: string): string {
 if (import.meta.main) {
   let input = "";
   for await (const chunk of process.stdin) input += chunk;
-  const reason = denialReason(payloadCommand(input));
+  // A guard that throws must not let the command through.
+  let reason: string | null;
+  try {
+    reason = denialReason(payloadCommand(input));
+  } catch (error) {
+    reason = `this command could not be read (${(error as Error).message}), so it is denied. Rephrase it, or report the input if it is an ordinary one.`;
+  }
   if (reason) {
     process.stdout.write(
       JSON.stringify({
