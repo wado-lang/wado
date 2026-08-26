@@ -98,7 +98,7 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
         let mut msg: Option<String> = null;
         if punct_is(tokens, *pos, &":") {
             *pos += 1;
-            if let Some(s) = string_at(tokens, *pos) {
+            if let Some(s) = string_at(tokens, *pos) && punct_is(tokens, *pos + 1, &";") {
                 msg = Option::Some(s);
                 *pos += 1;
             } else {

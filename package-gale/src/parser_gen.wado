@@ -2764,7 +2764,8 @@ fn peel_scalar_label(elem: &Element) -> &Element with stores[elem] {
 /// Collect the actual post-dedup bindings of an alt's ops (`[is_token, base,
 /// field]`), so the action translator resolves a `$ref` to its real local even
 /// when a token / rule field-name collision deduped it (`e_2`). Top-level leaf
-/// ops plus `Repeat` inners; nested-group refs fall back to `binding_name`.
+/// ops only; a `Repeat` / group inner binds in its own block, so a ref to one
+/// falls back to `binding_name` and is reported where it does not resolve.
 fn collect_alt_bindings(ops: &List<Op>) -> List<[bool, String, String]> {
     let mut out: List<[bool, String, String]> = [];
     for let op of ops {
@@ -2841,7 +2842,7 @@ fn gen_alt_elements(
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
-            gen_op_group(w, g_op, elem, ctx, &mut name_counts);
+            gen_op_group(w, g_op, elem, ctx, &mut name_counts, GroupEntry::Required);
         } else {
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
@@ -2895,7 +2896,7 @@ fn gen_elements_with_non_greedy(
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
-            gen_op_group(w, g_op, elem, ctx, name_counts);
+            gen_op_group(w, g_op, elem, ctx, name_counts, GroupEntry::Required);
         } else {
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
@@ -3966,7 +3967,7 @@ fn gen_op_inner_for_storable_repeat(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
-    entry: GroupEntry = GroupEntry::Guaranteed,
+    entry: GroupEntry,
 ) {
     let entry = open_group_entry(w, elem, ctx, entry);
     let op = &rep_op.body;
@@ -4002,7 +4003,7 @@ fn gen_op_storable_group_inner(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
-    entry: GroupEntry = GroupEntry::Guaranteed,
+    entry: GroupEntry,
 ) {
     let g_op = if let Group(g) = op {
         g;
@@ -4069,7 +4070,7 @@ fn gen_op_dispatch_element(
             };
             gen_op_repeat(w, rep, rep_op, ctx, name_counts);
         },
-        Group(g_op) => gen_op_group(w, g_op, elem, ctx, name_counts),
+        Group(g_op) => gen_op_group(w, g_op, elem, ctx, name_counts, GroupEntry::Required),
         ListLabel(ll) => gen_op_list_label(w, ll, elem, ctx, name_counts),
     }
 }
@@ -4275,7 +4276,15 @@ fn gen_op_storable_optional_with_first(
     // `Option<T>` wrapper collapses to a present/absent statement.
     w.begin(&`if ${entry}`);
     let mut nch: List<[String, i32]> = [];
-    gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nch, &([] as List<String>));
+    gen_op_inner_for_storable_repeat(
+        w,
+        rep_op,
+        inner_elem,
+        ctx,
+        &mut nch,
+        &([] as List<String>),
+        GroupEntry::Guaranteed,
+    );
     w.end();
 }
 
@@ -4400,8 +4409,10 @@ fn prequel_expected_names(rule_name: &String, at_entry: bool, ctx: &mut GenConte
 }
 
 /// Whether any of `alts` carries an alt-initial predicate the dispatch gates on.
+/// Off with action execution, so a grammar whose predicates are inert keeps the
+/// dispatch `alt_gate_and_suffix` would emit for it — byte-identical.
 fn any_alt_gated(alts: &List<Alternative>, ctx: &GenContext) -> bool {
-    return alts.iter_ref().any(|a: &Alternative| alt_has_gate(a, ctx));
+    return ctx.emit_actions() && alts.iter_ref().any(|a: &Alternative| alt_has_gate(a, ctx));
 }
 
 /// The alternatives of a repeat's group body, or `null` when the body is not a
@@ -4743,7 +4754,7 @@ fn gen_op_group(
     elem: &Element,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
-    entry: GroupEntry = GroupEntry::Required,
+    entry: GroupEntry,
 ) {
     // Scalar `name=(a | b | …)` lowers via `rebind_op_field` so the
     // resulting op is `Op::Group` even though the surface element is
@@ -4903,7 +4914,7 @@ fn gen_op_list_label(
         // outside a Repeat): the inner Group appends to the builder, so
         // there is no `List<T>` container and no `.push` — only the
         // group's own `let <shape.field> = …;`.
-        gen_op_group(w, g_op, &lab.element, ctx, name_counts);
+        gen_op_group(w, g_op, &lab.element, ctx, name_counts, GroupEntry::Required);
         return;
     }
     gen_op_leaf(w, &ll.inner, ctx, name_counts);
@@ -5077,9 +5088,19 @@ fn gen_op_repeat_non_greedy_storable(
     let _ = dedup_name(&list_field, name_counts);
     // The body appends to the builder, so there is no `List<T>` to accumulate.
     if is_plus {
+        // The mandatory first iteration is a required position: no loop guard
+        // has run, so a token no alternative admits is this group's to report.
         begin_plus_first_iteration(w, name_counts);
         let mut nc: List<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
+        gen_op_inner_for_storable_repeat(
+            w,
+            rep_op,
+            inner,
+            ctx,
+            &mut nc,
+            &empty_iter_follow,
+            GroupEntry::Required,
+        );
         w.end();
     }
     if non_greedy_probe_decides(rep_op, ctx) {

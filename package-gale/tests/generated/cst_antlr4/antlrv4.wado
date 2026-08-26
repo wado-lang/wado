@@ -3591,104 +3591,104 @@ fn try_ARGUMENT_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_29 = pos;
-        let mut ng_exit_29 = false;
-        ng_29: {
-            if pos >= chars.len() || chars[pos] != '"' { break ng_29; }
+        let ng_saved_30 = pos;
+        let mut ng_exit_30 = false;
+        ng_30: {
+            if pos >= chars.len() || chars[pos] != '"' { break ng_30; }
             pos += 1;
-            ng_exit_29 = true;
+            ng_exit_30 = true;
         }
-        if ng_exit_29 {
+        if ng_exit_30 {
             break;
         }
-        pos = ng_saved_29;
-        let alts_saved_30 = pos;
-        let mut alts_ok_30 = false;
-        alts_30_0: {
-            pos = alts_saved_30;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_30_0; }
+        pos = ng_saved_30;
+        let alts_saved_31 = pos;
+        let mut alts_ok_31 = false;
+        alts_31_0: {
+            pos = alts_saved_31;
+            if pos >= chars.len() || chars[pos] != '\\' { break alts_31_0; }
             pos += 1;
-            let alts_saved_31 = pos;
-            let mut alts_ok_31 = false;
-            alts_31_0: {
+            let alts_saved_32 = pos;
+            let mut alts_ok_32 = false;
+            alts_32_0: {
+                pos = alts_saved_32;
+                if pos >= chars.len() { break alts_32_0; }
+                if !((chars[pos] matches { 'b' | 't' | 'n' | 'f' | 'r' | '"' | '\'' | '\\' })) { break alts_32_0; }
+                pos += 1;
+                alts_ok_32 = true;
+            }
+            if !alts_ok_32 {
+                alts_32_1: {
+                    pos = alts_saved_32;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_32_1; }
+                    pos += 1;
+                    let opt_saved_33 = pos;
+                    let mut opt_ok_33 = false;
+                    rep_33: {
+                        if pos >= chars.len() { break rep_33; }
+                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_33; }
+                        pos += 1;
+                        let opt_saved_34 = pos;
+                        let mut opt_ok_34 = false;
+                        rep_34: {
+                            if pos >= chars.len() { break rep_34; }
+                            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_34; }
+                            pos += 1;
+                            let opt_saved_35 = pos;
+                            let mut opt_ok_35 = false;
+                            rep_35: {
+                                if pos >= chars.len() { break rep_35; }
+                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_35; }
+                                pos += 1;
+                                let opt_saved_36 = pos;
+                                let mut opt_ok_36 = false;
+                                rep_36: {
+                                    if pos >= chars.len() { break rep_36; }
+                                    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_36; }
+                                    pos += 1;
+                                    opt_ok_36 = true;
+                                }
+                                if !opt_ok_36 { pos = opt_saved_36; }
+                                opt_ok_35 = true;
+                            }
+                            if !opt_ok_35 { pos = opt_saved_35; }
+                            opt_ok_34 = true;
+                        }
+                        if !opt_ok_34 { pos = opt_saved_34; }
+                        opt_ok_33 = true;
+                    }
+                    if !opt_ok_33 { pos = opt_saved_33; }
+                    alts_ok_32 = true;
+                }
+                if !alts_ok_32 {
+                    alts_32_2: {
+                        pos = alts_saved_32;
+                        if pos >= chars.len() { break alts_32_2; }
+                        pos += 1;
+                        alts_ok_32 = true;
+                    }
+                    if !alts_ok_32 {
+                        alts_32_3: {
+                            pos = alts_saved_32;
+                            if pos < chars.len() { break alts_32_3; }
+                            alts_ok_32 = true;
+                        }
+                    }
+                }
+            }
+            if !alts_ok_32 { break alts_31_0; }
+            alts_ok_31 = true;
+        }
+        if !alts_ok_31 {
+            alts_31_1: {
                 pos = alts_saved_31;
-                if pos >= chars.len() { break alts_31_0; }
-                if !((chars[pos] matches { 'b' | 't' | 'n' | 'f' | 'r' | '"' | '\'' | '\\' })) { break alts_31_0; }
+                if pos >= chars.len() { break alts_31_1; }
+                if (chars[pos] matches { '"' | '\r' | '\n' | '\\' }) { break alts_31_1; }
                 pos += 1;
                 alts_ok_31 = true;
             }
-            if !alts_ok_31 {
-                alts_31_1: {
-                    pos = alts_saved_31;
-                    if pos >= chars.len() || chars[pos] != 'u' { break alts_31_1; }
-                    pos += 1;
-                    let opt_saved_32 = pos;
-                    let mut opt_ok_32 = false;
-                    rep_32: {
-                        if pos >= chars.len() { break rep_32; }
-                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_32; }
-                        pos += 1;
-                        let opt_saved_33 = pos;
-                        let mut opt_ok_33 = false;
-                        rep_33: {
-                            if pos >= chars.len() { break rep_33; }
-                            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_33; }
-                            pos += 1;
-                            let opt_saved_34 = pos;
-                            let mut opt_ok_34 = false;
-                            rep_34: {
-                                if pos >= chars.len() { break rep_34; }
-                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_34; }
-                                pos += 1;
-                                let opt_saved_35 = pos;
-                                let mut opt_ok_35 = false;
-                                rep_35: {
-                                    if pos >= chars.len() { break rep_35; }
-                                    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_35; }
-                                    pos += 1;
-                                    opt_ok_35 = true;
-                                }
-                                if !opt_ok_35 { pos = opt_saved_35; }
-                                opt_ok_34 = true;
-                            }
-                            if !opt_ok_34 { pos = opt_saved_34; }
-                            opt_ok_33 = true;
-                        }
-                        if !opt_ok_33 { pos = opt_saved_33; }
-                        opt_ok_32 = true;
-                    }
-                    if !opt_ok_32 { pos = opt_saved_32; }
-                    alts_ok_31 = true;
-                }
-                if !alts_ok_31 {
-                    alts_31_2: {
-                        pos = alts_saved_31;
-                        if pos >= chars.len() { break alts_31_2; }
-                        pos += 1;
-                        alts_ok_31 = true;
-                    }
-                    if !alts_ok_31 {
-                        alts_31_3: {
-                            pos = alts_saved_31;
-                            if pos < chars.len() { break alts_31_3; }
-                            alts_ok_31 = true;
-                        }
-                    }
-                }
-            }
-            if !alts_ok_31 { break alts_30_0; }
-            alts_ok_30 = true;
         }
-        if !alts_ok_30 {
-            alts_30_1: {
-                pos = alts_saved_30;
-                if pos >= chars.len() { break alts_30_1; }
-                if (chars[pos] matches { '"' | '\r' | '\n' | '\\' }) { break alts_30_1; }
-                pos += 1;
-                alts_ok_30 = true;
-            }
-        }
-        if !alts_ok_30 { return -1; }
+        if !alts_ok_31 { return -1; }
     }
     return pos;
 }
@@ -3722,52 +3722,52 @@ fn try_ARGUMENT_CONTENT(chars: &List<char>, start: i32) -> i32 {
 
 fn try_LEXER_CHAR_SET_BODY(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_37 = pos;
-    let mut alts_ok_37 = false;
-    alts_37_0: {
-        pos = alts_saved_37;
-        if pos >= chars.len() { break alts_37_0; }
-        if (chars[pos] matches { ']' | '\\' }) { break alts_37_0; }
+    let alts_saved_38 = pos;
+    let mut alts_ok_38 = false;
+    alts_38_0: {
+        pos = alts_saved_38;
+        if pos >= chars.len() { break alts_38_0; }
+        if (chars[pos] matches { ']' | '\\' }) { break alts_38_0; }
         pos += 1;
-        alts_ok_37 = true;
+        alts_ok_38 = true;
     }
-    if !alts_ok_37 {
-        alts_37_1: {
-            pos = alts_saved_37;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_37_1; }
+    if !alts_ok_38 {
+        alts_38_1: {
+            pos = alts_saved_38;
+            if pos >= chars.len() || chars[pos] != '\\' { break alts_38_1; }
             pos += 1;
-            if pos >= chars.len() { break alts_37_1; }
+            if pos >= chars.len() { break alts_38_1; }
             pos += 1;
-            alts_ok_37 = true;
+            alts_ok_38 = true;
         }
     }
-    if !alts_ok_37 { return -1; }
+    if !alts_ok_38 { return -1; }
     loop {
-        let rep_saved_36 = pos;
-        rep_36: {
-            let alts_saved_38 = pos;
-            let mut alts_ok_38 = false;
-            alts_38_0: {
-                pos = alts_saved_38;
-                if pos >= chars.len() { break alts_38_0; }
-                if (chars[pos] matches { ']' | '\\' }) { break alts_38_0; }
+        let rep_saved_37 = pos;
+        rep_37: {
+            let alts_saved_40 = pos;
+            let mut alts_ok_40 = false;
+            alts_40_0: {
+                pos = alts_saved_40;
+                if pos >= chars.len() { break alts_40_0; }
+                if (chars[pos] matches { ']' | '\\' }) { break alts_40_0; }
                 pos += 1;
-                alts_ok_38 = true;
+                alts_ok_40 = true;
             }
-            if !alts_ok_38 {
-                alts_38_1: {
-                    pos = alts_saved_38;
-                    if pos >= chars.len() || chars[pos] != '\\' { break alts_38_1; }
+            if !alts_ok_40 {
+                alts_40_1: {
+                    pos = alts_saved_40;
+                    if pos >= chars.len() || chars[pos] != '\\' { break alts_40_1; }
                     pos += 1;
-                    if pos >= chars.len() { break alts_38_1; }
+                    if pos >= chars.len() { break alts_40_1; }
                     pos += 1;
-                    alts_ok_38 = true;
+                    alts_ok_40 = true;
                 }
             }
-            if !alts_ok_38 { break rep_36; }
+            if !alts_ok_40 { break rep_37; }
             continue;
         }
-        pos = rep_saved_36;
+        pos = rep_saved_37;
         break;
     }
     return pos;

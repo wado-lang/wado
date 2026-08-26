@@ -1181,36 +1181,36 @@ fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) {
 fn apply_D_actions(lx: &mut Lexer, start: i32, end: i32) {
     let chars = &lx.chars;
     let mut pos = start;
-    let rep_probe_1_saved = pos;
-    let mut rep_probe_1_ok = false;
-    rep_probe_1: {
-        if pos >= chars.len() || chars[pos] != 'd' { break rep_probe_1; }
+    let rep_probe_2_saved = pos;
+    let mut rep_probe_2_ok = false;
+    rep_probe_2: {
+        if pos >= chars.len() || chars[pos] != 'd' { break rep_probe_2; }
         pos += 1;
-        rep_probe_1_ok = true;
+        rep_probe_2_ok = true;
     }
-    if !rep_probe_1_ok || pos > end { pos = rep_probe_1_saved; return; }
-    pos = rep_probe_1_saved;
+    if !rep_probe_2_ok || pos > end { pos = rep_probe_2_saved; return; }
+    pos = rep_probe_2_saved;
     if pos >= chars.len() || chars[pos] != 'd' { return; }
     pos += 1;
     lx.count += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            let rep_probe_2_saved = pos;
-            let mut rep_probe_2_ok = false;
-            rep_probe_2: {
-                if pos >= chars.len() || chars[pos] != 'd' { break rep_probe_2; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            let rep_probe_3_saved = pos;
+            let mut rep_probe_3_ok = false;
+            rep_probe_3: {
+                if pos >= chars.len() || chars[pos] != 'd' { break rep_probe_3; }
                 pos += 1;
-                rep_probe_2_ok = true;
+                rep_probe_3_ok = true;
             }
-            if !rep_probe_2_ok || pos > end { pos = rep_probe_2_saved; break rep_1; }
-            pos = rep_probe_2_saved;
-            if pos >= chars.len() || chars[pos] != 'd' { break rep_1; }
+            if !rep_probe_3_ok || pos > end { pos = rep_probe_3_saved; break rep_2; }
+            pos = rep_probe_3_saved;
+            if pos >= chars.len() || chars[pos] != 'd' { break rep_2; }
             pos += 1;
             lx.count += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
 }
@@ -1229,13 +1229,13 @@ fn try_A(lx: &Lexer, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= chars.len() || chars[pos] != 'a' { break rep_2; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() || chars[pos] != 'a' { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_4;
         break;
     }
     return pos;
@@ -1247,13 +1247,13 @@ fn try_D(lx: &Lexer, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= chars.len() || chars[pos] != 'd' { break rep_3; }
+        let rep_saved_6 = pos;
+        rep_6: {
+            if pos >= chars.len() || chars[pos] != 'd' { break rep_6; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_6;
         break;
     }
     return pos;

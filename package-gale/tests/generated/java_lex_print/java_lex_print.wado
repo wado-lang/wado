@@ -1164,15 +1164,15 @@ fn apply_ENUM_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     if pos > end { return; }
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_2; }
             pos += 1;
-            if pos > end { break rep_1; }
+            if pos > end { break rep_2; }
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     lx.emit(`enum!\n`);
@@ -1186,15 +1186,15 @@ fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     if pos > end { return; }
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_2; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() { break rep_4; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_4; }
             pos += 1;
-            if pos > end { break rep_2; }
+            if pos > end { break rep_4; }
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_4;
         break;
     }
     lx.emit(`ID ${LexerSlice::new(chars, start, pos).to_string()}\n`);
@@ -1205,13 +1205,13 @@ fn try_I(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_3; }
+        let rep_saved_6 = pos;
+        rep_6: {
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_6; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_6;
         break;
     }
     return pos;
@@ -1223,14 +1223,14 @@ fn try_ENUM(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_4 = pos;
-        rep_4: {
-            if pos >= chars.len() { break rep_4; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_4; }
+        let rep_saved_8 = pos;
+        rep_8: {
+            if pos >= chars.len() { break rep_8; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_8; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_4;
+        pos = rep_saved_8;
         break;
     }
     if !((LexerSlice::new(chars, start, pos).to_string() == "enum")) { return -1; }
@@ -1243,14 +1243,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_5 = pos;
-        rep_5: {
-            if pos >= chars.len() { break rep_5; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_5; }
+        let rep_saved_10 = pos;
+        rep_10: {
+            if pos >= chars.len() { break rep_10; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_10; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_5;
+        pos = rep_saved_10;
         break;
     }
     return pos;
@@ -1258,23 +1258,23 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_6 = pos;
-    let mut alts_ok_6 = false;
-    alts_6_0: {
-        pos = alts_saved_6;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_6_0; }
+    let alts_saved_12 = pos;
+    let mut alts_ok_12 = false;
+    alts_12_0: {
+        pos = alts_saved_12;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_12_0; }
         pos += 1;
-        alts_ok_6 = true;
+        alts_ok_12 = true;
     }
-    if !alts_ok_6 {
-        alts_6_1: {
-            pos = alts_saved_6;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_6_1; }
+    if !alts_ok_12 {
+        alts_12_1: {
+            pos = alts_saved_12;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_12_1; }
             pos += 1;
-            alts_ok_6 = true;
+            alts_ok_12 = true;
         }
     }
-    if !alts_ok_6 { return -1; }
+    if !alts_ok_12 { return -1; }
     return pos;
 }
 

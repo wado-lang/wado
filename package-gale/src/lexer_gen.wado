@@ -2782,10 +2782,13 @@ fn gen_lexer_repeat(
     }
     if let Plus = rep.kind {
         gen_lexer_repeat_iteration(w, rep, all_rules, fail_action, ci, ea, hm, replay, id);
+        // The loop's own probe names, minted rather than derived: two iterations
+        // in one fn must not share a `rep_probe_`.
+        let loop_id = w.next_id();
         w.begin(&"loop");
         w.line(&`let rep_saved_${id} = pos;`);
         w.begin(&`${label}:`);
-        gen_lexer_repeat_iteration(w, rep, all_rules, &break_label, ci, ea, hm, replay, id + 1);
+        gen_lexer_repeat_iteration(w, rep, all_rules, &break_label, ci, ea, hm, replay, loop_id);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_${id};`);

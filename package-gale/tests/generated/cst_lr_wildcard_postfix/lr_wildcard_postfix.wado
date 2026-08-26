@@ -1984,14 +1984,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -2003,14 +2003,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_2; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() { break rep_4; }
+            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_4;
         break;
     }
     return pos;

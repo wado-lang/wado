@@ -841,6 +841,11 @@ impl GenContext {
         for let id of &ids.sorted() {
             names.push(self.vocab_names[*id]);
         }
+        // ANTLR4 never reaches a state whose expected set is empty, so nothing
+        // here is not the set `{}` — it is codegen having no answer to give.
+        if names.is_empty() {
+            return String::new();
+        }
         if names.len() == 1 {
             return names[0];
         }
