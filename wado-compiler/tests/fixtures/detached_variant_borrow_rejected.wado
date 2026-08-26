@@ -2,6 +2,9 @@
 // storage, so no storage outliving the expression that took it may hold one.
 // Using it where it is taken stays legal — ref_field_ref_variant and
 // value_copy_variant_in_aggregate guard that side.
+//
+// The refusal runs after monomorphization, so it only sees reachable code: each
+// shape below is called from the test.
 
 variant Payload {
     Text(String),
@@ -16,17 +19,31 @@ struct View {
     slot: &mut Payload,
 }
 
+variant Slot {
+    Held(&mut Payload),
+    None,
+}
+
 fn bound_to_a_variable(b: &mut Bag) {
     let r = &mut b.item;
     *r = Payload::Text(`xyz`);
 }
 
+fn bound_through_a_branch(b: &mut Bag, c: bool) {
+    let r = if c { &mut b.item } else { &mut b.item };
+    *r = Payload::Text(`xyz`);
+}
+
 fn stored_in_an_aggregate(b: &mut Bag) -> View with stores[b] {
-    return View { slot: &mut b.item };
+    return View { slot: &mut b.item }
+}
+
+fn stored_in_a_variant_payload(b: &mut Bag) -> Slot with stores[b] {
+    return Slot::Held(&mut b.item)
 }
 
 fn returned(b: &mut Bag) -> &mut Payload with stores[b] {
-    return &mut b.item;
+    return &mut b.item
 }
 
 fn element_of_a_list(xs: &mut List<Payload>) {
@@ -35,11 +52,18 @@ fn element_of_a_list(xs: &mut List<Payload>) {
 }
 
 test "unreachable" {
-    assert true;
+    let mut b = Bag { item: Payload::Empty };
+    bound_to_a_variable(&mut b);
+    bound_through_a_branch(&mut b, true);
+    let _ = stored_in_an_aggregate(&mut b);
+    let _ = stored_in_a_variant_payload(&mut b);
+    let _ = returned(&mut b);
+    let mut xs: List<Payload> = [Payload::Empty];
+    element_of_a_list(&mut xs);
 }
 
 __DATA__
 {
     "test": {},
-    "compile_error": "cannot store a mutable reference to a field or element of a variant"
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
 }

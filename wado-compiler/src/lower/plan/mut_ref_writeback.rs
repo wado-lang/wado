@@ -10,7 +10,7 @@ use crate::tir::{
     ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
 
 /// Runs before [`super::boxing::prepare_types`], while `&mut T` is still
@@ -27,9 +27,10 @@ pub fn insert_write_backs(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Res
             type_table: &type_table,
             escaping: &escaping,
             local_count,
+            local_base: 0,
             locals,
             borrowed_temps: Vec::new(),
-            escaped: None,
+            refused: None,
         };
         if let Some(body) = func.body.as_mut() {
             pass.visit_block(body);
@@ -41,16 +42,15 @@ pub fn insert_write_backs(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Res
         for temp in pass.borrowed_temps {
             func.address_taken_locals.insert(temp);
         }
-        if let Some((span, callee)) = &pass.escaped {
+        if let Some((span, reason)) = &pass.refused {
             return Err(errors.fatal_in(
                 &func.module_source,
                 Diagnostic {
                     severity: Severity::Error,
                     code: Code::ImmutableAssignment,
                     message: format!(
-                        "cannot pass a mutable reference to a field or element of a variant to \
-                         '{callee}', which stores it: the reference is a detached copy, so a \
-                         whole-value write through it would be lost after the call returns"
+                        "a mutable reference to a field or element of a variant is a detached \
+                         copy, so a whole-value write through it would be lost: {reason}"
                     ),
                     span: Some(DiagnosticSpan::from_span(span, None)),
                 },
@@ -85,10 +85,13 @@ struct WriteBack<'a> {
     type_table: &'a TypeTable,
     escaping: &'a FuncKeyMap<IndexSet<u32>>,
     local_count: u32,
+    /// Locals from `local_base` up. A function owns its parameters' slots too,
+    /// so its base is 0; a closure keeps parameters outside `body_locals`.
+    local_base: u32,
     locals: Vec<TirLocal>,
     borrowed_temps: Vec<u32>,
-    /// The first detached borrow handed to a `stores` parameter, to report.
-    escaped: Option<(Span, String)>,
+    /// The first detached borrow with no write-back point, and why.
+    refused: Option<(Span, String)>,
 }
 
 /// A local this pass planted, and the reads of it the rewrite needs.
@@ -122,7 +125,10 @@ impl WriteBack<'_> {
         value: TirExpr,
         is_mut: bool,
     ) -> Temp {
-        assert_eq!(self.locals.len(), self.local_count as usize);
+        assert_eq!(
+            u32::try_from(self.locals.len()).unwrap() + self.local_base,
+            self.local_count
+        );
         let (type_id, span) = (value.type_id, value.span);
         let index = self.local_count;
         self.local_count += 1;
@@ -148,6 +154,75 @@ impl WriteBack<'_> {
         }
     }
 
+    fn refuse(&mut self, span: Span, reason: String) {
+        self.refused.get_or_insert((span, reason));
+    }
+
+    /// Refuse a detached borrow put into storage outliving the expression that
+    /// took it, which no point in this body is late enough to write back.
+    fn refuse_stored(&mut self, expr: &TirExpr, sink: &str) {
+        for place in self.detached_in_value_position(expr) {
+            self.refuse(place, format!("{sink} holds it past the borrow"));
+        }
+    }
+
+    /// The detached borrows `expr` can yield, following the value positions one
+    /// reaches storage through.
+    fn detached_in_value_position(&self, expr: &TirExpr) -> Vec<Span> {
+        if let Some(place) = self.detached_borrow(expr) {
+            return vec![place.span];
+        }
+        let blocks: Vec<&TirBlock> = match &expr.kind {
+            TirExprKind::Block(block) => vec![block],
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => std::iter::once(then_branch).chain(else_branch).collect(),
+            TirExprKind::Match { arms, .. } => {
+                return arms
+                    .iter()
+                    .flat_map(|arm| self.detached_in_value_position(&arm.body))
+                    .collect();
+            }
+            _ => return Vec::new(),
+        };
+        blocks
+            .into_iter()
+            .filter_map(block_value)
+            .flat_map(|value| self.detached_in_value_position(value))
+            .collect()
+    }
+
+    /// Walk a closure body against its own local namespace: its parameters hold
+    /// the slots below `body_locals`, and the temps it borrows belong to its
+    /// own address-taken set, which is what `boxing` reads on the way in.
+    fn visit_closure(
+        &mut self,
+        param_count: usize,
+        body: &mut TirExpr,
+        address_taken_locals: &mut IndexSet<u32>,
+        body_locals: &mut Vec<TirLocal>,
+    ) -> bool {
+        let local_base = u32::try_from(param_count).unwrap();
+        let mut inner = WriteBack {
+            type_table: self.type_table,
+            escaping: self.escaping,
+            local_count: local_base + u32::try_from(body_locals.len()).unwrap(),
+            local_base,
+            locals: std::mem::take(body_locals),
+            borrowed_temps: Vec::new(),
+            refused: None,
+        };
+        let changed = inner.visit_expr(body);
+        *body_locals = inner.locals;
+        address_taken_locals.extend(inner.borrowed_temps);
+        if let Some((span, reason)) = inner.refused {
+            self.refuse(span, reason);
+        }
+        changed
+    }
+
     /// Whether a `&mut` to a place of this type is a detached box — of the
     /// replace types only a `variant` gets here, generic or not.
     fn detaches(&self, place_type: TypeId) -> bool {
@@ -161,8 +236,11 @@ impl WriteBack<'_> {
         }
     }
 
-    /// The place a detached `&mut` argument borrows, if this argument is one.
-    fn detached_place<'e>(&self, arg: &'e TirExpr) -> Option<&'e TirExpr> {
+    /// The place a detached `&mut` borrows, if `arg` is one. A borrow of a
+    /// local is not detached — that box *is* the local's slot — but a borrow
+    /// through anything else lands in a box nothing else can see. `&mut xs[i]`
+    /// arrives here as `&mut *xs.index_ref(i)`, hence the deref.
+    fn detached_borrow<'e>(&self, arg: &'e TirExpr) -> Option<&'e TirExpr> {
         let TirExprKind::Unary {
             op: TirUnaryOp::MutRef,
             expr: place,
@@ -170,11 +248,30 @@ impl WriteBack<'_> {
         else {
             return None;
         };
-        let is_projection = matches!(
+        let detached = match &place.kind {
+            TirExprKind::FieldAccess { .. } | TirExprKind::Index { .. } => true,
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } => !matches!(
+                inner.kind,
+                TirExprKind::Local { .. } | TirExprKind::Capture { .. }
+            ),
+            _ => false,
+        };
+        (detached && self.detaches(place.type_id)).then_some(place.as_ref())
+    }
+
+    /// The subset [`Self::wrap`] can also store back to: a place this pass can
+    /// spell as an assignment target. An element needs an `index_assign` the
+    /// pass cannot synthesise, so it is left to the refusals.
+    fn detached_place<'e>(&self, arg: &'e TirExpr) -> Option<&'e TirExpr> {
+        let place = self.detached_borrow(arg)?;
+        matches!(
             place.kind,
             TirExprKind::FieldAccess { .. } | TirExprKind::Index { .. }
-        );
-        (is_projection && self.detaches(place.type_id)).then_some(place.as_ref())
+        )
+        .then_some(place)
     }
 
     /// Read every step of `place` that is not already a slot into a temp, so
@@ -227,25 +324,44 @@ impl WriteBack<'_> {
                     .unwrap_or_default(),
                 args.iter_mut().map(|a| &mut a.expr).collect(),
             ),
-            TirExprKind::IndirectCall { callee, args } => (
-                "a function value".to_string(),
-                match self.type_table.get(callee.type_id) {
+            TirExprKind::IndirectCall { callee, args } => {
+                let stores = match self.type_table.get(callee.type_id) {
                     ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
-                    _ => IndexSet::default(),
-                },
-                args.iter_mut().collect(),
-            ),
+                    // A callee whose type says nothing has declared nothing it
+                    // keeps, which is not the same as keeping nothing.
+                    _ => (0..u32::try_from(args.len()).unwrap()).collect(),
+                };
+                (
+                    "a function value".to_string(),
+                    stores,
+                    args.iter_mut().collect(),
+                )
+            }
             _ => return,
         };
+        let detached: Vec<bool> = args
+            .iter()
+            .map(|arg| self.detached_place(arg).is_some())
+            .collect();
+        if !detached.iter().any(|&d| d) {
+            return;
+        }
         let mut prefix: Vec<TirStmt> = Vec::new();
         let mut write_backs: Vec<TirStmt> = Vec::new();
         for (position, arg) in args.into_iter().enumerate() {
-            let Some(place) = self.detached_place(arg) else {
+            if !detached[position] {
+                // The prefix runs ahead of the call, so an argument left in the
+                // call would evaluate after a place this loop already read.
+                // Reading it here keeps the arguments in source order.
+                self.hoist_operand(arg, &mut prefix);
                 continue;
-            };
+            }
+            let place = self.detached_place(arg).expect("detached above");
             if escaping.contains(&u32::try_from(position).unwrap()) {
-                self.escaped
-                    .get_or_insert_with(|| (arg.span, callee.clone()));
+                self.refuse(
+                    arg.span,
+                    format!("'{callee}' stores it, so it outlives the call"),
+                );
                 continue;
             }
             let span = arg.span;
@@ -322,12 +438,56 @@ impl WriteBack<'_> {
     }
 }
 
+/// The expression a block evaluates to, if its last statement is one.
+fn block_value(block: &TirBlock) -> Option<&TirExpr> {
+    match block.stmts.last().map(|stmt| &stmt.kind) {
+        Some(TirStmtKind::Expr(expr)) => Some(expr),
+        _ => None,
+    }
+}
+
 impl TirOptVisitor for WriteBack<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+        match &stmt.kind {
+            // A TIR `Let` is a single binding; a destructuring `let` lowered to
+            // a pattern, which binds through the borrow rather than keeping it.
+            TirStmtKind::Let { value, .. } => self.refuse_stored(value, "a variable"),
+            TirStmtKind::Return { value: Some(value) } | TirStmtKind::TaskReturn { value } => {
+                self.refuse_stored(value, "the returned value");
+            }
+            _ => {}
+        }
+        opt_walk_stmt(self, stmt)
+    }
+
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
-        // A closure body numbers locals in its own namespace, so a temp drawn
-        // from this function's counter would name one of its locals (WEP D1).
-        if matches!(expr.kind, TirExprKind::Closure { .. }) {
-            return false;
+        if let TirExprKind::Closure {
+            params,
+            body,
+            address_taken_locals,
+            body_locals,
+            ..
+        } = &mut expr.kind
+        {
+            return self.visit_closure(params.len(), body, address_taken_locals, body_locals);
+        }
+        match &expr.kind {
+            TirExprKind::VariantConstruct {
+                payload: Some(payload),
+                ..
+            } => self.refuse_stored(payload, "a variant payload"),
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.refuse_stored(&field.value, "a struct field");
+                }
+            }
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
+                for element in elements {
+                    self.refuse_stored(element, "an element");
+                }
+            }
+            TirExprKind::Assign { value, .. } => self.refuse_stored(value, "a place"),
+            _ => {}
         }
         let changed = opt_walk_expr(self, expr);
         let planted = self.borrowed_temps.len();

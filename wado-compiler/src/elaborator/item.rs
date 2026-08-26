@@ -2362,7 +2362,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(b) = func.body.as_ref() {
             scope.resolve_block(b, &mut ctx, None);
-            scope.check_detached_borrows(b);
         }
 
         scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
@@ -2460,7 +2459,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Recorded under `function_name` so `#function` literals match
         // what reify emits.
         self.resolve_block(&test_decl.body, &mut ctx, None);
-        self.check_detached_borrows(&test_decl.body);
 
         let tir_test = TirTest {
             name: test_decl.name.clone(),
@@ -2699,7 +2697,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(b) = func.body.as_ref() {
             scope.resolve_block(b, &mut ctx, None);
-            scope.check_detached_borrows(b);
         }
 
         scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
