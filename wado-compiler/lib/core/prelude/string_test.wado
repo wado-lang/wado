@@ -323,6 +323,25 @@ test "is_ascii_digit false cases" {
     assert !'\u{FF10}'.is_ascii_digit();  // FULLWIDTH DIGIT ZERO
 }
 
+test "is_ascii_alphabetic covers both cases, and nothing else" {
+    assert 'a'.is_ascii_alphabetic();
+    assert 'z'.is_ascii_alphabetic();
+    assert 'A'.is_ascii_alphabetic();
+    assert 'Z'.is_ascii_alphabetic();
+    assert !'0'.is_ascii_alphabetic();
+    assert !'_'.is_ascii_alphabetic();
+    assert !'\u{00E9}'.is_ascii_alphabetic();  // LATIN SMALL LETTER E WITH ACUTE
+}
+
+test "is_ascii_alphanumeric is the union of the letters and the digits" {
+    for let c of ['a', 'z', 'A', 'Z', '0', '9'] {
+        assert c.is_ascii_alphanumeric();
+    }
+    for let c of ['_', '-', ' ', '/', ':', '@', '[', '`', '{'] {
+        assert !c.is_ascii_alphanumeric();
+    }
+}
+
 test "is_hexdigit true cases" {
     assert '0'.is_hexdigit();
     assert '9'.is_hexdigit();

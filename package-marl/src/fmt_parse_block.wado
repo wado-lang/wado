@@ -278,11 +278,11 @@ fn is_html_block_start(chars: &List<char>) -> bool {
     if p < len && chars[p] == '/' {
         p += 1;
     }
-    if !(p < len && is_ascii_alpha(chars[p])) {
+    if !(p < len && chars[p].is_ascii_alphabetic()) {
         return false;
     }
     p += 1;
-    while p < len && (is_ascii_alnum(chars[p]) || chars[p] == '-') {
+    while p < len && (chars[p].is_ascii_alphanumeric() || chars[p] == '-') {
         p += 1;
     }
     return p >= len || chars[p] matches { ' ' | '\t' | '>' | '/' };
@@ -935,14 +935,6 @@ fn cells_to_nodes(cells: &List<String>, ncol: i32, refs: &RefTable) -> List<List
 
 fn is_blank(line: &String) -> bool {
     return line.trim().len() == 0;
-}
-
-fn is_ascii_alnum(c: char) -> bool {
-    return c matches { '0'..='9' | 'a'..='z' | 'A'..='Z' };
-}
-
-fn is_ascii_alpha(c: char) -> bool {
-    return c matches { 'a'..='z' | 'A'..='Z' };
 }
 
 /// A leading-indentation whitespace column. A tab counts as one column, the

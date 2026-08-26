@@ -197,7 +197,7 @@ fn push_delim(cur: &StrCursor, i: i32, d: char, toks: &mut List<InlineTok>) -> i
     let prev = cur.at(i - 1);
     let next = cur.at(i + n);
     let next_is_alnum = match next {
-        Some(c) => is_ascii_alnum(c),
+        Some(c) => c.is_ascii_alphanumeric(),
         None => false,
     };
     toks.push(InlineTok::Delim(DelimTok {
@@ -499,7 +499,7 @@ fn try_angle_construct(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
 fn try_autolink_scheme(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
     let end = cur.end();
     let mut j = i + 1;
-    if !(j < end && is_ascii_alpha(char_at(cur, j))) {
+    if !(j < end && char_at(cur, j).is_ascii_alphabetic()) {
         return null;
     }
     let scheme_start = j;
@@ -533,7 +533,7 @@ fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
     if j < end && char_at(cur, j) == '/' {
         j += 1;
     }
-    if !(j < end && is_ascii_alpha(char_at(cur, j))) {
+    if !(j < end && char_at(cur, j).is_ascii_alphabetic()) {
         return null;
     }
     while j < end {
@@ -784,7 +784,7 @@ fn opt_is_punct(o: Option<char>) -> bool {
 
 fn opt_is_alnum(o: Option<char>) -> bool {
     return match o {
-        Some(c) => is_ascii_alnum(c),
+        Some(c) => c.is_ascii_alphanumeric(),
         None => false,
     };
 }
@@ -800,16 +800,8 @@ internal fn is_ascii_punct(c: char) -> bool {
     return c matches { '!'..='/' | ':'..='@' | '['..='`' | '{'..='~' };
 }
 
-fn is_ascii_alnum(c: char) -> bool {
-    return c matches { '0'..='9' | 'a'..='z' | 'A'..='Z' };
-}
-
-fn is_ascii_alpha(c: char) -> bool {
-    return c matches { 'a'..='z' | 'A'..='Z' };
-}
-
 fn is_scheme_char(c: char) -> bool {
-    return is_ascii_alnum(c) || c matches { '+' | '-' | '.' };
+    return c.is_ascii_alphanumeric() || c matches { '+' | '-' | '.' };
 }
 
 fn run_length(cur: &StrCursor, from: i32, d: char) -> i32 {
