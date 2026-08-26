@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { denialReason } from "./forbidden-commands.mts";
+import { commandNames, denialReason } from "./forbidden-commands.mts";
 
 const DENIED = [
   "sed -i 's/a/b/' f.rs",
@@ -77,6 +77,16 @@ test("denies a forbidden command word", () => {
 
 test("allows a command that only mentions one", () => {
   for (const command of ALLOWED) assert.equal(denialReason(command), null, command);
+});
+
+test("resolves the command word of every nested source", () => {
+  assert.deepEqual(commandNames("cat f | while read l; do sed -i x $l; done"), [
+    "cat",
+    "read",
+    "sed",
+  ]);
+  assert.deepEqual(commandNames("find . -exec mv {} /tmp/awk \\;"), ["find", "mv"]);
+  assert.deepEqual(commandNames("echo $(bash -c 'awk 1')"), ["echo", "bash", "awk"]);
 });
 
 test("gives the reason of the ban that applies", () => {

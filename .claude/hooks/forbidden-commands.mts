@@ -1,25 +1,25 @@
 #!/usr/bin/env node
-// PreToolUse hook for the Bash tool: deny the command words below.
-// The command is read the way a shell reads it — quoting, substitutions,
-// heredocs, redirections — so a command word is caught wherever it runs.
+// PreToolUse hook for the Bash tool: deny the command words below, read the way
+// a shell reads them, so one is caught wherever it runs.
 
-const FORBIDDEN: [RegExp, string][] = [
-  [
-    /^(sed|awk|python(3(\.\d+)?)?)$/,
-    "sed, awk, python and python3 are forbidden (AGENTS.md > Tooling): a rewrite keeps" +
+const FORBIDDEN = [
+  {
+    pattern: /^(sed|awk|python(3(\.\d+)?)?)$/,
+    reason:
+      "sed, awk, python and python3 are forbidden (AGENTS.md > Tooling): a rewrite keeps" +
       " matching where it was not aimed. Edit with the editing tools, one call per change" +
       " site; script in Node.js.",
-  ],
-  [
-    /^nohup$/,
-    "nohup is forbidden (AGENTS.md > Tooling): it notifies nobody when the job exits. Run a" +
-      " long job through the harness's background mechanism.",
-  ],
+  },
+  {
+    pattern: /^nohup$/,
+    reason:
+      "nohup is forbidden (AGENTS.md > Tooling): it notifies nobody when the job exits. Run" +
+      " a long job through the harness's background mechanism.",
+  },
 ];
 
-// Words that pass their argument on to another command, so the command word is
-// the first of their arguments that is neither a flag nor a duration. The flags
-// listed take a value, which is that argument without being the command.
+// Words that pass their argument on to another command: the command word is the
+// first argument that is neither a flag, a listed flag's value, nor a duration.
 const RUNNERS: Record<string, string[]> = {
   command: ["-v", "-V"],
   env: ["-u", "--unset", "-C", "--chdir", "-S", "--split-string"],
@@ -64,18 +64,42 @@ function balanced(src: string, start: number, open: string, close: string): [str
   let i = start;
   while (i < src.length) {
     const c = src[i];
-    if (quote) {
-      if (c === "\\" && quote === '"') i += 2;
-      else i += c === quote ? ((quote = ""), 1) : 1;
-      continue;
+    if (c === "\\" && quote !== "'") {
+      i += 2;
+    } else if (quote) {
+      if (c === quote) quote = "";
+      i++;
+    } else if (c === "'" || c === '"') {
+      quote = c;
+      i++;
+    } else {
+      if (c === open) depth++;
+      else if (c === close && --depth === 0) return [src.slice(start, i), i + 1];
+      i++;
     }
-    if (c === "\\") i += 2;
-    else if (c === "'" || c === '"') (quote = c), i++;
-    else if (c === open) depth++, i++;
-    else if (c === close && --depth === 0) return [src.slice(start, i), i + 1];
-    else i++;
   }
   return [src.slice(start), i];
+}
+
+/** Text up to the next `close`, and the index past it. */
+function delimited(src: string, start: number, close: string): [string, number] {
+  const end = src.indexOf(close, start);
+  return end < 0 ? [src.slice(start), src.length] : [src.slice(start, end), end + 1];
+}
+
+/** Index past the `$(…)` or `` `…` `` substitution at `at`, or -1 if none is there. */
+function readSubstitution(src: string, at: number, subs: string[]): number {
+  if (src[at] === "$" && src[at + 1] === "(") {
+    const [inner, end] = balanced(src, at + 2, "(", ")");
+    subs.push(inner);
+    return end;
+  }
+  if (src[at] === "`") {
+    const [inner, end] = delimited(src, at + 1, "`");
+    subs.push(inner);
+    return end;
+  }
+  return -1;
 }
 
 function doubleQuoted(src: string, start: number, subs: string[]): [string, number] {
@@ -84,18 +108,13 @@ function doubleQuoted(src: string, start: number, subs: string[]): [string, numb
   while (i < src.length) {
     const c = src[i];
     if (c === '"') return [value, i + 1];
-    if (c === "\\") {
+    const substitution = readSubstitution(src, i, subs);
+    if (substitution >= 0) {
+      i = substitution;
+    } else if (c === "\\") {
       const next = src[i + 1] ?? "";
       if (next !== "\n") value += '$`"\\'.includes(next) ? next : c + next;
       i += 2;
-    } else if (c === "$" && src[i + 1] === "(") {
-      const [inner, end] = balanced(src, i + 2, "(", ")");
-      subs.push(inner);
-      i = end;
-    } else if (c === "`") {
-      const close = src.indexOf("`", i + 1);
-      subs.push(src.slice(i + 1, close < 0 ? undefined : close));
-      i = close < 0 ? src.length : close + 1;
     } else {
       value += c;
       i++;
@@ -112,25 +131,20 @@ function readWord(src: string, start: number): Word {
   while (i < src.length) {
     const c = src[i];
     if (BREAKS_WORD.includes(c)) break;
-    if (c === "\\") {
+    const substitution = readSubstitution(src, i, subs);
+    if (substitution >= 0) {
+      i = substitution;
+    } else if (c === "\\") {
       if (src[i + 1] !== "\n") value += src[i + 1] ?? "";
       i += 2;
     } else if (c === "'") {
-      const close = src.indexOf("'", i + 1);
-      value += src.slice(i + 1, close < 0 ? undefined : close);
-      i = close < 0 ? src.length : close + 1;
+      const [quoted, end] = delimited(src, i + 1, "'");
+      value += quoted;
+      i = end;
     } else if (c === '"') {
       const [quoted, end] = doubleQuoted(src, i + 1, subs);
       value += quoted;
       i = end;
-    } else if (c === "$" && src[i + 1] === "(") {
-      const [inner, end] = balanced(src, i + 2, "(", ")");
-      subs.push(inner);
-      i = end;
-    } else if (c === "`") {
-      const close = src.indexOf("`", i + 1);
-      subs.push(src.slice(i + 1, close < 0 ? undefined : close));
-      i = close < 0 ? src.length : close + 1;
     } else if (c === "$" && src[i + 1] === "{") {
       const [inner, end] = balanced(src, i + 2, "{", "}");
       value += `\${${inner}}`;
@@ -277,22 +291,25 @@ export function commandNames(src: string): string[] {
 /** Why the command is denied, or null when it runs nothing forbidden. */
 export function denialReason(command: string): string | null {
   for (const name of commandNames(command)) {
-    const match = FORBIDDEN.find(([pattern]) => pattern.test(name));
-    if (match) return match[1];
+    const ban = FORBIDDEN.find(({ pattern }) => pattern.test(name));
+    if (ban) return ban.reason;
   }
   return null;
+}
+
+/** The Bash command in the hook's stdin payload, or "" when it carries none. */
+function payloadCommand(input: string): string {
+  try {
+    return JSON.parse(input)?.tool_input?.command ?? "";
+  } catch {
+    return "";
+  }
 }
 
 if (import.meta.main) {
   let input = "";
   for await (const chunk of process.stdin) input += chunk;
-  let command = "";
-  try {
-    command = JSON.parse(input)?.tool_input?.command ?? "";
-  } catch {
-    command = "";
-  }
-  const reason = denialReason(command);
+  const reason = denialReason(payloadCommand(input));
   if (reason) {
     process.stdout.write(
       JSON.stringify({
