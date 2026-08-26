@@ -1195,8 +1195,10 @@ pub global RK_STAR: NodeKind = 1;
 pub global RK_NONGREEDY: NodeKind = 2;
 pub global RK_LIST_LABEL: NodeKind = 3;
 pub global RK_NESTED: NodeKind = 4;
+pub global RK_SOLO_STAR: NodeKind = 5;
+pub global RK_SOLO_OPT: NodeKind = 6;
 
-global RULE_NAMES: List<String> = ["opt", "star", "nongreedy", "list_label", "nested"];
+global RULE_NAMES: List<String> = ["opt", "star", "nongreedy", "list_label", "nested", "solo_star", "solo_opt"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1694,26 +1696,58 @@ fn scan_nested(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
+fn scan_solo_star(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && tokens[pos] == TK_A {
+        let sp = pos;
+        sg_5_done: {
+            sg_5: {
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_5; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sg_5; }
+                pos += 1;
+                break sg_5_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_solo_opt(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos] == TK_A {
+        pos += 1;
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_opt__inner(p: &mut Parser) -> () {
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_5 = pos;
-        let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_0(sgk_5) {
-            sg_5: {
-                pos = gp_5;
-                sg_5_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_5_0; }
+        let gp_6 = pos;
+        let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_0(sgk_6) {
+            sg_6: {
+                pos = gp_6;
+                sg_6_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6_0; }
                     pos += 1;
-                    break sg_5;
+                    break sg_6;
                 }
-                pos = gp_5;
-                sg_5_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_5_1; }
+                pos = gp_6;
+                sg_6_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_6_1; }
                     pos += 1;
-                    break sg_5;
+                    break sg_6;
                 }
                 break opt_scan;
             }
@@ -1754,23 +1788,23 @@ fn _parse_star__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_6 = pos;
-            let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_6) {
-                sg_6: {
-                    pos = gp_6;
-                    sg_6_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6_0; }
+            let gp_7 = pos;
+            let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if _kind_set_0(sgk_7) {
+                sg_7: {
+                    pos = gp_7;
+                    sg_7_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_0; }
                         pos += 1;
-                        break sg_6;
+                        break sg_7;
                     }
-                    pos = gp_6;
-                    sg_6_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_6_1; }
+                    pos = gp_7;
+                    sg_7_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_7_1; }
                         pos += 1;
-                        break sg_6;
+                        break sg_7;
                     }
-                    pos = gp_6;
+                    pos = gp_7;
                 }
             }
             if pos <= p.pos { break rep_scan; }
@@ -1836,23 +1870,23 @@ fn _parse_list_label__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_7 = pos;
-            let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_7) {
-                sg_7: {
-                    pos = gp_7;
-                    sg_7_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_0; }
+            let gp_8 = pos;
+            let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if _kind_set_0(sgk_8) {
+                sg_8: {
+                    pos = gp_8;
+                    sg_8_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_8_0; }
                         pos += 1;
-                        break sg_7;
+                        break sg_8;
                     }
-                    pos = gp_7;
-                    sg_7_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_7_1; }
+                    pos = gp_8;
+                    sg_8_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_8_1; }
                         pos += 1;
-                        break sg_7;
+                        break sg_8;
                     }
-                    pos = gp_7;
+                    pos = gp_8;
                 }
             }
             if pos <= p.pos { break rep_scan; }
@@ -1914,6 +1948,65 @@ fn _parse_nested(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_solo_star__inner(p: &mut Parser) -> () {
+    loop {
+        if p.recovering { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_9_done: {
+                sg_9: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_9; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_9; }
+                    pos += 1;
+                    break sg_9_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        if !((p.peek_kind() == TK_A && (pred_5(p)))) { break; }
+        let a = p.expect(TK_A, &SYNC_1);
+        let b = p.expect(TK_B, &EMPTY_SYNC);
+    }
+    let a = p.expect(TK_A, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_solo_star(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_SOLO_STAR, _start);
+    _parse_solo_star__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("solo_star");
+    }
+}
+
+fn _parse_solo_opt__inner(p: &mut Parser) -> () {
+    if p.peek_kind() == TK_A && ((p.peek_kind() == TK_A && (pred_6(p)))) {
+        let a = p.expect(TK_A, &EMPTY_SYNC);
+    }
+    let a_2 = p.expect(TK_A, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_solo_opt(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_SOLO_OPT, _start);
+    _parse_solo_opt__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("solo_opt");
+    }
+}
+
 fn pred_0(p: &Parser) -> bool {
     return  false ;
 }
@@ -1927,6 +2020,14 @@ fn pred_2(p: &Parser) -> bool {
 }
 
 fn pred_3(p: &Parser) -> bool {
+    return  false ;
+}
+
+fn pred_5(p: &Parser) -> bool {
+    return  false ;
+}
+
+fn pred_6(p: &Parser) -> bool {
     return  false ;
 }
 
@@ -1970,6 +2071,14 @@ pub fn parse_list_label(input: &String, max_errors: i32 = i32::MAX) -> ParseResu
 
 pub fn parse_nested(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_nested(p));
+}
+
+pub fn parse_solo_star(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_solo_star(p));
+}
+
+pub fn parse_solo_opt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_solo_opt(p));
 }
 
 fn _token_names() -> List<String> {

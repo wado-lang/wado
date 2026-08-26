@@ -20347,13 +20347,7 @@ fn _parse_continue_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if !p.speculating {
-            if !(TypeScriptParserBase::not_line_terminator(p)) {
-                p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
-                return;
-            }
-        }
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) && ((_kind_set_21(p.peek_kind()) && (pred_5(p)))) {
         p.atn_ret_pending = 1961;
         let identifier = _parse_identifier(p, &EMPTY_FOLLOW);
     }
@@ -20387,13 +20381,7 @@ fn _parse_break_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if !p.speculating {
-            if !(TypeScriptParserBase::not_line_terminator(p)) {
-                p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
-                return;
-            }
-        }
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) && ((_kind_set_21(p.peek_kind()) && (pred_6(p)))) {
         p.atn_ret_pending = 1975;
         let identifier = _parse_identifier(p, &EMPTY_FOLLOW);
     }
@@ -20427,13 +20415,7 @@ fn _parse_return_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if !p.speculating {
-            if !(TypeScriptParserBase::not_line_terminator(p)) {
-                p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
-                return;
-            }
-        }
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) && ((_kind_set_31(p.peek_kind()) && (pred_7(p)))) {
         p.atn_ret_pending = 1989;
         let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW);
     }
@@ -20467,13 +20449,7 @@ fn _parse_yield_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if !p.speculating {
-            if !(TypeScriptParserBase::not_line_terminator(p)) {
-                p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
-                return;
-            }
-        }
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) && ((_kind_set_31(p.peek_kind()) && (pred_8(p)))) {
         p.atn_ret_pending = 2009;
         let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW);
     }
@@ -25854,6 +25830,22 @@ fn _parse_eos(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () wi
     if p.recovering {
         p.push_rule_stack("eos");
     }
+}
+
+fn pred_5(p: &Parser) -> bool with TypeScriptParserBase {
+    return TypeScriptParserBase::not_line_terminator(p);
+}
+
+fn pred_6(p: &Parser) -> bool with TypeScriptParserBase {
+    return TypeScriptParserBase::not_line_terminator(p);
+}
+
+fn pred_7(p: &Parser) -> bool with TypeScriptParserBase {
+    return TypeScriptParserBase::not_line_terminator(p);
+}
+
+fn pred_8(p: &Parser) -> bool with TypeScriptParserBase {
+    return TypeScriptParserBase::not_line_terminator(p);
 }
 
 fn pred_15(p: &Parser) -> bool with TypeScriptParserBase {
