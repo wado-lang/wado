@@ -918,7 +918,7 @@ pub(super) fn synthesize_lift_map(
 
     let (index_assign_trait, index_assign_method) = index_assign;
     let info = crate::name::LocalMethodName::new(
-        map_head.clone(),
+        map_head,
         Some(index_assign_trait),
         index_assign_method,
     );

@@ -858,9 +858,10 @@ pub(super) fn synthesize_lower_map_to_buffer(
     locals: &mut Vec<TirLocal>,
     ctx: &LowerContext<'_>,
 ) -> (Vec<TirStmt>, u32, u32) {
-    let key_resolved = ctx.cm_interface_registry.resolve_type(key_type);
-    let value_resolved = ctx.cm_interface_registry.resolve_type(value_type);
-    let pair = [key_resolved.clone(), value_resolved.clone()];
+    let pair = [
+        ctx.cm_interface_registry.resolve_type(key_type),
+        ctx.cm_interface_registry.resolve_type(value_type),
+    ];
     let layout = cm_abi::layout_tuple_with_registry_scoped(
         &pair,
         ctx.cm_interface_registry,
@@ -907,7 +908,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             .0
             .clone();
         let next = crate::name::LocalMethodName::new(
-            iter_head.clone(),
+            iter_head,
             Some(items.trait_fq(crate::compiler_item::CompilerItem::Iterator)),
             items
                 .method_name(crate::compiler_item::CompilerItem::TreeMapEntriesIterNext)

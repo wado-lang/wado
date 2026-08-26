@@ -9,9 +9,8 @@ use wasmtime::{
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 use wasmtime_wasi_tls::{
     Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
     WasiTlsCtxView, WasiTlsView,
@@ -200,7 +199,7 @@ impl WasiState {
         }
         builder.args(args);
         for (host_path, guest_path) in preopened_dirs {
-            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
         // `wado run` and `wado test` are invoked directly by the developer,
         // so mirror native CLI tools by letting `wasi:sockets`/`wasi:tls`
@@ -249,7 +248,7 @@ impl Preopens {
     pub fn open(preopened_dirs: &[(String, String)]) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         for (host_path, guest_path) in preopened_dirs {
-            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
         // We only need the filesystem half of the WasiCtx; the rest is
         // rebuilt fresh per request. `WasiFilesystemCtx` is `Clone` (with

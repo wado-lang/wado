@@ -12,13 +12,10 @@ use bytes::Bytes;
 use futures::future::BoxFuture;
 use http::uri::Scheme;
 use http_body_util::BodyExt;
-use http_body_util::combinators::UnsyncBoxBody;
 use rustls::pki_types::ServerName;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
-use wasmtime_wasi::TrappableError;
-use wasmtime_wasi_http::p3::bindings::http::types::{DnsErrorPayload, ErrorCode};
-use wasmtime_wasi_http::p3::{RequestOptions, WasiHttpHooks};
+use wasmtime_wasi_http::{Error as HttpError, RequestOptions, WasiBody, WasiHttpHooks};
 
 use crate::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
@@ -85,26 +82,24 @@ impl Default for WadoHttpHooks {
 impl WasiHttpHooks for WadoHttpHooks {
     fn send_request(
         &mut self,
-        request: http::Request<UnsyncBoxBody<Bytes, ErrorCode>>,
+        request: http::Request<WasiBody>,
         options: Option<RequestOptions>,
-        _fut: Box<dyn core::future::Future<Output = Result<(), ErrorCode>> + Send>,
+        _fut: Box<dyn core::future::Future<Output = Result<(), HttpError>> + Send>,
     ) -> Box<
         dyn core::future::Future<
                 Output = Result<
                     (
-                        http::Response<UnsyncBoxBody<Bytes, ErrorCode>>,
-                        Box<dyn core::future::Future<Output = Result<(), ErrorCode>> + Send>,
+                        http::Response<WasiBody>,
+                        Box<dyn core::future::Future<Output = Result<(), HttpError>> + Send>,
                     ),
-                    TrappableError<ErrorCode>,
+                    HttpError,
                 >,
             > + Send,
     > {
         let config = Arc::clone(&self.client_config);
         Box::new(async move {
-            let (res, driver) = send_request(config, request, options)
-                .await
-                .map_err(TrappableError::from)?;
-            let driver: Box<dyn core::future::Future<Output = Result<(), ErrorCode>> + Send> =
+            let (res, driver) = send_request(config, request, options).await?;
+            let driver: Box<dyn core::future::Future<Output = Result<(), HttpError>> + Send> =
                 Box::new(driver);
             Ok((res.map(BodyExt::boxed_unsync), driver))
         })
@@ -113,17 +108,17 @@ impl WasiHttpHooks for WadoHttpHooks {
 
 async fn send_request(
     client_config: Arc<rustls::ClientConfig>,
-    mut req: http::Request<UnsyncBoxBody<Bytes, ErrorCode>>,
+    mut req: http::Request<WasiBody>,
     options: Option<RequestOptions>,
 ) -> Result<
     (
-        http::Response<impl http_body::Body<Data = Bytes, Error = ErrorCode>>,
-        BoxFuture<'static, Result<(), ErrorCode>>,
+        http::Response<impl http_body::Body<Data = Bytes, Error = HttpError>>,
+        BoxFuture<'static, Result<(), HttpError>>,
     ),
-    ErrorCode,
+    HttpError,
 > {
     let uri = req.uri();
-    let authority = uri.authority().ok_or(ErrorCode::HttpRequestUriInvalid)?;
+    let authority = uri.authority().ok_or(HttpError::HttpRequestUriInvalid)?;
     let use_tls = uri.scheme() == Some(&Scheme::HTTPS);
     let host = authority.host().to_string();
     let connect_addr = if authority.port().is_some() {
@@ -160,9 +155,9 @@ async fn send_request(
         }
         Ok(Err(err)) => {
             warn_log!("connection refused: {err:?}");
-            return Err(ErrorCode::ConnectionRefused);
+            return Err(HttpError::ConnectionRefused);
         }
-        Err(_) => return Err(ErrorCode::ConnectionTimeout),
+        Err(_) => return Err(HttpError::ConnectionTimeout),
     };
 
     let (mut sender, conn_driver) = if use_tls {
@@ -175,7 +170,7 @@ async fn send_request(
         let connector = TlsConnector::from(client_config);
         let tls = connector.connect(domain, tcp).await.map_err(|e| {
             warn_log!("tls protocol error: {e:?}");
-            ErrorCode::TlsProtocolError
+            HttpError::TlsProtocolError
         })?;
         let protocol = WireProtocol::from_alpn(tls.get_ref().1.alpn_protocol());
         handshake(protocol, tls, connect_timeout).await?
@@ -189,8 +184,8 @@ async fn send_request(
 
     let res = tokio::time::timeout(first_byte_timeout, sender.send_request(req))
         .await
-        .map_err(|_| ErrorCode::ConnectionReadTimeout)?
-        .map_err(ErrorCode::from_hyper_request_error)?;
+        .map_err(|_| HttpError::ConnectionReadTimeout)?
+        .map_err(HttpError::from)?;
 
     let res = res.map(|incoming| IncomingResponseBody {
         incoming,
@@ -215,7 +210,7 @@ fn origin_form(uri: &http::Uri) -> http::Uri {
         .expect("comes from valid request")
 }
 
-type RequestBody = UnsyncBoxBody<Bytes, ErrorCode>;
+type RequestBody = WasiBody;
 
 enum Sender {
     Http1(hyper::client::conn::http1::SendRequest<RequestBody>),
@@ -245,7 +240,7 @@ async fn handshake<S>(
     protocol: WireProtocol,
     stream: S,
     connect_timeout: Duration,
-) -> Result<(Sender, BoxFuture<'static, Result<(), ErrorCode>>), ErrorCode>
+) -> Result<(Sender, BoxFuture<'static, Result<(), HttpError>>), HttpError>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
 {
@@ -271,21 +266,21 @@ where
     }
 }
 
-async fn await_handshake<F, T>(connect_timeout: Duration, handshake: F) -> Result<T, ErrorCode>
+async fn await_handshake<F, T>(connect_timeout: Duration, handshake: F) -> Result<T, HttpError>
 where
     F: Future<Output = hyper::Result<T>>,
 {
     tokio::time::timeout(connect_timeout, handshake)
         .await
-        .map_err(|_| ErrorCode::ConnectionTimeout)?
-        .map_err(ErrorCode::from_hyper_request_error)
+        .map_err(|_| HttpError::ConnectionTimeout)?
+        .map_err(HttpError::from)
 }
 
 /// The hyper connection must be driven concurrently with `sender.send_request`,
 /// otherwise the request never reaches the wire. Spawn the connection on the
 /// tokio runtime now, and forward its result via a channel so the caller can
 /// still observe completion / errors.
-fn spawn_connection<C>(conn: C) -> BoxFuture<'static, Result<(), ErrorCode>>
+fn spawn_connection<C>(conn: C) -> BoxFuture<'static, Result<(), HttpError>>
 where
     C: Future<Output = hyper::Result<()>> + Send + 'static,
 {
@@ -297,25 +292,21 @@ where
     Box::pin(async move { rx.await.unwrap_or(Ok(())) })
 }
 
-fn from_hyper_response_error(err: hyper::Error) -> ErrorCode {
-    use core::error::Error as _;
+fn from_hyper_response_error(err: hyper::Error) -> HttpError {
     if err.is_timeout() {
-        return ErrorCode::HttpResponseTimeout;
+        return HttpError::HttpResponseTimeout;
     }
-    if let Some(cause) = err.source()
-        && let Some(err) = cause.downcast_ref::<ErrorCode>()
-    {
-        return err.clone();
-    }
-    warn_log!("hyper response error: {err:?}");
-    ErrorCode::HttpProtocolError
+    // Anything else travels as the hyper error itself: `error_to_p3` unwraps a
+    // `wasi:http` error out of its source before rendering, so recovering one
+    // here would only duplicate that.
+    HttpError::Hyper(err)
 }
 
-fn dns_error(rcode: String, info_code: u16) -> ErrorCode {
-    ErrorCode::DnsError(DnsErrorPayload {
+fn dns_error(rcode: String, info_code: u16) -> HttpError {
+    HttpError::DnsError {
         rcode: Some(rcode),
         info_code: Some(info_code),
-    })
+    }
 }
 
 struct IncomingResponseBody {
@@ -325,7 +316,7 @@ struct IncomingResponseBody {
 
 impl http_body::Body for IncomingResponseBody {
     type Data = <hyper::body::Incoming as http_body::Body>::Data;
-    type Error = ErrorCode;
+    type Error = HttpError;
 
     fn poll_frame(
         mut self: std::pin::Pin<&mut Self>,
@@ -341,7 +332,7 @@ impl http_body::Body for IncomingResponseBody {
             }
             Poll::Pending => match self.timeout.poll_tick(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(_) => Poll::Ready(Some(Err(ErrorCode::ConnectionReadTimeout))),
+                Poll::Ready(_) => Poll::Ready(Some(Err(HttpError::ConnectionReadTimeout))),
             },
         }
     }

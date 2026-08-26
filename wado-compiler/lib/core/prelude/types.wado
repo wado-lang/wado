@@ -401,6 +401,12 @@ impl AsyncCall<T> {
     pub fn cancel(&self) {
         let handle = self.__cm_packed >> 4;
         if handle != 0 {
+            // A synchronous `subtask.cancel` traps on a waitable still in a
+            // set, and `join` is a documented step before `cancel` here. The
+            // CM's `waitable.join` removes from any set before adding to the
+            // one given, so passing none is an unconditional "leave the set"
+            // whether or not the caller ever joined.
+            builtin::waitable_join(handle, 0);
             let raw = handle as Subtask;
             raw.cancel();
             raw.drop();

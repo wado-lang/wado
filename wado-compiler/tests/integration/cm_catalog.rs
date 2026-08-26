@@ -285,7 +285,7 @@ fn cases() -> Vec<Case> {
             "id-map-u32-string",
             Val::Map(vec![
                 (Val::U32(7), Val::String("seven".into())),
-                (Val::U32(8), Val::String("".into())),
+                (Val::U32(8), Val::String(String::new())),
             ]),
         ),
         case(
