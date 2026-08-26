@@ -236,13 +236,19 @@ B : 'b' ;
     assert !gen_source(src).contains("$nope"), "the untranslatable body must not be emitted";
 }
 
-test "a lexer action under a Repeat still warns (the replay cannot place it)" {
-    assert unsupported_count(&"lexer grammar L;
+test "a lexer action under a Repeat runs once per iteration" {
+    // The replay probes each iteration match-only before running it with the
+    // action, so an iteration that does not match leaves no trace.
+    let src = &"lexer grammar L;
 options { language = Wado; }
 A : ('a' { lx.set_type(TK_B) })+ ;
 B : 'b' ;
 WS : ' ' -> skip ;
-") == 1, "an action under a repeat must surface UnsupportedAction";
+";
+    assert unsupported_count(src) == 0, "an action under a plain repeat no longer warns";
+    let out = gen_source(src);
+    assert out.contains("rep_probe_"), "each replayed iteration is probed match-only first";
+    assert out.contains("lx.set_type(TK_B);"), "the action is emitted inside the replayed loop";
 }
 
 test "a multi-alt lexer rule runs each alt's top-level action (no warn)" {
@@ -263,11 +269,13 @@ WS : ' ' -> skip ;
 }
 
 test "a rule the replay cannot follow keeps the winning_alt helper" {
-    // The `Repeat` rules out the replay, so alt selection falls back to the
-    // match-only helper and the actions run flat, at the end of the match.
+    // A lookahead-aware repeat restructures the sequence the replay would have
+    // to walk (the loop records where the suffix could start and resumes
+    // there), so alt selection falls back to the match-only helper and the
+    // actions run flat, at the end of the match.
     let src = gen_source(&"lexer grammar L;
 options { language = Wado; }
-A : 'a'+ { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
+A : 'a' ~('b')+ 'c' { lx.set_type(TK_X) } | 'd' { lx.set_type(TK_Y) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ");

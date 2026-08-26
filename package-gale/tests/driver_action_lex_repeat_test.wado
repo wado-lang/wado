@@ -1,0 +1,18 @@
+//! Stage C lexer action under a repeat: the replay probes each iteration
+//! match-only, then runs it with the action, so the action fires exactly once
+//! per iteration of the winning match.
+
+use lr from "./grammars/wado_lex_repeat_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_repeat" },
+    };
+
+test "an action under a repeat runs once per iteration" {
+    let three = lr::parse_s(&"aaab");
+    assert three.ok(), "clean parse";
+    assert three.output == "ac", `three iterations retype B to C, got '${three.output}'`;
+
+    let one = lr::parse_s(&"ab");
+    assert one.ok(), "clean parse";
+    assert one.output == "ab", `one iteration leaves B alone, got '${one.output}'`;
+}

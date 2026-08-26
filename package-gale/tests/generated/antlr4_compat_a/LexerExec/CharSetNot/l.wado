@@ -1125,6 +1125,23 @@ impl Lexer {
 }
 
 fn apply_I_actions(lx: &mut Lexer, start: i32, end: i32) {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() { return; }
+    if (chars[pos] matches { 'a' | 'b' | ' ' | '\n' }) { return; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if (chars[pos] matches { ' ' | '\n' | 'c' | 'd' }) { break rep_0; }
+            pos += 1;
+            if pos > end { break rep_0; }
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
     lx.emit(`I\n`);
 }
 
@@ -1134,14 +1151,14 @@ fn try_I(chars: &List<char>, start: i32) -> i32 {
     if (chars[pos] matches { 'a' | 'b' | ' ' | '\n' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if (chars[pos] matches { ' ' | '\n' | 'c' | 'd' }) { break rep_0; }
+        let rep_saved_1 = pos;
+        rep_1: {
+            if pos >= chars.len() { break rep_1; }
+            if (chars[pos] matches { ' ' | '\n' | 'c' | 'd' }) { break rep_1; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_0;
+        pos = rep_saved_1;
         break;
     }
     return pos;
@@ -1153,14 +1170,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\n' | '\r' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { ' ' | '\n' | '\r' })) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !((chars[pos] matches { ' ' | '\n' | '\r' })) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     return pos;

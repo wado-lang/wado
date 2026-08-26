@@ -27,6 +27,7 @@ use {
     collect_unhandled_lexer_alt_action_ids,
     collect_lexer_predicate_ids,
     vocab_display_names,
+    resolve_ci,
     lexer_grammar_run_action_ids,
     lexer_rule_replayable,
 } from "./lexer_gen.wado";
@@ -406,7 +407,7 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
     let grammar_executes = lexer_grammar_executes_actions(grammar);
     for let rule of &grammar.lexer_rules {
         let executes = lexer_rule_executes_actions(grammar_executes, rule);
-        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
+        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules, resolve_ci(&grammar.options, &rule.options));
         let reason = unhandled_lexer_action_reason(grammar_executes, rule);
         for let mut ai = 0; ai < rule.body.len(); ai += 1 {
             // Every alt's top-level actions run for an executing rule (the

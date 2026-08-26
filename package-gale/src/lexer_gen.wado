@@ -941,26 +941,43 @@ pub fn lexer_rule_executes_actions(grammar_executes: bool, rule: &LexerRule) -> 
 
 /// Whether the action replay can interleave `alt`'s actions with its match, so
 /// each runs at the cursor it was written at. A `Group` is fine — the replay
-/// re-selects the arm that won. A `Repeat` is not: it matches an unknown number
-/// of times, and the non-greedy / lookahead-aware emitters restructure the
-/// sequence around it, so an alt carrying one keeps the flat emit.
-pub fn lexer_alt_replayable(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
-    for let e of &alt.elements {
-        if !lexer_element_replayable(e, all_rules) {
+/// re-selects the arm that won. A plain `Repeat` is too: the replay probes each
+/// iteration match-only before running it with actions, so an iteration that
+/// does not match leaves no trace. A `Repeat` the non-greedy or lookahead-aware
+/// emitters restructure the sequence around is not — those rewrite the sequence
+/// the replay would have to walk, so an alt carrying one keeps the flat emit.
+pub fn lexer_alt_replayable(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool) -> bool {
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let e = &alt.elements[i];
+        if let Repeat(rep) = e {
+            if !lexer_repeat_emit(alt, i, all_rules, ci) matches {
+                PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable
+            } {
+                return false;
+            }
+            if !lexer_element_replayable(&rep.element, all_rules, ci) {
+                return false;
+            }
+            continue;
+        }
+        if !lexer_element_replayable(e, all_rules, ci) {
             return false;
         }
     }
     return true;
 }
 
-fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
+fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool) -> bool {
     return match *elem {
         Literal(_) | CharRange(_) | CharClass(_) | AnyChar => true,
+        // A bare Repeat reached through another element has no alternative to
+        // read a strategy from; the alt-level walk above is where one is
+        // admitted.
         Repeat(_) => false,
-        Not(n) => lexer_element_replayable(&n.element, all_rules),
+        Not(n) => lexer_element_replayable(&n.element, all_rules, ci),
         Group(alts) => {
             for let a of alts {
-                if !lexer_alt_replayable(&a, all_rules) {
+                if !lexer_alt_replayable(&a, all_rules, ci) {
                     return false;
                 }
             }
@@ -972,7 +989,7 @@ fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>) ->
                     return true;
                 }
                 for let a of &f.body {
-                    if !lexer_alt_replayable(a, all_rules) {
+                    if !lexer_alt_replayable(a, all_rules, ci) {
                         return false;
                     }
                 }
@@ -983,9 +1000,9 @@ fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>) ->
     };
 }
 
-pub fn lexer_rule_replayable(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+pub fn lexer_rule_replayable(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
     for let alt of &rule.body {
-        if !lexer_alt_replayable(alt, all_rules) {
+        if !lexer_alt_replayable(alt, all_rules, ci) {
             return false;
         }
     }
@@ -1001,7 +1018,7 @@ fn lexer_rule_executed_action_ids(grammar: &Grammar, grammar_executes: bool, rul
     if !lexer_rule_executes_actions(grammar_executes, rule) {
         return;
     }
-    let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
+    let replays = lexer_rule_replayable(rule, &grammar.lexer_rules, resolve_ci(&grammar.options, &rule.options));
     for let alt of &rule.body {
         collect_lexer_run_action_ids(alt, replays, &grammar.lexer_rules, out);
     }
@@ -1027,11 +1044,13 @@ fn collect_lexer_run_action_ids(alt: &LexerAlternative, replays: bool, all_rules
 }
 
 /// The alternatives `elem` inlines into its enclosing sequence: a `Group`'s
-/// arms, or a non-recursive fragment's body. A `Repeat` / `Not` / rule call
-/// keeps its contents to itself as far as action placement is concerned.
+/// arms, a non-recursive fragment's body, or what a `Repeat` iterates (the
+/// replay runs each iteration's body in place). A `Not` / rule call keeps its
+/// contents to itself as far as action placement is concerned.
 fn inlined_alts_of(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<LexerAlternative> {
     return match *elem {
         Group(alts) => alts,
+        Repeat(rep) => inlined_alts_of(&rep.element, all_rules),
         RuleRef(name) => match find_fragment(all_rules, &name) {
             Some(f) => {
                 if fragment_is_recursive(f, all_rules) {
@@ -1102,7 +1121,7 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool,
             continue;
         }
         let ci = resolve_ci(&grammar.options, &rule.options);
-        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
+        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules, ci);
         // A base op reached from the replayed match carries the effect and
         // stores the char-stream ref in its `LexerView`, as in `try_`. The arm
         // re-selection matches only, so it carries the predicate half.
@@ -2708,7 +2727,7 @@ fn gen_lexer_elem(
                 gen_lexer_alts(w, &alts, all_rules, fail_action, ci, ea, hm, tail, replay);
             }
         },
-        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci, ea, hm),
+        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci, ea, hm, replay),
         Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action, ci, ea, hm),
     }
 }
@@ -2759,14 +2778,16 @@ fn gen_lexer_repeat(
     ci: bool,
     ea: bool,
     hm: bool,
+    replay: bool = false,
 ) {
     let id = w.next_id();
     let label = `rep_${id}`;
+    let break_label = `break ${label}`;
     if let Star = rep.kind {
         w.begin(&"loop");
         w.line(&`let rep_saved_${id} = pos;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm, false, false);
+        gen_lexer_repeat_iteration(w, rep, all_rules, &break_label, ci, ea, hm, replay, id);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_${id};`);
@@ -2774,11 +2795,11 @@ fn gen_lexer_repeat(
         w.end();
     }
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
+        gen_lexer_repeat_iteration(w, rep, all_rules, fail_action, ci, ea, hm, replay, id);
         w.begin(&"loop");
         w.line(&`let rep_saved_${id} = pos;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm, false, false);
+        gen_lexer_repeat_iteration(w, rep, all_rules, &break_label, ci, ea, hm, replay, id + 1);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_${id};`);
@@ -2789,11 +2810,68 @@ fn gen_lexer_repeat(
         w.line(&`let opt_saved_${id} = pos;`);
         w.line(&`let mut opt_ok_${id} = false;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm, false, false);
+        gen_lexer_repeat_iteration(w, rep, all_rules, &break_label, ci, ea, hm, replay, id);
         w.line(&`opt_ok_${id} = true;`);
         w.end();
         w.line(&`if !opt_ok_${id} \{ pos = opt_saved_${id}; \}`);
     }
+}
+
+/// One iteration of a repeat. Off the replay path this is the inner element,
+/// emitted where it stands. On it, an iteration that turns out not to match
+/// must leave no trace, so the inner runs twice: a match-only probe decides
+/// whether the iteration is part of the match, then the same cursor is replayed
+/// with the actions on. Only a body that matches gets to run an action, which
+/// is the same guarantee the winner replay gives a losing alternation arm.
+fn gen_lexer_repeat_iteration(
+    w: &mut CodeWriter,
+    rep: &LexerRepeatElement,
+    all_rules: &List<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+    ea: bool,
+    hm: bool,
+    replay: bool,
+    id: i32,
+) {
+    if !replay {
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
+        return;
+    }
+    if !lexer_element_has_action(&rep.element) {
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
+        // Same bound as the action-carrying form below: the replay stops where
+        // the match did, whatever the match consulted to stop there.
+        w.line(&`if pos > end \{ ${*fail_action}; \}`);
+        return;
+    }
+    let probe = `rep_probe_${id}`;
+    w.line(&`let ${probe}_saved = pos;`);
+    w.line(&`let mut ${probe}_ok = false;`);
+    w.begin(&`${probe}:`);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break ${probe}`, ci, ea, hm, false, false);
+    w.line(&`${probe}_ok = true;`);
+    w.end();
+    // The winner's extent bounds the replay: an iteration reaching past `end`
+    // is not part of the match this replay is placing actions in, however the
+    // match pass came to stop there (a predicate it evaluated and the replay
+    // does not, for one).
+    w.line(&`if !${probe}_ok || pos > end \{ pos = ${probe}_saved; ${*fail_action}; \}`);
+    w.line(&`pos = ${probe}_saved;`);
+    gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, true);
+}
+
+/// Whether `elem` carries an action anywhere inside it — the only reason a
+/// replayed iteration needs its match-only probe.
+fn lexer_element_has_action(elem: &LexerElement) -> bool {
+    return match *elem {
+        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_action(a) || a.elements.iter_ref().any(
+            |e: &LexerElement| lexer_element_has_action(e),
+        )),
+        Repeat(rep) => lexer_element_has_action(&rep.element),
+        Not(n) => lexer_element_has_action(&n.element),
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar | RuleRef(_) => false,
+    };
 }
 
 fn gen_lexer_non_greedy_repeat(

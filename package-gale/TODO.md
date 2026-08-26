@@ -39,9 +39,9 @@ Design in [`action.md`](./action.md). The largest remaining block, and a hard pr
 
 Work the entries in the order below. Each states the symptom and how it was reproduced; the design for all of them is in `action.md`.
 
-### Lexer actions under a `Repeat`
+### Lexer actions under a restructured `Repeat`
 
-`A : ( 'a' { lx.set_channel(1); } )+ ;` warns. The action replay places each action at the cursor it was written at, covering mid-element and nested-group placement, but a `Repeat` matches an unknown number of times and the non-greedy / lookahead-aware emitters restructure the sequence around it. An alt carrying one keeps the flat emit: top-level actions run at the end of the match, anything nested inside warns.
+A plain repeat replays its body once per iteration. A repeat the non-greedy or lookahead-aware emitter restructures the sequence around does not: those rewrite the sequence the replay would walk (the loop records where the suffix could start and resumes there), so an alt carrying one keeps the flat emit — its top-level actions run at the end of the match and anything nested inside warns. `A : 'a' ~('b')+ 'c' { act } | 'd' ;` is the shape.
 
 ### The rest of the surface
 
