@@ -555,9 +555,9 @@ fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
     let mut number = 0;
     if c matches { '-' | '+' | '*' } {
         p += 1;
-    } else if is_digit(c) {
+    } else if c.is_ascii_digit() {
         let mut q = p;
-        while q < len && is_digit(chars[q]) {
+        while q < len && chars[q].is_ascii_digit() {
             number = number * 10 + (chars[q] as i32 - '0' as i32);
             q += 1;
         }
@@ -935,10 +935,6 @@ fn cells_to_nodes(cells: &List<String>, ncol: i32, refs: &RefTable) -> List<List
 
 fn is_blank(line: &String) -> bool {
     return line.trim().len() == 0;
-}
-
-fn is_digit(c: char) -> bool {
-    return c matches { '0'..='9' };
 }
 
 fn is_ascii_alnum(c: char) -> bool {

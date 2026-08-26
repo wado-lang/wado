@@ -45,9 +45,9 @@ pub fn tokenize_java(body: &String) -> Result<List<JToken>, String> {
             i = j;
             continue;
         }
-        if c >= '0' && c <= '9' {
+        if c.is_ascii_digit() {
             let mut j = i + 1;
-            while j < n && chars[j] >= '0' && chars[j] <= '9' {
+            while j < n && chars[j].is_ascii_digit() {
                 j += 1;
             }
             out.push(JToken::Int(slice(&chars, i, j)));
