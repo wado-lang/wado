@@ -200,10 +200,8 @@ fix to conform; none should be preserved.
   goes; nothing else is the storage itself, since `&mut` of any other place
   re-boxes what it names — a capture and a `&mut *p` reborrow included.
   `variant` is exempt from the borrow-site refusal because mutation through its
-  payload lands, so a whole-value write is refused where the borrow is stored,
-  and written back where it is passed — through a branch, a closure body, or a
-  type parameter alike, and reading a rewritten call's callee and each of its
-  arguments in source order so a preceding one's write is not read past.
+  payload lands. A rewritten call reads its callee and each of its arguments in
+  source order, so a preceding one's write is not read past.
 
   Both halves follow the borrow, not its spelling: a variable bound to one
   carries it to whatever sink it reaches, and a whole-value write names its
