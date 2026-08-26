@@ -870,7 +870,13 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(&self, row: i32, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
         if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
             return String::new();
         }
@@ -1852,6 +1858,8 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             let for_ = _parse_for(p, follow);
         } else if grp_kind == TK_IF {
             let if_ = p.expect(TK_IF, &EMPTY_SYNC);
+        } else {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_1);
         }
         return vals;
     }
@@ -1878,7 +1886,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     p.no_viable(
         "no alternative of continue matches",
         p.peek_span(),
-        &SYNC_1,
+        &SYNC_2,
     );
     return vals;
 }
@@ -2040,7 +2048,8 @@ fn _kind_set_1(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_BREAK];
-global SYNC_1: List<i32> = [TK_BREAK, TK_FOR, TK_IF];
+global SYNC_1: List<i32> = [TK_FOR, TK_IF];
+global SYNC_2: List<i32> = [TK_BREAK, TK_FOR, TK_IF];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_FOR]];
 

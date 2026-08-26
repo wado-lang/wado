@@ -870,7 +870,13 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(&self, row: i32, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
         if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
             return String::new();
         }
@@ -1726,7 +1732,7 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         } else if p.peek_kind() == TK_NL && (p.la(2) != TK_NL) {
             let nl = p.expect(TK_NL, &EMPTY_SYNC);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_1);
         }
     }
     return;
@@ -1833,6 +1839,7 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_NL];
+global SYNC_1: List<i32> = [TK_LIT_S, TK_NL, TK_X];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_S, TK_NL, TK_X]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_EOF]];

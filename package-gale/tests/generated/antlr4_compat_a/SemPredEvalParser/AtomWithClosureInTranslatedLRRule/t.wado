@@ -870,7 +870,13 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(&self, row: i32, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
         if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
             return String::new();
         }
@@ -1639,6 +1645,8 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, _p:
             _plus_first = false;
             let lit_b = p.expect(TK_LIT_B, &EMPTY_SYNC);
         }
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
     }
     loop {
         if p.recovering { break; }

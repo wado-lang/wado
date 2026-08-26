@@ -870,7 +870,13 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(&self, row: i32, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
         if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
             return String::new();
         }
@@ -1736,6 +1742,8 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let lit_if = p.expect(TK_LIT_IF, &EMPTY_SYNC);
     } else if grp_kind == TK_LIT_A {
         let executable_statement = _parse_executable_statement(p, follow);
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_3);
     }
     return;
 }
@@ -1927,6 +1935,7 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LIT_A];
 global SYNC_1: List<i32> = [TK_LIT_A, TK_LIT_ELSE, TK_LIT_END];
 global SYNC_2: List<i32> = [TK_LIT_IF];
+global SYNC_3: List<i32> = [TK_LIT_A, TK_LIT_THEN];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_A, TK_LIT_THEN]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_THEN]];
