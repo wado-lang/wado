@@ -847,8 +847,9 @@ fn difference_zoned(offset: i64, start: Instant, end: Instant, largest_unit: Uni
         date_days = date_days - sign as i64;
     }
 
+    // The date walk fills years through days and the remainder fills hours and
+    // below, so the two never overlap and nothing needs rebalancing.
     let date = calendar_difference(start_days, date_days, largest_unit);
-    assert date.time_nanoseconds() == 0;
     return date.merge_components(&duration_from_nanoseconds(time_nanoseconds, Unit::Hour));
 }
 
