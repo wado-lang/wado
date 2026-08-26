@@ -264,11 +264,36 @@ epoch cutoff restricts no expression, and choosing it at compile time is fine.
 What the cutoff does cost is a wrong answer rather than a missing one: in a
 from-2000 build `Asia/Tokyo` at 1950-06-15 reads +09:00, where the full database
 has +10:00 for the 1948-51 JDT era. Whether a pre-cutoff instant should answer
-that way, or trap, is open — as is which year, and whether ICU4X's zone data is
-a full transition history at all or only the offsets its formatting needs. That
-last one is unverified: the `bdp-spike` datagen pulls `parse-zoneinfo`, so
-ICU4X's exporter can emit zone markers, but the spike never generated or
-measured them.
+that way, or trap, is open, as is which year.
+
+#### ICU4X supplies the identifiers, not the offsets
+
+Measured against `icu_time` 2.3, which carries four markers and no more:
+
+| marker                              |  baked | serves                          |
+| ----------------------------------- | -----: | ------------------------------- |
+| `TimezoneIdentifiersIanaCoreV1`     | 9.5 KB | IANA ↔ BCP-47                   |
+| `TimezoneIdentifiersIanaExtendedV1` | 9.7 KB | aliases, canonicalization       |
+| `TimezoneIdentifiersWindowsV1`      | 8.6 KB | Windows names; nothing here     |
+| `TimezonePeriodsV1`                 | 6.8 KB | a standard/daylight offset pair |
+
+6.8 KB for every zone on earth is ~15 bytes each, against 283 bytes for
+`America/New_York` alone in a from-2000 TZif. It is not a transition table and
+cannot be one at that size. Querying it confirms the shape: `America/New_York`
+answers `standard=-05:00 daylight=-04:00` at both 2005-06-15 and 2005-01-15 —
+the pair a formatter needs to pick a display name, never which one is in effect.
+`utc_offset(instant)` is not derivable from it. ICU4X says as much itself: the
+API is `#[deprecated(since = "2.1.0", note = "this API is a bad approximation of
+a time zone database")]`. Its history is no better than a truncated tzdb either
+— `Asia/Tokyo` at 1950 reads +09:00, and `Europe/London` reports BST as
+_standard_ +01:00.
+
+So the dedupe argument holds for identifiers and for the mechanism, and not for
+the offsets: `core:icu` is where the IANA canonicalization comes from
+(`Asia/Calcutta` → `Asia/Kolkata`, `US/Eastern` → `America/New_York`) and where a
+data component would be hosted, but the transition data has to be tzdb's
+whatever hosts it. Open: whether that rides the same blob as one more marker set
+or arrives beside it.
 
 #### DST disambiguation
 

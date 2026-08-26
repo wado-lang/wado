@@ -346,11 +346,12 @@ dedup following genuine runtime data dependencies rather than taxonomy.
       any handle-versus-lookup difference.
 - [ ] Where the facade's date/time formatting meets
       [`core:temporal`](./wep-2026-06-05-core-temporal.md), which takes its zone
-      data from here rather than bundling a tzdb of its own — WASI's `timezone`
-      answers only for the host's own zone, so it cannot serve one. Open:
-      whether ICU4X's zone markers carry a full transition history or only the
-      offsets formatting needs, and what truncating them to a start epoch costs
-      (tzdata itself halves from 331 KiB to 126 KiB at 2000).
+      IANA canonicalization from here — WASI's `timezone` answers only for the
+      host's own zone, so it cannot serve one, and ICU4X's own zone data stops
+      at identifiers: `TimezonePeriodsV1` is 6.8 KB for every zone and holds a
+      standard/daylight pair, not the transitions that say which is in effect.
+      Open: whether the tzdb the offsets do need rides this facade's data
+      component as one more marker set, or arrives beside it.
 - [ ] The full capability inventory, and which of its data is locale-bearing.
       The first cut covers what the spikes measured — locale identity,
       normalization, case mapping, character properties, segmentation,
