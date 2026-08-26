@@ -58,6 +58,13 @@ pub variant JStmt {
     /// `lhs op rhs;`, incl. compound `+=`.
     Assign(JAssign),
     Return(Option<JExpr>),
+    /// `assert cond;` / `assert cond : "message";`
+    Assert(JAssert),
+}
+
+pub struct JAssert {
+    pub cond: JExpr,
+    pub message: Option<String> = null,
 }
 
 pub struct JLocal {
@@ -83,6 +90,25 @@ pub fn parse_java_stmts(tokens: &List<JToken>) -> Result<List<JStmt>, String> {
 }
 
 fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
+    if ident_at(tokens, *pos) matches { Some("assert") } {
+        *pos += 1;
+        let cond = parse_or(tokens, pos)?;
+        // `assert c : msg;` — Java's detail message. Wado's takes a string, so
+        // a literal one carries over and anything else is dropped rather than
+        // translated into a value the assert cannot render.
+        let mut msg: Option<String> = null;
+        if punct_is(tokens, *pos, &":") {
+            *pos += 1;
+            if let Some(s) = string_at(tokens, *pos) {
+                msg = Option::Some(s);
+                *pos += 1;
+            } else {
+                let _ = parse_or(tokens, pos)?;
+            }
+        }
+        expect_semi(tokens, pos)?;
+        return Result::Ok(JStmt::Assert(JAssert { cond, message: msg }));
+    }
     if ident_at(tokens, *pos) matches { Some("return") } {
         *pos += 1;
         let mut val: Option<JExpr> = null;
@@ -385,6 +411,16 @@ pub fn ident_at(tokens: &List<JToken>, pos: i32) -> Option<String> {
     }
     return match &tokens[pos] {
         Ident(name) => Option::Some(*name),
+        _ => null,
+    };
+}
+
+fn string_at(tokens: &List<JToken>, pos: i32) -> Option<String> {
+    if pos < 0 || pos >= tokens.len() {
+        return null;
+    }
+    return match &tokens[pos] {
+        Str(s) => Option::Some(*s),
         _ => null,
     };
 }

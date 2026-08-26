@@ -50,16 +50,26 @@ pub fn translate_action(
     bindings: &List<[bool, String, String]>,
     grammar_name: &String,
     member_methods: &List<String>,
+    expected: &String = &NO_EXPECTED,
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
         Java => {
-            let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
+            let env = JEnv {
+                this_bind: PARSER_HANDLE,
+                grammar: *grammar_name,
+                methods: *member_methods,
+                expected: *expected,
+            };
             translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &env);
         },
         Other(name) => Result::Err(`unsupported action language '${*name}' for action '${*body}'`),
     };
 }
+
+/// The expected-token set of a site codegen cannot answer for: a body reading
+/// one there is reported rather than given a set that is not ANTLR's.
+global NO_EXPECTED: String = "";
 
 /// Translate a semantic-predicate body (`{ cond }?`) to a Wado boolean
 /// expression, dispatching on the action language as `translate_action` does.

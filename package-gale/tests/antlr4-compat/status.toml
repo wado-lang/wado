@@ -111,12 +111,12 @@
 
 # Stage C — action-print output-compare (result.output vs descriptor [output]).
 # These execute action bodies but do not yet match; each names the gap.
+# Both entries below are held by something other than action execution —
+# ambiguity reporting and error recovery — so neither is closed by Stage C
+# work; they are here because this is the axis whose comparison they fail.
 [stage_c_todo]
 "FullContextParsing/AmbiguityNoLoop" = "the grammar is ambiguous and its `@init` asks for LL_EXACT_AMBIG_DETECTION; Gale commits to an alternative without reporting the ambiguity, so the action on the reported alt never runs."
 "ParseTrees/ExtraTokensAndAltLabels" = "recovery diverges, not just rendering: ANTLR4 deletes both extraneous `?` and keeps `(v ? a)`, Gale abandons `v` and prints `(s ${ v)`. The `<skip>` marker is already normalised away here, so this is the recovery decision itself."
-"ParserErrors/LL1ErrorInfo" = "the `@init` prints `getExpectedTokens().toString(getVocabulary())`; neither the expected-token set nor the vocabulary is in the recognizer API java2wado maps, so the body is reported and dropped."
-"LeftRecursion/MultipleAlternativesWithCommonLabel_4" = "common alt label across LR alternatives with a return value the print reads; label-to-vals wiring incomplete for this shape."
-"ParseTrees/TokenAndRuleContextString" = "the action prints getRuleInvocationStack() ([a, s]); that recognizer accessor is not in the API java2wado maps, so the body is reported and dropped. Same family as the LL1ErrorInfo entry above."
 
 # Stage C — descriptors whose [output] is not a property of the grammar,
 # so no amount of Stage C work can make Gale reproduce it.

@@ -143,11 +143,29 @@ pub fn rule_span_hi_local(field: &String) -> String {
     return `_span_hi_${*field}`;
 }
 
+/// The local a labeled rule call captures before itself so `$<label>.ctx` can
+/// render that invocation's own node: the builder row the callee opens at.
+/// Emitted only where an action reads it (`action_reads_rule_ctx`).
+pub fn rule_node_local(field: &String) -> String {
+    return `_node_${*field}`;
+}
+
 /// Whether `body` reads `$<label>.text` for the rule-call binding `dedup_base`,
 /// the one reference that needs the call's token range captured.
 pub fn action_reads_rule_span(body: &String, dedup_base: &String) -> bool {
     for let r of &find_attr_refs(body) {
         if r.member matches { Some("text") } && binding_name(&r.name) == *dedup_base {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether `body` reads `$<label>.ctx` for the rule-call binding `dedup_base`,
+/// the one reference that needs the call's builder row captured.
+pub fn action_reads_rule_ctx(body: &String, dedup_base: &String) -> bool {
+    for let r of &find_attr_refs(body) {
+        if r.member matches { Some("ctx") } && binding_name(&r.name) == *dedup_base {
             return true;
         }
     }
@@ -343,7 +361,7 @@ pub fn resolve_lexer_attr_ref(text: &String) -> Result<String, String> {
 
 /// The local a call site binds a rule / label / token result to, matching
 /// `RuleRefElement` / `LabelElement` field-name derivation.
-fn binding_name(name: &String) -> String {
+pub fn binding_name(name: &String) -> String {
     return escape_ident(&to_snake_case(name));
 }
 
@@ -390,6 +408,13 @@ fn rule_member_expr(
         return Result::Ok(
             `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,
         );
+    }
+    // `.ctx` is the invocation's own node, rendered. ANTLR's `$x.ctx` is the
+    // context object and only `toStringTree` is modelled on it, so the
+    // reference resolves straight to the rendering — java2wado drops the
+    // `.toStringTree(this)` call that sits on top of it.
+    if let Some(m) = &r.member && *m == "ctx" {
+        return Result::Ok(`${*handle}.rule_tree_at(${rule_node_local(&binding)})`);
     }
     let target = match rules.iter_ref().find(|c| c.name == r.rule_name) {
         Some(t) => t,

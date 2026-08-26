@@ -26,6 +26,7 @@ use {
     lexer_grammar_executes_actions,
     collect_unhandled_lexer_alt_action_ids,
     collect_lexer_predicate_ids,
+    vocab_display_names,
     lexer_grammar_run_action_ids,
     lexer_rule_replayable,
 } from "./lexer_gen.wado";
@@ -165,6 +166,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_token_kinds(token_kinds);
+    ctx.set_vocab_names(vocab_display_names(&grammar.lexer_rules, &lit_tokens, ctx.token_kind_names()));
     ctx.set_trace(options.trace);
     ctx.set_fragment_entries(options.fragment_entries);
     ctx.set_action_language(&grammar.action_language);

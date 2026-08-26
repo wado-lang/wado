@@ -222,6 +222,12 @@ pub struct GenContext {
     /// alt-initial predicate inside one selects an alternative rather than
     /// guarding a sequence.
     multi_alt_group_depth: i32,
+    /// Vocabulary display names by kind id (`vocab_display_names`), for
+    /// rendering an expected-token set the way ANTLR4's does.
+    vocab_names: List<String>,
+    /// The rendered expected-token set at the action site being emitted, or
+    /// empty where codegen cannot answer — a body reading it there is reported.
+    expected_names: String,
     /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
     /// fns: `[action_id, body]`. The dispatch calls `pred_<id>(p)` instead of
     /// inlining the condition, so the same fn is callable from every decision
@@ -287,6 +293,8 @@ impl GenContext {
             action_seen: [],
             predicate_gated: [],
             multi_alt_group_depth: 0,
+            vocab_names: [],
+            expected_names: "",
             predicate_fns: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
@@ -357,6 +365,12 @@ impl GenContext {
     /// probe on its previous answer. The set over-approximates (a union over
     /// every call site), so conjoining it can only move a verdict from
     /// "exit" to "iterate": a token it excludes cannot continue any caller.
+    /// Whether the FOLLOW fixed point converged exactly, so a per-rule set is
+    /// the real one rather than an over-approximation.
+    pub fn rule_follow_is_exact(&self) -> bool {
+        return self.rule_follow_exact;
+    }
+
     pub fn rule_follow_for_probe(&self, rule_name: &String) -> List<String> {
         if !self.rule_follow_exact || !self.rule_follow_kinds.contains_key(*rule_name) {
             return [];
@@ -654,6 +668,17 @@ impl GenContext {
         return self.multi_alt_group_depth > 0;
     }
 
+    /// The expected-token set the action about to be emitted would see, as
+    /// `render_expected` rendered it. Set around a site codegen can answer for
+    /// (a rule prequel), cleared everywhere else.
+    pub fn set_expected_names(&mut self, rendered: String) {
+        self.expected_names = rendered;
+    }
+
+    pub fn expected_names(&self) -> &String with stores[self] {
+        return &self.expected_names;
+    }
+
     /// Record a prediction-strategy diagnostic, deduped on `(owner, message)`
     /// so a decision site lowering revisits — the parse and scan passes lower
     /// the same alts twice — is reported once. `message` already encodes
@@ -718,6 +743,44 @@ impl GenContext {
     pub fn set_token_kinds(&mut self, kinds: TokenKinds) {
         self.token_kinds = kinds;
         self.kind_rank = [];
+    }
+
+    /// The `TK_*` names by kind id, the order a vocabulary table is built in.
+    pub fn token_kind_names(&self) -> &List<String> with stores[self] {
+        return &self.token_kinds.names;
+    }
+
+    /// Install the vocabulary display names (`vocab_display_names`), indexed by
+    /// kind id, that `render_expected` renders an expected set through.
+    pub fn set_vocab_names(&mut self, names: List<String>) {
+        self.vocab_names = names;
+    }
+
+    /// ANTLR4's `getExpectedTokens().toString(getVocabulary())` for `kinds`:
+    /// the display names in kind order, `{'a', 'b'}`. Empty when the
+    /// vocabulary is not installed, which is the signal to report a body
+    /// reading it rather than print a wrong set.
+    pub fn render_expected(&mut self, kinds: &List<String>) -> String {
+        if self.vocab_names.is_empty() {
+            return String::new();
+        }
+        let mut ids: List<i32> = [];
+        for let k of kinds {
+            let id = self.token_kinds.intern(k);
+            if id < self.vocab_names.len() && !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        let sorted = ids.sorted();
+        let mut out = String::from("{");
+        for let mut i = 0; i < sorted.len(); i += 1 {
+            if i > 0 {
+                out.push_str(&", ");
+            }
+            out.push_str(&self.vocab_names[sorted[i]]);
+        }
+        out.push_str(&"}");
+        return out;
     }
 
     /// Kind id of the EOF terminal (`TK_EOF`). Always present in a production

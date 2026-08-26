@@ -88,7 +88,13 @@ use {
     rule_alt_scan_body,
 } from "./gir.wado";
 
-use { vals_struct_name, rule_threads_args, rule_span_lo_local, rule_span_hi_local } from "./action_translate.wado";
+use {
+    vals_struct_name,
+    rule_threads_args,
+    rule_node_local,
+    rule_span_lo_local,
+    rule_span_hi_local,
+} from "./action_translate.wado";
 
 use {
     NO_ACTIONS,
@@ -117,6 +123,7 @@ use {
     mark_alt_gate_predicates,
     mark_gated_predicates,
     result_type_carries_vals,
+    rule_call_ctx_field,
     rule_call_span_field,
     rule_emits_vals,
     rule_has_emittable_actions,
@@ -2261,7 +2268,7 @@ fn gen_parse_fn_simple_named(
     emit_span_capture(w, rule, ctx);
     if ctx.emit_actions() {
         if let Some(a) = &rule.init_action {
-            gen_action_body(w, a, ctx);
+            gen_prequel_action(w, a, &rule.name, true, ctx);
         }
     }
     let body = rule_alt_body(lowered_rule, 0).unwrap();
@@ -2571,7 +2578,7 @@ fn gen_parse_fn_named(
         // preserves it.
         if ctx.emit_actions() {
             if let Some(a) = &rule.init_action {
-                gen_action_body(w, a, ctx);
+                gen_prequel_action(w, a, &rule.name, true, ctx);
             }
         }
         if has_overlaps {
@@ -2635,7 +2642,7 @@ fn gen_alt_body(
 
     if ctx.emit_actions() {
         if let Some(a) = after_action {
-            gen_action_body(w, a, ctx);
+            gen_prequel_action(w, a, &ctx.current_rule_name(), false, ctx);
         }
     }
 
@@ -2821,6 +2828,9 @@ fn gen_alt_elements(
             if let Some(f) = &span_field {
                 w.line(&`${rule_span_lo_local(f)} = p.pos;`);
             }
+            if let Some(f) = rule_call_ctx_field(op, actions, ctx) {
+                w.line(&`${rule_node_local(&f)} = p.b.checkpoint();`);
+            }
             gen_op_leaf(w, op, ctx, &mut name_counts, &sync);
             if let Some(f) = &span_field {
                 w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
@@ -2882,6 +2892,9 @@ fn gen_elements_with_non_greedy(
             let span_field = rule_call_span_field(op, actions, ctx);
             if let Some(f) = &span_field {
                 w.line(&`${rule_span_lo_local(f)} = p.pos;`);
+            }
+            if let Some(f) = rule_call_ctx_field(op, actions, ctx) {
+                w.line(&`${rule_node_local(&f)} = p.b.checkpoint();`);
             }
             gen_op_leaf(w, op, ctx, name_counts, &sync);
             if let Some(f) = &span_field {
@@ -3242,7 +3255,7 @@ fn gen_lr_fn(
     if ctx.emit_actions() {
         emit_arg_stores(w, rule, ctx);
         if let Some(a) = &rule.init_action {
-            gen_action_body(w, a, ctx);
+            gen_prequel_action(w, a, &rule.name, true, ctx);
         }
     }
     // The atom seeds the accumulator (the left operand's value); each LR
@@ -3331,7 +3344,7 @@ fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool,
         // atom call), so reassign rather than redeclare.
         w.line(&"vals = _lr_acc;");
         if let Some(a) = &rule.after_action {
-            gen_action_body(w, a, ctx);
+            gen_prequel_action(w, a, &rule.name, false, ctx);
         }
         w.line(&"return vals;");
     } else if emits_vals {
@@ -3339,7 +3352,7 @@ fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool,
     } else {
         if let Some(a) = &rule.after_action {
             if ctx.emit_actions() {
-                gen_action_body(w, a, ctx);
+                gen_prequel_action(w, a, &rule.name, false, ctx);
             }
         }
         w.line(&"return;");
@@ -4345,6 +4358,35 @@ fn gen_op_transparent_optional_with_cond(
     gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx);
     leave_group_alt_bindings(&outer, &alt.actions, ctx);
     w.end();
+}
+
+/// Emit a rule prequel (`@init` / `@after`) with the expected-token set its
+/// body may print in scope: at rule entry that is what the rule can start with
+/// (plus what may follow it when it can match nothing), at exit what may follow
+/// it. Gale answers this statically, so a rule whose FOLLOW is not exact leaves
+/// the set empty and a body reading it is reported instead of printing a set
+/// that is not the one ANTLR would.
+fn gen_prequel_action(w: &mut CodeWriter, src: &ActionSource, rule_name: &String, at_entry: bool, ctx: &mut GenContext) {
+    ctx.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
+    gen_action_body(w, src, ctx);
+    ctx.set_expected_names(String::new());
+}
+
+fn prequel_expected_names(rule_name: &String, at_entry: bool, ctx: &mut GenContext) -> String {
+    if !ctx.rule_follow_is_exact() {
+        return String::new();
+    }
+    let follow = ctx.rule_follow_for_probe(rule_name);
+    if !at_entry {
+        return ctx.render_expected(&follow);
+    }
+    let mut visiting: List<String> = [];
+    let first = ctx.first_of_rule(rule_name, &mut visiting);
+    let mut nv: List<String> = [];
+    if ctx.rule_is_nullable(rule_name, &mut nv) {
+        return ctx.render_expected(&union_kind_arrays(&first, &follow));
+    }
+    return ctx.render_expected(&first);
 }
 
 /// Whether any of `alts` carries an alt-initial predicate the dispatch gates on.

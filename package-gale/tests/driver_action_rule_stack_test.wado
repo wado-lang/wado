@@ -1,0 +1,14 @@
+//! Stage C recognizer accessors: the rule-invocation stack (`p.rule_stack()`,
+//! ANTLR's `getRuleInvocationStack()`) and `$x.ctx` — the node one labeled rule
+//! call built, rendered.
+
+use rs from "./grammars/wado_rule_stack.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_rule_stack" },
+    };
+
+test "the rule stack is the open rules, innermost first" {
+    let r = rs::parse_s(&"x");
+    assert r.ok(), "clean parse";
+    assert r.output == "[a, s]\n(a x)", `output: '${r.output}'`;
+}

@@ -15,8 +15,10 @@ use {
 } from "./prediction.wado";
 use {
     RULE_START_TOK_LOCAL,
+    action_reads_rule_ctx,
     action_reads_rule_span,
     field_in_vals,
+    rule_node_local,
     rule_returns_vals,
     rule_span_hi_local,
     rule_span_lo_local,
@@ -410,19 +412,74 @@ pub fn rule_call_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext
             return Option::Some(rc.field);
         }
     }
+    if prequel_reads(ctx, &rc.dedup_base, false) {
+        return Option::Some(rc.field);
+    }
     return null;
 }
 
-/// Declare the token-range locals for every labeled rule call in this scope
-/// whose text an action reads, before any of them is assigned. Declaring up
-/// front rather than at the call keeps the read in scope wherever the action
-/// sits — including before the call, where the label is not bound yet and the
-/// empty range yields empty text (ANTLR's `$label` is null there).
+/// Whether the enclosing rule's `@init` / `@after` reads `$<base>.text`
+/// (`want_ctx` false) or `$<base>.ctx` (true). A prequel is not in any
+/// alternative's action list, but it runs in the same fn and reads the same
+/// locals, so it decides whether they are captured.
+fn prequel_reads(ctx: &GenContext, base: &String, want_ctx: bool) -> bool {
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return false;
+    }
+    let rule = &ctx.parser_rules()[ridx];
+    for let a of &[rule.init_action, rule.after_action] {
+        if let Some(src) = a {
+            let reads = if want_ctx {
+                action_reads_rule_ctx(&src.text, base);
+            } else {
+                action_reads_rule_span(&src.text, base);
+            };
+            if reads {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// The field of a labeled rule call whose node an action renders (`$x.ctx`), or
+/// `null`. Twin of `rule_call_span_field`, for the builder row rather than the
+/// token range.
+pub fn rule_call_ctx_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
+    if !ctx.emit_actions() {
+        return null;
+    }
+    let rc = match op {
+        RuleCall(r) => *r,
+        _ => {
+            return null;
+        },
+    };
+    for let a of actions {
+        if action_reads_rule_ctx(&a.source.text, &rc.dedup_base) {
+            return Option::Some(rc.field);
+        }
+    }
+    if prequel_reads(ctx, &rc.dedup_base, true) {
+        return Option::Some(rc.field);
+    }
+    return null;
+}
+
+/// Declare the token-range and node locals for every labeled rule call in this
+/// scope whose text or node an action reads, before any of them is assigned.
+/// Declaring up front rather than at the call keeps the read in scope wherever
+/// the action sits — including before the call, where the label is not bound yet
+/// and the empty range yields empty text (ANTLR's `$label` is null there).
 pub fn gen_rule_span_decls(w: &mut CodeWriter, ops: &List<Op>, actions: &List<AltAction>, ctx: &GenContext) {
     for let op of ops {
         if let Some(f) = rule_call_span_field(op, actions, ctx) {
             w.line(&`let mut ${rule_span_lo_local(&f)} = 0;`);
             w.line(&`let mut ${rule_span_hi_local(&f)} = -1;`);
+        }
+        if let Some(f) = rule_call_ctx_field(op, actions, ctx) {
+            w.line(&`let mut ${rule_node_local(&f)} = -1;`);
         }
     }
 }
@@ -913,6 +970,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             ctx.alt_bindings(),
             ctx.grammar_name(),
             ctx.action_member_methods(),
+            ctx.expected_names(),
         );
     };
     return match translated {

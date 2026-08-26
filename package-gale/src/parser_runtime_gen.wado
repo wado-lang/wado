@@ -539,6 +539,28 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
+        // `$x.ctx.toStringTree(this)` — the node one labeled rule call built,
+        // from the builder row captured before that call.
+        let mut frta = FnSpec::new(&"rule_tree_at", api);
+        frta.set_receiver(&"&self");
+        frta.add_param(&"row", &"i32");
+        frta.set_return_type(&"String");
+        frta.emit_begin(w);
+        w.line(&"return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);");
+        w.end();
+        w.blank();
+
+        // `getRuleInvocationStack()` — the rules entered and not yet finished,
+        // innermost first. The tree builder's open nodes already are that stack,
+        // so the recognizer keeps no second copy.
+        let mut frs = FnSpec::new(&"rule_stack", api);
+        frs.set_receiver(&"&self");
+        frs.set_return_type(&"String");
+        frs.emit_begin(w);
+        w.line(&"return self.b.open_rule_names(&RULE_NAMES);");
+        w.end();
+        w.blank();
+
         let mut frstf = FnSpec::new(&"rule_string_tree_final", api);
         frstf.set_receiver(&"&self");
         frstf.set_return_type(&"String");

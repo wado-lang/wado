@@ -874,6 +874,25 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(&self, row: i32, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            out.push_str(&rule_names[self.a[self.open[i]]]);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1477,6 +1496,14 @@ impl Parser {
 
     fn rule_string_tree(&self) -> String {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
     }
 
     fn rule_string_tree_final(&self) -> String {

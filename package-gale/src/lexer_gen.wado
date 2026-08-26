@@ -17,6 +17,7 @@ use {
     LabelElement,
     AltAction,
     find_lexer_rule,
+    lexer_alias_text,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use {
@@ -4502,6 +4503,43 @@ fn gen_lexer_emit_hook(
 fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &String) {
     w.line(&`ts.push_token(${*kind}, ${*start}, ${*end}, triv_lo, ts.trivia_mark());`);
     w.line(&"triv_lo = ts.trivia_mark();");
+}
+
+/// The display names ANTLR4's `Vocabulary` gives the token kinds, indexed by
+/// kind id: a token defined by a single literal prints that literal
+/// (`'hardware'`), every other one its name. This is what
+/// `getExpectedTokens().toString(getVocabulary())` renders through, and it is
+/// deliberately not `token_kind_name`: that one names a *rule* by its name,
+/// which is what Gale's own diagnostics read.
+pub fn vocab_display_names(
+    lexer_rules: &List<LexerRule>,
+    lit_tokens: &List<LitToken>,
+    kind_names: &List<String>,
+) -> List<String> {
+    let mut out: List<String> = [];
+    for let name of kind_names {
+        out.push(vocab_display_name(name, lexer_rules, lit_tokens));
+    }
+    return out;
+}
+
+fn vocab_display_name(kind_name: &String, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
+    for let lit of lit_tokens {
+        if lit.const_name == *kind_name {
+            return `'${lit.text}'`;
+        }
+    }
+    if let Some(rule_name) = kind_name.strip_prefix("TK_") {
+        if let Some(rule) = find_lexer_rule(lexer_rules, &rule_name) {
+            // The alias shape is exactly ANTLR4's `literalNames` entry: a rule
+            // whose whole body is one string literal.
+            if let Some(text) = lexer_alias_text(rule) {
+                return `'${text}'`;
+            }
+        }
+        return rule_name;
+    }
+    return *kind_name;
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
