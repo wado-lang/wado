@@ -1,9 +1,7 @@
 // A `&mut` to a variant field is a detached box, so a whole-value write inside
 // the callee lands in the box rather than the field. The call borrows a temp
-// and stores it back, which makes both the whole-value write and the older
-// payload-mutation idiom land at the place. An element borrow (`&mut xs[i]`)
-// lowers to `&mut *xs.index_ref(i)`, whose write-back needs an `index_assign`
-// this pass does not synthesize yet — see the WEP's D1.
+// and stores it back, which makes both that write and payload mutation through
+// the same borrow land at the place.
 
 variant Payload {
     Text(String),
@@ -18,6 +16,35 @@ struct Bag {
 #[inline("never")]
 fn replace(p: &mut Payload) {
     *p = Payload::Text(`xyz`);
+}
+
+variant Slot<T> {
+    Full(T),
+    Vacant,
+}
+
+struct Crate {
+    slot: Slot<String>,
+}
+
+#[inline("never")]
+fn refill(s: &mut Slot<String>) {
+    *s = Slot::Full(`xyz`);
+}
+
+struct Counter {
+    n: i32,
+}
+
+#[inline("never")]
+fn first(c: &mut Counter) -> i32 {
+    c.n = c.n + 1;
+    return 0;
+}
+
+#[inline("never")]
+fn writes_through_the_other_argument(b: &mut Bag, p: &mut Payload) {
+    b.item = Payload::Text(`via_b`);
 }
 
 #[inline("never")]
@@ -48,6 +75,33 @@ test "an indirect call writes back too" {
     let via: fn(&mut Payload) = replace;
     via(&mut b.item);
     assert b.item matches { Text(t) && t == `xyz` };
+}
+
+// A generic variant is still a `GenericInstance` where the write-back is
+// planned, so the detach test has to recognise one.
+test "a generic variant field writes back too" {
+    let mut c = Crate { slot: Slot::Vacant };
+    refill(&mut c.slot);
+    assert c.slot matches { Full(t) && t == `xyz` };
+}
+
+// The place is spelled twice — read before the call, assigned after — so
+// anything computed inside it runs once, not once per spelling.
+test "the place is evaluated once" {
+    let mut bs: List<Bag> = [Bag { item: Payload::Empty, tick: 0 }];
+    let mut n = Counter { n: 0 };
+    replace(&mut bs[first(&mut n)].item);
+    assert n.n == 1;
+    assert bs[0].item matches { Text(t) && t == `xyz` };
+}
+
+// The temp aliases the place, so storing it back unconditionally would undo a
+// write the callee made through another route to the same place. Only what the
+// callee replaced is stored back.
+test "a write through another route to the place is not undone" {
+    let mut b = Bag { item: Payload::Empty, tick: 0 };
+    writes_through_the_other_argument(&mut b, &mut b.item);
+    assert b.item matches { Text(t) && t == `via_b` };
 }
 
 // A destructuring `let` binds through the borrow rather than keeping it, so it

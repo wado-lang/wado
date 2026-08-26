@@ -7,8 +7,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
@@ -91,19 +91,74 @@ struct WriteBack<'a> {
     escaped: Option<(Span, String)>,
 }
 
+/// A local this pass planted, and the reads of it the rewrite needs.
+struct Temp {
+    index: u32,
+    name: String,
+    type_id: TypeId,
+    span: Span,
+}
+
+impl Temp {
+    fn read(&self) -> TirExpr {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: self.index,
+                name: self.name.clone(),
+            },
+            self.type_id,
+            self.span,
+        )
+    }
+}
+
 impl WriteBack<'_> {
-    fn alloc_local(&mut self, type_id: TypeId) -> u32 {
+    /// Bind `value` to a fresh local. Every temp this pass plants stands in for
+    /// storage its caller still owns, so none of them copy.
+    fn bind(
+        &mut self,
+        prefix: &mut Vec<TirStmt>,
+        kind: &str,
+        value: TirExpr,
+        is_mut: bool,
+    ) -> Temp {
+        assert_eq!(self.locals.len(), self.local_count as usize);
+        let (type_id, span) = (value.type_id, value.span);
         let index = self.local_count;
         self.local_count += 1;
         self.locals.push(TirLocal::synth(index, type_id, true));
-        index
+        let name = format!("__write_back_{kind}{index}");
+        prefix.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index: index,
+                is_mut,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: true,
+            },
+            span,
+        ));
+        Temp {
+            index,
+            name,
+            type_id,
+            span,
+        }
     }
 
-    /// Whether a `&mut` to a place of this type is a detached box. Only a
-    /// `variant` reaches a call; the elaborator refuses the other replace types.
+    /// Whether a `&mut` to a place of this type is a detached box — of the
+    /// replace types only a `variant` gets here, generic or not.
     fn detaches(&self, place_type: TypeId) -> bool {
         let peeled = self.type_table.get_ultimate_base_type(place_type);
-        matches!(self.type_table.get(peeled), ResolvedType::Variant { .. })
+        match self.type_table.get(peeled) {
+            ResolvedType::Variant { .. } => true,
+            ResolvedType::GenericInstance { def, .. } => {
+                self.type_table.variant_template_cases(*def).is_some()
+            }
+            _ => false,
+        }
     }
 
     /// The place a detached `&mut` argument borrows, if this argument is one.
@@ -122,8 +177,44 @@ impl WriteBack<'_> {
         (is_projection && self.detaches(place.type_id)).then_some(place.as_ref())
     }
 
-    /// `{ let t = place; let r = f(&mut t); place = t; r }` — the call keeps its
-    /// position, so a `?` on it still sees the write-back run first.
+    /// Read every step of `place` that is not already a slot into a temp, so
+    /// spelling the place a second time re-runs no side effect.
+    fn hoist_place(&mut self, place: &mut TirExpr, prefix: &mut Vec<TirStmt>) {
+        match &mut place.kind {
+            TirExprKind::FieldAccess { expr, .. }
+            | TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr,
+            } => self.hoist_place(expr, prefix),
+            TirExprKind::Index { expr, index } => {
+                self.hoist_place(expr, prefix);
+                self.hoist_operand(index, prefix);
+            }
+            _ => self.hoist_operand(place, prefix),
+        }
+    }
+
+    /// Bind `expr` to a temp and leave a read of it behind, unless re-reading
+    /// it already costs nothing.
+    fn hoist_operand(&mut self, expr: &mut TirExpr, prefix: &mut Vec<TirStmt>) {
+        if matches!(
+            expr.kind,
+            TirExprKind::Local { .. }
+                | TirExprKind::Capture { .. }
+                | TirExprKind::IntLiteral { .. }
+                | TirExprKind::BoolLiteral(_)
+                | TirExprKind::CharLiteral(_)
+        ) {
+            return;
+        }
+        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span);
+        let value = std::mem::replace(expr, placeholder);
+        *expr = self.bind(prefix, "place_", value, false).read();
+    }
+
+    /// `{ let t = place; let b = t; let r = f(&mut t); if t !== b { place = t }; r }`
+    /// — the call keeps its position, so a `?` on it still sees the write-back
+    /// run first.
     fn wrap(&mut self, call: &mut TirExpr) {
         // A direct callee declares the positions it keeps a borrow past the
         // call; an indirect one carries them on its function type.
@@ -158,50 +249,54 @@ impl WriteBack<'_> {
                 continue;
             }
             let span = arg.span;
-            let place_type = place.type_id;
-            let place = place.clone();
-            let temp = self.alloc_local(place_type);
-            self.borrowed_temps.push(temp);
-            let name = format!("__write_back_{temp}");
-            let read_temp = || {
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: temp,
-                        name: name.clone(),
-                    },
-                    place_type,
-                    span,
-                )
-            };
-            prefix.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: name.clone(),
-                    local_index: temp,
-                    is_mut: true,
-                    is_reactive: false,
-                    type_id: place_type,
-                    value: place.clone(),
-                    // The temp aliases the place: interior mutation through it
-                    // lands directly, and the store below is then a no-op.
-                    skip_value_copy: true,
-                },
-                span,
-            ));
+            let mut place = place.clone();
+            // The place is spelled twice — read before the call, assigned
+            // after — so anything in it that is not a plain slot is read once
+            // into a temp first.
+            self.hoist_place(&mut place, &mut prefix);
+            // The temp aliases the place, so payload mutation through it lands
+            // without any store back.
+            let temp = self.bind(&mut prefix, "", place.clone(), true);
+            self.borrowed_temps.push(temp.index);
+            // An identity witness, never a copy: a copy would make every call
+            // look like a whole-value write.
+            let before = self.bind(&mut prefix, "before_", temp.read(), false);
+            // Store back only what the callee replaced. An unconditional store
+            // would also undo a write the callee made through another route to
+            // the same place — `self`, or a sibling `&mut` argument.
             write_backs.push(TirStmt::new(
-                TirStmtKind::Expr(TirExpr::new(
-                    TirExprKind::Assign {
-                        target: Box::new(place),
-                        value: Box::new(read_temp()),
+                TirStmtKind::If {
+                    condition: TirExpr::new(
+                        TirExprKind::Binary {
+                            left: Box::new(temp.read()),
+                            op: TirBinaryOp::RefNotEq,
+                            right: Box::new(before.read()),
+                        },
+                        TypeTable::BOOL,
+                        span,
+                    ),
+                    then_block: TirBlock {
+                        stmts: vec![TirStmt::new(
+                            TirStmtKind::Expr(TirExpr::new(
+                                TirExprKind::Assign {
+                                    target: Box::new(place),
+                                    value: Box::new(temp.read()),
+                                },
+                                TypeTable::UNIT,
+                                span,
+                            )),
+                            span,
+                        )],
+                        span,
                     },
-                    TypeTable::UNIT,
-                    span,
-                )),
+                    else_block: None,
+                },
                 span,
             ));
             *arg = TirExpr::new(
                 TirExprKind::Unary {
                     op: TirUnaryOp::MutRef,
-                    expr: Box::new(read_temp()),
+                    expr: Box::new(temp.read()),
                 },
                 arg.type_id,
                 span,
@@ -215,33 +310,10 @@ impl WriteBack<'_> {
         let result_type = call.type_id;
         let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
         let original = std::mem::replace(call, placeholder);
-        let result = self.alloc_local(result_type);
-        let result_name = format!("__write_back_result_{result}");
         let mut stmts = prefix;
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: result_name.clone(),
-                local_index: result,
-                is_mut: false,
-                is_reactive: false,
-                type_id: result_type,
-                value: original,
-                skip_value_copy: true,
-            },
-            span,
-        ));
+        let result = self.bind(&mut stmts, "result_", original, false);
         stmts.append(&mut write_backs);
-        stmts.push(TirStmt::new(
-            TirStmtKind::Expr(TirExpr::new(
-                TirExprKind::Local {
-                    index: result,
-                    name: result_name,
-                },
-                result_type,
-                span,
-            )),
-            span,
-        ));
+        stmts.push(TirStmt::new(TirStmtKind::Expr(result.read()), span));
         *call = TirExpr::new(
             TirExprKind::Block(TirBlock { stmts, span }),
             result_type,
@@ -252,15 +324,14 @@ impl WriteBack<'_> {
 
 impl TirOptVisitor for WriteBack<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
-        let mut changed = opt_walk_expr(self, expr);
-        if matches!(
-            expr.kind,
-            TirExprKind::Call { .. } | TirExprKind::IndirectCall { .. }
-        ) {
-            let before = self.borrowed_temps.len();
-            self.wrap(expr);
-            changed |= self.borrowed_temps.len() != before;
+        // A closure body numbers locals in its own namespace, so a temp drawn
+        // from this function's counter would name one of its locals (WEP D1).
+        if matches!(expr.kind, TirExprKind::Closure { .. }) {
+            return false;
         }
-        changed
+        let changed = opt_walk_expr(self, expr);
+        let planted = self.borrowed_temps.len();
+        self.wrap(expr);
+        changed || self.borrowed_temps.len() != planted
     }
 }

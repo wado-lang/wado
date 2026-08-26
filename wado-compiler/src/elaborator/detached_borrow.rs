@@ -36,8 +36,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether a `&mut` to a place of this type is a box rather than the place
-    /// itself — true of a referent that replaces on assign: `Ref`, not `RefMut`.
+    /// itself: a referent that replaces on assign — `Ref`, not `RefMut`. What
+    /// the borrow site already refused is not refused twice here, which would
+    /// also call a `fn` field a variant.
     fn borrow_detaches_from(&self, place_type: TypeId) -> bool {
+        if self.is_replace_on_assign_place_type(place_type) {
+            return false;
+        }
         let resolved = self.tysys.type_table.borrow().get(place_type).clone();
         self.tysys.is_ref_identity(&resolved)
             && !self
