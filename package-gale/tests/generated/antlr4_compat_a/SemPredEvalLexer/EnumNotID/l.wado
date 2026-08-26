@@ -1128,14 +1128,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -1143,23 +1143,23 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_2 = pos;
-    let mut alts_ok_2 = false;
-    alts_2_0: {
-        pos = alts_saved_2;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
+    let alts_saved_4 = pos;
+    let mut alts_ok_4 = false;
+    alts_4_0: {
+        pos = alts_saved_4;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_4_0; }
         pos += 1;
-        alts_ok_2 = true;
+        alts_ok_4 = true;
     }
-    if !alts_ok_2 {
-        alts_2_1: {
-            pos = alts_saved_2;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
+    if !alts_ok_4 {
+        alts_4_1: {
+            pos = alts_saved_4;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_4_1; }
             pos += 1;
-            alts_ok_2 = true;
+            alts_ok_4 = true;
         }
     }
-    if !alts_ok_2 { return -1; }
+    if !alts_ok_4 { return -1; }
     return pos;
 }
 

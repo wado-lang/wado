@@ -2085,39 +2085,39 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     loop {
         let rep_saved_0 = pos;
         rep_0: {
-            let alts_saved_2 = pos;
-            let mut alts_ok_2 = false;
-            alts_2_0: {
-                pos = alts_saved_2;
-                if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_2_0; }
+            let alts_saved_3 = pos;
+            let mut alts_ok_3 = false;
+            alts_3_0: {
+                pos = alts_saved_3;
+                if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_3_0; }
                 pos += 1;
-                alts_ok_2 = true;
+                alts_ok_3 = true;
             }
-            if !alts_ok_2 {
-                alts_2_1: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_2_1; }
+            if !alts_ok_3 {
+                alts_3_1: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_3_1; }
                     pos += 1;
-                    alts_ok_2 = true;
+                    alts_ok_3 = true;
                 }
-                if !alts_ok_2 {
-                    alts_2_2: {
-                        pos = alts_saved_2;
-                        if pos >= chars.len() || chars[pos] != '_' { break alts_2_2; }
+                if !alts_ok_3 {
+                    alts_3_2: {
+                        pos = alts_saved_3;
+                        if pos >= chars.len() || chars[pos] != '_' { break alts_3_2; }
                         pos += 1;
-                        alts_ok_2 = true;
+                        alts_ok_3 = true;
                     }
-                    if !alts_ok_2 {
-                        alts_2_3: {
-                            pos = alts_saved_2;
-                            if pos >= chars.len() || chars[pos] != '$' { break alts_2_3; }
+                    if !alts_ok_3 {
+                        alts_3_3: {
+                            pos = alts_saved_3;
+                            if pos >= chars.len() || chars[pos] != '$' { break alts_3_3; }
                             pos += 1;
-                            alts_ok_2 = true;
+                            alts_ok_3 = true;
                         }
                     }
                 }
             }
-            if !alts_ok_2 { break rep_0; }
+            if !alts_ok_3 { break rep_0; }
             continue;
         }
         pos = rep_saved_0;
@@ -2131,13 +2131,13 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_3; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_4;
         break;
     }
     return pos;
@@ -2145,23 +2145,23 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_4 = pos;
-    let mut alts_ok_4 = false;
-    alts_4_0: {
-        pos = alts_saved_4;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_4_0; }
+    let alts_saved_6 = pos;
+    let mut alts_ok_6 = false;
+    alts_6_0: {
+        pos = alts_saved_6;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_6_0; }
         pos += 1;
-        alts_ok_4 = true;
+        alts_ok_6 = true;
     }
-    if !alts_ok_4 {
-        alts_4_1: {
-            pos = alts_saved_4;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_4_1; }
+    if !alts_ok_6 {
+        alts_6_1: {
+            pos = alts_saved_6;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_6_1; }
             pos += 1;
-            alts_ok_4 = true;
+            alts_ok_6 = true;
         }
     }
-    if !alts_ok_4 { return -1; }
+    if !alts_ok_6 { return -1; }
     return pos;
 }
 

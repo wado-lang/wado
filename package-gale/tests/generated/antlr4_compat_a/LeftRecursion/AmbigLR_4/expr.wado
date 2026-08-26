@@ -1168,14 +1168,14 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0'..='9' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { '0'..='9' })) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !((chars[pos] matches { '0'..='9' })) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -1183,14 +1183,14 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 
 fn try_NEWLINE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let opt_saved_2 = pos;
-    let mut opt_ok_2 = false;
-    rep_2: {
-        if pos >= chars.len() || chars[pos] != '\r' { break rep_2; }
+    let opt_saved_4 = pos;
+    let mut opt_ok_4 = false;
+    rep_4: {
+        if pos >= chars.len() || chars[pos] != '\r' { break rep_4; }
         pos += 1;
-        opt_ok_2 = true;
+        opt_ok_4 = true;
     }
-    if !opt_ok_2 { pos = opt_saved_2; }
+    if !opt_ok_4 { pos = opt_saved_4; }
     if pos >= chars.len() || chars[pos] != '\n' { return -1; }
     pos += 1;
     return pos;
@@ -1202,14 +1202,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\t' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= chars.len() { break rep_3; }
-            if !((chars[pos] matches { ' ' | '\t' })) { break rep_3; }
+        let rep_saved_5 = pos;
+        rep_5: {
+            if pos >= chars.len() { break rep_5; }
+            if !((chars[pos] matches { ' ' | '\t' })) { break rep_5; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_5;
         break;
     }
     return pos;

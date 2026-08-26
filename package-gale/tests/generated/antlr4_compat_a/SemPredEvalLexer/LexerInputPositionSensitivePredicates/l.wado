@@ -1164,15 +1164,15 @@ fn apply_WORD2_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     if pos > end { return; }
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { break rep_2; }
             pos += 1;
-            if pos > end { break rep_1; }
+            if pos > end { break rep_2; }
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     lx.emit(`${LexerSlice::new(chars, start, pos).to_string()}\n`);
@@ -1185,15 +1185,15 @@ fn try_WORD1(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if !(char_pos_in_line(chars, pos) < 2) { break rep_2; }
-            if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { break rep_2; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if !(char_pos_in_line(chars, pos) < 2) { break rep_4; }
+            if pos >= chars.len() { break rep_4; }
+            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_4;
         break;
     }
     return pos;
@@ -1206,15 +1206,15 @@ fn try_WORD2(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if !(char_pos_in_line(chars, pos) >= 2) { break rep_3; }
-            if pos >= chars.len() { break rep_3; }
-            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { break rep_3; }
+        let rep_saved_6 = pos;
+        rep_6: {
+            if !(char_pos_in_line(chars, pos) >= 2) { break rep_6; }
+            if pos >= chars.len() { break rep_6; }
+            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { break rep_6; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_6;
         break;
     }
     return pos;
@@ -1222,23 +1222,23 @@ fn try_WORD2(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_4 = pos;
-    let mut alts_ok_4 = false;
-    alts_4_0: {
-        pos = alts_saved_4;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_4_0; }
+    let alts_saved_8 = pos;
+    let mut alts_ok_8 = false;
+    alts_8_0: {
+        pos = alts_saved_8;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_8_0; }
         pos += 1;
-        alts_ok_4 = true;
+        alts_ok_8 = true;
     }
-    if !alts_ok_4 {
-        alts_4_1: {
-            pos = alts_saved_4;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_4_1; }
+    if !alts_ok_8 {
+        alts_8_1: {
+            pos = alts_saved_8;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_8_1; }
             pos += 1;
-            alts_ok_4 = true;
+            alts_ok_8 = true;
         }
     }
-    if !alts_ok_4 { return -1; }
+    if !alts_ok_8 { return -1; }
     return pos;
 }
 

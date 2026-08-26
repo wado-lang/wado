@@ -1162,14 +1162,14 @@ fn try_STR(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if (chars[pos] matches { '"' }) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if (chars[pos] matches { '"' }) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
@@ -1183,14 +1183,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_2; }
+        let rep_saved_3 = pos;
+        rep_3: {
+            if pos >= chars.len() { break rep_3; }
+            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_3; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_3;
         break;
     }
     return pos;
