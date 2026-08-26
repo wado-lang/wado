@@ -347,7 +347,7 @@ pub fn engine() -> &'static Engine {
         config.wasm_branch_hinting(true);
         // Match the wado CLI's default collector so the e2e suite exercises
         // the collector users actually get (see `runtime::DEFAULT_COLLECTOR`).
-        config.collector(wasmtime::Collector::Copying);
+        config.collector(wasmtime::Collector::DeferredReferenceCounting);
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         // Use minimal optimization for faster compilation in tests
         config.cranelift_opt_level(wasmtime::OptLevel::None);

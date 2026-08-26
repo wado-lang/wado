@@ -353,11 +353,22 @@ pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
 
 /// wado's default GC collector.
 ///
-/// wasmtime's own default ([`Collector::Auto`]) still resolves to the deferred
-/// reference-counting collector in this generation. We prefer the copying
-/// collector: on allocation-heavy / small-live-set workloads it is several
-/// times faster at the same resident set size, and it collects cycles.
-pub const DEFAULT_COLLECTOR: Collector = Collector::Copying;
+/// The copying collector is the one we want at run time: on allocation-heavy /
+/// small-live-set workloads it is several times faster at the same resident set
+/// size, and it collects cycles. It is not the default because of a
+/// _compile_-time regression in wasmtime 48: cranelift 0.135 rewrote
+/// `alias_analysis` (adding dead-store and idempotent-store elimination over a
+/// whole-function `observed_stores` pre-pass), and that pass goes superlinear on
+/// the store-dense code the copying collector's write barriers produce. On
+/// `benchmark/gale_gen/gale_gen.wado` (a 1.8 MB generated parser),
+/// `Component::new` costs 5.2 s on wasmtime 47 and had not finished after 14
+/// minutes on 48 — while
+/// the same module under the deferred reference-counting collector, whose
+/// barriers are far sparser, takes 8 s on 48.
+///
+/// Restore [`Collector::Copying`] once wasmtime fixes it; `--collector copying`
+/// selects it meanwhile.
+pub const DEFAULT_COLLECTOR: Collector = Collector::DeferredReferenceCounting;
 
 /// Parse a `--collector` argument value into a wasmtime [`Collector`].
 ///
