@@ -574,7 +574,13 @@ pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before:
 /// Whether a predicate here chooses an alternative rather than guarding a
 /// sequence — true in a multi-alt rule and in a multi-alt group alike.
 fn predicate_selects_alternative(before: i32, ctx: &GenContext) -> bool {
-    return before == 0 && (current_rule_is_multi_alt(ctx) || ctx.in_multi_alt_group());
+    if before != 0 {
+        return false;
+    }
+    return match ctx.in_alt_choice() {
+        Some(multi_alt) => multi_alt,
+        None => current_rule_is_multi_alt(ctx),
+    };
 }
 
 /// Owner for a diagnostic about action body `id`, attributed to the rule

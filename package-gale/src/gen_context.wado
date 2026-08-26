@@ -233,9 +233,10 @@ pub struct GenContext {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32>,
-    /// Nesting depth of the multi-alternative group bodies being emitted: an
-    /// alt-initial predicate inside one selects an alternative.
-    multi_alt_group_depth: i32,
+    /// Whether the group body being emitted has alternatives to choose between,
+    /// or null outside every group. An alt-initial predicate selects only where
+    /// there is a choice — see `enter_group_body`.
+    alt_choice: Option<bool>,
     /// Vocabulary display names by kind id (`vocab_display_names`), the names an
     /// expected-token set renders through.
     vocab_names: List<String>,
@@ -309,7 +310,7 @@ impl GenContext {
             parser_superclass_declared: false,
             action_seen: [],
             predicate_gated: [],
-            multi_alt_group_depth: 0,
+            alt_choice: null,
             vocab_names: [],
             expected_names: "",
             predicate_fns: [],
@@ -700,19 +701,24 @@ impl GenContext {
         return self.predicate_gated.contains(&id);
     }
 
-    /// Enter / leave a multi-alternative group's body, where an alt-initial
-    /// predicate decides which alternative the group takes.
-    pub fn enter_multi_alt_group(&mut self) {
-        self.multi_alt_group_depth += 1;
+    /// Enter a group's body, saying whether the group has alternatives to
+    /// choose between; returns the enclosing answer to restore on the way out.
+    /// A group answers for the body inside it, so a single-alternative group
+    /// nested in a multi-alt one leaves nothing for a predicate to select.
+    pub fn enter_group_body(&mut self, multi_alt: bool) -> Option<bool> {
+        let outer = self.alt_choice;
+        self.alt_choice = Option::Some(multi_alt);
+        return outer;
     }
 
-    pub fn leave_multi_alt_group(&mut self) {
-        self.multi_alt_group_depth -= 1;
-        assert self.multi_alt_group_depth >= 0, "leave_multi_alt_group without a matching enter";
+    pub fn leave_group_body(&mut self, outer: Option<bool>) {
+        self.alt_choice = outer;
     }
 
-    pub fn in_multi_alt_group(&self) -> bool {
-        return self.multi_alt_group_depth > 0;
+    /// Whether the body being emitted is one alternative of a choice. Unset
+    /// outside every group, where the rule's own alternative count answers.
+    pub fn in_alt_choice(&self) -> Option<bool> {
+        return self.alt_choice;
     }
 
     /// The rendered expected-token set the action about to be emitted would see.

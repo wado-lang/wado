@@ -4269,9 +4269,16 @@ fn gen_op_storable_optional_with_first(
     ctx: &mut GenContext,
     cond: &String,
 ) {
+    // Whatever the strategy proved, a gated body is entered only where its
+    // dispatch has an arm — otherwise the optional would report instead of
+    // matching nothing.
+    let entry = match group_entry_condition(inner_elem, ctx) {
+        Some(gate) => `${*cond} && (${gate})`,
+        None => *cond,
+    };
     // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
-    w.begin(&`if ${*cond}`);
+    w.begin(&`if ${entry}`);
     let mut nch: List<[String, i32]> = [];
     gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nch, &([] as List<String>));
     w.end();
@@ -4347,6 +4354,7 @@ fn gen_op_transparent_optional_with_cond(
     let alt = &g_elem.alternatives[0];
     w.begin(&`if ${*cond}`);
     let mut nc: List<[String, i32]> = [];
+    let outer_choice = ctx.enter_group_body(false);
     let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         gen_alt_actions_at(w, &alt.actions, i, ctx);
@@ -4354,6 +4362,7 @@ fn gen_op_transparent_optional_with_cond(
     }
     gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx);
     leave_group_alt_bindings(&outer, &alt.actions, ctx);
+    ctx.leave_group_body(outer_choice);
     w.end();
 }
 
@@ -4388,19 +4397,28 @@ fn any_alt_gated(alts: &List<Alternative>, ctx: &GenContext) -> bool {
 }
 
 /// The alternatives of a repeat's group body, or `null` when the body is not a
-/// group (a leaf or a rule call has no per-alternative gate).
+/// group (a leaf or a rule call has no per-alternative gate). A label of either
+/// kind is peeled: `xs+=( … )*` iterates the group, as the body emit does.
 fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with stores[inner] {
-    if let Group(g) = peel_scalar_label(inner) {
+    let mut cur = inner;
+    while let Label(lab) = cur {
+        cur = &lab.element;
+    }
+    if let Group(g) = cur {
         return Option::Some(&g.alternatives);
     }
     return null;
 }
 
-/// The viability condition of a repeat whose group body has a predicate-gated
-/// alternative: `(kind ∈ FIRST(alt) && gate) || …`, or `null` when none is.
-/// The body's dispatch gates each branch with the same `alt_gate_and_suffix`,
-/// so an iteration this admits always takes an arm.
-fn repeat_gate_condition(inner: &Element, ctx: &mut GenContext) -> Option<String> {
+/// What admits a group at all: `(kind ∈ FIRST(alt) && gate) || …` over its
+/// alternatives — the same disjunction its dispatch branches on. `null` when no
+/// alternative is gated, where a plain first-set test already agrees with it.
+///
+/// A construct deciding whether to enter a group tests first sets alone, so
+/// without this it admits a token only a gated alternative could take and the
+/// dispatch inside then has no arm for it. Every such construct conjoins this:
+/// a loop breaks on it, an optional skips on it.
+fn group_entry_condition(inner: &Element, ctx: &mut GenContext) -> Option<String> {
     if !ctx.emit_actions() {
         return null;
     }
@@ -4426,7 +4444,7 @@ fn repeat_gate_condition(inner: &Element, ctx: &mut GenContext) -> Option<String
 /// mandatory first iteration (`plus_flag`) chooses instead of exiting, so it
 /// falls through to the dispatch and its no-viable-alternative report.
 fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, plus_flag: &String) {
-    if let Some(cond) = repeat_gate_condition(inner, ctx) {
+    if let Some(cond) = group_entry_condition(inner, ctx) {
         if plus_flag.is_empty() {
             w.line(&`if !(${cond}) \{ break; \}`);
         } else {
@@ -4739,6 +4757,7 @@ fn gen_op_group(
                 // Repeat they run once per iteration.
                 let body = &g_op.alts[0];
                 let alt = &g_elem.alternatives[0];
+                let outer = ctx.enter_group_body(false);
                 gen_elements_with_non_greedy(
                     w,
                     &alt.elements,
@@ -4748,6 +4767,7 @@ fn gen_op_group(
                     &([] as List<String>),
                     &alt.actions,
                 );
+                ctx.leave_group_body(outer);
             },
         };
     } else {
@@ -4805,7 +4825,9 @@ fn gen_consume_single_alt_group_op(
     // Nested General-group emitters consume `GeneralShape.variant_type`
     // / `alt_struct_names` baked by `lower_single_alt_group` under
     // the SingleAlt's owner rule, so no walker-field swap is needed here.
+    let outer = ctx.enter_group_body(false);
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow, &alt.actions);
+    ctx.leave_group_body(outer);
     // the inner elements already appended; no struct.
 }
 
@@ -5027,6 +5049,7 @@ fn gen_op_repeat_non_greedy_storable(
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+        gen_repeat_gate_break(w, inner, ctx, &"");
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
         w.end();
@@ -5035,6 +5058,7 @@ fn gen_op_repeat_non_greedy_storable(
     if *while_cond != "false" {
         let guard = if is_plus { `!p.recovering && (${*while_cond})` } else { *while_cond };
         w.begin(&`while ${guard}`);
+        gen_repeat_gate_break(w, inner, ctx, &"");
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
         w.end();
@@ -5082,6 +5106,7 @@ fn gen_op_repeat_non_greedy_transparent(
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+        gen_repeat_gate_break(w, inner, ctx, &"");
         let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
         w.end();
@@ -5089,6 +5114,7 @@ fn gen_op_repeat_non_greedy_transparent(
     }
     if *while_cond != "false" {
         w.begin(&`while ${*while_cond}`);
+        gen_repeat_gate_break(w, inner, ctx, &"");
         let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
         w.end();
@@ -5383,12 +5409,14 @@ fn gen_op_repeat_star_plus_non_storable_group(
             gen_caller_follow_gate(w, rep_op);
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
+            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
             w.end();
         } else {
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
             gen_caller_follow_gate(w, rep_op);
+            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
             w.end();
@@ -5408,6 +5436,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             w.end();
+            gen_repeat_gate_break(w, inner, ctx, &plus_flag);
             w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
@@ -5422,6 +5451,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.end();
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&inner_first)})`);
             gen_caller_follow_gate(w, rep_op);
+            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
             w.end();
@@ -6149,9 +6179,9 @@ fn gen_general_alt_parse_and_store(
     let mut nc: List<[String, i32]> = [];
     // An alt-initial predicate in here selects this alternative, so one the
     // dispatch could not gate must be reported rather than guarded inline.
-    ctx.enter_multi_alt_group();
+    let outer = ctx.enter_group_body(true);
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>), &alt.actions);
-    ctx.leave_multi_alt_group();
+    ctx.leave_group_body(outer);
 }
 
 /// Returns true iff every alt in `sorted_group` has at least one element
