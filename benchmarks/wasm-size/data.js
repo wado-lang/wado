@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787719230541,
+  "lastUpdate": 1787729954417,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51161,6 +51161,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2e580ad31c01338b9621ded35a6c2040a4787e9e",
+          "message": "Merge pull request #1900 from wado-lang/claude/emi-material-submission-jxbvek\n\nfix(wir): give each bulk array clone its own temporaries",
+          "timestamp": "2026-08-26T16:27:57+09:00",
+          "tree_id": "992a68e062de30e1a9721ce0b029df6d65a658cf",
+          "url": "https://github.com/wado-lang/wado/commit/2e580ad31c01338b9621ded35a6c2040a4787e9e"
+        },
+        "date": 1787729953854,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254936,
             "unit": "bytes"
           }
         ]
