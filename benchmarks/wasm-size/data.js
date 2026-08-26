@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787712438756,
+  "lastUpdate": 1787719230541,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51107,6 +51107,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1472775a52bfd76856b2b19b742abe6c178208db",
+          "message": "Merge pull request #1899 from wado-lang/claude/emi-material-submission-jxbvek\n\nfeat(emi): draw the corpus from the stdlib and the examples",
+          "timestamp": "2026-08-26T13:29:30+09:00",
+          "tree_id": "e31a2346b8683c9d608f93c59e5510732f412d25",
+          "url": "https://github.com/wado-lang/wado/commit/1472775a52bfd76856b2b19b742abe6c178208db"
+        },
+        "date": 1787719229829,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
             "unit": "bytes"
           },
           {
