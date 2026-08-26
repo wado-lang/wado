@@ -320,8 +320,6 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
     return out;
 }
 
-/// The Wado type a literal argument evidently has, or `null` for anything a
-/// signature would have to guess at.
 /// Whether `text` is one whole string literal, not an expression that merely
 /// starts and ends with a quote (`"a" + x + "b"`) — that one has no evident
 /// type, and splicing it would emit the host expression verbatim.
@@ -345,6 +343,8 @@ fn is_string_literal(text: &String) -> bool {
     return false;
 }
 
+/// The Wado type a literal argument evidently has, or `null` for anything a
+/// signature would have to guess at.
 fn literal_arg_type(text: &String) -> Option<String> {
     if text.is_empty() {
         return null;

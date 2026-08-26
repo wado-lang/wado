@@ -26,6 +26,17 @@ test "a group whose alt-initial predicate is false reports" {
     assert bad.output.is_empty(), `the gated alternative's action must not run: '${bad.output}'`;
 }
 
+test "a repeat's mandatory first iteration reports rather than exiting" {
+    let ok = gnv::parse_plus_gated(&"ba");
+    assert ok.ok(), `clean parse: ${ok.diagnostics.len()} diagnostics`;
+
+    // The loop gate would exit on the token the false predicate excludes, and
+    // the `A` after the repeat would then consume it — a clean parse of "a".
+    let bad = gnv::parse_plus_gated(&"a");
+    assert bad.has_errors(), "the first iteration is required, so it reports";
+    assert bad.output.is_empty(), `the gated alternative's action must not run: '${bad.output}'`;
+}
+
 test "a rule-reference group reports the token no alternative admits" {
     let ok = gnv::parse_refs(&"ac");
     assert ok.ok(), `clean parse: ${ok.diagnostics.len()} diagnostics`;

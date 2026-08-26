@@ -671,7 +671,9 @@ impl GenContext {
     }
 
     pub fn mark_predicate_gated(&mut self, id: i32) {
-        self.predicate_gated.push(id);
+        if !self.predicate_gated.contains(&id) {
+            self.predicate_gated.push(id);
+        }
     }
 
     /// Register a context-free gated predicate's body for a standalone

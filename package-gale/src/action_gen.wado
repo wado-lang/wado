@@ -24,7 +24,6 @@ use {
     rule_span_hi_field,
     rule_span_lo_field,
     rule_threads_args,
-    rule_is_left_recursive,
     rule_uses_rule_span,
     vals_struct_name,
     wado_type_default,
@@ -863,7 +862,7 @@ pub fn mark_gated_predicates(
 
 /// Register `alt`'s gateable alt-initial predicates as gated, so the dispatch
 /// carries them as its condition and the body does not repeat them as a guard.
-pub fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
+fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
     for let a of &alt.actions {
         if is_gateable_alt_initial_predicate(a, ctx) {
             mark_gate_predicate(a, ctx);

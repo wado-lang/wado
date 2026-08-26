@@ -121,7 +121,6 @@ use {
     install_rule_captures,
     gen_vals_structs,
     join_gate_conds,
-    mark_alt_gate_predicates,
     mark_gated_predicates,
     result_type_carries_vals,
     rule_call_ctx_field,
@@ -4025,7 +4024,15 @@ fn gen_op_storable_group_inner(
             name_counts,
             outer_follow,
         ),
-        SimpleCst(_) => gen_rule_ref_group(w, &g_op.alts, &g_op.scan_alts, &g_elem.alternatives, entry, ctx, name_counts),
+        SimpleCst(_) => gen_rule_ref_group(
+            w,
+            &g_op.alts,
+            &g_op.scan_alts,
+            &g_elem.alternatives,
+            entry,
+            ctx,
+            name_counts,
+        ),
         General(gs) => gen_general_group(
             w,
             gs,
@@ -4319,10 +4326,17 @@ fn gen_op_transparent_optional(
                 rep_op.gate_caller_follow,
             ));
         },
-        Plain => gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &gate_cond_with_caller_follow(
-            &ctx.first_check_str(&rep_op.body_first_set),
-            rep_op.gate_caller_follow,
-        )),
+        Plain => gen_op_transparent_optional_with_cond(
+            w,
+            g_op,
+            g_elem,
+            &rep.element,
+            ctx,
+            &gate_cond_with_caller_follow(
+                &ctx.first_check_str(&rep_op.body_first_set),
+                rep_op.gate_caller_follow,
+            ),
+        ),
         NonGreedy(_) => panic(
             "gen_op_transparent_optional: NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
@@ -4357,9 +4371,13 @@ fn gen_op_transparent_optional_with_cond(
 }
 
 /// Emit a rule prequel (`@init` / `@after`) with the expected-token set its body
-/// may print in scope. Empty for a rule whose FOLLOW is not exact.
+/// may print in scope. Empty for a rule whose FOLLOW is not exact. An `@init`
+/// runs before the rule matches anything and an `@after` once it has matched
+/// everything, so the position is stated here rather than left at whatever the
+/// last alternative emitted set it to.
 fn gen_prequel_action(w: &mut CodeWriter, src: &ActionSource, rule_name: &String, at_entry: bool, ctx: &mut GenContext) {
     ctx.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
+    ctx.set_action_at_alt_end(!at_entry);
     gen_action_body(w, src, ctx);
     ctx.set_expected_names(String::new());
 }
@@ -4440,10 +4458,13 @@ fn optional_entry_test(own: &String, inner: &Element, ctx: &mut GenContext) -> S
     };
 }
 
+
 /// Discharge what `entry` owes before the group's own emit, and return what is
 /// left for the dispatch. A loop owes the break its gate needs, so it is emitted
 /// here rather than at each of the loop shapes — the site that decides it is a
-/// loop cannot also forget to guard it.
+/// loop cannot also forget to guard it. Clearing the mandatory-first flag is
+/// owed here too, and only here: cleared at the loop shape it would already read
+/// false at the break, which is the one place its whole point is to read true.
 fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, entry: GroupEntry) -> GroupEntry {
     let plus_flag = match &entry {
         Looped(flag) => *flag,
@@ -4452,6 +4473,9 @@ fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, en
         },
     };
     gen_repeat_gate_break(w, elem, ctx, &plus_flag);
+    if !plus_flag.is_empty() {
+        w.line(&`${plus_flag} = false;`);
+    }
     return GroupEntry::Guaranteed;
 }
 
@@ -4533,13 +4557,17 @@ fn gen_op_optional_with_shape_lookahead_storable(
     // `Option<T>` shape selection collapses to a plain `if cond { … } else if
     // … ` statement — no struct, no absent-field decls, no `null` else.
     let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
+    // The shape twin of `optional_entry_test`: the alternative is the same one
+    // in every shape, so its gate joins each shape's own condition.
+    let gate = alt_gate_and_suffix(alt, ctx);
+    let outer_choice = ctx.enter_group_body(false);
     let mut is_first = true;
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
         let entry = &s.shapes[ei];
         // K-prefix gate: every shape's entry condition must yield to
         // the caller when the deterministic K-prefix matches, so wrap
         // each entry's condition with `!(K_match) && (cond)`.
-        let cond = gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow);
+        let cond = `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`;
 
         if is_first {
             w.begin(&`if ${cond}`);
@@ -4567,6 +4595,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
         gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
         leave_group_alt_bindings(&outer, &alt.actions, ctx);
     }
+    ctx.leave_group_body(outer_choice);
     if !is_first {
         w.end();
     }
@@ -4592,13 +4621,17 @@ fn gen_op_optional_with_shape_lookahead_transparent(
     let elements = &alt.elements;
 
     let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
+    // The shape twin of `optional_entry_test`: the alternative is the same one
+    // in every shape, so its gate joins each shape's own condition.
+    let gate = alt_gate_and_suffix(alt, ctx);
+    let outer_choice = ctx.enter_group_body(false);
     let mut is_first = true;
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
         let entry = &s.shapes[ei];
         // K-prefix gate: every shape entry's condition must yield to
         // the caller when the deterministic K-prefix matches, so wrap
         // each entry's condition with `!(K_match) && (cond)`.
-        let cond = gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow);
+        let cond = `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`;
 
         if is_first {
             w.begin(&`if ${cond}`);
@@ -4649,6 +4682,7 @@ fn gen_op_optional_with_shape_lookahead_transparent(
         gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
         leave_group_alt_bindings(&outer, &alt.actions, ctx);
     }
+    ctx.leave_group_body(outer_choice);
     if !is_first {
         w.end();
     }
@@ -5431,7 +5465,6 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             w.end();
-            w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Looped(plus_flag));
             w.end();
@@ -5591,9 +5624,16 @@ fn gen_op_repeat_star_plus_storable(
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
             w.end();
-            w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, GroupEntry::Looped(plus_flag));
+            gen_op_inner_for_storable_repeat(
+                w,
+                rep_op,
+                inner,
+                ctx,
+                &mut nc,
+                &iter_follow,
+                GroupEntry::Looped(plus_flag),
+            );
             w.end();
         } else {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
@@ -5608,9 +5648,16 @@ fn gen_op_repeat_star_plus_storable(
                 gen_caller_follow_gate(w, rep_op);
                 w.end();
             }
-            w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, GroupEntry::Looped(plus_flag));
+            gen_op_inner_for_storable_repeat(
+                w,
+                rep_op,
+                inner,
+                ctx,
+                &mut nc,
+                &iter_follow,
+                GroupEntry::Looped(plus_flag),
+            );
             w.end();
         }
     }

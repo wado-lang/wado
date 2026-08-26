@@ -32,6 +32,16 @@ test "a single-alternative group under a repeat gates the loop" {
     assert opt.ok(), `optional: ${opt.diagnostics.len()} diagnostics`;
 }
 
+test "a shape-enumerated optional's entry carries its body's gate" {
+    // Without the gate on every shape, the `ra A` shape admits "aaa" and the
+    // whole input parses as though the predicate held.
+    let bad = gge::parse_shape_opt(&"aaa");
+    assert bad.has_errors(), "the gated body must not be entered";
+
+    let other = gge::parse_shape_opt(&"c");
+    assert other.ok(), `the other alternative is untouched: ${other.diagnostics.len()} diagnostics`;
+}
+
 test "a predicate in a single-alternative group guards rather than selects" {
     // `{false}?` there fails the parse — it is not a choice between the rule's
     // alternatives, so it is not silently dropped as one either.
