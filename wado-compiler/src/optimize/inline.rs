@@ -75,7 +75,8 @@ fn wasm_shape(type_table: &TypeTable, id: TypeId) -> Option<PrimitiveType> {
 /// a shape change, or a narrowing the target has to mask, costs anything.
 /// Unknown shapes stay charged: this narrows the estimate, never widens it.
 fn cast_emits_instruction(type_table: &TypeTable, from: TypeId, to: TypeId) -> bool {
-    let (Some(from_shape), Some(to_shape)) = (wasm_shape(type_table, from), wasm_shape(type_table, to))
+    let (Some(from_shape), Some(to_shape)) =
+        (wasm_shape(type_table, from), wasm_shape(type_table, to))
     else {
         return true;
     };
@@ -2582,7 +2583,7 @@ fn inline_calls_in_expr(
 #[cfg(test)]
 mod cast_cost_tests {
     use super::cast_emits_instruction;
-    use crate::tir::{TypeTable, TypeId};
+    use crate::tir::{TypeId, TypeTable};
 
     fn emits(from: TypeId, to: TypeId) -> bool {
         cast_emits_instruction(&TypeTable::new(), from, to)
