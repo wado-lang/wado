@@ -223,25 +223,59 @@ type. `From` impls both ways bridge them with a field-for-field copy.
 ### The IANA time-zone database
 
 `parse_fixed_offset` traps on anything but `"Z"`, `"UTC"`, and `±HH:MM`, so a
-`ZonedDateTime` in `"Asia/Tokyo"` cannot be formatted or read at all. Closing it
-takes an offset-and-transition source. Two candidates, neither settled:
+`ZonedDateTime` in `"Asia/Tokyo"` cannot be formatted or read at all. The data
+comes from [`core:icu`](./wep-2026-08-09-core-icu.md), not from a tzdb of this
+module's own and not from WASI. The reason is dedupe and altitude rather than
+size: ICU4X carries zone data already, a second copy here would be one concept
+with two implementations, and a stdlib that grows a bespoke data-bundling
+mechanism per capability is the special case that should have been the shared
+one. `core:icu` already carries an open item for this seam.
 
-- `wasi:clocks` `timezone` (unstable, `feature = clocks-timezone`). Gives
-  `utc-offset(instant)` — enough for the accessors, but it exposes no transition
-  list, so `start_of_day`, `hours_in_day`, `get_time_zone_transition`, and DST
-  gap/overlap disambiguation stay out of reach. It also makes every named-zone
-  program import a clock interface.
-- A bundled tzdb, sliced like [`core:icu`](./wep-2026-08-09-core-icu.md) slices
-  CLDR. Self-contained and complete, at a size cost that has not been measured.
-  `core:icu` already carries an open item for exactly this seam, and a
-  `core:temporal` that depends on `core:icu` would tie the smallest date type to
-  the largest data dependency in the stdlib.
+`wasi:clocks` `timezone` (unstable, `feature = clocks-timezone`) cannot serve
+this even in principle: `utc-offset(when)` takes no zone, so it answers only for
+the host's configured zone — a program cannot read an instant in `"Asia/Tokyo"`
+on a host set to UTC. It also exposes no transition list, every function may
+return `none`, and no host implements it (`timezone` appears in wasmtime's
+`.wit` files and nowhere in its Rust). It stays useful for one thing only:
+`Temporal.Now.timeZoneId`, once something implements it.
 
-Whichever is chosen, DST forces a second decision. Today
-`PlainDateTime::to_zoned_date_time` and `PlainDate::to_zoned_date_time` resolve a
-local reading against a fixed offset, where the answer is unique. Against a named
-zone it is not: a local time can fall in a spring-forward gap or a fall-back
-overlap, so both need Temporal's `disambiguation`
+#### The size lever is the epoch, not the zone set
+
+Measured with `zic` over tzdata's own `tzdata.zi`, whole database each time:
+
+| build                           |        size |   gzip |
+| ------------------------------- | ----------: | -----: |
+| TZif fat, full history          |     682 KiB |        |
+| TZif slim, full history         |     331 KiB | 84 KiB |
+| TZif slim, from 1970            |     241 KiB |        |
+| TZif slim, **from 2000**        | **126 KiB** | 32 KiB |
+| TZif slim, from 2020            |      82 KiB |        |
+| `tzdata.zi` (rules, not tables) |     114 KiB | 27 KiB |
+
+Truncating history is worth more than switching to the rules form, and costs no
+rule evaluator. Future timestamps are unaffected: the POSIX TZ footer survives
+truncation, so a from-2000 build still resolves 2031 correctly.
+
+Slicing by zone instead is rejected. It would make a program's zone set a
+compile-time property, which a zone read from a config file or an HTTP header
+cannot satisfy — a semantic restriction on the language bought with size. An
+epoch cutoff restricts no expression, and choosing it at compile time is fine.
+
+What the cutoff does cost is a wrong answer rather than a missing one: in a
+from-2000 build `Asia/Tokyo` at 1950-06-15 reads +09:00, where the full database
+has +10:00 for the 1948-51 JDT era. Whether a pre-cutoff instant should answer
+that way, or trap, is open — as is which year, and whether ICU4X's zone data is
+a full transition history at all or only the offsets its formatting needs. That
+last one is unverified: the `bdp-spike` datagen pulls `parse-zoneinfo`, so
+ICU4X's exporter can emit zone markers, but the spike never generated or
+measured them.
+
+#### DST disambiguation
+
+Today `PlainDateTime::to_zoned_date_time` and `PlainDate::to_zoned_date_time`
+resolve a local reading against a fixed offset, where the answer is unique.
+Against a named zone it is not: a local time can fall in a spring-forward gap or
+a fall-back overlap, so both need Temporal's `disambiguation`
 (`compatible`/`earlier`/`later`/`reject`) and `offset`
 (`use`/`ignore`/`prefer`/`reject`) options. `hours_in_day` returning a constant
 24 and `days_in_week` returning 7 are the same gap seen from the other side.

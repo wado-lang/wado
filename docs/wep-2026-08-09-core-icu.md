@@ -345,8 +345,12 @@ dedup following genuine runtime data dependencies rather than taxonomy.
       a sort cross the boundary once instead of per comparison, which dominates
       any handle-versus-lookup difference.
 - [ ] Where the facade's date/time formatting meets
-      [`core:temporal`](./wep-2026-06-05-core-temporal.md), and how its
-      time-zone view relates to the WASI-provided one.
+      [`core:temporal`](./wep-2026-06-05-core-temporal.md), which takes its zone
+      data from here rather than bundling a tzdb of its own — WASI's `timezone`
+      answers only for the host's own zone, so it cannot serve one. Open:
+      whether ICU4X's zone markers carry a full transition history or only the
+      offsets formatting needs, and what truncating them to a start epoch costs
+      (tzdata itself halves from 331 KiB to 126 KiB at 2000).
 - [ ] The full capability inventory, and which of its data is locale-bearing.
       The first cut covers what the spikes measured — locale identity,
       normalization, case mapping, character properties, segmentation,
