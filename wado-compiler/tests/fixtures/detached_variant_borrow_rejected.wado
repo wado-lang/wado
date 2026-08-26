@@ -4,7 +4,9 @@
 // value_copy_variant_in_aggregate guard that side.
 //
 // The refusal runs after monomorphization, so it only sees reachable code: each
-// shape below is called from the test.
+// shape below is called from the test. Only the first refusal is reported, so
+// this fixture pins the message; the sinks that carry their own wording get
+// their own fixture.
 
 variant Payload {
     Text(String),
@@ -24,9 +26,37 @@ variant Slot {
     None,
 }
 
+fn replace(p: &mut Payload) {
+    *p = Payload::Text(`xyz`);
+}
+
 fn bound_to_a_variable(b: &mut Bag) {
     let r = &mut b.item;
     *r = Payload::Text(`xyz`);
+}
+
+// Handing the borrow on is spelled `&mut *r`, which names `r` no less than
+// `*r = …` does.
+fn forwarded_by_a_reborrow(b: &mut Bag) {
+    let r = &mut b.item;
+    replace(&mut *r);
+}
+
+// A closure names an enclosing local as a capture, so the write it makes lands
+// on the same detached box.
+fn written_through_a_capture(b: &mut Bag) {
+    let r = &mut b.item;
+    let write = || {
+        *r = Payload::Text(`xyz`);
+    };
+    write();
+}
+
+// The borrow reaches the `return` through a variable, which is the same escape
+// as returning it there.
+fn returned_through_a_variable(b: &mut Bag) -> &mut Payload with stores[b] {
+    let r = &mut b.item;
+    return r
 }
 
 fn bound_through_a_branch(b: &mut Bag, c: bool) {
@@ -51,15 +81,44 @@ fn element_of_a_list(xs: &mut List<Payload>) {
     *r = Payload::Empty;
 }
 
+fn the_blocks_value(b: &mut Bag) {
+    let r = pick: {
+        break pick: &mut b.item;
+    };
+    *r = Payload::Text(`xyz`);
+}
+
+// A labeled block yields through its tail as well as its breaks.
+fn the_blocks_tail_value(b: &mut Bag) {
+    let r = pick: {
+        &mut b.item
+    };
+    *r = Payload::Text(`xyz`);
+}
+
+// An expression-bodied closure has no `return` to catch, and its body is what
+// it hands back.
+fn the_closures_result(b: &mut Bag) {
+    let get = || &mut b.item;
+    let r = get();
+    *r = Payload::Text(`xyz`);
+}
+
 test "unreachable" {
     let mut b = Bag { item: Payload::Empty };
     bound_to_a_variable(&mut b);
+    forwarded_by_a_reborrow(&mut b);
+    written_through_a_capture(&mut b);
+    let _ = returned_through_a_variable(&mut b);
     bound_through_a_branch(&mut b, true);
     let _ = stored_in_an_aggregate(&mut b);
     let _ = stored_in_a_variant_payload(&mut b);
     let _ = returned(&mut b);
     let mut xs: List<Payload> = [Payload::Empty];
     element_of_a_list(&mut xs);
+    the_blocks_value(&mut b);
+    the_blocks_tail_value(&mut b);
+    the_closures_result(&mut b);
 }
 
 __DATA__

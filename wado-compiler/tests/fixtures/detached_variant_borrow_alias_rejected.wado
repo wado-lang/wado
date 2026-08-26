@@ -1,0 +1,32 @@
+// A `&mut` binding is not a copy: `let q = p` leaves `q` naming `p`'s box, so
+// `*q = v` replaces what the caller handed in. Reading the callee's whole-value
+// writes off the parameter slot alone missed that, reported `replace_via_alias`
+// as replacing nothing, and let the element borrow below — which has no
+// write-back point — drop its write in silence.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+#[inline("never")]
+fn replace_via_alias(p: &mut Payload) {
+    let q = p;
+    *q = Payload::Text(`xyz`);
+}
+
+#[inline("never")]
+fn element_of_a_list(xs: &mut List<Payload>) {
+    replace_via_alias(&mut xs[0]);
+}
+
+test "unreachable" {
+    let mut xs: List<Payload> = [Payload::Empty];
+    element_of_a_list(&mut xs);
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "'replace_via_alias' replaces it, and no place here can be stored back to"
+}

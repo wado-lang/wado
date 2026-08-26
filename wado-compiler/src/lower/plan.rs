@@ -14,6 +14,7 @@ pub mod lift_mut;
 pub mod mut_ref_writeback;
 pub mod string;
 pub mod value_copy;
+pub mod whole_value_writes;
 
 pub struct LowerPlan {
     pub box_plan: boxing::BoxPlan,

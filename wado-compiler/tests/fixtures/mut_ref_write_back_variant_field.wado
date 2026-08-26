@@ -48,6 +48,70 @@ fn writes_through_the_other_argument(b: &mut Bag, p: &mut Payload) {
 }
 
 #[inline("never")]
+fn takes_by_value(mut xs: List<i32>, p: &mut Payload) {
+    xs.push(99);
+    *p = Payload::Text(`xyz`);
+}
+
+#[inline("never")]
+fn hoists_a_by_value_arg(xs: &mut List<i32>, b: &mut Bag) {
+    takes_by_value(*xs, &mut b.item);
+}
+
+#[inline("never")]
+fn takes_a_snapshot(seen: Counter, p: &mut Payload) {
+    *p = Payload::Text(`${seen.n}`);
+}
+
+#[inline("never")]
+fn reads_a_local_before_the_place(bs: &mut List<Bag>) {
+    let mut n = Counter { n: 0 };
+    takes_a_snapshot(n, &mut bs[first(&mut n)].item);
+}
+
+#[inline("never")]
+fn appends(p: &mut Payload) {
+    match p {
+        Text(s) => {
+            *s = `${*s}!`;
+        },
+        Empty => (),
+    }
+}
+
+#[inline("never")]
+fn pick(b: &mut Bag) -> fn(&mut Payload) with stores[b] {
+    b.item = Payload::Text(`from_pick`);
+    return appends
+}
+
+#[inline("never")]
+fn swap_to_appends(g: &mut fn(&mut Payload)) -> i32 {
+    *g = appends;
+    return 0
+}
+
+#[inline("never")]
+fn reads_the_callee_before_the_place(bs: &mut List<Bag>) {
+    let mut via: fn(&mut Payload) = replace;
+    via(&mut bs[swap_to_appends(&mut via)].item)
+}
+
+struct View {
+    slot: &mut Payload,
+}
+
+#[inline("never")]
+fn reborrows_a_reference(r: &mut Payload) {
+    replace(&mut *r);
+}
+
+#[inline("never")]
+fn reborrows_through_a_field(v: &mut View) {
+    replace(&mut *v.slot);
+}
+
+#[inline("never")]
 fn mutate_payload(p: &mut Payload) {
     match p {
         Text(s) => {
@@ -55,6 +119,20 @@ fn mutate_payload(p: &mut Payload) {
         },
         Empty => (),
     }
+}
+
+// A whole capture is the closure environment's own copy of the slot, so it is
+// no write-back point — detached_variant_capture_rejected guards that side.
+// Payload mutation through one still lands, since the capture copied the
+// reference and the payload object is shared.
+#[inline("never")]
+fn payload_through_a_capture() -> Payload {
+    let mut p = Payload::Text(`ab`);
+    let f = || {
+        mutate_payload(&mut p);
+    };
+    f();
+    return p
 }
 
 test "a whole-value write through a variant field borrow lands" {
@@ -102,6 +180,62 @@ test "a write through another route to the place is not undone" {
     let mut b = Bag { item: Payload::Empty, tick: 0 };
     writes_through_the_other_argument(&mut b, &mut b.item);
     assert b.item matches { Text(t) && t == `via_b` };
+}
+
+// Reading a by-value argument into a temp to keep the arguments in source order
+// must not also hand the callee the caller's storage: it is still the call's
+// argument, and value semantics owe it a copy.
+test "a hoisted by-value argument is still copied" {
+    let mut b = Bag { item: Payload::Empty, tick: 0 };
+    let mut xs: List<i32> = [1];
+    hoists_a_by_value_arg(&mut xs, &mut b);
+    assert xs.len() == 1;
+}
+
+// A slot is no freer to re-read than any other argument: the place read into
+// the prefix runs `first`, which writes the very local the earlier argument
+// names, so leaving that local in the call would read it after the write.
+test "an argument before the place is read before the place is" {
+    let mut bs: List<Bag> = [Bag { item: Payload::Empty, tick: 0 }];
+    reads_a_local_before_the_place(&mut bs);
+    assert bs[0].item matches { Text(t) && t == `0` };
+}
+
+// The callee expression runs before the arguments, so the place must not be
+// read until it has.
+test "an indirect callee runs before the place is read" {
+    let mut b = Bag { item: Payload::Text(`ab`), tick: 0 };
+    pick(&mut b)(&mut b.item);
+    assert b.item matches { Text(t) && t == `from_pick!` };
+}
+
+// An indirect callee is a slot no freer to re-read than an argument: the place
+// read after it runs `swap_to_appends`, which rebinds the very local the callee
+// names, so leaving it in the call would call the wrong function.
+test "an indirect callee held in a local is read before the place" {
+    let mut bs: List<Bag> = [Bag { item: Payload::Text(`ab`), tick: 0 }];
+    reads_the_callee_before_the_place(&mut bs);
+    assert bs[0].item matches { Text(t) && t == `xyz` };
+}
+
+test "payload mutation through a whole capture lands" {
+    assert payload_through_a_capture() matches { Text(t) && t == `zz` };
+}
+
+// `&mut *p` re-boxes what `p` points at, whatever `p` is, so a reborrow is as
+// detached as `&mut b.item` and needs the same write-back — to `*p`, which
+// names the storage the temp was read from.
+test "a reborrow of a mutable reference writes back" {
+    let mut p = Payload::Text(`ab`);
+    reborrows_a_reference(&mut p);
+    assert p matches { Text(t) && t == `xyz` };
+}
+
+test "a reborrow through a reference field writes back" {
+    let mut p = Payload::Text(`ab`);
+    let mut v = View { slot: &mut p };
+    reborrows_through_a_field(&mut v);
+    assert p matches { Text(t) && t == `xyz` };
 }
 
 // A destructuring `let` binds through the borrow rather than keeping it, so it

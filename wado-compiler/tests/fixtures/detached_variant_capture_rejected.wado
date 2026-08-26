@@ -1,0 +1,35 @@
+// A `&mut` to a whole captured local borrows the closure environment's own copy
+// of the slot: closure lowering filled that copy before this pass runs, so a
+// store back to the capture never reaches the enclosing local. With no
+// write-back point, a callee that replaces through the borrow is refused rather
+// than losing the write in silence. Payload mutation through the same capture
+// stays legal — mut_ref_write_back_variant_field guards that side.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+#[inline("never")]
+fn replace(p: &mut Payload) {
+    *p = Payload::Text(`xyz`);
+}
+
+fn replaces_a_captured_local() -> Payload {
+    let mut p = Payload::Text(`ab`);
+    let f = || {
+        replace(&mut p);
+    };
+    f();
+    return p
+}
+
+test "unreachable" {
+    let _ = replaces_a_captured_local();
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "and no place here can be stored back to"
+}

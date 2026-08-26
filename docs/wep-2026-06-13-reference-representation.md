@@ -182,35 +182,80 @@ never carved out.
 These are gaps between the design above and the current tree. Each is a bug to
 fix to conform; none should be preserved.
 
-- [ ] D1 — silent write-back drop, `variant` only. `&mut` to a non-local place
-      compiles but discards a whole-value write. Probe (HEAD):
+- [ ] D1 — a whole-value write through a `&mut` to a non-local place is dropped
+      behind `&mut *p` for every replace type but `variant`, and for two
+      `variant` shapes is refused rather than written back. Probe (HEAD):
 
-  | place, by referent and by where the borrow goes             | result                |
-  | ----------------------------------------------------------- | --------------------- |
-  | primitive / enum / flags / `fn`, anywhere                   | refused at the borrow |
-  | `variant`, into a variable / aggregate / payload / `return` | refused               |
-  | `variant` field, call argument                              | written back          |
-  | `variant`, call argument at a `stores` position             | refused               |
-  | `variant` element (`&mut xs[i]`), call argument             | dropped               |
+  | place, by referent and by where the borrow goes                   | result                |
+  | ----------------------------------------------------------------- | --------------------- |
+  | primitive / enum / flags / `fn` field or element, anywhere        | refused at the borrow |
+  | primitive / enum / flags / `fn` behind `&mut *p`                  | dropped               |
+  | `variant`, into a variable / aggregate / payload / `return`       | refused               |
+  | `variant`, reaching one of those through a variable               | refused               |
+  | `variant` field / `&mut *p`, call argument                        | written back          |
+  | `variant`, call argument at a `stores` position                   | refused               |
+  | `variant` element / whole capture / branch, at a written position | refused               |
 
   The same operations on a value-type _local_ all work, wherever the borrow
-  goes. `variant` is exempt from the borrow-site refusal because mutation
-  through its payload lands, so a whole-value write is refused where the borrow
-  is stored, and written back where it is passed — through a branch, a closure
-  body, or a type parameter alike, and reading each argument of a rewritten call
-  in source order so a preceding one's write is not read past.
+  goes; nothing else is the storage itself, since `&mut` of any other place
+  re-boxes what it names — a capture and a `&mut *p` reborrow included.
+  `variant` is exempt from the borrow-site refusal because mutation through its
+  payload lands, so a whole-value write is refused where the borrow is stored,
+  and written back where it is passed — through a branch, a closure body, or a
+  type parameter alike, and reading a rewritten call's callee and each of its
+  arguments in source order so a preceding one's write is not read past.
 
-  The element row is what remains. `&mut xs[i]` lowers to
+  Both halves follow the borrow rather than its spelling. A variable bound to
+  one carries it, so the sink that variable reaches is the sink the borrow
+  reaches; a whole-value write names the storage it lands on through the
+  `&mut *r` reborrow that forwarding spells, through the capture a closure
+  names an enclosing local by, and through the `&mut` bindings that carry a
+  parameter on (`let q = p; *q = v` replaces what the caller handed in); and a
+  closure numbers its locals in its own namespace, so what it replaces there
+  says nothing about the enclosing slot of the same index.
+
+  The `&mut *p` row is the borrow-site refusal's own gap: it keys on a
+  `FieldAccess` / `Index` operand, so a reborrow slips past it for every replace
+  type. `variant` is covered from the other side, by the write-back; the rest
+  drop silently until the refusal matches the deref too.
+
+  The element row is the other. `&mut xs[i]` lowers to
   `&mut *xs.index_ref(i)` — a `MutRef` over a deref of a call, not an `Index`
   place — so its write-back is an `index_assign` to synthesize rather than a
   field store, and `index_assign` resolves in the elaborator: the trait impl,
   the mangled name, and the recorded dispatch. A lowering pass would have to
   repeat trait resolution to reach it, which is why the carve-out lists the
   index-element and struct-field paths separately and why closing this one means
-  desugaring at elaboration time. Refusing it instead is not open: payload
+  desugaring at elaboration time. Refusing it outright is not open: payload
   mutation through an element borrow is the
-  `normalize_element(&mut alt.elements[ei])` idiom. The refusals do recognise
-  the shape, so only a call argument still drops.
+  `normalize_element(&mut alt.elements[ei])` idiom, and that lands. The refusal
+  is narrowed to a position the callee replaces or stores — code that was
+  already losing the write — so it rejects rather than miscompiles.
+
+  A call argument that _yields_ a borrow rather than being one —
+  `f(if c { &mut b.left } else { &mut b.right })` — is refused on the same
+  terms, and for the mirrored reason: which place it borrowed is not known until
+  it runs, so there is no one place to store the temp back to. Both want the
+  write-back to follow the borrow to whichever place it named, which is the
+  points-to answer neither half has.
+
+  The capture row is a third. A store back to a whole capture lands in the
+  closure's environment, which closure lowering filled with a copy of the
+  enclosing slot before this pass runs — a closure that only takes `&mut` of a
+  captured local, never assigning it, still captures it by value, and the
+  capture-mode decision is the closure lowering's, not this one's. So a whole
+  capture is no write-back point and is refused on the same terms as an element.
+  A projection _through_ a capture is not: it lands on the object the capture
+  copied, which is the one the read came from.
+
+  Two sinks are refused wider than the rule asks, because neither can be gated
+  on a whole-value write the way a `let` is. Rebinding a variable (`r = &mut
+  b.item`) is refused even where nothing replaces through `r`, since the
+  detached-local set is filled in visit order and an assignment need not
+  dominate its reads; gating it takes computing that set as a fixpoint before
+  the walk. A `break` carrying one is refused for the mirrored reason: the
+  labeled block's value is read from its tail alone, so nothing else would see
+  the borrow the break yields.
 
   The write-back stores the temp back only when the callee replaced it — the
   temp aliases the place, so an unconditional store would also undo a write the
