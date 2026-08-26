@@ -208,8 +208,13 @@ fix to conform; none should be preserved.
   synthesis, or a per-parameter whole-value-write summary so that only the
   callees which actually replace are refused.
 
-  Four narrower paths still drop — the same defect, reached by a shape neither
-  half recognises:
+  The write-back stores the temp back only when the callee replaced it — the
+  temp aliases the place, so an unconditional store would also undo a write the
+  callee made through another route to the same place (`self`, a sibling `&mut`
+  argument), which lands on its own.
+
+  Narrower paths still drop — the same defect, reached by a shape neither half
+  recognises:
 
   - A borrow reaching a binding through a branch — `let r = if c { &mut b.f }
     else { &mut b.g }` — is not the syntactically direct `&mut place` the
@@ -221,6 +226,18 @@ fix to conform; none should be preserved.
   - A borrow whose place has a type-parameter type is invisible: the refusal
     runs before monomorphization, so `&mut b.item` at `T` is never tested, and
     `Bag<Payload>` drops the write.
+  - A call inside a closure body is skipped: the body numbers its locals in its
+    own namespace, so the temp the write-back needs cannot be drawn from the
+    enclosing function's counter. Closing it takes a closure-scoped allocator
+    that also seeds the closure's own `address_taken_locals`.
+  - A borrow reads its place before the whole call rather than at its own
+    argument position, so in `f(g(&mut b), &mut b.item)` where `g` writes
+    `b.item`, `f` sees the pre-`g` payload. Closing it takes hoisting every
+    preceding argument into a temp too.
+  - An indirect callee whose type records no `stores` reads as storing nothing,
+    so a borrow it keeps is written back rather than refused. The positions have
+    to come from what the functor's slot declares, and be treated as unknown —
+    all of them — when it declares nothing.
   - The `stores` refusal is raised by a lowering pass, so it reaches a batch
     compile but not `wado query diagnostics`, and it reports only the first
     offending function. Moving it to the elaborator needs the callee's declared
