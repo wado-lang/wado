@@ -189,7 +189,7 @@ fix to conform; none should be preserved.
   through its payload lands, so a whole-value write is refused where the borrow
   is stored, and written back where it is passed.
 
-  The element row is what remains. `&mut xs[i]` lowers to
+  The element row is the largest of what remains. `&mut xs[i]` lowers to
   `&mut *xs.index_ref(i)` — a `MutRef` over a deref of a call, not an `Index`
   place — so its write-back is an `index_assign` to synthesize rather than a
   field store. That is why the carve-out lists the index-element and
@@ -198,6 +198,24 @@ fix to conform; none should be preserved.
   `normalize_element(&mut alt.elements[ei])` idiom. Closing it takes either that
   synthesis, or a per-parameter whole-value-write summary so that only the
   callees which actually replace are refused.
+
+  Four narrower paths still drop, each because the borrow reaches storage by a
+  shape neither half recognises. They are the same defect, not new ones:
+
+  - A borrow reaching a binding through a branch — `let r = if c { &mut b.f }
+    else { &mut b.g }` — is not the syntactically direct `&mut place` the
+    refusal matches. The refusal must follow value positions (branches, block
+    tails, `match` arms) to its operand.
+  - A borrow stored in a variant payload (`Slot::Held(&mut b.f)`) is a `Call` in
+    the AST and a `VariantConstruct` in TIR, so it looks like neither a storing
+    position nor a call argument. Its struct-literal twin is refused.
+  - A borrow whose place has a type-parameter type is invisible: the refusal
+    runs before monomorphization, so `&mut b.item` at `T` is never tested, and
+    `Bag<Payload>` drops the write.
+  - The `stores` refusal is raised by a lowering pass, so it reaches a batch
+    compile but not `wado query diagnostics`, and it reports only the first
+    offending function. Moving it to the elaborator needs the callee's declared
+    `stores` at the call site.
 
 - [ ] D2 — no shared predicate. The boxed set is inlined in
       `lower/plan/boxing.rs::create_needed_box_types` as

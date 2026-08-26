@@ -2,7 +2,7 @@
 //! not the place's storage, so a whole-value write through it never lands. See
 //! `docs/wep-2026-06-13-reference-representation.md`.
 
-use crate::ast::{AstId, AstVisitor, Block, Expr, Stmt, UnaryOp, walk_expr, walk_stmt};
+use crate::ast::{AstId, AstVisitor, Block, Expr, Pattern, Stmt, UnaryOp, walk_expr, walk_stmt};
 use crate::compiler_host::CompilerHost;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -63,7 +63,12 @@ struct DetachedBorrowWalker {
 impl AstVisitor for DetachedBorrowWalker {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::Let(let_stmt) => self.record(let_stmt.value.as_ref()),
+            // Only a plain binding keeps the borrow. A destructuring pattern
+            // binds through it — `let Text(s) = &mut b.item else { … }` binds
+            // the payload, and the borrow dies with the statement.
+            Stmt::Let(let_stmt) if binds_the_whole_value(&let_stmt.pattern) => {
+                self.record(let_stmt.value.as_ref());
+            }
             Stmt::Return(ret) => self.record(ret.value.as_ref()),
             Stmt::TaskReturn(ret) => self.record(Some(&ret.value)),
             _ => {}
@@ -88,6 +93,10 @@ impl AstVisitor for DetachedBorrowWalker {
         }
         walk_expr(self, expr);
     }
+}
+
+fn binds_the_whole_value(pattern: &Pattern) -> bool {
+    matches!(pattern, Pattern::Ident { .. } | Pattern::MutIdent { .. })
 }
 
 impl DetachedBorrowWalker {

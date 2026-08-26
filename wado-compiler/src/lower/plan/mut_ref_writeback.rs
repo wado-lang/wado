@@ -128,28 +128,54 @@ impl WriteBack<'_> {
         (is_projection && self.detaches(place.type_id)).then_some(place.as_ref())
     }
 
+    /// The callee's name and the positions it keeps its borrows past the call.
+    /// A direct callee declares them; an indirect one carries them on its
+    /// function type, and a callee that is not a function type at all keeps
+    /// nothing this pass can name.
+    fn callee_stores(&self, call: &TirExpr) -> Option<(String, IndexSet<u32>)> {
+        match &call.kind {
+            TirExprKind::Call { func, .. } => Some((
+                func.name.clone(),
+                self.escaping
+                    .get(&(func.module_source.clone(), func.name.clone()))
+                    .cloned()
+                    .unwrap_or_default(),
+            )),
+            TirExprKind::IndirectCall { callee, .. } => {
+                let stores = match self.type_table.get(callee.type_id) {
+                    ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
+                    _ => IndexSet::default(),
+                };
+                Some(("a function value".to_string(), stores))
+            }
+            _ => None,
+        }
+    }
+
     /// `{ let t = place; let r = f(&mut t); place = t; r }` — the call keeps its
     /// position, so a `?` on it still sees the write-back run first.
     fn wrap(&mut self, call: &mut TirExpr) {
-        let TirExprKind::Call { func, args, .. } = &mut call.kind else {
+        let Some((callee, escaping)) = self.callee_stores(call) else {
             return;
         };
-        let escaping = self
-            .escaping
-            .get(&(func.module_source.clone(), func.name.clone()));
+        let args: Vec<&mut TirExpr> = match &mut call.kind {
+            TirExprKind::Call { args, .. } => args.iter_mut().map(|a| &mut a.expr).collect(),
+            TirExprKind::IndirectCall { args, .. } => args.iter_mut().collect(),
+            _ => return,
+        };
         let mut prefix: Vec<TirStmt> = Vec::new();
         let mut write_backs: Vec<TirStmt> = Vec::new();
-        for (position, arg) in args.iter_mut().enumerate() {
-            let Some(place) = self.detached_place(&arg.expr) else {
+        for (position, arg) in args.into_iter().enumerate() {
+            let Some(place) = self.detached_place(arg) else {
                 continue;
             };
             // A `stores` parameter keeps the borrow past the call, so no point
             // in the caller is late enough to store the temp back.
-            if escaping.is_some_and(|e| e.contains(&u32::try_from(position).unwrap())) {
-                self.escaped.push((arg.expr.span, func.name.clone()));
+            if escaping.contains(&u32::try_from(position).unwrap()) {
+                self.escaped.push((arg.span, callee.clone()));
                 continue;
             }
-            let span = arg.expr.span;
+            let span = arg.span;
             let place_type = place.type_id;
             let place = place.clone();
             let temp = self.alloc_local(place_type);
@@ -189,12 +215,12 @@ impl WriteBack<'_> {
                 )),
                 span,
             ));
-            arg.expr = TirExpr::new(
+            *arg = TirExpr::new(
                 TirExprKind::Unary {
                     op: TirUnaryOp::MutRef,
                     expr: Box::new(read_temp()),
                 },
-                arg.expr.type_id,
+                arg.type_id,
                 span,
             );
         }
@@ -243,9 +269,14 @@ impl WriteBack<'_> {
 
 impl TirOptVisitor for WriteBack<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
-        let changed = opt_walk_expr(self, expr);
-        if matches!(expr.kind, TirExprKind::Call { .. }) {
+        let mut changed = opt_walk_expr(self, expr);
+        if matches!(
+            expr.kind,
+            TirExprKind::Call { .. } | TirExprKind::IndirectCall { .. }
+        ) {
+            let before = self.borrowed_temps.len();
             self.wrap(expr);
+            changed |= self.borrowed_temps.len() != before;
         }
         changed
     }

@@ -43,6 +43,24 @@ test "payload mutation through the same borrow still lands" {
     assert b.item matches { Text(t) && t == `zz` };
 }
 
+test "an indirect call writes back too" {
+    let mut b = Bag { item: Payload::Text(`ab`), tick: 0 };
+    let via: fn(&mut Payload) = replace;
+    via(&mut b.item);
+    assert b.item matches { Text(t) && t == `xyz` };
+}
+
+// A destructuring `let` binds through the borrow rather than keeping it, so it
+// is not a place the borrow outlives and stays legal.
+test "a destructuring let-else through the borrow lands" {
+    let mut b = Bag { item: Payload::Text(`ab`), tick: 0 };
+    let Text(s) = &mut b.item else {
+        return;
+    };
+    *s = `zz`;
+    assert b.item matches { Text(t) && t == `zz` };
+}
+
 __DATA__
 {
     "test": {}
