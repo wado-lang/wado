@@ -51,6 +51,7 @@ pub fn translate_action(
     grammar_name: &String,
     member_methods: &List<String>,
     expected: &String = &NO_EXPECTED,
+    at_alt_end: bool = false,
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
@@ -60,6 +61,7 @@ pub fn translate_action(
                 grammar: *grammar_name,
                 methods: *member_methods,
                 expected: *expected,
+                at_alt_end,
             };
             translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &env);
         },
@@ -82,11 +84,17 @@ pub fn translate_predicate(
     bindings: &List<[bool, String, String]>,
     grammar_name: &String,
     member_methods: &List<String>,
+    at_alt_end: bool = false,
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
         Java => {
-            let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
+            let env = JEnv {
+                this_bind: PARSER_HANDLE,
+                grammar: *grammar_name,
+                methods: *member_methods,
+                at_alt_end,
+            };
             translate_java_expr(rule, rules, body, vals_in_scope, bindings, &env);
         },
         Other(name) => Result::Err(`unsupported action language '${*name}' for predicate '${*body}'`),

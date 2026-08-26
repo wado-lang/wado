@@ -19,6 +19,12 @@ list_label : xs += ( { false }? A | B )* A ;
 // even where the enclosing rule has alternatives of its own.
 nested : ( A ( { false }? B ) | C ) ;
 
+// A single-alternative group carries the loop's own entry decision, so its
+// predicate gates the loop rather than failing inside it.
+solo_star : ( { false }? A B )* A ;
+
+solo_opt : ( { false }? A )? A ;
+
 A : 'a' ;
 
 B : 'b' ;

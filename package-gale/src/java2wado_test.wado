@@ -382,8 +382,23 @@ A : '!' ;
         &bindings,
         &g.name,
         &NO_METHODS,
+        true,
     );
     assert mandatory matches { Ok(code) && code == "true" }, `${mandatory:?}`;
+
+    // Before the alternative's last element the token may not have matched
+    // yet — ANTLR answers null there, so the constant is not this one.
+    let mid_alt = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"((SContext)$ctx).A() != null",
+        false,
+        &bindings,
+        &g.name,
+        &NO_METHODS,
+    );
+    assert mid_alt matches { Err(_) }, `a mid-alternative position must not fold: ${mid_alt:?}`;
 
     let optional = translate_predicate(
         &lang,

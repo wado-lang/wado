@@ -470,6 +470,18 @@ WS : ' ' -> skip ;
     assert !out.contains("this.setChannel"), "a body naming `this` must not reach the generated module";
 }
 
+test "an expression that merely starts and ends with a quote is not a literal" {
+    let src = &"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.setChannel(\"x\" + y + \"z\") } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 2, "concatenation settles no signature either";
+    let out = gen_source(src);
+    assert !out.contains("pub interface B"), "no interface for a base whose call takes an unrepresentable argument";
+    assert !out.contains("+ y +"), "the host expression must not be spliced into the call";
+}
+
 test "a zero-argument base call is still wired" {
     let out = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }

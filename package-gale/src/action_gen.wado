@@ -550,10 +550,17 @@ fn push_rule_call_bindings(ops: &List<Op>, out: &mut List<[String, String]>) {
 /// runs after `elements[before - 1]` and before `elements[before]`). No-op
 /// unless action execution is on. Predicates emit an inline runtime guard
 /// (a false one fails the parse); prediction-time gating is Phase 2 proper.
-pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ctx: &mut GenContext) {
+pub fn gen_alt_actions_at(
+    w: &mut CodeWriter,
+    actions: &List<AltAction>,
+    before: i32,
+    ctx: &mut GenContext,
+    at_alt_end: bool = false,
+) {
     if !ctx.emit_actions() {
         return;
     }
+    ctx.set_action_at_alt_end(at_alt_end);
     for let a of actions {
         if a.before_index != before {
             continue;
@@ -716,21 +723,31 @@ pub fn emit_atn_disabled_seed(
 }
 
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar
-/// order.
-pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &GenContext) -> List<String> {
+/// order — and registered as it goes: a condition names `pred_<id>`, so handing
+/// one out without emitting that fn (and without suppressing the body's own
+/// inline guard) is what this refuses to make possible. Ask `alt_has_gate` for
+/// the question alone.
+pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut GenContext) -> List<String> {
     let mut conds: List<String> = [];
     for let a of &alt.actions {
         if let Some(c) = gate_condition_for(a, ctx) {
+            mark_gate_predicate(a, ctx);
             conds.push(c);
         }
     }
     return conds;
 }
 
+/// Whether `alt` carries a gateable alt-initial predicate, without registering
+/// anything — for a caller deciding how to shape a dispatch, not emitting one.
+pub fn alt_has_gate(alt: &Alternative, ctx: &GenContext) -> bool {
+    return alt.actions.iter_ref().any(|a| is_gateable_alt_initial_predicate(a, ctx));
+}
+
 /// Whether any alt in an `Ambiguous` overlap group carries a gateable
 /// alt-initial predicate.
 fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
-    return amb_alts.iter_ref().any(|idx| !alt_initial_gate_conditions(&alts[*idx], ctx).is_empty());
+    return amb_alts.iter_ref().any(|idx| alt_has_gate(&alts[*idx], ctx));
 }
 
 /// Whether every alt in an overlap group matches the same terminal sequence, so
@@ -849,18 +866,24 @@ pub fn mark_gated_predicates(
 pub fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
     for let a of &alt.actions {
         if is_gateable_alt_initial_predicate(a, ctx) {
-            ctx.mark_predicate_gated(a.source.action_id);
-            if body_needs_no_translator(&a.source.text, ctx) {
-                ctx.register_predicate_fn(a.source.action_id, &a.source.text);
-            }
+            mark_gate_predicate(a, ctx);
         }
+    }
+}
+
+/// Register one gated predicate: the dispatch carries it, so the body must not
+/// repeat it, and a condition naming `pred_<id>` needs that fn emitted.
+fn mark_gate_predicate(a: &AltAction, ctx: &mut GenContext) {
+    ctx.mark_predicate_gated(a.source.action_id);
+    if body_needs_no_translator(&a.source.text, ctx) {
+        ctx.register_predicate_fn(a.source.action_id, &a.source.text);
     }
 }
 
 /// The ` && (pred)` suffix folding an alt's gateable predicates into a
 /// token-led dispatch condition, or "" when off (keeping non-Wado grammars
 /// byte-identical) or the alt has none.
-pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &GenContext) -> String {
+pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut GenContext) -> String {
     if !ctx.emit_actions() {
         return String::new();
     }
@@ -879,7 +902,7 @@ pub fn gen_predicate_gated_dispatch(
     amb_alts: &List<i32>,
     alts: &List<Alternative>,
     fn_name: &String,
-    ctx: &GenContext,
+    ctx: &mut GenContext,
     rule_display: &String,
 ) {
     let order = amb_alts.sorted();
@@ -1021,6 +1044,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             ctx.alt_bindings(),
             ctx.grammar_name(),
             ctx.action_member_methods(),
+            ctx.action_at_alt_end(),
         );
     } else {
         translate_action(
@@ -1033,6 +1057,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             ctx.grammar_name(),
             ctx.action_member_methods(),
             ctx.expected_names(),
+            ctx.action_at_alt_end(),
         );
     };
     return match translated {

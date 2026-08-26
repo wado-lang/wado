@@ -102,6 +102,7 @@ use {
     add_parser_super_effect,
     add_seeded_vals_param,
     alt_gate_and_suffix,
+    alt_has_gate,
     alt_initial_gate_conditions,
     alt_vals_arg,
     ambiguous_group_predicate_gated,
@@ -2837,9 +2838,7 @@ fn gen_alt_elements(
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            let span_field = open_call_capture(w, op, ctx);
             gen_op_leaf(w, op, ctx, &mut name_counts, &sync);
-            close_call_capture(w, &span_field);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -2848,7 +2847,7 @@ fn gen_alt_elements(
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
     }
-    gen_alt_actions_at(w, actions, elements.len(), ctx);
+    gen_alt_actions_at(w, actions, elements.len(), ctx, true);
 }
 
 /// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
@@ -2893,9 +2892,7 @@ fn gen_elements_with_non_greedy(
             // only deleted-or-unwound (recovery quality is uniform with the
             // top-level sequence).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            let span_field = open_call_capture(w, op, ctx);
             gen_op_leaf(w, op, ctx, name_counts, &sync);
-            close_call_capture(w, &span_field);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -2904,7 +2901,7 @@ fn gen_elements_with_non_greedy(
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
     }
-    gen_alt_actions_at(w, actions, elements.len(), ctx);
+    gen_alt_actions_at(w, actions, elements.len(), ctx, true);
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(outer_bindings);
     }
@@ -3058,6 +3055,7 @@ fn gen_op_leaf(
             // One callee per rule; the caller's continuation is
             // threaded at runtime via `follow_arg` rather than selecting a
             // cloned `__follow_<id>`.
+            let span_field = open_call_capture(w, op, ctx);
             let fn_name = `_parse_${r.target_snake}`;
             let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &r.follow_arg);
             // `RuleCallOp.min_prec_arg` carries the resolved precedence
@@ -3074,6 +3072,7 @@ fn gen_op_leaf(
             } else {
                 w.line(&`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}${argsfx});`);
             }
+            close_call_capture(w, &span_field);
         },
         Wildcard(wop) => w.line(&`${leaf_binding(ctx, &wop.field)}p.any();`),
         Excluded(eop) => w.line(&`${leaf_binding(ctx, &eop.field)}${gen_op_excluded_call(&eop, ctx)};`),
@@ -3494,7 +3493,7 @@ fn emit_lr_branch_body(
         gen_alt_actions_at(w, actions, i + 1, ctx);
         gen_op(w, &ops[i], ctx, nc);
     }
-    gen_alt_actions_at(w, actions, ops.len() + 1, ctx);
+    gen_alt_actions_at(w, actions, ops.len() + 1, ctx, true);
     w.line(&"p.b.finish_node(p.last_end());");
     if emits_vals {
         w.line(&"_lr_acc = vals;");
@@ -3968,7 +3967,9 @@ fn gen_op_inner_for_storable_repeat(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
+    entry: GroupEntry = GroupEntry::Guaranteed,
 ) {
+    let entry = open_group_entry(w, elem, ctx, entry);
     let op = &rep_op.body;
     // `lower_repeat_op`'s list-label branch unwraps `Label(Group)` on
     // the body op; mirror the unwrap on the surface side so
@@ -3984,7 +3985,7 @@ fn gen_op_inner_for_storable_repeat(
     };
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts),
-        StorableGroup => gen_op_storable_group_inner(w, op, unwrapped_elem, ctx, name_counts, outer_follow),
+        StorableGroup => gen_op_storable_group_inner(w, op, unwrapped_elem, ctx, name_counts, outer_follow, entry),
         TransparentGroup => panic(
             "gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm",
         ),
@@ -4002,6 +4003,7 @@ fn gen_op_storable_group_inner(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
+    entry: GroupEntry = GroupEntry::Guaranteed,
 ) {
     let g_op = if let Group(g) = op {
         g;
@@ -4023,22 +4025,14 @@ fn gen_op_storable_group_inner(
             name_counts,
             outer_follow,
         ),
-        SimpleCst(_) => gen_rule_ref_group(
-            w,
-            &g_op.alts,
-            &g_op.scan_alts,
-            &g_elem.alternatives,
-            GroupEntry::Guaranteed,
-            ctx,
-            name_counts,
-        ),
+        SimpleCst(_) => gen_rule_ref_group(w, &g_op.alts, &g_op.scan_alts, &g_elem.alternatives, entry, ctx, name_counts),
         General(gs) => gen_general_group(
             w,
             gs,
             &g_op.alts,
             &g_op.scan_alts,
             &g_elem.alternatives,
-            GroupEntry::Guaranteed,
+            entry,
             ctx,
             name_counts,
         ),
@@ -4269,12 +4263,7 @@ fn gen_op_storable_optional_with_first(
     ctx: &mut GenContext,
     cond: &String,
 ) {
-    // Whatever the strategy proved, a gated body is entered only where its
-    // dispatch has an arm; otherwise the optional reports instead of skipping.
-    let entry = match group_entry_condition(inner_elem, ctx) {
-        Some(gate) => `${*cond} && (${gate})`,
-        None => *cond,
-    };
+    let entry = optional_entry_test(cond, inner_elem, ctx);
     // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
     w.begin(&`if ${entry}`);
@@ -4301,7 +4290,7 @@ fn gen_op_transparent_optional(
 
     // Non-greedy `??`: runtime ATN decision (see gen_op_storable_optional).
     if rep.non_greedy && ctx.needs_atn() {
-        gen_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &atn_optional_enter_cond(ctx, rep_op));
+        gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &atn_optional_enter_cond(ctx, rep_op));
         return;
     }
 
@@ -4319,17 +4308,18 @@ fn gen_op_transparent_optional(
             w,
             g_op,
             g_elem,
+            &rep.element,
             ctx,
             &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow),
         ),
         OptionalScanGuard => {
             let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-            gen_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_caller_follow(
+            gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &gate_cond_with_caller_follow(
                 &`${scan_pos_var} >= 0`,
                 rep_op.gate_caller_follow,
             ));
         },
-        Plain => gen_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_caller_follow(
+        Plain => gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &gate_cond_with_caller_follow(
             &ctx.first_check_str(&rep_op.body_first_set),
             rep_op.gate_caller_follow,
         )),
@@ -4346,20 +4336,21 @@ fn gen_op_transparent_optional_with_cond(
     w: &mut CodeWriter,
     g_op: &GroupOp,
     g_elem: &GroupElement,
+    inner: &Element,
     ctx: &mut GenContext,
     cond: &String,
 ) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
-    w.begin(&`if ${*cond}`);
+    w.begin(&`if ${optional_entry_test(cond, inner, ctx)}`);
     let mut nc: List<[String, i32]> = [];
     let outer_choice = ctx.enter_group_body(false);
     let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         gen_alt_actions_at(w, &alt.actions, i, ctx);
-        gen_element_with_capture(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
+        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
     }
-    gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx);
+    gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx, true);
     leave_group_alt_bindings(&outer, &alt.actions, ctx);
     ctx.leave_group_body(outer_choice);
     w.end();
@@ -4392,7 +4383,7 @@ fn prequel_expected_names(rule_name: &String, at_entry: bool, ctx: &mut GenConte
 
 /// Whether any of `alts` carries an alt-initial predicate the dispatch gates on.
 fn any_alt_gated(alts: &List<Alternative>, ctx: &GenContext) -> bool {
-    return alts.iter_ref().any(|a: &Alternative| !alt_gate_and_suffix(a, ctx).is_empty());
+    return alts.iter_ref().any(|a: &Alternative| alt_has_gate(a, ctx));
 }
 
 /// The alternatives of a repeat's group body, or `null` when the body is not a
@@ -4434,6 +4425,36 @@ fn group_entry_condition(inner: &Element, ctx: &mut GenContext) -> Option<String
     return Option::Some(parts.join(" || "));
 }
 
+/// A loop iteration with no mandatory-first flag — the common case.
+fn looped() -> GroupEntry {
+    return GroupEntry::Looped(String::new());
+}
+
+/// The test an optional enters its body on: what its strategy proved, and what
+/// the body's dispatch will accept. Building one any other way is how an
+/// optional comes to admit a token its gated body then has no arm for.
+fn optional_entry_test(own: &String, inner: &Element, ctx: &mut GenContext) -> String {
+    return match group_entry_condition(inner, ctx) {
+        Some(gate) => `${*own} && (${gate})`,
+        None => *own,
+    };
+}
+
+/// Discharge what `entry` owes before the group's own emit, and return what is
+/// left for the dispatch. A loop owes the break its gate needs, so it is emitted
+/// here rather than at each of the loop shapes — the site that decides it is a
+/// loop cannot also forget to guard it.
+fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, entry: GroupEntry) -> GroupEntry {
+    let plus_flag = match &entry {
+        Looped(flag) => *flag,
+        _ => {
+            return entry;
+        },
+    };
+    gen_repeat_gate_break(w, elem, ctx, &plus_flag);
+    return GroupEntry::Guaranteed;
+}
+
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s
 /// mandatory first iteration (`plus_flag`) chooses instead of exiting.
 fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, plus_flag: &String) {
@@ -4444,20 +4465,6 @@ fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenConte
             w.line(&`if !${*plus_flag} && !(${cond}) \{ break; \}`);
         }
     }
-}
-
-/// Dispatch one element, capturing the token range and the builder row a
-/// labeled rule call's `$x.text` / `$x.ctx` read.
-fn gen_element_with_capture(
-    w: &mut CodeWriter,
-    op: &Op,
-    elem: &Element,
-    ctx: &mut GenContext,
-    name_counts: &mut List<[String, i32]>,
-) {
-    let span_field = open_call_capture(w, op, ctx);
-    gen_op_dispatch_element(w, op, elem, ctx, name_counts);
-    close_call_capture(w, &span_field);
 }
 
 /// Open a labeled rule call's captures: the token the call starts at, and the
@@ -4554,10 +4561,10 @@ fn gen_op_optional_with_shape_lookahead_storable(
                 }
             }
             if in_shape {
-                gen_element_with_capture(w, &body.ops[i], &elements[i], ctx, &mut nc);
+                gen_op_dispatch_element(w, &body.ops[i], &elements[i], ctx, &mut nc);
             }
         }
-        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx);
+        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
         leave_group_alt_bindings(&outer, &alt.actions, ctx);
     }
     if !is_first {
@@ -4623,9 +4630,9 @@ fn gen_op_optional_with_shape_lookahead_transparent(
                         let inner_outer = enter_group_alt_bindings(&inner_body.ops, &inner_alt.actions, ctx);
                         for let mut j = 0; j < inner_alt.elements.len(); j += 1 {
                             gen_alt_actions_at(w, &inner_alt.actions, j, ctx);
-                            gen_element_with_capture(w, &inner_body.ops[j], &inner_alt.elements[j], ctx, &mut nc);
+                            gen_op_dispatch_element(w, &inner_body.ops[j], &inner_alt.elements[j], ctx, &mut nc);
                         }
-                        gen_alt_actions_at(w, &inner_alt.actions, inner_alt.elements.len(), ctx);
+                        gen_alt_actions_at(w, &inner_alt.actions, inner_alt.elements.len(), ctx, true);
                         leave_group_alt_bindings(&inner_outer, &inner_alt.actions, ctx);
                     } else {
                         panic(
@@ -4633,13 +4640,13 @@ fn gen_op_optional_with_shape_lookahead_transparent(
                         );
                     }
                 } else {
-                    gen_element_with_capture(w, actual_op, actual_elem, ctx, &mut nc);
+                    gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
                 }
             } else {
-                gen_element_with_capture(w, actual_op, actual_elem, ctx, &mut nc);
+                gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
             }
         }
-        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx);
+        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
         leave_group_alt_bindings(&outer, &alt.actions, ctx);
     }
     if !is_first {
@@ -4712,6 +4719,7 @@ fn gen_op_group(
     // `peel_scalar_label` helper handles theoretical multi-level
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
+    let entry = open_group_entry(w, elem, ctx, entry);
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts),
@@ -5042,18 +5050,16 @@ fn gen_op_repeat_non_greedy_storable(
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
-        gen_repeat_gate_break(w, inner, ctx, &"");
         let mut nc: List<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
         w.end();
         return;
     }
     if *while_cond != "false" {
         let guard = if is_plus { `!p.recovering && (${*while_cond})` } else { *while_cond };
         w.begin(&`while ${guard}`);
-        gen_repeat_gate_break(w, inner, ctx, &"");
         let mut nc: List<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
         w.end();
     }
 }
@@ -5099,17 +5105,15 @@ fn gen_op_repeat_non_greedy_transparent(
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
-        gen_repeat_gate_break(w, inner, ctx, &"");
         let mut nc: List<[String, i32]> = [];
-        gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
+        gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
         w.end();
         return;
     }
     if *while_cond != "false" {
         w.begin(&`while ${*while_cond}`);
-        gen_repeat_gate_break(w, inner, ctx, &"");
         let mut nc: List<[String, i32]> = [];
-        gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
+        gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
         w.end();
     }
 }
@@ -5402,16 +5406,14 @@ fn gen_op_repeat_star_plus_non_storable_group(
             gen_caller_follow_gate(w, rep_op);
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
-            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
+            gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
             w.end();
         } else {
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
             gen_caller_follow_gate(w, rep_op);
-            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
+            gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
             w.end();
         }
         return;
@@ -5429,10 +5431,9 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             w.end();
-            gen_repeat_gate_break(w, inner, ctx, &plus_flag);
             w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
+            gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Looped(plus_flag));
             w.end();
         } else {
             // Plus + non-scannable + no-field: emit the first iteration
@@ -5444,9 +5445,8 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.end();
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&inner_first)})`);
             gen_caller_follow_gate(w, rep_op);
-            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Guaranteed);
+            gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
             w.end();
         }
     }
@@ -5564,17 +5564,15 @@ fn gen_op_repeat_star_plus_storable(
             gen_caller_follow_gate(w, rep_op);
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
-            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, looped());
             w.end();
         } else {
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
             // Same caller-FOLLOW gate for the non-scannable while loop.
             gen_caller_follow_gate(w, rep_op);
-            gen_repeat_gate_break(w, inner, ctx, &"");
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, looped());
             w.end();
         }
         return;
@@ -5593,10 +5591,9 @@ fn gen_op_repeat_star_plus_storable(
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
             w.end();
-            gen_repeat_gate_break(w, inner, ctx, &plus_flag);
             w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, GroupEntry::Looped(plus_flag));
             w.end();
         } else {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
@@ -5611,10 +5608,9 @@ fn gen_op_repeat_star_plus_storable(
                 gen_caller_follow_gate(w, rep_op);
                 w.end();
             }
-            gen_repeat_gate_break(w, inner, ctx, &plus_flag);
             w.line(&`${plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, GroupEntry::Looped(plus_flag));
             w.end();
         }
     }
@@ -5895,8 +5891,10 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
     } else {
         `p${follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}`;
     };
+    let span_field = open_call_capture(w, op, ctx);
     gen_atn_ret_pending(w, ctx, rc.atn_call_site);
     w.line(&`${leaf_binding(ctx, &local_var)}${fn_name}(${call_args});`);
+    close_call_capture(w, &span_field);
 }
 
 /// The branch body for alternatives sharing a first token: scan them all from
@@ -5936,8 +5934,15 @@ fn gen_group_scan_dispatch(
 /// What the dispatch owes a token none of the alternatives admits. `Guaranteed`
 /// is for a caller that scanned the group before entering.
 variant GroupEntry {
+    /// The group must match here: a token no alternative admits is reported.
     Required,
+    /// The caller scanned the group before entering, so the last branch takes
+    /// the rest and there is nothing to report.
     Guaranteed,
+    /// A loop iteration. The group emits the break its gate needs, so a loop
+    /// cannot admit an iteration its dispatch would then have no arm for. The
+    /// payload is the mandatory-first-iteration flag, or `""` for none.
+    Looped(String),
 }
 
 /// Which emitter a branch's body goes through: `RuleRef` is the SimpleCst shape
@@ -6029,7 +6034,6 @@ fn group_gate(group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext)
     if group.len() != 1 {
         return String::new();
     }
-    mark_alt_gate_predicates(&alts[group[0]], ctx);
     return alt_gate_and_suffix(&alts[group[0]], ctx);
 }
 

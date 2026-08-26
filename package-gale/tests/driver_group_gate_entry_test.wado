@@ -22,6 +22,16 @@ test "a repeat whose only viable alternative is gated exits the loop" {
     assert labelled.ok(), `list label: ${labelled.diagnostics.len()} diagnostics`;
 }
 
+test "a single-alternative group under a repeat gates the loop" {
+    // The predicate is the loop's own enter/exit decision, so it is emitted
+    // once as the loop's gate — not left referencing an undefined `pred_N`.
+    let star = gge::parse_solo_star(&"a");
+    assert star.ok(), `star: ${star.diagnostics.len()} diagnostics`;
+
+    let opt = gge::parse_solo_opt(&"a");
+    assert opt.ok(), `optional: ${opt.diagnostics.len()} diagnostics`;
+}
+
 test "a predicate in a single-alternative group guards rather than selects" {
     // `{false}?` there fails the parse — it is not a choice between the rule's
     // alternatives, so it is not silently dropped as one either.

@@ -35,6 +35,10 @@ pub struct JEnv {
     /// The rendered expected-token set at this site — a generation-time
     /// constant in Gale. Empty where codegen cannot answer, which reports.
     pub expected: String = "",
+    /// Whether every element the alternative binds has matched by this action's
+    /// position. `((XContext)$ctx).TOK()` is null before its element, so the
+    /// presence test only folds to a constant where this holds.
+    pub at_alt_end: bool = false,
     /// True inside a lexer action / predicate body, where the recognizer API is
     /// the lexer's: `getText()` is the matched slice rather than a rule's token
     /// span, and a `$`-attribute resolves against the match fn's cursor.
@@ -292,7 +296,7 @@ pub fn emit_expr(
         Binary(b) => {
             if b.op == "+" && is_string_concat(e) {
                 emit_template(rule, rules, e, vals_in_scope, bindings, env);
-            } else if let Some(folded) = fold_ctx_token_null_test(b, bindings) {
+            } else if let Some(folded) = fold_ctx_token_null_test(b, bindings, env) {
                 Result::Ok(folded);
             } else {
                 let l = emit_expr(rule, rules, &b.lhs, vals_in_scope, bindings, env)?;
@@ -379,9 +383,18 @@ fn emit_call(
     };
 }
 
-/// `((XContext)$ctx).TOK() != null` asks whether the alternative matched that
-/// token — a constant for one it binds, and unfoldable for any other.
-fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<[bool, String, String]>) -> Option<String> {
+/// `((XContext)$ctx).TOK() != null` asks whether the alternative has matched
+/// that token *by this point* — a constant only past the last element, where a
+/// token the alternative binds has certainly matched. Before then the answer
+/// depends on the action's position, which is not folded.
+fn fold_ctx_token_null_test(
+    b: &JBinary,
+    bindings: &List<[bool, String, String]>,
+    env: &JEnv,
+) -> Option<String> {
+    if !env.at_alt_end {
+        return null;
+    }
     if b.op != "!=" && b.op != "==" {
         return null;
     }

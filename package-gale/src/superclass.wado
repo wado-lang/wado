@@ -322,11 +322,34 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
 
 /// The Wado type a literal argument evidently has, or `null` for anything a
 /// signature would have to guess at.
+/// Whether `text` is one whole string literal, not an expression that merely
+/// starts and ends with a quote (`"a" + x + "b"`) — that one has no evident
+/// type, and splicing it would emit the host expression verbatim.
+fn is_string_literal(text: &String) -> bool {
+    let chars: List<char> = text.chars().collect();
+    if chars.len() < 2 || chars[0] != '"' || chars[chars.len() - 1] != '"' {
+        return false;
+    }
+    // The opening quote's own closing one must be the last character.
+    let mut i = 1;
+    while i < chars.len() {
+        if chars[i] == '\\' {
+            i += 2;
+            continue;
+        }
+        if chars[i] == '"' {
+            return i == chars.len() - 1;
+        }
+        i += 1;
+    }
+    return false;
+}
+
 fn literal_arg_type(text: &String) -> Option<String> {
     if text.is_empty() {
         return null;
     }
-    if text.starts_with("\"") && text.ends_with("\"") && text.len() >= 2 {
+    if is_string_literal(text) {
         return Option::Some("String");
     }
     if *text == "true" || *text == "false" {
