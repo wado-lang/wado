@@ -253,10 +253,11 @@ impl FunctionTranslator<'_, '_> {
         src: WirInstr,
         len: Option<WirInstr>,
     ) -> WirInstr {
-        let idx = type_id.index();
-        let src_name = self.unshadowed(format!("__array_clone_src_{idx}"));
-        let dst_name = self.unshadowed(format!("__array_clone_dst_{idx}"));
-        let len_name = self.unshadowed(format!("__array_clone_len_{idx}"));
+        // One set per clone: the `len` operand can hold a bulk clone of this
+        // same type, and it runs between this one's `src` store and its copy.
+        let src_name = self.fresh_local("__array_clone_src");
+        let dst_name = self.fresh_local("__array_clone_dst");
+        let len_name = self.fresh_local("__array_clone_len");
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
