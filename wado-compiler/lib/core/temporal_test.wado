@@ -750,18 +750,18 @@ test "Duration serializes as its ISO 8601 string" {
 }
 
 test "Instant::now reads the system clock" {
+    // Any real reading is well past 2020 and well short of 2100. `SystemClock`
+    // is a wall clock, so two reads carry no ordering a host correction cannot
+    // undo — only the range holds.
+    let low = ZonedDateTime::parse_rfc3339("2020-01-01T00:00:00Z").unwrap().instant;
+    let high = ZonedDateTime::parse_rfc3339("2100-01-01T00:00:00Z").unwrap().instant;
     let t = Instant::now();
-    // Any real reading is well past 2020 and well short of 2100.
-    assert t > ZonedDateTime::parse_rfc3339("2020-01-01T00:00:00Z").unwrap().instant;
-    assert t < ZonedDateTime::parse_rfc3339("2100-01-01T00:00:00Z").unwrap().instant;
+    assert t > low && t < high;
 
-    // The clock does not run backwards between two reads.
-    assert Instant::now() >= t;
-
-    // The zoned reading is the same moment, read in the caller's zone.
+    // The zoned reading is a reading of the same clock, in the caller's zone.
     let zoned = ZonedDateTime::now("+09:00");
     assert zoned.time_zone == "+09:00";
-    assert zoned.to_instant() >= t;
+    assert zoned.to_instant() > low && zoned.to_instant() < high;
 }
 
 test "RoundingMode directs and breaks ties" {

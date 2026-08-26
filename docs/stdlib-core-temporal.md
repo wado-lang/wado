@@ -19,8 +19,9 @@ clock through the effect row, so a program that never asks the time gains no
 WASI import.
 
 Only fixed UTC offsets (`"Z"`, `"UTC"`, `±HH:MM`) are interpretable: an IANA
-zone name is storable and serializable but traps on first use, until a
-time-zone database is bundled. See
+zone name is storable, but every operation that needs the offset traps —
+rendering and serializing among them, since the wire form carries the
+resolved offset. Until a time-zone database is bundled. See
 `docs/wep-2026-06-05-core-temporal.md`.
 
 Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
@@ -463,10 +464,12 @@ A signed span of time, as a Temporal-shaped record of ten components rather
 than one scalar. Corresponds to `Temporal.Duration`.
 
 The date components (`years`, `months`, `weeks`) have no fixed length, so a
-duration carrying one can only be applied to a `ZonedDateTime`, which knows
-the calendar position to measure them against; `Instant` admits hours and
-below. Unlike Temporal, a mixed-sign literal is representable — nothing
-rejects one at construction — and the ISO 8601 form asserts against it.
+duration carrying one applies only to a receiver that knows a calendar
+position — `ZonedDateTime`, `PlainDateTime`, `PlainDate`, and
+`PlainYearMonth` within the units each admits; `Instant` and `PlainTime`
+take hours and below. Unlike Temporal, a mixed-sign literal is representable
+— nothing rejects one at construction — and the ISO 8601 form asserts
+against it.
 
 #### `years: i64`
 

@@ -366,8 +366,10 @@ where the renderer produces years far outside four digits.
   numeric support.
 - ISO-8601-only is a deliberate limitation, revisited on demand.
 - Until the tz database gap closes, `time_zone` is a string that promises more
-  than the module delivers: an IANA name is storable, serializable, and traps on
-  first use. That is the sharpest edge in the module today.
+  than the module delivers: an IANA name is storable, and every operation
+  needing the offset traps — rendering and serializing included, since the wire
+  form carries the resolved offset. That is the sharpest edge in the module
+  today.
 - `PlainMonthDay` stores no reference year, where Temporal keeps an ISO one
   (1972) so two month-days compare. Wado's derived `Ord` over `(month, day)`
   gives the same order without the field, at the cost of not round-tripping

@@ -1094,8 +1094,8 @@ has it: SP, HT, LF, VT, FF, CR.
 
 #### `pub fn is_whitespace(&self) -> bool`
 
-Returns true if the character is Unicode whitespace: ASCII whitespace
-plus the Zs/Zl/Zp code points.
+Returns true if the character is Unicode whitespace: ASCII whitespace,
+U+0085 (NEXT LINE), and the Zs/Zl/Zp code points.
 
 #### `pub fn is_ascii_lowercase(&self) -> bool`
 
