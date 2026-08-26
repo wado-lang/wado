@@ -7,14 +7,20 @@
 //! - every function, global, table, tag, type and segment unreachable from the
 //!   exports the component actually uses is dropped.
 //!
+//! An active data segment is pruned by the byte where the asset carries a
+//! [`dataref`] map, and kept whole where it does not: a segment initialises
+//! memory whether or not anything still reads what it wrote.
+//!
 //! A custom section survives only where the prune leaves it true. The `name`
 //! section is rebuilt against the functions that remain; `producers` and
 //! `target_features` name no index and pass through untouched. Everything else
 //! goes: DWARF, `linking` and `reloc.*` describe an index space that no longer
-//! exists, branch hints carry byte offsets that renumbering moves (a narrower
-//! index encodes shorter), and an unknown section cannot be shown to have
-//! survived at all. `strip_custom_sections` drops even the ones that did.
+//! exists, `wado.dataref` describes segments the prune has since split, branch
+//! hints carry byte offsets that renumbering moves (a narrower index encodes
+//! shorter), and an unknown section cannot be shown to have survived at all.
+//! `strip_custom_sections` drops even the ones that did.
 
+pub mod dataref;
 mod emit;
 mod reach;
 
@@ -39,6 +45,8 @@ pub enum Error {
     Parse(wasmparser::BinaryReaderError),
     /// The asset has a shape a component cannot host.
     Unsupported(&'static str),
+    /// The asset's data-reference map cannot be read, or does not describe it.
+    DataRef(String),
 }
 
 impl fmt::Display for Error {
@@ -46,6 +54,7 @@ impl fmt::Display for Error {
         match self {
             Error::Parse(e) => write!(f, "failed to parse wasm asset: {e}"),
             Error::Unsupported(what) => write!(f, "unsupported wasm asset: {what}"),
+            Error::DataRef(why) => write!(f, "invalid `{}` section: {why}", dataref::SECTION_NAME),
         }
     }
 }
@@ -74,6 +83,33 @@ impl From<wasm_encoder::reencode::Error> for Error {
             E::UserError(e) => match e {},
         }
     }
+}
+
+/// The constant address an active data segment starts at.
+pub(crate) struct SegmentBase {
+    pub address: i64,
+    pub is_64: bool,
+}
+
+/// `None` for a passive segment or one at a computed address — neither can hand
+/// the pieces of a split an address of their own.
+pub(crate) fn segment_base(data: &wasmparser::Data<'_>) -> Option<SegmentBase> {
+    let wasmparser::DataKind::Active { offset_expr, .. } = &data.kind else {
+        return None;
+    };
+    let mut reader = offset_expr.get_operators_reader();
+    let base = match reader.read() {
+        Ok(wasmparser::Operator::I32Const { value }) => SegmentBase {
+            address: i64::from(value),
+            is_64: false,
+        },
+        Ok(wasmparser::Operator::I64Const { value }) => SegmentBase {
+            address: value,
+            is_64: true,
+        },
+        _ => return None,
+    };
+    reader.is_end_then_eof().then_some(base)
 }
 
 /// Embed `wasm`, keeping only what `opts` asks for.
@@ -105,6 +141,9 @@ pub(crate) struct Asset<'a> {
     pub datas: Vec<wasmparser::Data<'a>>,
     pub bodies: Vec<wasmparser::FunctionBody<'a>>,
     pub names: Option<wasmparser::NameSectionReader<'a>>,
+    /// Which bytes of the data segments each function reads, when the asset
+    /// says. `None` keeps every active segment whole.
+    pub data_refs: Option<dataref::DataRefs>,
     /// The custom sections that outlive the prune, in section order.
     pub customs: Vec<(&'a str, &'a [u8])>,
 }
@@ -200,6 +239,11 @@ impl<'a> Asset<'a> {
                     asset.names = Some(wasmparser::NameSectionReader::new(
                         wasmparser::BinaryReader::new(reader.data(), reader.data_offset()),
                     ));
+                }
+                Payload::CustomSection(reader) if reader.name() == dataref::SECTION_NAME => {
+                    let text = str::from_utf8(reader.data())
+                        .map_err(|e| Error::DataRef(format!("not UTF-8: {e}")))?;
+                    asset.data_refs = Some(dataref::DataRefs::parse(text)?);
                 }
                 Payload::CustomSection(reader)
                     if INDEX_FREE_CUSTOM_SECTIONS.contains(&reader.name()) =>

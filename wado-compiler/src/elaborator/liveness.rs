@@ -1,9 +1,12 @@
 //! Source-level liveness / dead-code analysis (WEP 2026-05-16, 2026-05-26):
 //! between `annotate_bodies` and `reify`, reachability from the
-//! package-external boundary over the call graph `references` recorded, tracing
-//! every site reify can emit a call from. Only free functions and globals are
-//! classified for diagnostics; a method is a production root but is emitted
-//! only when a call reaches it.
+//! package-external boundary over the two edges annotate records — the use→def
+//! edge of every name the source spells, and the dispatch decision at every
+//! site that spells none.
+//!
+//! Only free functions and globals are classified for diagnostics; a method
+//! counts as used so a function only it calls is not reported dead, but is
+//! emitted only when a call reaches it.
 
 use crate::ast::{self, AstId, AstVisitor, Block, Expr, Function, Item, Module};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -54,8 +57,20 @@ pub(crate) fn compute(
     references: &References<'_>,
     world_export_names: &IndexSet<String>,
     compiler_named: &CompilerNamed,
+    trait_method_impls: &IndexMap<AstId, IndexSet<AstId>>,
 ) -> Liveness {
     let mut graph = Graph::default();
+
+    // Which impl a call through a generic bound reaches is settled by
+    // monomorphization, which this graph does not run, so a trait method
+    // reaches every impl's. See the WEP's Liveness section for the two rules.
+    for (trait_method, impl_methods) in trait_method_impls {
+        graph
+            .edges
+            .entry(*trait_method)
+            .or_default()
+            .extend(impl_methods);
+    }
 
     for (source, module) in modules {
         // `#![generated]` modules are machine-emitted (e.g. Gale's parser
@@ -132,17 +147,20 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Impl(impl_block) => {
-                    // A trait method's dispatch is decided after this pass —
-                    // monomorphizing a bound, a derive, an operator — so no
-                    // edge here names it and the impl is a root. An inherent
-                    // method rides the graph on the call the source spells,
-                    // unless the compiler is the one naming it.
-                    let trait_impl = impl_block.trait_type.is_some();
+                    // A method rides the graph on the call that reaches it. It
+                    // is a root only where that call is minted after this pass:
+                    // by synthesis reading a format specifier, or by the
+                    // compiler naming an inherent method itself.
+                    let synthesis_dispatched = compiler_named
+                        .synthesis_dispatched_impls
+                        .contains(&impl_block.id);
                     let self_name = crate::ast::type_head_name(&impl_block.ty);
                     for method in &impl_block.methods {
                         let key = method.id;
                         graph.add_function_edges(method, references, &key);
-                        if trait_impl || compiler_named.names_method(self_name, &method.name) {
+                        if synthesis_dispatched
+                            || compiler_named.names_method(self_name, &method.name)
+                        {
                             graph.seed_world(key);
                         } else {
                             graph.seed_export(key);
@@ -214,6 +232,11 @@ pub(crate) fn compute(
 pub(crate) struct References<'a> {
     pub(crate) direct: &'a IndexMap<AstId, AstId>,
     pub(crate) inherited: &'a IndexMap<AstId, IndexSet<AstId>>,
+    /// Callees a dispatch fact names: an operator, a subscript, a `From`
+    /// conversion, a `for-of` iterator, a handler binding — and every method
+    /// call, since `direct` keeps one definition per node while a tuple
+    /// `for-of` resolves the same node once per element.
+    pub(crate) dispatch: &'a IndexMap<AstId, IndexSet<AstId>>,
 }
 
 /// Compute local last-use liveness over every function / method body in the
@@ -925,6 +948,7 @@ impl Graph {
         for &id in ids {
             edges.extend(references.direct.get(&id));
             edges.extend(references.inherited.get(&id).into_iter().flatten());
+            edges.extend(references.dispatch.get(&id).into_iter().flatten());
         }
     }
 
@@ -980,7 +1004,9 @@ impl Graph {
     }
 }
 
-/// Visitor that records every [`AstId`] it traverses.
+/// Every [`AstId`] the walk announces: names, fields and method segments, plus
+/// each statement's and expression's own — the node a dispatch fact is keyed
+/// under.
 #[derive(Default)]
 struct IdCollector {
     ids: Vec<AstId>,
@@ -1019,6 +1045,10 @@ pub(crate) struct CompilerNamed {
     pub(crate) methods: IndexMap<String, IndexSet<String>>,
     /// Free functions, by the module that declares them — the CM ABI helpers.
     pub(crate) functions: IndexMap<ModuleSource, IndexSet<String>>,
+    /// `impl` blocks whose trait a synthesis pass dispatches — see
+    /// [`crate::compiler_item::CompilerItem::dispatched_by_synthesis`]. Their
+    /// methods are roots: no edge here can name a call minted after this pass.
+    pub(crate) synthesis_dispatched_impls: IndexSet<AstId>,
 }
 
 impl CompilerNamed {

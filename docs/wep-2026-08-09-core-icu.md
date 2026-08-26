@@ -101,11 +101,16 @@ handle carries a `dtor` and is move-only.
 ### One implementation asset, collected per program
 
 Underneath the facade sits a single prebuilt ICU asset, not a partition. It is
-shipped relocatable, so the `linking` and `reloc.*` sections survive and the
-collection that produced it can run again against the exports one program
-reaches (Known gaps). Measured, that reproduces what rebuilding the asset with a
-narrower WIT surface would produce, and reaches granularity a rebuild cannot: a
-grapheme pass is 23 KB where segmentation's four operations are 2.31 MB.
+shipped relocatable, so the `linking` and `reloc.CODE` sections survive and the
+collection wasm-ld runs for `--gc-sections` can run again against the exports
+one program reaches. `wado-wasm-embed` performs it, over data as well as code:
+an active segment is pruned by the byte, from a map of which data ranges each
+function reads, and every surviving run becomes a segment of its own. Measured,
+that reproduces what rebuilding the asset with a narrower WIT surface would
+produce — 89 KB for locale + casemap against a ~92 KB rebuild, the slices
+runtime-checked, Turkish casing included — and reaches granularity a rebuild
+cannot: a grapheme pass is 23 KB where segmentation's four operations are
+2.31 MB. Slicing needs no rebuild, so one asset serves every program.
 
 So the capability axis is reachability's, end to end: code, and the data that
 does not vary by locale, which is baked into the asset and collected away when
@@ -305,28 +310,17 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 
 ## Known gaps
 
-- **The prune keeps baked data.** `wado-wasm-embed` drops every function,
-  global, table, tag, type and segment unreachable from the exports it keeps,
-  but marks every active data segment live unconditionally: an active segment
-  initialises memory whether or not anything still reads what it wrote.
+- **Nothing collects a component asset.** `wado-wasm-embed` collects over a
+  core-module asset, which is where the mechanism is proven: on
+  `wado-bundled-libm` a program calling `sin` keeps 344 of the asset's 5,448
+  rodata bytes, and all 54 of its exports answer bit-identically to the unpruned
+  module. A component takes the `wasm-compose` path instead and is composed
+  whole, so neither the code nor the data of ICU's asset is reached today.
 
-  Closing it means giving the prune a symbol graph where it has a wasm index
-  graph. The `linking` and `reloc.*` sections carry exactly that — which
-  function references which data symbol — and wasm-ld already collects over it,
-  `--gc-sections` being its default. Measured on the ICU asset kept relocatable,
-  collecting against one program's exports reproduces the from-source rebuild
-  across every capability — 89 KB for locale + casemap against a ~92 KB rebuild
-  — and the slices are runtime-checked, Turkish casing included, so the graph
-  carries the data edges and not only the code.
-
-  Two things follow. Slicing needs no rebuild, so one asset can serve every
-  program; and the root set can be finer than any WIT surface a rebuild could
-  express. What remains is implementing the collection in `wado-wasm-embed`,
-  which today reads the wasm index space rather than the symbol table.
-
-  This closes the capability axis only. A locale is reached through the same
-  symbol whatever the program declares, so no collection separates `ja` from the
-  rest — that stays the data image's job.
+  Closing it is the first three Implementation items: run the collection inside
+  a component, resolve the map from the sections a relocatable asset keeps
+  rather than only at asset-build time, and carry the `reloc.DATA` edges libm
+  has none of.
 
 ## Open questions
 
@@ -369,6 +363,18 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 - [ ] Promote the spike's ICU component into a first-party prebuilt artifact,
       shipped relocatable, with the locale-bearing capabilities moved onto a
       buffer provider and the rest left baked.
+- [ ] Collect over a component asset, rooted where the core-module path already
+      roots: the asset's exports that surviving Wado code calls.
+- [ ] Resolve the data-reference map at compile time. `dataref::resolve` runs
+      today only from `mise run update-bundled`, because libm ships as `.wat`
+      and the round trip invalidates the offsets a relocation holds. A
+      relocatable asset keeps those sections, so `embed` can read them itself
+      and needs no baked `wado.dataref`.
+- [ ] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
+      data range or a function. The map's shape and the walk both have to grow:
+      a live data range can root a function, so the data and code edges close
+      over one worklist rather than the code seeding the data once. The resolver
+      rejects one today rather than resolving halfway.
 - [ ] Write the facade over it: re-exports, the Wado-native shapes (`Ord`,
       iterators, `Display`), and the one-shot helpers.
 - [ ] Build the data image — per-(capability, locale) zlib entries plus index,

@@ -24,8 +24,8 @@ use super::sig::InstantiatedImplSig;
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
-    ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo,
-    IndexTraitInfo, IndexValueTraitInfo, MethodInfo, MethodOwner, TypeError, TypeLookup,
+    ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, MethodInfo,
+    MethodOwner, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 
@@ -2752,7 +2752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
-    ) -> Option<IndexTraitInfo> {
+    ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2760,15 +2760,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "index_ref",
             "Output",
             expected_index_type,
-        )
-        .map(
-            |(output_type, self_kind, trait_name, impl_module_source, index_type)| IndexTraitInfo {
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source,
-                index_type,
-            },
         )
     }
 
@@ -2780,7 +2771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
-    ) -> Option<IndexTraitInfo> {
+    ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2788,15 +2779,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "index_ref_mut",
             "Output",
             expected_index_type,
-        )
-        .map(
-            |(output_type, self_kind, trait_name, impl_module_source, index_type)| IndexTraitInfo {
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source,
-                index_type,
-            },
         )
     }
 
@@ -2821,6 +2803,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // trait name are never read; the array the literal builds is the
             // result.
             vec![FromArrayInfo {
+                impl_def: None,
                 element_type,
                 array_type: base_type_id,
                 impl_module_source: self.current_module_source.clone(),
@@ -2847,6 +2830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return None;
                     };
                     Some(FromArrayInfo {
+                        impl_def: Some(info.impl_def),
                         element_type,
                         array_type,
                         impl_module_source: info.impl_module_source,
@@ -2881,7 +2865,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-    ) -> Option<IndexAssignTraitInfo> {
+    ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2890,24 +2874,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "Output",
             None,
         )
-        .map(
-            |(input_type, self_kind, trait_name, impl_module_source, index_type)| {
-                IndexAssignTraitInfo {
-                    input_type,
-                    self_kind,
-                    trait_name,
-                    impl_module_source,
-                    index_type,
-                }
-            },
-        )
     }
 
     pub(super) fn find_index_mut_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-    ) -> Option<IndexMutTraitInfo> {
+    ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2915,17 +2888,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "index_ref_mut",
             "Output",
             None,
-        )
-        .map(
-            |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
-                IndexMutTraitInfo {
-                    output_type,
-                    self_kind,
-                    trait_name,
-                    impl_module_source,
-                    index_type,
-                }
-            },
         )
     }
 
@@ -2936,7 +2898,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
-    ) -> Option<IndexValueTraitInfo> {
+    ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2944,17 +2906,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "index_value",
             "Output",
             expected_index_type,
-        )
-        .map(
-            |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
-                IndexValueTraitInfo {
-                    output_type,
-                    self_kind,
-                    trait_name,
-                    impl_module_source,
-                    index_type,
-                }
-            },
         )
     }
 
@@ -3138,13 +3089,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
-    ) -> Option<(
-        TypeId,
-        ast::SelfKind,
-        crate::name::FqTraitName,
-        ModuleSource,
-        Option<TypeId>,
-    )> {
+    ) -> Option<IndexingTraitInfo> {
         let concrete_type_args = self
             .tysys
             .type_table
@@ -3210,7 +3155,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
-                Some((assoc_type, self_kind, trait_name, impl_source, index_type))
+                Some(IndexingTraitInfo {
+                    method_def: method_header.def,
+                    output_type: assoc_type,
+                    self_kind,
+                    trait_name,
+                    impl_module_source: impl_source,
+                    index_type,
+                })
             },
         )
     }
@@ -3405,6 +3357,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         "index_ref_mut".to_string(),
                     )),
                 },
+                method_def: Some(index_mut_info.method_def),
                 self_kind: index_mut_info.self_kind,
                 arg_ref_wraps: vec![false],
                 return_type: mut_ref_output_type,
@@ -3459,6 +3412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `DesugarKind::IndexMutMethodCall`, so reify takes the expansion path.
         self.record_method_dispatch(
             Some(method_call.id),
+            method_def,
             &func,
             self_kind,
             method_is_ref_impl,
