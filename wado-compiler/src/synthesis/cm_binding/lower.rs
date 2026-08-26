@@ -16,8 +16,7 @@ use crate::tir::{
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
     generic_method_call, generic_method_call_monomorphized, i32_const, i64_const, if_stmt,
-    internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, split_packed_ptr_len, synth_span,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
@@ -874,16 +873,24 @@ pub(super) fn synthesize_lower_map_to_buffer(
     let (key_tid, value_tid) = {
         let tt = ctx.type_table.borrow();
         match tt.get(map_type_id) {
-            crate::tir::ResolvedType::GenericInstance { type_args, .. }
-                if type_args.len() == 2 =>
-            {
+            crate::tir::ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
             }
             other => panic!("a `map` lower needs a two-argument TreeMap, got {other:?}"),
         }
     };
 
-    let (map_head, map_source, iter_tid, iter_source, next_method, len_method, entries_method, pair_tid, opt_tid) = {
+    let (
+        map_head,
+        map_source,
+        iter_tid,
+        iter_source,
+        next_method,
+        len_method,
+        entries_method,
+        pair_tid,
+        opt_tid,
+    ) = {
         let mut tt = ctx.type_table.borrow_mut();
         let ref_pair = {
             let key_ref = tt.make_ref(key_tid);
@@ -994,7 +1001,12 @@ pub(super) fn synthesize_lower_map_to_buffer(
     ));
 
     let i_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_mut_stmt("__map_i", i_local, TypeTable::I32, i32_const(0)));
+    stmts.push(let_mut_stmt(
+        "__map_i",
+        i_local,
+        TypeTable::I32,
+        i32_const(0),
+    ));
 
     let mut loop_body = Vec::new();
     loop_body.push(if_stmt(
@@ -1062,11 +1074,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
         let slot_ref_tid = ctx.type_table.borrow_mut().make_ref(slot_tid);
         let field = TirExpr::new(
             TirExprKind::FieldAccess {
-                expr: Box::new(local_ref(
-                    pair_binding_local,
-                    &pair_binding_name,
-                    pair_tid,
-                )),
+                expr: Box::new(local_ref(pair_binding_local, &pair_binding_name, pair_tid)),
                 field_index: slot as u32,
                 field_name: slot.to_string(),
             },
@@ -2015,7 +2023,9 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             synthesize_lower_list_to_memory(&g.args[0], value, addr, next_local, locals, ctx)
         }
-        Type::Generic(g) if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 => {
+        Type::Generic(g)
+            if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 =>
+        {
             synthesize_lower_map_to_memory(
                 &g.args[0], &g.args[1], value, addr, next_local, locals, ctx,
             )

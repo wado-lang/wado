@@ -27,8 +27,8 @@ use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinSet;
 use wasmtime::component::{Accessor, AccessorTask, Component};
 use wasmtime::{AsContextMut, Engine, GuestProfiler, Store, UpdateDeadline};
-use wasmtime_wasi_http::p3::Request as WasiRequest;
 use wasmtime_wasi_http::Error as HttpError;
+use wasmtime_wasi_http::p3::Request as WasiRequest;
 use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 
 use crate::args::{self, CliExit};
@@ -573,8 +573,7 @@ async fn dispatch_request(
     // The conversion consults the hooks for header policy only; the Wado hooks
     // customise the *outgoing* path (`send_request`) and nothing an incoming
     // request is measured against, so the defaults answer identically here.
-    let (wasi_req, io) =
-        WasiRequest::from_http(wasmtime_wasi_http::default_hooks(), http_req);
+    let (wasi_req, io) = WasiRequest::from_http(wasmtime_wasi_http::default_hooks(), http_req);
 
     let (resp_tx, resp_rx) = oneshot::channel::<HandlerOutcome>();
     let job = RequestJob {

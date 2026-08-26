@@ -477,12 +477,7 @@ fn lower_to_flat_inner(
             };
             let (buffer_stmts, base_local, len_local) =
                 super::lower::synthesize_lower_map_to_buffer(
-                    &key_ast,
-                    &value_ast,
-                    value,
-                    next_local,
-                    locals,
-                    &lower_ctx,
+                    &key_ast, &value_ast, value, next_local, locals, &lower_ctx,
                 );
             stmts.extend(buffer_stmts);
             vec![
@@ -993,6 +988,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     &generic.args[0],
                     &generic.args[1],
                     local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                    Some(target_type_id),
                     next_local,
                     stmts,
                     locals,

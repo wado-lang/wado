@@ -12,8 +12,8 @@ use crate::cm_abi;
 use crate::component_model::CmVariantCase;
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId,
-    TypeTable,
+    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField,
+    TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
@@ -234,7 +234,7 @@ fn synthesize_lift_inner(
                 )
             } else if tree_map_name.as_deref() == Some(gname) && g.args.len() == 2 {
                 synthesize_lift_map(
-                    &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
+                    &g.args[0], &g.args[1], addr, None, next_local, stmts, locals, ctx,
                 )
             } else if matches!(gname, "Stream" | "Future" | "Own" | "Borrow") {
                 builtin_call("i32_load", vec![addr], TypeTable::I32)
@@ -768,6 +768,19 @@ pub(super) fn synthesize_lift_list(
     local_ref(result_local, "__result", array_type_id)
 }
 
+/// `(TreeMap<K, V>, K, V)` when `tid` is a `TreeMap<K, V>`, else `None`.
+fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, TypeId)> {
+    let ResolvedType::GenericInstance { def, type_args } = tt.get(tid) else {
+        return None;
+    };
+    let is_tree_map =
+        tt.compiler_item_def(crate::compiler_item::CompilerItem::TreeMap) == Some(*def);
+    match type_args.as_slice() {
+        [key, value] if is_tree_map => Some((tid, *key, *value)),
+        _ => None,
+    }
+}
+
 /// Lift a `map<K, V>` from linear memory at `addr`.
 ///
 /// The buffer is the `list<tuple<K, V>>` buffer — the type `map` despecializes
@@ -776,10 +789,14 @@ pub(super) fn synthesize_lift_list(
 /// the rule the Component Model states for a repeated key. Nothing
 /// materialises the pair itself; the key and the value are lifted straight
 /// from their offsets.
+///
+/// `override_map_ty` is the caller's own `TreeMap<K, V>` where it has one, so
+/// the lift produces the parameter's exact GC type rather than a rebuilt one.
 pub(super) fn synthesize_lift_map(
     key_ty: &Type,
     value_ty: &Type,
     addr: TirExpr,
+    override_map_ty: Option<TypeId>,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -796,9 +813,19 @@ pub(super) fn synthesize_lift_map(
 
     let (map_type_id, key_tid, value_tid, map_head, map_source, index_assign) = {
         let mut tt = ctx.type_table.borrow_mut();
-        let key_tid = ctx.cm_type_id(key_ty, &mut tt);
-        let value_tid = ctx.cm_type_id(value_ty, &mut tt);
-        let map_type_id = tt.make_tree_map(key_tid, value_tid);
+        // Lift into the caller's exact `TreeMap<K, V>` where it knows one (an
+        // export param's type from the user signature), not a rebuilt one: a
+        // registry-shared key or value would otherwise resolve to a second GC
+        // `TypeId` and mismatch the parameter, the same hazard the list lift's
+        // `override_list_ty` exists for.
+        let (map_type_id, key_tid, value_tid) =
+            if let Some(found) = override_map_ty.and_then(|tid| tree_map_instance(&tt, tid)) {
+                found
+            } else {
+                let key_tid = ctx.cm_type_id(key_ty, &mut tt);
+                let value_tid = ctx.cm_type_id(value_ty, &mut tt);
+                (tt.make_tree_map(key_tid, value_tid), key_tid, value_tid)
+            };
         let map_head = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::TreeMap);
         let items = tt.compiler_items();
         let map_source = items
@@ -860,7 +887,12 @@ pub(super) fn synthesize_lift_map(
     ));
 
     let i_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_mut_stmt("__map_i", i_local, TypeTable::I32, i32_const(0)));
+    stmts.push(let_mut_stmt(
+        "__map_i",
+        i_local,
+        TypeTable::I32,
+        i32_const(0),
+    ));
 
     let mut loop_stmts: Vec<TirStmt> = Vec::new();
     loop_stmts.push(if_stmt(
@@ -909,7 +941,10 @@ pub(super) fn synthesize_lift_map(
         loop_stmts.extend(slot_stmts);
         let value = materialize_if_needed(value, next_local, &mut loop_stmts, locals);
         loop_stmts.extend(synthesize_free_element(
-            slot_ty, slot_addr, &string_name, ctx,
+            slot_ty,
+            slot_addr,
+            &string_name,
+            ctx,
         ));
         lifted.push(value);
     }
@@ -917,11 +952,8 @@ pub(super) fn synthesize_lift_map(
         .unwrap_or_else(|_| panic!("a map pair lifts exactly a key and a value"));
 
     let (index_assign_trait, index_assign_method) = index_assign;
-    let info = crate::name::LocalMethodName::new(
-        map_head,
-        Some(index_assign_trait),
-        index_assign_method,
-    );
+    let info =
+        crate::name::LocalMethodName::new(map_head, Some(index_assign_trait), index_assign_method);
     let mangled = info.to_mangled_name();
     loop_stmts.push(expr_stmt(TirExpr::new(
         TirExprKind::method_call(

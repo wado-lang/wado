@@ -451,7 +451,6 @@ impl WasiHttpHooks for TestHttpCtx {
                 >,
             > + Send,
     > {
-
         use http_body_util::BodyExt;
 
         let uri = request.uri().to_string();
@@ -495,6 +494,17 @@ impl WasiHttpHooks for TestHttpCtx {
             }),
         }
     }
+}
+
+/// Finish a fixture's [`WasiCtx`], granting socket *creation* but no network.
+///
+/// wasmtime 48 made creating a TCP/UDP socket a permission of its own, off by
+/// default. A fixture that only constructs a socket — to pattern-match the
+/// `Result` it comes back in, say — would otherwise fail before reaching what
+/// it tests. Reaching the network stays denied: no `inherit_network`, so the
+/// per-address check refuses every connection.
+fn fixture_wasi_ctx(builder: &mut WasiCtxBuilder) -> WasiCtx {
+    builder.allow_tcp(true).allow_udp(true).build()
 }
 
 /// Mock spec for a single `wasi:tls` handshake.
@@ -672,7 +682,7 @@ impl WasiState {
         stdout: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
         stderr: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
     ) -> Self {
-        let ctx = WasiCtxBuilder::new().stdout(stdout).stderr(stderr).build();
+        let ctx = fixture_wasi_ctx(WasiCtxBuilder::new().stdout(stdout).stderr(stderr));
         Self {
             ctx,
             table: ResourceTable::new(),
@@ -684,7 +694,7 @@ impl WasiState {
 
     /// Create a basic state (no I/O capture)
     pub fn new() -> Self {
-        let ctx = WasiCtxBuilder::new().build();
+        let ctx = fixture_wasi_ctx(&mut WasiCtxBuilder::new());
         Self {
             ctx,
             table: ResourceTable::new(),
@@ -1056,7 +1066,7 @@ pub fn run_wasm_with_full_options(
         for (host_path, guest_path) in dirs {
             builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
-        let ctx = builder.build();
+        let ctx = fixture_wasi_ctx(&mut builder);
         let state = WasiState {
             ctx,
             table: ResourceTable::new(),

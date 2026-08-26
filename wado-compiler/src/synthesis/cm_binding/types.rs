@@ -80,7 +80,9 @@ impl CmStdlibNames {
             err_index,
             index_value: items.trait_fq(CompilerItem::IndexValue),
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
-            tree_map: items.struct_name_opt(CompilerItem::TreeMap).map(str::to_string),
+            tree_map: items
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string),
         }
     }
 }
@@ -695,8 +697,7 @@ fn check_cm_boundary_representable_inner(
                         panic!("`TreeMap` is declared with two type parameters");
                     };
                     let (key, value) = (*key, *value);
-                    if let Some(reason) =
-                        crate::component_model::map_key_rejection(type_table, key)
+                    if let Some(reason) = crate::component_model::map_key_rejection(type_table, key)
                     {
                         return Err(reason);
                     }
