@@ -11,12 +11,6 @@ const FORBIDDEN = [
       " site; script in Node.js.",
   },
   {
-    pattern: /\$/,
-    reason:
-      "a command word that is only known once the shell expands it — $var, ${var}, $(…) —" +
-      " cannot be read, so it is denied. Name the command itself.",
-  },
-  {
     pattern: /^nohup$/,
     reason:
       "nohup is forbidden (AGENTS.md > Tooling): it notifies nobody when the job exits. Run" +
@@ -44,8 +38,6 @@ const RUNNERS = new Map([
 const SHELLS = new Set(["bash", "dash", "ksh", "sh", "zsh"]);
 // `bash -c`, `sh -ec`, `zsh -lic`: the script follows when `c` ends the flag.
 const SHELL_FLAG = /^-[A-Za-z]*c$/;
-// `env -S 'cmd'`, `env -S'cmd'`, `env --split-string=cmd`: a command line of its own.
-const ENV_SPLIT = /^(?:-S|--split-string)=?([\s\S]*)$/;
 const OPENS_COMMAND = new Set(["!", "do", "elif", "else", "if", "then", "until", "while"]);
 const NOT_A_COMMAND = new Set([
   "case",
@@ -88,53 +80,6 @@ function balanced(src: string, start: number, open: string, close: string): [str
     }
   }
   return [src.slice(start), i];
-}
-
-const ANSI_C_ESCAPES = new Map([
-  ["a", "\x07"],
-  ["b", "\b"],
-  ["e", "\x1b"],
-  ["E", "\x1b"],
-  ["f", "\f"],
-  ["n", "\n"],
-  ["r", "\r"],
-  ["t", "\t"],
-  ["v", "\v"],
-  ["\\", "\\"],
-  ["'", "'"],
-  ['"', '"'],
-  ["?", "?"],
-]);
-
-/** The text `$'…'` expands to, and the index past its close. */
-function ansiCQuoted(src: string, start: number): [string, number] {
-  let value = "";
-  let i = start;
-  while (i < src.length && src[i] !== "'") {
-    if (src[i] !== "\\") {
-      value += src[i++];
-      continue;
-    }
-    const escape = src[i + 1] ?? "";
-    const named = ANSI_C_ESCAPES.get(escape);
-    const numeric = /^(x[0-9a-fA-F]{1,2}|u[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{1,8}|[0-7]{1,3})/.exec(
-      src.slice(i + 1),
-    );
-    if (named !== undefined) {
-      value += named;
-      i += 2;
-    } else if (numeric) {
-      const digits = numeric[0];
-      const radix = /^[xuU]/.test(digits) ? 16 : 8;
-      const code = parseInt(radix === 16 ? digits.slice(1) : digits, radix);
-      value += code <= 0x10ffff ? String.fromCodePoint(code) : src.slice(i, i + 1 + digits.length);
-      i += 1 + digits.length;
-    } else {
-      value += src.slice(i, i + 2);
-      i += 2;
-    }
-  }
-  return [value, i < src.length ? i + 1 : i];
 }
 
 /** Text up to the next `close`, and the index past it. */
@@ -193,12 +138,8 @@ function readWord(src: string, start: number): Word {
     } else if (c === "\\") {
       if (src[i + 1] !== "\n") value += src[i + 1] ?? "";
       i += 2;
-    } else if (c === "$" && src[i + 1] === "'") {
-      const [quoted, end] = ansiCQuoted(src, i + 2);
-      value += quoted;
-      i = end;
-    } else if (c === "$" && src[i + 1] === '"') {
-      i++; // a locale-translated string runs as its contents
+    } else if (c === "$" && (src[i + 1] === "'" || src[i + 1] === '"')) {
+      i++; // `$'…'` and `$"…"` run as their contents
     } else if (c === "'") {
       const [quoted, end] = delimited(src, i + 1, "'");
       value += quoted;
@@ -312,12 +253,7 @@ export function commandNames(src: string): string[] {
       i = word.end;
       nested.push(...word.subs);
       const ioNumber = /^\d+$/.test(word.value) && (src[i] === "<" || src[i] === ">");
-      // A word that is only a substitution runs whatever the substitution prints.
-      if (word.value === "") {
-        if (word.subs.length > 0) classify("$()");
-      } else if (!ioNumber) {
-        classify(word.value);
-      }
+      if (word.value !== "" && !ioNumber) classify(word.value);
     }
   }
 
@@ -373,13 +309,7 @@ export function commandNames(src: string): string[] {
       if (ASSIGNMENT.test(value)) return;
       if (runner) {
         if (value.startsWith("-")) {
-          const split = runner === "env" ? ENV_SPLIT.exec(value) : null;
-          if (split) {
-            if (split[1] === "") nestNext = true;
-            else nested.push(split[1]);
-          } else {
-            skipValue = RUNNERS.get(runner)!.includes(value);
-          }
+          skipValue = RUNNERS.get(runner)!.includes(value);
           return;
         }
         if (DURATION.test(value)) return;

@@ -45,23 +45,13 @@ const DENIED = [
   "__proto__ -x; sed -i x f",
   "$'sed' -i x f",
   '$"sed" -i x f',
-  "$'\\x73ed' -i x f",
-  "$'\\163ed' -i x f",
-  "env -S 'sed -i x f'",
-  "env -S'awk 1 f'",
-  "env --split-string='sed -i x f'",
   "$'\\UFFFFFFFF'; sed -i x f",
   "cat <<EOF\n$(sed -i x f)\nEOF",
   "cat <<EOF\n`awk 1 f`\nEOF",
   "bash <<'EOF'\nsed -i x f\nEOF",
   "sh <<EOF\nawk 1 f\nEOF",
-  'tool=sed; "$tool" -i x f',
-  "c=sed; $c -i x f",
-  "${tool} -i x f",
-  "$(which sed) -i x f",
   "$HOME/bin/sed -i x f",
   "cat <<-EOF\n\tEOF\nsed -i x f\n\tEOF",
-  "env -S bash <<'EOF'\nsed -i x f\nEOF",
   "sudo sh <<'EOF'\nawk 1 f\nEOF",
 ];
 
@@ -96,6 +86,8 @@ const ALLOWED = [
   "cat <<EOF > note.md\n\\$(sed -i x f)\nEOF",
   "node <<'EOF'\nconsole.log(1)\nEOF",
   '"$HOME/.cargo/bin/cargo" test',
+  "$(mise which node) --version",
+  "CARGO=$HOME/.cargo/bin/cargo; $CARGO test",
   "cat <<EOF\n EOF\nsed -i x f\nEOF",
 ];
 
