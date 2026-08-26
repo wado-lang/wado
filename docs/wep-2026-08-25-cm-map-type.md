@@ -72,36 +72,43 @@ type's, unchanged:
 they answer for `List<[K, V]>`. Only the component *type section* differs, where
 `CmDefined::Map(k, v)` encodes `0x63` instead of a list of a tuple.
 
-### Lift and lower delegate through `List<[K, V]>`
+### Lift and lower go straight through `TreeMap`'s public API
 
-The CM binding synthesizer does not learn `TreeMap`'s representation. `TreeMap`
-is an AA-tree over two backing lists with a tombstone flag; a lift that built
-that layout directly would couple `cm_binding` to a private invariant of
-`core:collections` and break the moment the tree is retuned.
+No intermediate `List<[K, V]>`. Materializing one would deep-copy every key and
+value — Wado's assignment is a copy, so a pair list is a second full copy of the
+map's contents, built and discarded on every crossing. The despecialization
+`list<tuple<K, V>>` describes the *bytes*, and reusing it for the *bytes* is
+right; reusing it as a Wado value in between is not.
 
-Instead the binding reuses the list path it already has and converts at the
-ends, through two methods on `TreeMap`:
+The binding also does not learn `TreeMap`'s representation. `TreeMap` is an
+AA-tree over two backing lists with a tombstone flag, and encoding that into the
+ABI layer would break the moment the tree is retuned. Both are avoidable at
+once, because everything the binding needs is already public and is what user
+code writes:
 
-```wado
-pub fn from_entries(entries: List<[K, V]>) -> TreeMap<K, V>
-pub fn to_entries(&self) -> List<[K, V]>
-```
-
-- **Lift** (`map` → `TreeMap`): `synthesize_lift_list` with element type
-  `[K, V]`, then `TreeMap::<K, V>::from_entries(…)`.
-- **Lower** (`TreeMap` → `map`): `m.to_entries()`, then the existing list lower.
+- **Lift** (`map` → `TreeMap`): `TreeMap::new()`, then the list-lift loop with
+  its accumulator swapped — each iteration lifts `K` at the pair's offset and
+  `V` at the next, and calls `IndexAssign::index_assign` (`map[k] = v`). That
+  is a last-wins, order-preserving insert, exactly the rule the spec states for
+  a duplicate key.
+- **Lower** (`TreeMap` → `map`): `len()` sizes the `realloc`'d buffer (it counts
+  live pairs, not tombstones), then the loop walks `entries()` and writes each
+  pair at `base + i * stride`. The iterator yields `[&K, &V]`, so the lower
+  reads through the references and copies nothing.
 - **Free**: the list free, unchanged — the buffer is a list buffer.
 
-This costs one intermediate `List<[K, V]>` per crossing. That is the price of
-not encoding a private layout into the ABI, and it is a boundary cost, not a
-hot-path one. A later pass can fuse the intermediate away without changing this
-design.
+`entries()` yields insertion order and skips tombstones, so a lowered `map`
+never carries a duplicate. Round-tripping a `TreeMap` is therefore the identity,
+and round-tripping a duplicate-bearing `map` normalizes it, both of which the
+spec permits.
 
-`from_entries` inserts in list order, so a duplicate key takes the last pair's
-value — the rule the spec states. `to_entries` yields insertion order and skips
-tombstones, so it never emits a duplicate. Round-tripping a `TreeMap` is
-therefore the identity, and round-tripping a duplicate-bearing `map` normalizes
-it, both of which the spec permits.
+The lower is the one place this costs new machinery: the existing loop is
+index-driven (`len` + `index_value`), and a `TreeMap` has no positional accessor
+over live pairs — a tombstone breaks the correspondence between position and
+index. So the CM binding gains an iterator-driven loop. That is worth building
+rather than routing around: the alternative that avoids it is either the extra
+full copy above, or reaching into `entries` and `deleted` directly, which is the
+coupling this section exists to prevent.
 
 ### Feature gating
 
