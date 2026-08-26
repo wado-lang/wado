@@ -1124,3 +1124,87 @@ test "Instant rejects an epoch bignum beyond i64/u64 instead of truncating" {
         },
     }
 }
+
+test "a backwards until anchors at the receiver, so add round-trips it" {
+    let from = PlainDate::new(1959, 1, 19);
+    let to = PlainDate::new(1957, 6, 27);
+    let span = from.until(&to, Unit::Month);
+    assert span == Duration { months: -18, days: -22 };
+    assert from.add(&span) == to;
+
+    let years = from.until(&to, Unit::Year);
+    assert years == Duration { years: -1, months: -6, days: -22 };
+    assert from.add(&years) == to;
+}
+
+test "a backwards ZonedDateTime until round-trips through add" {
+    let from = ZonedDateTime::parse_rfc3339("1966-10-31T23:13:20+09:00").unwrap();
+    let to = ZonedDateTime::parse_rfc3339("1966-02-10T01:53:34+09:00").unwrap();
+    let span = from.until(&to, Unit::Month);
+    assert from.add(&span) == to;
+}
+
+test "ISO week numbering floors the leap-year terms, so BCE years count 53 weeks" {
+    let d = PlainDate::new(-396, 12, 28);
+    assert d.week_of_year() == 53;
+    assert d.year_of_week() == -396;
+}
+
+fn lcg(state: i64) -> i64 {
+    return (state * 6_364_136_223_846_793_005 + 1_442_695_040_888_963_407) % 4_611_686_018_427_387_904;
+}
+
+test "until round-trips through add for every date unit, in both directions" {
+    let units = [Unit::Year, Unit::Month, Unit::Week, Unit::Day];
+    let mut s: i64 = 12_345;
+    for let mut i = 0; i < 400; i += 1 {
+        s = lcg(s);
+        let a = PlainDate::from_epoch_days(s % 40_000 - 20_000);
+        s = lcg(s);
+        let b = PlainDate::from_epoch_days(s % 40_000 - 20_000);
+        for let u of units {
+            assert a.add(&a.until(&b, u)) == b;
+            assert b.add(&b.until(&a, u)) == a;
+        }
+    }
+}
+
+test "PlainDateTime until round-trips through add, in both directions" {
+    let units = [Unit::Year, Unit::Month, Unit::Week, Unit::Day, Unit::Hour];
+    let mut s: i64 = 999;
+    for let mut i = 0; i < 150; i += 1 {
+        s = lcg(s);
+        let a = sample_date_time(s);
+        s = lcg(s);
+        let b = sample_date_time(s);
+        for let u of units {
+            assert a.add(&a.until(&b, u)) == b;
+            assert b.add(&b.until(&a, u)) == a;
+        }
+    }
+}
+
+fn sample_date_time(s: i64) -> PlainDateTime {
+    let t = if s < 0 { -s } else { s };
+    return PlainDateTime::new(
+        PlainDate::from_epoch_days(s % 20_000 - 10_000),
+        PlainTime::new((t / 7 % 24) as i32, (t / 11 % 60) as i32, (t / 13 % 60) as i32),
+    );
+}
+
+test "ISO week numbering keeps its anchor days across -400..=400" {
+    // 4 January always falls in week 1 of its own year, 28 December in the last.
+    for let mut y: i32 = -400; y <= 400; y += 1 {
+        let jan4 = PlainDate::new(y, 1, 4);
+        assert jan4.week_of_year() == 1 && jan4.year_of_week() == y;
+
+        let weeks = PlainDate::new(y, 12, 28).week_of_year();
+        assert PlainDate::new(y, 12, 28).year_of_week() == y;
+        assert weeks == 52 || weeks == 53;
+
+        // Every ISO year runs a whole number of weeks, so week 1 plus that count
+        // lands in the next week-year and not a week sooner.
+        assert jan4.add(&Duration { weeks: (weeks - 1) as i64 }).year_of_week() == y;
+        assert jan4.add(&Duration { weeks: weeks as i64 }).year_of_week() == y + 1;
+    }
+}

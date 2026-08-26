@@ -825,20 +825,17 @@ fn difference_zoned(offset: i64, start: Instant, end: Instant, largest_unit: Uni
     if unit_rank(largest_unit) >= unit_rank(Unit::Day) {
         return duration_from_nanoseconds(end_nanoseconds - start_nanoseconds, largest_unit);
     }
-    if end_nanoseconds < start_nanoseconds {
-        return difference_zoned(offset, end, start, largest_unit).negated();
-    }
-
+    let sign: i128 = if end_nanoseconds >= start_nanoseconds { 1 } else { -1 };
     let [start_days, start_time] = local_day_and_nanoseconds(start_nanoseconds, offset);
     let [end_days, end_time] = local_day_and_nanoseconds(end_nanoseconds, offset);
 
-    // Borrow a day when the end's wall clock is earlier in the day than the
-    // start's, so the date part never overshoots.
+    // Borrow a day when the end's wall clock lies on the far side of the
+    // start's within the day, so the date part never overshoots.
     let mut date_days = end_days;
     let mut time_nanoseconds = end_time - start_time;
-    if time_nanoseconds < 0 {
-        time_nanoseconds = time_nanoseconds + 86_400_000_000_000;
-        date_days = date_days - 1;
+    if time_nanoseconds * sign < 0 {
+        time_nanoseconds = time_nanoseconds + sign * 86_400_000_000_000;
+        date_days = date_days - sign as i64;
     }
 
     let date = calendar_difference(start_days, date_days, largest_unit);
@@ -848,7 +845,8 @@ fn difference_zoned(offset: i64, start: Instant, end: Instant, largest_unit: Uni
 }
 
 /// The date part of a difference, in whole weeks, months, or years plus a day
-/// remainder. `start_days <= end_days`.
+/// remainder. Signed: the walk always anchors at `start_days`, so a backwards
+/// span steps back through the months the receiver actually has.
 fn calendar_difference(start_days: i64, end_days: i64, largest_unit: Unit) -> Duration {
     let span = end_days - start_days;
     if largest_unit matches { Week } {
@@ -865,20 +863,29 @@ fn calendar_difference(start_days: i64, end_days: i64, largest_unit: Unit) -> Du
 }
 
 /// Whole months from a civil date to `end_days`, the largest count whose
-/// constrained sum does not pass it.
+/// constrained sum does not pass it. Signed, and negative when `end_days`
+/// precedes the date; the year/month estimate is only a starting point because
+/// a constrained month end can move the sum by a day either way.
 fn whole_months_between(year: i64, month: i64, day: i64, end_days: i64) -> i64 {
+    let sign: i64 = if end_days >= days_from_civil(year, month, day) { 1 } else { -1 };
     let [end_year, end_month, _] = civil_from_days(end_days);
     let mut months = (end_year - year) * 12 + (end_month - month);
-    if months < 0 {
+    if months * sign < 0 {
         months = 0;
     }
-    while months > 0 && civil_days_after_months(year, month, day, months) > end_days {
-        months = months - 1;
+    while months != 0 && overshoots(year, month, day, months, end_days, sign) {
+        months = months - sign;
     }
-    while civil_days_after_months(year, month, day, months + 1) <= end_days {
-        months = months + 1;
+    while !overshoots(year, month, day, months + sign, end_days, sign) {
+        months = months + sign;
     }
     return months;
+}
+
+/// Whether shifting a civil date by `months` lands past `end_days`, travelling
+/// in the direction of `sign`.
+fn overshoots(year: i64, month: i64, day: i64, months: i64, end_days: i64, sign: i64) -> bool {
+    return (civil_days_after_months(year, month, day, months) - end_days) * sign > 0;
 }
 
 /// Day count of a civil date shifted by `months`, constrained at the month end.
@@ -949,7 +956,7 @@ fn iso_weeks_in_year(year: i64) -> i64 {
 /// Weekday of 31 December of `year`, `0` (Sunday) … `6` (Saturday), by the
 /// closed form the ISO week count is built on.
 fn year_end_weekday(year: i64) -> i64 {
-    return floor_mod(year + year / 4 - year / 100 + year / 400, 7);
+    return floor_mod(year + floor_div(year, 4) - floor_div(year, 100) + floor_div(year, 400), 7);
 }
 
 /// Temporal month code, `"M01"` … `"M12"`. The ISO 8601 calendar has no leap
@@ -2269,9 +2276,6 @@ impl PlainDate {
     pub fn until(&self, other: &PlainDate, largest_unit: Unit = Unit::Day) -> Duration {
         if !is_date_unit(largest_unit) {
             panic("core:temporal: a PlainDate difference is measured in days and above");
-        }
-        if other.epoch_days() < self.epoch_days() {
-            return other.until(self, largest_unit).negated();
         }
         if largest_unit matches { Day } {
             return Duration { days: other.epoch_days() - self.epoch_days() };

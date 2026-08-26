@@ -176,6 +176,10 @@ position is the one that can resolve it:
 | `PlainYearMonth` | years and months           | years or months                   |
 
 Anything outside its row traps with a message naming the type that can do it.
+`until` anchors at the receiver in both directions, so `a.add(a.until(b))` is
+`b` even when `b` is earlier: a backwards month span steps through the months
+the receiver has, not the ones the far end does. `since` is `until` negated, as
+in Temporal, and so does not round-trip.
 Rounding follows the same rule: an `Instant` counts multiples from the epoch, a
 `ZonedDateTime` and a `PlainTime` from local midnight, so a day-aligned unit
 lands on the civil boundary rather than on an epoch multiple.
