@@ -4357,14 +4357,16 @@ fn gen_op_transparent_optional_with_cond(
     ctx: &mut GenContext,
     cond: &String,
 ) {
-    w.begin(&`if ${*cond}`);
-    let mut nc: List<[String, i32]> = [];
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
-    let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
+    // Ahead of the `if`: the rule's prequel reads these locals from outside the
+    // branch, so a declaration inside it would not be in scope there.
     if ctx.emit_actions() {
         gen_rule_span_decls(w, &body.ops, &alt.actions, ctx);
     }
+    w.begin(&`if ${*cond}`);
+    let mut nc: List<[String, i32]> = [];
+    let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         gen_alt_actions_at(w, &alt.actions, i, ctx);
         gen_element_with_capture(w, &body.ops[i], &alt.elements[i], &alt.actions, ctx, &mut nc);
@@ -4545,6 +4547,11 @@ fn gen_op_optional_with_shape_lookahead_storable(
     // `Option<T>` shape selection collapses to a plain `if cond { … } else if
     // … ` statement — no struct, no absent-field decls, no `null` else.
     let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
+    // Ahead of the chain: one declaration serves every branch, and the rule's
+    // prequel reads the locals from outside all of them.
+    if ctx.emit_actions() {
+        gen_rule_span_decls(w, &body.ops, &alt.actions, ctx);
+    }
     let mut is_first = true;
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
         let entry = &s.shapes[ei];
@@ -4562,9 +4569,6 @@ fn gen_op_optional_with_shape_lookahead_storable(
 
         let mut nc: List<[String, i32]> = [];
         let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
-        if ctx.emit_actions() {
-            gen_rule_span_decls(w, &body.ops, &alt.actions, ctx);
-        }
         for let mut i = 0; i < elements.len(); i += 1 {
             // The actions are the alternative's, not the skipped element's, so
             // every shape branch runs them; only the element is conditional.
@@ -4607,6 +4611,11 @@ fn gen_op_optional_with_shape_lookahead_transparent(
     let elements = &alt.elements;
 
     let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
+    // Ahead of the chain: one declaration serves every branch, and the rule's
+    // prequel reads the locals from outside all of them.
+    if ctx.emit_actions() {
+        gen_rule_span_decls(w, &body.ops, &alt.actions, ctx);
+    }
     let mut is_first = true;
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
         let entry = &s.shapes[ei];
@@ -4624,9 +4633,6 @@ fn gen_op_optional_with_shape_lookahead_transparent(
 
         let mut nc: List<[String, i32]> = [];
         let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
-        if ctx.emit_actions() {
-            gen_rule_span_decls(w, &body.ops, &alt.actions, ctx);
-        }
         // Actions are the alternative's own, so they run in every shape branch
         // (`gen_op_optional_with_shape_lookahead_storable` says the same); the
         // positions decide only which elements are parsed.

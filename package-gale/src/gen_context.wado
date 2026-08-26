@@ -371,7 +371,6 @@ impl GenContext {
     /// probe on its previous answer. The set over-approximates (a union over
     /// every call site), so conjoining it can only move a verdict from
     /// "exit" to "iterate": a token it excludes cannot continue any caller.
-
     pub fn rule_follow_for_probe(&self, rule_name: &String) -> List<String> {
         if !self.rule_follow_exact || !self.rule_follow_kinds.contains_key(*rule_name) {
             return [];
@@ -758,27 +757,43 @@ impl GenContext {
     }
 
     /// ANTLR4's `getExpectedTokens().toString(getVocabulary())` for `kinds`:
-    /// the display names in kind order, `{'a', 'b'}`. Empty when the
-    /// vocabulary is not installed, which is the signal to report a body
-    /// reading it rather than print a wrong set.
+    /// the display names in kind order, `{'a', 'b'}`. A one-element set renders
+    /// bare (`'a'`), and EOF renders `<EOF>` ahead of the rest — its type is -1
+    /// upstream, so it sorts before every real kind. Empty when the vocabulary
+    /// is not installed, which is the signal to report a body reading it rather
+    /// than print a wrong set.
     pub fn render_expected(&mut self, kinds: &List<String>) -> String {
         if self.vocab_names.is_empty() {
             return String::new();
         }
+        let eof = self.eof_kind_id();
         let mut ids: List<i32> = [];
+        let mut has_eof = false;
         for let k of kinds {
             let id = self.token_kinds.intern(k);
-            if id < self.vocab_names.len() && !ids.contains(&id) {
+            if id == eof {
+                has_eof = true;
+            } else if id < self.vocab_names.len() && !ids.contains(&id) {
                 ids.push(id);
             }
         }
         let sorted = ids.sorted();
-        let mut out = String::from("{");
+        let mut names: List<String> = [];
+        if has_eof {
+            names.push("<EOF>");
+        }
         for let mut i = 0; i < sorted.len(); i += 1 {
+            names.push(self.vocab_names[sorted[i]]);
+        }
+        if names.len() == 1 {
+            return names[0];
+        }
+        let mut out = String::from("{");
+        for let mut i = 0; i < names.len(); i += 1 {
             if i > 0 {
                 out.push_str(&", ");
             }
-            out.push_str(&self.vocab_names[sorted[i]]);
+            out.push_str(&names[i]);
         }
         out.push_str(&"}");
         return out;

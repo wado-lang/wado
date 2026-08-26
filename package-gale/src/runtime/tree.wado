@@ -371,7 +371,9 @@ impl TreeBuilder {
             if i < self.open.len() - 1 {
                 out.push_str(&", ");
             }
-            out.push_str(&rule_names[self.a[self.open[i]]]);
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
         }
         out.push_str(&"]");
         return out;
