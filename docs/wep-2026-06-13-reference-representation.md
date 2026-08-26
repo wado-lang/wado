@@ -108,6 +108,12 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
   assign the whole element / field (`xs[i] = …`, `s.f = …`). Covers both `Index`
   and `FieldAccess` operands and generalizes (replaces) the existing partial
   primitive-struct-field guard.
+- `variant` is the exception, because it is the one replace type whose _interior_
+  can still be mutated through the borrow: a payload write lands on the shared
+  payload object. Taking the borrow is therefore allowed, and the refusal moves
+  to where the borrow is put into storage outliving the expression that took it
+  — a variable, an aggregate, a `return` — which is exactly where no write-back
+  point exists.
 - `&` (immutable, read-only) to such a place is permitted: it reads a snapshot
   copy, and there is no write to lose.
 - Carve-out: when the `&mut <place>` is a call argument to a parameter that does
@@ -132,15 +138,14 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
 In-place places — `&mut <local>` of any type, and `&mut` of a struct / `List` /
 `String` reference mutated in place — are always allowed and unaffected.
 
-Two constraints the forbid must respect:
+What the two rules above rest on:
 
-- For `variant` the carve-out is not optional, and the forbid cannot be keyed on
-  the borrow alone. `Option<T>` is a variant, so `if let Some(e) = &mut self.f`
-  is a detached borrow, and mutation through the payload — which lands — is how
-  it is used: every gale-generated parser, `normalize_element(&mut lab.element)`
-  at 5 `package-gale` sites, and the `value_copy_*` fixtures. The other replace
-  types have no such idiom, which is why the borrow-site refusal suits them and
-  not `variant`.
+- `Option<T>` is a variant, so `if let Some(e) = &mut self.f` is a detached
+  borrow, and payload mutation through it is how the language is written: every
+  gale-generated parser, `normalize_element(&mut lab.element)` at 5
+  `package-gale` sites, and the `value_copy_*` fixtures. A borrow-site refusal
+  for `variant` deletes all of it, which is why that refusal fits the other
+  replace types and not this one.
 - The rule keys on the place being non-local, not on the borrow escaping. A
   `&mut` rooted at a local _is_ that local's box, so a whole-value write through
   it lands even when the borrow is stored in an aggregate and written much
@@ -154,16 +159,20 @@ Two constraints the forbid must respect:
       on the in-place-vs-replace dividing line, not scalar-vs-heap.
 - [ ] Extract the boxed-as-value classification into one predicate shared by
       boxing / forbid / carve-out.
-- [ ] Forbid `&mut` to a non-local replace-on-assign place (compile error),
-      subsuming the partial primitive-struct-field guard. Ship `compile_error`
-      fixtures: variant / primitive / enum / flags / `fn` list element, and
-      variant / enum struct field.
+- [x] Forbid `&mut` to a non-local place of `primitive` / `enum` / `flags` /
+      `fn` at the borrow itself, over both `Index` and `FieldAccess` operands,
+      subsuming the partial primitive-struct-field guard.
+- [x] For `variant`, forbid only where the borrow is put into storage outliving
+      the expression that took it — a variable, an aggregate, a `return`. The
+      borrow itself stays legal, since payload mutation through it lands.
+- [ ] Ship the remaining `compile_error` fixtures: `primitive` / `enum` /
+      `flags` list element. Covered today: `fn` list element, `primitive` /
+      `enum` struct field, and the `variant` storing positions.
 - [ ] Carve out the `stores`-gated temp + write-back, one call path at a time:
-  - [ ] `List` index element (`&mut xs[i]`) — validated by a throwaway prototype
-        on the free-function / static-dispatch path; reuses the existing
+  - [ ] `List` index element (`&mut xs[i]`) — reuses the existing
         `index_assign` dispatch.
-  - [ ] struct field (`&mut s.f`) — write-back is a plain field assign.
-  - [ ] remaining call paths (method-call / indirect-call arguments).
+  - [x] struct field (`&mut s.f`) — write-back is a plain field assign.
+  - [x] remaining call paths (method-call / indirect-call arguments).
 
 Each carve-out narrows the forbid for the case it handles; the escaping case is
 never carved out.
