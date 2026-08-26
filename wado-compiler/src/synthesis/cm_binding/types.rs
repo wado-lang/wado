@@ -334,10 +334,13 @@ pub fn cm_type_to_type_id(
                 let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_list(elem_type);
             }
+            // `core:collections` is not auto-imported, so a program that never
+            // names `TreeMap` has no registration to compare against.
             let tree_map_name = type_table
-                .compiler_struct_name(CompilerItem::TreeMap)
-                .to_string();
-            if g.name.as_str() == tree_map_name && g.args.len() == 2 {
+                .compiler_items()
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string);
+            if tree_map_name.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 {
                 let key = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 let value = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
                 return type_table.make_tree_map(key, value);
@@ -1006,7 +1009,12 @@ fn flatten_export_type_inner(
                 }
             }
         },
-        Type::Generic(generic) if generic.name == names.array => {
+        Type::Generic(generic)
+            if generic.name == names.array
+                || names.tree_map.as_deref() == Some(generic.name.as_str()) =>
+        {
+            // `map<K, V>` despecializes to `list<tuple<K, V>>` and carries that
+            // type's `(ptr, count)`.
             out.push(cm_abi::CmValType::I32); // ptr
             out.push(cm_abi::CmValType::I32); // len
         }
@@ -1183,7 +1191,9 @@ fn flat_types_from_type_id_inner(
                     names,
                 );
                 out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
-            } else if name == &names.array {
+            } else if name == &names.array || names.tree_map.as_deref() == Some(name.as_str()) {
+                // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
+                // carries that type's pair.
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else {

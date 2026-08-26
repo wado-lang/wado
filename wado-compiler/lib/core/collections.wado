@@ -92,6 +92,7 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// Returns the number of key-value pairs in the map.
+    #[compiler_item("tree_map_len")]
     pub fn len(&self) -> i32 {
         return self.size;
     }
@@ -322,6 +323,7 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// The key-value pairs, in insertion order.
+    #[compiler_item("tree_map_entries")]
     pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self] {
         return TreeMapEntriesRefIter { entries: &self.entries, index: 0 };
     }

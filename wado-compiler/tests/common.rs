@@ -337,6 +337,7 @@ pub fn engine() -> &'static Engine {
         config.wasm_component_model_more_async_builtins(true);
         config.wasm_component_model_async_stackful(true);
         config.wasm_component_model_error_context(true);
+        config.wasm_component_model_map(true);
         config.wasm_wide_arithmetic(true);
         // Honor the `metadata.code.branch_hint` custom section the compiler
         // emits for `builtin::cold_path()`, matching the wado CLI runtime so

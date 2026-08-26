@@ -966,38 +966,8 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // bare `Array<u8>` mislabeled as `List<u8>`; the general path below
                 // builds the real `List<T>` struct, so all element types share it.)
                 // Write ptr/len to a temp memory block so we can reuse synthesize_lift
-                let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-                let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
-                // Allocate 8 bytes for ptr+len
-                let tmp_ptr_local = alloc_local(next_local, locals, TypeTable::I32);
-                stmts.push(let_stmt(
-                    "__lift_tmp",
-                    tmp_ptr_local,
-                    TypeTable::I32,
-                    builtin_call(
-                        "realloc",
-                        vec![i32_const(0), i32_const(0), i32_const(4), i32_const(8)],
-                        TypeTable::I32,
-                    ),
-                ));
-                // Write ptr at offset 0
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32), ptr],
-                    TypeTable::UNIT,
-                )));
-                // Write len at offset 4
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![
-                        binary_add(
-                            local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
-                            i32_const(4),
-                        ),
-                        len,
-                    ],
-                    TypeTable::UNIT,
-                )));
+                let tmp_ptr_local =
+                    spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
                 // Lift into the user function's exact `List<T>` type
                 // (`target_type_id`), not a rebuilt one, so a shared stdlib
                 // element type (e.g. `InputFile`) does not resolve to a second
@@ -1011,17 +981,24 @@ pub(super) fn synthesize_lift_from_flat_params(
                     locals,
                     &lift_ctx,
                 );
-                // Free temp memory
-                stmts.push(expr_stmt(builtin_call(
-                    "realloc",
-                    vec![
-                        local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
-                        i32_const(8),
-                        i32_const(4),
-                        i32_const(0),
-                    ],
-                    TypeTable::I32,
-                )));
+                free_ptr_len_temp(tmp_ptr_local, stmts);
+                (lifted, 2)
+            }
+            n if names.tree_map.as_deref() == Some(n) && generic.args.len() == 2 => {
+                // map<K, V> flat ABI: the `list<tuple<K, V>>` `(ptr, len)`, so
+                // the same spill-and-lift the list arm uses.
+                let tmp_ptr_local =
+                    spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
+                let lifted = super::lift::synthesize_lift_map(
+                    &generic.args[0],
+                    &generic.args[1],
+                    local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                    next_local,
+                    stmts,
+                    locals,
+                    &lift_ctx,
+                );
+                free_ptr_len_temp(tmp_ptr_local, stmts);
                 (lifted, 2)
             }
             n if n == names.option && generic.args.len() == 1 => {
@@ -1254,6 +1231,58 @@ fn coerce_payload_slots(
         }
     }
     (out_locals, natural)
+}
+
+/// Spill a `(ptr, len)` flat pair into an 8-byte scratch block, so a lift that
+/// reads a list-shaped value from memory can be reused on flat parameters.
+/// Returns the local holding the block's address.
+fn spill_ptr_len_to_temp(
+    flat_param_locals: &[u32],
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+) -> u32 {
+    let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
+    let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
+    let tmp = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__lift_tmp",
+        tmp,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![i32_const(0), i32_const(0), i32_const(4), i32_const(8)],
+            TypeTable::I32,
+        ),
+    ));
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![local_ref(tmp, "__lift_tmp", TypeTable::I32), ptr],
+        TypeTable::UNIT,
+    )));
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            binary_add(local_ref(tmp, "__lift_tmp", TypeTable::I32), i32_const(4)),
+            len,
+        ],
+        TypeTable::UNIT,
+    )));
+    tmp
+}
+
+/// Release the block [`spill_ptr_len_to_temp`] allocated.
+fn free_ptr_len_temp(tmp: u32, stmts: &mut Vec<TirStmt>) {
+    stmts.push(expr_stmt(builtin_call(
+        "realloc",
+        vec![
+            local_ref(tmp, "__lift_tmp", TypeTable::I32),
+            i32_const(8),
+            i32_const(4),
+            i32_const(0),
+        ],
+        TypeTable::I32,
+    )));
 }
 
 /// Lift a named `variant` from the flat CM ABI

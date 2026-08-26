@@ -882,7 +882,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
         }
     };
 
-    let (map_head, map_source, iter_tid, iter_source, next_method, pair_tid, opt_tid) = {
+    let (map_head, map_source, iter_tid, iter_source, next_method, len_method, entries_method, pair_tid, opt_tid) = {
         let mut tt = ctx.type_table.borrow_mut();
         let ref_pair = {
             let key_ref = tt.make_ref(key_tid);
@@ -913,7 +913,23 @@ pub(super) fn synthesize_lower_map_to_buffer(
                 .method_name(crate::compiler_item::CompilerItem::TreeMapEntriesIterNext)
                 .to_string(),
         );
-        (map_head, map_source, iter, iter_source, next, ref_pair, opt)
+        let len_method = items
+            .method_name(crate::compiler_item::CompilerItem::TreeMapLen)
+            .to_string();
+        let entries_method = items
+            .method_name(crate::compiler_item::CompilerItem::TreeMapEntries)
+            .to_string();
+        (
+            map_head,
+            map_source,
+            iter,
+            iter_source,
+            next,
+            len_method,
+            entries_method,
+            ref_pair,
+            opt,
+        )
     };
 
     let mut stmts = Vec::new();
@@ -930,7 +946,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
         generic_method_call_monomorphized(
             local_ref(map_local, "__map_val", map_type_id),
             &map_head,
-            "len",
+            &len_method,
             map_source.clone(),
             vec![key_tid, value_tid],
             vec![],
@@ -968,7 +984,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
         generic_method_call_monomorphized(
             local_ref(map_local, "__map_val", map_type_id),
             &map_head,
-            "entries",
+            &entries_method,
             map_source,
             vec![key_tid, value_tid],
             vec![],

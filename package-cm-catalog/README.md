@@ -35,6 +35,9 @@ Full intended scope; checked items are implemented.
 - [x] Nested compositions
 - [x] `flags` inside `option` / `list` / `tuple` — the CM width (one byte at ≤8
       labels) only shows up where the ABI reads a stride or an offset
+- [x] `map<k, v>` — the same bytes as `list<tuple<k, v>>`, under its own type
+      constructor. One row per key shape that lowers differently (`string`,
+      a scalar), plus a repeated-key round trip for the last-wins rule
 
 ### `future<T>` (consume/produce)
 

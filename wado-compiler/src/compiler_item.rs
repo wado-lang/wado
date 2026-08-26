@@ -409,6 +409,11 @@ pub enum CompilerItem {
     /// the pairs with it. `Iterator` carries an associated type, so the trait
     /// item records no single method name to reach for.
     TreeMapEntriesIterNext,
+    /// `TreeMap::len` — the live pair count, which sizes the `map<K, V>`
+    /// lower's buffer.
+    TreeMapLen,
+    /// `TreeMap::entries` — the pair traversal the `map<K, V>` lower walks.
+    TreeMapEntries,
     /// `ReflectStruct::type_name` — the per-struct type name.
     ReflectStructTypeName,
     /// `ReflectStruct::members` — the per-field member tuple.
@@ -728,6 +733,8 @@ impl CompilerItem {
         Self::ListFromTuple,
         Self::TreeMapIndexAssign,
         Self::TreeMapEntriesIterNext,
+        Self::TreeMapLen,
+        Self::TreeMapEntries,
         Self::ReflectStructTypeName,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
@@ -928,6 +935,8 @@ impl CompilerItem {
             Self::ListFromTuple => "list_from_tuple",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
             Self::TreeMapEntriesIterNext => "tree_map_entries_iter_next",
+            Self::TreeMapLen => "tree_map_len",
+            Self::TreeMapEntries => "tree_map_entries",
             Self::ReflectStructTypeName => "reflect_struct_type_name",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
@@ -1181,7 +1190,9 @@ impl CompilerItem {
             Self::TreeMap
             | Self::TreeMapEntriesIter
             | Self::TreeMapIndexAssign
-            | Self::TreeMapEntriesIterNext => false,
+            | Self::TreeMapEntriesIterNext
+            | Self::TreeMapLen
+            | Self::TreeMapEntries => false,
             // Loaded only when the user imports `core:serde` (which
             // happens implicitly for kiln-options decoding). The
             // validator skips the check; downstream synthesis ICEs
@@ -1371,6 +1382,8 @@ impl CompilerItem {
             | Self::ListFromTuple
             | Self::TreeMapIndexAssign
             | Self::TreeMapEntriesIterNext
+            | Self::TreeMapLen
+            | Self::TreeMapEntries
             | Self::ReflectStructTypeName
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields

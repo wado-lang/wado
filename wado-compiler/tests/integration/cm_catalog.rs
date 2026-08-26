@@ -270,6 +270,51 @@ fn cases() -> Vec<Case> {
             "id-assoc-array",
             Val::List(vec![Val::Tuple(vec![Val::String("k".into()), Val::U32(1)])]),
         ),
+        // `map<k, v>`: the same bytes as the association list above, under its
+        // own type constructor. A repeated key is legal on the wire and the
+        // guest normalises it, so every case here is already deduplicated —
+        // `map_last_wins_on_a_repeated_key` covers the other direction.
+        case(
+            "id-map-string-u32",
+            Val::Map(vec![
+                (Val::String("a".into()), Val::U32(1)),
+                (Val::String("bb".into()), Val::U32(2)),
+            ]),
+        ),
+        case(
+            "id-map-u32-string",
+            Val::Map(vec![
+                (Val::U32(7), Val::String("seven".into())),
+                (Val::U32(8), Val::String("".into())),
+            ]),
+        ),
+        case(
+            "id-map-string-record",
+            Val::Map(vec![(Val::String("origin".into()), point())]),
+        ),
+        case(
+            "id-map-string-list",
+            Val::Map(vec![
+                (
+                    Val::String("bytes".into()),
+                    Val::List(vec![Val::U8(1), Val::U8(2)]),
+                ),
+                (Val::String("empty".into()), Val::List(vec![])),
+            ]),
+        ),
+        case("id-map-string-u32", Val::Map(vec![])),
+        case(
+            "id-option-map",
+            Val::Option(b(Val::Map(vec![(Val::String("k".into()), Val::U32(1))]))),
+        ),
+        case("id-option-map", Val::Option(None)),
+        case(
+            "id-list-map",
+            Val::List(vec![
+                Val::Map(vec![(Val::String("k".into()), Val::U32(1))]),
+                Val::Map(vec![]),
+            ]),
+        ),
         // Tuples carrying aggregate (non-primitive) elements.
         case("id-tuple-record", Val::Tuple(vec![point(), Val::U32(7)])),
         case(
@@ -1845,6 +1890,64 @@ fn cm_lib_rejects_two_types_sharing_a_cm_name() {
         err.contains("http-server"),
         "expected a diagnostic naming the shared CM name, got: {err}"
     );
+}
+
+/// The Component Model states that a `map` may carry a repeated key, and that a
+/// bindings generator may deduplicate it as long as the *last* pair wins. The
+/// guest lifts with `map[k] = v`, so it does; and it lowers from a `TreeMap`,
+/// which cannot repeat one. One round trip shows both halves.
+#[test]
+fn map_last_wins_on_a_repeated_key() {
+    let wasm = compile_catalog(OptLevel::O0);
+    let engine = crate::common::engine();
+    let rt = crate::common::runtime();
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = crate::common::linker(engine).expect("build linker");
+        let state = crate::common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate library component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx)
+            .expect("catalog interface");
+        let func = instance
+            .get_export(&mut store, Some(&iface), "id-map-string-u32")
+            .map(|(_, idx)| idx)
+            .and_then(|idx| instance.get_func(&mut store, idx))
+            .expect("id-map-string-u32 export");
+
+        let mut results = vec![Val::Bool(false)];
+        func.call_async(
+            &mut store,
+            &[Val::Map(vec![
+                (Val::String("k".into()), Val::U32(1)),
+                (Val::String("other".into()), Val::U32(9)),
+                (Val::String("k".into()), Val::U32(2)),
+            ])],
+            &mut results,
+        )
+        .await
+        .expect("call id-map-string-u32");
+
+        assert_eq!(
+            results[0],
+            Val::Map(vec![
+                (Val::String("k".into()), Val::U32(2)),
+                (Val::String("other".into()), Val::U32(9)),
+            ]),
+            "the last pair for a repeated key wins, and the key keeps the position \
+             its first appearance gave it"
+        );
+    });
 }
 
 /// WASI 0.3.1 requires the Component Model `map<K, V>` type, and `TreeMap` is

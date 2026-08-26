@@ -26,6 +26,8 @@
 //!   instantiates; the `export fn`s are dropped in the test world, so that run
 //!   does not exercise lift/lower.
 
+use { TreeMap } from "core:collections";
+
 // --- Named types referenced by the identity exports below ---
 
 pub struct Point {
@@ -210,6 +212,33 @@ export fn id_result_list(v: Result<List<Point>, String>) -> Result<List<Point>, 
 // --- Association list (the CM map idiom: `list<tuple<k, v>>`) ---
 
 export fn id_assoc_array(v: List<[String, u32]>) -> List<[String, u32]> {
+    return v;
+}
+
+// --- Maps (`map<k, v>`) ---
+//
+// A `map` carries the association list above byte for byte; what these pin is
+// the specialization, which travels under its own type constructor and comes
+// back as a `TreeMap`. The key set is the Component Model's `keytype`, so one
+// row per key shape that lowers differently: a pointer-and-length `string` and
+// a scalar. The value side reuses the value-type surface.
+
+export fn id_map_string_u32(v: TreeMap<String, u32>) -> TreeMap<String, u32> {
+    return v;
+}
+export fn id_map_u32_string(v: TreeMap<u32, String>) -> TreeMap<u32, String> {
+    return v;
+}
+export fn id_map_string_record(v: TreeMap<String, Point>) -> TreeMap<String, Point> {
+    return v;
+}
+export fn id_map_string_list(v: TreeMap<String, List<u8>>) -> TreeMap<String, List<u8>> {
+    return v;
+}
+export fn id_option_map(v: Option<TreeMap<String, u32>>) -> Option<TreeMap<String, u32>> {
+    return v;
+}
+export fn id_list_map(v: List<TreeMap<String, u32>>) -> List<TreeMap<String, u32>> {
     return v;
 }
 

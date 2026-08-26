@@ -101,6 +101,15 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             CmShape::List(Box::new(field_of(&g.args[0], 0, ctx)))
         }
+        Type::Generic(g)
+            if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 =>
+        {
+            // A `map<K, V>` owns exactly what the `list<tuple<K, V>>` it
+            // despecializes to owns: the pair buffer, and whatever each key and
+            // value own inside it.
+            let pair = Type::Tuple(vec![g.args[0].clone(), g.args[1].clone()]);
+            CmShape::List(Box::new(field_of(&pair, 0, ctx)))
+        }
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             let payload_offset = cm_abi::layout_option_with_registry_scoped(
                 &g.args[0],
