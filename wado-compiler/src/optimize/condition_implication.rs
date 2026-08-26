@@ -669,34 +669,11 @@ pub(super) fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKe
 /// [`stmt_modifies`] over an arbitrary node subtree (e.g. the right operand of a
 /// short-circuit `||`).
 pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
-    match bound_root(bound) {
-        Some(b) => node_writes_any(engine, node, &[var, b]),
-        None => node_writes_any(engine, node, &[var]),
-    }
-}
-
-/// [`node_modifies`] over an arbitrary root set: does evaluating `node` write
-/// any of `roots` — by assignment, `&mut` escape, a receiver method call, or a
-/// fresh binding of that index?
-pub(super) fn node_writes_any(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
-    let is_root = |l: u32| roots.contains(&l);
+    let roots = [Some(var), bound_root(bound)];
+    let is_root = |l: u32| roots.contains(&Some(l));
     let mut hit = false;
-    let mut visit = |node: NodeRef| match node {
-        NodeRef::Stmt(s) => {
-            if let StmtKind::Let { local_index, .. } = &engine.body.stmts[s].kind
-                && is_root(*local_index)
-            {
-                hit = true;
-            }
-        }
-        NodeRef::Pat(p) => {
-            if let crate::nir_arena::PatKind::Binding { local_index, .. } = &engine.body.pats[p].kind
-                && is_root(*local_index)
-            {
-                hit = true;
-            }
-        }
-        NodeRef::Expr(e) => {
+    let mut visit = |node: NodeRef| {
+        if let NodeRef::Expr(e) = node {
             match &engine.body.exprs[e].kind {
                 ExprKind::Assign { target, .. } => {
                     if let Some(root) = super::arena_query::storage_root(engine.body, *target)
@@ -731,7 +708,6 @@ pub(super) fn node_writes_any(engine: &Engine, node: NodeRef, roots: &[u32]) -> 
                 _ => {}
             }
         }
-        NodeRef::Block(_) => {}
     };
     let mut stack = vec![node];
     while let Some(n) = stack.pop() {
@@ -937,145 +913,8 @@ fn recognize_early_exit(engine: &Engine, s: StmtId, binds: &Binds) -> Option<(u3
     parse_check(engine, binds, cond)
 }
 
-/// A straight-line early exit `if C { return/break/continue }` proves `C` false
-/// for the rest of the block, whatever shape `C` has. The arithmetic facts above
-/// need a `var`/`bound` split, which a constant bound (`i < 100`) leaves no room
-/// for; here CSE has already given guard and check one name, so identity alone
-/// refutes. Returns `C` and the locals it reads, so the fact dies the moment one
-/// of them is written.
-fn recognize_false_condition(
-    engine: &Engine,
-    s: StmtId,
-    binds: &Binds,
-) -> Option<(Operand, Vec<u32>)> {
-    let StmtKind::If {
-        condition,
-        then_block,
-        else_block: None,
-    } = &engine.body.stmts[s].kind
-    else {
-        return None;
-    };
-    let (cond, then_b) = (*condition, *then_block);
-    // Only a named condition is worth a fact: `operand_same` matches a bare
-    // local by index or a promoted value by id, so an inline comparison could
-    // only ever match its own node — which [`refute_same_condition`] excludes.
-    let named = match cond {
-        Operand::Value(_) => true,
-        Operand::Expr(e) => matches!(engine.body.exprs[e].kind, ExprKind::Local { .. }),
-    };
-    if !named {
-        return None;
-    }
-    if !block_always_exits(engine, then_b) {
-        return None;
-    }
-    Some((cond, condition_reads(engine, binds, cond)?))
-}
-
-/// Drive to `false` every `if <cond> { panic }` in `node` whose condition is the
-/// proven-false `known`. A check sharing the guard's *expr* is skipped: driving
-/// that node false would disarm the guard too. A shared promoted value is fine —
-/// `eliminate_condition` rewrites the holder's slot, not the value.
-fn refute_same_condition(
-    engine: &mut Engine,
-    node: NodeRef,
-    binds: &Binds,
-    known: Operand,
-) -> bool {
-    refute_panic_checks(engine, node, binds, |engine, binds, cond| {
-        !matches!((cond, known), (Operand::Expr(a), Operand::Expr(b)) if a == b)
-            && operand_same(engine, binds, cond, known)
-    })
-}
-
-/// The locals a condition reads, when it is a pure expression whose value is
-/// fixed by them: locals, constants, arithmetic, casts, field reads. `None` for
-/// anything else — a call, an assignment, a block — whose second evaluation need
-/// not agree with the first.
-fn condition_reads(engine: &Engine, binds: &Binds, op: Operand) -> Option<Vec<u32>> {
-    let mut roots = Vec::new();
-    collect_reads(engine, binds, op, 0, &mut roots).then_some(roots)
-}
-
-fn collect_reads(
-    engine: &Engine,
-    binds: &Binds,
-    op: Operand,
-    depth: u32,
-    out: &mut Vec<u32>,
-) -> bool {
-    if depth >= VAR_OFFSET_MAX_DEPTH {
-        return false;
-    }
-    match op {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            // A copy temp is a read in its own right *and* a read of everything
-            // its binding reads: rebinding it, or writing one of its inputs,
-            // both invalidate the fact.
-            ExprKind::Local { index, .. } => {
-                out.push(*index);
-                match binds.get(index) {
-                    Some(&b) => collect_reads(engine, binds, b, depth + 1, out),
-                    None => true,
-                }
-            }
-            ExprKind::Binary { left, right, .. } => {
-                collect_reads(engine, binds, *left, depth + 1, out)
-                    && collect_reads(engine, binds, *right, depth + 1, out)
-            }
-            ExprKind::Unary { expr: inner, .. }
-            | ExprKind::Cast { expr: inner, .. }
-            | ExprKind::FieldAccess { expr: inner, .. } => {
-                collect_reads(engine, binds, *inner, depth + 1, out)
-            }
-            _ => false,
-        },
-        Operand::Value(v) => collect_value_reads(engine, v, depth + 1, out),
-    }
-}
-
-fn collect_value_reads(
-    engine: &Engine,
-    v: crate::nir_value_graph::ValueId,
-    depth: u32,
-    out: &mut Vec<u32>,
-) -> bool {
-    if depth >= VAR_OFFSET_MAX_DEPTH {
-        return false;
-    }
-    let kind = engine.body.values.kind(v);
-    if kind.is_constant() {
-        return true;
-    }
-    match kind {
-        ValueKind::Opaque(_) => match opaque_local(engine, v) {
-            Some(i) => {
-                out.push(i);
-                true
-            }
-            None => false,
-        },
-        ValueKind::Binary { lhs, rhs, .. } => {
-            let (lhs, rhs) = (*lhs, *rhs);
-            collect_value_reads(engine, lhs, depth + 1, out)
-                && collect_value_reads(engine, rhs, depth + 1, out)
-        }
-        ValueKind::Unary { operand: inner, .. } | ValueKind::Cast { operand: inner, .. } => {
-            collect_value_reads(engine, *inner, depth + 1, out)
-        }
-        ValueKind::FieldAccess { receiver, .. } => {
-            collect_value_reads(engine, *receiver, depth + 1, out)
-        }
-        _ => false,
-    }
-}
-
 fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
     let mut changed = false;
-    // Conditions a dominating early exit proved false, each with the locals it
-    // reads; retained under the same position-aware scan as `seguards`.
-    let mut false_conds: Vec<(Operand, Vec<u32>)> = Vec::new();
     // Structural early-exit facts `var < bound` (value_of-free): a fact is used
     // for a later statement's checks while no statement since the guard has
     // modified `var` / `bound` (`stmt_modifies`), then dropped when one does.
@@ -1087,22 +926,11 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
                 changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, binds);
             }
         }
-        let facts = std::mem::take(&mut false_conds);
-        for (cond, reads) in &facts {
-            if !node_writes_any(engine, NodeRef::Stmt(s), reads) {
-                changed |= refute_same_condition(engine, NodeRef::Stmt(s), binds, *cond);
-            }
-        }
-        false_conds = facts;
         changed |= apply_dominating_if(engine, s, binds);
         changed |= process_stmt(engine, s, binds);
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
-        false_conds.retain(|(_, reads)| !node_writes_any(engine, NodeRef::Stmt(s), reads));
         if let Some(fact) = recognize_early_exit(engine, s, binds) {
             seguards.push(fact);
-        }
-        if let Some(fact) = recognize_false_condition(engine, s, binds) {
-            false_conds.push(fact);
         }
     }
     changed
