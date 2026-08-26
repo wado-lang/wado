@@ -308,6 +308,40 @@ test "is_whitespace false for non-space" {
     assert !'\u{200B}'.is_whitespace();  // ZERO WIDTH SPACE is NOT whitespace
 }
 
+test "u8 mirrors char's ASCII classification" {
+    // Same answers as `char`, without a cast at every call site.
+    for let b of [b'0', b'9'] {
+        assert b.is_ascii_digit() && b.is_ascii_alphanumeric() && b.is_hexdigit();
+        assert !b.is_ascii_alphabetic();
+    }
+    for let b of [b'a', b'Z'] {
+        assert b.is_ascii_alphabetic() && b.is_ascii_alphanumeric();
+        assert !b.is_ascii_digit();
+    }
+    assert b'a'.is_ascii_lowercase() && !b'a'.is_ascii_uppercase();
+    assert b'Z'.is_ascii_uppercase() && !b'Z'.is_ascii_lowercase();
+    assert b' '.is_ascii_whitespace() && b'\t'.is_ascii_whitespace() && b'\n'.is_ascii_whitespace();
+    assert !b'_'.is_ascii_whitespace() && !b'_'.is_ascii_alphanumeric();
+    assert b'f'.is_hexdigit() && b'F'.is_hexdigit() && !b'g'.is_hexdigit();
+
+    // A byte above ASCII belongs to no class.
+    let high: u8 = 0xC3;
+    assert !high.is_ascii_digit() && !high.is_ascii_alphabetic() && !high.is_ascii_whitespace();
+}
+
+test "u8 mirrors char's ASCII case folding" {
+    assert b'A'.to_ascii_lowercase() == b'a';
+    assert b'a'.to_ascii_uppercase() == b'A';
+    // Non-letters and non-ASCII pass through unchanged.
+    assert b'7'.to_ascii_lowercase() == b'7';
+    let high: u8 = 0xC3;
+    assert high.to_ascii_lowercase() == high && high.to_ascii_uppercase() == high;
+
+    assert b'A'.eq_ignore_ascii_case(&b'a');
+    assert b'z'.eq_ignore_ascii_case(&b'Z');
+    assert !b'a'.eq_ignore_ascii_case(&b'b');
+}
+
 test "is_ascii_digit true cases" {
     assert '0'.is_ascii_digit();
     assert '5'.is_ascii_digit();

@@ -277,10 +277,6 @@ fn parse_fixed_offset(zone: &String) -> i64 {
     );
 }
 
-fn is_ascii_digit(byte: u8) -> bool {
-    return (byte as char).is_ascii_digit();
-}
-
 /// Format a signed offset second count as `"Z"` (when zero) or `±HH:MM`.
 fn format_offset_suffix(offset_seconds: i64) -> String {
     if offset_seconds == 0 {
@@ -1100,7 +1096,7 @@ fn read_digits(text: &String, i: i32, end: i32, count: i32) -> Result<i64, Deser
     let mut k = 0;
     while k < count {
         let byte = text.get_byte_unchecked(i + k);
-        if !is_ascii_digit(byte) {
+        if !byte.is_ascii_digit() {
             return Result::Err(DeserializeError::malformed(`expected ${count} digits`, i as i64));
         }
         value = value * 10 + (byte - b'0') as i64;
@@ -1137,18 +1133,18 @@ fn parse_zone_designator(text: &String, start: i32, end: i32) -> Result<i64, Des
     let span = end - start;
     if span == 1 {
         let c = text.get_byte_unchecked(start);
-        if c == b'Z' || c == b'z' {
+        if c.eq_ignore_ascii_case(&b'z') {
             return Result::Ok(0);
         }
         return Result::Err(DeserializeError::malformed("expected 'Z' or a ±hh:mm offset", start as i64));
     }
     let well_formed = span == 6
         && (text.get_byte_unchecked(start) == b'+' || text.get_byte_unchecked(start) == b'-')
-        && is_ascii_digit(text.get_byte_unchecked(start + 1))
-        && is_ascii_digit(text.get_byte_unchecked(start + 2))
+        && text.get_byte_unchecked(start + 1).is_ascii_digit()
+        && text.get_byte_unchecked(start + 2).is_ascii_digit()
         && text.get_byte_unchecked(start + 3) == b':'
-        && is_ascii_digit(text.get_byte_unchecked(start + 4))
-        && is_ascii_digit(text.get_byte_unchecked(start + 5));
+        && text.get_byte_unchecked(start + 4).is_ascii_digit()
+        && text.get_byte_unchecked(start + 5).is_ascii_digit();
     if !well_formed {
         return Result::Err(DeserializeError::malformed("expected 'Z' or a ±hh:mm offset", start as i64));
     }
@@ -1818,7 +1814,7 @@ fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, D
 fn read_duration_number(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
     let mut j = i;
     let mut value: i64 = 0;
-    while j < end && is_ascii_digit(text.get_byte_unchecked(j)) {
+    while j < end && text.get_byte_unchecked(j).is_ascii_digit() {
         value = value * 10 + (text.get_byte_unchecked(j) - b'0') as i64;
         j += 1;
     }
@@ -1844,7 +1840,7 @@ fn read_fraction_nanoseconds(text: &String, i: i32, end: i32) -> Result<[i64, i3
     let mut j = i;
     let mut scale: i64 = 100_000_000;
     let mut value: i64 = 0;
-    while j < end && is_ascii_digit(text.get_byte_unchecked(j)) {
+    while j < end && text.get_byte_unchecked(j).is_ascii_digit() {
         if scale >= 1 {
             value = value + (text.get_byte_unchecked(j) - b'0') as i64 * scale;
             scale = scale / 10;

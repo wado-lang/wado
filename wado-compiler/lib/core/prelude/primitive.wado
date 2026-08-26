@@ -582,6 +582,58 @@ impl u8 {
         return builtin::select(a < b, a, b);
     }
 
+    /// Returns true if the byte is an ASCII digit: 0-9.
+    pub fn is_ascii_digit(&self) -> bool {
+        return (*self as char).is_ascii_digit();
+    }
+
+    /// Returns true if the byte is an ASCII letter: a-z or A-Z.
+    pub fn is_ascii_alphabetic(&self) -> bool {
+        return (*self as char).is_ascii_alphabetic();
+    }
+
+    /// Returns true if the byte is an ASCII letter or digit: a-z, A-Z, 0-9.
+    pub fn is_ascii_alphanumeric(&self) -> bool {
+        return (*self as char).is_ascii_alphanumeric();
+    }
+
+    /// Returns true if the byte is an ASCII lowercase letter: a-z.
+    pub fn is_ascii_lowercase(&self) -> bool {
+        return (*self as char).is_ascii_lowercase();
+    }
+
+    /// Returns true if the byte is an ASCII uppercase letter: A-Z.
+    pub fn is_ascii_uppercase(&self) -> bool {
+        return (*self as char).is_ascii_uppercase();
+    }
+
+    /// Returns true if the byte is ASCII whitespace: SP, HT, LF, VT, FF, CR.
+    pub fn is_ascii_whitespace(&self) -> bool {
+        return (*self as char).is_ascii_whitespace();
+    }
+
+    /// Returns true if the byte is a hexadecimal digit: 0-9, a-f, A-F.
+    pub fn is_hexdigit(&self) -> bool {
+        return (*self as char).is_hexdigit();
+    }
+
+    /// Converts an ASCII uppercase letter to lowercase, leaving every other
+    /// byte unchanged.
+    pub fn to_ascii_lowercase(&self) -> u8 {
+        return *self | self.is_ascii_uppercase() as u8 * (b'A' ^ b'a');
+    }
+
+    /// Converts an ASCII lowercase letter to uppercase, leaving every other
+    /// byte unchanged.
+    pub fn to_ascii_uppercase(&self) -> u8 {
+        return *self ^ self.is_ascii_lowercase() as u8 * (b'A' ^ b'a');
+    }
+
+    /// Checks that two bytes are an ASCII case-insensitive match.
+    pub fn eq_ignore_ascii_case(&self, other: &u8) -> bool {
+        return self.to_ascii_lowercase() == other.to_ascii_lowercase();
+    }
+
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
     }

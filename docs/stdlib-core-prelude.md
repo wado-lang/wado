@@ -1123,6 +1123,18 @@ Checks that two characters are an ASCII case-insensitive match.
 Equivalent to `to_ascii_lowercase() == other.to_ascii_lowercase()`,
 but implemented branchlessly.
 
+#### `pub fn is_ascii_digit(&self) -> bool`
+
+Returns true if the character is an ASCII digit: 0-9.
+
+#### `pub fn is_ascii_alphabetic(&self) -> bool`
+
+Returns true if the character is an ASCII letter: a-z or A-Z.
+
+#### `pub fn is_ascii_alphanumeric(&self) -> bool`
+
+Returns true if the character is an ASCII letter or digit: a-z, A-Z, 0-9.
+
 #### `pub fn is_hexdigit(&self) -> bool`
 
 Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
@@ -1277,6 +1289,48 @@ Encodes this character as UTF-8, returning the bytes.
 #### `pub fn max(a: u8, b: u8) -> u8`
 
 #### `pub fn min(a: u8, b: u8) -> u8`
+
+#### `pub fn is_ascii_digit(&self) -> bool`
+
+Returns true if the byte is an ASCII digit: 0-9.
+
+#### `pub fn is_ascii_alphabetic(&self) -> bool`
+
+Returns true if the byte is an ASCII letter: a-z or A-Z.
+
+#### `pub fn is_ascii_alphanumeric(&self) -> bool`
+
+Returns true if the byte is an ASCII letter or digit: a-z, A-Z, 0-9.
+
+#### `pub fn is_ascii_lowercase(&self) -> bool`
+
+Returns true if the byte is an ASCII lowercase letter: a-z.
+
+#### `pub fn is_ascii_uppercase(&self) -> bool`
+
+Returns true if the byte is an ASCII uppercase letter: A-Z.
+
+#### `pub fn is_ascii_whitespace(&self) -> bool`
+
+Returns true if the byte is ASCII whitespace: SP, HT, LF, VT, FF, CR.
+
+#### `pub fn is_hexdigit(&self) -> bool`
+
+Returns true if the byte is a hexadecimal digit: 0-9, a-f, A-F.
+
+#### `pub fn to_ascii_lowercase(&self) -> u8`
+
+Converts an ASCII uppercase letter to lowercase, leaving every other
+byte unchanged.
+
+#### `pub fn to_ascii_uppercase(&self) -> u8`
+
+Converts an ASCII lowercase letter to uppercase, leaving every other
+byte unchanged.
+
+#### `pub fn eq_ignore_ascii_case(&self, other: &u8) -> bool`
+
+Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn to_string(&self) -> String`
 
