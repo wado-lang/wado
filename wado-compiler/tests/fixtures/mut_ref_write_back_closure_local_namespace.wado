@@ -1,0 +1,47 @@
+// A closure numbers its locals in its own namespace, so a whole-value write to
+// one of its slots says nothing about the enclosing function's slot of the same
+// index. Walking the closure body against the outer namespace refused this
+// payload-only borrow, which the design allows.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+#[inline("never")]
+fn mutate_payload(p: &mut Payload) {
+    match p {
+        Text(s) => {
+            *s = `zz`;
+        },
+        Empty => (),
+    }
+}
+
+// `r` is the outer local 1; `q` is the closure's local 1.
+#[inline("never")]
+fn payload_only(b: &mut Bag) -> i32 {
+    let r = &mut b.item;
+    mutate_payload(&mut *r);
+    let replace_own = |n: i32, q: &mut Payload| {
+        *q = Payload::Empty;
+        return n
+    };
+    let mut own = Payload::Text(`w`);
+    return replace_own(1, &mut own)
+}
+
+test "a payload-only borrow beside a closure that replaces its own parameter" {
+    let mut b = Bag { item: Payload::Text(`ab`) };
+    assert payload_only(&mut b) == 1;
+    assert b.item matches { Text(t) && t == `zz` };
+}
+
+__DATA__
+{
+    "test": {}
+}

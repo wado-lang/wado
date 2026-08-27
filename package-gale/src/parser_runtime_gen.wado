@@ -412,7 +412,7 @@ pub fn gen_parser_struct(
         w.end();
         w.begin(&"while j < sp.end");
         w.line(&"let c = self.tokens.chars[j];");
-        w.begin(&"if c >= '0' && c <= '9'");
+        w.begin(&"if c.is_ascii_digit()");
         w.line(&"acc = acc * 10 + (c as i32 - '0' as i32);");
         w.end();
         w.line(&"j += 1;");

@@ -957,8 +957,30 @@ fn process_stmt(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
             changed
         }
         StmtShape::Labeled(b) => process_block(engine, b, binds),
-        StmtShape::None => false,
+        // A block in *value* position — `let s = { … loop { … } … }`, the shape
+        // inlining leaves behind — is a straight-line block like any other, and
+        // without this its statements (the loop among them) are never visited.
+        StmtShape::None => process_nested_blocks(engine, NodeRef::Stmt(s), binds),
     }
+}
+
+/// Run [`process_block`] on the outermost blocks nested in `node`'s expression
+/// tree. The walk stops at each block, since `process_block` recurses itself.
+fn process_nested_blocks(engine: &mut Engine, node: NodeRef, binds: &Binds) -> bool {
+    let mut blocks: Vec<BlockId> = Vec::new();
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        if let NodeRef::Block(b) = n {
+            blocks.push(b);
+            continue;
+        }
+        engine.body.for_each_child(n, |c| stack.push(c));
+    }
+    let mut changed = false;
+    for b in blocks {
+        changed |= process_block(engine, b, binds);
+    }
+    changed
 }
 
 enum StmtShape {

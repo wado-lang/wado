@@ -1,0 +1,31 @@
+// A place whose type is a type parameter is only a `variant` once the function
+// is instantiated, so the refusal has to run after monomorphization to see it.
+// Instantiated at `Payload`, this stored borrow dropped its write in silence.
+//
+// One offending function, so the reported message is this one.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag<T> {
+    item: T,
+}
+
+#[inline("never")]
+fn store_and_write<T>(b: &mut Bag<T>, v: T) {
+    let r = &mut b.item;
+    *r = v;
+}
+
+test "unreachable" {
+    let mut b: Bag<Payload> = Bag { item: Payload::Empty };
+    store_and_write(&mut b, Payload::Text(`xyz`));
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "a variable holds it past the borrow"
+}

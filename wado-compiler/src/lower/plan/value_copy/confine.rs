@@ -48,7 +48,7 @@ enum Kind {
     Opaque,
 }
 
-pub fn compute_confined_params(project: &FlatPackage) -> ConfinedParams {
+pub fn compute_confined_params(project: &FlatPackage, call_graph: &CallGraph) -> ConfinedParams {
     let type_table = project.type_table.borrow();
     let kinds = classify_functions(project);
 
@@ -68,7 +68,6 @@ pub fn compute_confined_params(project: &FlatPackage) -> ConfinedParams {
         }
     }
 
-    let call_graph = CallGraph::build(project);
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
         let Some(body) = &func.body else {

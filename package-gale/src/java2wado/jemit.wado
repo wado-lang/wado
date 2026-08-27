@@ -615,9 +615,9 @@ fn is_system_out(e: &JExpr) -> bool {
 fn is_upper_ident(name: &String) -> bool {
     let mut has_alpha = false;
     for let c of name.chars() {
-        if c >= 'A' && c <= 'Z' {
+        if c.is_ascii_uppercase() {
             has_alpha = true;
-        } else if !(c >= '0' && c <= '9' || c == '_') {
+        } else if !(c.is_ascii_digit() || c == '_') {
             return false;
         }
     }

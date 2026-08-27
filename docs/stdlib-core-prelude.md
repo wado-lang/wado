@@ -1089,14 +1089,13 @@ in string operations.
 
 #### `pub fn is_ascii_whitespace(&self) -> bool`
 
-Returns true if the character is an ASCII whitespace character:
-SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
-Matches POSIX isspace() for the ASCII range.
+Returns true if the character is ASCII whitespace, as POSIX `isspace()`
+has it: SP, HT, LF, VT, FF, CR.
 
 #### `pub fn is_whitespace(&self) -> bool`
 
-Returns true if the character is a Unicode whitespace character.
-Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
+Returns true if the character is Unicode whitespace: ASCII whitespace,
+U+0085 (NEXT LINE), and the Zs/Zl/Zp code points.
 
 #### `pub fn is_ascii_lowercase(&self) -> bool`
 
@@ -1120,8 +1119,17 @@ non-lowercase characters are returned unchanged.
 
 Checks that two characters are an ASCII case-insensitive match.
 
-Equivalent to `to_ascii_lowercase() == other.to_ascii_lowercase()`,
-but implemented branchlessly.
+#### `pub fn is_ascii_digit(&self) -> bool`
+
+Returns true if the character is an ASCII digit: 0-9.
+
+#### `pub fn is_ascii_alphabetic(&self) -> bool`
+
+Returns true if the character is an ASCII letter: a-z or A-Z.
+
+#### `pub fn is_ascii_alphanumeric(&self) -> bool`
+
+Returns true if the character is an ASCII letter or digit: a-z, A-Z, 0-9.
 
 #### `pub fn is_hexdigit(&self) -> bool`
 
@@ -1277,6 +1285,48 @@ Encodes this character as UTF-8, returning the bytes.
 #### `pub fn max(a: u8, b: u8) -> u8`
 
 #### `pub fn min(a: u8, b: u8) -> u8`
+
+#### `pub fn is_ascii_digit(&self) -> bool`
+
+Returns true if the byte is an ASCII digit: 0-9.
+
+#### `pub fn is_ascii_alphabetic(&self) -> bool`
+
+Returns true if the byte is an ASCII letter: a-z or A-Z.
+
+#### `pub fn is_ascii_alphanumeric(&self) -> bool`
+
+Returns true if the byte is an ASCII letter or digit: a-z, A-Z, 0-9.
+
+#### `pub fn is_ascii_lowercase(&self) -> bool`
+
+Returns true if the byte is an ASCII lowercase letter: a-z.
+
+#### `pub fn is_ascii_uppercase(&self) -> bool`
+
+Returns true if the byte is an ASCII uppercase letter: A-Z.
+
+#### `pub fn is_ascii_whitespace(&self) -> bool`
+
+Returns true if the byte is ASCII whitespace: SP, HT, LF, VT, FF, CR.
+
+#### `pub fn is_hexdigit(&self) -> bool`
+
+Returns true if the byte is a hexadecimal digit: 0-9, a-f, A-F.
+
+#### `pub fn to_ascii_lowercase(&self) -> u8`
+
+Converts an ASCII uppercase letter to lowercase, leaving every other
+byte unchanged.
+
+#### `pub fn to_ascii_uppercase(&self) -> u8`
+
+Converts an ASCII lowercase letter to uppercase, leaving every other
+byte unchanged.
+
+#### `pub fn eq_ignore_ascii_case(&self, other: &u8) -> bool`
+
+Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn to_string(&self) -> String`
 

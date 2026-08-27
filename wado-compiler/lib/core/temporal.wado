@@ -1,31 +1,34 @@
 #![stdlib("core:temporal")]
-//! Minimal date and time types, modelled on TC39 Temporal.
+//! Date and time, modelled on TC39 Temporal.
 //!
-//! This is the MVP described in `docs/wep-2026-06-05-core-temporal.md`: it
-//! provides only the two value types every temporal API is built around, an
-//! exact point on the timeline (`Instant`) and that instant paired with a
-//! time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
-//! formatting (`Display`), civil field accessors, RFC 3339 parsing, epoch
-//! constructors, and serde `Serialize`/`Deserialize` (an RFC 3339 string under
-//! CBOR's date/time tag 0, a bare string in JSON; an epoch-seconds number is
-//! also accepted on decode); arithmetic, `now()`, and
-//! `Duration` are deferred to follow-up work. The types exist so a serde format
-//! such as `core:json` or `core:cbor` has a concrete Wado type for timestamps.
+//! Two types carry an instant — `Instant`, an exact point on the timeline, and
+//! `ZonedDateTime`, that instant paired with the zone it is read in. Five are
+//! zoneless readings the way a birthday or a recurring wall-clock time is:
+//! `PlainDate`, `PlainTime`, `PlainDateTime`, `PlainYearMonth`, and
+//! `PlainMonthDay`. `Duration` is a signed span, and `Unit` and `RoundingMode`
+//! parameterize the difference and rounding operations.
+//!
+//! Every type parses and renders its ISO 8601 spelling, and that spelling is
+//! its serde wire form. `Instant` also reads and writes the RFC 7231
+//! IMF-fixdate an HTTP `Date` header carries. `Instant::now` takes the system
+//! clock through the effect row, so a program that never asks the time gains no
+//! WASI import.
+//!
+//! Only fixed UTC offsets (`"Z"`, `"UTC"`, `±HH:MM`) are interpretable: an IANA
+//! zone name is storable, but every operation that needs the offset traps —
+//! rendering and serializing among them, since the wire form carries the
+//! resolved offset. Until a time-zone database is bundled. See
+//! `docs/wep-2026-06-05-core-temporal.md`.
 //!
 //! Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
 //! record (`{ seconds, nanoseconds }`) for the system clock. That type is a
 //! Component Model binding — pinned to a specific WASI version and regenerated
 //! by `wado-from-idl` — whereas `core:temporal`'s `Instant` is a plain,
 //! version-independent Wado type that grows methods. They share a name and
-//! field layout deliberately: it is "the same concept, a different type". To
-//! bridge them without making either depend on the other's representation,
-//! `core:temporal` provides `From` impls both ways (a field-for-field copy), so
-//! a clock reading converts with `Instant::from(SystemClock::now())` and back
-//! with `ClockInstant::from`. Merely naming the `wasi:clocks` record in these
-//! impls is not a runtime use of the clock, so it pulls in no WASI import for a
-//! component that never calls one.
+//! field layout deliberately: it is "the same concept, a different type", and
+//! `From` impls both ways bridge them with a field-for-field copy.
 //!
-//! Both `core:temporal` types are ISO 8601 only and so store no calendar.
+//! Every type here is ISO 8601 only and so stores no calendar.
 
 use {
     Serialize,
@@ -38,7 +41,7 @@ use {
     DeserializeSeq,
     DeserializeMap,
 } from "core:serde";
-use { Instant as ClockInstant } from "wasi:clocks";
+use { Instant as ClockInstant, SystemClock } from "wasi:clocks";
 
 #[synopsis]
 test {
@@ -48,6 +51,18 @@ test {
 
     assert ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20+09:00") matches { Ok(zoned) && zoned.hour() == 22
         && `${zoned}` == "2023-11-14T22:13:20+09:00" };
+
+    // A duration reads as written, and a calendar unit needs a calendar to
+    // resolve it: 01-31 plus a month is 02-28, not 03-03.
+    let month = Duration { months: 1 };
+    assert `${month}` == "P1M";
+    let end_of_january = ZonedDateTime::parse_rfc3339("2023-01-31T00:00:00Z").unwrap();
+    assert `${end_of_january.add(&month)}` == "2023-02-28T00:00:00Z";
+
+    // The zoneless types are the shapes a date or a clock reading really has.
+    assert PlainDate::new(2024, 2, 29).in_leap_year();
+    assert `${PlainTime { hour: 9, minute: 30 }}` == "09:30:00";
+    assert Instant::EPOCH.to_http_date() == "Thu, 01 Jan 1970 00:00:00 GMT";
 }
 
 /// An exact point on the timeline, as the offset from the Unix epoch
@@ -84,8 +99,11 @@ impl Ord for Instant;
 /// demand by accessors rather than stored state.
 ///
 /// `Ord` is auto-derived and orders by `instant` first, then `time_zone`
-/// lexically. That is _not_ a meaningful chronological order across different
-/// zones beyond the instant; ordering distinct zones is the caller's concern.
+/// lexically, so it stays consistent with the derived `Eq`. Temporal splits the
+/// two questions — `compare` weighs only the instant, `equals` the zone as well
+/// — so for "the same moment, wherever it is read" compare `to_instant()`
+/// rather than the values. `new` canonicalizes the three spellings of UTC, so
+/// `"UTC"`, `"z"`, and `"+00:00"` are one zone rather than three.
 pub struct ZonedDateTime {
     /// The exact instant.
     pub instant: Instant,
@@ -143,13 +161,7 @@ fn resolve_fraction_digits(f: &Formatter, default_digits: i32) -> i32 {
     if p == Formatter::PRECISION_INFINITE {
         return 9;
     }
-    if p < 0 {
-        return 0;
-    }
-    if p > 9 {
-        return 9;
-    }
-    return p;
+    return clamp_i32(p, 0, 9);
 }
 
 /// Render an instant as an ISO 8601 / RFC 3339 string in the civil time given
@@ -159,9 +171,7 @@ fn render_iso8601(seconds: i64, nanoseconds: u32, offset_seconds: i64, digits: i
     let local = seconds + offset_seconds;
     let [days, second_of_day] = epoch_days_and_seconds(local);
     let [year, month, day] = civil_from_days(days);
-    let hour = second_of_day / 3600;
-    let minute = second_of_day % 3600 / 60;
-    let second = second_of_day % 60;
+    let [hour, minute, second] = clock_from_second_of_day(second_of_day);
     let year_str = format_iso_year(year);
     let fraction = format_fraction(nanoseconds, digits);
     return `${year_str}-${month:02}-${day:02}T${hour:02}:${minute:02}:${second:02}${fraction}${suffix}`;
@@ -198,6 +208,11 @@ fn civil_from_days(days: i64) -> [i64, i64, i64] {
     return [civil_year, month, day];
 }
 
+/// Split a second-of-day into `[hour, minute, second]`.
+fn clock_from_second_of_day(second_of_day: i64) -> [i64, i64, i64] {
+    return [second_of_day / 3600, second_of_day % 3600 / 60, second_of_day % 60];
+}
+
 /// Format the year per ISO 8601 / Temporal `PadISOYear`: four digits in
 /// `0..=9999`, otherwise a sign followed by six digits.
 fn format_iso_year(year: i64) -> String {
@@ -232,7 +247,7 @@ fn format_fraction(nanoseconds: u32, digits: i32) -> String {
 
 /// Render a `ZonedDateTime` for `Display`/`DisplayAlt`. Only fixed UTC offsets
 /// are supported; an IANA zone name traps, because resolving its offset needs
-/// a time-zone database this MVP does not bundle.
+/// a time-zone database this module does not bundle.
 fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
     let digits = resolve_fraction_digits(f, default_digits);
     let offset = parse_fixed_offset(&zdt.time_zone);
@@ -240,43 +255,27 @@ fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
     f.pad(render_iso8601(zdt.instant.seconds, zdt.instant.nanoseconds, offset, digits, suffix));
 }
 
-/// Parse a fixed UTC offset zone string into a signed second count. Accepts
-/// `"Z"`/`"z"`, `"UTC"`, and `±HH:MM`. Any other value (notably an IANA zone
-/// name) traps with a clear message.
-fn parse_fixed_offset(zone: &String) -> i64 {
-    let n = zone.len();
-    if n == 1 && (zone.get_byte_unchecked(0) == b'Z' || zone.get_byte_unchecked(0) == b'z') {
-        return 0;
+/// A fixed UTC offset zone string as a signed second count, or `None` when the
+/// zone is not one: `"Z"`/`"z"`, `"UTC"`, and ±HH:MM are the forms understood.
+fn try_fixed_offset(zone: &String) -> Option<i64> {
+    if *zone == "UTC" {
+        return Option::Some(0);
     }
-    if n == 3
-        && zone.get_byte_unchecked(0) == b'U'
-        && zone.get_byte_unchecked(1) == b'T'
-        && zone.get_byte_unchecked(2) == b'C' {
-        return 0;
+    if let Ok(offset) = parse_zone_designator(zone, 0, zone.len()) {
+        return Option::Some(offset);
     }
-    let well_formed = n == 6
-        && (zone.get_byte_unchecked(0) == b'+' || zone.get_byte_unchecked(0) == b'-')
-        && is_ascii_digit(zone.get_byte_unchecked(1))
-        && is_ascii_digit(zone.get_byte_unchecked(2))
-        && zone.get_byte_unchecked(3) == b':'
-        && is_ascii_digit(zone.get_byte_unchecked(4))
-        && is_ascii_digit(zone.get_byte_unchecked(5));
-    if !well_formed {
-        panic(
-            `core:temporal: cannot Display a ZonedDateTime whose time zone "${zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
-        );
-    }
-    let hours = (zone.get_byte_unchecked(1) - b'0') as i64 * 10 + (zone.get_byte_unchecked(2) - b'0') as i64;
-    let minutes = (zone.get_byte_unchecked(4) - b'0') as i64 * 10 + (zone.get_byte_unchecked(5) - b'0') as i64;
-    let magnitude = hours * 3600 + minutes * 60;
-    if zone.get_byte_unchecked(0) == b'-' {
-        return -magnitude;
-    }
-    return magnitude;
+    return Option::None;
 }
 
-fn is_ascii_digit(byte: u8) -> bool {
-    return byte >= 0x30 && byte <= 0x39;
+/// The fixed UTC offset of `zone` in seconds. Any other value (notably an IANA
+/// zone name) traps with a clear message.
+fn parse_fixed_offset(zone: &String) -> i64 {
+    if let Some(offset) = try_fixed_offset(zone) {
+        return offset;
+    }
+    panic(
+        `core:temporal: time zone "${zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
+    );
 }
 
 /// Format a signed offset second count as `"Z"` (when zero) or `±HH:MM`.
@@ -284,11 +283,14 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
     if offset_seconds == 0 {
         return "Z";
     }
+    return format_offset(offset_seconds);
+}
+
+/// Format a signed offset second count as `±HH:MM`, spelling zero `"+00:00"`.
+fn format_offset(offset_seconds: i64) -> String {
     let sign = if offset_seconds < 0 { "-" } else { "+" };
     let magnitude = if offset_seconds < 0 { -offset_seconds } else { offset_seconds };
-    let hours = magnitude / 3600;
-    let minutes = magnitude % 3600 / 60;
-    return `${sign}${hours:02}:${minutes:02}`;
+    return `${sign}${magnitude / 3600:02}:${magnitude % 3600 / 60:02}`;
 }
 
 // Accessors.
@@ -298,6 +300,9 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
 // exposes only epoch-based convenience values. The calendar is always ISO 8601.
 
 impl Instant {
+    /// The Unix epoch itself, 1970-01-01T00:00:00Z.
+    pub const EPOCH: Instant = Instant { seconds: 0, nanoseconds: 0 };
+
     /// Construct an instant `nanoseconds` after `seconds` since the Unix epoch,
     /// normalizing so the stored sub-second part lands in `0..<1_000_000_000`
     /// even when `nanoseconds` is negative or `>= 1_000_000_000`. This is the
@@ -324,11 +329,25 @@ impl Instant {
         return Instant::new(milliseconds / 1000, milliseconds % 1000 * 1_000_000);
     }
 
+    /// Construct an instant from microseconds since the Unix epoch. The inverse
+    /// of `epoch_microseconds`.
+    pub fn from_epoch_microseconds(microseconds: i64) -> Instant {
+        return Instant::new(microseconds / 1_000_000, microseconds % 1_000_000 * 1000);
+    }
+
     /// Construct an instant from nanoseconds since the Unix epoch. The inverse
-    /// of `epoch_nanoseconds`, and like it limited to the i64 range
-    /// (≈ ±292 years).
-    pub fn from_epoch_nanoseconds(nanoseconds: i64) -> Instant {
-        return Instant::new(0, nanoseconds);
+    /// of `epoch_nanoseconds`, and like it spanning the whole `i64`-second
+    /// range.
+    pub fn from_epoch_nanoseconds(nanoseconds: i128) -> Instant {
+        // Floor, so the sub-second part is never negative and `whole_seconds`
+        // is already the second count the instant will carry — which makes the
+        // range below the exact one, where a truncating pair would leave the
+        // decrement `Instant::new` still owes it.
+        let whole_seconds = floor_div_i128(nanoseconds, 1_000_000_000);
+        // A count past the i64 second range is an overflow, not something to
+        // wrap — the same rule `duration_from_nanoseconds` holds.
+        assert whole_seconds >= -9_223_372_036_854_775_808 && whole_seconds <= 9_223_372_036_854_775_807;
+        return Instant::new(whole_seconds as i64, (nanoseconds - whole_seconds * 1_000_000_000) as i64);
     }
 
     /// Construct an instant from fractional seconds since the Unix epoch (CBOR
@@ -341,19 +360,81 @@ impl Instant {
         return Instant::new(whole as i64, nanos as i64);
     }
 
+    /// The current reading of the system clock (`Temporal.Now.instant`). The
+    /// effect row is what keeps the clock off callers that never ask the time.
+    pub fn now() -> Instant with SystemClock {
+        return Instant::from(SystemClock::now());
+    }
+
     /// Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
     pub fn epoch_milliseconds(&self) -> i64 {
         return self.seconds * 1000 + self.nanoseconds as i64 / 1_000_000;
     }
 
+    /// Microseconds since the Unix epoch, flooring toward the epoch's past so a
+    /// pre-epoch instant keeps moving forward with `nanoseconds`.
+    pub fn epoch_microseconds(&self) -> i64 {
+        return self.seconds * 1_000_000 + (self.nanoseconds / 1000) as i64;
+    }
+
     /// Nanoseconds since the Unix epoch (`Temporal.Instant.epochNanoseconds`).
     ///
-    /// Temporal uses a BigInt; this returns an `i64` and so is only valid within
-    /// ≈ ±292 years of the epoch (1678..=2262) — outside that range the
-    /// multiplication traps. Use the `seconds`/`nanoseconds` fields directly for
-    /// the full range.
-    pub fn epoch_nanoseconds(&self) -> i64 {
-        return self.seconds * 1_000_000_000 + self.nanoseconds as i64;
+    /// Temporal uses a BigInt; `i128` covers the whole `i64`-second range with
+    /// nanosecond resolution, so this never truncates.
+    pub fn epoch_nanoseconds(&self) -> i128 {
+        return self.seconds as i128 * 1_000_000_000 + self.nanoseconds as i128;
+    }
+
+    /// Move forward by `duration`. Only the time components are admitted: a day
+    /// and above has no fixed length without a calendar, so Temporal measures
+    /// those against a `ZonedDateTime` instead.
+    pub fn add(&self, duration: &Duration) -> Instant {
+        if duration.has_date_components() {
+            panic(
+                "core:temporal: Instant arithmetic admits hours and below; days and above need the calendar a ZonedDateTime carries",
+            );
+        }
+        return Instant::from_epoch_nanoseconds(self.epoch_nanoseconds() + duration.time_nanoseconds());
+    }
+
+    /// Move back by `duration`, under the same restriction as `add`.
+    pub fn subtract(&self, duration: &Duration) -> Instant {
+        return self.add(&duration.negated());
+    }
+
+    /// The span from this instant to `other`, positive when `other` is later.
+    /// `largest_unit` must be a time unit, as on `add`.
+    pub fn until(&self, other: &Instant, largest_unit: Unit = Unit::Second) -> Duration {
+        if is_date_unit(largest_unit) {
+            panic(
+                "core:temporal: Instant differences are measured in hours and below; use ZonedDateTime::until for a calendar unit",
+            );
+        }
+        return duration_from_nanoseconds(other.epoch_nanoseconds() - self.epoch_nanoseconds(), largest_unit);
+    }
+
+    /// The span from `other` to this instant — `until` with the sign flipped.
+    pub fn since(&self, other: &Instant, largest_unit: Unit = Unit::Second) -> Duration {
+        return self.until(other, largest_unit).negated();
+    }
+
+    /// Round to a multiple of `increment` units. `smallest_unit` must be an
+    /// hour or below, as on `add`; the multiples are counted from the epoch,
+    /// and the step must divide the day so they line up with the clock.
+    pub fn round(
+        &self,
+        smallest_unit: Unit,
+        increment: i64 = 1,
+        mode: RoundingMode = RoundingMode::HalfExpand,
+    ) -> Instant {
+        if is_date_unit(smallest_unit) {
+            panic("core:temporal: an Instant rounds to hours and below; use ZonedDateTime::round for a calendar unit");
+        }
+        return Instant::from_epoch_nanoseconds(round_to_increment(
+            self.epoch_nanoseconds(),
+            day_aligned_step(smallest_unit, increment),
+            mode,
+        ));
     }
 
     /// RFC 3339 / ISO 8601 string in UTC (`…Z`), using the least sub-second
@@ -363,135 +444,121 @@ impl Instant {
         let digits = fraction_digits_for(self.nanoseconds);
         return render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z");
     }
+
+    /// Parse an RFC 3339 / ISO 8601 timestamp into the exact instant it names,
+    /// discarding the offset. Same grammar as `ZonedDateTime::parse_rfc3339`.
+    pub fn parse_rfc3339(text: String) -> Result<Instant, DeserializeError> {
+        return Result::Ok(parse_iso_zoned(&text, 0, text.len())?.instant);
+    }
+
+    /// RFC 7231 IMF-fixdate, the form an HTTP `Date`, `Expires`, or
+    /// `Last-Modified` header carries: `"Sun, 06 Nov 1994 08:49:37 GMT"`.
+    /// Always UTC, always whole seconds.
+    pub fn to_http_date(&self) -> String {
+        let [days, second_of_day] = epoch_days_and_seconds(self.seconds);
+        let [year, month, day] = civil_from_days(days);
+        assert year >= 0 && year <= 9999;
+        let weekday = day_of_week_of(days);
+        let [hour, minute, second] = clock_from_second_of_day(second_of_day);
+        return `${imf_weekday_name(weekday)}, ${day:02} ${imf_month_name(month)} ${year:04} ${hour:02}:${minute:02}:${second:02} GMT`;
+    }
+
+    /// Parse an HTTP-date in any of the three forms RFC 7231 requires a
+    /// recipient to accept: IMF-fixdate (`"Sun, 06 Nov 1994 08:49:37 GMT"`),
+    /// the obsolete RFC 850 (`"Sunday, 06-Nov-94 08:49:37 GMT"`, whose
+    /// two-digit year pivots at 70), and asctime (`"Sun Nov  6 08:49:37 1994"`).
+    /// The weekday is advisory and is not checked against the date.
+    pub fn parse_http_date(text: String) -> Result<Instant, DeserializeError> {
+        let end = text.len();
+        let comma = index_of_byte(&text, b',');
+        if comma < 0 {
+            return parse_asctime(&text, end);
+        }
+        if comma + 4 < end && text.get_byte_unchecked(comma + 4) == b'-' {
+            return parse_rfc850_date(&text, comma, end);
+        }
+        return parse_imf_fixdate(&text, comma, end);
+    }
+
+    /// Interpret this instant in `time_zone`, the zoned view of the same moment
+    /// (`Temporal.Instant.toZonedDateTimeISO`).
+    pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime {
+        return ZonedDateTime::new(*self, time_zone);
+    }
+}
+impl FromStr for Instant {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Instant, DeserializeError> {
+        return Result::Ok(parse_iso_zoned(s, start, end)?.instant);
+    }
+}
+
+impl FromStr for ZonedDateTime {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<ZonedDateTime, DeserializeError> {
+        return parse_iso_zoned(s, start, end);
+    }
 }
 
 impl ZonedDateTime {
+    /// Interpret `instant` in `time_zone`, canonicalizing the three spellings of
+    /// UTC (`"UTC"`, `"z"`, `±00:00`) to `"Z"` so they are one value under the
+    /// derived `Eq`. Any other zone is stored verbatim.
+    pub fn new(instant: Instant, time_zone: String) -> ZonedDateTime {
+        return ZonedDateTime { instant: instant, time_zone: canonical_time_zone(time_zone) };
+    }
+
+    /// The current time read in `time_zone` (`Temporal.Now.zonedDateTimeISO`).
+    /// The zone is the caller's: there is no system-zone lookup until the
+    /// `wasi:clocks` `timezone` interface is wired up.
+    pub fn now(time_zone: String) -> ZonedDateTime with SystemClock {
+        return ZonedDateTime::new(Instant::now(), time_zone);
+    }
+
     /// Parse an RFC 3339 / ISO 8601 timestamp such as
     /// `"2023-11-14T22:13:20.5+09:00"` or `"1970-01-01T00:00:00Z"`, preserving
     /// the offset as a fixed-offset zone (so it round-trips through `to_rfc3339`
     /// / `Display` in canonical form).
     ///
     /// The grammar is `[±]Y…Y-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`: the year is
-    /// four or more digits with an optional sign (ISO 8601 extended years), the
+    /// four digits, or a sign followed by six (ISO 8601 expanded years), the
     /// date/time separator may be `T`, `t`, or a space, the fraction is
-    /// truncated to nanosecond precision, and the offset is mandatory. `"Z"` and
-    /// `"+00:00"` both normalize to a `"Z"` zone. Field values are range-checked
-    /// against the ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"`
-    /// are rejected); malformed or out-of-range input returns a
-    /// `DeserializeError` carrying the byte offset of the problem.
+    /// truncated to nanosecond precision, a leap second (`:60`) is constrained
+    /// to `:59`, and the offset is mandatory. `"Z"` and `"+00:00"` both
+    /// normalize to a `"Z"` zone. Field values are range-checked against the
+    /// ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"` are
+    /// rejected); malformed or out-of-range input returns a `DeserializeError`
+    /// carrying the byte offset of the problem.
     pub fn parse_rfc3339(text: String) -> Result<ZonedDateTime, DeserializeError> {
-        let len = text.len();
-        let mut i: i32 = 0;
-
-        // Year: an optional sign followed by one or more digits.
-        let mut year_sign: i64 = 1;
-        if i < len {
-            let c = text.get_byte_unchecked(i);
-            if c == b'+' || c == b'-' {
-                if c == b'-' {
-                    year_sign = -1;
-                }
-                i += 1;
-            }
-        }
-        let year_start = i;
-        while i < len && is_ascii_digit(text.get_byte_unchecked(i)) {
-            i += 1;
-        }
-        if i == year_start {
-            return Result::Err(DeserializeError::malformed("expected a year", year_start as i64));
-        }
-        let mut year: i64 = 0;
-        let mut yi = year_start;
-        while yi < i {
-            year = year * 10 + (text.get_byte_unchecked(yi) - b'0') as i64;
-            yi += 1;
-        }
-        year = year * year_sign;
-
-        i = expect_byte(&text, i, b'-')?;
-        let month = read_two_digits(&text, i)?;
-        if month < 1 || month > 12 {
-            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
-        }
-        i += 2;
-        i = expect_byte(&text, i, b'-')?;
-        let day = read_two_digits(&text, i)?;
-        if day < 1 || day > days_in_month_value(year, month) {
-            return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
-        }
-        i += 2;
-
-        // Date/time separator: 'T', 't', or a space.
-        if i >= len {
-            return Result::Err(DeserializeError::eof(i as i64));
-        }
-        let sep = text.get_byte_unchecked(i);
-        if sep != b'T' && sep != b't' && sep != b' ' {
-            return Result::Err(DeserializeError::malformed("expected a date/time separator", i as i64));
-        }
-        i += 1;
-
-        let hour = read_two_digits(&text, i)?;
-        if hour > 23 {
-            return Result::Err(DeserializeError::invalid_value("hour out of range", i as i64));
-        }
-        i += 2;
-        i = expect_byte(&text, i, b':')?;
-        let minute = read_two_digits(&text, i)?;
-        if minute > 59 {
-            return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
-        }
-        i += 2;
-        i = expect_byte(&text, i, b':')?;
-        let second = read_two_digits(&text, i)?;
-        if second > 59 {
-            return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
-        }
-        i += 2;
-
-        // Optional fractional seconds, truncated to nanosecond precision.
-        let mut nanoseconds: i64 = 0;
-        if i < len && text.get_byte_unchecked(i) == b'.' {
-            i += 1;
-            let frac_start = i;
-            let mut scale: i64 = 100_000_000;
-            while i < len && is_ascii_digit(text.get_byte_unchecked(i)) {
-                if scale >= 1 {
-                    nanoseconds = nanoseconds + (text.get_byte_unchecked(i) - b'0') as i64 * scale;
-                    scale = scale / 10;
-                }
-                i += 1;
-            }
-            if i == frac_start {
-                return Result::Err(DeserializeError::malformed(
-                    "expected fractional digits after '.'",
-                    frac_start as i64,
-                ));
-            }
-        }
-
-        // Mandatory zone designator: 'Z'/'z' or ±hh:mm.
-        let offset = parse_zone_designator(&text, i, len)?;
-
-        let days = days_from_civil(year, month, day);
-        let local_seconds = days * 86400 + hour * 3600 + minute * 60 + second;
-        return Result::Ok(ZonedDateTime {
-            instant: Instant { seconds: local_seconds - offset, nanoseconds: nanoseconds as u32 },
-            time_zone: format_offset_suffix(offset),
-        });
+        return parse_iso_zoned(&text, 0, text.len());
     }
 
-    /// RFC 3339 / ISO 8601 string in this zone's local time, with the offset
-    /// suffix (or `Z`) and the least sub-second precision that is exact. This is
-    /// the serde wire form. Traps on an IANA zone name (offset resolution is
-    /// future work).
-    pub fn to_rfc3339(&self) -> String {
-        let offset = parse_fixed_offset(&self.time_zone);
-        let digits = fraction_digits_for(self.instant.nanoseconds);
-        return render_iso8601(self.instant.seconds, self.instant.nanoseconds, offset, digits, format_offset_suffix(
-            offset,
-        ));
+    /// The exact instant, dropping the zone (`Temporal.ZonedDateTime.toInstant`).
+    pub fn to_instant(&self) -> Instant {
+        return self.instant;
+    }
+
+    /// Milliseconds since the Unix epoch.
+    pub fn epoch_milliseconds(&self) -> i64 {
+        return self.instant.epoch_milliseconds();
+    }
+
+    /// Nanoseconds since the Unix epoch.
+    pub fn epoch_nanoseconds(&self) -> i128 {
+        return self.instant.epoch_nanoseconds();
+    }
+
+    /// The zone's UTC offset at this instant, as `±HH:MM`. Temporal spells a
+    /// zero offset `"+00:00"` here even where the zone is `"Z"`.
+    pub fn offset(&self) -> String {
+        return format_offset(parse_fixed_offset(&self.time_zone));
+    }
+
+    /// The zone's UTC offset at this instant, in nanoseconds.
+    pub fn offset_nanoseconds(&self) -> i64 {
+        return parse_fixed_offset(&self.time_zone) * 1_000_000_000;
     }
 
     /// ISO year in the zone's local time. May be negative or beyond four digits.
@@ -504,6 +571,11 @@ impl ZonedDateTime {
     pub fn month(&self) -> i32 {
         let [_, _, month, _, _] = self.local_parts();
         return month as i32;
+    }
+
+    /// Temporal month code, `"M01"` … `"M12"` under the ISO 8601 calendar.
+    pub fn month_code(&self) -> String {
+        return month_code_of(self.month());
     }
 
     /// Day of the month, `1..=31`.
@@ -532,29 +604,53 @@ impl ZonedDateTime {
 
     /// Millisecond of the second, `0..=999`.
     pub fn millisecond(&self) -> i32 {
+        self.require_resolvable_zone();
         return (self.instant.nanoseconds / 1_000_000) as i32;
     }
 
     /// Microsecond of the millisecond, `0..=999`.
     pub fn microsecond(&self) -> i32 {
+        self.require_resolvable_zone();
         return (self.instant.nanoseconds / 1000 % 1000) as i32;
     }
 
     /// Nanosecond of the microsecond, `0..=999`.
     pub fn nanosecond(&self) -> i32 {
+        self.require_resolvable_zone();
         return (self.instant.nanoseconds % 1000) as i32;
     }
 
     /// Day of the week, `1` (Monday) through `7` (Sunday), per ISO 8601.
     pub fn day_of_week(&self) -> i32 {
         let [days, _, _, _, _] = self.local_parts();
-        return (floor_mod(days + 3, 7) + 1) as i32;
+        return day_of_week_of(days) as i32;
     }
 
     /// Day of the year, `1..=366`.
     pub fn day_of_year(&self) -> i32 {
         let [days, year, _, _, _] = self.local_parts();
-        return (days - days_from_civil(year, 1, 1) + 1) as i32;
+        return day_of_year_of(days, year) as i32;
+    }
+
+    /// ISO 8601 week of the week-year, `1..=53`.
+    pub fn week_of_year(&self) -> i32 {
+        let [_, year, _, _, _] = self.local_parts();
+        let [week, _] = iso_week_date(year, self.day_of_year() as i64, self.day_of_week() as i64);
+        return week as i32;
+    }
+
+    /// ISO 8601 week-numbering year, which differs from `year` in the days at
+    /// either end of the year that belong to the neighbour's week.
+    pub fn year_of_week(&self) -> i32 {
+        let [_, year, _, _, _] = self.local_parts();
+        let [_, week_year] = iso_week_date(year, self.day_of_year() as i64, self.day_of_week() as i64);
+        return week_year as i32;
+    }
+
+    /// Number of days in this week — always `7` for ISO 8601.
+    pub fn days_in_week(&self) -> i32 {
+        self.require_resolvable_zone();
+        return 7;
     }
 
     /// Number of days in this month, `28..=31`.
@@ -566,10 +662,13 @@ impl ZonedDateTime {
     /// Number of days in this year, `365` or `366`.
     pub fn days_in_year(&self) -> i32 {
         let [_, year, _, _, _] = self.local_parts();
-        if is_leap_year(year) {
-            return 366;
-        }
-        return 365;
+        return days_in_year_value(year);
+    }
+
+    /// Number of months in this year — always `12` for ISO 8601.
+    pub fn months_in_year(&self) -> i32 {
+        self.require_resolvable_zone();
+        return 12;
     }
 
     /// Whether this year is a leap year in the ISO 8601 calendar.
@@ -578,12 +677,127 @@ impl ZonedDateTime {
         return is_leap_year(year);
     }
 
-    /// Number of months in this year — always `12` for ISO 8601.
-    pub fn months_in_year(&self) -> i32 {
-        // Validate the zone for consistency with the other accessors (all of
-        // which trap on an unresolvable zone); the ISO 8601 answer is 12.
+    /// Hours between this day's start and the next. A fixed offset has no DST,
+    /// so it is always 24; an IANA zone traps.
+    pub fn hours_in_day(&self) -> i32 {
+        self.require_resolvable_zone();
+        return 24;
+    }
+
+    /// Local midnight on this value's day. Traps on an IANA zone name.
+    pub fn start_of_day(&self) -> ZonedDateTime {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let [days, _, _, _, _] = self.local_parts();
+        return self.with_instant(Instant { seconds: days * 86400 - offset, nanoseconds: 0 });
+    }
+
+    /// Move forward by `duration`, reading the calendar components in local
+    /// time. Following Temporal, years and months are applied first (a day
+    /// beyond the target month's end is constrained to its last day), then
+    /// weeks and days, then the exact time. Traps on an IANA zone name.
+    pub fn add(&self, duration: &Duration) -> ZonedDateTime {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let [_, year, month, day, second_of_day] = self.local_parts();
+        let [shifted_year, shifted_month, shifted_day] = add_months_to_civil(
+            year,
+            month,
+            day,
+            duration.years * 12 + duration.months,
+        );
+        let local_days = days_from_civil(shifted_year, shifted_month, shifted_day) + duration.weeks * 7 + duration.days;
+        let local_seconds = local_days * 86400 + second_of_day;
+        let shifted = Instant { seconds: local_seconds - offset, nanoseconds: self.instant.nanoseconds };
+        return self.with_instant(Instant::from_epoch_nanoseconds(
+            shifted.epoch_nanoseconds() + duration.time_nanoseconds(),
+        ));
+    }
+
+    /// Move back by `duration`. Not the inverse of `add` when a month-end is
+    /// constrained on the way out: 01-31 plus a month is 02-28, and minus a
+    /// month again is 01-28.
+    pub fn subtract(&self, duration: &Duration) -> ZonedDateTime {
+        return self.add(&duration.negated());
+    }
+
+    /// The span from this value to `other`, positive when `other` is later,
+    /// measured in this value's zone. A date `largest_unit` walks the calendar;
+    /// a time one divides the exact span.
+    pub fn until(&self, other: &ZonedDateTime, largest_unit: Unit = Unit::Hour) -> Duration {
+        let offset = parse_fixed_offset(&self.time_zone);
+        return difference_zoned(offset, self.instant, other.instant, largest_unit);
+    }
+
+    /// The span from `other` to this value — `until` with the sign flipped.
+    pub fn since(&self, other: &ZonedDateTime, largest_unit: Unit = Unit::Hour) -> Duration {
+        return self.until(other, largest_unit).negated();
+    }
+
+    /// Round the local wall clock to a multiple of `increment` units, counting
+    /// from local midnight so a day-aligned unit lands on the civil boundary.
+    /// `Unit::Day` rounds to the nearest midnight. Traps on an IANA zone name.
+    pub fn round(
+        &self,
+        smallest_unit: Unit,
+        increment: i64 = 1,
+        mode: RoundingMode = RoundingMode::HalfExpand,
+    ) -> ZonedDateTime {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let [days, time_of_day] = local_day_and_nanoseconds(self.instant.epoch_nanoseconds(), offset);
+        let rounded = round_to_increment(time_of_day, day_aligned_step(smallest_unit, increment), mode);
+        let local = days as i128 * 86_400_000_000_000 + rounded;
+        return self.with_instant(Instant::from_epoch_nanoseconds(local - offset as i128 * 1_000_000_000));
+    }
+
+    /// The same instant read in another zone.
+    pub fn with_time_zone(&self, time_zone: String) -> ZonedDateTime {
+        return ZonedDateTime::new(self.instant, time_zone);
+    }
+
+    /// RFC 3339 / ISO 8601 string in this zone's local time, with the offset
+    /// suffix (or `Z`) and the least sub-second precision that is exact. This is
+    /// the serde wire form. Traps on an IANA zone name (offset resolution is
+    /// future work).
+    pub fn to_rfc3339(&self) -> String {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let digits = fraction_digits_for(self.instant.nanoseconds);
+        return render_iso8601(self.instant.seconds, self.instant.nanoseconds, offset, digits, format_offset_suffix(
+            offset,
+        ));
+    }
+
+    /// The local calendar date. Traps on an IANA zone name.
+    pub fn to_plain_date(&self) -> PlainDate {
+        let [_, year, month, day, _] = self.local_parts();
+        return PlainDate { year: year as i32, month: month as i32, day: day as i32 };
+    }
+
+    /// The local wall-clock time. Traps on an IANA zone name.
+    pub fn to_plain_time(&self) -> PlainTime {
+        let [_, _, _, _, second_of_day] = self.local_parts();
+        return PlainTime::from_nanoseconds_since_midnight(
+            second_of_day * 1_000_000_000 + self.instant.nanoseconds as i64,
+        );
+    }
+
+    /// The local date and time together, dropping the zone. Traps on an IANA
+    /// zone name.
+    pub fn to_plain_date_time(&self) -> PlainDateTime {
+        return PlainDateTime {
+            date: self.to_plain_date(),
+            time: self.to_plain_time(),
+        };
+    }
+
+    /// Trap unless this zone resolves, so an accessor whose answer does not
+    /// depend on the offset still refuses a zone the rest of the type cannot
+    /// read.
+    fn require_resolvable_zone(&self) {
         let _ = parse_fixed_offset(&self.time_zone);
-        return 12;
+    }
+
+    /// The same zone at a different instant.
+    fn with_instant(&self, instant: Instant) -> ZonedDateTime {
+        return ZonedDateTime { instant: instant, time_zone: self.time_zone };
     }
 
     /// Local broken-down parts `[days_since_epoch, year, month, day,
@@ -597,6 +811,109 @@ impl ZonedDateTime {
         return [days, year, month, day, second_of_day];
     }
 }
+/// Whether `unit` measures calendar time rather than exact time.
+fn is_date_unit(unit: Unit) -> bool {
+    return unit_rank(unit) <= unit_rank(Unit::Day);
+}
+
+/// Add `months` to a proleptic Gregorian date, constraining a day beyond the
+/// target month's end to its last day, as Temporal's `constrain` overflow does.
+fn add_months_to_civil(year: i64, month: i64, day: i64, months: i64) -> [i64, i64, i64] {
+    let total = year * 12 + month - 1 + months;
+    let shifted_year = floor_div(total, 12);
+    let shifted_month = floor_mod(total, 12) + 1;
+    let month_length = days_in_month_value(shifted_year, shifted_month);
+    let shifted_day = if day > month_length { month_length } else { day };
+    return [shifted_year, shifted_month, shifted_day];
+}
+
+/// The span between two instants read at a fixed UTC `offset`.
+fn difference_zoned(offset: i64, start: Instant, end: Instant, largest_unit: Unit) -> Duration {
+    let start_nanoseconds = start.epoch_nanoseconds();
+    let end_nanoseconds = end.epoch_nanoseconds();
+    if unit_rank(largest_unit) >= unit_rank(Unit::Day) {
+        return duration_from_nanoseconds(end_nanoseconds - start_nanoseconds, largest_unit);
+    }
+    let sign: i128 = if end_nanoseconds >= start_nanoseconds { 1 } else { -1 };
+    let [start_days, start_time] = local_day_and_nanoseconds(start_nanoseconds, offset);
+    let [end_days, end_time] = local_day_and_nanoseconds(end_nanoseconds, offset);
+
+    // Borrow a day when the end's wall clock lies on the far side of the
+    // start's within the day, so the date part never overshoots.
+    let mut date_days = end_days;
+    let mut time_nanoseconds = end_time - start_time;
+    if time_nanoseconds * sign < 0 {
+        time_nanoseconds = time_nanoseconds + sign * 86_400_000_000_000;
+        date_days = date_days - sign as i64;
+    }
+
+    // The date walk fills years through days and the remainder fills hours and
+    // below, so the two never overlap and nothing needs rebalancing.
+    let date = calendar_difference(start_days, date_days, largest_unit);
+    return date.merge_components(&duration_from_nanoseconds(time_nanoseconds, Unit::Hour));
+}
+
+/// The date part of a difference, in whole weeks, months, or years plus a day
+/// remainder. Signed, and always anchored at `start_days`.
+fn calendar_difference(start_days: i64, end_days: i64, largest_unit: Unit) -> Duration {
+    let span = end_days - start_days;
+    if largest_unit matches { Week } {
+        return Duration { weeks: span / 7, days: span % 7 };
+    }
+    let sign: i64 = if span >= 0 { 1 } else { -1 };
+    let [year, month, day] = civil_from_days(start_days);
+    let months = whole_months_between(year, month, day, end_days, sign);
+    let [base_year, base_month, base_day] = add_months_to_civil(year, month, day, months);
+    let days = end_days - days_from_civil(base_year, base_month, base_day);
+    if largest_unit matches { Month } {
+        return Duration { months: months, days: days };
+    }
+    return Duration { years: months / 12, months: months % 12, days: days };
+}
+
+/// Whole months from a civil date to `end_days`, travelling in the direction of
+/// `sign`: the largest count whose constrained sum does not pass the target.
+fn whole_months_between(year: i64, month: i64, day: i64, end_days: i64, sign: i64) -> i64 {
+    let [end_year, end_month, _] = civil_from_days(end_days);
+    // Only an estimate — a constrained month end moves the sum by up to a day.
+    let mut months = (end_year - year) * 12 + (end_month - month);
+    if months * sign < 0 {
+        months = 0;
+    }
+    while months != 0 && overshoots(year, month, day, months, end_days, sign) {
+        months = months - sign;
+    }
+    while !overshoots(year, month, day, months + sign, end_days, sign) {
+        months = months + sign;
+    }
+    return months;
+}
+
+/// Whether a civil date shifted by `months`, constrained at the month end, lands
+/// past `end_days` travelling in the direction of `sign`.
+fn overshoots(year: i64, month: i64, day: i64, months: i64, end_days: i64, sign: i64) -> bool {
+    let [shifted_year, shifted_month, shifted_day] = add_months_to_civil(year, month, day, months);
+    return (days_from_civil(shifted_year, shifted_month, shifted_day) - end_days) * sign > 0;
+}
+
+/// Split an epoch-nanosecond count into the local day and the nanosecond of
+/// that day, at a fixed UTC `offset`.
+fn local_day_and_nanoseconds(epoch_nanoseconds: i128, offset: i64) -> [i64, i128] {
+    let nanoseconds_per_day: i128 = 86_400_000_000_000;
+    let local = epoch_nanoseconds + offset as i128 * 1_000_000_000;
+    let mut days = local / nanoseconds_per_day;
+    let mut rest = local % nanoseconds_per_day;
+    if rest < 0 {
+        days = days - 1;
+        rest = rest + nanoseconds_per_day;
+    }
+    return [days as i64, rest];
+}
+
+/// Quotient of `a` by positive `m`, flooring toward negative infinity.
+fn floor_div(a: i64, m: i64) -> i64 {
+    return (a - floor_mod(a, m)) / m;
+}
 
 /// Non-negative remainder of `a` modulo positive `m`.
 fn floor_mod(a: i64, m: i64) -> i64 {
@@ -605,6 +922,68 @@ fn floor_mod(a: i64, m: i64) -> i64 {
         return r + m;
     }
     return r;
+}
+
+/// Canonicalize the spellings of a zero-offset zone (`"UTC"`, `"z"`, `±00:00`)
+/// to `"Z"`, and a fixed offset to `±HH:MM`. Anything else is left verbatim.
+fn canonical_time_zone(zone: String) -> String {
+    if let Some(offset) = try_fixed_offset(&zone) {
+        return format_offset_suffix(offset);
+    }
+    return zone;
+}
+
+/// ISO 8601 week date `[week, week_year]` for a day given by its calendar year,
+/// day of year (`1..=366`), and day of week (`1` Monday … `7` Sunday).
+fn iso_week_date(year: i64, day_of_year: i64, day_of_week: i64) -> [i64, i64] {
+    let week = (day_of_year - day_of_week + 10) / 7;
+    if week < 1 {
+        return [iso_weeks_in_year(year - 1), year - 1];
+    }
+    if week > iso_weeks_in_year(year) {
+        return [1, year + 1];
+    }
+    return [week, year];
+}
+
+/// Number of ISO 8601 weeks in `year`: 53 when the year ends on a Thursday, or
+/// the year before it ended on a Wednesday; else 52.
+fn iso_weeks_in_year(year: i64) -> i64 {
+    if year_end_weekday(year) == 4 || year_end_weekday(year - 1) == 3 {
+        return 53;
+    }
+    return 52;
+}
+
+/// Weekday of 31 December of `year`, `0` (Sunday) … `6` (Saturday), by the
+/// closed form the ISO week count is built on.
+fn year_end_weekday(year: i64) -> i64 {
+    return floor_mod(year + floor_div(year, 4) - floor_div(year, 100) + floor_div(year, 400), 7);
+}
+
+/// Temporal month code, `"M01"` … `"M12"`. The ISO 8601 calendar has no leap
+/// month, so no case carries the `L` suffix a lunisolar one would.
+fn month_code_of(month: i32) -> String {
+    return `M${month:02}`;
+}
+
+/// ISO 8601 day of the week for a day count since the epoch, `1` (Monday)
+/// through `7` (Sunday). 1970-01-01 was a Thursday, hence the `+ 3`.
+fn day_of_week_of(days: i64) -> i64 {
+    return floor_mod(days + 3, 7) + 1;
+}
+
+/// Day of the year, `1..=366`, for a day count since the epoch and its year.
+fn day_of_year_of(days: i64, year: i64) -> i64 {
+    return days - days_from_civil(year, 1, 1) + 1;
+}
+
+/// Number of days in `year`, `365` or `366`.
+fn days_in_year_value(year: i64) -> i32 {
+    if is_leap_year(year) {
+        return 366;
+    }
+    return 365;
 }
 
 /// Whether `year` is a leap year in the proleptic Gregorian (ISO 8601) calendar.
@@ -638,26 +1017,122 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     return era * 146097 + doe - 719468;
 }
 
-/// Require byte `byte` at index `i` of `text`, returning the next index, or a
-/// `DeserializeError` on mismatch or end of input.
-fn expect_byte(text: &String, i: i32, byte: u8) -> Result<i32, DeserializeError> {
-    if i >= text.len() || text.get_byte_unchecked(i) != byte {
+/// Parse an RFC 3339 / ISO 8601 timestamp in `text[start..<end]`. The shared
+/// engine behind `ZonedDateTime::parse_rfc3339`, `Instant::parse_rfc3339`, and
+/// both `FromStr` impls.
+fn parse_iso_zoned(text: &String, start: i32, end: i32) -> Result<ZonedDateTime, DeserializeError> {
+    let mut i = start;
+
+    let [year, year_end] = parse_iso_year(text, i, end)?;
+    i = year_end;
+
+    i = expect_byte(text, i, end, b'-')?;
+    let month = read_digits(text, i, end, 2)?;
+    if month < 1 || month > 12 {
+        return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
+    }
+    i += 2;
+    i = expect_byte(text, i, end, b'-')?;
+    let day = read_digits(text, i, end, 2)?;
+    if day < 1 || day > days_in_month_value(year, month) {
+        return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
+    }
+    i += 2;
+
+    if i >= end {
+        return Result::Err(DeserializeError::eof(i as i64));
+    }
+    let sep = text.get_byte_unchecked(i);
+    if sep != b'T' && sep != b't' && sep != b' ' {
+        return Result::Err(DeserializeError::malformed("expected a date/time separator", i as i64));
+    }
+    i += 1;
+
+    let hour = read_digits(text, i, end, 2)?;
+    if hour > 23 {
+        return Result::Err(DeserializeError::invalid_value("hour out of range", i as i64));
+    }
+    i += 2;
+    i = expect_byte(text, i, end, b':')?;
+    let minute = read_digits(text, i, end, 2)?;
+    if minute > 59 {
+        return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
+    }
+    i += 2;
+    i = expect_byte(text, i, end, b':')?;
+    let parsed_second = read_digits(text, i, end, 2)?;
+    if parsed_second > 60 {
+        return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
+    }
+    // RFC 3339 admits a leap second; the ISO calendar has no 61st second to hold
+    // it, so Temporal constrains :60 to :59 rather than rejecting it.
+    let second = if parsed_second == 60 { 59 } else { parsed_second };
+    i += 2;
+
+    let mut nanoseconds: i64 = 0;
+    if i < end && text.get_byte_unchecked(i) == b'.' {
+        let [fraction, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+        nanoseconds = fraction;
+        i = after;
+    }
+
+    let offset = parse_zone_designator(text, i, end)?;
+
+    let days = days_from_civil(year, month, day);
+    let local_seconds = days * 86400 + hour * 3600 + minute * 60 + second;
+    return Result::Ok(ZonedDateTime {
+        instant: Instant { seconds: local_seconds - offset, nanoseconds: nanoseconds as u32 },
+        time_zone: format_offset_suffix(offset),
+    });
+}
+
+/// Require byte `byte` at index `i` of `text[..<end]`, returning the next index,
+/// or a `DeserializeError` on mismatch or end of input.
+fn expect_byte(text: &String, i: i32, end: i32, byte: u8) -> Result<i32, DeserializeError> {
+    if i >= end || text.get_byte_unchecked(i) != byte {
         return Result::Err(DeserializeError::malformed(`expected '${byte as char}'`, i as i64));
     }
     return Result::Ok(i + 1);
 }
 
-/// Read exactly two ASCII digits at index `i` of `text` as an integer, erroring
-/// if either is missing or non-numeric.
-fn read_two_digits(text: &String, i: i32) -> Result<i64, DeserializeError> {
-    if i + 1 >= text.len()
-        || !is_ascii_digit(text.get_byte_unchecked(i))
-        || !is_ascii_digit(text.get_byte_unchecked(i + 1)) {
-        return Result::Err(DeserializeError::malformed("expected two digits", i as i64));
+/// Read exactly `count` ASCII digits at index `i` of `text[..<end]` as an integer,
+/// erroring if any of them is missing or non-numeric.
+fn read_digits(text: &String, i: i32, end: i32, count: i32) -> Result<i64, DeserializeError> {
+    if i + count > end {
+        return Result::Err(DeserializeError::malformed(`expected ${count} digits`, i as i64));
     }
-    let tens = (text.get_byte_unchecked(i) - b'0') as i64;
-    let ones = (text.get_byte_unchecked(i + 1) - b'0') as i64;
-    return Result::Ok(tens * 10 + ones);
+    let mut value: i64 = 0;
+    let mut k = 0;
+    while k < count {
+        let byte = text.get_byte_unchecked(i + k);
+        if !byte.is_ascii_digit() {
+            return Result::Err(DeserializeError::malformed(`expected ${count} digits`, i as i64));
+        }
+        value = value * 10 + (byte - b'0') as i64;
+        k += 1;
+    }
+    return Result::Ok(value);
+}
+
+/// Parse the ISO 8601 year at index `i` — exactly four digits, or a sign
+/// followed by exactly six (the expanded form) — returning the year and the
+/// index just past it. `-000000` is the one expanded year ISO 8601 forbids.
+fn parse_iso_year(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+    if i >= end {
+        return Result::Err(DeserializeError::eof(i as i64));
+    }
+    let sign = text.get_byte_unchecked(i);
+    if sign != b'+' && sign != b'-' {
+        return Result::Ok([read_digits(text, i, end, 4)?, i + 4]);
+    }
+    let magnitude = read_digits(text, i + 1, end, 6)?;
+    if sign == b'-' {
+        if magnitude == 0 {
+            return Result::Err(DeserializeError::invalid_value("year -000000 is not an ISO 8601 year", i as i64));
+        }
+        return Result::Ok([-magnitude, i + 7]);
+    }
+    return Result::Ok([magnitude, i + 7]);
 }
 
 /// Parse the mandatory RFC 3339 zone designator in `text[start..<end]` into a
@@ -667,18 +1142,18 @@ fn parse_zone_designator(text: &String, start: i32, end: i32) -> Result<i64, Des
     let span = end - start;
     if span == 1 {
         let c = text.get_byte_unchecked(start);
-        if c == b'Z' || c == b'z' {
+        if c.eq_ignore_ascii_case(&b'z') {
             return Result::Ok(0);
         }
         return Result::Err(DeserializeError::malformed("expected 'Z' or a ±hh:mm offset", start as i64));
     }
     let well_formed = span == 6
         && (text.get_byte_unchecked(start) == b'+' || text.get_byte_unchecked(start) == b'-')
-        && is_ascii_digit(text.get_byte_unchecked(start + 1))
-        && is_ascii_digit(text.get_byte_unchecked(start + 2))
+        && text.get_byte_unchecked(start + 1).is_ascii_digit()
+        && text.get_byte_unchecked(start + 2).is_ascii_digit()
         && text.get_byte_unchecked(start + 3) == b':'
-        && is_ascii_digit(text.get_byte_unchecked(start + 4))
-        && is_ascii_digit(text.get_byte_unchecked(start + 5));
+        && text.get_byte_unchecked(start + 4).is_ascii_digit()
+        && text.get_byte_unchecked(start + 5).is_ascii_digit();
     if !well_formed {
         return Result::Err(DeserializeError::malformed("expected 'Z' or a ±hh:mm offset", start as i64));
     }
@@ -694,6 +1169,22 @@ fn parse_zone_designator(text: &String, start: i32, end: i32) -> Result<i64, Des
     return Result::Ok(magnitude);
 }
 
+/// The `.fff…` fraction of an ISO 8601 duration: as many digits as the value
+/// needs and no more, trailing zeros trimmed, `""` for zero. Durations spell a
+/// fraction at its shortest, where a timestamp keeps the 0/3/6/9 digit groups.
+fn format_minimal_fraction(nanoseconds: u32) -> String {
+    if nanoseconds == 0 {
+        return "";
+    }
+    let mut digits = 9;
+    let mut value = nanoseconds;
+    while value % 10 == 0 {
+        value = value / 10;
+        digits = digits - 1;
+    }
+    return format_fraction(nanoseconds, digits);
+}
+
 /// Least sub-second precision (0, 3, 6, or 9 fraction digits) that renders
 /// `nanoseconds` without loss.
 fn fraction_digits_for(nanoseconds: u32) -> i32 {
@@ -707,6 +1198,1960 @@ fn fraction_digits_for(nanoseconds: u32) -> i32 {
         return 6;
     }
     return 9;
+}
+
+/// The unit a temporal difference or rounding operation works in. The order is
+/// Temporal's, largest first; `Year`, `Month`, `Week`, and `Day` are the date
+/// units, the rest the time units.
+pub enum Unit {
+    Year,
+    Month,
+    Week,
+    Day,
+    Hour,
+    Minute,
+    Second,
+    Millisecond,
+    Microsecond,
+    Nanosecond,
+}
+
+/// How a rounding operation breaks a tie and which way it moves. Temporal's
+/// nine modes: the first four are directed, the `Half*` five choose only when
+/// the value sits exactly halfway.
+pub enum RoundingMode {
+    /// Toward positive infinity.
+    Ceil,
+    /// Toward negative infinity.
+    Floor,
+    /// Away from zero.
+    Expand,
+    /// Toward zero.
+    Trunc,
+    /// Nearest; a tie goes toward positive infinity.
+    HalfCeil,
+    /// Nearest; a tie goes toward negative infinity.
+    HalfFloor,
+    /// Nearest; a tie goes away from zero. Temporal's default.
+    HalfExpand,
+    /// Nearest; a tie goes toward zero.
+    HalfTrunc,
+    /// Nearest; a tie goes to the even multiple.
+    HalfEven,
+}
+
+/// Nanoseconds in one whole `unit`, or `0` for a calendar unit, which has none.
+fn fixed_unit_nanoseconds(unit: Unit) -> i128 {
+    return match unit {
+        Nanosecond => 1,
+        Microsecond => 1000,
+        Millisecond => 1_000_000,
+        Second => 1_000_000_000,
+        Minute => 60_000_000_000,
+        Hour => 3_600_000_000_000,
+        Day => 86_400_000_000_000,
+        Week => 0,
+        Month => 0,
+        Year => 0,
+    };
+}
+
+/// Nanoseconds in one whole `unit`. The calendar units have no fixed length and
+/// trap: measure them against a `ZonedDateTime` instead.
+fn unit_nanoseconds(unit: Unit) -> i128 {
+    let nanoseconds = fixed_unit_nanoseconds(unit);
+    if nanoseconds == 0 {
+        panic(`core:temporal: a ${unit} is not a fixed length of exact time; measure it against a ZonedDateTime`);
+    }
+    return nanoseconds;
+}
+
+/// The coarser of two units — the one that comes first in Temporal's order.
+fn coarser_unit(a: Unit, b: Unit) -> Unit {
+    if unit_rank(a) <= unit_rank(b) {
+        return a;
+    }
+    return b;
+}
+
+/// Position of `unit` in Temporal's order, `0` for `Year` … `9` for
+/// `Nanosecond`. Smaller is coarser.
+fn unit_rank(unit: Unit) -> i32 {
+    return match unit {
+        Year => 0,
+        Month => 1,
+        Week => 2,
+        Day => 3,
+        Hour => 4,
+        Minute => 5,
+        Second => 6,
+        Millisecond => 7,
+        Microsecond => 8,
+        Nanosecond => 9,
+    };
+}
+
+/// Assert a clock-based rounding step divides the day, the rule Temporal
+/// enforces: a 7-hour bucket has no consistent place to start from.
+fn day_aligned_step(unit: Unit, increment: i64) -> i128 {
+    let step = unit_nanoseconds(unit) * increment as i128;
+    assert step > 0 && 86_400_000_000_000 % step == 0;
+    return step;
+}
+
+/// Round `value` to a multiple of `increment` under `mode`.
+fn round_to_increment(value: i128, increment: i128, mode: RoundingMode) -> i128 {
+    assert increment > 0;
+    let mut quotient = value / increment;
+    let remainder = value % increment;
+    if remainder == 0 {
+        return value;
+    }
+    let negative = remainder < 0;
+    let magnitude = if negative { -remainder } else { remainder };
+    let doubled = magnitude * 2;
+    let up = match mode {
+        Ceil => !negative,
+        Floor => negative,
+        Expand => true,
+        Trunc => false,
+        HalfCeil => if doubled == increment { !negative } else { doubled > increment },
+        HalfFloor => if doubled == increment { negative } else { doubled > increment },
+        HalfExpand => doubled >= increment,
+        HalfTrunc => doubled > increment,
+        HalfEven => if doubled == increment { quotient % 2 != 0 } else { doubled > increment },
+    };
+    if up {
+        quotient = if negative { quotient - 1 } else { quotient + 1 };
+    }
+    return quotient * increment;
+}
+
+/// English weekday abbreviations, Monday first, as RFC 7231 spells them.
+fn imf_weekday_name(day_of_week: i64) -> String {
+    return match day_of_week {
+        1 => "Mon",
+        2 => "Tue",
+        3 => "Wed",
+        4 => "Thu",
+        5 => "Fri",
+        6 => "Sat",
+        7 => "Sun",
+        _ => panic(`core:temporal: day of week ${day_of_week} is outside 1..=7`),
+    };
+}
+
+/// English month abbreviations, as RFC 7231 spells them.
+fn imf_month_name(month: i64) -> String {
+    return match month {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        12 => "Dec",
+        _ => panic(`core:temporal: month ${month} is outside 1..=12`),
+    };
+}
+
+/// The month a three-letter RFC 7231 abbreviation names, or `-1`.
+fn imf_month_number(text: &String, i: i32) -> i64 {
+    let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let mut month: i64 = 1;
+    for let name of names {
+        if text.get_byte_unchecked(i) == name.get_byte_unchecked(0)
+            && text.get_byte_unchecked(i + 1) == name.get_byte_unchecked(1)
+            && text.get_byte_unchecked(i + 2) == name.get_byte_unchecked(2) {
+            return month;
+        }
+        month += 1;
+    }
+    return -1;
+}
+
+/// A signed span of time, as a Temporal-shaped record of ten components rather
+/// than one scalar. Corresponds to `Temporal.Duration`.
+///
+/// The date components (`years`, `months`, `weeks`) have no fixed length, so a
+/// duration carrying one applies only to a receiver that knows a calendar
+/// position — `ZonedDateTime`, `PlainDateTime`, `PlainDate`, and
+/// `PlainYearMonth` within the units each admits; `Instant` and `PlainTime`
+/// take hours and below. Unlike Temporal, a mixed-sign literal is representable
+/// — nothing rejects one at construction — and the ISO 8601 form asserts
+/// against it.
+pub struct Duration {
+    pub years: i64 = 0,
+    pub months: i64 = 0,
+    pub weeks: i64 = 0,
+    pub days: i64 = 0,
+    pub hours: i64 = 0,
+    pub minutes: i64 = 0,
+    pub seconds: i64 = 0,
+    pub milliseconds: i64 = 0,
+    pub microseconds: i64 = 0,
+    pub nanoseconds: i64 = 0,
+}
+
+impl Eq for Duration;
+
+impl Duration {
+    /// Parse an ISO 8601 duration such as `"P1Y2M3W4DT5H6M7.5S"`, optionally
+    /// signed. A fraction is allowed on the last time component present and
+    /// spills into the components below it, so `"PT1.5H"` is `PT1H30M`.
+    pub fn parse(text: String) -> Result<Duration, DeserializeError> {
+        return parse_iso_duration(&text, 0, text.len());
+    }
+
+    /// The sign of the largest non-zero component: `1`, `-1`, or `0` when every
+    /// component is zero.
+    pub fn sign(&self) -> i32 {
+        for let component of self.components() {
+            if component > 0 {
+                return 1;
+            }
+            if component < 0 {
+                return -1;
+            }
+        }
+        return 0;
+    }
+
+    /// Every component, largest first — the order `sign` and the ISO 8601 form
+    /// read them in.
+    fn components(&self) -> [i64, i64, i64, i64, i64, i64, i64, i64, i64, i64] {
+        return [
+            self.years, self.months, self.weeks, self.days, self.hours, self.minutes, self.seconds, self.milliseconds,
+            self.microseconds, self.nanoseconds,
+        ];
+    }
+
+    /// Whether every component is zero (`Temporal.Duration.prototype.blank`).
+    pub fn is_zero(&self) -> bool {
+        return self.sign() == 0;
+    }
+
+    /// The same span in the opposite direction.
+    pub fn negated(&self) -> Duration {
+        return self.scaled(-1);
+    }
+
+    /// The same span with a non-negative sign.
+    pub fn abs(&self) -> Duration {
+        if self.sign() < 0 {
+            return self.negated();
+        }
+        return *self;
+    }
+
+    /// The two spans summed and rebalanced, expressed at the coarser of their
+    /// two top units. A day counts as 24 hours; years, months, and weeks trap,
+    /// since adding one needs the calendar position Temporal's `relativeTo`
+    /// supplies.
+    pub fn add(&self, other: &Duration) -> Duration {
+        if self.has_calendar_components() || other.has_calendar_components() {
+            panic(
+                "core:temporal: adding a duration that carries years, months, or weeks needs the calendar position a relativeTo anchor would supply",
+            );
+        }
+        return duration_from_nanoseconds(
+            self.exact_nanoseconds() + other.exact_nanoseconds(),
+            coarser_unit(self.top_unit(), other.top_unit()),
+        );
+    }
+
+    /// The difference of the two spans, rebalanced the same way as `add`.
+    pub fn subtract(&self, other: &Duration) -> Duration {
+        return self.add(&other.negated());
+    }
+
+    /// Component-wise sum of two durations that do not overlap, so nothing
+    /// needs balancing. Unlike `add` it admits calendar components.
+    fn merge_components(&self, other: &Duration) -> Duration {
+        return Duration {
+            years: self.years + other.years,
+            months: self.months + other.months,
+            weeks: self.weeks + other.weeks,
+            days: self.days + other.days,
+            hours: self.hours + other.hours,
+            minutes: self.minutes + other.minutes,
+            seconds: self.seconds + other.seconds,
+            milliseconds: self.milliseconds + other.milliseconds,
+            microseconds: self.microseconds + other.microseconds,
+            nanoseconds: self.nanoseconds + other.nanoseconds,
+        };
+    }
+
+    /// The whole span as a nanosecond count, a day counting as 24 hours. Only
+    /// meaningful once the calendar components are known to be zero.
+    fn exact_nanoseconds(&self) -> i128 {
+        return self.days as i128 * 86_400_000_000_000 + self.time_nanoseconds();
+    }
+
+    /// The largest non-zero component, `Day` or below. A zero duration reads as
+    /// `Nanosecond`, as Temporal's `DefaultTemporalLargestUnit` does.
+    fn top_unit(&self) -> Unit {
+        if self.days != 0 {
+            return Unit::Day;
+        }
+        if self.hours != 0 {
+            return Unit::Hour;
+        }
+        if self.minutes != 0 {
+            return Unit::Minute;
+        }
+        if self.seconds != 0 {
+            return Unit::Second;
+        }
+        if self.milliseconds != 0 {
+            return Unit::Millisecond;
+        }
+        if self.microseconds != 0 {
+            return Unit::Microsecond;
+        }
+        return Unit::Nanosecond;
+    }
+
+    /// The whole span expressed in `unit`, as a fraction. A day counts as 24
+    /// hours; the calendar components have no length without an anchor and
+    /// trap.
+    pub fn total(&self, unit: Unit) -> f64 {
+        if self.years != 0 || self.months != 0 || self.weeks != 0 {
+            panic("core:temporal: a duration carrying years, months, or weeks has no total without a calendar anchor");
+        }
+        return self.exact_nanoseconds() as f64 / unit_nanoseconds(unit) as f64;
+    }
+
+    /// Round the exact span to a multiple of `increment` `smallest_unit`s and
+    /// re-express it with `largest_unit` on top. Calendar components trap.
+    pub fn round(
+        &self,
+        smallest_unit: Unit,
+        largest_unit: Unit,
+        increment: i64 = 1,
+        mode: RoundingMode = RoundingMode::HalfExpand,
+    ) -> Duration {
+        if self.years != 0 || self.months != 0 || self.weeks != 0 {
+            panic("core:temporal: a duration carrying years, months, or weeks has no exact length to round");
+        }
+        return duration_from_nanoseconds(
+            round_to_increment(
+                self.exact_nanoseconds(),
+                unit_nanoseconds(smallest_unit) * increment as i128,
+                mode,
+            ),
+            largest_unit,
+        );
+    }
+
+    /// The ISO 8601 form, e.g. `"P1Y2M3W4DT5H6M7.5S"`. A zero duration is
+    /// `"PT0S"`; a negative one takes a leading `-`.
+    pub fn to_iso8601(&self) -> String {
+        assert self.is_uniformly_signed();
+        let d = self.abs();
+        let mut out = if self.sign() < 0 { "-P" } else { "P" };
+        if d.years != 0 {
+            out = `${out}${d.years}Y`;
+        }
+        if d.months != 0 {
+            out = `${out}${d.months}M`;
+        }
+        if d.weeks != 0 {
+            out = `${out}${d.weeks}W`;
+        }
+        if d.days != 0 {
+            out = `${out}${d.days}D`;
+        }
+        let sub_second = d.milliseconds * 1_000_000 + d.microseconds * 1000 + d.nanoseconds;
+        if d.hours == 0 && d.minutes == 0 && d.seconds == 0 && sub_second == 0 {
+            if out.len() <= 2 {
+                return `${out}T0S`;
+            }
+            return out;
+        }
+        out = `${out}T`;
+        if d.hours != 0 {
+            out = `${out}${d.hours}H`;
+        }
+        if d.minutes != 0 {
+            out = `${out}${d.minutes}M`;
+        }
+        if d.seconds != 0 || sub_second != 0 {
+            let whole = d.seconds + sub_second / 1_000_000_000;
+            out = `${out}${whole}${format_minimal_fraction((sub_second % 1_000_000_000) as u32)}S`;
+        }
+        return out;
+    }
+
+    /// The time components (`hours` and below) as a nanosecond count. The date
+    /// components are ignored — they have no length without a calendar anchor.
+    fn time_nanoseconds(&self) -> i128 {
+        return self.hours as i128 * 3_600_000_000_000 + self.minutes as i128 * 60_000_000_000 + self.seconds as i128 * 1_000_000_000 + self.milliseconds as i128 * 1_000_000 + self.microseconds as i128 * 1000 + self.nanoseconds as i128;
+    }
+
+    /// Every component scaled by `factor`.
+    fn scaled(&self, factor: i64) -> Duration {
+        return Duration {
+            years: self.years * factor,
+            months: self.months * factor,
+            weeks: self.weeks * factor,
+            days: self.days * factor,
+            hours: self.hours * factor,
+            minutes: self.minutes * factor,
+            seconds: self.seconds * factor,
+            milliseconds: self.milliseconds * factor,
+            microseconds: self.microseconds * factor,
+            nanoseconds: self.nanoseconds * factor,
+        };
+    }
+
+    /// Whether every non-zero component carries the same sign, the invariant
+    /// Temporal enforces at construction and the ISO 8601 form needs.
+    fn is_uniformly_signed(&self) -> bool {
+        let overall = self.sign();
+        for let component of self.components() {
+            if component > 0 && overall < 0 {
+                return false;
+            }
+            if component < 0 && overall > 0 {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Whether any component measures calendar time, which only a
+    /// `ZonedDateTime` can resolve.
+    fn has_date_components(&self) -> bool {
+        return self.has_calendar_components() || self.days != 0;
+    }
+
+    /// Whether any component has no fixed length at all — a day is 24 hours
+    /// once a zone is fixed, but a year, month, or week never is.
+    fn has_calendar_components(&self) -> bool {
+        return self.years != 0 || self.months != 0 || self.weeks != 0;
+    }
+}
+
+impl Display for Duration {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(self.to_iso8601());
+    }
+}
+
+impl Serialize for Duration {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+impl FromStr for Duration {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Duration, DeserializeError> {
+        return parse_iso_duration(s, start, end);
+    }
+}
+
+/// Split a nanosecond count into a `Duration` whose largest populated component
+/// is `largest_unit`. The date units above `Day` have no fixed length, so they
+/// are not reachable from a bare nanosecond count and trap.
+fn duration_from_nanoseconds(total: i128, largest_unit: Unit) -> Duration {
+    let negative = total < 0;
+    let magnitude = if negative { -total } else { total };
+    // Each component is an i64 and the largest one carries the whole span, so a
+    // count that does not fit is an overflow rather than something to wrap.
+    let step = fixed_unit_nanoseconds(largest_unit);
+    assert step == 0 || magnitude / step <= 9_223_372_036_854_775_807;
+
+    let nanoseconds = (magnitude % 1000) as i64;
+    let microseconds = (magnitude / 1000 % 1000) as i64;
+    let milliseconds = (magnitude / 1_000_000 % 1000) as i64;
+    let whole_seconds = magnitude / 1_000_000_000;
+
+    let mut out = match largest_unit {
+        Nanosecond => Duration { nanoseconds: magnitude as i64 },
+        Microsecond => Duration { microseconds: (magnitude / 1000) as i64, nanoseconds: nanoseconds },
+        Millisecond => Duration {
+            milliseconds: (magnitude / 1_000_000) as i64,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Second => Duration {
+            seconds: whole_seconds as i64,
+            milliseconds: milliseconds,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Minute => Duration {
+            minutes: (whole_seconds / 60) as i64,
+            seconds: (whole_seconds % 60) as i64,
+            milliseconds: milliseconds,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Hour => Duration {
+            hours: (whole_seconds / 3600) as i64,
+            minutes: (whole_seconds / 60 % 60) as i64,
+            seconds: (whole_seconds % 60) as i64,
+            milliseconds: milliseconds,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Day => Duration {
+            days: (whole_seconds / 86400) as i64,
+            hours: (whole_seconds / 3600 % 24) as i64,
+            minutes: (whole_seconds / 60 % 60) as i64,
+            seconds: (whole_seconds % 60) as i64,
+            milliseconds: milliseconds,
+            microseconds: microseconds,
+            nanoseconds: nanoseconds,
+        },
+        Year => panic("core:temporal: a year is not a fixed length; measure it against a ZonedDateTime"),
+        Month => panic("core:temporal: a month is not a fixed length; measure it against a ZonedDateTime"),
+        Week => panic("core:temporal: a week needs a calendar anchor; measure it against a ZonedDateTime"),
+    };
+    if negative {
+        out = out.negated();
+    }
+    return out;
+}
+
+/// Parse an ISO 8601 duration in `text[start..<end]`.
+fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, DeserializeError> {
+    let mut i = start;
+    let mut sign: i64 = 1;
+    if i < end && (text.get_byte_unchecked(i) == b'+' || text.get_byte_unchecked(i) == b'-') {
+        if text.get_byte_unchecked(i) == b'-' {
+            sign = -1;
+        }
+        i += 1;
+    }
+    if i >= end || text.get_byte_unchecked(i) != b'P' && text.get_byte_unchecked(i) != b'p' {
+        return Result::Err(DeserializeError::malformed("expected 'P'", i as i64));
+    }
+    i += 1;
+
+    let mut out = Duration {};
+    let mut seen_component = false;
+
+    let mut date_slot = 0;
+    while i < end {
+        let byte = text.get_byte_unchecked(i);
+        if byte == b'T' || byte == b't' {
+            break;
+        }
+        let [value, after] = read_duration_number(text, i, end)?;
+        if after >= end {
+            return Result::Err(DeserializeError::eof(after as i64));
+        }
+        let designator_slot = duration_date_slot(text.get_byte_unchecked(after));
+        if designator_slot < 0 {
+            return Result::Err(DeserializeError::malformed("expected 'Y', 'M', 'W', or 'D'", after as i64));
+        }
+        if designator_slot < date_slot {
+            return Result::Err(DeserializeError::malformed("duration components are out of order", after as i64));
+        }
+        date_slot = designator_slot + 1;
+        seen_component = true;
+        out = assign_date_component(out, designator_slot, value);
+        i = after + 1;
+    }
+
+    if i < end && (text.get_byte_unchecked(i) == b'T' || text.get_byte_unchecked(i) == b't') {
+        i += 1;
+        let mut time_slot = 0;
+        let mut seen_time_component = false;
+        let mut fraction_seen = false;
+        while i < end {
+            if fraction_seen {
+                return Result::Err(DeserializeError::malformed(
+                    "only the last duration component may carry a fraction",
+                    i as i64,
+                ));
+            }
+            let [value, after_number] = read_duration_number(text, i, end)?;
+            let [fraction_nanoseconds, after] = read_duration_fraction(text, after_number, end)?;
+            if after >= end {
+                return Result::Err(DeserializeError::eof(after as i64));
+            }
+            let designator_slot = duration_time_slot(text.get_byte_unchecked(after));
+            if designator_slot < 0 {
+                return Result::Err(DeserializeError::malformed("expected 'H', 'M', or 'S'", after as i64));
+            }
+            if designator_slot < time_slot {
+                return Result::Err(DeserializeError::malformed("duration components are out of order", after as i64));
+            }
+            time_slot = designator_slot + 1;
+            seen_time_component = true;
+            seen_component = true;
+            out = assign_time_component(out, designator_slot, value);
+            if after > after_number {
+                fraction_seen = true;
+                out = out.merge_components(&duration_from_nanoseconds(
+                    fraction_nanoseconds * duration_time_slot_seconds(designator_slot),
+                    Unit::Minute,
+                ));
+            }
+            i = after + 1;
+        }
+        if !seen_time_component {
+            return Result::Err(DeserializeError::malformed("expected a time component after 'T'", i as i64));
+        }
+    }
+
+    if !seen_component {
+        return Result::Err(DeserializeError::malformed("a duration needs at least one component", i as i64));
+    }
+    if i != end {
+        return Result::Err(DeserializeError::malformed("trailing characters", i as i64));
+    }
+    if sign < 0 {
+        return Result::Ok(out.negated());
+    }
+    return Result::Ok(out);
+}
+
+/// Read the leading run of digits at `i`, returning the value and the index just
+/// past it.
+fn read_duration_number(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+    let mut j = i;
+    let mut value: i64 = 0;
+    while j < end && text.get_byte_unchecked(j).is_ascii_digit() {
+        value = value * 10 + (text.get_byte_unchecked(j) - b'0') as i64;
+        j += 1;
+    }
+    if j == i {
+        return Result::Err(DeserializeError::malformed("expected a duration component", i as i64));
+    }
+    return Result::Ok([value, j]);
+}
+
+/// Read an optional `.`/`,` fraction at `i` as a nine-digit nanosecond scale,
+/// returning it and the index just past it. Absent, it reads as zero and `i`.
+fn read_duration_fraction(text: &String, i: i32, end: i32) -> Result<[i128, i32], DeserializeError> {
+    if i >= end || text.get_byte_unchecked(i) != b'.' && text.get_byte_unchecked(i) != b',' {
+        return Result::Ok([0, i]);
+    }
+    let [nanoseconds, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+    return Result::Ok([nanoseconds as i128, after]);
+}
+
+/// Read the run of digits at `i` as a nanosecond count — the first digit is a
+/// tenth of a second — truncating past the ninth. Errors on no digit at all.
+fn read_fraction_nanoseconds(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+    let mut j = i;
+    let mut scale: i64 = 100_000_000;
+    let mut value: i64 = 0;
+    while j < end && text.get_byte_unchecked(j).is_ascii_digit() {
+        if scale >= 1 {
+            value = value + (text.get_byte_unchecked(j) - b'0') as i64 * scale;
+            scale = scale / 10;
+        }
+        j += 1;
+    }
+    if j == i {
+        return Result::Err(DeserializeError::malformed("expected fractional digits after the separator", i as i64));
+    }
+    return Result::Ok([value, j]);
+}
+
+/// Slot index of an ISO 8601 date designator (`Y`, `M`, `W`, `D`), or `-1`.
+fn duration_date_slot(byte: u8) -> i32 {
+    if byte == b'Y' || byte == b'y' {
+        return 0;
+    }
+    if byte == b'M' || byte == b'm' {
+        return 1;
+    }
+    if byte == b'W' || byte == b'w' {
+        return 2;
+    }
+    if byte == b'D' || byte == b'd' {
+        return 3;
+    }
+    return -1;
+}
+
+/// Slot index of an ISO 8601 time designator (`H`, `M`, `S`), or `-1`.
+fn duration_time_slot(byte: u8) -> i32 {
+    if byte == b'H' || byte == b'h' {
+        return 0;
+    }
+    if byte == b'M' || byte == b'm' {
+        return 1;
+    }
+    if byte == b'S' || byte == b's' {
+        return 2;
+    }
+    return -1;
+}
+
+/// Seconds in one whole unit of the time slot, which scales a fraction read as
+/// nanoseconds-per-second into nanoseconds of that unit.
+fn duration_time_slot_seconds(slot: i32) -> i128 {
+    if slot == 0 {
+        return 3600;
+    }
+    if slot == 1 {
+        return 60;
+    }
+    return 1;
+}
+
+/// Store `value` in the date component named by `slot`.
+fn assign_date_component(duration: Duration, slot: i32, value: i64) -> Duration {
+    if slot == 0 {
+        return Duration { ..duration, years: value };
+    }
+    if slot == 1 {
+        return Duration { ..duration, months: value };
+    }
+    if slot == 2 {
+        return Duration { ..duration, weeks: value };
+    }
+    return Duration { ..duration, days: value };
+}
+
+/// Store `value` in the time component named by `slot`.
+fn assign_time_component(duration: Duration, slot: i32, value: i64) -> Duration {
+    if slot == 0 {
+        return Duration { ..duration, hours: value };
+    }
+    if slot == 1 {
+        return Duration { ..duration, minutes: value };
+    }
+    return Duration { ..duration, seconds: value };
+}
+
+/// Accepts an ISO 8601 duration string.
+struct DurationVisitor {
+}
+
+impl Visitor for DurationVisitor {
+    type Value = Duration;
+
+    fn visit_string(&mut self, v: String) -> Result<Duration, DeserializeError> {
+        return Duration::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected duration, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<Duration, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected duration, found map", -1));
+    }
+}
+
+impl Deserialize for Duration {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Duration, DeserializeError> {
+        let mut v = DurationVisitor {};
+        return d.deserialize_any::<DurationVisitor>(&mut v);
+    }
+}
+
+/// `"Sun, 06 Nov 1994 08:49:37 GMT"`.
+fn parse_imf_fixdate(text: &String, comma: i32, end: i32) -> Result<Instant, DeserializeError> {
+    let mut i = comma + 1;
+    i = expect_byte(text, i, end, b' ')?;
+    let day = read_digits(text, i, end, 2)?;
+    i = expect_byte(text, i + 2, end, b' ')?;
+    let month = read_month_name(text, i, end)?;
+    i = expect_byte(text, i + 3, end, b' ')?;
+    let year = read_digits(text, i, end, 4)?;
+    i = expect_byte(text, i + 4, end, b' ')?;
+    let [second_of_day, after] = read_clock_time(text, i, end)?;
+    expect_gmt(text, after, end)?;
+    return civil_instant(year, month, day, second_of_day, after);
+}
+
+/// The obsolete `"Sunday, 06-Nov-94 08:49:37 GMT"`. RFC 7231 asks that a
+/// two-digit year more than 50 years ahead be read as the past year with those
+/// digits; with no clock to compare against, this pivots at 70 — `70..=99` is
+/// 1970s onward, `00..=69` is 2000s onward.
+fn parse_rfc850_date(text: &String, comma: i32, end: i32) -> Result<Instant, DeserializeError> {
+    let mut i = comma + 1;
+    i = expect_byte(text, i, end, b' ')?;
+    let day = read_digits(text, i, end, 2)?;
+    i = expect_byte(text, i + 2, end, b'-')?;
+    let month = read_month_name(text, i, end)?;
+    i = expect_byte(text, i + 3, end, b'-')?;
+    let two_digit_year = read_digits(text, i, end, 2)?;
+    let year = if two_digit_year >= 70 { 1900 + two_digit_year } else { 2000 + two_digit_year };
+    i = expect_byte(text, i + 2, end, b' ')?;
+    let [second_of_day, after] = read_clock_time(text, i, end)?;
+    expect_gmt(text, after, end)?;
+    return civil_instant(year, month, day, second_of_day, after);
+}
+
+/// The obsolete `"Sun Nov  6 08:49:37 1994"`. Fixed width at 24, with the day
+/// space-padded rather than zero-padded.
+fn parse_asctime(text: &String, end: i32) -> Result<Instant, DeserializeError> {
+    if end != 24 {
+        return Result::Err(DeserializeError::malformed("expected an HTTP-date", 0));
+    }
+    expect_byte(text, 3, end, b' ')?;
+    let month = read_month_name(text, 4, end)?;
+    expect_byte(text, 7, end, b' ')?;
+    let day = if text.get_byte_unchecked(8) == b' ' {
+        read_digits(text, 9, end, 1)?;
+    } else {
+        read_digits(text, 8, end, 2)?;
+    };
+    expect_byte(text, 10, end, b' ')?;
+    let [second_of_day, after] = read_clock_time(text, 11, end)?;
+    expect_byte(text, after, end, b' ')?;
+    let year = read_digits(text, 20, end, 4)?;
+    return civil_instant(year, month, day, second_of_day, 0);
+}
+
+/// Read `hh:mm:ss` at `i`, returning the second of the day and the index just
+/// past it.
+fn read_clock_time(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+    let hour = read_digits(text, i, end, 2)?;
+    let mut j = expect_byte(text, i + 2, end, b':')?;
+    let minute = read_digits(text, j, end, 2)?;
+    j = expect_byte(text, j + 2, end, b':')?;
+    let second = read_digits(text, j, end, 2)?;
+    if hour > 23 || minute > 59 || second > 60 {
+        return Result::Err(DeserializeError::invalid_value("clock time out of range", i as i64));
+    }
+    let constrained_second = if second == 60 { 59 } else { second };
+    return Result::Ok([hour * 3600 + minute * 60 + constrained_second, j + 2]);
+}
+
+/// Read a three-letter English month abbreviation at `i`.
+fn read_month_name(text: &String, i: i32, end: i32) -> Result<i64, DeserializeError> {
+    if i + 3 > end {
+        return Result::Err(DeserializeError::eof(i as i64));
+    }
+    let month = imf_month_number(text, i);
+    if month < 0 {
+        return Result::Err(DeserializeError::malformed("expected a month name", i as i64));
+    }
+    return Result::Ok(month);
+}
+
+/// Require the trailing `GMT` an HTTP-date's two dated forms end with.
+fn expect_gmt(text: &String, i: i32, end: i32) -> Result<(), DeserializeError> {
+    let mut j = expect_byte(text, i, end, b' ')?;
+    j = expect_byte(text, j, end, b'G')?;
+    j = expect_byte(text, j, end, b'M')?;
+    j = expect_byte(text, j, end, b'T')?;
+    if j != end {
+        return Result::Err(DeserializeError::malformed("trailing characters", j as i64));
+    }
+    return Result::Ok(());
+}
+
+/// Build a UTC instant from range-checked civil fields.
+fn civil_instant(year: i64, month: i64, day: i64, second_of_day: i64, offset: i32) -> Result<Instant, DeserializeError> {
+    if day < 1 || day > days_in_month_value(year, month) {
+        return Result::Err(DeserializeError::invalid_value("day out of range", offset as i64));
+    }
+    return Result::Ok(Instant {
+        seconds: days_from_civil(year, month, day) * 86400 + second_of_day,
+        nanoseconds: 0,
+    });
+}
+
+/// Index of the first `byte` in `text`, or `-1`.
+fn index_of_byte(text: &String, byte: u8) -> i32 {
+    let mut i = 0;
+    while i < text.len() {
+        if text.get_byte_unchecked(i) == byte {
+            return i;
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+// The plain (zoneless) family. Wado's literal spread is Temporal's `with`:
+// `PlainDate { ..d, day: 1 }` replaces one component and keeps the rest. It does
+// not constrain, so use `constrain` where the result may fall off a month's end.
+
+/// A calendar date with no time and no zone. Corresponds to
+/// `Temporal.PlainDate`. `Ord` is auto-derived over year, month, day and so
+/// orders chronologically.
+pub struct PlainDate {
+    pub year: i32,
+    pub month: i32,
+    pub day: i32,
+}
+
+impl Eq for PlainDate;
+impl Ord for PlainDate;
+
+/// A wall-clock time with no date and no zone. Corresponds to
+/// `Temporal.PlainTime`. `Ord` is auto-derived over the components in
+/// descending significance and so orders chronologically within a day.
+pub struct PlainTime {
+    pub hour: i32 = 0,
+    pub minute: i32 = 0,
+    pub second: i32 = 0,
+    pub millisecond: i32 = 0,
+    pub microsecond: i32 = 0,
+    pub nanosecond: i32 = 0,
+}
+
+impl Eq for PlainTime;
+impl Ord for PlainTime;
+
+/// A date and a wall-clock time with no zone, and so no instant — the pair
+/// still names a different moment in every zone. Corresponds to
+/// `Temporal.PlainDateTime`.
+pub struct PlainDateTime {
+    pub date: PlainDate,
+    pub time: PlainTime,
+}
+
+impl Eq for PlainDateTime;
+impl Ord for PlainDateTime;
+
+/// A month of a particular year, with no day — a credit-card expiry, a billing
+/// period. Corresponds to `Temporal.PlainYearMonth`.
+pub struct PlainYearMonth {
+    pub year: i32,
+    pub month: i32,
+}
+
+impl Eq for PlainYearMonth;
+impl Ord for PlainYearMonth;
+
+/// A day of a month with no year — a birthday, an anniversary. Corresponds to
+/// `Temporal.PlainMonthDay`. February 29 is representable; landing it on a year
+/// is `to_plain_date`'s problem.
+pub struct PlainMonthDay {
+    pub month: i32,
+    pub day: i32,
+}
+
+impl Eq for PlainMonthDay;
+impl Ord for PlainMonthDay;
+
+impl PlainDate {
+    /// A date, asserted to exist in the ISO 8601 calendar. Use `constrain` to
+    /// clamp a day past the month's end instead, or `parse` for input that may
+    /// be malformed.
+    pub fn new(year: i32, month: i32, day: i32) -> PlainDate {
+        assert month >= 1 && month <= 12;
+        assert day >= 1 && day as i64 <= days_in_month_value(year as i64, month as i64);
+        return PlainDate { year: year, month: month, day: day };
+    }
+
+    /// A date with `month` clamped to `1..=12` and `day` to that month's
+    /// length — Temporal's `constrain` overflow.
+    pub fn constrain(year: i32, month: i32, day: i32) -> PlainDate {
+        let clamped_month = clamp_i32(month, 1, 12);
+        let length = days_in_month_value(year as i64, clamped_month as i64) as i32;
+        return PlainDate { year: year, month: clamped_month, day: clamp_i32(day, 1, length) };
+    }
+
+    /// The date `days` after the Unix epoch.
+    pub fn from_epoch_days(days: i64) -> PlainDate {
+        let [year, month, day] = civil_from_days(days);
+        return PlainDate { year: year as i32, month: month as i32, day: day as i32 };
+    }
+
+    /// Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
+    pub fn parse(text: String) -> Result<PlainDate, DeserializeError> {
+        return PlainDate::from_str_range(&text, 0, text.len());
+    }
+
+    /// Days since 1970-01-01, negative before it.
+    pub fn epoch_days(&self) -> i64 {
+        return days_from_civil(self.year as i64, self.month as i64, self.day as i64);
+    }
+
+    /// Day of the week, `1` (Monday) through `7` (Sunday), per ISO 8601.
+    pub fn day_of_week(&self) -> i32 {
+        return day_of_week_of(self.epoch_days()) as i32;
+    }
+
+    /// Day of the year, `1..=366`.
+    pub fn day_of_year(&self) -> i32 {
+        return day_of_year_of(self.epoch_days(), self.year as i64) as i32;
+    }
+
+    /// ISO 8601 week of the week-year, `1..=53`.
+    pub fn week_of_year(&self) -> i32 {
+        let [week, _] = iso_week_date(self.year as i64, self.day_of_year() as i64, self.day_of_week() as i64);
+        return week as i32;
+    }
+
+    /// ISO 8601 week-numbering year.
+    pub fn year_of_week(&self) -> i32 {
+        let [_, week_year] = iso_week_date(self.year as i64, self.day_of_year() as i64, self.day_of_week() as i64);
+        return week_year as i32;
+    }
+
+    /// Number of days in this week — always `7` for ISO 8601.
+    pub fn days_in_week(&self) -> i32 {
+        return 7;
+    }
+
+    /// Number of days in this month, `28..=31`.
+    pub fn days_in_month(&self) -> i32 {
+        return days_in_month_value(self.year as i64, self.month as i64) as i32;
+    }
+
+    /// Number of days in this year, `365` or `366`.
+    pub fn days_in_year(&self) -> i32 {
+        return days_in_year_value(self.year as i64);
+    }
+
+    /// Number of months in this year — always `12` for ISO 8601.
+    pub fn months_in_year(&self) -> i32 {
+        return 12;
+    }
+
+    /// Whether this year is a leap year in the ISO 8601 calendar.
+    pub fn in_leap_year(&self) -> bool {
+        return is_leap_year(self.year as i64);
+    }
+
+    /// Temporal month code, `"M01"` … `"M12"`.
+    pub fn month_code(&self) -> String {
+        return month_code_of(self.month);
+    }
+
+    /// Move forward by `duration`'s date components, constraining a month-end
+    /// overflow. Time components trap: a date has no clock to carry them.
+    pub fn add(&self, duration: &Duration) -> PlainDate {
+        if duration.time_nanoseconds() != 0 {
+            panic("core:temporal: a PlainDate carries no clock; drop the time components or use PlainDateTime");
+        }
+        let [year, month, day] = add_months_to_civil(
+            self.year as i64,
+            self.month as i64,
+            self.day as i64,
+            duration.years * 12 + duration.months,
+        );
+        return PlainDate::from_epoch_days(
+            days_from_civil(year, month, day) + duration.weeks * 7 + duration.days,
+        );
+    }
+
+    /// Move back by `duration`. Not the inverse of `add` when a month-end is
+    /// constrained on the way out.
+    pub fn subtract(&self, duration: &Duration) -> PlainDate {
+        return self.add(&duration.negated());
+    }
+
+    /// The span from this date to `other`, positive when `other` is later.
+    pub fn until(&self, other: &PlainDate, largest_unit: Unit = Unit::Day) -> Duration {
+        if !is_date_unit(largest_unit) {
+            panic("core:temporal: a PlainDate difference is measured in days and above");
+        }
+        if largest_unit matches { Day } {
+            return Duration { days: other.epoch_days() - self.epoch_days() };
+        }
+        return calendar_difference(self.epoch_days(), other.epoch_days(), largest_unit);
+    }
+
+    /// The span from `other` to this date — `until` with the sign flipped.
+    pub fn since(&self, other: &PlainDate, largest_unit: Unit = Unit::Day) -> Duration {
+        return self.until(other, largest_unit).negated();
+    }
+
+    /// Drop the day.
+    pub fn to_plain_year_month(&self) -> PlainYearMonth {
+        return PlainYearMonth { year: self.year, month: self.month };
+    }
+
+    /// Drop the year.
+    pub fn to_plain_month_day(&self) -> PlainMonthDay {
+        return PlainMonthDay { month: self.month, day: self.day };
+    }
+
+    /// Pair this date with a wall-clock time.
+    pub fn to_plain_date_time(&self, time: PlainTime = PlainTime {}) -> PlainDateTime {
+        return PlainDateTime { date: *self, time: time };
+    }
+
+    /// Read this date at `time` in `time_zone`, which resolves it to an
+    /// instant. Traps on an IANA zone name.
+    pub fn to_zoned_date_time(&self, time_zone: String, time: PlainTime = PlainTime {}) -> ZonedDateTime {
+        return self.to_plain_date_time(time).to_zoned_date_time(time_zone);
+    }
+
+    /// `YYYY-MM-DD`, with an expanded year where it does not fit four digits.
+    pub fn to_iso8601(&self) -> String {
+        return `${format_iso_year(self.year as i64)}-${self.month:02}-${self.day:02}`;
+    }
+}
+
+impl Display for PlainDate {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(self.to_iso8601());
+    }
+}
+
+impl PlainTime {
+    /// A wall-clock time, asserted to be in range. Every component defaults to
+    /// zero, so `PlainTime { hour: 9 }` is 09:00:00.
+    pub fn new(
+        hour: i32,
+        minute: i32,
+        second: i32 = 0,
+        millisecond: i32 = 0,
+        microsecond: i32 = 0,
+        nanosecond: i32 = 0,
+    ) -> PlainTime {
+        let time = PlainTime {
+            hour: hour,
+            minute: minute,
+            second: second,
+            millisecond: millisecond,
+            microsecond: microsecond,
+            nanosecond: nanosecond,
+        };
+        assert time.is_valid();
+        return time;
+    }
+
+    /// Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
+    pub fn parse(text: String) -> Result<PlainTime, DeserializeError> {
+        return PlainTime::from_str_range(&text, 0, text.len());
+    }
+
+    /// Whether every component is in the range the ISO 8601 clock allows.
+    pub fn is_valid(&self) -> bool {
+        return self.hour >= 0
+            && self.hour <= 23
+            && self.minute >= 0
+            && self.minute <= 59
+            && self.second >= 0
+            && self.second <= 59
+            && self.millisecond >= 0
+            && self.millisecond <= 999
+            && self.microsecond >= 0
+            && self.microsecond <= 999
+            && self.nanosecond >= 0
+            && self.nanosecond <= 999;
+    }
+
+    /// Nanoseconds since midnight, `0..<86_400_000_000_000`.
+    pub fn nanoseconds_since_midnight(&self) -> i64 {
+        return self.hour as i64 * 3_600_000_000_000 + self.minute as i64 * 60_000_000_000 + self.second as i64 * 1_000_000_000 + self.millisecond as i64 * 1_000_000 + self.microsecond as i64 * 1000 + self.nanosecond as i64;
+    }
+
+    /// The time `nanoseconds` after midnight, wrapping into `0..<24h` so a
+    /// negative or overflowing count lands on the same clock reading a day's
+    /// worth of turning would.
+    pub fn from_nanoseconds_since_midnight(nanoseconds: i64) -> PlainTime {
+        let within_day = floor_mod(nanoseconds, 86_400_000_000_000);
+        return PlainTime {
+            hour: (within_day / 3_600_000_000_000) as i32,
+            minute: (within_day / 60_000_000_000 % 60) as i32,
+            second: (within_day / 1_000_000_000 % 60) as i32,
+            millisecond: (within_day / 1_000_000 % 1000) as i32,
+            microsecond: (within_day / 1000 % 1000) as i32,
+            nanosecond: (within_day % 1000) as i32,
+        };
+    }
+
+    /// Move forward by `duration`'s exact components, wrapping around midnight
+    /// as Temporal does. Date components trap: a clock has no calendar.
+    pub fn add(&self, duration: &Duration) -> PlainTime {
+        if duration.has_date_components() {
+            panic("core:temporal: a PlainTime carries no calendar; drop the date components or use PlainDateTime");
+        }
+        return PlainTime::from_nanoseconds_since_midnight(
+            self.nanoseconds_since_midnight() + duration.time_nanoseconds() as i64,
+        );
+    }
+
+    /// Move back by `duration`, wrapping the same way.
+    pub fn subtract(&self, duration: &Duration) -> PlainTime {
+        return self.add(&duration.negated());
+    }
+
+    /// The span from this time to `other` within one day, positive when
+    /// `other` is later on the clock.
+    pub fn until(&self, other: &PlainTime, largest_unit: Unit = Unit::Hour) -> Duration {
+        if is_date_unit(largest_unit) {
+            panic("core:temporal: a PlainTime difference is measured in hours and below");
+        }
+        return duration_from_nanoseconds(
+            (other.nanoseconds_since_midnight() - self.nanoseconds_since_midnight()) as i128,
+            largest_unit,
+        );
+    }
+
+    /// The span from `other` to this time — `until` with the sign flipped.
+    pub fn since(&self, other: &PlainTime, largest_unit: Unit = Unit::Hour) -> Duration {
+        return self.until(other, largest_unit).negated();
+    }
+
+    /// Round to a multiple of `increment` units, counted from midnight and
+    /// wrapping at the end of the day.
+    pub fn round(
+        &self,
+        smallest_unit: Unit,
+        increment: i64 = 1,
+        mode: RoundingMode = RoundingMode::HalfExpand,
+    ) -> PlainTime {
+        if is_date_unit(smallest_unit) {
+            panic("core:temporal: a PlainTime rounds to hours and below");
+        }
+        return PlainTime::from_nanoseconds_since_midnight(round_to_increment(
+            self.nanoseconds_since_midnight() as i128,
+            day_aligned_step(smallest_unit, increment),
+            mode,
+        ) as i64);
+    }
+
+    /// `hh:mm:ss[.fraction]`, with the least sub-second precision that is
+    /// exact.
+    pub fn to_iso8601(&self) -> String {
+        let sub_second = (self.millisecond * 1_000_000 + self.microsecond * 1000 + self.nanosecond) as u32;
+        let fraction = format_fraction(sub_second, fraction_digits_for(sub_second));
+        return `${self.hour:02}:${self.minute:02}:${self.second:02}${fraction}`;
+    }
+}
+
+impl Display for PlainTime {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(self.to_iso8601());
+    }
+}
+
+impl PlainDateTime {
+    /// A date and time, asserted to be in range.
+    pub fn new(date: PlainDate, time: PlainTime = PlainTime {}) -> PlainDateTime {
+        assert time.is_valid();
+        return PlainDateTime { date: date, time: time };
+    }
+
+    /// Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
+    /// the separator and no offset.
+    pub fn parse(text: String) -> Result<PlainDateTime, DeserializeError> {
+        return PlainDateTime::from_str_range(&text, 0, text.len());
+    }
+
+    /// Move forward by `duration`: the date components first, constraining a
+    /// month-end overflow, then the exact time, carrying whole days into the
+    /// date.
+    pub fn add(&self, duration: &Duration) -> PlainDateTime {
+        let shifted_date = self.date.add(&Duration {
+            years: duration.years,
+            months: duration.months,
+            weeks: duration.weeks,
+            days: duration.days,
+        });
+        let total = self.time.nanoseconds_since_midnight() as i128 + duration.time_nanoseconds();
+        let carried_days = floor_div_i128(total, 86_400_000_000_000);
+        return PlainDateTime {
+            date: PlainDate::from_epoch_days(shifted_date.epoch_days() + carried_days as i64),
+            time: PlainTime::from_nanoseconds_since_midnight(
+                (total - carried_days * 86_400_000_000_000) as i64,
+            ),
+        };
+    }
+
+    /// Move back by `duration`.
+    pub fn subtract(&self, duration: &Duration) -> PlainDateTime {
+        return self.add(&duration.negated());
+    }
+
+    /// The span from this value to `other`, positive when `other` is later.
+    pub fn until(&self, other: &PlainDateTime, largest_unit: Unit = Unit::Hour) -> Duration {
+        return difference_zoned(0, self.to_utc_instant(), other.to_utc_instant(), largest_unit);
+    }
+
+    /// The span from `other` to this value — `until` with the sign flipped.
+    pub fn since(&self, other: &PlainDateTime, largest_unit: Unit = Unit::Hour) -> Duration {
+        return self.until(other, largest_unit).negated();
+    }
+
+    /// Read this reading in `time_zone`, which resolves it to an instant.
+    /// Traps on an IANA zone name.
+    pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime {
+        let offset = parse_fixed_offset(&time_zone);
+        let local = self.date.epoch_days() * 86400;
+        return ZonedDateTime {
+            instant: Instant::new(
+                local - offset + self.time.nanoseconds_since_midnight() / 1_000_000_000,
+                self.time.nanoseconds_since_midnight() % 1_000_000_000,
+            ),
+            time_zone: canonical_time_zone(time_zone),
+        };
+    }
+
+    /// The instant this reading names when read as UTC — the anchor `until`
+    /// measures against, since a zoneless value has no offset of its own.
+    fn to_utc_instant(&self) -> Instant {
+        return Instant::new(
+            self.date.epoch_days() * 86400 + self.time.nanoseconds_since_midnight() / 1_000_000_000,
+            self.time.nanoseconds_since_midnight() % 1_000_000_000,
+        );
+    }
+
+    /// `YYYY-MM-DDThh:mm:ss[.fraction]`.
+    pub fn to_iso8601(&self) -> String {
+        return `${self.date}T${self.time}`;
+    }
+}
+
+impl Display for PlainDateTime {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(self.to_iso8601());
+    }
+}
+
+impl PlainYearMonth {
+    /// A year and month, asserted to be in range.
+    pub fn new(year: i32, month: i32) -> PlainYearMonth {
+        assert month >= 1 && month <= 12;
+        return PlainYearMonth { year: year, month: month };
+    }
+
+    /// Parse `YYYY-MM`.
+    pub fn parse(text: String) -> Result<PlainYearMonth, DeserializeError> {
+        return PlainYearMonth::from_str_range(&text, 0, text.len());
+    }
+
+    /// Number of days in this month, `28..=31`.
+    pub fn days_in_month(&self) -> i32 {
+        return days_in_month_value(self.year as i64, self.month as i64) as i32;
+    }
+
+    /// Number of days in this year, `365` or `366`.
+    pub fn days_in_year(&self) -> i32 {
+        return self.to_plain_date(1).days_in_year();
+    }
+
+    /// Number of months in this year — always `12` for ISO 8601.
+    pub fn months_in_year(&self) -> i32 {
+        return 12;
+    }
+
+    /// Whether this year is a leap year in the ISO 8601 calendar.
+    pub fn in_leap_year(&self) -> bool {
+        return is_leap_year(self.year as i64);
+    }
+
+    /// Temporal month code, `"M01"` … `"M12"`.
+    pub fn month_code(&self) -> String {
+        return month_code_of(self.month);
+    }
+
+    /// Move forward by `duration`'s years and months. Smaller components trap:
+    /// a year-month has no day to carry them.
+    pub fn add(&self, duration: &Duration) -> PlainYearMonth {
+        if duration.weeks != 0 || duration.days != 0 || duration.time_nanoseconds() != 0 {
+            panic("core:temporal: a PlainYearMonth moves in years and months only");
+        }
+        let [year, month, _] = add_months_to_civil(
+            self.year as i64,
+            self.month as i64,
+            1,
+            duration.years * 12 + duration.months,
+        );
+        return PlainYearMonth { year: year as i32, month: month as i32 };
+    }
+
+    /// Move back by `duration`.
+    pub fn subtract(&self, duration: &Duration) -> PlainYearMonth {
+        return self.add(&duration.negated());
+    }
+
+    /// The span from this month to `other`, positive when `other` is later.
+    pub fn until(&self, other: &PlainYearMonth, largest_unit: Unit = Unit::Year) -> Duration {
+        let months = (other.year as i64 - self.year as i64) * 12 + (other.month as i64 - self.month as i64);
+        if largest_unit matches { Month } {
+            return Duration { months: months };
+        }
+        if largest_unit matches { Year } {
+            return Duration { years: months / 12, months: months % 12 };
+        }
+        panic("core:temporal: a PlainYearMonth difference is measured in years or months");
+    }
+
+    /// The span from `other` to this month — `until` with the sign flipped.
+    pub fn since(&self, other: &PlainYearMonth, largest_unit: Unit = Unit::Year) -> Duration {
+        return self.until(other, largest_unit).negated();
+    }
+
+    /// Land this month on a day, clamped to the month's length.
+    pub fn to_plain_date(&self, day: i32) -> PlainDate {
+        return PlainDate::constrain(self.year, self.month, day);
+    }
+
+    /// `YYYY-MM`.
+    pub fn to_iso8601(&self) -> String {
+        return `${format_iso_year(self.year as i64)}-${self.month:02}`;
+    }
+}
+
+impl Display for PlainYearMonth {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(self.to_iso8601());
+    }
+}
+
+impl PlainMonthDay {
+    /// A month and day, asserted to exist in some year — February 29 does, so
+    /// it is accepted here and resolved by `to_plain_date`.
+    pub fn new(month: i32, day: i32) -> PlainMonthDay {
+        assert month >= 1 && month <= 12;
+        assert day >= 1 && day as i64 <= days_in_month_value(2024, month as i64);
+        return PlainMonthDay { month: month, day: day };
+    }
+
+    /// Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
+    pub fn parse(text: String) -> Result<PlainMonthDay, DeserializeError> {
+        return PlainMonthDay::from_str_range(&text, 0, text.len());
+    }
+
+    /// Land this month-day in `year`, clamping February 29 to the 28th outside
+    /// a leap year.
+    pub fn to_plain_date(&self, year: i32) -> PlainDate {
+        return PlainDate::constrain(year, self.month, self.day);
+    }
+
+    /// Temporal month code, `"M01"` … `"M12"`.
+    pub fn month_code(&self) -> String {
+        return month_code_of(self.month);
+    }
+
+    /// `--MM-DD`, the ISO 8601 spelling.
+    pub fn to_iso8601(&self) -> String {
+        return `--${self.month:02}-${self.day:02}`;
+    }
+}
+
+impl Display for PlainMonthDay {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(self.to_iso8601());
+    }
+}
+
+/// Parse `YYYY-MM-DD` at `start`, returning the date and the index just past it.
+fn parse_iso_date(text: &String, start: i32, end: i32) -> Result<[PlainDate, i32], DeserializeError> {
+    let [year, after_year] = parse_iso_year(text, start, end)?;
+    let mut i = expect_byte(text, after_year, end, b'-')?;
+    let month = read_digits(text, i, end, 2)?;
+    if month < 1 || month > 12 {
+        return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
+    }
+    i = expect_byte(text, i + 2, end, b'-')?;
+    let day = read_digits(text, i, end, 2)?;
+    if day < 1 || day > days_in_month_value(year, month) {
+        return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
+    }
+    return Result::Ok([
+        PlainDate { year: year as i32, month: month as i32, day: day as i32 },
+        i + 2,
+    ]);
+}
+
+/// Parse `hh:mm[:ss[.fraction]]` at `start`, returning the time and the index
+/// just past it. A leap second is constrained to `:59`, as in a timestamp.
+fn parse_iso_time(text: &String, start: i32, end: i32) -> Result<[PlainTime, i32], DeserializeError> {
+    let hour = read_digits(text, start, end, 2)?;
+    if hour > 23 {
+        return Result::Err(DeserializeError::invalid_value("hour out of range", start as i64));
+    }
+    let mut i = expect_byte(text, start + 2, end, b':')?;
+    let minute = read_digits(text, i, end, 2)?;
+    if minute > 59 {
+        return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
+    }
+    i += 2;
+    if i >= end || text.get_byte_unchecked(i) != b':' {
+        return Result::Ok([
+            PlainTime { hour: hour as i32, minute: minute as i32 },
+            i,
+        ]);
+    }
+    i += 1;
+    let parsed_second = read_digits(text, i, end, 2)?;
+    if parsed_second > 60 {
+        return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
+    }
+    let second = if parsed_second == 60 { 59 } else { parsed_second };
+    i += 2;
+    let mut nanoseconds: i64 = 0;
+    if i < end && text.get_byte_unchecked(i) == b'.' {
+        let [fraction, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+        nanoseconds = fraction;
+        i = after;
+    }
+    return Result::Ok([
+        PlainTime {
+            hour: hour as i32,
+            minute: minute as i32,
+            second: second as i32,
+            millisecond: (nanoseconds / 1_000_000) as i32,
+            microsecond: (nanoseconds / 1000 % 1000) as i32,
+            nanosecond: (nanoseconds % 1000) as i32,
+        },
+        i,
+    ]);
+}
+
+/// Clamp `value` into `low..=high`.
+fn clamp_i32(value: i32, low: i32, high: i32) -> i32 {
+    if value < low {
+        return low;
+    }
+    if value > high {
+        return high;
+    }
+    return value;
+}
+
+/// Quotient of `a` by positive `m`, flooring toward negative infinity.
+fn floor_div_i128(a: i128, m: i128) -> i128 {
+    let mut q = a / m;
+    if a % m < 0 {
+        q = q - 1;
+    }
+    return q;
+}
+
+// The plain family goes over the wire as its ISO 8601 form, the way Temporal's
+// `toJSON` does, not as the field bag the structural derive would produce.
+
+impl Serialize for PlainDate {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a date.
+struct PlainDateVisitor {
+}
+
+impl Visitor for PlainDateVisitor {
+    type Value = PlainDate;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainDate, DeserializeError> {
+        return PlainDate::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainDate, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainDate {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainDate, DeserializeError> {
+        let mut v = PlainDateVisitor {};
+        return d.deserialize_any::<PlainDateVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainDate {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDate, DeserializeError> {
+        let [date, after] = parse_iso_date(s, start, end)?;
+        require_end(after, end)?;
+        return Result::Ok(date);
+    }
+}
+
+impl Serialize for PlainTime {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a time.
+struct PlainTimeVisitor {
+}
+
+impl Visitor for PlainTimeVisitor {
+    type Value = PlainTime;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainTime, DeserializeError> {
+        return PlainTime::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainTime {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainTime, DeserializeError> {
+        let mut v = PlainTimeVisitor {};
+        return d.deserialize_any::<PlainTimeVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainTime {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainTime, DeserializeError> {
+        let [time, after] = parse_iso_time(s, start, end)?;
+        require_end(after, end)?;
+        return Result::Ok(time);
+    }
+}
+
+impl Serialize for PlainDateTime {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a date-time.
+struct PlainDateTimeVisitor {
+}
+
+impl Visitor for PlainDateTimeVisitor {
+    type Value = PlainDateTime;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainDateTime, DeserializeError> {
+        return PlainDateTime::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type(
+            "expected an ISO 8601 date-time string, found sequence",
+            -1,
+        ));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainDateTime {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainDateTime, DeserializeError> {
+        let mut v = PlainDateTimeVisitor {};
+        return d.deserialize_any::<PlainDateTimeVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainDateTime {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDateTime, DeserializeError> {
+        let [date, after_date] = parse_iso_date(s, start, end)?;
+        if after_date >= end {
+            return Result::Err(DeserializeError::eof(after_date as i64));
+        }
+        let separator = s.get_byte_unchecked(after_date);
+        if separator != b'T' && separator != b't' && separator != b' ' {
+            return Result::Err(DeserializeError::malformed("expected a date/time separator", after_date as i64));
+        }
+        let [time, after] = parse_iso_time(s, after_date + 1, end)?;
+        require_end(after, end)?;
+        return Result::Ok(PlainDateTime { date: date, time: time });
+    }
+}
+
+impl Serialize for PlainYearMonth {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a year-month.
+struct PlainYearMonthVisitor {
+}
+
+impl Visitor for PlainYearMonthVisitor {
+    type Value = PlainYearMonth;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainYearMonth, DeserializeError> {
+        return PlainYearMonth::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type(
+            "expected an ISO 8601 year-month string, found sequence",
+            -1,
+        ));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainYearMonth, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainYearMonth {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainYearMonth, DeserializeError> {
+        let mut v = PlainYearMonthVisitor {};
+        return d.deserialize_any::<PlainYearMonthVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainYearMonth {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainYearMonth, DeserializeError> {
+        let [year, after_year] = parse_iso_year(s, start, end)?;
+        let i = expect_byte(s, after_year, end, b'-')?;
+        let month = read_digits(s, i, end, 2)?;
+        if month < 1 || month > 12 {
+            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
+        }
+        require_end(i + 2, end)?;
+        return Result::Ok(PlainYearMonth { year: year as i32, month: month as i32 });
+    }
+}
+
+impl Serialize for PlainMonthDay {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_iso8601();
+        return s.serialize_string(&text);
+    }
+}
+
+/// Accepts the ISO 8601 spelling of a month-day.
+struct PlainMonthDayVisitor {
+}
+
+impl Visitor for PlainMonthDayVisitor {
+    type Value = PlainMonthDay;
+
+    fn visit_string(&mut self, v: String) -> Result<PlainMonthDay, DeserializeError> {
+        return PlainMonthDay::parse(v);
+    }
+
+    fn visit_i64(&mut self, _v: i64) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_u64(&mut self, _v: u64) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_null(&mut self) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type(
+            "expected an ISO 8601 month-day string, found sequence",
+            -1,
+        ));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainMonthDay, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string, found map", -1));
+    }
+}
+
+impl Deserialize for PlainMonthDay {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainMonthDay, DeserializeError> {
+        let mut v = PlainMonthDayVisitor {};
+        return d.deserialize_any::<PlainMonthDayVisitor>(&mut v);
+    }
+}
+
+impl FromStr for PlainMonthDay {
+    type Err = DeserializeError;
+
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainMonthDay, DeserializeError> {
+        let mut i = start;
+        if start + 2 <= end && s.get_byte_unchecked(start) == b'-' && s.get_byte_unchecked(start + 1) == b'-' {
+            i = start + 2;
+        }
+        let month = read_digits(s, i, end, 2)?;
+        if month < 1 || month > 12 {
+            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
+        }
+        let j = expect_byte(s, i + 2, end, b'-')?;
+        let day = read_digits(s, j, end, 2)?;
+        // A leap year is the yardstick: 02-29 is a real month-day.
+        if day < 1 || day > days_in_month_value(2024, month) {
+            return Result::Err(DeserializeError::invalid_value("day out of range", j as i64));
+        }
+        require_end(j + 2, end)?;
+        return Result::Ok(PlainMonthDay { month: month as i32, day: day as i32 });
+    }
+}
+
+/// Require that a parse consumed everything up to `end`.
+fn require_end(after: i32, end: i32) -> Result<(), DeserializeError> {
+    if after != end {
+        return Result::Err(DeserializeError::malformed("trailing characters", after as i64));
+    }
+    return Result::Ok(());
 }
 
 // serde — `Instant` and `ZonedDateTime` serialize as an RFC 3339 string under
@@ -802,11 +3247,11 @@ impl Visitor for ZonedDateTimeVisitor {
     }
 
     fn visit_i64(&mut self, v: i64) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Ok(ZonedDateTime { instant: Instant::from_epoch_seconds(v), time_zone: "UTC" });
+        return Result::Ok(ZonedDateTime::new(Instant::from_epoch_seconds(v), "UTC"));
     }
 
     fn visit_u64(&mut self, v: u64) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Ok(ZonedDateTime { instant: Instant::from_epoch_seconds(v as i64), time_zone: "UTC" });
+        return Result::Ok(ZonedDateTime::new(Instant::from_epoch_seconds(v as i64), "UTC"));
     }
 
     fn visit_i128(&mut self, _v: i128) -> Result<ZonedDateTime, DeserializeError> {
@@ -820,7 +3265,7 @@ impl Visitor for ZonedDateTimeVisitor {
     fn visit_f64(&mut self, v: f64) -> Result<ZonedDateTime, DeserializeError> {
         let whole = v as i64;
         let nanos = ((v - whole as f64) * 1_000_000_000.0) as i64;
-        return Result::Ok(ZonedDateTime { instant: Instant::new(whole, nanos), time_zone: "UTC" });
+        return Result::Ok(ZonedDateTime::new(Instant::new(whole, nanos), "UTC"));
     }
 
     fn visit_null(&mut self) -> Result<ZonedDateTime, DeserializeError> {

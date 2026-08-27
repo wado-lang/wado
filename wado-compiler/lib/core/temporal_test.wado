@@ -1,4 +1,15 @@
-use { Instant, ZonedDateTime } from "core:temporal";
+use {
+    Instant,
+    ZonedDateTime,
+    Duration,
+    Unit,
+    RoundingMode,
+    PlainDate,
+    PlainTime,
+    PlainDateTime,
+    PlainYearMonth,
+    PlainMonthDay,
+} from "core:temporal";
 use { Instant as ClockInstant } from "wasi:clocks";
 use { to_string, from_string } from "core:json";
 use { to_bytes, from_bytes } from "core:cbor";
@@ -152,7 +163,7 @@ test "ZonedDateTime Display traps on an IANA zone name" {
         instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
         time_zone: "America/New_York",
     };
-    // Resolving an IANA offset needs a tz database this MVP does not bundle.
+    // Resolving an IANA offset needs a tz database this module does not bundle.
     let _ = `${zdt}`;
 }
 
@@ -244,6 +255,17 @@ test "ZonedDateTime accessors trap on an IANA zone name" {
         time_zone: "Asia/Tokyo",
     };
     let _ = zdt.year();
+}
+
+#[expect_trap]
+test "the sub-second accessors trap on an IANA zone name too" {
+    // Their answer does not depend on the offset, but a zone the rest of the
+    // type cannot read is not one to answer from either.
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 0, nanoseconds: 123_456_789 },
+        time_zone: "Asia/Tokyo",
+    };
+    let _ = zdt.millisecond();
 }
 
 #[expect_trap]
@@ -372,6 +394,610 @@ test "ZonedDateTime::parse_rfc3339 range-checks the calendar fields" {
     assert ZonedDateTime::parse_rfc3339("2023-02-29T00:00:00Z") matches { Err(_) };
 }
 
+test "ZonedDateTime::parse_rfc3339 requires a four-digit year or a signed six-digit one" {
+    // ISO 8601 fixes the year at four digits, or a sign plus exactly six.
+    assert ZonedDateTime::parse_rfc3339("1-01-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("999-01-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("12023-11-14T22:13:20Z") matches { Err(_) };
+
+    // A sign demands the six-digit expanded form, not four digits.
+    assert ZonedDateTime::parse_rfc3339("+2023-11-14T22:13:20Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("+002023-11-14T22:13:20Z") matches { Ok(zdt) && zdt.year() == 2023 };
+
+    // `-000000` is the one expanded year ISO 8601 forbids: negative zero.
+    assert ZonedDateTime::parse_rfc3339("-000000-01-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("+000000-01-01T00:00:00Z") matches { Ok(zdt) && zdt.year() == 0 };
+}
+
+test "ZonedDateTime::parse_rfc3339 accepts a leap second, constraining it to 59" {
+    // RFC 3339 permits :60; Temporal reads it and clamps, since the ISO
+    // calendar has no 61st second to represent.
+    let leap = ZonedDateTime::parse_rfc3339("2016-12-31T23:59:60Z").unwrap();
+    assert leap.second() == 59;
+    assert leap.instant == ZonedDateTime::parse_rfc3339("2016-12-31T23:59:59Z").unwrap().instant;
+
+    // :61 is not a leap second and stays rejected.
+    assert ZonedDateTime::parse_rfc3339("2016-12-31T23:59:61Z") matches { Err(_) };
+}
+
+test "Instant::parse_rfc3339 drops the offset, keeping the exact instant" {
+    assert Instant::parse_rfc3339("2023-11-15T07:13:20+09:00") matches { Ok(t) && t == Instant {
+        seconds: 1_700_000_000,
+        nanoseconds: 0,
+    } };
+    assert Instant::parse_rfc3339("2023-11-14T22:13:20Z") matches { Ok(t) && t == Instant {
+        seconds: 1_700_000_000,
+        nanoseconds: 0,
+    } };
+    assert Instant::parse_rfc3339("2023-11-14T22:13:20") matches { Err(_) };
+}
+
+test "Instant and ZonedDateTime parse through FromStr" {
+    assert Instant::from_str("2023-11-14T22:13:20Z") matches { Ok(t) && t == Instant {
+        seconds: 1_700_000_000,
+        nanoseconds: 0,
+    } };
+    assert ZonedDateTime::from_str("2023-11-15T07:13:20+09:00") matches { Ok(zdt) && zdt.time_zone == "+09:00" };
+    assert Instant::from_str("nope") matches { Err(_) };
+}
+
+test "Instant exposes microsecond and full-range nanosecond epochs" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert t.epoch_microseconds() == 1_700_000_000_123_456;
+    assert t.epoch_nanoseconds() == 1_700_000_000_123_456_789;
+    assert Instant::from_epoch_microseconds(1_700_000_000_123_456) == Instant {
+        seconds: 1_700_000_000,
+        nanoseconds: 123_456_000,
+    };
+
+    // i128 nanoseconds reach far beyond the ±292 years an i64 count spans.
+    let far = Instant { seconds: 253_402_300_799, nanoseconds: 0 };
+    assert far.epoch_nanoseconds() == 253_402_300_799_000_000_000;
+    assert Instant::from_epoch_nanoseconds(far.epoch_nanoseconds()) == far;
+
+    // Before the epoch, the nanosecond field still moves time forward.
+    let before = Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert before.epoch_nanoseconds() == -1;
+    assert before.epoch_microseconds() == -1;
+}
+
+test "Instant::EPOCH is the Unix epoch" {
+    assert Instant::EPOCH == Instant { seconds: 0, nanoseconds: 0 };
+    assert `${Instant::EPOCH}` == "1970-01-01T00:00:00Z";
+}
+
+test "Instant projects into a zone and back" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    let zdt = t.to_zoned_date_time("+09:00");
+    assert zdt.hour() == 7 && zdt.day() == 15;
+    assert zdt.to_instant() == t;
+}
+
+test "ZonedDateTime::new canonicalizes the UTC spellings to Z" {
+    let t = Instant::EPOCH;
+    assert ZonedDateTime::new(t, "UTC").time_zone == "Z";
+    assert ZonedDateTime::new(t, "z").time_zone == "Z";
+    assert ZonedDateTime::new(t, "+00:00").time_zone == "Z";
+    assert ZonedDateTime::new(t, "-00:00").time_zone == "Z";
+    assert ZonedDateTime::new(t, "+09:00").time_zone == "+09:00";
+
+    // So the three spellings are one value under the derived Eq.
+    assert ZonedDateTime::new(t, "UTC") == ZonedDateTime::new(t, "Z");
+
+    // An IANA name is preserved verbatim; it still traps on use.
+    assert ZonedDateTime::new(t, "Asia/Tokyo").time_zone == "Asia/Tokyo";
+}
+
+test "ZonedDateTime exposes its epoch and offset views" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20.5+09:00").unwrap();
+    assert zdt.to_instant() == Instant { seconds: 1_700_000_000, nanoseconds: 500_000_000 };
+    assert zdt.epoch_milliseconds() == 1_700_000_000_500;
+    assert zdt.epoch_nanoseconds() == 1_700_000_000_500_000_000;
+    assert zdt.offset() == "+09:00";
+    assert zdt.offset_nanoseconds() == 32_400_000_000_000;
+
+    // Temporal spells a zero offset "+00:00" here, even where the zone is "Z".
+    let utc = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    assert utc.offset() == "+00:00";
+    assert utc.offset_nanoseconds() == 0;
+}
+
+test "ZonedDateTime::with_time_zone keeps the instant and moves the wall clock" {
+    let utc = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    let tokyo = utc.with_time_zone("+09:00");
+    assert tokyo.to_instant() == utc.to_instant();
+    assert tokyo.hour() == 7 && tokyo.day() == 15;
+}
+
+test "ZonedDateTime::start_of_day snaps to local midnight" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20.5+09:00").unwrap();
+    let start = zdt.start_of_day();
+    assert `${start}` == "2023-11-15T00:00:00+09:00";
+    assert start.start_of_day() == start;
+
+    // A fixed offset has no DST, so every day is 24 hours long.
+    assert zdt.hours_in_day() == 24;
+
+    // Before the epoch the floor still lands on the correct civil day.
+    let pre = ZonedDateTime::parse_rfc3339("1969-12-31T23:59:59Z").unwrap();
+    assert `${pre.start_of_day()}` == "1969-12-31T00:00:00Z";
+}
+
+test "ZonedDateTime exposes the ISO week date" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    assert zdt.week_of_year() == 46;
+    assert zdt.year_of_week() == 2023;
+    assert zdt.days_in_week() == 7;
+
+    // 2021-01-01 is a Friday, in ISO week 53 of 2020.
+    let early = ZonedDateTime::parse_rfc3339("2021-01-01T00:00:00Z").unwrap();
+    assert early.week_of_year() == 53;
+    assert early.year_of_week() == 2020;
+
+    // 2019-12-30 is a Monday, already in ISO week 1 of 2020.
+    let late = ZonedDateTime::parse_rfc3339("2019-12-30T00:00:00Z").unwrap();
+    assert late.week_of_year() == 1;
+    assert late.year_of_week() == 2020;
+}
+
+test "ZonedDateTime::month_code names the ISO month" {
+    assert ZonedDateTime::parse_rfc3339("2023-01-14T00:00:00Z").unwrap().month_code() == "M01";
+    assert ZonedDateTime::parse_rfc3339("2023-11-14T00:00:00Z").unwrap().month_code() == "M11";
+}
+
+test "Duration defaults every field to zero" {
+    let d = Duration { hours: 1, minutes: 30 };
+    assert d.hours == 1 && d.minutes == 30;
+    assert d.years == 0 && d.days == 0 && d.nanoseconds == 0;
+    assert Duration {}.is_zero();
+    assert !d.is_zero();
+}
+
+test "Duration sign follows its largest non-zero field" {
+    assert Duration {}.sign() == 0;
+    assert Duration { days: 3 }.sign() == 1;
+    assert Duration { days: -3 }.sign() == -1;
+    assert Duration { years: 1, nanoseconds: -5 }.sign() == 1;
+}
+
+#[expect_trap]
+test "the ISO 8601 form asserts a duration's components agree in sign" {
+    // Wado cannot reject the literal the way Temporal's constructor does, so
+    // the invariant is checked where it actually matters.
+    let _ = `${Duration { years: 1, nanoseconds: -5 }}`;
+}
+
+test "a decoded epoch number lands on the canonical UTC zone" {
+    let zdt = from_string::<ZonedDateTime>("1700000000").expect("decode epoch");
+    assert zdt.time_zone == "Z";
+    assert zdt == ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+}
+
+test "Duration negated and abs flip every field together" {
+    let d = Duration { years: 1, days: -2, seconds: 3 };
+    assert d.negated() == Duration { years: -1, days: 2, seconds: -3 };
+    assert Duration { days: -2, seconds: -3 }.abs() == Duration { days: 2, seconds: 3 };
+    assert d.negated().negated() == d;
+}
+
+test "Duration arithmetic balances into a uniformly signed result" {
+    let a = Duration { days: 1, hours: 2 };
+    let b = Duration { hours: 3, minutes: 4 };
+    assert a.add(&b) == Duration { days: 1, hours: 5, minutes: 4 };
+
+    // A component-wise difference would leave `{ days: 1, hours: -1 }`, which
+    // has no ISO 8601 spelling.
+    assert a.subtract(&b) == Duration { hours: 22, minutes: 56 };
+    assert `${a.subtract(&b)}` == "PT22H56M";
+    assert `${Duration { hours: 1 }.subtract(&Duration { minutes: 30 })}` == "PT30M";
+
+    // The result is expressed at the coarser of the two operands' top units.
+    assert Duration { minutes: 30 }.add(&Duration { minutes: 45 }) == Duration { minutes: 75 };
+    assert Duration { hours: 1 }.add(&Duration { minutes: 30 }) == Duration { hours: 1, minutes: 30 };
+    assert Duration { days: 1 }.subtract(&Duration { hours: 1 }) == Duration { hours: 23 };
+}
+
+#[expect_trap]
+test "Duration arithmetic rejects a calendar component" {
+    // A month has no length to add without knowing where on the calendar it
+    // starts, so Temporal demands a relativeTo this module does not take yet.
+    let _ = Duration { months: 1 }.add(&Duration { days: 1 });
+}
+
+test "ZonedDateTime::new keeps an out-of-range offset verbatim" {
+    // An hour or minute past the clock is not a fixed offset, so it is stored
+    // as written rather than renormalized into a different zone.
+    assert ZonedDateTime::new(Instant::EPOCH, "+99:99").time_zone == "+99:99";
+    assert ZonedDateTime::new(Instant::EPOCH, "+24:00").time_zone == "+24:00";
+    assert ZonedDateTime::new(Instant::EPOCH, "+00:60").time_zone == "+00:60";
+    assert ZonedDateTime::new(Instant::EPOCH, "+23:59").time_zone == "+23:59";
+}
+
+#[expect_trap]
+test "an out-of-range offset traps on use, like an IANA name" {
+    let _ = `${ZonedDateTime::new(Instant::EPOCH, "+99:99")}`;
+}
+
+#[expect_trap]
+test "a nanosecond span beyond the i64 range traps rather than wrapping" {
+    // ~400 years in nanoseconds overflows the i64 a component is stored in.
+    let far = Instant::from_epoch_seconds(400 * 365 * 86400);
+    let _ = Instant::EPOCH.until(&far, Unit::Nanosecond);
+}
+
+test "Duration renders as an ISO 8601 duration" {
+    assert `${Duration {}}` == "PT0S";
+    assert `${Duration { years: 1, months: 2, weeks: 3, days: 4 }}` == "P1Y2M3W4D";
+    assert `${Duration { hours: 1, minutes: 30 }}` == "PT1H30M";
+    assert `${Duration { seconds: 1, milliseconds: 500 }}` == "PT1.5S";
+    assert `${Duration { nanoseconds: 1 }}` == "PT0.000000001S";
+    assert `${Duration { days: -1, hours: -2 }}` == "-P1DT2H";
+    assert `${Duration { weeks: 2 }}` == "P2W";
+}
+
+test "Duration parses an ISO 8601 duration" {
+    assert Duration::parse("P1Y2M3W4DT5H6M7S") matches { Ok(d) && d == Duration {
+        years: 1,
+        months: 2,
+        weeks: 3,
+        days: 4,
+        hours: 5,
+        minutes: 6,
+        seconds: 7,
+    } };
+    assert Duration::parse("PT0S") matches { Ok(d) && d.is_zero() };
+    assert Duration::parse("-P1D") matches { Ok(d) && d == Duration { days: -1 } };
+    assert Duration::parse("+PT1H") matches { Ok(d) && d == Duration { hours: 1 } };
+
+    // A fraction spills into the units below it, as Temporal balances it.
+    assert Duration::parse("PT1.5H") matches { Ok(d) && d == Duration { hours: 1, minutes: 30 } };
+    assert Duration::parse("PT1.5M") matches { Ok(d) && d == Duration { minutes: 1, seconds: 30 } };
+    assert Duration::parse("PT1.5S") matches { Ok(d) && d == Duration { seconds: 1, milliseconds: 500 } };
+}
+
+test "Duration rejects malformed ISO 8601 durations" {
+    assert Duration::parse("") matches { Err(_) };
+    assert Duration::parse("P") matches { Err(_) };
+    assert Duration::parse("1D") matches { Err(_) };
+    assert Duration::parse("P1D2H") matches { Err(_) };
+    assert Duration::parse("PT1H2Y") matches { Err(_) };
+    assert Duration::parse("P1DT") matches { Err(_) };
+    // A fraction must be on the last component present.
+    assert Duration::parse("PT1.5H30M") matches { Err(_) };
+}
+
+test "Duration round-trips through its ISO 8601 form" {
+    for let text of ["P1Y2M3W4DT5H6M7.5S", "-P1DT2H", "PT0S", "PT0.000000001S"] {
+        let parsed = Duration::parse(text).expect(`parse ${text}`);
+        assert `${parsed}` == text;
+    }
+}
+
+test "Instant adds and subtracts an exact duration" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert t.add(&Duration { hours: 1 }) == Instant { seconds: 1_700_003_600, nanoseconds: 0 };
+    assert t.subtract(&Duration { hours: 1 }) == Instant { seconds: 1_699_996_400, nanoseconds: 0 };
+    assert t.add(&Duration { nanoseconds: -1 }) == Instant { seconds: 1_699_999_999, nanoseconds: 999_999_999 };
+    assert t.add(&Duration { hours: 1 }).subtract(&Duration { hours: 1 }) == t;
+}
+
+#[expect_trap]
+test "Instant arithmetic rejects a calendar unit" {
+    // A day is not a fixed length once a calendar is involved, so Temporal
+    // admits only hours and below on an instant.
+    let _ = Instant::EPOCH.add(&Duration { days: 1 });
+}
+
+test "Instant::until and since measure the span between two instants" {
+    let a = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    let b = Instant { seconds: 1_700_003_661, nanoseconds: 500_000_000 };
+
+    // The default largest unit is the second, as in Temporal.
+    assert a.until(&b) == Duration { seconds: 3661, milliseconds: 500 };
+    assert a.until(&b, Unit::Hour) == Duration { hours: 1, minutes: 1, seconds: 1, milliseconds: 500 };
+    assert a.since(&b) == a.until(&b).negated();
+    assert b.until(&a) == a.until(&b).negated();
+    assert a.until(&a).is_zero();
+}
+
+test "ZonedDateTime adds calendar units in local time" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20+09:00").unwrap();
+    assert `${zdt.add(&Duration { days: 1 })}` == "2023-11-15T22:13:20+09:00";
+    assert `${zdt.add(&Duration { months: 1 })}` == "2023-12-14T22:13:20+09:00";
+    assert `${zdt.add(&Duration { years: 1 })}` == "2024-11-14T22:13:20+09:00";
+    assert `${zdt.add(&Duration { weeks: 2 })}` == "2023-11-28T22:13:20+09:00";
+    assert `${zdt.add(&Duration { hours: 2 })}` == "2023-11-15T00:13:20+09:00";
+    assert zdt.subtract(&Duration { months: 1 }) == ZonedDateTime::parse_rfc3339("2023-10-14T22:13:20+09:00").unwrap();
+}
+
+test "ZonedDateTime constrains a month-end overflow to the last valid day" {
+    let end = ZonedDateTime::parse_rfc3339("2023-01-31T00:00:00Z").unwrap();
+    assert `${end.add(&Duration { months: 1 })}` == "2023-02-28T00:00:00Z";
+    assert `${end.add(&Duration { months: 13 })}` == "2024-02-29T00:00:00Z";
+
+    // Constraining is lossy, so adding a month is not invertible.
+    assert `${end.add(&Duration { months: 1 }).subtract(&Duration { months: 1 })}` == "2023-01-28T00:00:00Z";
+}
+
+test "ZonedDateTime::until walks the calendar for a date-unit largest unit" {
+    let a = ZonedDateTime::parse_rfc3339("2023-01-31T00:00:00Z").unwrap();
+    let b = ZonedDateTime::parse_rfc3339("2024-03-01T12:00:00Z").unwrap();
+
+    // 2023-01-31 + 1y1m lands on 2024-02-29 (constrained), one day short of b.
+    assert a.until(&b, Unit::Year) == Duration { years: 1, months: 1, days: 1, hours: 12 };
+    assert a.until(&b, Unit::Month) == Duration { months: 13, days: 1, hours: 12 };
+    assert a.until(&b, Unit::Week) == Duration { weeks: 56, days: 3, hours: 12 };
+    assert a.until(&b, Unit::Day) == Duration { days: 395, hours: 12 };
+
+    // The default largest unit is the hour, as in Temporal.
+    assert a.until(&b) == Duration { hours: 9492 };
+    assert a.since(&b, Unit::Year) == a.until(&b, Unit::Year).negated();
+    assert b.until(&a, Unit::Month) == a.until(&b, Unit::Month).negated();
+}
+
+test "ZonedDateTime::until reads the span in the receiver's zone" {
+    let a = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    let b = a.add(&Duration { days: 1, minutes: 30 });
+    assert a.until(&b, Unit::Day) == Duration { days: 1, minutes: 30 };
+    assert a.until(&b) == Duration { hours: 24, minutes: 30 };
+}
+
+test "Duration serializes as its ISO 8601 string" {
+    let d = Duration { hours: 1, minutes: 30 };
+    assert to_string(&d) matches { Ok(json) && json == `"PT1H30M"` };
+    assert from_string::<Duration>(`"PT1H30M"`) matches { Ok(back) && back == d };
+    assert from_string::<Duration>(`"nope"`) matches { Err(_) };
+}
+
+test "Instant::now reads the system clock" {
+    // Any real reading is well past 2020 and well short of 2100. `SystemClock`
+    // is a wall clock, so two reads carry no ordering a host correction cannot
+    // undo — only the range holds.
+    let low = ZonedDateTime::parse_rfc3339("2020-01-01T00:00:00Z").unwrap().instant;
+    let high = ZonedDateTime::parse_rfc3339("2100-01-01T00:00:00Z").unwrap().instant;
+    let t = Instant::now();
+    assert t > low && t < high;
+
+    // The zoned reading is a reading of the same clock, in the caller's zone.
+    let zoned = ZonedDateTime::now("+09:00");
+    assert zoned.time_zone == "+09:00";
+    assert zoned.to_instant() > low && zoned.to_instant() < high;
+}
+
+test "RoundingMode directs and breaks ties" {
+    let t = Instant { seconds: 90, nanoseconds: 0 };
+    assert t.round(Unit::Minute) == Instant { seconds: 120, nanoseconds: 0 };
+    assert t.round(Unit::Minute, 1, RoundingMode::Floor) == Instant { seconds: 60, nanoseconds: 0 };
+    assert t.round(Unit::Minute, 1, RoundingMode::Ceil) == Instant { seconds: 120, nanoseconds: 0 };
+    assert t.round(Unit::Minute, 1, RoundingMode::Trunc) == Instant { seconds: 60, nanoseconds: 0 };
+    assert t.round(Unit::Minute, 1, RoundingMode::HalfEven) == Instant { seconds: 120, nanoseconds: 0 };
+
+    // Before the epoch, Floor and Trunc part company.
+    let before = Instant { seconds: -90, nanoseconds: 0 };
+    assert before.round(Unit::Minute, 1, RoundingMode::Floor) == Instant { seconds: -120, nanoseconds: 0 };
+    assert before.round(Unit::Minute, 1, RoundingMode::Trunc) == Instant { seconds: -60, nanoseconds: 0 };
+    assert before.round(Unit::Minute, 1, RoundingMode::Expand) == Instant { seconds: -120, nanoseconds: 0 };
+}
+
+test "Instant::round takes an increment" {
+    let t = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap().instant;
+    assert `${t.round(Unit::Minute, 15)}` == "2023-11-14T22:15:00Z";
+    assert `${t.round(Unit::Hour, 6, RoundingMode::Floor)}` == "2023-11-14T18:00:00Z";
+}
+
+#[expect_trap]
+test "rounding rejects a step that does not divide the day" {
+    // A 7-hour bucket has no consistent place to start from, so Temporal
+    // rejects the increment rather than counting from an arbitrary origin.
+    let _ = Instant::EPOCH.round(Unit::Hour, 7);
+}
+
+#[expect_trap]
+test "Instant::round rejects a calendar unit" {
+    let _ = Instant::EPOCH.round(Unit::Day);
+}
+
+test "ZonedDateTime::round counts from local midnight" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20+09:00").unwrap();
+    assert `${zdt.round(Unit::Hour)}` == "2023-11-15T07:00:00+09:00";
+    assert `${zdt.round(Unit::Day)}` == "2023-11-15T00:00:00+09:00";
+    assert `${zdt.round(Unit::Minute, 15)}` == "2023-11-15T07:15:00+09:00";
+
+    // Rounding up past the end of the day carries into the next one.
+    let late = ZonedDateTime::parse_rfc3339("2023-11-15T23:59:59Z").unwrap();
+    assert `${late.round(Unit::Day)}` == "2023-11-16T00:00:00Z";
+}
+
+test "Duration totals and rounds its exact part" {
+    let d = Duration { hours: 1, minutes: 30 };
+    assert d.total(Unit::Minute) == 90.0;
+    assert d.total(Unit::Hour) == 1.5;
+    assert Duration { days: 1 }.total(Unit::Hour) == 24.0;
+
+    assert Duration { minutes: 100 }.round(Unit::Hour, Unit::Hour) == Duration { hours: 2 };
+    assert Duration { minutes: 100 }.round(Unit::Hour, Unit::Hour, 1, RoundingMode::Floor) == Duration { hours: 1 };
+}
+
+#[expect_trap]
+test "Duration::total rejects a calendar component" {
+    let _ = Duration { months: 1 }.total(Unit::Day);
+}
+
+test "Instant renders and reads an HTTP-date" {
+    // The example RFC 7231 gives for all three forms.
+    let expected = Instant { seconds: 784_111_777, nanoseconds: 0 };
+    assert expected.to_http_date() == "Sun, 06 Nov 1994 08:49:37 GMT";
+
+    assert Instant::parse_http_date("Sun, 06 Nov 1994 08:49:37 GMT") matches { Ok(t) && t == expected };
+    assert Instant::parse_http_date("Sunday, 06-Nov-94 08:49:37 GMT") matches { Ok(t) && t == expected };
+    assert Instant::parse_http_date("Sun Nov  6 08:49:37 1994") matches { Ok(t) && t == expected };
+
+    // The epoch itself, and a two-digit day in the asctime form.
+    assert Instant::EPOCH.to_http_date() == "Thu, 01 Jan 1970 00:00:00 GMT";
+    assert Instant::parse_http_date("Sun Nov 16 08:49:37 1994") matches { Ok(t) && t == Instant {
+        seconds: 784_975_777,
+        nanoseconds: 0,
+    } };
+}
+
+test "Instant::parse_http_date rejects malformed input" {
+    assert Instant::parse_http_date("") matches { Err(_) };
+    assert Instant::parse_http_date("Sun, 06 Nov 1994 08:49:37 UTC") matches { Err(_) };
+    assert Instant::parse_http_date("Sun, 06 Xxx 1994 08:49:37 GMT") matches { Err(_) };
+    assert Instant::parse_http_date("Sun, 31 Nov 1994 08:49:37 GMT") matches { Err(_) };
+    assert Instant::parse_http_date("Sun, 06 Nov 1994 08:49:37 GMT trailing") matches { Err(_) };
+}
+
+test "PlainDate constructs, parses, and renders" {
+    let d = PlainDate::new(2023, 11, 14);
+    assert `${d}` == "2023-11-14";
+    assert PlainDate::parse("2023-11-14") matches { Ok(p) && p == d };
+    assert PlainDate::parse("2023-02-29") matches { Err(_) };
+    assert PlainDate::parse("2023-11-14T00:00:00Z") matches { Err(_) };
+
+    // `constrain` clamps a day past the month's end; `..base` is Temporal's `with`.
+    assert PlainDate::constrain(2023, 2, 31) == PlainDate::new(2023, 2, 28);
+    assert PlainDate { ..d, day: 1 } == PlainDate::new(2023, 11, 1);
+}
+
+#[expect_trap]
+test "PlainDate::new asserts the day exists" {
+    let _ = PlainDate::new(2023, 2, 29);
+}
+
+test "PlainDate exposes the ISO calendar" {
+    let d = PlainDate::new(2023, 11, 14);
+    assert d.day_of_week() == 2;
+    assert d.day_of_year() == 318;
+    assert d.week_of_year() == 46 && d.year_of_week() == 2023;
+    assert d.days_in_month() == 30 && d.days_in_year() == 365;
+    assert d.months_in_year() == 12 && d.days_in_week() == 7;
+    assert !d.in_leap_year();
+    assert d.month_code() == "M11";
+    assert PlainDate::new(2024, 2, 29).in_leap_year();
+}
+
+test "PlainDate does calendar arithmetic" {
+    let d = PlainDate::new(2023, 1, 31);
+    assert d.add(&Duration { months: 1 }) == PlainDate::new(2023, 2, 28);
+    assert d.add(&Duration { days: 1 }) == PlainDate::new(2023, 2, 1);
+    assert d.add(&Duration { years: 1, weeks: 1 }) == PlainDate::new(2024, 2, 7);
+    assert d.subtract(&Duration { days: 31 }) == PlainDate::new(2022, 12, 31);
+
+    let later = PlainDate::new(2024, 3, 1);
+    assert d.until(&later) == Duration { days: 395 };
+    assert d.until(&later, Unit::Year) == Duration { years: 1, months: 1, days: 1 };
+    assert d.until(&later, Unit::Week) == Duration { weeks: 56, days: 3 };
+    assert later.since(&d) == d.until(&later);
+}
+
+test "PlainTime constructs, parses, and renders" {
+    assert `${PlainTime { hour: 9 }}` == "09:00:00";
+    assert `${PlainTime::new(22, 13, 20, 500)}` == "22:13:20.500";
+    assert PlainTime::parse("22:13") matches { Ok(t) && t == PlainTime { hour: 22, minute: 13 } };
+    assert PlainTime::parse("22:13:20.5") matches { Ok(t) && t == PlainTime {
+        hour: 22,
+        minute: 13,
+        second: 20,
+        millisecond: 500,
+    } };
+    assert PlainTime::parse("24:00") matches { Err(_) };
+    assert PlainTime { hour: 9 } < PlainTime { hour: 9, minute: 1 };
+}
+
+test "PlainTime wraps around midnight" {
+    let t = PlainTime { hour: 23, minute: 30 };
+    assert t.add(&Duration { hours: 1 }) == PlainTime { hour: 0, minute: 30 };
+    assert t.subtract(&Duration { hours: 24 }) == t;
+    assert PlainTime {}.subtract(&Duration { nanoseconds: 1 }) == PlainTime {
+        hour: 23,
+        minute: 59,
+        second: 59,
+        millisecond: 999,
+        microsecond: 999,
+        nanosecond: 999,
+    };
+    assert t.until(&PlainTime { hour: 23, minute: 45 }) == Duration { minutes: 15 };
+    assert t.round(Unit::Hour) == PlainTime {};
+}
+
+test "PlainDateTime pairs a date with a clock and carries into the date" {
+    let dt = PlainDateTime::new(PlainDate::new(2023, 11, 14), PlainTime { hour: 23, minute: 30 });
+    assert `${dt}` == "2023-11-14T23:30:00";
+    assert PlainDateTime::parse("2023-11-14T23:30:00") matches { Ok(p) && p == dt };
+    assert PlainDateTime::parse("2023-11-14 23:30") matches { Ok(p) && p == dt };
+
+    // An hour past 23:30 rolls the date over.
+    assert dt.add(&Duration { hours: 1 }) == PlainDateTime::new(PlainDate::new(2023, 11, 15), PlainTime {
+        hour: 0,
+        minute: 30,
+    });
+    assert dt.until(&dt.add(&Duration { days: 1, hours: 1 })) == Duration { hours: 25 };
+}
+
+test "PlainDateTime resolves against a zone, and a ZonedDateTime drops back" {
+    let dt = PlainDateTime::new(PlainDate::new(2023, 11, 15), PlainTime { hour: 7, minute: 13, second: 20 });
+    let zdt = dt.to_zoned_date_time("+09:00");
+    assert `${zdt}` == "2023-11-15T07:13:20+09:00";
+    assert zdt.to_instant() == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert zdt.to_plain_date_time() == dt;
+    assert zdt.to_plain_date() == dt.date;
+    assert zdt.to_plain_time() == dt.time;
+
+    // A date lands on a zone through its midnight by default.
+    assert `${PlainDate::new(2023, 11, 15).to_zoned_date_time("+09:00")}` == "2023-11-15T00:00:00+09:00";
+}
+
+test "PlainYearMonth and PlainMonthDay carry the partial dates" {
+    let ym = PlainYearMonth::new(2024, 2);
+    assert `${ym}` == "2024-02";
+    assert PlainYearMonth::parse("2024-02") matches { Ok(p) && p == ym };
+    assert ym.days_in_month() == 29 && ym.in_leap_year();
+    assert ym.add(&Duration { months: 11 }) == PlainYearMonth::new(2025, 1);
+    assert ym.until(&PlainYearMonth::new(2025, 4)) == Duration { years: 1, months: 2 };
+    assert ym.to_plain_date(31) == PlainDate::new(2024, 2, 29);
+
+    let leap_day = PlainMonthDay::new(2, 29);
+    assert `${leap_day}` == "--02-29";
+    assert PlainMonthDay::parse("--02-29") matches { Ok(p) && p == leap_day };
+    assert PlainMonthDay::parse("02-29") matches { Ok(p) && p == leap_day };
+    assert leap_day.to_plain_date(2024) == PlainDate::new(2024, 2, 29);
+    assert leap_day.to_plain_date(2023) == PlainDate::new(2023, 2, 28);
+    assert PlainDate::new(2024, 2, 29).to_plain_month_day() == leap_day;
+    assert PlainDate::new(2024, 2, 29).to_plain_year_month() == ym;
+}
+
+test "the plain family goes over the wire as its ISO 8601 form" {
+    let date = PlainDate::new(2023, 11, 14);
+    assert to_string(&date) matches { Ok(json) && json == `"2023-11-14"` };
+    assert from_string::<PlainDate>(`"2023-11-14"`) matches { Ok(back) && back == date };
+
+    let time = PlainTime::new(22, 13, 20, 500);
+    assert to_string(&time) matches { Ok(json) && json == `"22:13:20.500"` };
+    assert from_string::<PlainTime>(`"22:13:20.5"`) matches { Ok(back) && back == time };
+
+    let dt = PlainDateTime::new(date, time);
+    assert to_string(&dt) matches { Ok(json) && json == `"2023-11-14T22:13:20.500"` };
+    assert from_string::<PlainDateTime>(`"2023-11-14T22:13:20.5"`) matches { Ok(back) && back == dt };
+
+    assert to_string(&PlainYearMonth::new(2024, 2)) matches { Ok(json) && json == `"2024-02"` };
+    assert to_string(&PlainMonthDay::new(2, 29)) matches { Ok(json) && json == `"--02-29"` };
+    assert from_string::<PlainMonthDay>(`"--02-29"`) matches { Ok(back) && back == PlainMonthDay::new(2, 29) };
+
+    // A structurally-shaped value is refused, not read field by field.
+    assert from_string::<PlainDate>(`{"year":2023,"month":11,"day":14}`) matches { Err(_) };
+    assert from_string::<PlainDate>(`"nope"`) matches { Err(_) };
+}
+
+test "the plain family parses through FromStr" {
+    assert PlainDate::from_str("2023-11-14") matches { Ok(d) && d == PlainDate::new(2023, 11, 14) };
+    assert PlainTime::from_str("22:13") matches { Ok(t) && t == PlainTime { hour: 22, minute: 13 } };
+    assert PlainYearMonth::from_str("2024-02") matches { Ok(m) && m == PlainYearMonth::new(2024, 2) };
+    assert PlainMonthDay::from_str("--02-29") matches { Ok(m) && m == PlainMonthDay::new(2, 29) };
+    assert PlainDateTime::from_str("2023-11-14T22:13") matches { Ok(_) };
+    assert PlainDate::from_str("2023-11-14 ") matches { Err(_) };
+}
+
 test "Instant serializes as an RFC 3339 string with minimal precision" {
     let whole = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
     assert to_string(&whole) matches { Ok(s) && s == `"2023-11-14T22:13:20Z"` };
@@ -496,5 +1122,106 @@ test "Instant rejects an epoch bignum beyond i64/u64 instead of truncating" {
         Ok(_) => {
             assert false;
         },
+    }
+}
+
+test "a backwards until anchors at the receiver, so add round-trips it" {
+    let from = PlainDate::new(1959, 1, 19);
+    let to = PlainDate::new(1957, 6, 27);
+    let span = from.until(&to, Unit::Month);
+    assert span == Duration { months: -18, days: -22 };
+    assert from.add(&span) == to;
+
+    let years = from.until(&to, Unit::Year);
+    assert years == Duration { years: -1, months: -6, days: -22 };
+    assert from.add(&years) == to;
+}
+
+test "a backwards ZonedDateTime until round-trips through add" {
+    let from = ZonedDateTime::parse_rfc3339("1966-10-31T23:13:20+09:00").unwrap();
+    let to = ZonedDateTime::parse_rfc3339("1966-02-10T01:53:34+09:00").unwrap();
+    let span = from.until(&to, Unit::Month);
+    assert from.add(&span) == to;
+}
+
+test "ISO week numbering floors the leap-year terms, so BCE years count 53 weeks" {
+    let d = PlainDate::new(-396, 12, 28);
+    assert d.week_of_year() == 53;
+    assert d.year_of_week() == -396;
+}
+
+fn lcg(state: i64) -> i64 {
+    return (state * 6_364_136_223_846_793_005 + 1_442_695_040_888_963_407) % 4_611_686_018_427_387_904;
+}
+
+test "until round-trips through add for every date unit, in both directions" {
+    let units = [Unit::Year, Unit::Month, Unit::Week, Unit::Day];
+    let mut s: i64 = 12_345;
+    for let mut i = 0; i < 400; i += 1 {
+        s = lcg(s);
+        let a = PlainDate::from_epoch_days(s % 40_000 - 20_000);
+        s = lcg(s);
+        let b = PlainDate::from_epoch_days(s % 40_000 - 20_000);
+        for let u of units {
+            assert a.add(&a.until(&b, u)) == b;
+            assert b.add(&b.until(&a, u)) == a;
+        }
+    }
+}
+
+test "PlainDateTime until round-trips through add, in both directions" {
+    let units = [Unit::Year, Unit::Month, Unit::Week, Unit::Day, Unit::Hour];
+    let mut s: i64 = 999;
+    for let mut i = 0; i < 150; i += 1 {
+        s = lcg(s);
+        let a = sample_date_time(s);
+        s = lcg(s);
+        let b = sample_date_time(s);
+        for let u of units {
+            assert a.add(&a.until(&b, u)) == b;
+            assert b.add(&b.until(&a, u)) == a;
+        }
+    }
+}
+
+fn sample_date_time(s: i64) -> PlainDateTime {
+    let t = if s < 0 { -s } else { s };
+    return PlainDateTime::new(
+        PlainDate::from_epoch_days(s % 20_000 - 10_000),
+        PlainTime::new((t / 7 % 24) as i32, (t / 11 % 60) as i32, (t / 13 % 60) as i32),
+    );
+}
+
+test "ISO week numbering keeps its anchor days across -400..=400" {
+    // 4 January always falls in week 1 of its own year, 28 December in the last.
+    for let mut y: i32 = -400; y <= 400; y += 1 {
+        let jan4 = PlainDate::new(y, 1, 4);
+        assert jan4.week_of_year() == 1 && jan4.year_of_week() == y;
+
+        let dec28 = PlainDate::new(y, 12, 28);
+        let weeks = dec28.week_of_year();
+        assert dec28.year_of_week() == y;
+        assert weeks == 52 || weeks == 53;
+
+        // Every ISO year runs a whole number of weeks, so week 1 plus that count
+        // lands in the next week-year and not a week sooner.
+        assert jan4.add(&Duration { weeks: (weeks - 1) as i64 }).year_of_week() == y;
+        assert jan4.add(&Duration { weeks: weeks as i64 }).year_of_week() == y + 1;
+    }
+}
+
+test "from_epoch_nanoseconds round-trips the whole i64 second range" {
+    let bounds: List<i64> = [
+        -9_223_372_036_854_775_808, -9_223_372_036_854_775_807, -1, 0, 1, 9_223_372_036_854_775_806,
+        9_223_372_036_854_775_807,
+    ];
+    // A zero sub-second is the case a truncating division cannot walk back
+    // from, so both spellings of each bound have to round-trip.
+    let fractions: List<u32> = [0, 500_000_000, 999_999_999];
+    for let seconds of bounds {
+        for let nanoseconds of fractions {
+            let i = Instant { seconds: seconds, nanoseconds: nanoseconds };
+            assert Instant::from_epoch_nanoseconds(i.epoch_nanoseconds()) == i;
+        }
     }
 }

@@ -172,11 +172,11 @@ impl Lexer {
 }
 
 fn is_ident_start(c: char) -> bool {
-    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_';
+    return c.is_ascii_alphabetic() || c == '_';
 }
 
 fn is_ident_cont(c: char) -> bool {
-    return is_ident_start(c) || c >= '0' && c <= '9' || c == '.' || c == '-';
+    return is_ident_start(c) || c.is_ascii_digit() || c == '.' || c == '-';
 }
 
 struct Parser {

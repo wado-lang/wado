@@ -100,8 +100,8 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let packed: i64;
-    let rx_17: i32;
-    let tx_18: i32;
+    let rx_18: i32;
+    let tx_19: i32;
     let __hfs_pos_28: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:hfs_inline_break_no_writeback.wado::__modules_initialized);
@@ -116,12 +116,12 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
         l1: loop {
             break_if b0 __hfs_pos_28 >= s.data.used;
             "hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces"(s);
-            if __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_0: block -> i32 {
+            if __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: block -> i32 {
                 __hfs_pos_28 = s.pos;
                 if __hfs_pos_28 >= s.data.used {
-                    break __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_0: -1;
+                    break __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: -1;
                 }
-                break __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_0: builtin::array_get_value<u8>(s.data.repr, __hfs_pos_28);
+                break __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: builtin::array_get_value<u8>(s.data.repr, __hfs_pos_28);
             } >= 0 {
                 count = count + 1;
                 __hfs_pos_28 = __hfs_pos_28 + 1;
@@ -134,10 +134,10 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
     __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(count, __local_3);
-    rx_17 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_18 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "hfs_inline_break_no_writeback.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
-    "core:cli/write_to_stream"(tx_18, __local_2, 1);
+    rx_18 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_19 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "hfs_inline_break_no_writeback.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
+    "core:cli/write_to_stream"(tx_19, __local_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

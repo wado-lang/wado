@@ -130,10 +130,10 @@ fn "value_semantics.wado/value_semantics_array"() with Stdout {
     let rx_197: i32;
     let tx_198: i32;
     elements = array.new_fixed<i32>(1, 2, 3);
-    let __array_clone_dst_9: ref Array<i32>;
-    __array_clone_dst_9 = builtin::array_new<i32>(3);
-    builtin::array_copy<i32>(__array_clone_dst_9, 0, elements, 0, 3);
-    builtin::array_set<i32>(__array_clone_dst_9, 0, 99);
+    let __array_clone_dst_2: ref Array<i32>;
+    __array_clone_dst_2 = builtin::array_new<i32>(3);
+    builtin::array_copy<i32>(__array_clone_dst_2, 0, elements, 0, 3);
+    builtin::array_set<i32>(__array_clone_dst_2, 0, 99);
     __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     new_used_29 = __local_2.used + 1;
     if @unlikely(new_used_29 > builtin::array_len(__local_2.repr)) {
@@ -224,7 +224,7 @@ fn "value_semantics.wado/value_semantics_array"() with Stdout {
     __local_4_4.used = new_used_176;
     builtin::array_set_u8(__local_4_4.repr, start_177, 61);
     __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_194(builtin::array_get_value<i32>(__array_clone_dst_9, 0)), __local_5_5);
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_194(builtin::array_get_value<i32>(__array_clone_dst_2, 0)), __local_5_5);
     rx_197 = builtin::i32_wrap_i64(local.tee packed_196("wasi/stream-new"()));
     tx_198 = builtin::i32_wrap_i64(packed_196 >> 32_i64);
     handle_112 = "value_semantics.wado/__cm_binding__Stdout_write_via_stream"(rx_197);

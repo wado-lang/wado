@@ -245,7 +245,7 @@ condition: from_string::<Perms>(`[\"Read\"]`) matches { Ok(_) }
 
 fn "serde_flags_deserialize_only.wado/$value_copy$core:serde/DeserializeError"(v) {
     let v_1: ref "core:prelude/string.wado//String";
-    return struct.new "core:serde//DeserializeError" { kind: v.kind, message: ref.as_non_null(v_1 = v.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_1.repr; let __array_clone_len_9: i32; __array_clone_len_9 = v_1.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_1.used }), offset: v.offset };
+    return struct.new "core:serde//DeserializeError" { kind: v.kind, message: ref.as_non_null(v_1 = v.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_1.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_1.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: v_1.used }), offset: v.offset };
 }
 
 fn "core:base64/build_decode_table"() {
@@ -505,7 +505,7 @@ fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/char::hex_digit_value"(self) {
-    if select i32(self >=u 48, self <=u 57, 0) {
+    if (self - 48) <u 10 {
         return self - 48;
     }
     if select i32(self >=u 97, self <=u 102, 0) {
@@ -1362,12 +1362,12 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     let _licm_input_11: ref "core:prelude/slice.wado//Slice<u8>";
     let _licm_repr_12: ref Array<u8>;
     let _licm_start_13: i32;
-    let _av_14: i32;
+    let _av_15: i32;
     start = self.pos;
-    _av_14 = self.pos;
-    if @unlikely((_av_14 + 4) > (self.input.end - self.input.start)) {
+    _av_15 = self.pos;
+    if @unlikely((_av_15 + 4) > (self.input.end - self.input.start)) {
         cold_path;
-        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(_av_14));
+        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(_av_15));
     }
     code = 0;
     i = 0;
@@ -1379,7 +1379,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
         l148: loop {
             break_if b147 i >= 4;
             c_4 = builtin::array_get_value<u8>(_licm_repr_12, _licm_start_13 + (_licm_pos_10 + i)) & 255;
-            if @unlikely((if (if select i32(c_4 >=u 48, c_4 <=u 57, 0) -> i32 {
+            if @unlikely((if (if (c_4 - 48) <u 10 -> i32 {
                 1;
             } else {
                 select i32(c_4 >=u 97, c_4 <=u 102, 0);
@@ -1396,7 +1396,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
             continue l148;
         };
     };
-    self.pos = _av_14 + 4;
+    self.pos = _av_15 + 4;
     return 0, code, ref.null none;
 }
 

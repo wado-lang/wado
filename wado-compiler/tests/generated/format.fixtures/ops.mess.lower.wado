@@ -4140,11 +4140,11 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     }
     let remaining: i32 = (len - i);
     let c0: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"(i);
-    if (((c0 == 105) || (c0 == 73)) && (remaining >= 3)) {
+    if (Box<u8> { value: c0 }.u8::eq_ignore_ascii_case(Box<u8> { value: 105 }) && (remaining >= 3)) {
         core::builtin::cold_path();
         let c1: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 1));
         let c2: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 2));
-        if (((c1 == 110) || (c1 == 78)) && ((c2 == 102) || (c2 == 70))) {
+        if (Box<u8> { value: c1 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 }) && Box<u8> { value: c2 }.u8::eq_ignore_ascii_case(Box<u8> { value: 102 })) {
             if (remaining == 3) {
                 return Option<f64>::Some(core::builtin::f64_copysign((1.0 / 0.0), sign));
             }
@@ -4154,18 +4154,18 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
                 let c5: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 5));
                 let c6: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 6));
                 let c7: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 7));
-                if ((((((c3 == 105) || (c3 == 73)) && ((c4 == 110) || (c4 == 78))) && ((c5 == 105) || (c5 == 73))) && ((c6 == 116) || (c6 == 84))) && ((c7 == 121) || (c7 == 89))) {
+                if ((((Box<u8> { value: c3 }.u8::eq_ignore_ascii_case(Box<u8> { value: 105 }) && Box<u8> { value: c4 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 })) && Box<u8> { value: c5 }.u8::eq_ignore_ascii_case(Box<u8> { value: 105 })) && Box<u8> { value: c6 }.u8::eq_ignore_ascii_case(Box<u8> { value: 116 })) && Box<u8> { value: c7 }.u8::eq_ignore_ascii_case(Box<u8> { value: 121 })) {
                     return Option<f64>::Some(core::builtin::f64_copysign((1.0 / 0.0), sign));
                 }
             }
         }
         return null;
     }
-    if (((c0 == 110) || (c0 == 78)) && (remaining == 3)) {
+    if (Box<u8> { value: c0 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 }) && (remaining == 3)) {
         core::builtin::cold_path();
         let c1: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 1));
         let c2: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 2));
-        if (((c1 == 97) || (c1 == 65)) && ((c2 == 110) || (c2 == 78))) {
+        if (Box<u8> { value: c1 }.u8::eq_ignore_ascii_case(Box<u8> { value: 97 }) && Box<u8> { value: c2 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 })) {
             return Option<f64>::Some((0.0 / 0.0));
         }
         return null;
@@ -4175,7 +4175,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let mut frac: i32 = 0;
     let digit_start: i32 = i;
     loop {
-        if !(((i < len) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) >= 48)) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) <= 57)) {
+        if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
             break;
         }
         __for_0_body: {
@@ -4191,7 +4191,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         i = (i + 1);
         let frac_start: i32 = i;
         loop {
-            if !(((i < len) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) >= 48)) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) <= 57)) {
+            if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
                 break;
             }
             __for_1_body: {
@@ -4227,7 +4227,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
             return null;
         }
         loop {
-            if !(((i < len) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) >= 48)) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) <= 57)) {
+            if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
                 break;
             }
             __for_2_body: {
@@ -6044,6 +6044,23 @@ pub fn char::is_ascii_whitespace(self: Box<char>) -> bool {
     };
 }
 
+pub fn char::is_ascii_uppercase(self: Box<char>) -> bool {
+    return ((self.value as u32 - 'A' as u32) < 26);
+}
+
+pub fn char::to_ascii_lowercase(self: Box<char>) -> char {
+    let c: u32 = self.value as u32;
+    return "core::prelude/primitive.wado::char::from_u32_unchecked"((c | (self.char::is_ascii_uppercase() as u32 * ('A' as u32 ^ 'a' as u32))));
+}
+
+pub fn char::eq_ignore_ascii_case(self: Box<char>, other: Box<char>) -> bool {
+    return (self.char::to_ascii_lowercase() == other.char::to_ascii_lowercase());
+}
+
+pub fn char::is_ascii_digit(self: Box<char>) -> bool {
+    return ((self.value as u32 - '0' as u32) < 10);
+}
+
 fn i8::fmt_into(self: Box<i8>, f: &mut Formatter) {
     Box<i32> { value: self.value as i32 }.i32::fmt_decimal(f);
 }
@@ -6057,6 +6074,18 @@ fn "i8^core:prelude/traits.wado/FromStr::from_str_range"(s: &String, start: i32,
 
 pub fn "i8^core:prelude/traits.wado/FromStr::from_str"(s: &String) -> Result<i8, ParseIntError> {
     return "core::prelude/primitive.wado::i8^core:prelude/traits.wado/FromStr::from_str_range"(s, 0, s."core:prelude/string.wado/String::len"());
+}
+
+pub fn u8::is_ascii_digit(self: Box<u8>) -> bool {
+    return Box<char> { value: self.value as char }.char::is_ascii_digit();
+}
+
+pub fn u8::is_ascii_whitespace(self: Box<u8>) -> bool {
+    return Box<char> { value: self.value as char }.char::is_ascii_whitespace();
+}
+
+pub fn u8::eq_ignore_ascii_case(self: Box<u8>, other: Box<u8>) -> bool {
+    return Box<char> { value: self.value as char }.char::eq_ignore_ascii_case(Box<char> { value: other.value as char });
 }
 
 fn u8::fmt_into(self: Box<u8>, f: &mut Formatter) {
@@ -7564,10 +7593,6 @@ pub fn "fn(char)->char^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: B
 
 pub fn "fn mut(char)->char^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: Box<fn(char)->char>, f: &mut Formatter);
 
-fn is_ascii_whitespace_byte(b: u8) -> bool {
-    return Box<char> { value: b as char }.char::is_ascii_whitespace();
-}
-
 #[inline]
 fn utf8_seq_len(b0: u8) -> i32 {
     if (b0 < 128) {
@@ -8878,7 +8903,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
 
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
     loop {
-        if !((self.pos < self.used) && "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self.pos))) {
+        if !((self.pos < self.used) && Box<u8> { value: self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self.pos) }.u8::is_ascii_whitespace()) {
             break;
         }
         self.pos = (self.pos + 1);
@@ -8888,7 +8913,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     }
     let start: i32 = self.pos;
     loop {
-        if !((self.pos < self.used) && !"core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self.pos))) {
+        if !((self.pos < self.used) && !Box<u8> { value: self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self.pos) }.u8::is_ascii_whitespace()) {
             break;
         }
         self.pos = (self.pos + 1);
