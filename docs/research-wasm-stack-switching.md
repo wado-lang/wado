@@ -174,11 +174,13 @@ immediates, reading a `cancellable` byte in the pinned generation and none upstr
 set moved too: `thread.suspend-to` is gone, `thread.{suspend,yield}-then-promote` are
 new.
 
-Two further gates: the 🧵 feature is off by default in both `wasmparser` and wasmtime,
-whose own docs call its support "very incomplete"; and `thread.new-indirect` passes the
-new thread a single `i32`, so a GC language needs a side table to hand a spawned thread
-anything else — the spec defers loosening this until the Canonical ABI is extended for
-GC. See [Non-Goals](#5-non-goals).
+Two further gates. The first is the Component Model threading feature — `CM_THREADING` in
+`wasmparser`, `wasm_component_model_threading` in wasmtime, distinct from core Wasm
+`THREADS` (on by default) and from `SHARED_EVERYTHING_THREADS`. It is off by default in
+both, and wasmtime's own docs call its support "very incomplete". The second is that
+`thread.new-indirect` passes the new thread a single `i32`, so a GC language needs a side
+table to hand a spawned thread anything else — the spec defers loosening this until the
+Canonical ABI is extended for GC. See [Non-Goals](#5-non-goals).
 
 ---
 
