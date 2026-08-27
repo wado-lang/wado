@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1102,17 +1129,17 @@ fn try_CMT(chars: &List<char>, start: i32) -> i32 {
             if pos >= chars.len() || chars[pos] != '/' { break rep_0; }
             pos += 1;
             loop {
-                let ng_saved_2 = pos;
-                let mut ng_exit_2 = false;
-                ng_2: {
-                    if pos >= chars.len() || chars[pos] != '\n' { break ng_2; }
+                let ng_saved_3 = pos;
+                let mut ng_exit_3 = false;
+                ng_3: {
+                    if pos >= chars.len() || chars[pos] != '\n' { break ng_3; }
                     pos += 1;
-                    ng_exit_2 = true;
+                    ng_exit_3 = true;
                 }
-                if ng_exit_2 {
+                if ng_exit_3 {
                     break;
                 }
-                pos = ng_saved_2;
+                pos = ng_saved_3;
                 if pos >= chars.len() { break rep_0; }
                 pos += 1;
             }
@@ -1126,46 +1153,46 @@ fn try_CMT(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_4 = pos;
-    let mut alts_ok_4 = false;
-    alts_4_0: {
-        pos = alts_saved_4;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_4_0; }
+    let alts_saved_5 = pos;
+    let mut alts_ok_5 = false;
+    alts_5_0: {
+        pos = alts_saved_5;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_5_0; }
         pos += 1;
-        alts_ok_4 = true;
+        alts_ok_5 = true;
     }
-    if !alts_ok_4 {
-        alts_4_1: {
-            pos = alts_saved_4;
-            if pos >= chars.len() || chars[pos] != '\t' { break alts_4_1; }
+    if !alts_ok_5 {
+        alts_5_1: {
+            pos = alts_saved_5;
+            if pos >= chars.len() || chars[pos] != '\t' { break alts_5_1; }
             pos += 1;
-            alts_ok_4 = true;
+            alts_ok_5 = true;
         }
     }
-    if !alts_ok_4 { return -1; }
+    if !alts_ok_5 { return -1; }
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            let alts_saved_5 = pos;
-            let mut alts_ok_5 = false;
-            alts_5_0: {
-                pos = alts_saved_5;
-                if pos >= chars.len() || chars[pos] != ' ' { break alts_5_0; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            let alts_saved_7 = pos;
+            let mut alts_ok_7 = false;
+            alts_7_0: {
+                pos = alts_saved_7;
+                if pos >= chars.len() || chars[pos] != ' ' { break alts_7_0; }
                 pos += 1;
-                alts_ok_5 = true;
+                alts_ok_7 = true;
             }
-            if !alts_ok_5 {
-                alts_5_1: {
-                    pos = alts_saved_5;
-                    if pos >= chars.len() || chars[pos] != '\t' { break alts_5_1; }
+            if !alts_ok_7 {
+                alts_7_1: {
+                    pos = alts_saved_7;
+                    if pos >= chars.len() || chars[pos] != '\t' { break alts_7_1; }
                     pos += 1;
-                    alts_ok_5 = true;
+                    alts_ok_7 = true;
                 }
             }
-            if !alts_ok_5 { break rep_3; }
+            if !alts_ok_7 { break rep_4; }
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_4;
         break;
     }
     return pos;

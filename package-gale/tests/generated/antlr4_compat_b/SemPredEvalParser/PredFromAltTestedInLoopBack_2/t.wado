@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1311,6 +1338,14 @@ impl Parser {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
+    }
+
     fn rule_string_tree_final(&self) -> String {
         return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
@@ -1539,6 +1574,7 @@ fn scan_para(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1562,10 +1598,8 @@ fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 pos += 1;
                 break sg_0;
             }
-            return -1;
+            pos = gp_0;
         }
-    } else {
-        return -1;
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -1599,6 +1633,7 @@ fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -1680,18 +1715,26 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                             pos += 1;
                             break sg_2;
                         }
-                        break rep_scan;
+                        pos = gp_2;
                     }
-                } else {
-                    break rep_scan;
                 }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
         }
+        if !_plus_first && !((p.peek_kind() == TK_LIT_S) || (p.peek_kind() == TK_X) || (p.peek_kind() == TK_NL && (p.la(2) != TK_NL))) { break; }
         _plus_first = false;
-        let lit_s_or_x_or_nl = p.expect_set(&SYNC_1);
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LIT_S {
+            let lit_s = p.expect(TK_LIT_S, &EMPTY_SYNC);
+        } else if grp_kind == TK_X {
+            let x = p.expect(TK_X, &EMPTY_SYNC);
+        } else if grp_kind == TK_NL && (p.la(2) != TK_NL) {
+            let nl = p.expect(TK_NL, &EMPTY_SYNC);
+        } else {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_1);
+        }
     }
     return;
 }

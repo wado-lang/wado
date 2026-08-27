@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1303,6 +1330,14 @@ impl Parser {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
+    }
+
     fn rule_string_tree_final(&self) -> String {
         return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
@@ -1508,6 +1543,11 @@ impl Parser {
     }
 }
 
+struct AVals {
+    _span_lo_label: i32 = 0,
+    _span_hi_label: i32 = -1,
+}
+
 fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
@@ -1600,19 +1640,18 @@ fn _parse_start(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_a__inner(p: &mut Parser) -> () {
+fn _parse_a__inner(p: &mut Parser) -> AVals {
+    let mut vals = AVals {};
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
         p.b.set_alt(0);
-        let mut _span_lo_label = 0;
-        let mut _span_hi_label = -1;
-        _span_lo_label = p.pos;
+        vals._span_lo_label = p.pos;
         let label = _parse_subrule(p);
-        _span_hi_label = p.pos - 1;
+        vals._span_hi_label = p.pos - 1;
         if !p.speculating {
-            p.emit(`${p.text_between(_span_lo_label, _span_hi_label)}\n`);
+            p.emit(`${p.text_between(vals._span_lo_label, vals._span_hi_label)}\n`);
         }
-        return;
+        return vals;
     }
     if kind == TK_LIT_Y {
         p.b.set_alt(1);
@@ -1620,25 +1659,26 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         if !p.speculating {
             p.emit(`${p.token_text(label)}\n`);
         }
-        return;
+        return vals;
     }
     p.no_viable(
         "no alternative of a matches",
         p.peek_span(),
         &SYNC_0,
     );
-    return;
+    return vals;
 }
 
-fn _parse_a(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_a(p: &mut Parser) -> AVals {
+    if p.recovering { return AVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    _parse_a__inner(p);
+    let __vals = _parse_a__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("a");
     }
+    return __vals;
 }
 
 fn _parse_subrule__inner(p: &mut Parser) -> () {
@@ -1684,7 +1724,7 @@ pub fn parse_start(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_a(p); });
 }
 
 pub fn parse_subrule(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

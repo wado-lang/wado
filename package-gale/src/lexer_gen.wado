@@ -17,9 +17,9 @@ use {
     LabelElement,
     AltAction,
     find_lexer_rule,
+    lexer_alias_text,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
-use { translate_lexer_predicate, translate_lexer_action } from "./action_translate.wado";
 use {
     CodeWriter,
     StructSpec,
@@ -884,9 +884,8 @@ fn gen_lexer_match_fn(
 
 /// Emit each semantic predicate at position `before` as a guard
 /// (`if !(cond) { <fail_action>; }`) in a lexer rule's match fn. The condition
-/// runs through the identity translator (`translate_lexer_predicate`), resolving
-/// lexer `$`-attributes (`$text`) against the match fn's `chars` / `start` /
-/// `pos`; an unresolvable reference is a loud codegen error. `fail_action` is
+/// is the staged body (`stage_lexer_bodies` resolved its lexer `$`-attributes
+/// against the match fn's `chars` / `start` / `pos`). `fail_action` is
 /// `return -1` for a single-alt rule and `break <label>` inside a multi-alt
 /// rule / group / fragment (a false predicate falls through to the next alt).
 /// `gen_lexer_alt_seq` drives this over every `before_index` (alt-initial, mid,
@@ -900,18 +899,14 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
             continue;
         }
         if a.kind matches { Predicate } {
-            let cond = match translate_lexer_predicate(&a.source.text) {
-                Ok(c) => c,
-                Err(e) => panic(`lexer predicate: ${e}`),
-            };
-            w.line(&`if !(${cond}) \{ ${fail_action}; \}`);
+            w.line(&`if !(${a.source.text}) \{ ${fail_action}; \}`);
         }
     }
 }
 
 /// Whether codegen runs `{ ... }` action bodies for this grammar's lexer at
 /// all. A `language = Java` lexer qualifies because codegen stages its bodies
-/// into Wado before emit (`rewrite_lexer_java_bodies`), which carves out a
+/// into Wado before emit (`stage_lexer_bodies`), which carves out a
 /// `superClass` grammar. Such a grammar still qualifies when every action body
 /// is nothing but `this.<method>()` base calls: the rewrite turns those into
 /// Wado on its own, with no host translator involved.
@@ -945,27 +940,38 @@ pub fn lexer_rule_executes_actions(grammar_executes: bool, rule: &LexerRule) -> 
 }
 
 /// Whether the action replay can interleave `alt`'s actions with its match, so
-/// each runs at the cursor it was written at. A `Group` is fine — the replay
-/// re-selects the arm that won. A `Repeat` is not: it matches an unknown number
-/// of times, and the non-greedy / lookahead-aware emitters restructure the
-/// sequence around it, so an alt carrying one keeps the flat emit.
-pub fn lexer_alt_replayable(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
-    for let e of &alt.elements {
-        if !lexer_element_replayable(e, all_rules) {
+/// each runs at the cursor it was written at. A restructured `Repeat` cannot.
+pub fn lexer_alt_replayable(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool) -> bool {
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let e = &alt.elements[i];
+        if let Repeat(rep) = e {
+            // Named as the two that restructure, not as the six that do not: a
+            // seventh plain shape must not read here as one that restructures.
+            if lexer_repeat_emit(alt, i, all_rules, ci) matches { NonGreedy | LookaheadAware } {
+                return false;
+            }
+            if !lexer_element_replayable(&rep.element, all_rules, ci) {
+                return false;
+            }
+            continue;
+        }
+        if !lexer_element_replayable(e, all_rules, ci) {
             return false;
         }
     }
     return true;
 }
 
-fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
+fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool) -> bool {
     return match *elem {
         Literal(_) | CharRange(_) | CharClass(_) | AnyChar => true,
+        // A Repeat reached through another element has no alternative to read a
+        // strategy from; the alt-level walk above is where one is admitted.
         Repeat(_) => false,
-        Not(n) => lexer_element_replayable(&n.element, all_rules),
+        Not(n) => lexer_element_replayable(&n.element, all_rules, ci),
         Group(alts) => {
             for let a of alts {
-                if !lexer_alt_replayable(&a, all_rules) {
+                if !lexer_alt_replayable(&a, all_rules, ci) {
                     return false;
                 }
             }
@@ -977,7 +983,7 @@ fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>) ->
                     return true;
                 }
                 for let a of &f.body {
-                    if !lexer_alt_replayable(a, all_rules) {
+                    if !lexer_alt_replayable(a, all_rules, ci) {
                         return false;
                     }
                 }
@@ -988,9 +994,9 @@ fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>) ->
     };
 }
 
-pub fn lexer_rule_replayable(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+pub fn lexer_rule_replayable(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
     for let alt of &rule.body {
-        if !lexer_alt_replayable(alt, all_rules) {
+        if !lexer_alt_replayable(alt, all_rules, ci) {
             return false;
         }
     }
@@ -1006,7 +1012,7 @@ fn lexer_rule_executed_action_ids(grammar: &Grammar, grammar_executes: bool, rul
     if !lexer_rule_executes_actions(grammar_executes, rule) {
         return;
     }
-    let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
+    let replays = lexer_rule_replayable(rule, &grammar.lexer_rules, resolve_ci(&grammar.options, &rule.options));
     for let alt of &rule.body {
         collect_lexer_run_action_ids(alt, replays, &grammar.lexer_rules, out);
     }
@@ -1032,11 +1038,11 @@ fn collect_lexer_run_action_ids(alt: &LexerAlternative, replays: bool, all_rules
 }
 
 /// The alternatives `elem` inlines into its enclosing sequence: a `Group`'s
-/// arms, or a non-recursive fragment's body. A `Repeat` / `Not` / rule call
-/// keeps its contents to itself as far as action placement is concerned.
+/// arms, a non-recursive fragment's body, or what a `Repeat` iterates.
 fn inlined_alts_of(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<LexerAlternative> {
     return match *elem {
         Group(alts) => alts,
+        Repeat(rep) => inlined_alts_of(&rep.element, all_rules),
         RuleRef(name) => match find_fragment(all_rules, &name) {
             Some(f) => {
                 if fragment_is_recursive(f, all_rules) {
@@ -1092,7 +1098,7 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
 
 /// Emit the replay fn per executing rule: `apply_<rule>_actions(lx, start, end)`,
 /// called post-tournament for the winner only, so a losing candidate's actions
-/// never run. Bodies are identity-translated.
+/// never run. Bodies arrive staged (`stage_lexer_bodies`).
 ///
 /// A replayable rule (`lexer_rule_replayable`) re-runs its own match with the
 /// actions dropped in at their cursors. One the replay cannot follow keeps the
@@ -1107,7 +1113,7 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool,
             continue;
         }
         let ci = resolve_ci(&grammar.options, &rule.options);
-        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
+        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules, ci);
         // A base op reached from the replayed match carries the effect and
         // stores the char-stream ref in its `LexerView`, as in `try_`. The arm
         // re-selection matches only, so it carries the predicate half.
@@ -1220,17 +1226,13 @@ fn lexer_alt_has_action(alt: &LexerAlternative) -> bool {
     return alt.actions.iter_ref().any(|a| a.kind matches { Action });
 }
 
-/// Emit an alt's top-level actions (identity-translated) as statements.
+/// Emit an alt's top-level actions (staged) as statements.
 fn gen_lexer_alt_action_stmts(w: &mut CodeWriter, alt: &LexerAlternative) {
     for let a of &alt.actions {
         if !a.kind matches { Action } {
             continue;
         }
-        let body = match translate_lexer_action(&a.source.text) {
-            Ok(b) => b,
-            Err(e) => panic(`lexer action: ${e}`),
-        };
-        emit_lexer_action_stmt(w, &body);
+        emit_lexer_action_stmt(w, &a.source.text);
     }
 }
 
@@ -1295,9 +1297,8 @@ fn gen_lexer_winning_alt_fn(
     w.blank();
 }
 
-/// Emit a translated lexer-action body as a statement. The identity translator
-/// hands back a Wado expression/statement; normalize the trailing separator so
-/// a body written with or without `;` yields exactly one statement.
+/// Emit a staged lexer-action body as a statement, normalizing the trailing
+/// separator so a body written with or without `;` yields exactly one.
 fn emit_lexer_action_stmt(w: &mut CodeWriter, body: &String) {
     let trimmed = body.trim();
     if trimmed.ends_with(";") || trimmed.ends_with("}") {
@@ -1376,6 +1377,68 @@ pub fn collect_unhandled_lexer_alt_action_ids(
             continue;
         }
         push_all_lexer_element_action_ids(e, out);
+    }
+}
+
+/// Every semantic-predicate id `rule` carries, its referenced rules included:
+/// the lexer ATN inlines those, so their predicates share the rule's fate.
+pub fn collect_lexer_predicate_ids(rule: &LexerRule, all_rules: &List<LexerRule>, out: &mut List<i32>) {
+    let mut visiting: List<String> = [];
+    push_lexer_rule_predicate_ids(rule, all_rules, &mut visiting, out);
+}
+
+fn push_lexer_rule_predicate_ids(
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    visiting: &mut List<String>,
+    out: &mut List<i32>,
+) {
+    if visiting.contains(&rule.name) {
+        return;
+    }
+    visiting.push(rule.name);
+    for let alt of &rule.body {
+        push_lexer_alt_predicate_ids(alt, all_rules, visiting, out);
+    }
+}
+
+fn push_lexer_alt_predicate_ids(
+    alt: &LexerAlternative,
+    all_rules: &List<LexerRule>,
+    visiting: &mut List<String>,
+    out: &mut List<i32>,
+) {
+    for let a of &alt.actions {
+        if a.kind matches { Predicate } {
+            out.push(a.source.action_id);
+        }
+    }
+    for let e of &alt.elements {
+        push_lexer_element_predicate_ids(e, all_rules, visiting, out);
+    }
+}
+
+fn push_lexer_element_predicate_ids(
+    elem: &LexerElement,
+    all_rules: &List<LexerRule>,
+    visiting: &mut List<String>,
+    out: &mut List<i32>,
+) {
+    match *elem {
+        Group(alts) => {
+            for let alt of &alts {
+                push_lexer_alt_predicate_ids(alt, all_rules, visiting, out);
+            }
+        },
+        Repeat(rep) => push_lexer_element_predicate_ids(&rep.element, all_rules, visiting, out),
+        Not(n) => push_lexer_element_predicate_ids(&n.element, all_rules, visiting, out),
+        RuleRef(name) => {
+            if let Some(r) = find_lexer_rule(all_rules, &name) {
+                push_lexer_rule_predicate_ids(r, all_rules, visiting, out);
+            }
+        },
+        _ => {
+        },
     }
 }
 
@@ -1966,11 +2029,7 @@ fn gen_lexer_alt_seq(
 fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32) {
     for let a of actions {
         if a.kind matches { Action } && a.before_index == before {
-            let body = match translate_lexer_action(&a.source.text) {
-                Ok(b) => b,
-                Err(e) => panic(`lexer action: ${e}`),
-            };
-            emit_lexer_action_stmt(w, &body);
+            emit_lexer_action_stmt(w, &a.source.text);
         }
     }
 }
@@ -2656,7 +2715,7 @@ fn gen_lexer_elem(
                 gen_lexer_alts(w, &alts, all_rules, fail_action, ci, ea, hm, tail, replay);
             }
         },
-        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci, ea, hm),
+        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci, ea, hm, replay),
         Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action, ci, ea, hm),
     }
 }
@@ -2707,14 +2766,16 @@ fn gen_lexer_repeat(
     ci: bool,
     ea: bool,
     hm: bool,
+    replay: bool = false,
 ) {
     let id = w.next_id();
     let label = `rep_${id}`;
+    let break_label = `break ${label}`;
     if let Star = rep.kind {
         w.begin(&"loop");
         w.line(&`let rep_saved_${id} = pos;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm, false, false);
+        gen_lexer_repeat_iteration(w, rep, all_rules, &break_label, ci, ea, hm, replay, id);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_${id};`);
@@ -2722,11 +2783,14 @@ fn gen_lexer_repeat(
         w.end();
     }
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
+        gen_lexer_repeat_iteration(w, rep, all_rules, fail_action, ci, ea, hm, replay, id);
+        // The loop's own probe names, minted rather than derived: two iterations
+        // in one fn must not share a `rep_probe_`.
+        let loop_id = w.next_id();
         w.begin(&"loop");
         w.line(&`let rep_saved_${id} = pos;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm, false, false);
+        gen_lexer_repeat_iteration(w, rep, all_rules, &break_label, ci, ea, hm, replay, loop_id);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_${id};`);
@@ -2737,11 +2801,72 @@ fn gen_lexer_repeat(
         w.line(&`let opt_saved_${id} = pos;`);
         w.line(&`let mut opt_ok_${id} = false;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm, false, false);
+        gen_lexer_repeat_iteration(w, rep, all_rules, &break_label, ci, ea, hm, replay, id);
         w.line(&`opt_ok_${id} = true;`);
         w.end();
         w.line(&`if !opt_ok_${id} \{ pos = opt_saved_${id}; \}`);
     }
+}
+
+/// One iteration of a repeat: the inner element, and on the replay path a
+/// match-only probe of it first, so a non-matching iteration runs no action.
+fn gen_lexer_repeat_iteration(
+    w: &mut CodeWriter,
+    rep: &LexerRepeatElement,
+    all_rules: &List<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+    ea: bool,
+    hm: bool,
+    replay: bool,
+    id: i32,
+) {
+    if !replay {
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
+        return;
+    }
+    if !lexer_element_has_action(&rep.element, all_rules) {
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
+        // Same bound as the action-carrying form below: the replay stops where
+        // the match did, whatever the match consulted to stop there.
+        w.line(&`if pos > end \{ ${*fail_action}; \}`);
+        return;
+    }
+    let probe = `rep_probe_${id}`;
+    w.line(&`let ${probe}_saved = pos;`);
+    w.line(&`let mut ${probe}_ok = false;`);
+    w.begin(&`${probe}:`);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break ${probe}`, ci, ea, hm, false, false);
+    w.line(&`${probe}_ok = true;`);
+    w.end();
+    // The winner's extent bounds the replay: an iteration reaching past `end`
+    // is not part of the match, however the match pass came to stop there.
+    w.line(&`if !${probe}_ok || pos > end \{ pos = ${probe}_saved; ${*fail_action}; \}`);
+    w.line(&`pos = ${probe}_saved;`);
+    gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, true);
+}
+
+/// Whether `elem` carries an action anywhere inside it, counting what a rule
+/// reference inlines — the only reason an iteration needs its match-only probe.
+fn lexer_element_has_action(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
+    return match *elem {
+        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules)),
+        Repeat(rep) => lexer_element_has_action(&rep.element, all_rules),
+        Not(n) => lexer_element_has_action(&n.element, all_rules),
+        RuleRef(name) => match find_fragment(all_rules, &name) {
+            Some(f) => !fragment_is_recursive(f, all_rules)
+                && f.body.iter_ref().any(
+                |a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules),
+            ),
+            None => false,
+        },
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => false,
+    };
+}
+
+fn lexer_alt_has_any_action(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
+    return lexer_alt_has_action(alt)
+        || alt.elements.iter_ref().any(|e: &LexerElement| lexer_element_has_action(e, all_rules));
 }
 
 fn gen_lexer_non_greedy_repeat(
@@ -4450,6 +4575,42 @@ fn gen_lexer_emit_hook(
 fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &String) {
     w.line(&`ts.push_token(${*kind}, ${*start}, ${*end}, triv_lo, ts.trivia_mark());`);
     w.line(&"triv_lo = ts.trivia_mark();");
+}
+
+/// The display names ANTLR4's `Vocabulary` gives the token kinds, by kind id: a
+/// token defined by a single literal prints that literal, every other its name.
+pub fn vocab_display_names(
+    lexer_rules: &List<LexerRule>,
+    lit_tokens: &List<LitToken>,
+    kind_names: &List<String>,
+) -> List<String> {
+    let mut out: List<String> = [];
+    for let name of kind_names {
+        out.push(vocab_display_name(name, lexer_rules, lit_tokens));
+    }
+    return out;
+}
+
+fn vocab_display_name(kind_name: &String, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
+    // `lit_name`, not hand-quoting: `token_kind_name` renders a literal through
+    // it, and the two are one vocabulary — a `'` or a newline in the text has to
+    // come back escaped the same way in both.
+    for let lit of lit_tokens {
+        if lit.const_name == *kind_name {
+            return `${lit_name(lit.text)}`;
+        }
+    }
+    if let Some(rule_name) = kind_name.strip_prefix("TK_") {
+        if let Some(rule) = find_lexer_rule(lexer_rules, &rule_name) {
+            // The alias shape is exactly ANTLR4's `literalNames` entry: a rule
+            // whose whole body is one string literal.
+            if let Some(text) = lexer_alias_text(rule) {
+                return `${lit_name(text)}`;
+            }
+        }
+        return rule_name;
+    }
+    return *kind_name;
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {

@@ -55,6 +55,21 @@ pub struct FollowMaskEntry {
 /// truncation hurts precision rather than correctness).
 pub global FOLLOW_MASK_MAX_K: i32 = 4;
 
+/// The labeled rule calls of one rule whose capture an action reads: `spans`
+/// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
+pub struct RuleCaptures {
+    pub spans: List<String> = [],
+    pub nodes: List<String> = [],
+}
+
+impl RuleCaptures {
+    pub fn is_empty(&self) -> bool {
+        return self.spans.is_empty() && self.nodes.is_empty();
+    }
+}
+
+global NO_CAPTURES: RuleCaptures = RuleCaptures {};
+
 /// Codegen-time context shared across emit walkers. Holds the
 /// first / nullable / single-token / scannable caches, the
 /// `single_alt_owner` and `kind_set` registries, and the
@@ -218,6 +233,15 @@ pub struct GenContext {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32>,
+    /// Whether the group body being emitted has alternatives to choose between,
+    /// or null outside every group — an alt-initial predicate selects only there.
+    alt_choice: Option<bool>,
+    /// Vocabulary display names by kind id (`vocab_display_names`), the names an
+    /// expected-token set renders through.
+    vocab_names: List<String>,
+    /// The rendered expected-token set at the action site being emitted, or
+    /// empty where codegen cannot answer — a body reading it there is reported.
+    expected_names: String,
     /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
     /// fns: `[action_id, body]`. The dispatch calls `pred_<id>(p)` instead of
     /// inlining the condition, so the same fn is callable from every decision
@@ -225,6 +249,9 @@ pub struct GenContext {
     predicate_fns: List<[i32, String]>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
+    /// Per rule, the labeled rule calls whose capture an action reads. Their
+    /// value-struct fields are what `$x.text` / `$x.ctx` resolve to.
+    rule_captures: TreeMap<String, RuleCaptures>,
     /// Actual post-dedup bindings for the alternative currently being emitted:
     /// `[is_token, base, field]`. The action translator maps a `$ref` to its
     /// real local (`e_2`) instead of re-deriving `binding_name`, which diverges
@@ -282,9 +309,13 @@ impl GenContext {
             parser_superclass_declared: false,
             action_seen: [],
             predicate_gated: [],
+            alt_choice: null,
+            vocab_names: [],
+            expected_names: "",
             predicate_fns: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
+            rule_captures: TreeMap::new(),
             alt_bindings: [],
         };
     }
@@ -341,9 +372,46 @@ impl GenContext {
         return self.needs_scan_atn_seen;
     }
 
+    /// Install what each rule's actions read off its labeled rule calls
+    /// (`install_rule_captures`), before any value-struct decision is taken.
+    pub fn set_rule_captures(&mut self, captures: TreeMap<String, RuleCaptures>) {
+        self.rule_captures = captures;
+    }
+
+    pub fn rule_captures(&self, rule_name: &String) -> &RuleCaptures with stores[self] {
+        if !self.rule_captures.contains_key(*rule_name) {
+            return &NO_CAPTURES;
+        }
+        return &self.rule_captures[*rule_name];
+    }
+
+    /// Whether the rule being emitted captures `field`'s token range / builder
+    /// row — the gate on emitting the capture and on resolving a reference.
+    pub fn captures_span(&self, field: &String) -> bool {
+        return self.current_captures().spans.contains(field);
+    }
+
+    pub fn captures_node(&self, field: &String) -> bool {
+        return self.current_captures().nodes.contains(field);
+    }
+
+    fn current_captures(&self) -> &RuleCaptures with stores[self] {
+        let ridx = self.current_rule_index();
+        if ridx < 0 {
+            return &NO_CAPTURES;
+        }
+        return self.rule_captures(&self.parser_rules[ridx].name);
+    }
+
     pub fn set_rule_follow(&mut self, kinds: TreeMap<String, List<String>>, exact: bool) {
         self.rule_follow_kinds = kinds;
         self.rule_follow_exact = exact;
+    }
+
+    /// Whether the FOLLOW fixed point converged exactly, so a per-rule set is
+    /// the real one rather than an over-approximation.
+    pub fn rule_follow_is_exact(&self) -> bool {
+        return self.rule_follow_exact;
     }
 
     /// The rule's classical FOLLOW, for a probe whose scan ends at the
@@ -599,7 +667,9 @@ impl GenContext {
     }
 
     pub fn mark_predicate_gated(&mut self, id: i32) {
-        self.predicate_gated.push(id);
+        if !self.predicate_gated.contains(&id) {
+            self.predicate_gated.push(id);
+        }
     }
 
     /// Register a context-free gated predicate's body for a standalone
@@ -630,6 +700,34 @@ impl GenContext {
 
     pub fn is_predicate_gated(&self, id: i32) -> bool {
         return self.predicate_gated.contains(&id);
+    }
+
+    /// Enter a group's body, saying whether the group has alternatives to choose
+    /// between; returns the enclosing answer to restore on the way out.
+    pub fn enter_group_body(&mut self, multi_alt: bool) -> Option<bool> {
+        let outer = self.alt_choice;
+        self.alt_choice = Option::Some(multi_alt);
+        return outer;
+    }
+
+    pub fn leave_group_body(&mut self, outer: Option<bool>) {
+        self.alt_choice = outer;
+    }
+
+    /// Whether the body being emitted is one alternative of a choice. Unset
+    /// outside every group, where the rule's own alternative count answers.
+    pub fn in_alt_choice(&self) -> Option<bool> {
+        return self.alt_choice;
+    }
+
+    /// The rendered expected-token set the action about to be emitted would see.
+    /// Set around a site codegen can answer for, cleared everywhere else.
+    pub fn set_expected_names(&mut self, rendered: String) {
+        self.expected_names = rendered;
+    }
+
+    pub fn expected_names(&self) -> &String with stores[self] {
+        return &self.expected_names;
     }
 
     /// Record a prediction-strategy diagnostic, deduped on `(owner, message)`
@@ -696,6 +794,48 @@ impl GenContext {
     pub fn set_token_kinds(&mut self, kinds: TokenKinds) {
         self.token_kinds = kinds;
         self.kind_rank = [];
+    }
+
+    /// The `TK_*` names by kind id, the order a vocabulary table is built in.
+    pub fn token_kind_names(&self) -> &List<String> with stores[self] {
+        return &self.token_kinds.names;
+    }
+
+    /// Install the vocabulary display names (`vocab_display_names`) by kind id.
+    pub fn set_vocab_names(&mut self, names: List<String>) {
+        self.vocab_names = names;
+    }
+
+    /// ANTLR4's `getExpectedTokens().toString(getVocabulary())` for `kinds`: the
+    /// display names in kind order, braced unless the set holds one.
+    pub fn render_expected(&mut self, kinds: &List<String>) -> String {
+        if self.vocab_names.is_empty() {
+            return String::new();
+        }
+        // EOF is type -1 upstream, so it renders `<EOF>` before every real kind.
+        let eof = self.eof_kind_id();
+        let mut ids: List<i32> = [];
+        let mut names: List<String> = [];
+        for let k of kinds {
+            let id = self.token_kinds.intern(k);
+            if id == eof {
+                names = ["<EOF>"];
+            } else if id < self.vocab_names.len() && !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        for let id of &ids.sorted() {
+            names.push(self.vocab_names[*id]);
+        }
+        // ANTLR4 never reaches a state whose expected set is empty, so nothing
+        // here is not the set `{}` — it is codegen having no answer to give.
+        if names.is_empty() {
+            return String::new();
+        }
+        if names.len() == 1 {
+            return names[0];
+        }
+        return `\{${names.join(", ")}\}`;
     }
 
     /// Kind id of the EOF terminal (`TK_EOF`). Always present in a production

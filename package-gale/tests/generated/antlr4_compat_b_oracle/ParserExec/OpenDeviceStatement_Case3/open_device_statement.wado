@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1187,23 +1214,23 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     loop {
         let rep_saved_0 = pos;
         rep_0: {
-            let alts_saved_2 = pos;
-            let mut alts_ok_2 = false;
-            alts_2_0: {
-                pos = alts_saved_2;
-                if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
+            let alts_saved_3 = pos;
+            let mut alts_ok_3 = false;
+            alts_3_0: {
+                pos = alts_saved_3;
+                if pos >= chars.len() || chars[pos] != ' ' { break alts_3_0; }
                 pos += 1;
-                alts_ok_2 = true;
+                alts_ok_3 = true;
             }
-            if !alts_ok_2 {
-                alts_2_1: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
+            if !alts_ok_3 {
+                alts_3_1: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] != '\n' { break alts_3_1; }
                     pos += 1;
-                    alts_ok_2 = true;
+                    alts_ok_3 = true;
                 }
             }
-            if !alts_ok_2 { break rep_0; }
+            if !alts_ok_3 { break rep_0; }
             continue;
         }
         pos = rep_saved_0;
@@ -1429,6 +1456,14 @@ impl Parser {
 
     fn rule_string_tree(&self) -> String {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
     }
 
     fn rule_string_tree_final(&self) -> String {
@@ -1881,9 +1916,10 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            if p.peek_kind() == TK_OPT1 {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_OPT1 {
                 let opt1 = p.expect(TK_OPT1, &EMPTY_SYNC);
-            } else if p.peek_kind() == TK_OPT2 {
+            } else if grp_kind == TK_OPT2 {
                 let opt2 = p.expect(TK_OPT2, &EMPTY_SYNC);
             } else {
                 let opt3 = p.expect(TK_OPT3, &EMPTY_SYNC);

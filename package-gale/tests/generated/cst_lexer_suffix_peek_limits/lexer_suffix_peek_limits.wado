@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1656,45 +1683,45 @@ fn try_E(chars: &List<char>, start: i32) -> i32 {
 
 fn try_G(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_37: i32 = -1;
+    let mut accept_38: i32 = -1;
     if pos >= chars.len() || chars[pos] != 'A' { return -1; }
     pos += 1;
-    let peek_save_38 = pos;
-    let mut peek_ok_38 = false;
-    peek_38: {
+    let peek_save_39 = pos;
+    let mut peek_ok_39 = false;
+    peek_39: {
         pos = try_H(chars, pos);
-        if pos < 0 { break peek_38; }
-        peek_ok_38 = true;
+        if pos < 0 { break peek_39; }
+        peek_ok_39 = true;
     }
-    pos = peek_save_38;
-    if peek_ok_38 {
-        accept_37 = peek_save_38;
+    pos = peek_save_39;
+    if peek_ok_39 {
+        accept_38 = peek_save_39;
     }
     loop {
-        let la_saved_37 = pos;
-        la_rep_37: {
-            if pos >= chars.len() || chars[pos] != 'A' { break la_rep_37; }
+        let la_saved_38 = pos;
+        la_rep_38: {
+            if pos >= chars.len() || chars[pos] != 'A' { break la_rep_38; }
             pos += 1;
-            let peek_save_39 = pos;
-            let mut peek_ok_39 = false;
-            peek_39: {
+            let peek_save_40 = pos;
+            let mut peek_ok_40 = false;
+            peek_40: {
                 pos = try_H(chars, pos);
-                if pos < 0 { break peek_39; }
-                peek_ok_39 = true;
+                if pos < 0 { break peek_40; }
+                peek_ok_40 = true;
             }
-            pos = peek_save_39;
-            if peek_ok_39 {
-                accept_37 = peek_save_39;
+            pos = peek_save_40;
+            if peek_ok_40 {
+                accept_38 = peek_save_40;
             }
             continue;
         }
-        pos = la_saved_37;
+        pos = la_saved_38;
         break;
     }
-    if accept_37 < 0 {
+    if accept_38 < 0 {
         return -1;
     }
-    pos = accept_37;
+    pos = accept_38;
     pos = try_H(chars, pos);
     if pos < 0 { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     return pos;
@@ -1710,15 +1737,15 @@ fn try_F(chars: &List<char>, start: i32) -> i32 {
 fn try_H(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    let not_saved_40 = pos;
-    let mut not_matched_40 = false;
-    not_40: {
-        if pos >= chars.len() || chars[pos] != 'a' { break not_40; }
+    let not_saved_41 = pos;
+    let mut not_matched_41 = false;
+    not_41: {
+        if pos >= chars.len() || chars[pos] != 'a' { break not_41; }
         pos += 1;
-        not_matched_40 = true;
+        not_matched_41 = true;
     }
-    pos = not_saved_40;
-    if not_matched_40 { return -1; }
+    pos = not_saved_41;
+    if not_matched_41 { return -1; }
     pos += 1;
     return pos;
 }

@@ -14,5 +14,9 @@ r : x=(ID) '+' y=(ID) { p.emit(`${$x.text}-${$y.text}`); } ;
 
 s : items+=(ID)+ EOF ;
 
+// A scalar label over a group that carries several elements: lower peels the
+// label off the body op, so the surface element has to be peeled with it.
+t : n=(ID ',')+ EOF ;
+
 ID : [a-z]+ ;
 WS : ' ' -> skip ;

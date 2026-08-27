@@ -203,6 +203,63 @@ ${*rule_src}
     );
 }
 
+test "java action: only the vocabulary-rendered expected set folds" {
+    // `IntervalSet.toString()` renders raw token numbers and `toString(boolean)`
+    // a different form again; only the vocabulary overload is what codegen has.
+    let rule = &"r : ID ;";
+    let vocab = translate_action(
+        &ActionLanguage::Java,
+        &parse(`grammar T;
+${*rule}
+`).unwrap().parser_rules[0],
+        &parse(`grammar T;
+${*rule}
+`).unwrap().parser_rules,
+        &"System.out.println(getExpectedTokens().toString(getVocabulary()));",
+        false,
+        &NO_BINDINGS,
+        &"T",
+        &NO_METHODS,
+        &"{'a'}",
+    );
+    assert vocab matches { Ok(code) && code.contains("{'a'}") }, `${vocab:?}`;
+
+    for let body of &[
+        "System.out.println(getExpectedTokens().toString());", "System.out.println(getExpectedTokens().toString(true));",
+    ] {
+        let out = translate_action(
+            &ActionLanguage::Java,
+            &parse(`grammar T;
+${*rule}
+`).unwrap().parser_rules[0],
+            &parse(`grammar T;
+${*rule}
+`).unwrap().parser_rules,
+            body,
+            false,
+            &NO_BINDINGS,
+            &"T",
+            &NO_METHODS,
+            &"{'a'}",
+        );
+        assert out matches { Err(_) }, `${*body} must not fold: ${out:?}`;
+    }
+}
+
+test "java action: an assert message carries over only as a literal" {
+    let rule = &"r : ID ;";
+    let plain = java_action(&"assert 1 == 1;", rule, false);
+    assert plain == "assert 1 == 1;", `out: '${plain}'`;
+
+    let literal = java_action(&"assert 1 == 1 : \"nope\";", rule, false);
+    assert literal == "assert 1 == 1, \"nope\";", `out: '${literal}'`;
+
+    // Java stringifies any expression there; dropping it would weaken the
+    // assertion with nothing said.
+    let expr = java_action_res(&"assert 1 == 1 : someValue;", rule, false);
+    assert expr matches { Err(_) }, `a non-literal message must be refused: ${expr:?}`;
+}
+
 test "java action: println appends a newline" {
     let out = java_action(&"System.out.println(\"enum\");", &"a : ID ;", false);
     assert out == "p.emit(`enum\\n`);", `out: '${out}'`;
@@ -359,4 +416,56 @@ a : A ;
 a : A ;
 ").unwrap();
     assert !grammar_has_superclass(&plain), "grammar without superClass must not be detected";
+}
+
+test "a ctx token accessor folds only for a token the alternative always matches" {
+    // `((SContext)$ctx).A() != null` asks whether the alternative matched `A`:
+    // a constant for a mandatory element, unanswerable for an optional one.
+    let bindings: List<[bool, String, String]> = [
+        [true, "a", "a"],
+    ];
+    let g = parse("grammar T;
+s : ID A ;
+ID : [a-z]+ ;
+A : '!' ;
+").unwrap();
+    let lang = ActionLanguage::Java;
+    let mandatory = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"((SContext)$ctx).A() != null",
+        false,
+        &bindings,
+        &g.name,
+        &NO_METHODS,
+        true,
+    );
+    assert mandatory matches { Ok(code) && code == "true" }, `${mandatory:?}`;
+
+    // Before the alternative's last element the token may not have matched
+    // yet — ANTLR answers null there, so the constant is not this one.
+    let mid_alt = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"((SContext)$ctx).A() != null",
+        false,
+        &bindings,
+        &g.name,
+        &NO_METHODS,
+    );
+    assert mid_alt matches { Err(_) }, `a mid-alternative position must not fold: ${mid_alt:?}`;
+
+    let optional = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"((SContext)$ctx).A() != null",
+        false,
+        &NO_BINDINGS,
+        &g.name,
+        &NO_METHODS,
+    );
+    assert optional matches { Err(_) }, `an unbound token must not fold: ${optional:?}`;
 }

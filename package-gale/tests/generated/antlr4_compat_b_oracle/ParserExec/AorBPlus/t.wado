@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1137,13 +1164,13 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -1151,23 +1178,23 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_2 = pos;
-    let mut alts_ok_2 = false;
-    alts_2_0: {
-        pos = alts_saved_2;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
+    let alts_saved_4 = pos;
+    let mut alts_ok_4 = false;
+    alts_4_0: {
+        pos = alts_saved_4;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_4_0; }
         pos += 1;
-        alts_ok_2 = true;
+        alts_ok_4 = true;
     }
-    if !alts_ok_2 {
-        alts_2_1: {
-            pos = alts_saved_2;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
+    if !alts_ok_4 {
+        alts_4_1: {
+            pos = alts_saved_4;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_4_1; }
             pos += 1;
-            alts_ok_2 = true;
+            alts_ok_4 = true;
         }
     }
-    if !alts_ok_2 { return -1; }
+    if !alts_ok_4 { return -1; }
     return pos;
 }
 
@@ -1353,6 +1380,14 @@ impl Parser {
 
     fn rule_string_tree(&self) -> String {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
     }
 
     fn rule_string_tree_final(&self) -> String {
@@ -1561,6 +1596,7 @@ impl Parser {
 }
 
 fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1578,10 +1614,8 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
                 pos += 1;
                 break sg_0;
             }
-            return -1;
+            pos = gp_0;
         }
-    } else {
-        return -1;
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -1609,6 +1643,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -1639,18 +1674,28 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                             pos += 1;
                             break sg_2;
                         }
-                        break rep_scan;
+                        pos = gp_2;
                     }
-                } else {
-                    break rep_scan;
                 }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_ID) || (p.peek_kind() == TK_INT)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
+        }
         _plus_first = false;
-        let id_or_int = p.expect_set(&SYNC_0);
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_ID {
+            let id = p.expect(TK_ID, &EMPTY_SYNC);
+        } else {
+            let int = p.expect(TK_INT, &EMPTY_SYNC);
+            if !p.speculating {
+                
+            }
+        }
     }
     if !p.speculating {
         p.emit(`${p.rule_text(_rule_start_tok)}\n`);

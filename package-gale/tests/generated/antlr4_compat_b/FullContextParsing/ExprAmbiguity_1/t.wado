@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1140,14 +1167,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\r' | '\n' | '\t' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { ' ' | '\r' | '\n' | '\t' })) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !((chars[pos] matches { ' ' | '\r' | '\n' | '\t' })) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -1350,6 +1377,14 @@ impl Parser {
 
     fn rule_string_tree(&self) -> String {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
     }
 
     fn rule_string_tree_final(&self) -> String {
@@ -1557,6 +1592,10 @@ impl Parser {
     }
 }
 
+struct SVals {
+    _node_expr: i32 = -1,
+}
+
 struct ExprVals {
     _p: i32 = 0,
 }
@@ -1607,20 +1646,26 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> SVals {
+    let mut vals = SVals {};
+    vals._node_expr = p.b.checkpoint();
     let expr = _parse_expr(p, follow, 0);
-    return;
+    if !p.speculating {
+        p.emit(`${p.rule_tree_at(vals._node_expr)}\n`);
+    }
+    return vals;
 }
 
-fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> SVals {
+    if p.recovering { return SVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p, follow);
+    let __vals = _parse_s__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");
     }
+    return __vals;
 }
 
 fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, _p: i32 = 0) -> ExprVals {
@@ -1661,12 +1706,16 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if p.peek_kind() == TK_LIT_STAR {
+        if !((p.peek_kind() == TK_LIT_STAR && (5 >= vals._p)) || (p.peek_kind() == TK_LIT_PLUS && (4 >= vals._p))) { break; }
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_LIT_STAR && (5 >= vals._p) {
             let star = p.expect(TK_LIT_STAR, &SYNC_1);
             let expr = _parse_expr(p, follow, 6);
-        } else {
+        } else if grp_kind == TK_LIT_PLUS && (4 >= vals._p) {
             let plus = p.expect(TK_LIT_PLUS, &SYNC_1);
             let expr = _parse_expr(p, follow, 5);
+        } else {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
         }
     }
     return vals;
@@ -1707,7 +1756,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_s(p); });
 }
 
 pub fn parse_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

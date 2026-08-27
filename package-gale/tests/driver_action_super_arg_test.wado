@@ -1,0 +1,30 @@
+//! A superClass operation that takes an argument: the call sites settle the
+//! signature — one `String` here — so the base is wired.
+
+use sa from "./grammars/wado_super_arg.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_super_arg" },
+    };
+use { ArgBase, Parser } from "./grammars/wado_super_arg.g4";
+
+struct WordBase {
+}
+
+impl ArgBase for WordBase {
+    fn word(&self, p: &Parser, a0: String) -> bool {
+        resume p.token_text(p.lt(1)) == a0;
+    }
+}
+
+fn parse_kw(input: &String) -> String {
+    let mut base = WordBase {};
+    with ArgBase => &mut base do {
+        return sa::parse_kw(input).output;
+    };
+}
+
+test "the base sees the argument its call site passed" {
+    assert parse_kw(&"of") == "of", `output: '${parse_kw(&"of")}'`;
+    assert parse_kw(&"in") == "in", `output: '${parse_kw(&"in")}'`;
+    assert parse_kw(&"x") == "other", `output: '${parse_kw(&"x")}'`;
+}

@@ -26,13 +26,13 @@ use { to_snake_case } from "./ident.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
-/// `has_args` marks a call site that passes arguments: the rewrite drops them
-/// and the interface has no type to declare them with, so a base carrying one
-/// is refused rather than wired to a signature that loses an argument.
+/// `params` are the Wado types the call sites agree on, inferred from their
+/// literal arguments; `bad_args` marks sites that settle no signature at all.
 pub struct SuperOp {
     pub name: String,
     pub is_predicate: bool,
-    pub has_args: bool,
+    pub params: List<String> = [],
+    pub bad_args: bool = false,
     /// The same name reached from both a predicate and an action body: the two
     /// call forms differ, so one site would mismatch the operation's signature.
     pub mixed_role: bool = false,
@@ -51,8 +51,8 @@ pub enum SuperSite {
 /// One `this.<method>(...)` call site found in a body.
 pub struct SuperCall {
     pub name: String,
-    /// The call passes something — `this.m(2)`, not `this.m()`.
-    pub has_args: bool,
+    /// The arguments as written, one per top-level comma-separated slot.
+    pub args: List<String> = [],
 }
 
 /// One action or predicate body, with the kind that fixes its call form.
@@ -185,7 +185,15 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
         }
         i = match this_call_at(&chars, i, n) {
             Some([name, close]) => {
-                out.push(SuperCall { name, has_args: call_has_args(&chars, i, close) });
+                let args = call_args(&chars, i, close);
+                // The rewrite descends into an argument, so the operations a
+                // nested call needs have to be collected from there too.
+                for let a of &args {
+                    for let c of &find_this_calls(a) {
+                        out.push(*c);
+                    }
+                }
+                out.push(SuperCall { name, args });
                 close;
             },
             None => i + 1,
@@ -244,7 +252,7 @@ fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] 
             return [k + 1, spans];
         }
         if chars[k] == '$' && k + 1 < n && chars[k + 1] == '{' {
-            let close = match_brace(chars, k + 1, n);
+            let close = match_delim(chars, k + 1, n, '{', '}');
             assert close > k + 1, "match_brace never returns before the brace it opened";
             spans.push([k + 2, close - 1]);
             k = close;
@@ -255,34 +263,45 @@ fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] 
     return [n, spans];
 }
 
-/// The index just past the `}` matching the `{` at `open`.
-fn match_brace(chars: &List<char>, open: i32, n: i32) -> i32 {
+/// The end of the string or template span opening at `i`, or `null` where none
+/// does. What a scanner must step over whole: a delimiter, a comma, or a quote
+/// inside one is text, not structure.
+pub fn opaque_span_end(chars: &List<char>, i: i32, n: i32) -> Option<i32> {
+    return match chars[i] {
+        '"' | '\'' => Option::Some(scan_string(chars, i)),
+        '`' => Option::Some(scan_template(chars, i, n).0),
+        _ => null,
+    };
+}
+
+/// Scan to the delimiter matching the one at `open`, or `n` when unbalanced —
+/// a body the g4 parser would already have rejected.
+fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_ch: char) -> i32 {
     let mut depth = 0;
-    for let mut i = open; i < n; i += 1 {
-        match chars[i] {
-            '"' | '\'' => i = scan_string(chars, i) - 1,
-            '`' => {
-                let [end, _] = scan_template(chars, i, n);
-                i = end - 1;
-            },
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return i + 1;
-                }
-            },
-            _ => {
-            },
+    let mut i = open;
+    while i < n {
+        if let Some(end) = opaque_span_end(chars, i, n) {
+            i = end;
+            continue;
         }
+        let c = chars[i];
+        if c == open_ch {
+            depth += 1;
+        } else if c == close_ch {
+            depth -= 1;
+            if depth == 0 {
+                return i + 1;
+            }
+        }
+        i += 1;
     }
     return n;
 }
 
-/// Whether the call spanning `[start, close)` passes anything between its
-/// parentheses. Only the receiver and the method name precede the first `(`,
-/// so that one opens the argument list.
-fn call_has_args(chars: &List<char>, start: i32, close: i32) -> bool {
+/// The arguments the call spanning `[start, close)` passes, split on its
+/// top-level commas. Only the receiver and the method name precede the first
+/// `(`, so that one opens the argument list.
+fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
     let mut open = start;
     for let mut i = start; i < close; i += 1 {
         if chars[i] == '(' {
@@ -290,12 +309,114 @@ fn call_has_args(chars: &List<char>, start: i32, close: i32) -> bool {
             break;
         }
     }
-    for let mut i = open + 1; i + 1 < close; i += 1 {
-        if !chars[i].is_ascii_whitespace() {
-            return true;
+    let mut out: List<String> = [];
+    let mut depth = 0;
+    let mut arg_start = open + 1;
+    let mut i = open + 1;
+    while i + 1 < close {
+        if let Some(end) = opaque_span_end(chars, i, close) {
+            i = end;
+            continue;
+        }
+        match chars[i] {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' => {
+                if depth == 0 {
+                    out.push(collect_range(chars, arg_start, i).trim());
+                    arg_start = i + 1;
+                }
+            },
+            _ => {
+            },
+        }
+        i += 1;
+    }
+    let last = collect_range(chars, arg_start, close - 1).trim();
+    if !last.is_empty() || !out.is_empty() {
+        out.push(last);
+    }
+    return out;
+}
+
+/// Whether `text` is one whole string literal, not an expression that merely
+/// starts and ends with a quote (`"a" + x + "b"`) — that one has no evident
+/// type, and splicing it would emit the host expression verbatim.
+fn is_string_literal(text: &String) -> bool {
+    let chars: List<char> = text.chars().collect();
+    if chars.len() < 2 || chars[0] != '"' || chars[chars.len() - 1] != '"' {
+        return false;
+    }
+    return scan_string(&chars, 0) == chars.len();
+}
+
+/// The same question for a Wado template literal, which is a `String` however
+/// its holes evaluate.
+fn is_template_literal(text: &String) -> bool {
+    let chars: List<char> = text.chars().collect();
+    if chars.len() < 2 || chars[0] != '`' || chars[chars.len() - 1] != '`' {
+        return false;
+    }
+    return scan_template(&chars, 0, chars.len()).0 == chars.len();
+}
+
+/// Whether the digit run from `first` is an `i32`. A literal outside the range
+/// would be spliced into an `i32` parameter and fail to compile, so it has no
+/// evident type either. Equal-length decimal runs compare lexicographically.
+fn fits_i32(digits: &List<char>, first: i32, negative: bool) -> bool {
+    let mut start = first;
+    while start + 1 < digits.len() && digits[start] == '0' {
+        start += 1;
+    }
+    let limit: List<char> = if negative { "2147483648" } else { "2147483647" }.chars().collect();
+    if digits.len() - start != limit.len() {
+        return digits.len() - start < limit.len();
+    }
+    for let mut i = 0; i < limit.len(); i += 1 {
+        if digits[start + i] != limit[i] {
+            return digits[start + i] < limit[i];
         }
     }
-    return false;
+    return true;
+}
+
+/// The Wado type a literal argument evidently has, or `null` for anything a
+/// signature would have to guess at.
+fn literal_arg_type(text: &String) -> Option<String> {
+    if text.is_empty() {
+        return null;
+    }
+    if is_string_literal(text) || is_template_literal(text) {
+        return Option::Some("String");
+    }
+    if *text == "true" || *text == "false" {
+        return Option::Some("bool");
+    }
+    let digits: List<char> = text.chars().collect();
+    let negative = digits[0] == '-';
+    let first = if negative { 1 } else { 0 };
+    if digits.len() > first && digits.iter_ref().skip(first).all(|c: &char| *c matches { '0'..='9' }) {
+        if !fits_i32(&digits, first, negative) {
+            return null;
+        }
+        return Option::Some("i32");
+    }
+    return null;
+}
+
+/// The Wado types of a call's arguments, or `null` when one has no evident
+/// type — the whole call is then unrepresentable, not just that argument.
+fn call_param_types(args: &List<String>) -> Option<List<String>> {
+    let mut out: List<String> = [];
+    for let a of args {
+        match literal_arg_type(a) {
+            Some(t) => out.push(t),
+            None => {
+                return null;
+            },
+        }
+    }
+    return Option::Some(out);
 }
 
 /// If a `this.<method>(` call starts at `i` (whitespace allowed between
@@ -334,7 +455,7 @@ fn call_at(chars: &List<char>, i: i32, n: i32, receiver: &List<char>, sep: &List
         return null;
     }
     let name = collect_range(chars, name_start, name_end);
-    return Option::Some([name, match_paren(chars, paren, n)]);
+    return Option::Some([name, match_delim(chars, paren, n, '(', ')')]);
 }
 
 /// Whether `word` sits at `i` as a whole word (not part of a longer ident).
@@ -389,30 +510,59 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
-/// role. A later occurrence still contributes `has_args` and `mixed_role`,
-/// either of which makes the operation unrepresentable.
+/// role and its signature. A later occurrence still contributes `bad_args` and
+/// `mixed_role`, either of which makes the operation unrepresentable.
 pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
     let is_predicate = kind matches { Predicate };
+    let params = call_param_types(&call.args);
     for let mut i = 0; i < ops.len(); i += 1 {
         if ops[i].name == call.name {
-            ops[i].has_args = ops[i].has_args || call.has_args;
             ops[i].mixed_role = ops[i].mixed_role || ops[i].is_predicate != is_predicate;
+            match &params {
+                Some(p) => {
+                    if *p != ops[i].params {
+                        ops[i].bad_args = true;
+                    }
+                },
+                None => ops[i].bad_args = true,
+            }
             return;
         }
     }
-    ops.push(SuperOp { name: call.name, is_predicate, has_args: call.has_args });
+    match params {
+        Some(p) => ops.push(SuperOp { name: call.name, is_predicate, params: p }),
+        None => ops.push(SuperOp { name: call.name, is_predicate, bad_args: true }),
+    }
 }
 
-/// Operations called with arguments anywhere in the grammar. A base is wired
-/// only when this is empty (`action.md`, "SuperClass — an effect interface").
-pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
+/// A base is wired only when this is empty (`action.md`, "SuperClass — an
+/// effect interface").
+pub fn super_ops_without_signature(ops: &List<SuperOp>) -> List<String> {
     let mut out: List<String> = [];
     for let op of ops {
-        if op.has_args {
+        if op.bad_args {
             out.push(op.name);
         }
     }
     return out;
+}
+
+/// The parameter list an operation's inferred argument types declare, after the
+/// receiver: `, a0: String`. Empty for a zero-argument operation.
+fn super_op_params(op: &SuperOp) -> String {
+    let mut typed: List<String> = [];
+    for let mut i = 0; i < op.params.len(); i += 1 {
+        typed.push(`a${i}: ${op.params[i]}`);
+    }
+    return after_receiver(&typed);
+}
+
+/// What an operation's signature or call site appends after the receiver.
+fn after_receiver(items: &List<String>) -> String {
+    if items.is_empty() {
+        return String::new();
+    }
+    return `, ${items.join(", ")}`;
 }
 
 /// The recognizer methods a base may override.
@@ -529,14 +679,14 @@ pub fn parser_super_refusal(ops: &List<SuperOp>) -> String {
     return "";
 }
 
-/// The refusal both recognizers share: the rewrite drops call arguments and the
-/// interface has no type to declare them with.
+/// The refusal both recognizers share: a call site is an operation's only
+/// signature source, so sites that settle none leave nothing to declare.
 fn args_refusal(ops: &List<SuperOp>) -> String {
-    let with_args = super_ops_with_args(ops);
-    if with_args.is_empty() {
+    let unsettled = super_ops_without_signature(ops);
+    if unsettled.is_empty() {
         return "";
     }
-    return `is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them`;
+    return `is called with arguments (${unsettled.join(", ")}) whose types its call sites do not settle; a base operation has no other signature source`;
 }
 
 /// Operations reached from an action body rather than a predicate.
@@ -561,7 +711,7 @@ pub fn collect_parser_super_ops(grammar: &Grammar) -> List<SuperOp> {
 pub fn gen_parser_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
     w.line(&`pub interface ${*name} {`);
     for let op of ops {
-        w.line(&`    fn ${to_snake_case(&op.name)}(p: &Parser) -> bool;`);
+        w.line(&`    fn ${to_snake_case(&op.name)}(p: &Parser${super_op_params(op)}) -> bool;`);
     }
     w.line(&"}");
     w.blank();
@@ -716,9 +866,9 @@ pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp
     w.line(&`pub interface ${*name} {`);
     for let op of ops {
         if op.is_predicate {
-            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView) -> bool;`);
+            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView${super_op_params(op)}) -> bool;`);
         } else {
-            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer);`);
+            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer${super_op_params(op)});`);
         }
     }
     gen_super_hooks(w);
@@ -743,14 +893,14 @@ pub fn super_emit_hook_expr(base_name: &String, channel: &String) -> String {
 }
 
 /// The ambient operation call for a call site, reading the locals in scope
-/// there. Arguments are dropped.
-pub fn super_call_expr(base_name: &String, method: &String, site: SuperSite) -> String {
+/// there and passing `args` after the receiver.
+pub fn super_call_expr(base_name: &String, method: &String, site: SuperSite, args: &List<String>) -> String {
     let recv = match site {
         LexerPredicate => "LexerView { chars, start, pos }",
         LexerAction => "LexerView { chars, start, pos }, lx",
         ParserPredicate => "p",
     };
-    return `${*base_name}::${to_snake_case(method)}(${recv})`;
+    return `${*base_name}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;
 }
 
 /// Rewrite every lexer action / predicate body in place, turning each
@@ -817,7 +967,14 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
         }
         i = match this_call_at(&chars, i, n) {
             Some([method, close]) => {
-                out.push_str(&super_call_expr(base_name, &method, site));
+                // An argument is a body of its own: a call nested in one has to
+                // reach its operation too, or `this` survives into generated
+                // Wado, where nothing receives it.
+                let mut args: List<String> = [];
+                for let a of &call_args(&chars, i, close) {
+                    args.push(rewrite_this_calls(a, base_name, site));
+                }
+                out.push_str(&super_call_expr(base_name, &method, site, &args));
                 close;
             },
             None => {
@@ -827,29 +984,6 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
         };
     }
     return out;
-}
-
-/// Index just past the `)` matching the `(` at `open`, skipping nested parens
-/// and string spans. Returns `n` if unbalanced (a malformed body the g4 parser
-/// would already have rejected).
-fn match_paren(chars: &List<char>, open: i32, n: i32) -> i32 {
-    let mut depth = 0;
-    for let mut i = open; i < n; i += 1 {
-        match chars[i] {
-            // Skip a string span; `- 1` because the loop step re-adds one.
-            '"' | '\'' => i = scan_string(chars, i) - 1,
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 {
-                    return i + 1;
-                }
-            },
-            _ => {
-            },
-        }
-    }
-    return n;
 }
 
 /// Copy `chars[start..end]` into `out` and return `end` — the scanner's next

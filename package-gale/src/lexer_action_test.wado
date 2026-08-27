@@ -202,13 +202,50 @@ WS : ' ' -> skip ;
     assert out.contains("sel_alt_"), "the replay selects the winning arm first";
 }
 
-test "a lexer action under a Repeat still warns (the replay cannot place it)" {
-    assert unsupported_count(&"lexer grammar L;
+test "a predicate in an ATN-class lexer rule is refused, not silently dropped" {
+    // The rule routes to `latn_match`, and the lexer ATN has no predicate
+    // transition, so without a refusal it matches input the predicate rejects.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+CMT : '/*' ( CMT | . )+? { false }? '*/' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 1, "an ATN-class rule's predicate must surface UnsupportedAction";
+}
+
+test "an ATN-class lexer rule with no predicate stays byte-identical" {
+    let src = &"lexer grammar L;
+options { language = Wado; }
+CMT : '/*' ( CMT | . )+? '*/' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "the refusal must not fire on a predicate-free ATN-class rule";
+}
+
+test "an unresolvable lexer $-attribute is reported, not a generator panic" {
+    // Staging runs where a `ctx` is in hand; emit has none to warn through.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type($nope) } ;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "an unresolvable $-attribute must surface UnsupportedAction";
+    assert !gen_source(src).contains("$nope"), "the untranslatable body must not be emitted";
+}
+
+test "a lexer action under a Repeat runs once per iteration" {
+    // The replay probes each iteration match-only before running it with the
+    // action, so an iteration that does not match leaves no trace.
+    let src = &"lexer grammar L;
 options { language = Wado; }
 A : ('a' { lx.set_type(TK_B) })+ ;
 B : 'b' ;
 WS : ' ' -> skip ;
-") == 1, "an action under a repeat must surface UnsupportedAction";
+";
+    assert unsupported_count(src) == 0, "an action under a plain repeat no longer warns";
+    let out = gen_source(src);
+    assert out.contains("rep_probe_"), "each replayed iteration is probed match-only first";
+    assert out.contains("lx.set_type(TK_B);"), "the action is emitted inside the replayed loop";
 }
 
 test "a multi-alt lexer rule runs each alt's top-level action (no warn)" {
@@ -229,11 +266,11 @@ WS : ' ' -> skip ;
 }
 
 test "a rule the replay cannot follow keeps the winning_alt helper" {
-    // The `Repeat` rules out the replay, so alt selection falls back to the
-    // match-only helper and the actions run flat, at the end of the match.
+    // A lookahead-aware repeat rewrites the sequence the replay would walk, so
+    // alt selection falls back to the helper and the actions run flat.
     let src = gen_source(&"lexer grammar L;
 options { language = Wado; }
-A : 'a'+ { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
+A : 'a' ~('b')+ 'c' { lx.set_type(TK_X) } | 'd' { lx.set_type(TK_Y) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ");
@@ -405,21 +442,44 @@ WS : ' ' -> skip ;
     assert !src.contains("act_type"), "a predicate-only base emits no action-effect surface";
 }
 
-test "a superClass call with arguments is refused, not silently stripped" {
-    // The call rewrite drops arguments and the generated interface has no type
-    // to declare them with, so wiring the base would run `set_channel` with the
-    // `2` lost. Refuse the base and say so.
+test "a superClass call's literal arguments settle its operation's signature" {
     let src = &"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : 'a' { this.setChannel(2) } ;
 WS : ' ' -> skip ;
 ";
+    assert unsupported_count(src) == 0, "a literal argument needs no other signature source";
+    let out = gen_source(src);
+    assert out.contains("fn set_channel(view: LexerView, lx: &mut Lexer, a0: i32);"), out;
+    assert out.contains("B::set_channel(LexerView { chars, start, pos }, lx, 2)"), out;
+}
+
+test "a superClass call whose argument has no evident type is refused" {
+    // The interface would have to invent the type, so wiring the base would run
+    // `set_channel` against a signature nothing settled. Refuse and say so.
+    let src = &"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.setChannel(n + 1) } ;
+WS : ' ' -> skip ;
+";
     // Two reports: the refused base, and the action that can no longer run.
-    assert unsupported_count(src) == 2, "an argument-passing base call must be reported";
+    assert unsupported_count(src) == 2, "an unsettled base call must be reported";
     let out = gen_source(src);
     assert !out.contains("pub interface B"), "no interface is emitted for a base Gale cannot represent";
-    assert !out.contains("B::set_channel"), "the call must not be emitted with its argument dropped";
+    assert !out.contains("B::set_channel"), "the call must not be emitted against a guessed signature";
     assert !out.contains("this.setChannel"), "a body naming `this` must not reach the generated module";
+}
+
+test "an expression that merely starts and ends with a quote is not a literal" {
+    let src = &"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.setChannel(\"x\" + y + \"z\") } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 2, "concatenation settles no signature either";
+    let out = gen_source(src);
+    assert !out.contains("pub interface B"), "no interface for a base whose call takes an unrepresentable argument";
+    assert !out.contains("+ y +"), "the host expression must not be spliced into the call";
 }
 
 test "a zero-argument base call is still wired" {

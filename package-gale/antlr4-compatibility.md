@@ -477,6 +477,55 @@ the same predicate limit as the repeat path. Fixtures:
 `lexer_alt_suffix_longest.g4`, `lexer_alt_suffix_shapes.g4`,
 `lexer_suffix_peek_limits.g4`.
 
+### One dispatch emitter, one no-match policy
+
+Every decision over a group's alternatives — general or rule-reference shape,
+overlapping first sets or not, standing alone or as a repeat's body — is
+emitted by one function, and the only thing its callers vary is the body of a
+branch and what happens when no branch is taken. That no-match answer is the
+policy, stated once per call site, and it has three values:
+
+- **Required** — the group must match here, so a token no alternative admits is
+  a no-viable-alternative, over the union of the alternatives' first sets.
+- **Guaranteed** — the caller has already proved a match is viable, so the last
+  branch needs no condition of its own and there is no report to make. Both
+  callers scan before entering: a repeat's loop guard, and an optional's entry
+  check. An optional group therefore never needs a policy of its own — its own
+  guard is what skips it. A gated alternative forces Guaranteed back to
+  Required: a false predicate must not land in an unconditional `else` meant
+  for the alternative it excludes.
+- **Looped** — a loop iteration, carrying the mandatory-first-iteration flag or
+  none. It is what a repeat states, and `open_group_entry` discharges it into
+  one of the two above: the loop's own obligations are emitted there, and the
+  dispatch is left the answer for the position they do not cover.
+
+Guaranteed rests on that scan, and a `+`'s first iteration is the one position
+no scan covers — it is mandatory, so the loop enters it unguarded. Both answers
+it needs are emitted where the flag still reads true, before the body:
+
+- Gated, single-alternative body — no dispatch to force Guaranteed back, so the
+  gate reports. Without it the gate registers the predicate, the body drops its
+  inline guard, and the first iteration matches what the predicate excludes.
+- Ungated — the dispatch has no report at all, and where every branch is
+  conditional (one overlap group, so none takes the rest) it has no arm either:
+  `( A B | A C )+ E` matched nothing on `E` and said nothing, so the `+`
+  accepted zero iterations. A first-set test over the same partition reports it.
+
+Splitting the policy across per-shape emitters is what let a required group
+take no alternative, append nothing, and report nothing while the sequence
+continued as though it had matched — the shape reached first-set-only
+positions for years and reached predicate-gated ones as soon as gating landed.
+
+Two decisions are deliberately not that emitter, because their inputs are not
+a group's alternatives:
+
+- **A rule's own alternatives** are independent attempts that fall through to
+  the next on a body failure, closing with the rule's error fallback, rather
+  than a chain that commits on a condition.
+- **A group inside a left-recursive suffix** is walked by the GIR walker off
+  the dispatch plan lower baked (`MultiAltDispatch`), not off first sets, and
+  closes with `expect_set` over the union — a report, but not the same one.
+
 ### Static LL prediction — the runtime FOLLOW gate
 
 Gale's parser-side prediction is a static FOLLOW-based repair on top of
@@ -621,6 +670,12 @@ relevant sites.
     `('>' '>')?` is measurable from what follows only when one token wide. A
     shape no K-prefix walk measures falls back to the candidate's own suffix
     scan. Fixtures `lr_overlap_{multi_token,opaque_op,nullable_carrier}.g4`.
+12. A repeat's body op and its surface element are paired through
+    `peel_repeat_body_label`. The Repeat supplies the `List<>` typing itself, so
+    both label forms lose their wrapper on the op side; peeling one form and not
+    the other left the pair disagreeing about the shape, which aborted codegen
+    for `n=( A B )+` and narrowed the iter-follow of every `xs+=( … )*`.
+    Fixture `wado_label_group.g4`.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a

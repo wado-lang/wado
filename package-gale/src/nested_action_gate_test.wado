@@ -1,12 +1,5 @@
-//! An action / predicate nested inside a group (not on a rule's top-level
-//! alternative) must not be silently dropped. Two paths used to lose it:
-//! `grammar_has_actions` only inspected top-level `alt.actions`, so a grammar
-//! whose only action sits inside a group left `emit_actions` off (the whole
-//! action pipeline, including the `warn_unhandled_actions` safety net, never
-//! ran); and `empty_alt_group_as_optional` folded `( {p}? | A )` to an
-//! Optional before action ids were assigned, dropping the empty alt's
-//! predicate. Either way the body vanished with no diagnostic — against the
-//! "loud, never silent" contract. These tests pin the loud behavior.
+//! An action or predicate nested inside a group must never vanish: it either
+//! runs — a group's alternatives decide like a rule's — or it is reported.
 
 use { parse } from "./g4/parser.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
@@ -28,23 +21,48 @@ fn has_unsupported_action(diags: &List<Diagnostic>) -> bool {
     return false;
 }
 
-test "nested-group predicate surfaces a loud diagnostic, not a silent drop" {
-    let diags = gen_diagnostics(&"grammar T;
+test "a nested-group predicate gates its branch" {
+    // The group's alternatives are a decision like a rule's, so the predicate
+    // joins the branch condition instead of being dropped (or emitted as an
+    // inline guard, which would fail the parse rather than select `B`).
+    let src = &"grammar T;
 options { language = Wado; }
 r : ( {false}? A | B ) ;
 A : 'a' ;
 B : 'b' ;
-");
-    assert has_unsupported_action(&diags), "a predicate nested in a group must raise UnsupportedAction, not vanish";
+";
+    assert !has_unsupported_action(&gen_diagnostics(src)), "a gated group predicate must not warn";
+    let out = gen_source(src);
+    assert out.contains("== TK_A && (pred_0(p))"), "the predicate joins its branch condition";
 }
 
-test "empty-alt predicate surfaces a loud diagnostic, not a silent drop" {
-    let diags = gen_diagnostics(&"grammar T;
+test "an empty-alt predicate gates the empty alternative" {
+    // `( {p}? | A )` means "match nothing when p holds, else match A". The
+    // group carries an action, so it keeps its per-alternative dispatch instead
+    // of folding to an Optional that had nowhere to put the predicate.
+    let src = &"grammar T;
 options { language = Wado; }
 r : ( {false}? | A ) A ;
 A : 'a' ;
-");
-    assert has_unsupported_action(&diags), "an empty-alt predicate `( {p}? | A )` must raise UnsupportedAction, not be folded away";
+";
+    assert !has_unsupported_action(&gen_diagnostics(src)), "a gated empty alternative must not warn";
+    let out = gen_source(src);
+    assert out.contains("if true && (pred_0(p))"), "the empty alternative is taken only while the predicate holds";
+}
+
+test "a `+` over a single-alternative gated group answers the predicate on its first iteration" {
+    // The loop gate exits later iterations, but the mandatory first one runs
+    // past it. A single-alternative body has no dispatch to report from, so
+    // without an answer here the predicate is dropped and `A B` matches.
+    let src = &"grammar T;
+options { language = Wado; }
+r : ( {false}? A B )+ A ;
+A : 'a' ;
+B : 'b' ;
+";
+    assert !has_unsupported_action(&gen_diagnostics(src)), "a gated group predicate must not warn";
+    let out = gen_source(src);
+    assert out.contains("failed semantic predicate"), `the first iteration must answer the predicate: ${out}`;
 }
 
 fn gen_source(src: &String) -> String {

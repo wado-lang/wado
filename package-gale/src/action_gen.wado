@@ -3,8 +3,9 @@
 //! capture. All inert when `emit_actions()` is off.
 
 use { ActionSource, AltAction, Alternative, AttrDecl, Element, Grammar, ParserRule } from "./ir.wado";
-use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, Rule, RuleCallOp } from "./gir.wado";
-use { GenContext } from "./gen_context.wado";
+use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, LoweredGrammar, Op, Rule, RuleCallOp } from "./gir.wado";
+use { GenContext, RuleCaptures } from "./gen_context.wado";
+use { TreeMap } from "core:collections";
 use { elements_match, follow_sep, to_snake_case } from "./gen_util.wado";
 use { CodeWriter, FnSpec, ImplSpec, ParamSpec, str_lit } from "./wadopoet.wado";
 use {
@@ -15,11 +16,14 @@ use {
 } from "./prediction.wado";
 use {
     RULE_START_TOK_LOCAL,
+    action_reads_rule_ctx,
     action_reads_rule_span,
     field_in_vals,
+    rule_action_bodies,
+    rule_node_field,
     rule_returns_vals,
-    rule_span_hi_local,
-    rule_span_lo_local,
+    rule_span_hi_field,
+    rule_span_lo_field,
     rule_threads_args,
     rule_uses_rule_span,
     vals_struct_name,
@@ -34,7 +38,7 @@ use {
 } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
-use { body_is_base_calls_only, body_names_this } from "./superclass.wado";
+use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
 use { escape_ident } from "./ident.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
@@ -163,24 +167,28 @@ fn split_top_level_commas(text: &String) -> List<String> {
     let chars: List<char> = text.chars().collect();
     let mut i = 0;
     while i < chars.len() {
-        let c = chars[i];
-        match c {
-            '(' | '[' | '{' | '<' => {
-                depth += 1;
-                cur.push(c);
-            },
-            ')' | ']' | '}' | '>' => {
-                if depth > 0 {
-                    depth -= 1;
-                }
-                cur.push(c);
-            },
-            ',' && depth == 0 => {
-                out.push(cur.trim());
-                cur = String::new();
-            },
-            _ => cur.push(c),
+        // `a["x,y"]` passes one argument, not two.
+        if let Some(end) = opaque_span_end(&chars, i, chars.len()) {
+            while i < end {
+                cur.push(chars[i]);
+                i += 1;
+            }
+            continue;
         }
+        let c = chars[i];
+        if c matches { '(' | '[' | '{' | '<' } {
+            depth += 1;
+        } else if c matches { ')' | ']' | '}' | '>' } {
+            if depth > 0 {
+                depth -= 1;
+            }
+        } else if c == ',' && depth == 0 {
+            out.push(cur.trim());
+            cur = String::new();
+            i += 1;
+            continue;
+        }
+        cur.push(c);
         i += 1;
     }
     if !cur.trim().is_empty() {
@@ -291,9 +299,9 @@ pub fn entry_emits_vals(ctx: &GenContext, rule_name: &String) -> bool {
 /// Emit a `<Rule>Vals` struct per rule that exposes a value channel. Fields
 /// are the rule's returns then locals, each with a defaulted Wado type, so
 /// the rule function can default-construct `<Rule>Vals {}`.
-pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
+pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &GenContext) {
     for let rule of &grammar.parser_rules {
-        if !rule_returns_vals(rule) {
+        if !rule_emits_vals(ctx, rule) {
             continue;
         }
         w.begin(&`struct ${vals_struct_name(rule)}`);
@@ -302,8 +310,22 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
         }
         gen_vals_fields(w, &rule.returns_decls);
         gen_vals_fields(w, &rule.locals_decls);
+        gen_capture_fields(w, ctx.rule_captures(&rule.name));
         w.end();
         w.blank();
+    }
+}
+
+/// The captured token range / builder row of each labeled rule call an action
+/// reads. Zero-valued so a read before the call yields the empty span ANTLR's
+/// null `$label` renders as empty text.
+fn gen_capture_fields(w: &mut CodeWriter, captures: &RuleCaptures) {
+    for let f of &captures.spans {
+        w.line(&`${rule_span_lo_field(f)}: i32 = 0,`);
+        w.line(&`${rule_span_hi_field(f)}: i32 = -1,`);
+    }
+    for let f of &captures.nodes {
+        w.line(&`${rule_node_field(f)}: i32 = -1,`);
     }
 }
 
@@ -377,10 +399,11 @@ pub fn result_type_carries_vals(result_type: &String) -> bool {
 }
 
 /// Whether `rule` gets a value channel emitted: action execution is on and the
-/// rule exposes one. The single source of truth for the `vals` struct, local,
-/// return type, and `$v` substitution.
+/// rule either declares args / `returns` / `locals` or captures a labeled call
+/// for an action to read. The single source of truth for the `vals` struct,
+/// local, return type, and `$v` substitution.
 pub fn rule_emits_vals(ctx: &GenContext, rule: &ParserRule) -> bool {
-    return ctx.emit_actions() && rule_returns_vals(rule);
+    return ctx.emit_actions() && (rule_returns_vals(rule) || !ctx.rule_captures(&rule.name).is_empty());
 }
 
 pub fn current_rule_emits_vals(ctx: &GenContext) -> bool {
@@ -391,39 +414,104 @@ pub fn current_rule_emits_vals(ctx: &GenContext) -> bool {
     return rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
 }
 
-/// The binding field of a `RuleCall` op whose matched text one of `actions`
-/// reads through `$<label>.text`, or null. Gates the token-range capture so a
-/// grammar that never reads a rule label's text stays byte-identical. Predicate
-/// bodies count: they resolve `$`-references through the same path.
-pub fn rule_call_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
+/// Install what every rule's actions read off its labeled rule calls, so the
+/// value struct, the capture emit, and the reference all read one answer.
+pub fn install_rule_captures(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     if !ctx.emit_actions() {
-        return null;
+        return;
     }
+    let mut captures: TreeMap<String, RuleCaptures> = TreeMap::new();
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        let rule = &grammar.parser_rules[i];
+        let bodies = rule_action_bodies(rule);
+        if bodies.is_empty() {
+            continue;
+        }
+        let mut c = RuleCaptures {};
+        for let call of &rule_call_bindings(&lowered.parser_rules[i]) {
+            if body_reads_any(&bodies, &call.0, false) && !c.spans.contains(&call.1) {
+                c.spans.push(call.1);
+            }
+            if body_reads_any(&bodies, &call.0, true) && !c.nodes.contains(&call.1) {
+                c.nodes.push(call.1);
+            }
+        }
+        if !c.is_empty() {
+            captures[rule.name] = c;
+        }
+    }
+    ctx.set_rule_captures(captures);
+}
+
+fn body_reads_any(bodies: &List<String>, base: &String, want_node: bool) -> bool {
+    return bodies.iter_ref().any(|b: &String| if want_node {
+        action_reads_rule_ctx(b, base);
+    } else {
+        action_reads_rule_span(b, base);
+    });
+}
+
+/// The value-struct field a labeled rule call's token range / builder row is
+/// captured into, or null where no action reads it.
+pub fn rule_call_span_field(op: &Op, ctx: &GenContext) -> Option<String> {
+    return captured_field(op, ctx, false);
+}
+
+pub fn rule_call_ctx_field(op: &Op, ctx: &GenContext) -> Option<String> {
+    return captured_field(op, ctx, true);
+}
+
+fn captured_field(op: &Op, ctx: &GenContext, want_node: bool) -> Option<String> {
     let rc = match op {
         RuleCall(r) => *r,
         _ => {
             return null;
         },
     };
-    for let a of actions {
-        if action_reads_rule_span(&a.source.text, &rc.dedup_base) {
-            return Option::Some(rc.field);
-        }
-    }
-    return null;
+    let captured = if want_node { ctx.captures_node(&rc.field) } else { ctx.captures_span(&rc.field) };
+    return if captured { Option::Some(rc.field) } else { null };
 }
 
-/// Declare the token-range locals for every labeled rule call in this scope
-/// whose text an action reads, before any of them is assigned. Declaring up
-/// front rather than at the call keeps the read in scope wherever the action
-/// sits — including before the call, where the label is not bound yet and the
-/// empty range yields empty text (ANTLR's `$label` is null there).
-pub fn gen_rule_span_decls(w: &mut CodeWriter, ops: &List<Op>, actions: &List<AltAction>, ctx: &GenContext) {
+/// Every rule call in the rule's bodies, as `[dedup_base, field]`.
+fn rule_call_bindings(rule: &Rule) -> List<[String, String]> {
+    let mut out: List<[String, String]> = [];
+    match rule {
+        Simple(s) => push_rule_call_bindings(&s.body.ops, &mut out),
+        MultiAlt(m) => {
+            for let a of &m.alts {
+                push_rule_call_bindings(&a.ops, &mut out);
+            }
+        },
+        LeftRecursive(l) => {
+            for let a of &l.atom.alts {
+                push_rule_call_bindings(&a.ops, &mut out);
+            }
+            for let lr of &l.lr_alts {
+                push_rule_call_bindings(&lr.suffix.ops, &mut out);
+            }
+        },
+    }
+    return out;
+}
+
+fn push_rule_call_bindings(ops: &List<Op>, out: &mut List<[String, String]>) {
     for let op of ops {
-        if let Some(f) = rule_call_span_field(op, actions, ctx) {
-            w.line(&`let mut ${rule_span_lo_local(&f)} = 0;`);
-            w.line(&`let mut ${rule_span_hi_local(&f)} = -1;`);
-        }
+        push_op_rule_call_bindings(op, out);
+    }
+}
+
+fn push_op_rule_call_bindings(op: &Op, out: &mut List<[String, String]>) {
+    match op {
+        RuleCall(rc) => out.push([rc.dedup_base, rc.field]),
+        Repeat(rep) => push_op_rule_call_bindings(&rep.body, out),
+        ListLabel(ll) => push_op_rule_call_bindings(&ll.inner, out),
+        Group(g) => {
+            for let a of &g.alts {
+                push_rule_call_bindings(&a.ops, out);
+            }
+        },
+        _ => {
+        },
     }
 }
 
@@ -431,7 +519,13 @@ pub fn gen_rule_span_decls(w: &mut CodeWriter, ops: &List<Op>, actions: &List<Al
 /// runs after `elements[before - 1]` and before `elements[before]`). No-op
 /// unless action execution is on. Predicates emit an inline runtime guard
 /// (a false one fails the parse); prediction-time gating is Phase 2 proper.
-pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ctx: &mut GenContext) {
+pub fn gen_alt_actions_at(
+    w: &mut CodeWriter,
+    actions: &List<AltAction>,
+    before: i32,
+    ctx: &mut GenContext,
+    at_alt_end: bool = false,
+) {
     if !ctx.emit_actions() {
         return;
     }
@@ -440,26 +534,30 @@ pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before:
             continue;
         }
         match a.kind {
-            Action => gen_action_body(w, &a.source, ctx),
+            Action => gen_action_body(w, &a.source, ctx, at_alt_end),
             Predicate => {
                 if ctx.is_predicate_gated(a.source.action_id) {
                     ctx.mark_action_seen(a.source.action_id);
                 } else if predicate_selects_alternative(before, ctx) {
                     warn_unsupported_prediction_predicate(&a.source, ctx);
                 } else {
-                    gen_predicate_guard(w, &a.source, ctx);
+                    gen_predicate_guard(w, &a.source, ctx, at_alt_end);
                 }
             },
         }
     }
 }
 
-/// An alt-initial predicate in a multi-alt rule chooses which alternative the
-/// prediction takes. Gale's prediction ignores predicates, so this shape is
-/// not an inline guard but a prediction gate — surfaced loudly until
-/// prediction-time gating lands (Phase 2).
+/// Whether a predicate here chooses an alternative rather than guarding a
+/// sequence — true in a multi-alt rule and in a multi-alt group alike.
 fn predicate_selects_alternative(before: i32, ctx: &GenContext) -> bool {
-    return before == 0 && current_rule_is_multi_alt(ctx);
+    if before != 0 {
+        return false;
+    }
+    return match ctx.in_alt_choice() {
+        Some(multi_alt) => multi_alt,
+        None => current_rule_is_multi_alt(ctx),
+    };
 }
 
 /// Owner for a diagnostic about action body `id`, attributed to the rule
@@ -593,21 +691,31 @@ pub fn emit_atn_disabled_seed(
 }
 
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar
-/// order.
-pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &GenContext) -> List<String> {
+/// order — and registered as it goes: a condition names `pred_<id>`, so handing
+/// one out without emitting that fn (and without suppressing the body's own
+/// inline guard) is what this refuses to make possible. Ask `alt_has_gate` for
+/// the question alone.
+pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut GenContext) -> List<String> {
     let mut conds: List<String> = [];
     for let a of &alt.actions {
         if let Some(c) = gate_condition_for(a, ctx) {
+            mark_gate_predicate(a, ctx);
             conds.push(c);
         }
     }
     return conds;
 }
 
+/// Whether `alt` carries a gateable alt-initial predicate, without registering
+/// anything — for a caller deciding how to shape a dispatch, not emitting one.
+pub fn alt_has_gate(alt: &Alternative, ctx: &GenContext) -> bool {
+    return alt.actions.iter_ref().any(|a| is_gateable_alt_initial_predicate(a, ctx));
+}
+
 /// Whether any alt in an `Ambiguous` overlap group carries a gateable
 /// alt-initial predicate.
 fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
-    return amb_alts.iter_ref().any(|idx| !alt_initial_gate_conditions(&alts[*idx], ctx).is_empty());
+    return amb_alts.iter_ref().any(|idx| alt_has_gate(&alts[*idx], ctx));
 }
 
 /// Whether every alt in an overlap group matches the same terminal sequence, so
@@ -721,21 +829,29 @@ pub fn mark_gated_predicates(
     }
 }
 
+/// Register `alt`'s gateable alt-initial predicates as gated, so the dispatch
+/// carries them as its condition and the body does not repeat them as a guard.
 fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
     for let a of &alt.actions {
         if is_gateable_alt_initial_predicate(a, ctx) {
-            ctx.mark_predicate_gated(a.source.action_id);
-            if body_needs_no_translator(&a.source.text, ctx) {
-                ctx.register_predicate_fn(a.source.action_id, &a.source.text);
-            }
+            mark_gate_predicate(a, ctx);
         }
+    }
+}
+
+/// Register one gated predicate: the dispatch carries it, so the body must not
+/// repeat it, and a condition naming `pred_<id>` needs that fn emitted.
+fn mark_gate_predicate(a: &AltAction, ctx: &mut GenContext) {
+    ctx.mark_predicate_gated(a.source.action_id);
+    if body_needs_no_translator(&a.source.text, ctx) {
+        ctx.register_predicate_fn(a.source.action_id, &a.source.text);
     }
 }
 
 /// The ` && (pred)` suffix folding an alt's gateable predicates into a
 /// token-led dispatch condition, or "" when off (keeping non-Wado grammars
 /// byte-identical) or the alt has none.
-pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &GenContext) -> String {
+pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut GenContext) -> String {
     if !ctx.emit_actions() {
         return String::new();
     }
@@ -754,7 +870,7 @@ pub fn gen_predicate_gated_dispatch(
     amb_alts: &List<i32>,
     alts: &List<Alternative>,
     fn_name: &String,
-    ctx: &GenContext,
+    ctx: &mut GenContext,
     rule_display: &String,
 ) {
     let order = amb_alts.sorted();
@@ -851,16 +967,21 @@ pub fn join_gate_conds(conds: &List<String>) -> String {
 /// rule's environment — its own `vals` local (`$v`) and child bindings
 /// (`$a.v`). A reference the translator cannot emit yet is a loud
 /// `UnsupportedAction` diagnostic rather than invalid `$x`.
-pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext, at_alt_end: bool) {
     ctx.mark_action_seen(src.action_id);
-    if let Some(code) = translate_action_or_warn(src, false, ctx) {
+    if let Some(code) = translate_action_or_warn(src, false, ctx, at_alt_end) {
         emit_action_stmt(w, &code);
     }
 }
 
 /// Translate an action (a statement list) or a predicate condition (an
 /// expression) to Wado, warning (loud) and returning `null` on failure.
-fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
+fn translate_action_or_warn(
+    src: &ActionSource,
+    is_predicate: bool,
+    ctx: &mut GenContext,
+    at_alt_end: bool,
+) -> Option<String> {
     if body_names_unwired_base(&src.text, ctx) {
         // A refused base already reported the cause; an undeclared one has not.
         if !ctx.parser_superclass_declared() {
@@ -896,6 +1017,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             ctx.alt_bindings(),
             ctx.grammar_name(),
             ctx.action_member_methods(),
+            at_alt_end,
         );
     } else {
         translate_action(
@@ -907,6 +1029,8 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             ctx.alt_bindings(),
             ctx.grammar_name(),
             ctx.action_member_methods(),
+            ctx.expected_names(),
+            at_alt_end,
         );
     };
     return match translated {
@@ -942,9 +1066,9 @@ pub fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext
 /// rule fails into normal recovery. Prediction-time gating of which alt to
 /// take is Phase 2 proper; this serves mid-alt predicates and single-alt-rule
 /// gates, where a false predicate is a parse failure at that point.
-fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext, at_alt_end: bool) {
     ctx.mark_action_seen(src.action_id);
-    let cond = match translate_action_or_warn(src, true, ctx) {
+    let cond = match translate_action_or_warn(src, true, ctx, at_alt_end) {
         Some(c) => c,
         None => {
             return;

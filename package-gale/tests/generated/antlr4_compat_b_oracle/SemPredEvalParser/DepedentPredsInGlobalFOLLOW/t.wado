@@ -873,6 +873,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1101,13 +1128,13 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -1115,23 +1142,23 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_2 = pos;
-    let mut alts_ok_2 = false;
-    alts_2_0: {
-        pos = alts_saved_2;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
+    let alts_saved_4 = pos;
+    let mut alts_ok_4 = false;
+    alts_4_0: {
+        pos = alts_saved_4;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_4_0; }
         pos += 1;
-        alts_ok_2 = true;
+        alts_ok_4 = true;
     }
-    if !alts_ok_2 {
-        alts_2_1: {
-            pos = alts_saved_2;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
+    if !alts_ok_4 {
+        alts_4_1: {
+            pos = alts_saved_4;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_4_1; }
             pos += 1;
-            alts_ok_2 = true;
+            alts_ok_4 = true;
         }
     }
-    if !alts_ok_2 { return -1; }
+    if !alts_ok_4 { return -1; }
     return pos;
 }
 
@@ -1330,6 +1357,14 @@ impl Parser {
 
     fn rule_string_tree(&self) -> String {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
     }
 
     fn rule_string_tree_final(&self) -> String {

@@ -21,7 +21,13 @@ use {
     GrammarKind,
 } from "./ir.wado";
 use { map_java_type } from "./java2wado/jemit.wado";
-use { translate_wado_action, LEXER_HANDLE, PARSER_HANDLE } from "./action_translate.wado";
+use {
+    translate_wado_action,
+    translate_lexer_action,
+    translate_lexer_predicate,
+    LEXER_HANDLE,
+    PARSER_HANDLE,
+} from "./action_translate.wado";
 use {
     translate_java_expr,
     translate_java_stmts,
@@ -44,16 +50,28 @@ pub fn translate_action(
     bindings: &List<[bool, String, String]>,
     grammar_name: &String,
     member_methods: &List<String>,
+    expected: &String = &NO_EXPECTED,
+    at_alt_end: bool = false,
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
         Java => {
-            let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
+            let env = JEnv {
+                this_bind: PARSER_HANDLE,
+                grammar: *grammar_name,
+                methods: *member_methods,
+                expected: *expected,
+                at_alt_end,
+            };
             translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &env);
         },
         Other(name) => Result::Err(`unsupported action language '${*name}' for action '${*body}'`),
     };
 }
+
+/// The expected-token set of a site codegen cannot answer for: a body reading
+/// one there is reported rather than given a set that is not ANTLR's.
+global NO_EXPECTED: String = "";
 
 /// Translate a semantic-predicate body (`{ cond }?`) to a Wado boolean
 /// expression, dispatching on the action language as `translate_action` does.
@@ -66,24 +84,29 @@ pub fn translate_predicate(
     bindings: &List<[bool, String, String]>,
     grammar_name: &String,
     member_methods: &List<String>,
+    at_alt_end: bool = false,
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
         Java => {
-            let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
+            let env = JEnv {
+                this_bind: PARSER_HANDLE,
+                grammar: *grammar_name,
+                methods: *member_methods,
+                at_alt_end,
+            };
             translate_java_expr(rule, rules, body, vals_in_scope, bindings, &env);
         },
         Other(name) => Result::Err(`unsupported action language '${*name}' for predicate '${*body}'`),
     };
 }
 
-/// Rewrite every `language = Java` lexer action / predicate body in place into
-/// its Wado form, so `lexer_gen`'s identity translator emits it unchanged — the
-/// same staging the superClass call rewrite uses, which keeps the emitters free
-/// of an action-language parameter. A body outside the java2wado subset is
-/// dropped (so codegen never emits Java text) and reported, never silently kept.
-pub fn rewrite_lexer_java_bodies(
+/// Stage every lexer action / predicate body in place into its Wado form, so
+/// the `lexer_gen` emitters splice ready text. A body that will not translate
+/// is dropped here and reported, never left to panic from inside an emitter.
+pub fn stage_lexer_bodies(
     grammar: &mut Grammar,
+    lang: &ActionLanguage,
     member_methods: &List<String>,
     member_fields: &List<String>,
 ) -> List<String> {
@@ -91,21 +114,31 @@ pub fn rewrite_lexer_java_bodies(
     let env = lexer_env(&grammar.name, member_methods, member_fields);
     for let rule of &mut grammar.lexer_rules {
         for let alt of &mut rule.body {
-            rewrite_lexer_java_alt(alt, &env, &mut errors);
+            stage_lexer_alt(alt, lang, &env, &mut errors);
         }
     }
     return errors;
 }
 
-fn rewrite_lexer_java_alt(alt: &mut LexerAlternative, env: &JEnv, errors: &mut List<String>) {
-    let mut kept: List<AltAction> = [];
-    for let a of &alt.actions {
-        let translated = if a.kind matches { Predicate } {
+/// One body, in the grammar's action language. `Wado` is the identity
+/// translator: `$`-references resolved, the rest verbatim.
+fn stage_lexer_body(a: &AltAction, lang: &ActionLanguage, env: &JEnv) -> Result<String, String> {
+    let is_pred = a.kind matches { Predicate };
+    return match lang {
+        Java => if is_pred {
             translate_java_lexer_expr(&a.source.text, env);
         } else {
             translate_java_lexer_stmts(&a.source.text, env);
-        };
-        match translated {
+        },
+        Wado => if is_pred { translate_lexer_predicate(&a.source.text) } else { translate_lexer_action(&a.source.text) },
+        Other(name) => Result::Err(`no translator for action language '${name}'`),
+    };
+}
+
+fn stage_lexer_alt(alt: &mut LexerAlternative, lang: &ActionLanguage, env: &JEnv, errors: &mut List<String>) {
+    let mut kept: List<AltAction> = [];
+    for let a of &alt.actions {
+        match stage_lexer_body(a, lang, env) {
             Ok(text) => {
                 let mut kept_action = *a;
                 kept_action.source.text = text;
@@ -118,27 +151,27 @@ fn rewrite_lexer_java_alt(alt: &mut LexerAlternative, env: &JEnv, errors: &mut L
     }
     alt.actions = kept;
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        alt.elements[i] = rewrite_lexer_java_elem(&alt.elements[i], env, errors);
+        alt.elements[i] = stage_lexer_elem(&alt.elements[i], lang, env, errors);
     }
 }
 
-fn rewrite_lexer_java_elem(elem: &LexerElement, env: &JEnv, errors: &mut List<String>) -> LexerElement {
+fn stage_lexer_elem(elem: &LexerElement, lang: &ActionLanguage, env: &JEnv, errors: &mut List<String>) -> LexerElement {
     return match elem {
         Group(alts) => {
             let mut new_alts: List<LexerAlternative> = [];
             for let alt of alts {
                 let mut a = *alt;
-                rewrite_lexer_java_alt(&mut a, env, errors);
+                stage_lexer_alt(&mut a, lang, env, errors);
                 new_alts.push(a);
             }
             LexerElement::Group(new_alts);
         },
         Repeat(rep) => LexerElement::Repeat(LexerRepeatElement {
             kind: rep.kind,
-            element: rewrite_lexer_java_elem(&rep.element, env, errors),
+            element: stage_lexer_elem(&rep.element, lang, env, errors),
             non_greedy: rep.non_greedy,
         }),
-        Not(nn) => LexerElement::Not(LexerNotElement { element: rewrite_lexer_java_elem(&nn.element, env, errors) }),
+        Not(nn) => LexerElement::Not(LexerNotElement { element: stage_lexer_elem(&nn.element, lang, env, errors) }),
         _ => *elem,
     };
 }

@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1114,14 +1141,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\n' | '\t' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { ' ' | '\n' | '\t' })) { break rep_1; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !((chars[pos] matches { ' ' | '\n' | '\t' })) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -1324,6 +1351,14 @@ impl Parser {
 
     fn rule_string_tree(&self) -> String {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
     }
 
     fn rule_string_tree_final(&self) -> String {
@@ -1652,7 +1687,9 @@ fn _parse_if_stmt__inner(p: &mut Parser) -> () {
     if grp_kind == TK_ELSE {
         let else_ = p.expect(TK_ELSE, &SYNC_0);
         let stmt = _parse_stmt(p);
-    } else if true {
+    } else if true && (p.la(1) != TK_ELSE) {
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_2);
     }
     return;
 }
@@ -1735,4 +1772,5 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID, TK_LIT_IF];
 global SYNC_1: List<i32> = [TK_ID];
+global SYNC_2: List<i32> = [TK_ELSE];
 

@@ -255,7 +255,7 @@ pub fn is_general_group(alts: &List<Alternative>) -> bool {
     if alts.len() < 2 {
         return false;
     }
-    return !is_simple_cst_group(alts) && !is_token_only_group(alts);
+    return classify_group(alts) matches { General };
 }
 
 pub enum GroupClass {
@@ -275,6 +275,11 @@ pub fn classify_group(alts: &List<Alternative>) -> GroupClass {
         }
         return GroupClass::SingleAlt;
     }
+    // Only the General shape keeps a per-alternative body to run an action in
+    // and a per-alternative condition for a predicate to gate.
+    if group_alts_have_actions(alts) {
+        return GroupClass::General;
+    }
     if is_token_only_group(alts) {
         return GroupClass::TokenOnly;
     }
@@ -282,6 +287,11 @@ pub fn classify_group(alts: &List<Alternative>) -> GroupClass {
         return GroupClass::SimpleCst;
     }
     return GroupClass::General;
+}
+
+/// Whether any alternative of `alts` carries an action or a predicate.
+pub fn group_alts_have_actions(alts: &List<Alternative>) -> bool {
+    return alts.iter_ref().any(|a: &Alternative| !a.actions.is_empty());
 }
 
 /// Count how many general groups are in an element list.

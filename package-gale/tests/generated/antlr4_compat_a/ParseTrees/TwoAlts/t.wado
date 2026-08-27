@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1254,6 +1281,14 @@ impl Parser {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
+    }
+
     fn rule_string_tree_final(&self) -> String {
         return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
@@ -1459,6 +1494,10 @@ impl Parser {
     }
 }
 
+struct SVals {
+    _node_r: i32 = -1,
+}
+
 fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
@@ -1475,20 +1514,26 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
+fn _parse_s__inner(p: &mut Parser) -> SVals {
+    let mut vals = SVals {};
+    vals._node_r = p.b.checkpoint();
     let r = _parse_a(p);
-    return;
+    if !p.speculating {
+        p.emit(`${p.rule_tree_at(vals._node_r)}\n`);
+    }
+    return vals;
 }
 
-fn _parse_s(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_s(p: &mut Parser) -> SVals {
+    if p.recovering { return SVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    let __vals = _parse_s__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");
     }
+    return __vals;
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
@@ -1539,7 +1584,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_s(p); });
 }
 
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

@@ -2088,7 +2088,7 @@ fn lower_scan_repeat(
     // optional shape, breaking `( (a)? b )?`-style cases).
     if !rep.non_greedy {
         if let Optional = rep.kind {
-            if let Group(g) = rep.element {
+            if let Group(g) = peel_repeat_body_label(&rep.element) {
                 if g.alternatives.len() == 1
                     && has_nested_optional_in_alt(&g.alternatives[0])
                     && !alt_has_variable_repeat(&g.alternatives[0])
@@ -3391,6 +3391,10 @@ fn lower_repeat_op(
     gate_caller_follow: bool,
 ) -> Op {
     let outer_field = compute_repeat_outer_field(rep, name_counts, *group_counter);
+    // Every shape decision below reads the body the op was lowered from, not
+    // the label wrapping it — a label changes a repeat's typing, never its
+    // shape. Positional reads (`first_of_element`, scannability) take either.
+    let body_elem = peel_repeat_body_label(&rep.element);
 
     // Pre-compute the inner's first set; used both by the strategy
     // decision (mask subtraction / suppression) and by the
@@ -3424,7 +3428,12 @@ fn lower_repeat_op(
                 rule: *rule_name,
                 site: DiagnosticSite::Optional(outer_field),
             };
-            opt_specialised = pick_optional_specialised(&rep.element, body_has_field, &owner, ctx);
+            opt_specialised = pick_optional_specialised(
+                body_elem,
+                body_has_field,
+                &owner,
+                ctx,
+            );
         }
     }
 
@@ -3442,7 +3451,7 @@ fn lower_repeat_op(
             ctx.mark_needs_atn();
             RepeatStrategy::Plain;
         } else {
-            compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+            compute_non_greedy_strategy(body_elem, outer_follow, ctx);
         }
     } else {
         // Greedy: a specialised Optional strategy when one fires,
@@ -3513,7 +3522,7 @@ fn lower_repeat_op(
         FollowArg::NoFollow,
         gate_caller_follow,
     );
-    let body_is_single_alt_group = if let Group(g) = &rep.element {
+    let body_is_single_alt_group = if let Group(g) = body_elem {
         g.alternatives.len() == 1;
     } else {
         false;
@@ -3549,7 +3558,7 @@ fn lower_repeat_op(
 /// at emit time: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> List<String> {
-    if let Group(g) = elem {
+    if let Group(g) = peel_repeat_body_label(elem) {
         if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
             return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
         }
@@ -3596,11 +3605,7 @@ fn compute_caller_follow_second(elements: &List<Element>, start: i32, ctx: &mut 
     }
     let follow_elem = &elements[start];
     if let Repeat(rep) = follow_elem {
-        if let Group(g) = rep.element {
-            if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
-                return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
-            }
-        }
+        return compute_body_second_position_first(&rep.element, ctx);
     }
     return [];
 }
@@ -3984,6 +3989,20 @@ fn repeat_inner_is_list_label(elem: &Element) -> bool {
         return lab.list;
     }
     return false;
+}
+
+/// The surface element a Repeat's body op was lowered from. A Repeat supplies
+/// the `List<>` typing itself, so both label forms lose their wrapper on the op
+/// side — the list form explicitly below, the scalar form inside
+/// `lower_label_op`'s `rebind_op_field`. Every reader that pairs the body op
+/// with its surface element peels through this, or the two disagree about the
+/// shape.
+pub fn peel_repeat_body_label(elem: &Element) -> &Element with stores[elem] {
+    let mut cur = elem;
+    while let Label(lab) = cur {
+        cur = &lab.element;
+    }
+    return cur;
 }
 
 /// Outer struct field base name for a Repeat. `Star` / `Plus`

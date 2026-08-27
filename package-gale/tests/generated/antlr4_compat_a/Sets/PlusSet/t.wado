@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1264,6 +1291,14 @@ impl Parser {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
+    fn rule_tree_at(&self, row: i32) -> String {
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_stack(&self) -> String {
+        return self.b.open_rule_names(&RULE_NAMES);
+    }
+
     fn rule_string_tree_final(&self) -> String {
         return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
@@ -1557,6 +1592,10 @@ fn _parse_a__inner(p: &mut Parser) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
+        }
+        if _plus_first && !((p.peek_kind() == TK_LIT_A) || (p.peek_kind() == TK_LIT_B)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
         }
         _plus_first = false;
         let lit_a_or_lit_b = p.expect_set(&SYNC_0);

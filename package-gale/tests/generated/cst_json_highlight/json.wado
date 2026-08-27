@@ -870,6 +870,33 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
+    pub fn render_at(
+        &self,
+        row: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+            return String::new();
+        }
+        return self.render_from(row, toks, rule_names, token_names);
+    }
+
+    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+        let mut out = String::from("[");
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            if i < self.open.len() - 1 {
+                out.push_str(&", ");
+            }
+            let kind = self.a[self.open[i]];
+            let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
+            out.push_str(&name);
+        }
+        out.push_str(&"]");
+        return out;
+    }
+
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1422,38 +1449,38 @@ fn try_NUMBER(chars: &List<char>, start: i32) -> i32 {
         opt_ok_6 = true;
     }
     if !opt_ok_6 { pos = opt_saved_6; }
-    let opt_saved_8 = pos;
-    let mut opt_ok_8 = false;
-    rep_8: {
-        if pos >= chars.len() { break rep_8; }
-        if !((chars[pos] matches { 'E' | 'e' })) { break rep_8; }
+    let opt_saved_9 = pos;
+    let mut opt_ok_9 = false;
+    rep_9: {
+        if pos >= chars.len() { break rep_9; }
+        if !((chars[pos] matches { 'E' | 'e' })) { break rep_9; }
         pos += 1;
-        let opt_saved_9 = pos;
-        let mut opt_ok_9 = false;
-        rep_9: {
-            if pos >= chars.len() { break rep_9; }
-            if !((chars[pos] matches { '+' | '-' })) { break rep_9; }
+        let opt_saved_10 = pos;
+        let mut opt_ok_10 = false;
+        rep_10: {
+            if pos >= chars.len() { break rep_10; }
+            if !((chars[pos] matches { '+' | '-' })) { break rep_10; }
             pos += 1;
-            opt_ok_9 = true;
+            opt_ok_10 = true;
         }
-        if !opt_ok_9 { pos = opt_saved_9; }
-        if pos >= chars.len() { break rep_8; }
-        if !((chars[pos] matches { '0'..='9' })) { break rep_8; }
+        if !opt_ok_10 { pos = opt_saved_10; }
+        if pos >= chars.len() { break rep_9; }
+        if !((chars[pos] matches { '0'..='9' })) { break rep_9; }
         pos += 1;
         loop {
-            let rep_saved_10 = pos;
-            rep_10: {
-                if pos >= chars.len() { break rep_10; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_10; }
+            let rep_saved_11 = pos;
+            rep_11: {
+                if pos >= chars.len() { break rep_11; }
+                if !((chars[pos] matches { '0'..='9' })) { break rep_11; }
                 pos += 1;
                 continue;
             }
-            pos = rep_saved_10;
+            pos = rep_saved_11;
             break;
         }
-        opt_ok_8 = true;
+        opt_ok_9 = true;
     }
-    if !opt_ok_8 { pos = opt_saved_8; }
+    if !opt_ok_9 { pos = opt_saved_9; }
     return pos;
 }
 
@@ -1463,14 +1490,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_11 = pos;
-        rep_11: {
-            if pos >= chars.len() { break rep_11; }
-            if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { break rep_11; }
+        let rep_saved_13 = pos;
+        rep_13: {
+            if pos >= chars.len() { break rep_13; }
+            if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { break rep_13; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_11;
+        pos = rep_saved_13;
         break;
     }
     return pos;

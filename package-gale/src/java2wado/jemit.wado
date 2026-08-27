@@ -11,14 +11,17 @@ use {
     lexer_token_start_column_expr,
     resolve_lexer_attr_ref,
     resolve_attr_ref,
+    binding_name,
     rule_binding_for,
     rule_is_left_recursive,
+    ref_is_call_ctx,
     ref_is_ctx_to_string_tree,
     RULE_START_TOK_LOCAL,
     LR_ACC_LOCAL,
 } from "../action_translate.wado";
 use { to_snake_case } from "../ident.wado";
-use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign } from "./jparser.wado";
+use { str_lit } from "../wadopoet.wado";
+use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 
@@ -30,6 +33,13 @@ pub struct JEnv {
     pub this_bind: String,
     pub grammar: String,
     pub methods: List<String>,
+    /// The rendered expected-token set at this site — a generation-time
+    /// constant in Gale. Empty where codegen cannot answer, which reports.
+    pub expected: String = "",
+    /// Whether every element the alternative binds has matched by this action's
+    /// position. `((XContext)$ctx).TOK()` is null before its element, so the
+    /// presence test only folds to a constant where this holds.
+    pub at_alt_end: bool = false,
     /// True inside a lexer action / predicate body, where the recognizer API is
     /// the lexer's: `getText()` is the matched slice rather than a rule's token
     /// span, and a `$`-attribute resolves against the match fn's cursor.
@@ -168,6 +178,15 @@ fn emit_stmt(
             },
             None => Result::Ok("return;"),
         },
+        // Java's assertions need `-ea`; Wado's always run. A live assert is the
+        // stronger reading, and the one Gale takes everywhere else.
+        Assert(a) => {
+            let cond = emit_expr(rule, rules, &a.cond, vals_in_scope, bindings, env)?;
+            match &a.message {
+                Some(m) => Result::Ok(`assert ${cond}, ${str_lit(*m)};`),
+                None => Result::Ok(`assert ${cond};`),
+            }
+        },
     };
 }
 
@@ -278,6 +297,8 @@ pub fn emit_expr(
         Binary(b) => {
             if b.op == "+" && is_string_concat(e) {
                 emit_template(rule, rules, e, vals_in_scope, bindings, env);
+            } else if let Some(folded) = fold_ctx_token_null_test(b, bindings, env) {
+                Result::Ok(folded);
             } else {
                 let l = emit_expr(rule, rules, &b.lhs, vals_in_scope, bindings, env)?;
                 let r = emit_expr(rule, rules, &b.rhs, vals_in_scope, bindings, env)?;
@@ -320,6 +341,23 @@ fn emit_call(
         if is_ctx_expr(&m.recv) {
             return emit_ctx_child(rule, m, &c.args, bindings);
         }
+        // `getExpectedTokens().toString(getVocabulary())`: the site fixes the
+        // set and the grammar the vocabulary, so the idiom is one constant. The
+        // other `IntervalSet.toString` overloads render token numbers instead,
+        // which is not the string codegen has.
+        if m.name == "toString" && call_names(&m.recv, &"getExpectedTokens") {
+            if !(c.args.len() == 1 && call_names(&c.args[0], &"getVocabulary")) {
+                return Result::Err(
+                    "java2wado: only getExpectedTokens().toString(getVocabulary()) is supported; the other overloads render token numbers",
+                );
+            }
+            if env.expected.is_empty() {
+                return Result::Err(
+                    "java2wado: getExpectedTokens() is only available in a rule's @init / @after, where codegen knows the set",
+                );
+            }
+            return Result::Ok(`${str_lit(env.expected)}`);
+        }
     }
     // `$ctx.toStringTree(this)`: the `$`-attr lexer captures the whole
     // `$ctx.toStringTree` as the call target, so the trailing `(this)` lands
@@ -341,6 +379,8 @@ fn emit_call(
                 }
             } else if env.lexer && *n == "getCharPositionInLine" {
                 Result::Ok(lexer_cursor_column_expr());
+            } else if !env.lexer && *n == "getRuleInvocationStack" {
+                Result::Ok(`${env.this_bind}.rule_stack()`);
             } else if method_declared(env, n) {
                 Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
             } else {
@@ -349,6 +389,44 @@ fn emit_call(
         },
         _ => Result::Err("java2wado: unsupported call target"),
     };
+}
+
+/// `((XContext)$ctx).TOK() != null` asks whether the alternative has matched
+/// that token *by this point* — a constant only past the last element, where a
+/// token the alternative binds has certainly matched. Before then the answer
+/// depends on the action's position, which is not folded.
+fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<[bool, String, String]>, env: &JEnv) -> Option<String> {
+    if !env.at_alt_end {
+        return null;
+    }
+    if b.op != "!=" && b.op != "==" {
+        return null;
+    }
+    if !name_is(&b.rhs, &"null") {
+        return null;
+    }
+    let call = if let Call(c) = &b.lhs {
+        *c;
+    } else {
+        return null;
+    };
+    if !call.args.is_empty() {
+        return null;
+    }
+    let m = if let Member(mm) = &call.callee {
+        *mm;
+    } else {
+        return null;
+    };
+    if !is_ctx_expr(&m.recv) || !token_is_bound(bindings, &m.name) {
+        return null;
+    }
+    return Option::Some(if b.op == "!=" { "true" } else { "false" });
+}
+
+/// Whether the current alternative binds a token named `name`.
+fn token_is_bound(bindings: &List<[bool, String, String]>, name: &String) -> bool {
+    return bindings.iter_ref().any(|b: &[bool, String, String]| b.0 && b.1 == binding_name(name));
 }
 
 /// Whether `e` reduces (through parens and casts) to the `$ctx` special — the
@@ -403,6 +481,13 @@ fn emit_member_call(
     env: &JEnv,
 ) -> Result<String, String> {
     let meth = m.name;
+    // `$x.ctx.toStringTree(this)`: `$x.ctx` already resolves to the rendered
+    // node, so the call the `$`-attr scanner left behind is dropped.
+    if meth == "toStringTree" {
+        if let Attr(t) = &m.recv && ref_is_call_ctx(t) {
+            return resolve_attr_ref(rule, rules, t, vals_in_scope, bindings, &env.this_bind);
+        }
+    }
     if (meth == "println" || meth == "print") && is_system_out(&m.recv) {
         let newline = meth == "println";
         return emit_print(rule, rules, raw_args, vals_in_scope, bindings, env, newline);
@@ -505,6 +590,14 @@ fn emit_args(
         out.push_str(&emit_expr(rule, rules, &args[i], vals_in_scope, bindings, env)?);
     }
     return Result::Ok(out);
+}
+
+/// Whether `e` is a no-argument call of `name` (`getExpectedTokens()`).
+fn call_names(e: &JExpr, name: &String) -> bool {
+    if let Call(c) = e {
+        return name_is(&c.callee, name) && c.args.is_empty();
+    }
+    return false;
 }
 
 fn name_is(e: &JExpr, s: &String) -> bool {
