@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787844765036,
+  "lastUpdate": 1787849002557,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51557,6 +51557,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 258232,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "542c4926eae6651112530bbb5eac5774d1d98623",
+          "message": "Merge pull request #1910 from wado-lang/gale-gen-perf\n\nperf(ownership): widen value-copy elision; gale-gen 13% faster",
+          "timestamp": "2026-08-28T01:29:55+09:00",
+          "tree_id": "0b9ab7ce0b411623698f1d5d34c13d7612aa1821",
+          "url": "https://github.com/wado-lang/wado/commit/542c4926eae6651112530bbb5eac5774d1d98623"
+        },
+        "date": 1787849001737,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 258212,
             "unit": "bytes"
           }
         ]
