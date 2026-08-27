@@ -155,8 +155,10 @@ cooperative scheduling primitives, distinct from the Wasm Stack Switching instru
 they operate on CM green threads managed by the runtime, and until
 shared-everything-threads lands they interleave on a single core.
 
-Wado declares none of them, and should not until the encoding settles. The opcodes are
-still being reassigned in place:
+Wado declares none of them, and should not until the encoding settles. Four opcodes are
+reassigned in place between the pinned generation and upstream — the rest of the family
+(`0x0c` `thread.yield`, `0x26` `thread.index`, `0x27` `thread.new-indirect`, `0x29`
+`thread.suspend`) holds, and `0x2d` `thread.yield-then-promote` exists only upstream:
 
 | Opcode | `wasmparser` 0.252 (pinned)                    | Upstream                                       |
 | ------ | ---------------------------------------------- | ---------------------------------------------- |
