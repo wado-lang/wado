@@ -3905,13 +3905,14 @@ file-private name is a visibility error, like any other import. See [Re-export S
 | Source Type   | Syntax                        | Example                              |
 | ------------- | ----------------------------- | ------------------------------------ |
 | WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
+| Web platform  | `"web:<package>"`             | `"web:dom"`                          |
 | Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
 | CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
 | Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
 | Remote (HTTP) | `"https://..."`               | `"https://example.com/lib.wado"`     |
 | Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
-A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `wasi:`/`core:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
+A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `core:`/`wasi:`/`web:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 
 ### Module Path Validation
 
@@ -3921,7 +3922,7 @@ Module paths are validated before loading to provide clear error messages:
 
 Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
-1. Bundled namespaces `core:` / `wasi:` — resolved from embedded stdlib.
+1. Bundled namespaces `core:` / `wasi:` / `web:` — resolved from embedded stdlib.
 
 2. Open coordinates `<ns>:<pkg>` (any other namespace) — resolved from the default registry, or a `with`/manifest source override.
 
@@ -5213,21 +5214,21 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 
 #### Resource handle backing
 
-A `#[cm(...)]` resource may declare how its handle is represented: `type = "i32"`, a Component Model handle, or `type = "extern-ref"`, a handle to a host object. Omitting the field reads as `i32`. `extern-ref` is confined to `web:*` bindings until its lowering exists.
+A `#[cm(...)]` resource may declare how its handle is represented: `type = "i32"`, a Component Model handle, or `type = "extern-handle"`, an opaque index into a host table. Omitting the field reads as `i32`.
 
-An extern-ref handle is a copyable value — assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope. An `i32` handle is move-only, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md).
+An extern-handle is a copyable value — assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope. An `i32` handle is move-only, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 ### Resource Inheritance
 
-`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `type = "extern-ref"`; single inheritance only, and a cycle is an error.
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `type = "extern-handle"`; single inheritance only, and a cycle is an error.
 
 ```wado
-#[cm("web:dom/event-target", type = "extern-ref")]
+#[cm("web:dom/event-target", type = "extern-handle")]
 resource EventTarget {
     fn add_event_listener(&self, kind: String);
 }
 
-#[cm("web:dom/node", type = "extern-ref")]
+#[cm("web:dom/node", type = "extern-handle")]
 resource Node extends EventTarget {
     fn text_content(&self) -> Option<String>;
 }
@@ -5535,7 +5536,7 @@ Component Model interop: The compiler automatically converts between Wado conven
 - CM: Wasm Component Model
 - module: a Wado file
 - project: a collection of modules
-- Wado standard library: consists of `core:` and `wasi:`
+- Wado standard library: consists of `core:`, `wasi:` and `web:`
 - effect: the concept; e.g., "the `Stdout` effect"
 - effect interface: the declaration (`effect Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
 - operation: a function in an effect interface; synonym: "effect operation"

@@ -50,7 +50,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:hlc/Hlc::wrap" = fn(i32, i32, i32, i32, i32);  // TypeId(14)
+type "functype//wasi/test:hlc/Hlc::wrap" = fn(i32, i32, i32, i32, i32);  // TypeId(14)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
@@ -125,7 +125,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:hlc/Hlc::wrap from "wasi/wasi:hlc/Hlc::wrap";
+import fn wasi/test:hlc/Hlc::wrap from "wasi/test:hlc/Hlc::wrap";
 import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -185,7 +185,7 @@ fn "provider_surface.wado/__cm_binding__Hlc_wrap"(code, lang) with Hlc {
     "core:rt/gc_array_to_memory"(bytes_20, 0, ptr_21, len_19);
     __lang_packed = builtin::i64_extend_i32_s(ptr_21) | (builtin::i64_extend_i32_s(len_19) << 32_i64);
     __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:hlc/Hlc::wrap"(builtin::i32_wrap_i64(__code_packed), builtin::i32_wrap_i64(__code_packed >> 32_i64), builtin::i32_wrap_i64(__lang_packed), builtin::i32_wrap_i64(__lang_packed >> 32_i64), __outptr);
+    "wasi/test:hlc/Hlc::wrap"(builtin::i32_wrap_i64(__code_packed), builtin::i32_wrap_i64(__code_packed >> 32_i64), builtin::i32_wrap_i64(__lang_packed), builtin::i32_wrap_i64(__lang_packed >> 32_i64), __outptr);
     ptr_7 = builtin::load_i32(__outptr);
     len_8 = builtin::load_i32(__outptr + 4);
     arr = "core:rt/memory_to_gc_array"(ptr_7, len_8);

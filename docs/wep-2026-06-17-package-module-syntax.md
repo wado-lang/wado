@@ -25,23 +25,23 @@ A specifier is a CM package coordinate, a `lib:` alias, a local path, or a
 remote URL. Two principles anchor the rest:
 
 - **Reserved namespace ⇔ bundled namespace.** A namespace is reserved iff the
-  compiler ships its bytes — today `wasi` and `core`. Every other namespace is
-  open and resolves from outside. `lib` is the one extra reserved namespace, and
-  carries a single responsibility (below).
+  compiler ships its bytes — today `core`, `wasi` and `web`. Every other
+  namespace is open and resolves from outside. `lib` is the one extra reserved
+  namespace, and carries a single responsibility (below).
 - **Manifest key ≡ specifier string.** A `[dependencies]` key is byte-identical
   to the `from "..."` string it backs. There is no key-level indirection.
 
 ### Specifier forms
 
-| Form                     | Resolver                                      |
-| ------------------------ | --------------------------------------------- |
-| `wasi:…` / `core:…`      | Reserved → compiler-bundled                   |
-| `ns:pkg[@ver]` (open ns) | Default registry, or `with`/manifest override |
-| `lib:nick`               | Indirection: alias / rename / private dep     |
-| `./` `../`               | Local file                                    |
-| `http(s)://`             | Remote                                        |
+| Form                      | Resolver                                      |
+| ------------------------- | --------------------------------------------- |
+| `core:…` `wasi:…` `web:…` | Reserved → compiler-bundled                   |
+| `ns:pkg[@ver]` (open ns)  | Default registry, or `with`/manifest override |
+| `lib:nick`                | Indirection: alias / rename / private dep     |
+| `./` `../`                | Local file                                    |
+| `http(s)://`              | Remote                                        |
 
-`wasi:`/`core:` are not a separate scheme — they are coordinates whose
+`core:`/`wasi:`/`web:` are not a separate scheme — they are coordinates whose
 namespace happens to be bundled. Nested namespaces (`a:b:pkg`) follow WIT.
 
 A specifier names a **package only**; it carries no interface segment.
@@ -60,8 +60,8 @@ distinct from a local indirection (`from "lib:rx"`, "see the manifest").
 
 Bundling is a default, not a lock-in: because `lib:` resolution is pure
 indirection, a registry-hosted alternative to a bundled namespace (a forked or
-newer `wasi:`/`core:` package) is reachable by aliasing it under `lib:` —
-slightly ugly, but possible. Easy things stay easy; hard things stay possible.
+newer package) is reachable by aliasing it under `lib:` — slightly ugly, but
+possible. Easy things stay easy; hard things stay possible.
 
 The `package` field bridges a `lib:` alias to its real coordinate:
 
@@ -110,7 +110,7 @@ Bare names (`from "router"`) are rejected everywhere.
 - Single-file scripts gain the manifest's full expressive power inline.
 - Coverage is complete with one indirection point: public-transparent (direct
   coordinate), rename/short/multi-major/coordinate-less (`lib:`), bundled
-  (`wasi:`/`core:`), local (`./`), remote (`http(s)://`).
+  (`core:`/`wasi:`/`web:`), local (`./`), remote (`http(s)://`).
 
 ### Trade-offs
 

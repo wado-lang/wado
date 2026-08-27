@@ -103,6 +103,9 @@ pub const WASI_TLS_TYPES: &str = include_str!("../lib/wasi/tls/types.wado");
 pub const WASI_TLS_CLIENT: &str = include_str!("../lib/wasi/tls/client.wado");
 pub const WASI_TLS_WORLDS: &str = include_str!("../lib/wasi/tls/worlds.wado");
 
+// Web platform bindings — the extern-handle slice Tide's WebIDL frontend replaces.
+pub const WEB_DOM: &str = include_str!("../lib/web/dom.wado");
+
 /// All core stdlib statics.
 ///
 /// Each entry is `(import_path, source)` where `import_path` matches
@@ -161,11 +164,13 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
 /// [`ModuleSource::Wasm`](crate::module_source::ModuleSource::Wasm).
 pub const ALL_CORE_WASM_ASSETS: &[(&str, &[u8])] = &[("core:libm.wat", CORE_LIBM_WAT)];
 
-/// All WASI interface statics, used for registry building.
+/// Every bundled CM binding module, used for registry building.
 ///
-/// Each entry is `(import_path, source)` where `import_path` matches
-/// what users write in `from "wasi:..."` expressions.
-pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
+/// Each entry is `(import_path, source)` where `import_path` matches what users
+/// write in a `from "wasi:..."` / `from "web:..."` expression. The namespace of
+/// each is reserved because it appears here — see
+/// `docs/wep-2026-06-17-package-module-syntax.md`.
+pub const ALL_BINDING_MODULES: &[(&str, &str)] = &[
     // Flat package paths (user-facing, backward compatible)
     ("wasi:cli", WASI_CLI),
     ("wasi:filesystem", WASI_FILESYSTEM),
@@ -216,6 +221,7 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
     ("wasi:tls/types.wado", WASI_TLS_TYPES),
     ("wasi:tls/client.wado", WASI_TLS_CLIENT),
     ("wasi:tls/worlds.wado", WASI_TLS_WORLDS),
+    ("web:dom", WEB_DOM),
 ];
 
 /// Get embedded wasm asset bytes by canonical path.
@@ -234,14 +240,14 @@ pub fn get_stdlib_wasm_asset(import_path: &str) -> Option<&'static [u8]> {
 /// Get embedded module source by import path.
 ///
 /// # Arguments
-/// * `import_path` - Import path string, e.g., `"core:cli"` or `"wasi:filesystem/types.wado"`
+/// * `import_path` - Import path string, e.g., `"core:cli"`, `"wasi:filesystem/types.wado"` or `"web:dom"`
 ///
 /// # Returns
 /// The source code of the module if found, or `None` if not a standard library module.
 pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
     ALL_CORE_MODULES
         .iter()
-        .chain(ALL_WASI_MODULES.iter())
+        .chain(ALL_BINDING_MODULES.iter())
         .find(|(path, _)| *path == import_path)
         .map(|(_, src)| *src)
 }

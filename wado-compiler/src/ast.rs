@@ -1325,14 +1325,14 @@ pub enum CmBoundary {
 /// See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CmResourceBacking {
-    ExternRef,
+    ExternHandle,
     I32,
 }
 
 impl CmResourceBacking {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
-            "extern-ref" => Some(Self::ExternRef),
+            "extern-handle" => Some(Self::ExternHandle),
             "i32" => Some(Self::I32),
             _ => None,
         }

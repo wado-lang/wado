@@ -313,7 +313,9 @@ fn should_check(source: &ModuleSource) -> bool {
         | ModuleSource::Dependency { .. }
         | ModuleSource::Remote { .. }
         | ModuleSource::Redirected { .. } => true,
-        ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. } => false,
+        ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => {
+            false
+        }
     }
 }
 

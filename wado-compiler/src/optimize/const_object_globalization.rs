@@ -741,7 +741,7 @@ fn skip_function(f: &NirFunction) -> bool {
         // `module_source` — a plain helper function can live in a
         // `wasi:*`-namespaced file even though its own CM-binding glue is
         // excluded above, so this still needs its own check.
-        || f.module_source.is_wasi()
+        || f.module_source.is_binding()
 }
 
 // ---------------------------------------------------------------------------

@@ -1030,7 +1030,9 @@ pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
         | ModuleSource::Redirected { .. } => true,
         ModuleSource::Local { path } => {
             let path = path.as_str();
-            !(path.starts_with("core:") || path.starts_with("wasi:") || path.starts_with("wasm:"))
+            !(path.starts_with("core:")
+                || path.starts_with("wasm:")
+                || crate::module_source::CmNamespace::split_specifier(path).is_some())
         }
         _ => false,
     }

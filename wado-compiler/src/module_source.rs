@@ -90,15 +90,16 @@ fn well_known_arcs() -> Vec<Arc<str>> {
 /// `crate::stdlib` module lists. Every [`ModuleSourceInterner`] adopts them, so
 /// stdlib `ModuleSource` values compare pointer-equal across independently
 /// constructed interners — what lets the stdlib TIR cache key by `ModuleSource`.
-/// `Core` and `Wasi` store the prefix-stripped path, `Wasm` the full one.
+/// `Core` and `Binding` store the prefix-stripped path, `Wasm` the full one.
 static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
     let mut arcs: Vec<Arc<str>> = Vec::new();
     for (path, _src) in crate::stdlib::ALL_CORE_MODULES {
         let name = path.strip_prefix("core:").unwrap_or(path);
         arcs.push(Arc::<str>::from(name));
     }
-    for (path, _src) in crate::stdlib::ALL_WASI_MODULES {
-        let interface = path.strip_prefix("wasi:").unwrap_or(path);
+    for (path, _src) in crate::stdlib::ALL_BINDING_MODULES {
+        let (_, interface) = CmNamespace::split_specifier(path)
+            .unwrap_or_else(|| panic!("bundled binding module `{path}` has no reserved namespace"));
         arcs.push(Arc::<str>::from(interface));
     }
     for (path, _bytes) in crate::stdlib::ALL_CORE_WASM_ASSETS {
@@ -202,10 +203,14 @@ impl ModuleSourceInterner {
             name: self.intern(name),
         }
     }
-    pub fn wasi(&mut self, interface: &str) -> ModuleSource {
-        ModuleSource::Wasi {
+    pub fn binding(&mut self, namespace: CmNamespace, interface: &str) -> ModuleSource {
+        ModuleSource::Binding {
+            namespace,
             interface: self.intern(interface),
         }
+    }
+    pub fn wasi(&mut self, interface: &str) -> ModuleSource {
+        self.binding(CmNamespace::Wasi, interface)
     }
     pub fn local(&mut self, path: &str) -> ModuleSource {
         ModuleSource::Local {
@@ -248,9 +253,11 @@ impl ModuleSourceInterner {
             [] => ModuleSource::entry_point_synthetic(),
             [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
             [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
-            [first, rest @ ..] if first == "wasi" => self.wasi(&rest.join("/")),
             [first, rest @ ..] if first == "dep" => self.dependency(&rest.join("/")),
-            segments => self.local(&segments.join("/")),
+            all @ [first, rest @ ..] => match CmNamespace::from_prefix(first) {
+                Some(namespace) => self.binding(namespace, &rest.join("/")),
+                None => self.local(&all.join("/")),
+            },
         }
     }
 }
@@ -287,6 +294,58 @@ impl WasmAssetKind {
     }
 }
 
+/// A CM package namespace the compiler ships bindings for. Reserved because it
+/// is bundled: `wep-2026-06-17-package-module-syntax.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CmNamespace {
+    /// `wasi:*` — the WASI P3 bindings under `lib/wasi/`.
+    Wasi,
+    /// `web:*` — the web platform bindings under `lib/web/`.
+    Web,
+}
+
+impl CmNamespace {
+    /// The specifier prefix, without the colon.
+    #[must_use]
+    pub fn prefix(self) -> &'static str {
+        match self {
+            Self::Wasi => "wasi",
+            Self::Web => "web",
+        }
+    }
+
+    /// The namespace a specifier prefix names, or `None` for an open one.
+    #[must_use]
+    pub fn from_prefix(prefix: &str) -> Option<Self> {
+        match prefix {
+            "wasi" => Some(Self::Wasi),
+            "web" => Some(Self::Web),
+            _ => None,
+        }
+    }
+
+    /// Split `"wasi:cli/stdout.wado"` into its namespace and interface path.
+    #[must_use]
+    pub fn split_specifier(specifier: &str) -> Option<(Self, &str)> {
+        let (prefix, rest) = specifier.split_once(':')?;
+        Some((Self::from_prefix(prefix)?, rest))
+    }
+}
+
+impl fmt::Display for CmNamespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.prefix())
+    }
+}
+
+/// `true` for a specifier in a namespace the compiler bundles: `core:` or any
+/// [`CmNamespace`]. Such a specifier resolves out of the embedded stdlib, never
+/// off the host filesystem.
+#[must_use]
+pub fn is_bundled_specifier(specifier: &str) -> bool {
+    specifier.starts_with("core:") || CmNamespace::split_specifier(specifier).is_some()
+}
+
 /// Structured source location of a module. String payloads are [`InternedStr`]:
 /// a well-known source comes from a zero-arg constructor
 /// ([`ModuleSource::prelude`]), anything else from [`ModuleSourceInterner`],
@@ -299,9 +358,12 @@ pub enum ModuleSource {
         /// Module name within core (e.g., "prelude", "cli", "rt", "builtin")
         name: InternedStr,
     },
-    /// WASI module (e.g., `wasi:cli`, `wasi:io`)
-    Wasi {
-        /// Interface name (e.g., "cli", "io", "filesystem")
+    /// A bundled CM binding module (e.g., `wasi:cli`, `web:dom`). Bodiless
+    /// declarations that lower to component imports, unlike [`Self::Core`].
+    Binding {
+        /// The reserved namespace the module belongs to.
+        namespace: CmNamespace,
+        /// Interface path within the namespace (e.g., "cli", "cli/stdout.wado")
         interface: InternedStr,
     },
     /// Local module relative to project root
@@ -359,13 +421,13 @@ pub enum ModuleSource {
 
 /// The package a [`ModuleSource`] belongs to. Visibility enforcement keys on
 /// this: `internal` items reach any module with the same `PackageId`; `pub`
-/// items reach across package boundaries. `core` and `wasi` are each their own
-/// independent package; the entry point and its local modules form the `Root`
-/// package being compiled.
+/// items reach across package boundaries. `core` and each bundled CM namespace
+/// are their own independent package; the entry point and its local modules
+/// form the `Root` package being compiled.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageId {
     Core,
-    Wasi,
+    Binding(CmNamespace),
     /// Entry point, its local modules, Kiln redirects, and wasm assets bundled
     /// into the same component.
     Root,
@@ -378,7 +440,7 @@ impl ModuleSource {
     pub fn package_id(&self) -> PackageId {
         match self {
             Self::Core { .. } => PackageId::Core,
-            Self::Wasi { .. } => PackageId::Wasi,
+            Self::Binding { namespace, .. } => PackageId::Binding(*namespace),
             Self::Local { .. }
             | Self::EntryPoint { .. }
             | Self::Redirected { .. }
@@ -399,7 +461,16 @@ impl PartialEq for ModuleSource {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
-            (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
+            (
+                Self::Binding {
+                    namespace: ns_a,
+                    interface: a,
+                },
+                Self::Binding {
+                    namespace: ns_b,
+                    interface: b,
+                },
+            ) => ns_a == ns_b && a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
             (Self::Dependency { path: a, .. }, Self::Dependency { path: b, .. }) => a == b,
             (Self::Remote { url: a, .. }, Self::Remote { url: b, .. }) => a == b,
@@ -429,7 +500,13 @@ impl std::hash::Hash for ModuleSource {
         std::mem::discriminant(self).hash(state);
         match self {
             Self::Core { name } => name.hash(state),
-            Self::Wasi { interface } => interface.hash(state),
+            Self::Binding {
+                namespace,
+                interface,
+            } => {
+                namespace.hash(state);
+                interface.hash(state);
+            }
             Self::Local { path } => path.hash(state),
             Self::Dependency { path, .. } => path.hash(state),
             Self::Remote { url, .. } => url.hash(state),
@@ -455,19 +532,25 @@ impl Default for ModuleSource {
 
 /// Generate a zero-arg `ModuleSource` constructor that adopts a
 /// well-known `LazyLock<Arc<str>>` static. Keeps the constructor body
-/// regular so the only per-name input is the variant + field + static.
+/// regular so the only per-name input is the variant + field + static,
+/// plus whatever plain fields the variant carries alongside.
 macro_rules! well_known_module_sources {
     (
         $(
             $(#[$meta:meta])*
-            $vis:vis fn $fn_name:ident() = $variant:ident { $field:ident: $arc:ident }
+            $vis:vis fn $fn_name:ident() = $variant:ident {
+                $field:ident: $arc:ident $(, $fixed:ident: $value:expr)*
+            }
         ),* $(,)?
     ) => {
         $(
             $(#[$meta])*
             #[must_use]
             $vis fn $fn_name() -> Self {
-                Self::$variant { $field: InternedStr::from_arc($arc.clone()) }
+                Self::$variant {
+                    $field: InternedStr::from_arc($arc.clone()),
+                    $($fixed: $value,)*
+                }
             }
         )*
     };
@@ -509,13 +592,15 @@ impl ModuleSource {
         pub fn serde() = Core { name: CORE_SERDE },
 
         /// `wasi:cli` — CLI interface root.
-        pub fn wasi_cli() = Wasi { interface: NAME_CLI },
+        pub fn wasi_cli() = Binding { interface: NAME_CLI, namespace: CmNamespace::Wasi },
         /// `wasi:clocks` — clocks interface root.
-        pub fn wasi_clocks() = Wasi { interface: WASI_CLOCKS },
+        pub fn wasi_clocks() = Binding { interface: WASI_CLOCKS, namespace: CmNamespace::Wasi },
         /// `wasi:filesystem` — filesystem interface root.
-        pub fn wasi_filesystem() = Wasi { interface: WASI_FILESYSTEM },
+        pub fn wasi_filesystem() = Binding {
+            interface: WASI_FILESYSTEM, namespace: CmNamespace::Wasi
+        },
         /// `wasi:http` — http interface root.
-        pub fn wasi_http() = Wasi { interface: WASI_HTTP },
+        pub fn wasi_http() = Binding { interface: WASI_HTTP, namespace: CmNamespace::Wasi },
 
         /// Synthetic `<entry>` placeholder used by `from_path(&[])`.
         pub fn entry_point_synthetic() = EntryPoint { filename: ENTRY_FILENAME_ENTRY },
@@ -536,7 +621,10 @@ impl ModuleSource {
     pub fn to_path(&self) -> Vec<String> {
         match self {
             Self::Core { name } => vec!["core".to_string(), name.to_string()],
-            Self::Wasi { interface } => vec!["wasi".to_string(), interface.to_string()],
+            Self::Binding {
+                namespace,
+                interface,
+            } => vec![namespace.prefix().to_string(), interface.to_string()],
             Self::Local { path } => vec![path.to_string()],
             Self::Dependency { path, .. } => vec!["dep".to_string(), path.to_string()],
             Self::Remote { url, .. } => vec![url.to_string()],
@@ -569,10 +657,10 @@ impl ModuleSource {
         matches!(self, Self::Core { .. })
     }
 
-    /// Check if this is a WASI module.
+    /// Check if this is a bundled CM binding module (`wasi:*`, `web:*`).
     #[must_use]
-    pub fn is_wasi(&self) -> bool {
-        matches!(self, Self::Wasi { .. })
+    pub fn is_binding(&self) -> bool {
+        matches!(self, Self::Binding { .. })
     }
 
     /// Whether the entry package owns this module: the entry point and the
@@ -653,7 +741,7 @@ impl ModuleSource {
     /// - `EntryPoint { filename }` → `"{basename}"`
     /// - `Local { path }` → `"{path}"`
     /// - `Core { name }` → `"core/{name}"`
-    /// - `Wasi { interface }` → `"wasi/{interface}"`
+    /// - `Binding { namespace, interface }` → `"{namespace}/{interface}"`
     /// - `Remote { url }` → `"{url}"`
     #[must_use]
     pub fn to_path_string(&self) -> String {
@@ -727,7 +815,10 @@ impl fmt::Display for ModuleSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Core { name } => write!(f, "core:{name}"),
-            Self::Wasi { interface } => write!(f, "wasi:{interface}"),
+            Self::Binding {
+                namespace,
+                interface,
+            } => write!(f, "{namespace}:{interface}"),
             Self::Local { path } => write!(f, "{path}"),
             Self::Dependency { path, .. } => write!(f, "dep:{path}"),
             Self::Remote { url, .. } => write!(f, "{url}"),
@@ -747,6 +838,16 @@ impl fmt::Display for ModuleSource {
 mod tests {
     use super::*;
     use std::assert_matches;
+
+    #[test]
+    fn every_bundled_namespace_is_a_bundled_specifier() {
+        assert!(is_bundled_specifier("core:libm.wat"));
+        assert!(is_bundled_specifier("wasi:cli/stdout.wado"));
+        assert!(is_bundled_specifier("web:dom/dom.wat"));
+        assert!(!is_bundled_specifier("./libm.wat"));
+        assert!(!is_bundled_specifier("dep:../greet/src/lib.wado"));
+        assert!(!is_bundled_specifier("https://example.com/x.wasm"));
+    }
 
     #[test]
     fn dependency_identity_is_the_resolved_path() {
@@ -807,10 +908,16 @@ mod tests {
     fn test_module_source_from_path_wasi() {
         let mut interner = ModuleSourceInterner::new();
         let source = interner.from_path(&["wasi".to_string(), "cli".to_string()]);
-        assert_matches!(source, ModuleSource::Wasi { ref interface } if interface == "cli");
+        assert_matches!(
+            source,
+            ModuleSource::Binding {
+                namespace: CmNamespace::Wasi,
+                ref interface
+            } if interface == "cli"
+        );
 
         let source = interner.from_path(&["wasi".to_string(), "io".to_string()]);
-        assert!(source.is_wasi());
+        assert!(source.is_binding());
     }
 
     #[test]
@@ -885,7 +992,7 @@ mod tests {
         let core = ModuleSource::rt();
         assert!(core.is_core());
         assert!(core.is_core_rt());
-        assert!(!core.is_wasi());
+        assert!(!core.is_binding());
         assert!(!core.is_local());
 
         let builtin = ModuleSource::builtin();
@@ -895,7 +1002,7 @@ mod tests {
         assert!(prelude.is_core_prelude());
 
         let wasi = interner.wasi("cli");
-        assert!(wasi.is_wasi());
+        assert!(wasi.is_binding());
         assert!(!wasi.is_core());
 
         let local = interner.local("./file.wado");
@@ -913,7 +1020,7 @@ mod tests {
         assert!(rt.same_package(&cli), "all core:* share the core package");
 
         let wasi = interner.wasi("cli");
-        assert_eq!(wasi.package_id(), PackageId::Wasi);
+        assert_eq!(wasi.package_id(), PackageId::Binding(CmNamespace::Wasi));
         assert!(
             !rt.same_package(&wasi),
             "core and wasi are separate packages"

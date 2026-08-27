@@ -151,7 +151,9 @@ pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
         .filter(|ms| {
             matches!(
                 ms,
-                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+                ModuleSource::Core { .. }
+                    | ModuleSource::Binding { .. }
+                    | ModuleSource::Wasm { .. }
             )
         })
         .cloned()
@@ -301,7 +303,7 @@ mod tests {
         for ms in snap.tir_modules.keys() {
             match ms {
                 ModuleSource::Core { .. }
-                | ModuleSource::Wasi { .. }
+                | ModuleSource::Binding { .. }
                 | ModuleSource::Wasm { .. } => {}
                 ModuleSource::EntryPoint { .. } => entry_count += 1,
                 _ => panic!("snapshot contains non-stdlib module: {ms:?}"),

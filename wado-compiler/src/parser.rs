@@ -1235,7 +1235,7 @@ impl Parser {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
             // `as_ident_name`, so a contextual keyword can be a key:
-            // `#[cm(..., type="extern-ref")]`.
+            // `#[cm(..., type="extern-handle")]`.
             let key = self.peek_kind().as_ident_name().map(str::to_string);
             let arg = match (key, self.peek_kind().clone()) {
                 (_, TokenKind::StringLit(raw)) => {
@@ -6276,7 +6276,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
             }
             if CmResourceBacking::parse(value).is_none() {
                 return Err(format!(
-                    "unknown #[cm] type `{value}`; expected \"extern-ref\" or \"i32\""
+                    "unknown #[cm] type `{value}`; expected \"extern-handle\" or \"i32\""
                 ));
             }
         }
@@ -6829,7 +6829,7 @@ mod tests {
     #[test]
     fn resource_declares_a_parent() {
         let source = r#"
-            #[cm("web:dom/node", type="extern-ref")]
+            #[cm("web:dom/node", type="extern-handle")]
             pub resource Node extends EventTarget {}
         "#;
         let module = parse(source).unwrap();
@@ -6864,7 +6864,7 @@ mod tests {
     #[test]
     fn cm_attribute_carries_a_resource_backing() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-ref")]
+            #[cm("web:dom/element", type="extern-handle")]
             pub resource Element {}
         "#;
         let module = parse(source).unwrap();
@@ -6874,7 +6874,7 @@ mod tests {
         let attr = &decl.attrs[0];
         assert_eq!(
             attr.cm_resource_backing(),
-            Some(CmResourceBacking::ExternRef)
+            Some(CmResourceBacking::ExternHandle)
         );
         let cm = attr.as_cm_import().expect("cm boundary import");
         assert_eq!(cm.interface, "element");
@@ -6901,7 +6901,7 @@ mod tests {
         "#;
         let err = parse(source).unwrap_err();
         assert!(
-            err.message.contains("extern-ref") && err.message.contains("i32"),
+            err.message.contains("extern-handle") && err.message.contains("i32"),
             "expected the allowed values in the message, got: {}",
             err.message
         );
@@ -6929,7 +6929,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_a_repeated_type_field() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-ref", type="i32")]
+            #[cm("web:dom/element", type="extern-handle", type="i32")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -6943,7 +6943,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_an_unknown_field() {
         let source = r#"
-            #[cm("web:dom/element", backing="extern-ref")]
+            #[cm("web:dom/element", backing="extern-handle")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -6957,7 +6957,7 @@ mod tests {
     #[test]
     fn cm_attribute_backing_belongs_on_a_resource() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-ref")]
+            #[cm("web:dom/element", type="extern-handle")]
             pub struct Element {}
         "#;
         let err = parse(source).unwrap_err();
