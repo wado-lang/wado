@@ -6,7 +6,7 @@ use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, TypeTable};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
@@ -18,7 +18,6 @@ use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
-use super::util::placeholder;
 
 /// The parameter an associated-type equality binds: a bare parameter
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
@@ -630,13 +629,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve arguments with coercion awareness
-        let mut args: Vec<TirExpr> = call
+        let mut args: Vec<TypeId> = call
             .args
             .iter()
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = param_types.get(i).copied();
-                placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
+                self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
 
@@ -655,7 +654,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.solve_infer_var(var, slot);
             }
             for arg in &mut args {
-                arg.type_id = self.apply_infer_holes(arg.type_id);
+                *arg = self.apply_infer_holes(*arg);
             }
         }
 
@@ -666,11 +665,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_variant_payload {
             for (i, arg) in args.iter_mut().enumerate() {
                 if let Some(&expected) = param_types.get(i)
-                    && self.type_has_infer_hole(arg.type_id)
+                    && self.type_has_infer_hole(*arg)
                     && self.hole_pinnable_against(expected)
                 {
-                    self.solve_infer_holes_against(arg.type_id, expected);
-                    arg.type_id = self.apply_infer_holes(arg.type_id);
+                    self.solve_infer_holes_against(*arg, expected);
+                    *arg = self.apply_infer_holes(*arg);
                 }
             }
         }
@@ -720,7 +719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(suffix_seg) = ident.segments.get(1) {
                     let arg_hint = if (suffix == "from" || suffix == "try_from") && args.len() == 1
                     {
-                        Some(self.tysys.type_table.borrow().type_name(args[0].type_id))
+                        Some(self.tysys.type_table.borrow().type_name(args[0]))
                     } else {
                         None
                     };
@@ -796,7 +795,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // Handle From conversions with no explicit impl: reflexive and newtype.
                 if suffix == "from" && args.len() == 1 {
-                    let arg_type = args[0].type_id;
+                    let arg_type = args[0];
                     let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
                     // Reflexive `T::from(T_val)`: the outer Call evaporates, so
@@ -824,7 +823,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             call.id,
                             super::sem::types::DesugarKind::NewtypeFromCollapse,
                         );
-                        return args[0].type_id;
+                        return args[0];
                     }
 
                     // Newtype→Base: u64::from(UserId_val) where type UserId = u64
@@ -911,7 +910,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, arg) in args.iter().enumerate() {
                     if let Some(&expected) = substituted.get(i) {
                         self.typecheck(
-                            arg.type_id,
+                            *arg,
                             expected,
                             call.args.get(i).map_or(call.span, ast::Expr::span),
                         );
@@ -997,7 +996,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 &self.annotate_ctx,
                                 &variant_info,
                                 &case_data,
-                                payload.as_deref(),
+                                payload.as_deref().copied(),
                                 expected_type,
                                 &[],
                                 &[],
@@ -1036,7 +1035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_table
                         .borrow()
                         .type_id_of_decl(variant_info.defined_at);
-                    let from_type = args[0].type_id;
+                    let from_type = args[0];
                     let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
                     let from_trait_name = self
                         .tysys
@@ -1064,15 +1063,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                             == from_type_name)
                         });
                     if matching_impl {
-                        return self
-                            .resolve_from_call(
-                                target_type_id,
-                                from_type,
-                                args.into_iter().next().unwrap(),
-                                call.span,
-                                call.id,
-                            )
-                            .type_id;
+                        return self.resolve_from_call(target_type_id, from_type, call.id);
                     }
                     if let Some(return_type) = self.resolve_named_type_blanket_static(
                         prefix, suffix, call.id, &args, call.span,
@@ -1163,7 +1154,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         &self.annotate_ctx,
                                         &variant_info,
                                         &case_data,
-                                        payload.as_deref(),
+                                        payload.as_deref().copied(),
                                         expected_type,
                                         &[],
                                         &[],
@@ -1223,7 +1214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_type_hint = if (method_name == "from" || method_name == "try_from")
                         && args.len() == 1
                     {
-                        Some(self.tysys.type_table.borrow().type_name(args[0].type_id))
+                        Some(self.tysys.type_table.borrow().type_name(args[0]))
                     } else {
                         None
                     };
@@ -1345,7 +1336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(&expected) = checked.get(i) {
                             self.typecheck(
-                                arg.type_id,
+                                *arg,
                                 expected,
                                 call.args.get(i).map_or(call.span, ast::Expr::span),
                             );
@@ -1589,12 +1580,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(&expected) = check_param_types.get(i) {
                 // Pin a deferred hole carried into this argument
                 // (`let v = gen()?; foo(v)`) against the parameter type.
-                if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected) {
-                    self.solve_infer_holes_against(arg.type_id, expected);
-                    arg.type_id = self.apply_infer_holes(arg.type_id);
+                if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected) {
+                    self.solve_infer_holes_against(*arg, expected);
+                    *arg = self.apply_infer_holes(*arg);
                 }
                 self.typecheck(
-                    arg.type_id,
+                    *arg,
                     expected,
                     call.args.get(i).map_or(call.span, ast::Expr::span),
                 );
@@ -1659,13 +1650,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type: TypeId,
         pad_with_defaults: bool,
     ) -> TypeId {
-        let mut args: Vec<TirExpr> = call
+        let mut args: Vec<TypeId> = call
             .args
             .iter()
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = fn_params.get(i).copied();
-                placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
+                self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
 
@@ -1685,7 +1676,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = fn_params.get(i) {
                 self.typecheck(
-                    arg.type_id,
+                    *arg,
                     expected,
                     call.args.get(i).map_or(call.span, ast::Expr::span),
                 );
@@ -1888,7 +1879,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         callee: &Expr,
         call_args_ast: &[Expr],
-        args: &mut Vec<TirExpr>,
+        args: &mut Vec<TypeId>,
         param_types: &[TypeId],
         ctx: &mut FunctionContext,
     ) {
@@ -1937,7 +1928,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         default_expr.span()
                     );
                 }
-                args.push(placeholder(resolved, default_expr.span()));
+                args.push(resolved);
                 subs.insert(name, default_expr);
             }
         });
@@ -2000,7 +1991,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         callee: &CalleeRef,
         raw_args: &[Expr],
-        args: &[TirExpr],
+        args: &[TypeId],
         expected_type: Option<TypeId>,
         span: crate::token::Span,
     ) -> Vec<TypeId> {
@@ -2047,9 +2038,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
             for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
                 if Self::is_literal_number_arg(raw_args.get(i)) {
-                    infer.add_deferred(*param_type, arg.type_id);
+                    infer.add_deferred(*param_type, *arg);
                 } else {
-                    infer.add(*param_type, arg.type_id);
+                    infer.add(*param_type, *arg);
                 }
             }
             if let Some(expected) = expected_type {
@@ -2125,9 +2116,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
-                infer.add_deferred(*param_type, arg.type_id);
+                infer.add_deferred(*param_type, *arg);
             } else {
-                infer.add(*param_type, arg.type_id);
+                infer.add(*param_type, *arg);
             }
         }
         if let (Some(decl_ret), Some(expected)) = (decl_return_type, expected_type) {
@@ -2395,7 +2386,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
-        args: &[TirExpr],
+        args: &[TypeId],
         expected_type: Option<TypeId>,
         span: crate::token::Span,
     ) {
@@ -2446,7 +2437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let can_defer =
-            expected_type.is_none() && args.iter().all(|a| !self.type_has_infer_hole(a.type_id));
+            expected_type.is_none() && args.iter().all(|a| !self.type_has_infer_hole(*a));
         if !can_defer {
             self.report_uninferred_fn_type_args(callee, type_args, span);
             return;
@@ -2633,7 +2624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         prefix: &str,
         suffix: &str,
         raw_args: &[Expr],
-        args: &[TirExpr],
+        args: &[TypeId],
         expected_type: Option<TypeId>,
         span: crate::token::Span,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
@@ -2655,7 +2646,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
         raw_args: &[Expr],
-        args: &[TirExpr],
+        args: &[TypeId],
         expected_type: Option<TypeId>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         let Some(sig) = self.static_method_sig(struct_name, method_name) else {
@@ -2673,9 +2664,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut infer = InferCtx::new(&self.tysys.type_table, all_param_ids.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
-                infer.add_deferred(*param_type, arg.type_id);
+                infer.add_deferred(*param_type, *arg);
             } else {
-                infer.add(*param_type, arg.type_id);
+                infer.add(*param_type, *arg);
             }
         }
         if let (Some(decl_ret), Some(expected)) = (decl_return_type, expected_type) {
@@ -2780,7 +2771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_name: &str,
         method: &str,
         call_id: crate::AstId,
-        args: &[TirExpr],
+        args: &[TypeId],
         span: crate::Span,
     ) -> Option<TypeId> {
         // `type_name` is the receiver spelling after `Self::` / `T::`
@@ -2822,7 +2813,7 @@ impl TypeSystem {
         ctx: &Scope,
         variant_info: &super::types::VariantInfo,
         case_data: &super::types::VariantCaseData,
-        payload: Option<&TirExpr>,
+        payload: Option<TypeId>,
         expected_type: Option<TypeId>,
         explicit_args: &[TypeId],
         holes: &[bool],
@@ -2854,7 +2845,7 @@ impl TypeSystem {
         // Forward inference: unify the case payload's declared type against
         // the actual payload expression's type.
         if let Some(payload_expr) = payload {
-            infer.add(case_data.payload, payload_expr.type_id);
+            infer.add(case_data.payload, payload_expr);
         }
 
         // Backward inference: extract type args from the caller's expected type.

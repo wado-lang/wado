@@ -9,8 +9,8 @@ use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirStruct, TirStructField,
-    TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirStruct, TirStructField, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -2276,9 +2276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
         match expr {
             ast::Expr::Block(block) => self.coerce_block_numeric_literal_tail(block, target),
-            _ => self
-                .try_coerce_numeric_literal(expr, target)
-                .map(|c| c.type_id),
+            _ => self.try_coerce_numeric_literal(expr, target),
         }
     }
 
@@ -3151,12 +3149,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // `[1, 2, 3] as List<i32>`, `[1, 2, 3] as SeqVec<i32>`
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
-            return coerced.type_id;
+            return coerced;
         }
 
         // `{ a: 1, b: 2 } as TreeMap<String, i32>`
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
-            return coerced.type_id;
+            return coerced;
         }
 
         // `[1, 2] as [i64, i64]`: each element takes the target's own element
@@ -3895,7 +3893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(coerced) =
                     self.try_coerce_tuple_to_sequence(&ast_field.value, ctx, concrete_type)
                 {
-                    fields[field_idx].value = coerced;
+                    fields[field_idx].value.type_id = coerced;
                 }
                 // The check the first pass skipped — but only once the slot is
                 // actually filled. A field type that still names a rigid
@@ -4849,7 +4847,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_option {
             self.resolve_question_mark_option(inner_type, ctx)
         } else {
-            self.resolve_question_mark_result(inner_type, ctx, qm.span, qm.id)
+            self.resolve_question_mark_result(inner_type, ctx, qm.id)
         }
     }
 
@@ -4881,7 +4879,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         inner_type: TypeId,
         ctx: &mut FunctionContext,
-        span: Span,
         qm_id: AstId,
     ) -> TypeId {
         let return_type = ctx.return_type;
@@ -4905,23 +4902,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The `__qm_v` local is allocated for walk-order parity; reify rebuilds
         // the `?` desugar and its own bindings, so the index is not kept here.
         ctx.add_local("__qm_v".to_string(), ok_type, false, None);
-        let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
+        ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
 
         // Record the `From::from(e)` conversion facts when the inner and outer
         // error types differ (no-op when they match). `resolve_from_call`
         // writes `FromCallFacts` keyed by the `?` AstId; reify replays the
-        // conversion from the AST + those facts. The returned `TirExpr` is the
-        // dead `Err(From::from(e))` node, projected away here.
+        // conversion from the AST + those facts.
         if inner_err_type != outer_err_type {
-            let e_expr = TirExpr::new(
-                TirExprKind::Local {
-                    index: e_local,
-                    name: "__qm_e".to_string(),
-                },
-                inner_err_type,
-                span,
-            );
-            let _ = self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id);
+            let _ = self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
         }
 
         ctx.exit_scope();
@@ -4934,19 +4922,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ok_type
     }
 
-    /// Generate `target_type::from(value)` as a static call, off the
-    /// `impl From<from_type> for target_type`. `caller_id` is the source
-    /// expression that triggered the conversion — the `?` operator, an explicit
-    /// `T::from(v)` — and the resolved facts are recorded under it so reify can
-    /// rebuild the `Call` without re-walking impl blocks or re-mangling.
+    /// Record the facts for `target_type::from(value)` off the
+    /// `impl From<from_type> for target_type`, and answer with the conversion's
+    /// result type. `caller_id` is the source expression that triggered the
+    /// conversion — the `?` operator, an explicit `T::from(v)` — and the facts
+    /// are recorded under it so reify rebuilds the `Call` without re-walking
+    /// impl blocks or re-mangling.
     pub(super) fn resolve_from_call(
         &mut self,
         target_type: TypeId,
         from_type: TypeId,
-        value: TirExpr,
-        span: Span,
         caller_id: crate::ast::AstId,
-    ) -> TirExpr {
+    ) -> TypeId {
         let tt = self.tysys.type_table.borrow();
         let target_name = tt.type_name(target_type);
         let from_name = tt.fq_type_name(from_type);
@@ -4977,29 +4964,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source,
-                    name: method_name,
-                    monomorph_info: None,
-                    // Auto-derived `From` impl (synthesis-side): the dispatch
-                    // builder never needs `From`'s declaring module because
-                    // it's not an effect / resource, so `base_trait_module`
-                    // stays unset.
-                    method_info: Some(crate::name::LocalMethodName::new(
-                        target_receiver,
-                        Some(from_trait),
-                        "from".to_string(),
-                    )),
-                }),
-                type_args: vec![],
-                args: vec![CallArg::new(value, false)],
-                has_receiver: false,
-            },
-            target_type,
-            span,
-        )
+        target_type
     }
 
     /// The `impl From<from_name> for target_name` block and the module that

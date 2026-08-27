@@ -12,9 +12,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, RefKind};
-use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
-};
+use crate::tir::{FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -87,7 +85,7 @@ pub(super) struct MethodInferenceInput<'a> {
     /// form; parallel to `args` / `raw_args`.
     pub param_types: &'a [TypeId],
     /// Already-resolved argument expressions, in order.
-    pub args: &'a [TirExpr],
+    pub args: &'a [TypeId],
     /// Raw AST expressions for `args`, used to detect literal-number
     /// arguments that participate in deferred-literal unification.
     pub raw_args: &'a [Expr],
@@ -1257,9 +1255,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
-                infer.add_deferred(param_type, arg.type_id);
+                infer.add_deferred(param_type, *arg);
             } else {
-                infer.add(param_type, arg.type_id);
+                infer.add(param_type, *arg);
             }
         }
         if let Some(expected) = expected_return_type {
@@ -3434,26 +3432,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // body walk projects only the result type. The args were resolved
         // above for their fact-recording side effects.
         Some(placeholder(return_type, method_call.span))
-    }
-
-    /// The sole elaborator-side constructor of a method call — a
-    /// [`TirExprKind::Call`] whose receiver heads its `args`. Centralising it
-    /// gives one audit point for "every elaborator-emitted method call was
-    /// typechecked against the callee's declared parameter types", though the
-    /// typechecking itself stays the caller's job.
-    pub(super) fn build_tir_method_call(
-        receiver: TirExpr,
-        func: FunctionRef,
-        type_args: Vec<TypeId>,
-        args: Vec<CallArg>,
-        return_type: TypeId,
-        span: crate::token::Span,
-    ) -> TirExpr {
-        TirExpr::new(
-            TirExprKind::method_call(Box::new(receiver), func, type_args, args),
-            return_type,
-            span,
-        )
     }
 }
 

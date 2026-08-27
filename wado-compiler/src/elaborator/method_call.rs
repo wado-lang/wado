@@ -704,12 +704,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Resolve arguments with coercion using method parameter types
-        let mut args: Vec<TirExpr> = args_ast
+        let mut args: Vec<TypeId> = args_ast
             .iter()
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = expected_param_types.get(i).copied();
-                placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
+                self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
 
@@ -748,7 +748,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = s.with_foreign_vantage(vantage, |s| {
                         s.resolve_expr(&default_expr, ctx, Some(expected_type))
                     });
-                    args.push(placeholder(resolved, default_expr.span()));
+                    args.push(resolved);
                     if let Some(name) = param_names.get(i) {
                         subs.insert(name.clone(), default_expr);
                     }
@@ -764,9 +764,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // these argument types — has run. The check happens once below,
         // against the substituted parameter types.
         for (arg, &expected_type) in args.iter_mut().zip(expected_param_types.iter()) {
-            if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected_type) {
-                self.solve_infer_holes_against(arg.type_id, expected_type);
-                arg.type_id = self.apply_infer_holes(arg.type_id);
+            if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected_type) {
+                self.solve_infer_holes_against(*arg, expected_type);
+                *arg = self.apply_infer_holes(*arg);
             }
         }
 
@@ -883,7 +883,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = substituted_param_types.get(i) {
                 self.typecheck(
-                    arg.type_id,
+                    *arg,
                     expected,
                     args_ast.get(i).map_or(span, super::ast::Expr::span),
                 );
@@ -1631,13 +1631,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve arguments with expected types for coercion
-        let mut args: Vec<TirExpr> = static_call
+        let mut args: Vec<TypeId> = static_call
             .args
             .iter()
             .enumerate()
             .map(|(i, a)| {
                 let expected_type = param_types.get(i).copied();
-                placeholder(self.resolve_expr(a, ctx, expected_type), a.span())
+                self.resolve_expr(a, ctx, expected_type)
             })
             .collect();
 
@@ -1668,7 +1668,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         s.resolve_expr(&default_expr, ctx, Some(expected_type))
                     })
                 });
-                args.push(placeholder(resolved, default_expr.span()));
+                args.push(resolved);
                 subs.insert(pname.clone(), default_expr);
             }
         }
@@ -1812,7 +1812,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 &self.annotate_ctx,
                                 &variant_info,
                                 &case_data,
-                                args.first(),
+                                args.first().copied(),
                                 None,
                                 &explicit_args,
                                 &target_holes,
@@ -1848,7 +1848,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .args
                                 .first()
                                 .map_or(static_call.span, super::ast::Expr::span);
-                            self.typecheck(args[0].type_id, expected_type, span);
+                            self.typecheck(args[0], expected_type, span);
                         }
                     }
 
@@ -1867,28 +1867,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The synthesized function doesn't exist during resolution, so we generate the call inline.
         if static_call.method == "from"
             && args.len() == 1
-            && self.has_from_synthesis_request(&static_call.target_type, &args[0].type_id)
+            && self.has_from_synthesis_request(&static_call.target_type, &args[0])
         {
-            return self
-                .resolve_from_call(
-                    target_type_id,
-                    args[0].type_id,
-                    args.into_iter().next().unwrap(),
-                    static_call.span,
-                    static_call.id,
-                )
-                .type_id;
+            return self.resolve_from_call(target_type_id, args[0], static_call.id);
         }
 
         // Reflexive identity: From<T> for T — return the value unchanged.
-        if static_call.method == "from" && args.len() == 1 && args[0].type_id == target_type_id {
-            return args.into_iter().next().unwrap().type_id;
+        if static_call.method == "from" && args.len() == 1 && args[0] == target_type_id {
+            return args.into_iter().next().unwrap();
         }
 
         // Newtype From conversions: From<Base> for Newtype and From<Newtype> for Base.
         // Newtypes share the same representation as their base type, so this is a Cast.
         if static_call.method == "from" && args.len() == 1 {
-            let arg_type = args[0].type_id;
+            let arg_type = args[0];
             let base_of_target = self
                 .tysys
                 .type_table
@@ -2131,7 +2123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let arg_type_hint = if (static_call.method == "from" || static_call.method == "try_from")
             && args.len() == 1
         {
-            Some(self.tysys.type_table.borrow().type_name(args[0].type_id))
+            Some(self.tysys.type_table.borrow().type_name(args[0]))
         } else {
             None
         };
@@ -2347,7 +2339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         method_type_args: &[TypeId],
         static_method_defaults: &[(String, Option<ast::Expr>)],
-        args: &[TirExpr],
+        args: &[TypeId],
         span: Span,
     ) -> Option<TypeId> {
         let (trait_name, blanket_param, blanket_module, blanket_def) =
@@ -2525,7 +2517,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn check_blanket_static_args(
         &mut self,
         param_types: &[TypeId],
-        args: &[TirExpr],
+        args: &[TypeId],
         static_method_defaults: &[(String, Option<ast::Expr>)],
         span: Span,
     ) -> bool {
@@ -2546,7 +2538,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().contains_type_param(expected) {
                 continue;
             }
-            self.typecheck(arg.type_id, expected, arg.span);
+            self.typecheck(*arg, expected, span);
         }
         true
     }
@@ -3704,7 +3696,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        args: &[TirExpr],
+        args: &[TypeId],
         impl_type_args: &[TypeId],
         method_type_args: &[TypeId],
         call_id: AstId,
@@ -3798,7 +3790,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // rather than the default `ModuleSource::primitive()` for `i32`.
         let arg_type_hint =
             if (method_name == "from" || method_name == "try_from") && args.len() == 1 {
-                Some(self.tysys.type_table.borrow().type_name(args[0].type_id))
+                Some(self.tysys.type_table.borrow().type_name(args[0]))
             } else {
                 None
             };

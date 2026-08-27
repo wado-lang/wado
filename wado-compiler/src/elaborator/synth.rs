@@ -260,7 +260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         selected_with: &[Option<ArgClass>],
         args_ast: &[ast::Expr],
         ctx: &FunctionContext,
-        args: &[crate::tir::TirExpr],
+        args: &[TypeId],
         span: crate::token::Span,
     ) {
         // Once an error is reported the arguments carry recovery types, which
@@ -270,7 +270,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (index, arg_ast) in args_ast.iter().enumerate() {
             let Some(arg) = args.get(index) else { continue };
-            if arg.type_id == TypeTable::ERROR || arg.type_id == TypeTable::UNKNOWN {
+            if *arg == TypeTable::ERROR || *arg == TypeTable::UNKNOWN {
                 continue;
             }
             let class = match selected_with.get(index).and_then(Clone::clone) {
@@ -278,11 +278,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => self.synthesize_arg_class(arg_ast, ctx),
             };
             assert!(
-                self.class_admits(arg.type_id, &class),
+                self.class_admits(*arg, &class),
                 "argument synthesis under-approximated at {span:?}: argument {} elaborated to \
                  `{}`, which the synthesized class {class:?} excludes",
                 index + 1,
-                self.tysys.type_table.borrow().type_name(arg.type_id),
+                self.tysys.type_table.borrow().type_name(*arg),
             );
         }
     }

@@ -3,7 +3,6 @@
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
-use super::util::placeholder;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
@@ -36,7 +35,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         expr: &Expr,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let coerced = self.try_coerce_numeric_literal_inner(expr, target_type)?;
         self.record_coercion(
             expr.id(),
@@ -60,7 +59,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         expr: &Expr,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         // Number literal coercion to integer
         if let Expr::Literal(lit) = expr
             && let Literal::Number(repr) = &lit.value
@@ -73,7 +72,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: lit.span,
                 });
-                return Some(placeholder(target_type, lit.span));
+                return Some(target_type);
             }
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
@@ -88,14 +87,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: lit.span,
                         });
                     }
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
             });
         }
@@ -117,14 +116,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: lit.span,
                         });
                     }
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
             });
         }
@@ -143,7 +142,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: unary.span,
                 });
-                return Some(placeholder(target_type, unary.span));
+                return Some(target_type);
             }
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
@@ -158,14 +157,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: unary.span,
                         });
                     }
-                    placeholder(target_type, unary.span)
+                    target_type
                 }
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, unary.span)
+                    target_type
                 }
             });
         }
@@ -176,13 +175,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_float(target_type)
         {
             return Some(match util::parse_float_literal(repr) {
-                Ok(_) => placeholder(target_type, lit.span),
+                Ok(_) => target_type,
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
             });
         }
@@ -195,13 +194,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_float(target_type)
         {
             return Some(match util::parse_float_literal(repr) {
-                Ok(_) => placeholder(target_type, unary.span),
+                Ok(_) => target_type,
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, unary.span)
+                    target_type
                 }
             });
         }
@@ -229,7 +228,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 match parse_result {
                     Ok(_) => {
-                        return Some(placeholder(target_type, lit.span));
+                        return Some(target_type);
                     }
                     Err(_) => {
                         let _ = self.emit(TypeError::InvalidLiteral {
@@ -260,7 +259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let negated_repr = format!("-{repr}");
                 if util::parse_i128_literal(&negated_repr).is_ok() {
-                    return Some(placeholder(target_type, unary.span));
+                    return Some(target_type);
                 }
                 let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
@@ -280,7 +279,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn recoerce_literal_args(
         &mut self,
         raw_args: &[Expr],
-        args: &mut [TirExpr],
+        args: &mut [TypeId],
         expected_param_types: &[TypeId],
     ) {
         for (i, arg) in args.iter_mut().enumerate() {
@@ -293,7 +292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !Self::is_literal_number_arg(Some(raw)) {
                 continue;
             }
-            if arg.type_id == expected {
+            if *arg == expected {
                 continue;
             }
             let is_numeric = {
@@ -329,7 +328,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // records `NumericLiteral` and `expression_types` for the visited
         // AST id (and the inner `-NUM` literal id, when applicable).
         if let Some(coerced) = self.try_coerce_numeric_literal(expr, target_type) {
-            return Some(coerced.type_id);
+            return Some(coerced);
         }
 
         // Null literal → Option<T>
@@ -458,13 +457,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and user types). The sub-helper records `TupleToSequence` and
         // `expression_types`.
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
-            return Some(coerced.type_id);
+            return Some(coerced);
         }
 
         // Key-value literal → a type with a `From<Array<[K, V]>>` impl. The
         // sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
-            return Some(coerced.type_id);
+            return Some(coerced);
         }
 
         // A key-value literal whose generic target builds from no pair array
@@ -516,7 +515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let coerced = self.try_coerce_struct_to_map_inner(expr, ctx, target_type)?;
         self.record_coercion(
             expr.id(),
@@ -532,7 +531,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let Expr::StructLiteral(struct_lit) = expr else {
             return None;
         };
@@ -583,7 +582,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             // Recover as the target type: the literal named a real impl, so a
             // second "not constructible" report would describe the same fault.
-            return Some(placeholder(target_type, span));
+            return Some(target_type);
         }
         self.solve_infer_holes_against(key_type, string_type);
 
@@ -667,7 +666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx.exit_scope();
         }
 
-        Some(placeholder(target_type, span))
+        Some(target_type)
     }
 
     /// Coerce a sequence literal `[e0, e1, …]` into a type implementing
@@ -680,7 +679,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let coerced = self.try_coerce_tuple_to_sequence_inner(expr, ctx, target_type)?;
         self.record_coercion(
             expr.id(),
@@ -922,7 +921,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let tuple_lit = match expr {
             Expr::TupleLiteral(tuple_lit) => tuple_lit,
             Expr::Unary(unary) if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) => {
@@ -960,7 +959,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ),
                 span: spread.span(),
             });
-            return Some(placeholder(target_type, span));
+            return Some(target_type);
         }
 
         // WEP 2026-08-24: record the resolved `From<Array<E>>` so reify
@@ -1022,7 +1021,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             output_type
         };
-        Some(placeholder(result_type, span))
+        Some(result_type)
     }
 }
 

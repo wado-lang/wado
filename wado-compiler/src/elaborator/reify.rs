@@ -2778,7 +2778,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         span,
                         &self.tysys.type_table,
                     );
-                    return super::Elaborator::<H>::build_tir_method_call(
+                    return build_tir_method_call(
                         receiver,
                         dispatch.function_ref,
                         vec![],
@@ -2975,7 +2975,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     );
                     let idx_expr = self.reify_expr(&index_expr.index, ctx, None);
                     let value_expr = self.reify_expr(&assign.value, ctx, None);
-                    return super::Elaborator::<H>::build_tir_method_call(
+                    return build_tir_method_call(
                         receiver,
                         dispatch.function_ref,
                         vec![],
@@ -3753,7 +3753,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
         let iter_type = info.iter_type;
-        let into_iter_call = super::Elaborator::<H>::build_tir_method_call(
+        let into_iter_call = build_tir_method_call(
             into_iter_receiver,
             info.into_iter.clone(),
             vec![],
@@ -3799,7 +3799,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow_mut()
             .make_option(info.item_type);
-        let next_call = super::Elaborator::<H>::build_tir_method_call(
+        let next_call = build_tir_method_call(
             next_receiver,
             info.next.clone(),
             vec![],
@@ -5022,7 +5022,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     TirBinaryOp::RefNotEq
                 };
                 return TirExpr::new(
-                    TirExprKind::Binary {
+                    crate::tir::TirExprKind::Binary {
                         op,
                         left: Box::new(left),
                         right: Box::new(right),
@@ -5070,7 +5070,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg_expr, false)
                 })
                 .collect();
-            let call = super::Elaborator::<H>::build_tir_method_call(
+            let call = build_tir_method_call(
                 receiver,
                 dispatch.function_ref,
                 vec![],
@@ -5098,12 +5098,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | ast::BinaryOp::GtEq
                     if call.type_id != TypeTable::ERROR =>
                 {
-                    super::operators::ord_bool_from_cmp(
-                        call,
-                        binary.op,
-                        binary.span,
-                        &self.tysys.type_table,
-                    )
+                    ord_bool_from_cmp(call, binary.op, binary.span, &self.tysys.type_table)
                 }
                 _ => call,
             };
@@ -5116,7 +5111,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `==` / `!=` path on ref types; other ops on refs are already
         // diagnosed by annotate.
         TirExpr::new(
-            TirExprKind::Binary {
+            crate::tir::TirExprKind::Binary {
                 left: Box::new(left),
                 op: ast_binary_op_to_tir(binary.op),
                 right: Box::new(right),
@@ -5627,7 +5622,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg_expr, false)
                 })
                 .collect();
-            super::Elaborator::<H>::build_tir_method_call(
+            build_tir_method_call(
                 receiver,
                 dispatch.function_ref,
                 vec![],
@@ -5637,7 +5632,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         } else {
             TirExpr::new(
-                TirExprKind::Binary {
+                crate::tir::TirExprKind::Binary {
                     left: Box::new(read),
                     op,
                     right: Box::new(rhs),
@@ -5694,7 +5689,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
             &self.tysys.type_table,
         );
-        let method_call = super::Elaborator::<H>::build_tir_method_call(
+        let method_call = build_tir_method_call(
             adjusted,
             dispatch.function_ref,
             vec![],
@@ -5811,7 +5806,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
                 &self.tysys.type_table,
             );
-            let write = super::Elaborator::<H>::build_tir_method_call(
+            let write = build_tir_method_call(
                 write_recv,
                 assign_dispatch.function_ref,
                 vec![],
@@ -6194,7 +6189,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         crate::tir::CallArg::new(arg_expr, false)
                     })
                     .collect();
-                let method_call = super::Elaborator::<H>::build_tir_method_call(
+                let method_call = build_tir_method_call(
                     receiver,
                     dispatch.function_ref,
                     vec![],
@@ -6229,7 +6224,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .ann_expression_types(chain.id)
                 .unwrap_or(TypeTable::BOOL);
             return TirExpr::new(
-                TirExprKind::Binary {
+                crate::tir::TirExprKind::Binary {
                     left: Box::new(left),
                     op: ast_binary_op_to_tir(cmp.op),
                     right: Box::new(right),
@@ -6272,7 +6267,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
 
         let mut acc_tir = TirExpr::new(
-            TirExprKind::Binary {
+            crate::tir::TirExprKind::Binary {
                 left: Box::new(first_tir),
                 op: ast_binary_op_to_tir(cmp0.op),
                 right: Box::new(m0_ref.clone()),
@@ -6315,7 +6310,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
             let next_prev = right_tir.clone();
             let cmp_tir = TirExpr::new(
-                TirExprKind::Binary {
+                crate::tir::TirExprKind::Binary {
                     left: Box::new(prev_tir),
                     op: ast_binary_op_to_tir(cmp.op),
                     right: Box::new(right_tir),
@@ -6324,7 +6319,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cmp.op_span,
             );
             acc_tir = TirExpr::new(
-                TirExprKind::Binary {
+                crate::tir::TirExprKind::Binary {
                     left: Box::new(acc_tir),
                     op: TirBinaryOp::And,
                     right: Box::new(cmp_tir),
@@ -7705,7 +7700,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         op: ast::BinaryOp,
         span: crate::token::Span,
     ) -> TirExpr {
-        super::operators::ord_bool_from_cmp(cmp_call, op, span, &self.tysys.type_table)
+        ord_bool_from_cmp(cmp_call, op, span, &self.tysys.type_table)
     }
 
     /// A function-typed global's `GlobalVarGet` parts
@@ -8336,7 +8331,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
         let index_resolved = self.reify_expr(&index_expr.index, ctx, None);
-        let index_mut_call = super::Elaborator::<H>::build_tir_method_call(
+        let index_mut_call = build_tir_method_call(
             receiver_for_index_mut,
             inner_dispatch.function_ref,
             vec![],
@@ -8370,7 +8365,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             outer_dispatch.return_type
         };
-        super::Elaborator::<H>::build_tir_method_call(
+        build_tir_method_call(
             receiver_for_method,
             outer_dispatch.function_ref,
             type_args,
@@ -8643,7 +8638,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             dispatch.return_type
         };
-        super::Elaborator::<H>::build_tir_method_call(
+        build_tir_method_call(
             adjusted_receiver,
             dispatch.function_ref,
             type_args,
@@ -9149,7 +9144,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .borrow()
                         .type_id_of_decl(enum_info.defined_at);
                     return TirExpr::new(
-                        TirExprKind::EnumConstruct {
+                        crate::tir::TirExprKind::EnumConstruct {
                             enum_type,
                             case_index: case_data.index,
                             case_name: case_data.name,
@@ -9520,14 +9515,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                     &self.tysys.type_table,
                 );
-                let call = super::Elaborator::<H>::build_tir_method_call(
-                    receiver,
-                    func,
-                    vec![],
-                    vec![],
-                    target_base,
-                    span,
-                );
+                let call = build_tir_method_call(receiver, func, vec![], vec![], target_base, span);
                 Some(bridge(call, target_type, span))
             }
             Lowering::LowThenCast => {
@@ -9544,14 +9532,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                     &self.tysys.type_table,
                 );
-                let low_call = super::Elaborator::<H>::build_tir_method_call(
-                    receiver,
-                    func,
-                    vec![],
-                    vec![],
-                    TypeTable::U64,
-                    span,
-                );
+                let low_call =
+                    build_tir_method_call(receiver, func, vec![], vec![], TypeTable::U64, span);
                 let converted = if target_base == TypeTable::U64 {
                     low_call
                 } else {
@@ -10666,6 +10648,88 @@ fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate:
 fn unescape_checked(raw: &str) -> String {
     super::util::unescape_template_string(raw)
         .expect("the body walk rejects a malformed template escape before reify runs")
+}
+
+/// Wrap an `Ord::cmp` call into a `bool` by comparing the returned
+/// `Ordering` variant against the one that makes the operator true:
+/// `<` → `cmp == Less`, `>` → `cmp == Greater`,
+/// `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
+fn ord_bool_from_cmp(
+    cmp_call: TirExpr,
+    op: ast::BinaryOp,
+    span: crate::token::Span,
+    type_table: &std::cell::RefCell<crate::tir::TypeTable>,
+) -> TirExpr {
+    let ordering_type_id = type_table
+        .borrow_mut()
+        .make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
+    // Look up Ordering's `Less` / `Greater` cases through the
+    // `CompilerItem` registry so a stdlib rename of either case
+    // flows here without touching the operator-lowering path.
+    let (less_name, less_index, greater_name, greater_index) = {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        let (_, _, less_name, less_index) =
+            items.require_enum_case(crate::compiler_item::CompilerItem::OrderingLess);
+        let (_, _, greater_name, greater_index) =
+            items.require_enum_case(crate::compiler_item::CompilerItem::OrderingGreater);
+        (
+            less_name.to_string(),
+            less_index,
+            greater_name.to_string(),
+            greater_index,
+        )
+    };
+    use crate::tir::TirBinaryOp;
+    let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
+        ast::BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
+        ast::BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
+        ast::BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
+        ast::BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
+        _ => unreachable!(),
+    };
+    let ordering_variant = TirExpr::new(
+        crate::tir::TirExprKind::EnumConstruct {
+            enum_type: ordering_type_id,
+            case_name,
+            case_index,
+        },
+        ordering_type_id,
+        span,
+    );
+    // The callee is `Ord::cmp` by construction, so it returns `Ordering`
+    // whatever the dispatch recorded — a trait-bounded receiver leaves that
+    // unresolved, and the comparison below would have no type to lower from.
+    let mut cmp_call = cmp_call;
+    cmp_call.type_id = ordering_type_id;
+    TirExpr::new(
+        crate::tir::TirExprKind::Binary {
+            op: compare_op,
+            left: Box::new(cmp_call),
+            right: Box::new(ordering_variant),
+        },
+        crate::tir::TypeTable::BOOL,
+        span,
+    )
+}
+
+/// The sole constructor of a method call — a [`crate::tir::TirExprKind::Call`]
+/// whose receiver heads its `args`. Centralising it gives one audit point for
+/// "every emitted method call was typechecked against the callee's declared
+/// parameter types", though the typechecking itself is annotate's job.
+fn build_tir_method_call(
+    receiver: TirExpr,
+    func: crate::tir::FunctionRef,
+    type_args: Vec<TypeId>,
+    args: Vec<crate::tir::CallArg>,
+    return_type: TypeId,
+    span: crate::token::Span,
+) -> TirExpr {
+    TirExpr::new(
+        crate::tir::TirExprKind::method_call(Box::new(receiver), func, type_args, args),
+        return_type,
+        span,
+    )
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {
