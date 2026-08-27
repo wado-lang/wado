@@ -397,6 +397,14 @@ frontend makes a caller handing on its own reference parameter declare
 aggregate — passed to such a callee whose result the caller drops is the shape
 that would escape both.
 
+`carries` drops the same way at a projection whose type only _holds_ a
+reference — `w.h` where `Held { r: &Rep }` — since the arm keys on the
+projection being a reference itself. A carrier is seeded only from a reference
+parameter, and the frontend rejects storing one in a struct field without
+`stores[p]`, so the declaration covers what the walk lets go. Naming it instead
+takes a "can a value of this type hold a reference" predicate, memoized per
+`TypeId`.
+
 Deriving it instead means promoting a declaration the walk did not confirm to
 the strong reading, and that is only sound-and-precise once the walk confirms
 the routings that are real: measured, it promotes `List::as_slice` and every

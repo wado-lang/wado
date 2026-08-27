@@ -1028,20 +1028,21 @@ impl Analyzer<'_> {
             }
         } else {
             if record && callee.is_some_and(|c| self.callee_stores(c, pos)) {
-                self.escape_if_reference_local(arg);
+                self.escape_if_reference(arg);
             }
             self.walk_expr(arg, live, record);
         }
     }
 
-    /// A reference *local* handed on as is — the spelling [`Analyzer::walk_expr`]
-    /// misses, since it catches only `&place`. It is what a match arm binding
-    /// over a `&`-borrowed scrutinee always is.
-    fn escape_if_reference_local(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Local { index, .. } = &expr.kind
-            && is_reference_type(expr.type_id, self.type_table)
+    /// A reference handed on as it stands — the spelling [`Analyzer::walk_expr`]
+    /// misses, since it catches only `&place`. A match arm binding over a
+    /// `&`-borrowed scrutinee is one; so is that binding cast (`rep as &Rep`)
+    /// or read back out of what holds it, each naming the same storage.
+    fn escape_if_reference(&mut self, expr: &TirExpr) {
+        if is_reference_type(expr.type_id, self.type_table)
+            && let Some(root) = alias_root(expr)
         {
-            self.mark_escaped(*index, None);
+            self.mark_escaped(root, None);
         }
     }
 
@@ -1050,7 +1051,7 @@ impl Analyzer<'_> {
     /// reference pins its referent as the `&place` spelling would.
     fn walk_persisting(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
         if record {
-            self.escape_if_reference_local(expr);
+            self.escape_if_reference(expr);
         }
         self.walk_expr(expr, live, record);
     }
