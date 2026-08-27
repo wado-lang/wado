@@ -1,0 +1,37 @@
+// A `String` copy is right-sized to `used`, never to its backing array's
+// capacity — a builder's slack is not part of the value. What decides it is
+// whether the copy helper recognises the type as the compiler's `String`,
+// which is a question about the declaration a type names (WEP 2026-08-12).
+//
+// This pins the shape only: the miss it guards needs one declaration reaching
+// the type table under two ids, which takes a package-scale program.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder { s: String }
+
+fn build() -> String {
+    let mut b = String::with_capacity(1024);
+    b.push('h');
+    b.push('i');
+    return b;
+}
+
+fn keep(h: &Holder, out: &mut List<String>) {
+    out.push(h.s);
+}
+
+export fn run() with Stdout {
+    let h = Holder { s: build() };
+    let mut out: List<String> = [];
+    keep(&h, &mut out);
+    keep(&h, &mut out);
+    println(`${out.len()} ${out[0].len()} ${out[1]}`);
+}
+
+__DATA__
+{
+    "stdout": "2 2 hi\n",
+    "wir_not_expect:O0": ["builtin::array_len(__array_clone_src"],
+    "wir_not_expect:O2": ["builtin::array_len(__array_clone_src"]
+}

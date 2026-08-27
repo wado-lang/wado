@@ -224,6 +224,15 @@ pub fn hands_out_payload(
         .is_some_and(|path| !path.through_borrow)
 }
 
+/// Whether `type_id` is spelled `&T` / `&mut T`. Narrower than
+/// [`TypeTable::is_reference_shaped`], which also answers for a boxed borrow.
+pub fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(type_id),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+    )
+}
+
 /// True when a value of `type_id` must be deep-copied on assignment
 /// or parameter passing.
 ///

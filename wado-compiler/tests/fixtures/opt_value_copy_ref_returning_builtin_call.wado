@@ -1,0 +1,44 @@
+// Where a builtin routes a reference cannot be read off its facts — it has no
+// body and declares no `stores` — and `array_get_ref`, what `index_ref` lowers
+// to, hands back a slot of its first argument. So a reference-typed call result
+// carries every argument; read the other way, the caller moves the list out
+// from under the `&T` it is still holding.
+
+use { println, Stdout } from "core:cli";
+
+struct Item { tags: List<String> }
+
+fn peek(names: &List<String>) -> &String {
+    return names.index_ref(0);
+}
+
+fn make(i: i32) -> Item {
+    return Item { tags: [`aa${i}`, "b"] };
+}
+
+fn build(n: i32) -> i32 {
+    let mut out: List<Item> = [];
+    let mut total = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let it = make(i);
+        let s = peek(&it.tags);
+        total += s.len();
+        out.push(it);
+    }
+    return out.len() * 10 + total;
+}
+
+export fn run() with Stdout {
+    println(`${build(3)}`);
+}
+
+__DATA__
+{
+    "stdout": "39\n",
+    "wir_expect:O0": [
+        "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"
+    ],
+    "wir_expect:O2": [
+        "array_clone_deep_prefix"
+    ]
+}

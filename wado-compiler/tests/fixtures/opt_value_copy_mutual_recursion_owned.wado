@@ -1,0 +1,54 @@
+// A cycle whose members return each other's result: `lower_x` yields
+// `lower_y`'s value and `lower_y` yields `lower_x`'s. Neither can be built up
+// from nothing — each reads the other's unproven answer — so every result the
+// family builds is deep-copied at its consumer until the component settles as
+// a unit.
+
+use { println, Stdout } from "core:cli";
+
+struct Leaf { name: String }
+
+variant Node { L(Leaf), N(List<Node>) }
+
+fn lower_x(d: i32) -> Node {
+    if d <= 0 {
+        return Node::L(Leaf { name: `x${d}` });
+    }
+    return lower_y(d - 1);
+}
+
+fn lower_y(d: i32) -> Node {
+    if d % 2 == 0 {
+        return lower_x(d - 1);
+    }
+    let kids: List<Node> = [lower_x(d - 1)];
+    return Node::N(kids);
+}
+
+fn depth(n: &Node) -> i32 {
+    return match *n {
+        L(_) => 1,
+        N(kids) => {
+            let mut d = 0;
+            for let k of &kids {
+                d += depth(k);
+            }
+            d + 1;
+        },
+    };
+}
+
+export fn run() with Stdout {
+    let mut out: List<Node> = [];
+    out.push(lower_x(4));
+    println(`${out.len()} ${depth(&out[0])}`);
+}
+
+__DATA__
+{
+    "stdout": "1 3\n",
+    "wir_not_expect:O0": [
+        "$value_copy$core:prelude/list.wado/List<opt_value_copy_mutual_recursion_owned.wado/Node>"
+    ],
+    "wir_not_expect:O2": ["array_clone_deep_prefix"]
+}

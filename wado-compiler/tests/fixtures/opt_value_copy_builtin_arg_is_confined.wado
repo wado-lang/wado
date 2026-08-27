@@ -1,0 +1,39 @@
+// Handing a reference to a builtin is not a way out of the callee: `a[i]`'s
+// `array_get_value` keeps nothing. Reading it as one confined no parameter of
+// any function that indexes, so a comparison key — `map.get(rule.name)` — was
+// deep-copied at every lookup.
+
+use { println, Stdout } from "core:cli";
+
+struct Rule { name: String, n: i32 }
+
+fn longest(names: List<String>, probe: String) -> i32 {
+    let mut best = 0;
+    for let mut i = 0; i < names.len(); i += 1 {
+        if names[i] == probe {
+            best += probe.len();
+        }
+    }
+    return best;
+}
+
+fn total(rules: &List<Rule>, names: &List<String>) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < rules.len(); i += 1 {
+        sum += longest(*names, rules[i].name);
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let rules: List<Rule> = [Rule { name: "ab", n: 1 }, Rule { name: "cde", n: 2 }];
+    let names: List<String> = ["ab", "xy", "cde"];
+    println(`${total(&rules, &names)}`);
+}
+
+__DATA__
+{
+    "stdout": "5\n",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/string.wado/String"],
+    "wir_not_expect:O2": ["array_clone"]
+}

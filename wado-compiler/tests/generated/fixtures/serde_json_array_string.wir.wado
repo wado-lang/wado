@@ -358,18 +358,16 @@ fn "serde_json_array_string.wado/__test_2_roundtrip_i32"() {
     let s: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    let input: ref "core:prelude/string.wado//String";
     let json_mv_0: i32;
     let json_mv_1: ref null "core:prelude/string.wado//String";
     let json_mv_2: ref null "core:serde//SerializeError";
     multivalue_bind [json_mv_0, json_mv_1, json_mv_2] = "core:json/core/json/to_string<i32>"(42, struct.new "core:prelude/types.wado//Option<char>" { 1 });
     if @likely(json_mv_0 == 0) {
         s = ref.as_non_null(json_mv_1);
-        input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = s.repr; let __array_clone_len_3: i32; __array_clone_len_3 = s.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: s.used };
         let parsed_mv_0: i32;
         let parsed_mv_1: i32;
         let parsed_mv_2: ref null "core:serde//DeserializeError";
-        multivalue_bind [parsed_mv_0, parsed_mv_1, parsed_mv_2] = "core:json/core/json/from_bytes<i32,core:prelude/string.wado/String>"(input, 100);
+        multivalue_bind [parsed_mv_0, parsed_mv_1, parsed_mv_2] = "core:json/core/json/from_bytes<i32,core:prelude/string.wado/String>"(s, 100);
         if @likely(parsed_mv_0 == 0) {
             if @unlikely(parsed_mv_1 != 42) {
                 cold_path;

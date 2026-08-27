@@ -196,13 +196,18 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
     }
 }
 
-/// Least fixpoint over the two return conventions. Seeds the always-owned
+/// The two return conventions, component by component. Seeds the always-owned
 /// callees (value-copy helpers clone; builtins except the container-alias
-/// reads `array_get_value` / `array_get_ref` allocate) and grows: a body function
-/// becomes owned once every value it returns is owned,
-/// and self-projecting once every value it returns is owned *or* a projection of
+/// reads `array_get_value` / `array_get_ref` allocate), then settles each
+/// strongly connected component of the call graph with its callees already
+/// decided: a body function is owned when every value it returns is owned, and
+/// self-projecting when every value it returns is owned *or* a projection of
 /// its first parameter (`return *self`). `returns_owned` is a subset of
 /// `returns_self_projection`.
+///
+/// Inside a component the answer is assumed and then disproved, not built up: a
+/// cycle whose members return each other's result has no base to build from,
+/// and the returns that avoid the cycle are what decide it either way.
 pub fn compute_return_conventions(
     project: &FlatPackage,
     call_graph: &CallGraph,
@@ -223,38 +228,88 @@ pub fn compute_return_conventions(
     }
     let mut self_proj = owned.clone();
 
-    call_graph.solve(project, |id| {
-        let func = project.functions[id as usize].borrow();
-        let already_owned = owned.contains(&func.module_source, &func.name);
-        let already_self_proj = self_proj.contains(&func.module_source, &func.name);
-        if already_owned && already_self_proj {
-            return false;
-        }
-        let Some(body) = &func.body else {
-            return false;
-        };
-        let (ret_owned, ret_self_proj) = {
-            let oracle =
-                OwnedCalls::new(&owned, &self_proj).assuming_owned(&func.module_source, &func.name);
-            let hands_out_payload = super::hands_out_payload(&func, return_paths);
-            function_return_convention(body, &func.params, &oracle, &type_table, hands_out_payload)
-        };
-        let mut changed = false;
-        if !already_owned && ret_owned {
-            self_proj.insert(func.module_source.clone(), func.name.clone());
-            owned.insert(func.module_source.clone(), func.name.clone());
-            changed = true;
-        }
-        if !already_self_proj && ret_self_proj {
-            self_proj.insert(func.module_source.clone(), func.name.clone());
-            changed = true;
-        }
-        changed
-    });
+    for component in call_graph.sccs() {
+        settle_component(
+            &component,
+            project,
+            call_graph,
+            return_paths,
+            &type_table,
+            &mut owned,
+            &mut self_proj,
+        );
+    }
 
     ReturnConventions {
         returns_owned: owned,
         returns_self_projection: self_proj,
+    }
+}
+
+/// Settle one component: assume every member holds both conventions, then drop
+/// the ones a walk of their returns refutes, re-checking each member that calls
+/// a dropped one. Every callee outside the component is already decided, so a
+/// member's verdict only ever moves down and the loop terminates.
+fn settle_component(
+    component: &[u32],
+    project: &FlatPackage,
+    call_graph: &CallGraph,
+    return_paths: &super::place::ReturnPaths,
+    type_table: &TypeTable,
+    owned: &mut FuncKeySet,
+    self_proj: &mut FuncKeySet,
+) {
+    let members: Vec<u32> = component
+        .iter()
+        .copied()
+        .filter(|&id| project.functions[id as usize].borrow().body.is_some())
+        .collect();
+    if members.is_empty() {
+        return;
+    }
+    let in_component: IndexSet<u32> = members.iter().copied().collect();
+    for &id in &members {
+        let func = project.functions[id as usize].borrow();
+        owned.insert(func.module_source.clone(), func.name.clone());
+        self_proj.insert(func.module_source.clone(), func.name.clone());
+    }
+
+    let mut queue: std::collections::VecDeque<u32> = members.iter().copied().collect();
+    let mut queued: IndexSet<u32> = in_component.clone();
+    while let Some(id) = queue.pop_front() {
+        queued.swap_remove(&id);
+        let func = project.functions[id as usize].borrow();
+        let held_owned = owned.contains(&func.module_source, &func.name);
+        let held_self_proj = self_proj.contains(&func.module_source, &func.name);
+        if !held_owned && !held_self_proj {
+            continue;
+        }
+        let body = func.body.as_ref().expect("members have bodies");
+        let (ret_owned, ret_self_proj) = {
+            let oracle = OwnedCalls::new(owned, self_proj);
+            let hands_out_payload = super::hands_out_payload(&func, return_paths);
+            function_return_convention(body, &func.params, &oracle, type_table, hands_out_payload)
+        };
+        let mut dropped = false;
+        // `owned` is a subset of `self_proj`: losing the weaker verdict loses
+        // the stronger one with it.
+        if held_owned && !ret_owned {
+            owned.remove(&func.module_source, &func.name);
+            dropped = true;
+        }
+        if held_self_proj && !ret_self_proj {
+            self_proj.remove(&func.module_source, &func.name);
+            owned.remove(&func.module_source, &func.name);
+            dropped = true;
+        }
+        if !dropped {
+            continue;
+        }
+        for &caller in call_graph.callers_of(id) {
+            if in_component.contains(&caller) && queued.insert(caller) {
+                queue.push_back(caller);
+            }
+        }
     }
 }
 

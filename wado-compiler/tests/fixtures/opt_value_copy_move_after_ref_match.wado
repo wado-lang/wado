@@ -1,0 +1,46 @@
+// A `&`-borrowed match scrutinee is a transient borrow, like a `&` call
+// argument: it keeps the local live for the match, but a later whole-value read
+// is still the final one and moves the storage instead of deep-copying it.
+
+use { println, Stdout } from "core:cli";
+
+struct Rep { tags: List<String> }
+
+variant Op { Plain(i32), Repeat(Rep) }
+
+fn make(i: i32) -> Op {
+    if i % 2 == 0 {
+        return Op::Repeat(Rep { tags: ["a", "b"] });
+    }
+    return Op::Plain(i);
+}
+
+fn build(n: i32) -> i32 {
+    let mut ops: List<Op> = [];
+    let mut tagged = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let op = make(i);
+        if let Repeat(rep) = &op {
+            tagged += rep.tags.len();
+        }
+        ops.push(op);
+    }
+    return ops.len() * 10 + tagged;
+}
+
+export fn run() with Stdout {
+    println(`${build(4)}`);
+}
+
+__DATA__
+{
+    "stdout": "44\n",
+    "wir_not_expect:O0": [
+        "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>",
+        "array_clone_deep_prefix"
+    ],
+    "wir_not_expect:O2": [
+        "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>",
+        "array_clone_deep_prefix"
+    ]
+}

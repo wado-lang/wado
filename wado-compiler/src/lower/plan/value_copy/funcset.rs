@@ -40,6 +40,14 @@ impl FuncKeySet {
     pub fn insert(&mut self, module: ModuleSource, name: String) -> bool {
         self.by_module.entry(module).or_default().insert(name)
     }
+
+    /// Remove `(module, name)`; returns whether it was present. Order among the
+    /// remaining names is not observed — every reader asks by key.
+    pub fn remove(&mut self, module: &ModuleSource, name: &str) -> bool {
+        self.by_module
+            .get_mut(module)
+            .is_some_and(|names| names.swap_remove(name))
+    }
 }
 
 /// A map from `(module_source, name)` to `V`, queryable by borrow.

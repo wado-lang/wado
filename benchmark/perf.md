@@ -92,3 +92,19 @@ gale-gen, best of four alternating pairs, **182.6 KB/s without it vs 168.0**.
 Pricing the two elisions against each other needs the share analysis keyed on
 liveness, a standing item in
 [WEP: Ownership Analysis](../docs/wep-2026-05-21-resource-ownership.md).
+
+## Raising the `-O2` inline budget (2026-08-27)
+
+The 13-instruction budget leaves 313 functions out of line in gale-gen, and
+raising it to 20 pulls them in: gale-gen 98.9 → 95.9 ms/iter, cbor-twitter
+serialize +7.8%, syntax-highlight +3.7%, sqlite-parse +3.4%, sieve +2.2%.
+
+It is still a loss. json-twitter **serialize drops 17%** (638 → 530 MB/s),
+mandelbrot goes slightly backwards, and every program pays for it in bytes:
+`-Os` output grows 41% on gale-gen (1.29 → 1.81 MB), 43% on json-twitter, 16%
+on syntax-highlight.
+
+So the budget is not a dial with a better setting — a serializer's hot loop is
+exactly what growing it damages. What the sweep says instead is that the
+threshold is doing two jobs, admitting a callee and pricing a loop body, and a
+gale-gen-shaped win needs the second priced apart from the first.
