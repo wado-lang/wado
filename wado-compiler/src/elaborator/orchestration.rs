@@ -1609,7 +1609,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let is_stdlib_snapshot_hit = |ms: &ModuleSource| {
             matches!(
                 ms,
-                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+                ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. }
             ) && snapshot.is_some_and(|s| s.tir_modules.contains_key(ms))
         };
         // User modules whose Phase 1 body walk succeeded and whose AST is

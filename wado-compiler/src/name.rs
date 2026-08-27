@@ -4,7 +4,7 @@
 //! Module paths are filesystem representations, not URIs: normalized lexically
 //! ([`crate::path::normalize`]), never percent-encoded, and project-root-relative.
 
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use std::fmt;
 use std::hash::Hash;
 
@@ -1137,11 +1137,11 @@ pub fn validate_module_path(path: &str) -> Result<(), String> {
 }
 
 /// `true` for an opaque module identifier that is not a filesystem path and
-/// must never be normalized: a scheme-qualified name (`core:` / `wasi:`) or a
-/// remote URI (`http://` / `https://`).
+/// must never be normalized: a reserved namespace (`core:`, `wasi:`, `web:`) or
+/// a remote URI (`http://` / `https://`).
 fn has_special_prefix(path: &str) -> bool {
     path.starts_with("core:")
-        || path.starts_with("wasi:")
+        || CmNamespace::split_specifier(path).is_some()
         || path.starts_with("https://")
         || path.starts_with("http://")
 }
@@ -1172,11 +1172,7 @@ pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
 /// `../lib.wado` gives `./lib.wado`.
 pub fn resolve_module_path(base: &str, relative: &str) -> String {
     // Handle special module prefixes - they don't need resolution
-    if relative.starts_with("core:")
-        || relative.starts_with("wasi:")
-        || relative.starts_with("https://")
-        || relative.starts_with("http://")
-    {
+    if has_special_prefix(relative) {
         return relative.to_string();
     }
 
@@ -1301,8 +1297,8 @@ pub fn resolve_import_with_entry(
     if let Some(name) = import_source.strip_prefix("core:") {
         return interner.core(name);
     }
-    if let Some(interface) = import_source.strip_prefix("wasi:") {
-        return interner.wasi(interface);
+    if let Some((namespace, interface)) = CmNamespace::split_specifier(import_source) {
+        return interner.binding(namespace, interface);
     }
     if import_source.starts_with("https://") || import_source.starts_with("http://") {
         return interner.remote(import_source);

@@ -58,6 +58,7 @@ mod unused_diagnostics;
 mod wasm_import_dce;
 mod wasm_module_optimize;
 mod wat;
+mod web_dom;
 mod wit;
 mod wit_bundle;
 mod wit_import_plan;

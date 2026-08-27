@@ -90,7 +90,7 @@ fn lookup_effect_owner(
         if n != name {
             continue;
         }
-        if let ModuleSource::Wasi { interface } = ms
+        if let ModuleSource::Binding { interface, .. } = ms
             && interface
                 .strip_prefix(package)
                 .is_some_and(|rest| rest.starts_with('/'))

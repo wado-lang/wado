@@ -234,7 +234,7 @@ pub fn cm_payload_type_from_type_id(
 /// dependency declarations do not, so they route through `Named`.
 fn is_cm_owned_source(ms: &ModuleSource) -> bool {
     match ms {
-        ModuleSource::Wasi { .. } => true,
+        ModuleSource::Binding { .. } => true,
         // The `core:kiln` facade itself (`name == "kiln"`) plus its WIT-generated
         // submodules (`kiln/...`). `kilnfoo` is unrelated, so match exactly.
         ModuleSource::Core { name } => {
@@ -465,7 +465,11 @@ fn wasi_error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> Opti
     else {
         return None;
     };
-    let ModuleSource::Wasi { interface } = type_table.def_module(*def) else {
+    let ModuleSource::Binding {
+        namespace: crate::module_source::CmNamespace::Wasi,
+        interface,
+    } = type_table.def_module(*def)
+    else {
         return None;
     };
     Some(interface.split('/').next().unwrap_or("cli").to_string())
@@ -547,9 +551,11 @@ fn extract_cm_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Information about a WASI function from an interface method
+/// Information about a CM function from an interface method
 #[derive(Debug, Clone)]
 pub struct CmFunctionInfo {
+    /// Binding namespace (e.g., "wasi", "web")
+    pub namespace: String,
     /// Effect name (e.g., "Stdout")
     pub interface_name: String,
     /// Method name in Wado (e.g., "`write_via_stream`")
@@ -571,10 +577,15 @@ pub struct CmFunctionInfo {
 impl CmFunctionInfo {
     /// Build the local alias name for Component Model imports.
     ///
-    /// Format: `wasi:{package}/{interface_name}::{method_name}`
+    /// Format: `{namespace}:{package}/{interface_name}::{method_name}`
     /// Example: `wasi:cli/Stdout::write_via_stream`
     pub fn local_alias_name(&self) -> String {
-        build_local_alias_name(&self.package, &self.interface_name, &self.method_name)
+        build_local_alias_name(
+            &self.namespace,
+            &self.package,
+            &self.interface_name,
+            &self.method_name,
+        )
     }
 
     /// This function's key in `NirPackage::used_wasi_functions` (e.g.
@@ -709,13 +720,18 @@ impl CmFunctionInfo {
     }
 }
 
-/// Build a WASI function's local alias name,
-/// `wasi:{package}/{interface_name}::{method_name}` — e.g.
-/// `wasi:cli/Stdout::write_via_stream`. The package keeps it unique across
-/// packages, and the segments are the Wado effect / method names, not the WIT
-/// interface / function ones.
-pub fn build_local_alias_name(package: &str, interface_name: &str, method_name: &str) -> String {
-    format!("wasi:{package}/{interface_name}::{method_name}")
+/// Build a CM function's local alias name,
+/// `{namespace}:{package}/{interface_name}::{method_name}` — e.g.
+/// `wasi:cli/Stdout::write_via_stream`. The namespace and package keep it
+/// unique across packages, and the last two segments are the Wado effect /
+/// method names, not the WIT interface / function ones.
+pub fn build_local_alias_name(
+    namespace: &str,
+    package: &str,
+    interface_name: &str,
+    method_name: &str,
+) -> String {
+    format!("{namespace}:{package}/{interface_name}::{method_name}")
 }
 
 /// Information about a WASI interface (grouping functions by interface)
@@ -1584,7 +1600,7 @@ impl CmInterfaceRegistry {
         let mut modules: Vec<(&'static str, crate::ast::Module)> = Vec::new();
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
             IndexMap::default();
-        for (path, source) in stdlib::ALL_WASI_MODULES {
+        for (path, source) in stdlib::ALL_BINDING_MODULES {
             let module = parse_module(source);
             defs_by_module.insert(*path, collect_cm_definitions(&module));
             modules.push((*path, module));
@@ -2982,6 +2998,7 @@ impl CmInterfaceRegistry {
             .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
             .collect();
         let func_info = CmFunctionInfo {
+            namespace: wasi.namespace.clone(),
             interface_name: interface_name.to_string(),
             method_name: method_name.to_string(),
             wasi_func_name: wasi_func_name.clone(),
@@ -3029,6 +3046,9 @@ impl CmInterfaceRegistry {
             .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
             .collect();
         let func_info = CmFunctionInfo {
+            // A world import sits above any interface, so it has no namespace,
+            // package or interface path to name: its alias is a bare key.
+            namespace: String::new(),
             interface_name: String::new(),
             method_name: func_name.to_string(),
             wasi_func_name: cm_func_name.to_string(),
@@ -3150,10 +3170,11 @@ impl CmInterfaceRegistry {
     }
 
     /// Whether `source` names an interface whose values follow the CM canonical
-    /// ABI: a stdlib CM namespace (`wasi:`, `core:kiln/`) or a component import
-    /// (whose package namespace is arbitrary, so tracked explicitly).
+    /// ABI: a bundled CM namespace (`wasi:`, `web:`, `core:kiln/`) or a
+    /// component import (whose package namespace is arbitrary, so tracked
+    /// explicitly).
     pub fn is_cm_source(&self, source: &str) -> bool {
-        source.starts_with("wasi:")
+        crate::module_source::CmNamespace::split_specifier(source).is_some()
             || source.starts_with("core:kiln/")
             || self.component_interfaces.contains(source)
     }
@@ -4849,11 +4870,11 @@ mod tests {
     fn test_build_local_alias_name() {
         // Test the utility function directly
         assert_eq!(
-            build_local_alias_name("cli", "Stdout", "write_via_stream"),
+            build_local_alias_name("wasi", "cli", "Stdout", "write_via_stream"),
             "wasi:cli/Stdout::write_via_stream"
         );
         assert_eq!(
-            build_local_alias_name("clocks", "MonotonicClock", "now"),
+            build_local_alias_name("wasi", "clocks", "MonotonicClock", "now"),
             "wasi:clocks/MonotonicClock::now"
         );
     }
@@ -4861,6 +4882,7 @@ mod tests {
     #[test]
     fn test_func_info_local_alias_name() {
         let func_info = CmFunctionInfo {
+            namespace: "wasi".to_string(),
             interface_name: "Stdout".to_string(),
             method_name: "write_via_stream".to_string(),
             wasi_func_name: "write-via-stream".to_string(),

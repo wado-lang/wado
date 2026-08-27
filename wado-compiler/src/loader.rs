@@ -14,7 +14,7 @@ use crate::ast::{Item, Module};
 use crate::bind;
 use crate::compiler_host::{CompilerHost, SourceError};
 use crate::logger::Logger;
-use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
+use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind};
 use crate::name::{normalize_module_path, resolve_module_path};
 use crate::parser::Parser;
 use crate::stdlib;
@@ -133,7 +133,7 @@ impl std::fmt::Display for LoadError {
             LoadError::UnknownNamespace { namespace } => {
                 write!(
                     f,
-                    "unknown module namespace '{namespace}'; expected 'core' or 'wasi'"
+                    "unknown module namespace '{namespace}'; expected 'core', 'wasi' or 'web'"
                 )
             }
             LoadError::InvalidModulePath { path } => {
@@ -527,8 +527,11 @@ pub fn resolve_wasm_asset_path(
             "core:{}",
             join_namespace_relative_path(name, import_source)
         )),
-        ModuleSource::Wasi { interface } => Ok(format!(
-            "wasi:{}",
+        ModuleSource::Binding {
+            namespace,
+            interface,
+        } => Ok(format!(
+            "{namespace}:{}",
             join_namespace_relative_path(interface, import_source)
         )),
         ModuleSource::Local { path } => Ok(crate::name::resolve_local_identity(
@@ -1009,10 +1012,10 @@ fn parse_stdlib_identity_attribute(
     };
     if let Some(name) = path.strip_prefix("core:") {
         Ok(Some(interner.core(name)))
-    } else if let Some(interface) = path.strip_prefix("wasi:") {
-        Ok(Some(interner.wasi(interface)))
+    } else if let Some((namespace, interface)) = CmNamespace::split_specifier(&path) {
+        Ok(Some(interner.binding(namespace, interface)))
     } else {
-        unreachable!("a registered stdlib path is `core:`- or `wasi:`-prefixed")
+        unreachable!("a registered stdlib path carries `core:` or a reserved namespace")
     }
 }
 
@@ -1107,12 +1110,12 @@ fn stdlib_slots() -> &'static StdlibSlotMap {
 
     static SLOTS: OnceLock<StdlibSlotMap> = OnceLock::new();
     SLOTS.get_or_init(|| {
-        let total = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_WASI_MODULES.len();
+        let total = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_BINDING_MODULES.len();
         let mut slots: StdlibSlotMap =
             crate::hashmap::IndexMap::with_capacity_and_hasher(total, FxBuildHasher);
         for &(path, source) in stdlib::ALL_CORE_MODULES
             .iter()
-            .chain(stdlib::ALL_WASI_MODULES.iter())
+            .chain(stdlib::ALL_BINDING_MODULES.iter())
         {
             slots.insert(
                 path,
@@ -1165,7 +1168,10 @@ fn cached_wasm_binding_module(import_path: &str, source: &str) -> Option<&'stati
 fn stdlib_cache_key(ms: &ModuleSource) -> Option<String> {
     match ms {
         ModuleSource::Core { name } => Some(format!("core:{name}")),
-        ModuleSource::Wasi { interface } => Some(format!("wasi:{interface}")),
+        ModuleSource::Binding {
+            namespace,
+            interface,
+        } => Some(format!("{namespace}:{interface}")),
         _ => None,
     }
 }
@@ -1847,8 +1853,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         if let Some(name) = import_source.strip_prefix("core:") {
             return Ok(self.interner.core(name));
         }
-        if let Some(interface) = import_source.strip_prefix("wasi:") {
-            return Ok(self.interner.wasi(interface));
+        if let Some((namespace, interface)) = CmNamespace::split_specifier(import_source) {
+            return Ok(self.interner.binding(namespace, interface));
         }
 
         // Handle remote modules (http:// or https://)
@@ -1968,8 +1974,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     Err(LoadError::ModuleNotFound { path: import_path })
                 }
             }
-            ModuleSource::Wasi { interface } => {
-                let import_path = format!("wasi:{interface}");
+            ModuleSource::Binding {
+                namespace,
+                interface,
+            } => {
+                let import_path = format!("{namespace}:{interface}");
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
                     Ok(source.to_string())
                 } else {

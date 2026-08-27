@@ -1341,7 +1341,7 @@ pub(super) fn type_id_to_ast_type(
         // `ErrorCode`s are non-unique and resolution falls through to the
         // lone `wasi:cli` enum, mis-lifting a filesystem variant as an i32.
         let (cm_namespace, pkg_hint) = match ms {
-            ModuleSource::Wasi { interface } => (true, interface.split('/').next()),
+            ModuleSource::Binding { interface, .. } => (true, interface.split('/').next()),
             ModuleSource::Core { name } if name == "kiln" || name.starts_with("kiln/") => {
                 (true, None)
             }

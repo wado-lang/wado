@@ -2275,7 +2275,7 @@ impl TypeTable {
                 continue;
             }
             let matches = match ms {
-                ModuleSource::Wasi { interface } => interface.as_str() == module_name,
+                ModuleSource::Binding { interface, .. } => interface.as_str() == module_name,
                 ModuleSource::Core { name: cm_name } => cm_name.as_str() == module_name,
                 _ => false,
             };
@@ -2301,7 +2301,7 @@ impl TypeTable {
                 continue;
             }
             match ms {
-                ModuleSource::Wasi { interface } if interface.starts_with(&prefix) => {
+                ModuleSource::Binding { interface, .. } if interface.starts_with(&prefix) => {
                     return Some(type_id);
                 }
                 // Core-packaged CM types (e.g. `core:kiln/types.wado`) are
