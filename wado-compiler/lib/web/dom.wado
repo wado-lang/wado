@@ -7,10 +7,10 @@ pub interface Dom {
     fn document() -> Document;
 }
 
-#[cm("web:dom/event-target", type = "extern-ref")]
+#[cm("web:dom/event-target", type = "extern-handle")]
 pub resource EventTarget;
 
-#[cm("web:dom/node", type = "extern-ref")]
+#[cm("web:dom/node", type = "extern-handle")]
 pub resource Node extends EventTarget {
     #[cm("web:dom/node#text-content")]
     #[cm_params("self")]
@@ -25,7 +25,7 @@ pub resource Node extends EventTarget {
     fn append_child(&self, child: &Node) -> Node;
 }
 
-#[cm("web:dom/element", type = "extern-ref")]
+#[cm("web:dom/element", type = "extern-handle")]
 pub resource Element extends Node {
     #[cm("web:dom/element#id")]
     #[cm_params("self")]
@@ -40,7 +40,7 @@ pub resource Element extends Node {
     fn tag_name(&self) -> String;
 }
 
-#[cm("web:dom/document", type = "extern-ref")]
+#[cm("web:dom/document", type = "extern-handle")]
 pub resource Document extends Node {
     #[cm("web:dom/document#create-element")]
     #[cm_params("self", "local-name")]

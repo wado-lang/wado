@@ -212,11 +212,11 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
         .expect("resource WIT failed to re-parse");
 }
 
-/// An extern-ref-backed resource has no CM handle type: one interface per Wado
+/// An extern-handle-backed resource has no CM handle type: one interface per Wado
 /// type, every handle position the same opaque `u32`, and nothing naming the
 /// `extends` relation. See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[test]
-fn full_scope_reconstructs_an_extern_ref_interface_per_wado_type() {
+fn full_scope_reconstructs_an_extern_handle_interface_per_wado_type() {
     let text = emit_scope(
         "use { Dom, Node } from \"web:dom\";\n\
          export fn run() with Dom {\n\
@@ -238,13 +238,13 @@ fn full_scope_reconstructs_an_extern_ref_interface_per_wado_type() {
     );
     assert!(
         !text.contains("resource") && !text.contains("borrow<") && !text.contains("extends"),
-        "an extern-ref handle is neither a CM resource nor a borrow\n{text}"
+        "an extern-handle handle is neither a CM resource nor a borrow\n{text}"
     );
 
     let mut resolve = wit_parser::Resolve::new();
     resolve
         .push_str("dom.wit", &text)
-        .expect("extern-ref WIT failed to re-parse");
+        .expect("extern-handle WIT failed to re-parse");
 }
 
 #[test]

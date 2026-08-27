@@ -542,17 +542,19 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// Whether a resource declares `#[cm(..., type = "extern-ref")]`.
-fn extern_ref_backed(attrs: &[crate::ast::Attribute]) -> bool {
+/// Whether a resource declares `#[cm(..., type = "extern-handle")]`.
+fn extern_handle_backed(attrs: &[crate::ast::Attribute]) -> bool {
     attrs
         .iter()
-        .any(|a| a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternRef))
+        .any(|a| a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternHandle))
 }
 
-/// The CM type an extern-ref-backed handle takes at the boundary: an opaque
-/// index into the host's table, until CM-GC replaces it with a real
-/// `externref` ([GC in Components](../../docs/wep-2026-03-28-gc-in-components.md)).
-fn extern_ref_handle_type(span: crate::token::Span) -> Type {
+/// The CM type an extern-handle crosses the boundary as. The Component Model
+/// has no reference value type: `own` and `borrow` are its only handle types,
+/// and both carry uniqueness and drop obligations a copyable handle cannot
+/// meet. So the handle is an opaque integer, and CM-GC does not change that —
+/// it swaps the representation of `own` / `borrow`, not their semantics.
+fn extern_handle_type(span: crate::token::Span) -> Type {
     Type::Named(crate::ast::NamedType::new(
         crate::ast::AstId::fresh(),
         "u32".to_string(),
@@ -833,13 +835,13 @@ pub struct CmInterfaceRegistry {
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
 
-    /// Resources declared `#[cm(..., type = "extern-ref")]`. They are absent
+    /// Resources declared `#[cm(..., type = "extern-handle")]`. They are absent
     /// from [`Self::resources`] — at the CM boundary the universal handle is an
     /// opaque `u32`, registered as a newtype, not a CM `resource`. Kept so a
     /// `&handle` receiver can drop its reference: the handle is a value, so a
     /// method takes it directly rather than as a `borrow`.
     /// See `docs/wep-2026-04-28-resource-inheritance.md`.
-    extern_ref_resources: IndexSet<(String, String)>,
+    extern_handle_resources: IndexSet<(String, String)>,
 
     /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`).
     /// Key: `(source_interface, wado_name)`. Value:
@@ -1502,18 +1504,18 @@ impl CmInterfaceRegistry {
         Self::default()
     }
 
-    /// Whether the resource `name` declared in `source` takes the extern-ref
+    /// Whether the resource `name` declared in `source` takes the extern-handle
     /// backing, and so crosses the boundary as the universal handle.
     #[must_use]
-    pub fn is_extern_ref_resource(&self, source: &str, name: &str) -> bool {
-        self.extern_ref_resources
+    pub fn is_extern_handle_resource(&self, source: &str, name: &str) -> bool {
+        self.extern_handle_resources
             .contains(&(source.to_string(), name.to_string()))
     }
 
-    /// Drop the reference around an extern-ref handle: the handle is a value,
+    /// Drop the reference around an extern-handle: the handle is a value,
     /// so `&self` and a `&Handle` argument both cross the boundary as the
     /// handle itself, never as a CM `borrow`.
-    fn deref_extern_ref_handle(&self, ty: &Type) -> Type {
+    fn deref_extern_handle(&self, ty: &Type) -> Type {
         let (Type::Reference(inner) | Type::MutReference(inner)) = ty else {
             return ty.clone();
         };
@@ -1521,7 +1523,7 @@ impl CmInterfaceRegistry {
             return ty.clone();
         };
         match self.source_interface(named) {
-            Some(source) if self.is_extern_ref_resource(&source, &named.name) => {
+            Some(source) if self.is_extern_handle_resource(&source, &named.name) => {
                 inner.as_ref().clone()
             }
             _ => ty.clone(),
@@ -1727,18 +1729,18 @@ impl CmInterfaceRegistry {
                 // Extract source interface path from #[cm] attribute
                 // Format: #[cm("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
                 let source_interface = Self::cm_source_interface(&resource.attrs);
-                // An extern-ref backing erases the resource: the boundary sees
+                // An extern-handle backing erases the resource: the boundary sees
                 // the universal handle, a copyable `u32`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
-                if extern_ref_backed(&resource.attrs) {
-                    self.extern_ref_resources
+                if extern_handle_backed(&resource.attrs) {
+                    self.extern_handle_resources
                         .insert((source_interface.clone(), resource.name.clone()));
                     register_unique(
                         &mut self.newtypes,
                         "newtype",
                         source_interface,
                         resource.name.clone(),
-                        extern_ref_handle_type(resource.span),
+                        extern_handle_type(resource.span),
                     );
                     continue;
                 }
@@ -1977,7 +1979,7 @@ impl CmInterfaceRegistry {
                                     &resource.name,
                                     &resource_source,
                                 );
-                                let ty = self.deref_extern_ref_handle(&ty);
+                                let ty = self.deref_extern_handle(&ty);
                                 (
                                     p.name.clone(),
                                     cm_name,
@@ -2968,11 +2970,11 @@ impl CmInterfaceRegistry {
         self.newtypes
             .iter()
             .filter_map(move |((source, name), ty)| {
-                // An extern-ref handle registers here to reach the `u32` every
+                // An extern-handle handle registers here to reach the `u32` every
                 // boundary path lowers it to, but it names no CM type: the WIT
                 // spells the handle inline, so no alias declares it.
                 if source.starts_with(interface_prefix)
-                    && !self.is_extern_ref_resource(source, name)
+                    && !self.is_extern_handle_resource(source, name)
                 {
                     Some((name.as_str(), ty))
                 } else {

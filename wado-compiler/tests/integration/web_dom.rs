@@ -1,5 +1,5 @@
 //! `web:` is a bundled namespace, on the same footing as `wasi:`, and
-//! `web:dom` is the extern-ref binding slice Tide's generator will replace.
+//! `web:dom` is the extern-handle binding slice Tide's generator will replace.
 //! See `docs/wep-2026-04-01-tide.md`.
 
 use crate::common::{check_diagnostics, compile_source};
@@ -48,10 +48,10 @@ fn an_inherited_method_type_checks() {
     assert_eq!(check_diagnostics(INHERITED_METHOD), Vec::<String>::new());
 }
 
-/// An extern-ref-backed resource is an opaque `u32` at the CM boundary, not a
+/// An extern-handle-backed resource is an opaque `u32` at the CM boundary, not a
 /// CM `resource`, so the component's imports carry no handle type.
 #[test]
-fn an_extern_ref_handle_crosses_as_a_bare_u32() {
+fn an_extern_handle_crosses_as_a_bare_u32() {
     let wat = compile_to_wat(OWN_METHODS);
     assert!(
         wat.contains("web:dom/element"),
@@ -59,7 +59,7 @@ fn an_extern_ref_handle_crosses_as_a_bare_u32() {
     );
     assert!(
         !wat.contains("(resource"),
-        "an extern-ref resource declares no CM resource type: {wat}"
+        "an extern-handle resource declares no CM resource type: {wat}"
     );
 }
 

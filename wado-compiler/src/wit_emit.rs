@@ -759,15 +759,15 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// The universal handle an extern-ref-backed resource crosses as. It names
+    /// The universal handle an extern-handle-backed resource crosses as. It names
     /// no WIT type: the boundary sees one opaque `u32`, whatever Wado type the
     /// signature spells, and a `&handle` is that same value rather than a
     /// `borrow` ([Resource Inheritance](../../docs/wep-2026-04-28-resource-inheritance.md)).
-    fn extern_ref_handle(&self, named: &crate::ast::NamedType) -> Option<Type> {
+    fn extern_handle(&self, named: &crate::ast::NamedType) -> Option<Type> {
         let registry = self.cm_interface_registry?;
         let source = registry.source_interface(named)?;
         registry
-            .is_extern_ref_resource(&source, &named.name)
+            .is_extern_handle_resource(&source, &named.name)
             .then_some(Type::U32)
     }
 
@@ -781,7 +781,7 @@ impl<'a> Emitter<'a> {
         use crate::ast::Type as AstType;
         match ty {
             AstType::Named(named) => {
-                if let Some(handle) = self.extern_ref_handle(named) {
+                if let Some(handle) = self.extern_handle(named) {
                     return Ok(handle);
                 }
                 match primitive_by_name(&named.name) {
@@ -793,7 +793,7 @@ impl<'a> Emitter<'a> {
             // transparent (already peeled by `classify_ast`).
             AstType::Reference(inner) | AstType::MutReference(inner) => {
                 if let AstType::Named(named) = inner.as_ref() {
-                    if let Some(handle) = self.extern_ref_handle(named) {
+                    if let Some(handle) = self.extern_handle(named) {
                         return Ok(handle);
                     }
                     Ok(Type::borrow(self.cm_type_name(named, current_fq, uses)))

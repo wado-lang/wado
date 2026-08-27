@@ -103,7 +103,7 @@ pub const WASI_TLS_TYPES: &str = include_str!("../lib/wasi/tls/types.wado");
 pub const WASI_TLS_CLIENT: &str = include_str!("../lib/wasi/tls/client.wado");
 pub const WASI_TLS_WORLDS: &str = include_str!("../lib/wasi/tls/worlds.wado");
 
-// Web platform bindings — the extern-ref slice Tide's WebIDL frontend replaces.
+// Web platform bindings — the extern-handle slice Tide's WebIDL frontend replaces.
 pub const WEB_DOM: &str = include_str!("../lib/web/dom.wado");
 
 /// All core stdlib statics.

@@ -29,11 +29,11 @@ use super::types::{
 };
 use super::tysys::TypeSystem;
 
-/// Whether a resource may take the extern-ref backing yet: while the lowering
+/// Whether a resource may take the extern-handle backing yet: while the lowering
 /// is unbuilt, only the namespace the declaration spells keeps it out of a
 /// resource the compiler does lower. See the WEP linked from
 /// [`resolve_resource_extends`].
-fn extern_ref_backing_allowed(attr: &crate::ast::Attribute) -> bool {
+fn extern_handle_backing_allowed(attr: &crate::ast::Attribute) -> bool {
     attr.as_cm_import().is_some_and(|cm| cm.namespace == "web")
 }
 
@@ -148,11 +148,11 @@ fn resolve_resource_extends<H: CompilerHost>(
             continue;
         }
         let tt = type_table.borrow();
-        let child_is_extern_ref = tt.is_extern_ref_resource(clause.child);
-        let parent_is_extern_ref = tt.is_extern_ref_resource(parent);
+        let child_is_extern_handle = tt.is_extern_handle_resource(clause.child);
+        let parent_is_extern_handle = tt.is_extern_handle_resource(parent);
         drop(tt);
-        if !child_is_extern_ref || !parent_is_extern_ref {
-            let lacking = if child_is_extern_ref {
+        if !child_is_extern_handle || !parent_is_extern_handle {
+            let lacking = if child_is_extern_handle {
                 defs.name(parent).to_string()
             } else {
                 clause.child_name.clone()
@@ -160,7 +160,7 @@ fn resolve_resource_extends<H: CompilerHost>(
             reject(
                 clause,
                 format!(
-                    "`extends` requires `#[cm(..., type = \"extern-ref\")]` on both resources; `{lacking}` does not declare it"
+                    "`extends` requires `#[cm(..., type = \"extern-handle\")]` on both resources; `{lacking}` does not declare it"
                 ),
             );
             continue;
@@ -542,16 +542,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             );
                             if let Some(attr) = resource_decl.attrs.iter().find(|a| {
                                 a.cm_resource_backing()
-                                    == Some(crate::ast::CmResourceBacking::ExternRef)
+                                    == Some(crate::ast::CmResourceBacking::ExternHandle)
                             }) {
-                                if extern_ref_backing_allowed(attr) {
-                                    type_table.borrow_mut().mark_extern_ref_resource(def);
+                                if extern_handle_backing_allowed(attr) {
+                                    type_table.borrow_mut().mark_extern_handle_resource(def);
                                 } else {
                                     let _ = logger.error_in(
                                         module_source,
                                         TypeError::ResourceBacking {
                                             message: format!(
-                                                "`{}` declares `type = \"extern-ref\"` outside `web:*`; that lowering is not built yet",
+                                                "`{}` declares `type = \"extern-handle\"` outside `web:*`; that lowering is not built yet",
                                                 resource_decl.name
                                             ),
                                             span: resource_decl.span,
