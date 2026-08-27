@@ -175,14 +175,21 @@ pub(super) struct ResolvedField {
 /// `declared` is in declaration order; `fields` is not. A literal carrying a
 /// spread holds only the fields written beside it, so position in `fields` says
 /// nothing about which slot a field fills — `field_index` is what does.
+///
+/// A field the declaration does not have keeps the position it was written at,
+/// so the name is what confirms the slot: a typo must not stand as evidence for
+/// whichever slot its position happens to land on.
 fn declared_pairs<'a>(
     fields: &'a [ResolvedField],
     declared: &'a [TypeId],
+    declared_names: &'a [&'a str],
 ) -> impl Iterator<Item = (&'a ResolvedField, TypeId)> {
     fields.iter().filter_map(|field| {
-        declared
-            .get(field.field_index as usize)
-            .map(|&type_id| (field, type_id))
+        let slot = field.field_index as usize;
+        if declared_names.get(slot) != Some(&field.name.as_str()) {
+            return None;
+        }
+        declared.get(slot).map(|&type_id| (field, type_id))
     })
 }
 
@@ -3626,7 +3633,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve field expressions, converting tuple literals to arrays when needed.
         // For generic structs, tuple-to-sequence coercion may be deferred to a second
         // pass after type arguments are inferred from field values.
-        let mut deferred_coercions: Vec<(usize, usize)> = Vec::new(); // (field_index, ast_field_index)
+        // Indexes into `struct_lit.fields`. The resolved field this reopens is
+        // found by name: `fields` is sorted into declaration order before the
+        // second pass runs, so a position captured here would name another
+        // field by then.
+        let mut deferred_coercions: Vec<usize> = Vec::new();
         let fields: Vec<ResolvedField> = struct_lit
             .fields
             .iter()
@@ -3669,7 +3680,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 let coercion_deferred = needs_deferred_coercion && tuple_is_spread_free;
                 if coercion_deferred {
-                    deferred_coercions.push((provided_idx, provided_idx));
+                    deferred_coercions.push(provided_idx);
                 }
                 // A field whose declared type names a slot is not a constraint
                 // on the value — the value is what fixes the slot. Fields
@@ -3855,11 +3866,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // concrete type arguments are known. For example, [10, 20, 30] in
             // `Container<i32> { items: [10, 20, 30] }` needs List<i32> coercion,
             // but at first pass the field type was List<T> (type param).
-            for &(field_idx, ast_idx) in &deferred_coercions {
-                let field_name = &fields[field_idx].name;
+            for &ast_idx in &deferred_coercions {
+                let ast_field = &struct_lit.fields[ast_idx];
                 let Some(concrete_type) = struct_field_types
                     .iter()
-                    .find(|(name, _)| name == field_name)
+                    .find(|(name, _)| name == &ast_field.name)
                     .map(|(_, type_id)| {
                         if type_args.is_empty() {
                             *type_id
@@ -3870,7 +3881,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 else {
                     continue;
                 };
-                let ast_field = &struct_lit.fields[ast_idx];
+                let Some(field_idx) = fields.iter().position(|f| f.name == ast_field.name) else {
+                    continue;
+                };
                 if let Some(coerced) =
                     self.try_coerce_tuple_to_sequence(&ast_field.value, ctx, concrete_type)
                 {
@@ -4343,6 +4356,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
         let field_types = self.instantiate_types(&decl_field_types, &inst);
+        let decl_field_names: Vec<&str> = struct_info
+            .fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
 
         // Two fields mentioning one slot are each other's evidence: the slot
         // takes what the first of them says, so a later one has to agree.
@@ -4353,7 +4371,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // prelude's `IterChain { first: *self, second: other }` into `expected
         // StrCharIter, found J`. Only the literal's own fields are consulted.
         let mut agreed: IndexMap<TypeId, TypeId> = IndexMap::default();
-        for (struct_field, expected_field_type) in declared_pairs(fields, &field_types) {
+        for (struct_field, expected_field_type) in
+            declared_pairs(fields, &field_types, &decl_field_names)
+        {
             let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
             super::infer::unify(
                 &self.tysys.type_table,
@@ -4387,7 +4407,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
 
-        for (struct_field, expected_field_type) in declared_pairs(fields, &field_types) {
+        for (struct_field, expected_field_type) in
+            declared_pairs(fields, &field_types, &decl_field_names)
+        {
             infer.add(expected_field_type, struct_field.type_id);
         }
 
