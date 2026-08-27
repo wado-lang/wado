@@ -1375,10 +1375,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Seed per-module semantics with the snapshot's pre-resolved stdlib
         // entries so the LSP edges remain consistent and the body walk on
-        // user modules can extend on top. The snapshot stores `references` /
-        // `locals` / `local_types` as flat maps keyed by `AstId`; we
-        // split them by `key.module` because each module's data now lives in
-        // its own [`super::sem::ModuleSemantics`].
+        // user modules can extend on top. The snapshot holds them per module
+        // already, so each lands in the [`super::sem::ModuleSemantics`] whose
+        // walk recorded it.
         let mut module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics> =
             IndexMap::default();
         // Ensure every loaded module has an entry; the body walk in
@@ -1387,98 +1386,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for ms in modules.keys() {
             module_semantics.entry(ms.clone()).or_default();
         }
-        if let Some(snap) = snapshot {
-            // Seed each stdlib module's `types` facts from the snapshot. The
-            // flattened `snap` maps below carry only what `semantics_of` drained
-            // into `Semantics`; signatures, effects and the dispatch maps live
-            // only here, and the effect check needs them for stdlib. The drained
-            // fields are re-seeded from `snap` afterwards.
-            if let Some(snap_state) = snapshot_state {
-                for (ms, snap_sem) in &snap_state.module_semantics {
-                    if let Some(sem) = module_semantics.get_mut(ms) {
-                        sem.types = snap_sem.types.clone();
-                        // A snapshot module runs no decl pass this compile;
-                        // its digests must come from the snapshot.
-                        sem.decls.clone_digests_from(&snap_sem.decls);
-                    }
+        if let Some(snap_state) = snapshot_state {
+            for (ms, snap_sem) in &snap_state.module_semantics {
+                if let Some(sem) = module_semantics.get_mut(ms) {
+                    sem.types = snap_sem.types.clone();
+                    sem.bindings = snap_sem.bindings.clone();
+                    // A snapshot module runs no decl pass this compile;
+                    // its digests must come from the snapshot.
+                    sem.decls.clone_digests_from(&snap_sem.decls);
                 }
-            }
-            // A snapshot id routes back to a per-module `ModuleSemantics` through
-            // the snapshot's `AstIdSpace → ModuleSource` registry: stdlib ASTs
-            // are parsed once per process and shared, so its spaces are this
-            // compile's. Every key must name a module in the current `modules`
-            // set, so `get_mut`'s miss fails a `debug_assert` rather than minting.
-            let snapshot_invariant =
-                "snapshot id must belong to a module in the current compile's loaded set";
-            for (use_id, def_key) in &snap.references {
-                let Some(sem) = snap
-                    .module_of_id(*use_id)
-                    .and_then(|ms| module_semantics.get_mut(ms))
-                else {
-                    debug_assert!(false, "{snapshot_invariant}: {use_id:?}");
-                    continue;
-                };
-                sem.bindings.references.insert(*use_id, *def_key);
-            }
-            for (id, sym) in &snap.locals {
-                let Some(sem) = snap
-                    .module_of_id(*id)
-                    .and_then(|ms| module_semantics.get_mut(ms))
-                else {
-                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
-                    continue;
-                };
-                sem.bindings.local_symbols.insert(*id, sym.clone());
-            }
-            for (id, type_id) in &snap.local_types {
-                let Some(sem) = snap
-                    .module_of_id(*id)
-                    .and_then(|ms| module_semantics.get_mut(ms))
-                else {
-                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
-                    continue;
-                };
-                sem.types.local_types.insert(*id, *type_id);
-            }
-            for (id, type_id) in &snap.expression_types {
-                let Some(sem) = snap
-                    .module_of_id(*id)
-                    .and_then(|ms| module_semantics.get_mut(ms))
-                else {
-                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
-                    continue;
-                };
-                sem.types.expression_types.insert(*id, *type_id);
-            }
-            for (id, dispatch) in &snap.method_dispatch {
-                let Some(sem) = snap
-                    .module_of_id(*id)
-                    .and_then(|ms| module_semantics.get_mut(ms))
-                else {
-                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
-                    continue;
-                };
-                sem.types.method_dispatch.insert(*id, dispatch.clone());
-            }
-            for (id, choice) in &snap.coercions {
-                let Some(sem) = snap
-                    .module_of_id(*id)
-                    .and_then(|ms| module_semantics.get_mut(ms))
-                else {
-                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
-                    continue;
-                };
-                sem.types.coercions.insert(*id, choice.clone());
-            }
-            for (id, kind) in &snap.desugars {
-                let Some(sem) = snap
-                    .module_of_id(*id)
-                    .and_then(|ms| module_semantics.get_mut(ms))
-                else {
-                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
-                    continue;
-                };
-                sem.types.desugars.insert(*id, *kind);
             }
         }
 

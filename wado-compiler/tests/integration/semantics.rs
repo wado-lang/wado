@@ -556,15 +556,15 @@ export fn run() {
     // Every recorded i32 literal in the user module would be a regression
     // (the only literals are the two `1` / `2` args, which must surface as
     // i64 after type-arg inference).
-    let any_i32 = sem.expression_types.iter().any(|(id, &type_id)| {
-        sem.module_of_id(*id) == Some(&entry) && sem.types.type_name(type_id) == "i32"
+    let any_i32 = sem.iter_expression_types().any(|(id, type_id)| {
+        sem.module_of_id(id) == Some(&entry) && sem.types.type_name(type_id) == "i32"
     });
     assert!(
         !any_i32,
         "post-inference recoerce_literal_args must overwrite the pre-inference i32 entry",
     );
-    let saw_i64 = sem.expression_types.iter().any(|(id, &type_id)| {
-        sem.module_of_id(*id) == Some(&entry) && sem.types.type_name(type_id) == "i64"
+    let saw_i64 = sem.iter_expression_types().any(|(id, type_id)| {
+        sem.module_of_id(id) == Some(&entry) && sem.types.type_name(type_id) == "i64"
     });
     assert!(
         saw_i64,
