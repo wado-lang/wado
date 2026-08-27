@@ -46,11 +46,11 @@ testDecl
     ;
 
 attribute
-    : '#' '[' IDENTIFIER attrArgs? ']'
+    : '#' '[' identifier attrArgs? ']'
     ;
 
 innerAttribute
-    : '#' '!' '[' IDENTIFIER attrArgs? ']'
+    : '#' '!' '[' identifier attrArgs? ']'
     ;
 
 attrArgs
@@ -58,13 +58,13 @@ attrArgs
     ;
 
 attrArg
-    : IDENTIFIER ('=' attrValue)?
+    : identifier ('=' attrValue)?
     | attrValue
     ;
 
 attrValue
     : literal
-    | IDENTIFIER
+    | identifier
     | '[' (attrValue (',' attrValue)*)? ']'
     ;
 
