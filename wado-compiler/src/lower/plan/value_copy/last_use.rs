@@ -1038,11 +1038,23 @@ impl Analyzer<'_> {
     /// misses, since it catches only `&place`. A match arm binding over a
     /// `&`-borrowed scrutinee is one; so is that binding cast (`rep as &Rep`)
     /// or read back out of what holds it, each naming the same storage.
+    ///
+    /// `&place` is left to that arm, which knows the field it borrows: taking
+    /// it here would answer the whole local and pin its every other field.
     fn escape_if_reference(&mut self, expr: &TirExpr) {
+        if matches!(
+            strip_casts(expr).kind,
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                ..
+            }
+        ) {
+            return;
+        }
         if is_reference_type(expr.type_id, self.type_table)
             && let Some(root) = alias_root(expr)
         {
-            self.mark_escaped(root, None);
+            self.mark_escaped(root, borrow_top_field(expr));
         }
     }
 
