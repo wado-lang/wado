@@ -33,17 +33,17 @@ toolchain has not moved does not need remeasuring.
 | c        |        3,076 |
 | moonbit  |        9,254 |
 | zig      |       32,248 |
-| rust     |       40,365 |
+| rust     |       40,097 |
 
 ### pi_approx
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        6,490 |
+| wado     |        6,487 |
 | c        |       16,786 |
 | moonbit  |       23,003 |
 | zig      |       38,054 |
-| rust     |       59,753 |
+| rust     |       59,315 |
 
 ### zlib
 
@@ -51,10 +51,10 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       16,660 | stdin + gzip decompress (core:zlib)    |
+| wado     |       16,783 | stdin + gzip decompress (core:zlib)    |
 | c        |       33,439 | stdin + gzip decompress (zlib 1.3.1)   |
 | zig      |       48,300 | stdin + gzip decompress (std.compress) |
-| rust     |       89,117 | stdin + gzip decompress (zlib-rs)      |
+| rust     |       89,609 | stdin + gzip decompress (zlib-rs)      |
 
 ### sqlite_highlight
 
@@ -62,8 +62,8 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      254,755 | Gale-generated highlighter from `SQLite.g4` |
-| rust     |    3,483,481 | tree-sitter + tree-sitter-sequel            |
+| wado     |      254,916 | Gale-generated highlighter from `SQLite.g4` |
+| rust     |    3,484,487 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
 
