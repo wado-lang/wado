@@ -300,6 +300,10 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
                 i = scan_string(chars, i);
                 continue;
             },
+            '`' => {
+                i = scan_template(chars, i, close).0;
+                continue;
+            },
             '(' | '[' | '{' => depth += 1,
             ')' | ']' | '}' => depth -= 1,
             ',' => {
@@ -331,13 +335,23 @@ fn is_string_literal(text: &String) -> bool {
     return scan_string(&chars, 0) == chars.len();
 }
 
+/// The same question for a Wado template literal, which is a `String` however
+/// its holes evaluate.
+fn is_template_literal(text: &String) -> bool {
+    let chars: List<char> = text.chars().collect();
+    if chars.len() < 2 || chars[0] != '`' || chars[chars.len() - 1] != '`' {
+        return false;
+    }
+    return scan_template(&chars, 0, chars.len()).0 == chars.len();
+}
+
 /// The Wado type a literal argument evidently has, or `null` for anything a
 /// signature would have to guess at.
 fn literal_arg_type(text: &String) -> Option<String> {
     if text.is_empty() {
         return null;
     }
-    if is_string_literal(text) {
+    if is_string_literal(text) || is_template_literal(text) {
         return Option::Some("String");
     }
     if *text == "true" || *text == "false" {

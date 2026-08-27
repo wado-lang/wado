@@ -1,3 +1,6 @@
+// Source: Gale test fixture (a required group that takes no alternative)
+// License: same as the Gale package
+//
 // A required group that takes none of its alternatives: ANTLR4 reports a
 // no-viable-alternative there, one shape per group class.
 grammar GroupNoViable;

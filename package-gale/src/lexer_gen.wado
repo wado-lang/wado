@@ -945,7 +945,9 @@ pub fn lexer_alt_replayable(alt: &LexerAlternative, all_rules: &List<LexerRule>,
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let e = &alt.elements[i];
         if let Repeat(rep) = e {
-            if !lexer_repeat_emit(alt, i, all_rules, ci) matches { PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable } {
+            // Named as the two that restructure, not as the six that do not: a
+            // seventh plain shape must not read here as one that restructures.
+            if lexer_repeat_emit(alt, i, all_rules, ci) matches { NonGreedy | LookaheadAware } {
                 return false;
             }
             if !lexer_element_replayable(&rep.element, all_rules, ci) {

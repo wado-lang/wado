@@ -203,6 +203,64 @@ ${*rule_src}
     );
 }
 
+test "java action: only the vocabulary-rendered expected set folds" {
+    // `IntervalSet.toString()` renders raw token numbers and `toString(boolean)`
+    // a different form again; only the vocabulary overload is what codegen has.
+    let rule = &"r : ID ;";
+    let vocab = translate_action(
+        &ActionLanguage::Java,
+        &parse(`grammar T;
+${*rule}
+`).unwrap().parser_rules[0],
+        &parse(`grammar T;
+${*rule}
+`).unwrap().parser_rules,
+        &"System.out.println(getExpectedTokens().toString(getVocabulary()));",
+        false,
+        &NO_BINDINGS,
+        &"T",
+        &NO_METHODS,
+        &"{'a'}",
+    );
+    assert vocab matches { Ok(code) && code.contains("{'a'}") }, `${vocab:?}`;
+
+    for let body of &[
+        "System.out.println(getExpectedTokens().toString());",
+        "System.out.println(getExpectedTokens().toString(true));",
+    ] {
+        let out = translate_action(
+            &ActionLanguage::Java,
+            &parse(`grammar T;
+${*rule}
+`).unwrap().parser_rules[0],
+            &parse(`grammar T;
+${*rule}
+`).unwrap().parser_rules,
+            body,
+            false,
+            &NO_BINDINGS,
+            &"T",
+            &NO_METHODS,
+            &"{'a'}",
+        );
+        assert out matches { Err(_) }, `${*body} must not fold: ${out:?}`;
+    }
+}
+
+test "java action: an assert message carries over only as a literal" {
+    let rule = &"r : ID ;";
+    let plain = java_action(&"assert 1 == 1;", rule, false);
+    assert plain == "assert 1 == 1;", `out: '${plain}'`;
+
+    let literal = java_action(&"assert 1 == 1 : \"nope\";", rule, false);
+    assert literal == "assert 1 == 1, \"nope\";", `out: '${literal}'`;
+
+    // Java stringifies any expression there; dropping it would weaken the
+    // assertion with nothing said.
+    let expr = java_action_res(&"assert 1 == 1 : someValue;", rule, false);
+    assert expr matches { Err(_) }, `a non-literal message must be refused: ${expr:?}`;
+}
+
 test "java action: println appends a newline" {
     let out = java_action(&"System.out.println(\"enum\");", &"a : ID ;", false);
     assert out == "p.emit(`enum\\n`);", `out: '${out}'`;

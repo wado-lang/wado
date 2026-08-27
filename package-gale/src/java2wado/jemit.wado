@@ -341,8 +341,15 @@ fn emit_call(
             return emit_ctx_child(rule, m, &c.args, bindings);
         }
         // `getExpectedTokens().toString(getVocabulary())`: the site fixes the
-        // set and the grammar the vocabulary, so the idiom is one constant.
+        // set and the grammar the vocabulary, so the idiom is one constant. The
+        // other `IntervalSet.toString` overloads render token numbers instead,
+        // which is not the string codegen has.
         if m.name == "toString" && call_names(&m.recv, &"getExpectedTokens") {
+            if !(c.args.len() == 1 && call_names(&c.args[0], &"getVocabulary")) {
+                return Result::Err(
+                    "java2wado: only getExpectedTokens().toString(getVocabulary()) is supported; the other overloads render token numbers",
+                );
+            }
             if env.expected.is_empty() {
                 return Result::Err(
                     "java2wado: getExpectedTokens() is only available in a rule's @init / @after, where codegen knows the set",

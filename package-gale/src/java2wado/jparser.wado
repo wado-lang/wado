@@ -94,7 +94,8 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
         *pos += 1;
         let cond = parse_or(tokens, pos)?;
         // `assert c : msg;` — Wado's message is a string, so a literal one
-        // carries over and any other expression is dropped.
+        // carries over. Java stringifies any expression there; dropping one
+        // would weaken the assertion silently, so it is refused instead.
         let mut msg: Option<String> = null;
         if punct_is(tokens, *pos, &":") {
             *pos += 1;
@@ -102,7 +103,7 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
                 msg = Option::Some(s);
                 *pos += 1;
             } else {
-                let _ = parse_or(tokens, pos)?;
+                return Result::Err("java2wado: an assert message must be a string literal");
             }
         }
         expect_semi(tokens, pos)?;

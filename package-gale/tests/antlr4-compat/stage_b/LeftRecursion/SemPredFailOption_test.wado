@@ -13,7 +13,7 @@ use t from "../../grammars/LeftRecursion/SemPredFailOption.g4"
     };
 use { normalize_tree } from "../../../support/tree_compare.wado";
 
-// triage: the suffix predicate evaluates and stops the LR loop at `y`; ANTLR reports the failed predicate (its `fail=` message) and recovers far enough to keep `z` under the node, so its tree carries one more token. What is left is the recovery decision, not the predicate.
+// triage: recovery, not the predicate: both stop the LR loop at `y`, and ANTLR's tree keeps the trailing `z` that its `fail=` recovery consumes.
 #[TODO]
 test "stage_b: LeftRecursion/SemPredFailOption" {
     let input = "x y z";

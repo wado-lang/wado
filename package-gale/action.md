@@ -39,7 +39,9 @@ A cast `$ctx` member reaching a name the enclosing alternative already binds nee
 
 ### The value channel is the context object
 
-What ANTLR keeps on a context object, Gale keeps in the value struct: both live exactly as long as one rule invocation. So every per-invocation capture an action can read — the rule's own start token (`$text` / `$start` / `$stop`), a labeled rule call's token range (`$x.text`), the builder row its node opens at (`$x.ctx`) — is a field of `<Rule>Vals`, written where the element matches and read wherever an action sits.
+What ANTLR keeps on a context object, Gale keeps in the value struct: both live exactly as long as one rule invocation. So a capture written at one element and read by an action somewhere else in the invocation — a labeled rule call's token range (`$x.text`), the builder row its node opens at (`$x.ctx`) — is a field of `<Rule>Vals`, written where the element matches and read wherever an action sits.
+
+The rule's own start token (`$text` / `$start` / `$stop`) needs no field: `_rule_start_tok` is bound at every shape's body entry, so it is already in scope at every action in that body. What it does need is that the walk deciding to bind it sees the same bodies the translator substitutes for — the rule's prequels, its alternatives, and the groups nested in them.
 
 This is what makes the reads well-scoped by construction. A rule's body is not one block: an alternative is a block, a repeat body is a block, and a multi-alt or left-recursive rule spreads its alternatives across `_alt_<n>` / `_atom` / `_lr_<n>` functions. A capture held in a local is visible only inside the block that declares it, so a prequel (`@init` before the body, `@after` after it), an action in a sibling branch, or anything in another function reads a local that is not there — a generated module that does not compile, or a silently empty value. A field has none of those cases: the struct is threaded into every helper and returned from it (each mutates its own copy and hands it back), so a write anywhere in the invocation is visible to every later read in it.
 

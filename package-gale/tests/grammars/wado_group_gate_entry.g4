@@ -1,3 +1,6 @@
+// Source: Gale test fixture (a group's entry test vs its dispatch)
+// License: same as the Gale package
+//
 // A construct deciding whether to enter a group tests first sets; the dispatch
 // inside also tests the alternatives' predicates. Both must agree, or a token
 // only a gated alternative could take is admitted and then has no arm.
