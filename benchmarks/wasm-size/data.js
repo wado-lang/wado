@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787790173255,
+  "lastUpdate": 1787791344825,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51361,6 +51361,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6e641dc3454d8e0f11ccdc8358f393c01f22bd11"
         },
         "date": 1787790172579,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254936,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "782f4c86721c1623468a2a5ab37b648276b5c009",
+          "message": "Merge pull request #1905 from wado-lang/claude/core-temporal-remaining-tasks-ikf1ir\n\nfix(optimizer): price a cast by what it emits, and walk value-position blocks",
+          "timestamp": "2026-08-27T09:23:33+09:00",
+          "tree_id": "46531fc8052b7a60827f43e2b9598b168c23e5a0",
+          "url": "https://github.com/wado-lang/wado/commit/782f4c86721c1623468a2a5ab37b648276b5c009"
+        },
+        "date": 1787791344369,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
