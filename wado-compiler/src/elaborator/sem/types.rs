@@ -247,7 +247,7 @@ pub(crate) struct TypeAnnotations {
     /// Reify reads it instead of re-resolving the return annotation.
     pub(crate) fn_return_types: IndexMap<AstId, crate::tir::TypeId>,
     /// Resolved operation signatures per effect / resource decl `AstId`
-    /// (params, return type, `cm` name), as the combined walk resolved them
+    /// (params, return type, `cm` name), as the body walk resolved them
     /// with the decl's type-param / `Self` scope in place. Reify reads these
     /// instead of re-resolving the op signatures itself.
     pub(crate) effect_ops: IndexMap<AstId, Vec<crate::tir::TirEffectOp>>,
@@ -706,8 +706,8 @@ pub(crate) struct StaticMethodDispatch {
 pub(crate) struct GenericInstantiation {
     pub(crate) type_args: Vec<TypeId>,
     pub(crate) instance_type: TypeId,
-    /// Mangled name as the combined walk emitted it onto the TIR node
-    /// (`StructLiteral::struct_name`, `Call::FuncRef::name`, ...).
+    /// Mangled name the body walk computed, which reify writes onto the TIR
+    /// node (`StructLiteral::struct_name`, `Call::FuncRef::name`, ...).
     /// `None` for sites that don't carry a mangled name (e.g. when the
     /// instantiation is recorded purely for type-arg replay).
     ///

@@ -1770,8 +1770,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user
-        // module to populate `ModuleSemantics`. The combined walk's own TIR is
-        // discarded; reify (Phase 2, below) is the sole TIR source. Liveness
+        // module to populate `ModuleSemantics`; reify (Phase 2, below) is the
+        // sole TIR source. Liveness
         // runs between the two phases so reify can gate on it.
         for module_source in &sorted_sources {
             if is_stdlib_snapshot_hit(module_source) {

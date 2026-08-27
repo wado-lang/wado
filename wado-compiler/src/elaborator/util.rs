@@ -3,11 +3,12 @@
 use crate::tir::{PrimitiveType, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
-/// The combined walk records facts and returns
-/// `TypeId`; reify is the sole TIR producer. The few combined-walk sites that
-/// hand an already-resolved operand to a reify-shared builder (which still
-/// takes a `TirExpr`) wrap the resolved type with this `Unit` sentinel — only
-/// its `type_id` / `span` are ever read.
+/// The body walk records facts and returns `TypeId`; reify is the sole TIR
+/// producer. The few body-walk sites that hand an already-resolved operand to
+/// a reify-shared builder (which still takes a `TirExpr`) wrap the resolved
+/// type with this `Unit` sentinel — only its `type_id` / `span` are ever read.
+/// The builders taking `TirExpr` at all is a known gap; see WEP 2026-05-26
+/// §"`annotate` still speaks TIR".
 pub(super) fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
     TirExpr::new(TirExprKind::Unit, type_id, span)
 }

@@ -23,7 +23,7 @@ use super::util::placeholder;
 /// is `target op rhs` whose result type is computed via
 /// [`Elaborator::build_binary_op_tir`]).
 ///
-/// The combined walk only needs the resolved type and span: reify rebuilds
+/// The body walk only needs the resolved type and span: reify rebuilds
 /// the actual compound-assign TIR from the AST.
 pub(super) enum AssignValue<'a> {
     Ast(&'a ast::Expr),
@@ -1081,7 +1081,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Reify rebuilds the native `Binary` from the AST +
-        // recorded operand `expression_types`; the combined walk projects
+        // recorded operand `expression_types`; the body walk projects
         // only the result type. `left` / `right` were resolved by the
         // caller and typechecked above for their side effects.
         type_id
@@ -1819,7 +1819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify rebuilds the `(a<b) && (b<c) …` Block (with the
         // `__mK` middle bindings) from the recorded `ComparisonChain`
-        // desugar + the AST; the combined walk projects only the boolean
+        // desugar + the AST; the body walk projects only the boolean
         // result type. The operand resolutions, middle-binding local
         // allocations, and per-comparison dispatch above ran for their
         // fact-recording side effects.
@@ -1829,7 +1829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Helper: allocate a `__mK` local for a comparison-chain middle term and
     /// return a `TirExpr::Local` handle that callers splice into the
     /// surrounding comparisons. The `Let` binding itself is rebuilt by reify;
-    /// the combined walk only needs the `add_local` side effect (walk-order
+    /// the body walk only needs the `add_local` side effect (walk-order
     /// parity) and the local handle's type.
     fn bind_chain_middle(
         &mut self,
@@ -2029,7 +2029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the overloaded operator's method call
         // from the recorded `operator_dispatch` (receiver adjustment via
         // `self_kind`, arg `&`-wrapping via `arg_ref_wraps`) + the AST; the
-        // combined walk projects only the result type. `receiver` and
+        // body walk projects only the result type. `receiver` and
         // `args` were resolved / typechecked above for their side effects.
         placeholder(resolved.return_type, span)
     }

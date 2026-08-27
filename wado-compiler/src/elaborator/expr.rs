@@ -166,7 +166,7 @@ pub(super) fn compose_union_plan(
 
 /// Shape projection of a match-arm pattern, used solely for exhaustiveness /
 /// overlap analysis on the AST. It captures exactly the pattern shape the
-/// checks read, mirroring the `TirPattern` the combined walk used to build:
+/// checks read, one distinction per `TirPattern` distinction they depend on:
 /// catch-all (wildcard / binding / reversed-or-empty range / bad range bound),
 /// enum / variant case names, bool literals, integer ranges and points, an
 /// opaque `Other` (strings, structs, tuples, constant-value patterns), and
@@ -373,7 +373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Reify rebuilds the `LabeledBlock` from the AST,
-                // re-running the same break-type unification. The combined walk
+                // re-running the same break-type unification. The body walk
                 // resolved the body and ran break-type / null diagnostics for
                 // their side effects; project only the unified result type.
                 result_type
@@ -398,7 +398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a method call
     pub(super) fn resolve_literal(&mut self, lit: &ast::LiteralExpr) -> TypeId {
         // Reify rebuilds every literal node from the AST; the
-        // combined walk only needs the literal's type and its parse / unescape
+        // body walk only needs the literal's type and its parse / unescape
         // diagnostics. The returned value is a placeholder, so this projects
         // only the type while preserving the validation side effects.
         match &lit.value {
@@ -2003,7 +2003,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Reify rebuilds the if-let-chain (recorded via
-                // `DesugarKind::IfLetChain`) from the AST. The combined walk
+                // `DesugarKind::IfLetChain`) from the AST. The body walk
                 // ran `resolve_let_chain_stmts` for its fact-recording side
                 // effects (pattern bindings, element resolution) and computed
                 // the result type. Project only the result type.
@@ -2119,7 +2119,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Reify rebuilds the `If` node from the AST; the
-                // combined walk resolved the condition and both blocks for
+                // body walk resolved the condition and both blocks for
                 // their fact-recording side effects and ran branch-agreement /
                 // null diagnostics off the AST (`ast_block_result_type`).
                 // Project only the result type.
@@ -2459,7 +2459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Reify rebuilds the `Match` node from the AST
-        // (`reify_match_expr`); the combined walk resolved the scrutinee and
+        // (`reify_match_expr`); the body walk resolved the scrutinee and
         // arms above for their fact-recording side effects and ran
         // exhaustiveness / null / arm-agreement diagnostics. No analysis reads
         // the resolved match structure (missing-return walks arms off the AST
@@ -2493,12 +2493,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (body_type, arm.body.span())
     }
 
-    /// Exhaustiveness runs on the AST: the combined walk no longer materializes
-    /// a `TirMatchArm` / `TirPattern` for each arm. Each arm pattern is
-    /// classified into an [`ExhPattern`] — a shape projection that mirrors
-    /// exactly the `TirPattern` shape the old `resolve_if_pattern_inner` would
-    /// have produced (case-name disambiguation, range bounds, const-vs-literal,
-    /// reversed/empty-range → catch-all) — and the checks read that projection.
+    /// Exhaustiveness runs on the AST: the body walk materializes no
+    /// `TirMatchArm` / `TirPattern` to check. Each arm pattern is classified
+    /// into an [`ExhPattern`] — a shape projection carrying every distinction
+    /// the checks make (case-name disambiguation, range bounds,
+    /// const-vs-literal, reversed/empty-range → catch-all) — and the checks
+    /// read that projection.
     fn check_match_exhaustiveness(
         &mut self,
         arms: &[MatchArm],
@@ -4005,7 +4005,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify rebuilds the `StructLiteral` (`reify_struct_literal`)
         // from the AST + the recorded `generic_instantiations` mangled name /
-        // instance type; the combined walk resolved the fields (and applied any
+        // instance type; the body walk resolved the fields (and applied any
         // deferred tuple-to-sequence coercion) for their fact-recording side
         // effects. Project only the struct type.
         struct_type
@@ -4866,7 +4866,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify rebuilds the `Option` `?` desugar
         // (`reify_question_mark_option`) from the AST, allocating its own
-        // `__qm_v` local. The combined walk keeps the scope/local allocation
+        // `__qm_v` local. The body walk keeps the scope/local allocation
         // (walk-order parity) and projects the unwrapped `Some` payload type.
         some_type
     }
@@ -4922,7 +4922,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify rebuilds the `Result` `?` desugar
         // (`reify_question_mark_result`) from the AST + the recorded
-        // `FromCallFacts`. The combined walk keeps the scope / local allocation
+        // `FromCallFacts`. The body walk keeps the scope / local allocation
         // and the `resolve_from_call` fact-recording, and projects the
         // unwrapped `Ok` payload type.
         ok_type
@@ -5236,9 +5236,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Mangled name for the resulting `TirExprKind::StructLiteral`.
         // The monomorphizer keys instantiation lookup on this form
-        // (`RangeExclusive<i32>`), so reify and the combined walk both emit
-        // the mangled name. Recorded so reify reads it instead of running
-        // its own `type_name(t)` + `mangle_generic_name`.
+        // (`RangeExclusive<i32>`), so there is one spelling of it: the body
+        // walk mangles it here and records it, and reify reads it back instead
+        // of running its own `type_name(t)` + `mangle_generic_name`.
         let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
         let mangled_name = mangle_generic_name(&struct_name, &arg_names);
         self.record_generic_instantiation_with_mangle(

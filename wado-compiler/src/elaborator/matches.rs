@@ -1,6 +1,6 @@
 //! Annotation pass for the `matches` operator.
 //!
-//! The combined walk records the `Matches` desugar tag plus the scrutinee /
+//! The body walk records the `Matches` desugar tag plus the scrutinee /
 //! pattern / guard facts; reify rebuilds the two-arm `TirExprKind::Match`
 //! (`match s { p [&& guard] => true|guard, _ => false }`) from the AST and
 //! those facts.

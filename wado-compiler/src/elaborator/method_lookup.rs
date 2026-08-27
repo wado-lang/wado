@@ -3370,7 +3370,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify (`reify_index_mut_method_call`) rebuilds the
         // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
-        // above; the combined walk only needed the dispatch fact. The
+        // above; the body walk only needed the dispatch fact. The
         // index was resolved above for its side effects.
 
         for (i, a) in method_call.args.iter().enumerate() {
@@ -3431,7 +3431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify (`reify_index_mut_method_call`) rebuilds the
         // outer method call (and the `__index_mut_val` synthesis) from the
         // recorded `method_dispatch` + `IndexMutMethodCall` desugar; the
-        // combined walk projects only the result type. The args were resolved
+        // body walk projects only the result type. The args were resolved
         // above for their fact-recording side effects.
         Some(placeholder(return_type, method_call.span))
     }

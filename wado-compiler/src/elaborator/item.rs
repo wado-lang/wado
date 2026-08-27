@@ -47,7 +47,7 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
 }
 
 /// Body-walk placeholder for a function / method / test. The
-/// combined walk records the signature facts (`fn_param_types`,
+/// body walk records the signature facts (`fn_param_types`,
 /// `fn_return_types`, `decl_type_params`, `function_effects`,
 /// `method_names`, …) and resolves the body for its side-effect fact
 /// recording, but no longer assembles the function's TIR — reify is the
@@ -1967,7 +1967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a global variable declaration for its fact-recording side
     /// effects. Reify (`reify_global`) is the sole producer of the `TirGlobal`,
     /// re-emitting the initializer from the AST + recorded per-`AstId`
-    /// expression types, so the combined walk builds no TIR here.
+    /// expression types, so the body walk builds no TIR here.
     pub(super) fn resolve_global(&mut self, global_decl: &GlobalDecl) {
         let ty = self.resolve_type(&global_decl.ty);
 

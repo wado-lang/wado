@@ -1417,7 +1417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `ref_binding` so that identifier bindings get `&InnerType` instead of `InnerType`.
     /// Bind a refutable pattern's variables into `ctx` and run the same
     /// disambiguation / diagnostics as reify's pattern builder, returning the
-    /// bindings it introduced in declaration (pre-order). The combined walk
+    /// bindings it introduced in declaration (pre-order). The body walk
     /// only needs the binding side effects and facts — reify rebuilds the real
     /// `TirPattern` independently — so no `TirPattern` node is assembled here.
     pub(super) fn resolve_if_pattern(
@@ -1970,7 +1970,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// True when the scrutinee is a variant type that has a `None` case, so a
     /// `null` literal pattern lowers to a `None` variant pattern (which binds
-    /// nothing). Reify rebuilds the actual `None` pattern; the combined walk
+    /// nothing). Reify rebuilds the actual `None` pattern; the body walk
     /// only needs the yes/no answer for its binding/fact walk.
     fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> bool {
         let Some(variant_info) = self.variant_of_type(scrutinee_type) else {
@@ -2877,7 +2877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 self.record_desugar(w.id, super::sem::types::DesugarKind::WhileLetChain);
                 // The else-branch (an unconditional `break`) is rebuilt by reify;
-                // the combined walk only binds the chain patterns and walks the
+                // the body walk only binds the chain patterns and walks the
                 // then-body for facts.
                 ctx.enter_scope();
                 self.resolve_let_chain_stmts(elements, &w.body, ctx, None, false, *cond_span);

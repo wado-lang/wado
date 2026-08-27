@@ -947,7 +947,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_item_reference_by_name(prefix_seg.id, prefix);
                 }
                 // Reify rebuilds the flags `none()` / `all()`
-                // constant from the AST + flags info; the combined walk
+                // constant from the AST + flags info; the body walk
                 // projects only the result type.
                 return flags_info.type_id;
             }
@@ -1024,7 +1024,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Reify rebuilds the `VariantConstruct` from
                     // the AST + variant info + recorded `generic_instantiations`;
-                    // the combined walk projects only the result type. The
+                    // the body walk projects only the result type. The
                     // payload was resolved above (and fed variant type-arg
                     // inference) for its fact-recording side effects.
                     return variant_type;
@@ -1188,7 +1188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self.record_generic_instantiation(call.id, type_args, variant_type);
 
                             // Reify rebuilds the `VariantConstruct`;
-                            // the combined walk projects only the result type.
+                            // the body walk projects only the result type.
                             return variant_type;
                         }
                     }
@@ -1367,7 +1367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
 
                     // Reify rebuilds the `Call` from the recorded
-                    // `static_method_dispatch`; the combined walk projects
+                    // `static_method_dispatch`; the body walk projects
                     // only the result type.
                     return return_type;
                 }
@@ -1638,7 +1638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         // Reify rebuilds the `Call` TIR from the recorded
         // `static_method_dispatch` + `generic_instantiations` +
-        // `call_param_types` and the resolved args; the combined walk
+        // `call_param_types` and the resolved args; the body walk
         // projects only the result type.
         return_type
     }
@@ -1694,7 +1694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify (`reify_call`'s indirect-call branch) rebuilds
         // the `IndirectCall` from the AST — resolving the callee, applying
-        // `deref_to_value_static`, and reifying the args — so the combined walk
+        // `deref_to_value_static`, and reifying the args — so the body walk
         // projects only the result type. The `args` Vec was built above for the
         // `resolve_expr` / `typecheck` fact-recording side effects.
         return_type

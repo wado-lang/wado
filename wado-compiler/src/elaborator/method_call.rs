@@ -1746,7 +1746,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Reify rebuilds the `VariantConstruct` from
-                    // the AST + variant info; the combined walk projects only
+                    // the AST + variant info; the body walk projects only
                     // the result type.
                     return target_type_id;
                 }
@@ -1853,7 +1853,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Reify rebuilds the `VariantConstruct` from
-                    // the AST + variant info; the combined walk projects only
+                    // the AST + variant info; the body walk projects only
                     // the result type. The payload was already resolved (and
                     // typechecked) above for its fact-recording side effects.
                     return result_type;

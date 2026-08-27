@@ -662,8 +662,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
     /// module's `expression_types` map. Used by the AST-level
-    /// missing-return / definite-exit walks that replaced the TIR
-    /// walkers consuming the combined walk's body TIR.
+    /// missing-return / definite-exit walks, which answer from the recorded
+    /// types rather than from a `TirBlock`.
     fn ctrl_flow_ctx(&self) -> control_flow::CtrlFlowCtx<'_> {
         control_flow::CtrlFlowCtx {
             expression_types: &self.sem.types.expression_types,
@@ -683,10 +683,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Result type of an AST block, read from `expression_types` rather
-    /// than a built `TirBlock`. AST-level replacement for
-    /// `Self::block_result_type(&TirBlock)`: lets the combined walk type
-    /// `{ … }`, `if`/`match` arms, loop and handler bodies without
-    /// inspecting the body TIR it produces.
+    /// than from a built `TirBlock`: types `{ … }`, `if` / `match` arms, and
+    /// loop and handler bodies with no TIR in hand.
     pub(super) fn ast_block_result_type(&self, block: &crate::ast::Block) -> TypeId {
         control_flow::block_result_type(self.ctrl_flow_ctx(), block)
     }
@@ -728,9 +726,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         // An indefinite type IS recorded, because the AST-level
-        // block-result-type analysis the combined walk uses (in place of
-        // reading the body TIR) needs to see an unresolved-null branch to type
-        // it the same way the TIR walker did. Readers that want a *definite*
+        // block-result-type analysis needs to see an unresolved-null branch to
+        // type the block it sits in. Readers that want a *definite*
         // type call `is_indefinite` explicitly: reify's `ann_expression_types`
         // (so a null still falls back to its `expected_type`) and the
         // missing-return walk in `control_flow.rs`.
@@ -1938,9 +1935,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.resolve_variant_decl(variant_decl);
                 }
                 Item::Test(test_decl) => {
-                    // `test_index` only named the discarded combined-walk test
-                    // function; reify re-indexes its own tests. Pass the running
-                    // count for parity and resolve the body for its facts.
+                    // Reify indexes its own tests, so nothing reads this one.
+                    // Pass the running count for parity and resolve the body
+                    // for its facts.
                     let test_index = test_count;
                     let module_is_todo = module.has_todo();
                     if self
@@ -1955,7 +1952,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 // Enum / Flags / Newtype emit no body-level facts — reify
                 // rebuilds their `TirEnum` / `TirFlags` / `TirNewtype` from the
-                // AST + decl tables, so the combined walk does nothing for them.
+                // AST + decl tables, so the body walk does nothing for them.
                 Item::Enum(_) | Item::Flags(_) | Item::Newtype(_) => {}
                 Item::Interface(effect_decl) => {
                     // Records `effect_ops`; reify reads them.

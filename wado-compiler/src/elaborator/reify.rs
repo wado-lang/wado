@@ -556,7 +556,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// macro-generated accessors, but reporting an indefinite one as absent so
     /// the node falls back to its `expected_type`.
     ///
-    /// The combined walk records indefinite types for its own AST analyses;
+    /// The body walk records indefinite types for its own AST analyses;
     /// building with one reifies a bare `null` as an `Option` nothing inhabits
     /// and fails WIR validation.
     fn ann_expression_types(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
@@ -569,7 +569,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         (!self.tysys.type_table.borrow().is_indefinite(raw)).then_some(raw)
     }
 
-    // Decl/signature facts the combined walk records once per decl, read
+    // Decl/signature facts the body walk records once per decl, read
     // straight from `sem.types` with no overlay walk.
     reify_annotation_accessors! {
         base {
@@ -786,7 +786,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // Reify is the sole producer of
                     // trait default-method `TirFunction`s, synthesised here
                     // from the per-impl `ModuleSemantics` snapshots the
-                    // combined walk recorded on `sem.default_method_semantics`.
+                    // body walk recorded on `sem.default_method_semantics`.
                     for tir_func in self.reify_impl_default_methods(impl_block) {
                         tir_module.add_function(tir_func);
                     }
@@ -1036,7 +1036,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        // Single source of truth: the combined walk projected these type
+        // Single source of truth: the body walk projected these type
         // params with each default resolved while the decl's type-param scope
         // was alive; read them back rather than re-resolving the defaults.
         let type_params = self
@@ -1224,7 +1224,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Single source of truth: read the type params the combined walk
+        // Single source of truth: read the type params the body walk
         // projected (defaults resolved with the decl's scope alive) rather
         // than re-resolving the defaults here.
         let type_params = self
@@ -1254,7 +1254,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Self` type — `&self` / `&mut self` on an effect method is a
     /// surface error annotate already diagnosed.
     fn reify_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> tir::TirEffect {
-        // Single source of truth: the combined walk resolved the op
+        // Single source of truth: the body walk resolved the op
         // signatures with the decl's type-param / `Self` scope in place and
         // recorded them; reify reads them back rather than re-resolving.
         let operations = self
@@ -1272,7 +1272,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
     /// 0; for generic resources `Self = GenericResource<…>` with the
     /// decl's own `TypeParam`s as type args. The op signatures are read
-    /// from the facts the combined walk recorded.
+    /// from the facts the body walk recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
         let operations = self
             .ann_effect_ops(decl.id)
@@ -1625,13 +1625,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.sem = saved_sem;
 
             if let Some(mut tir_func) = tir_func_opt {
-                // The combined walk overwrites the name with
-                // `format_local(struct, trait, method)` after
-                // `resolve_method` returns. `reify_method` would have
-                // already read this exact string from
-                // `ann_method_names(func.id)`; the overwrite here is a
-                // safety net for the synthesis path and matches the
-                // combined walk byte-for-byte.
+                // `resolve_method` records this exact string under
+                // `method_names`, which `reify_method` already read back.
+                // Recomputing it covers the synthesis path, where the fact
+                // has no declaring walk to come from, and goes through the
+                // same `format_local` so the two spellings agree.
                 tir_func.name = MethodName::format_local(
                     concrete_owner.as_ref().unwrap_or(&struct_name),
                     Some(&trait_name_mangled),
@@ -7082,7 +7080,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Synthesise a `From<From>::from(value)` call from the facts the
-    /// combined walk's [`super::Elaborator::resolve_from_call`] recorded
+    /// body walk's [`super::Elaborator::resolve_from_call`] recorded
     /// under `caller_id`. Every caller has a source-level handle (`?`
     /// operator, `Type::from(x)` static call, `Type::<…>::from(x)`); the
     /// recording is unconditional, so reify is a pure read.
@@ -8327,7 +8325,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Qualified-callee `Type::method` shapes that don't flow through
         // `static_method_dispatch` recording: `Flags::none()` /
         // `Flags::all()` lower to an `IntLiteral` (not a `Call`) so
-        // the combined walk's static-method recording in
+        // the body walk's static-method recording in
         // `resolve_call` skips them. Reify reproduces the same
         // `IntLiteral` here.
         if let ast::Expr::Ident(ident) = &call.callee
@@ -8650,9 +8648,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Method-level type args for the TIR method-call node — the exact
         // vector annotate fed into `build_tir_method_call`. The monomorphizer's
         // `collect_func_instantiation_sites` keys off this field to queue
-        // `Struct^Trait::method<Args>` instances, so it must match what the
-        // combined walk produced byte-for-byte (turbofish-resolved or
-        // inference-recovered). Reading it from `MethodDispatch` keeps the
+        // `Struct^Trait::method<Args>` instances, so it must be exactly what
+        // annotate resolved (turbofish-resolved or inference-recovered).
+        // Reading it from `MethodDispatch` keeps the
         // blanket-impl turbofish case correct (where
         // `monomorph_info.method_type_args` is zeroed by design).
         let type_args = dispatch.method_type_args.clone();

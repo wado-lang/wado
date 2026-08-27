@@ -1,6 +1,6 @@
 //! Control-flow analyses for missing-return diagnosis (WEP 2026-05-26): walks
 //! over the parsed AST reading types from `TypeAnnotations::expression_types`,
-//! replacing the TIR walkers so the combined walk need not produce body TIR.
+//! so the body walk answers them without a `TirBlock` to read.
 //! Both the diagnostic point and reify's closure return-type derivation build a
 //! [`CtrlFlowCtx`] and dispatch to the same free functions, arm for arm.
 
@@ -110,7 +110,8 @@ pub(super) fn expr_always_exits(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -> bool 
 /// mirror of [`crate::tir::block_result_type`], reading
 /// `expression_types[(module, id)]` so a block's value type needs no body TIR.
 /// Unlike the missing-return walk it does *not* filter an indefinite type: an
-/// unresolved-`null` tail stays `Option<!>`, as the TIR walker saw it.
+/// unresolved-`null` tail stays `Option<!>`, which its caller must see to type
+/// the branch.
 pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> TypeId {
     block
         .stmts
@@ -118,9 +119,10 @@ pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> Typ
         .and_then(|s| match s {
             ast::Stmt::Expr(e) => ctx.type_of(&e.expr),
             // A trailing `match` lowers to `TirStmtKind::Expr(match)`, so its
-            // recorded type is the block's value (the combined walk records
+            // recorded type is the block's value (the body walk records
             // `match.id` for both stmt-position and trailing-with-expected
-            // matches). The TIR walker reached it through the `Expr` arm.
+            // matches). `Stmt::Match` is an AST surface for the expression
+            // form, so it is read like one.
             ast::Stmt::Match(m) => ctx.type_of_id(m.id),
             ast::Stmt::If(if_stmt) => if_stmt.else_block.as_ref().and_then(|else_block| {
                 let (then_type, else_type) = (
@@ -176,8 +178,8 @@ pub(super) fn collect_unresolved_null_tails(
 
 /// Tail-position helper for [`collect_unresolved_null_tails`], mirroring
 /// `patch_unresolved_null_in_block`. A trailing `match` lowers to
-/// `TirStmtKind::Expr(match)`, which the TIR walker reached through its
-/// `Expr` arm, so it is descended here too.
+/// `TirStmtKind::Expr(match)`, so it is descended here like the expression
+/// form.
 pub(super) fn collect_unresolved_null_tails_in_block(
     ctx: CtrlFlowCtx<'_>,
     block: &ast::Block,
@@ -240,9 +242,8 @@ fn find_return_type_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> Option<Ty
         ast::Stmt::LabeledBlock(lb) => find_return_type_in_block(ctx, &lb.block),
         ast::Stmt::Expr(e) => find_return_type_in_expr(ctx, &e.expr),
         // Top-level `match` statement — recurse through arms like the
-        // expression form. Matches the TIR walker's expression-level
-        // arm; `Stmt::Match` is just an AST surface that lowers to the
-        // same TIR shape.
+        // expression form; `Stmt::Match` is just an AST surface that
+        // lowers to the same TIR shape.
         ast::Stmt::Match(m) => {
             for arm in &m.arms {
                 if let Some(t) = find_return_type_in_expr(ctx, &arm.body) {
@@ -536,9 +537,8 @@ fn any_in_expr<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, probe: &
         Step::Skip => return false,
         Step::Descend => {}
     }
-    // Mirror the TIR walker's `any_in_expr`: descend into every
-    // sub-expression / sub-block carrier except `Closure`, whose body
-    // has its own control-flow scope.
+    // Descend into every sub-expression / sub-block carrier except
+    // `Closure`, whose body has its own control-flow scope.
     match expr {
         // Pure leaves.
         ast::Expr::Ident(_) | ast::Expr::Literal(_) => false,

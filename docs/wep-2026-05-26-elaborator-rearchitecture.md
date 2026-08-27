@@ -559,8 +559,8 @@ whose count exceeds its target is a [known gap](#known-gaps).
 The phase boundary holds — reify is the sole `TirModule` producer — but the
 walker's own vocabulary does not. `util::placeholder(type_id, span)` mints a
 `TirExpr` whose kind is `Unit` and whose only readable content is its type and
-span, so that walker code can keep calling builders whose signatures were
-written for the combined walk: `build_binary_op_tir` takes two `TirExpr` and
+span, so that walker code can keep calling builders whose signatures are
+shaped for TIR: `build_binary_op_tir` takes two `TirExpr` and
 returns a `TypeId`. 61 placeholder sites feed 24 such signatures. In the same
 seam, `resolve_function` / `resolve_struct` / `resolve_effect_decl` /
 `resolve_resource_decl` return TIR nodes no caller reads, which is why
