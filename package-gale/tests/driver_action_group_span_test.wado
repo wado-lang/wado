@@ -43,6 +43,12 @@ test "an action inside a group reads the rule's own span" {
     assert looped.output == "aaa", `output: '${looped.output}'`;
 }
 
+test "a rule-call argument reads a capture" {
+    let r = gs::parse_arg_reader(&"aab");
+    assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
+    assert r.output == "aa", `output: '${r.output}'`;
+}
+
 test "an action in an optional group renders that call's node" {
     let taken = gs::parse_opt(&"aab");
     assert taken.ok(), "clean parse with the optional present";

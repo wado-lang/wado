@@ -345,6 +345,28 @@ fn is_template_literal(text: &String) -> bool {
     return scan_template(&chars, 0, chars.len()).0 == chars.len();
 }
 
+/// Whether the digit run from `first` is an `i32`. A literal outside the range
+/// would be spliced into an `i32` parameter and fail to compile, so it has no
+/// evident type either. Equal-length decimal runs compare lexicographically.
+fn fits_i32(digits: &List<char>, first: i32, negative: bool) -> bool {
+    let mut start = first;
+    while start + 1 < digits.len() && digits[start] == '0' {
+        start += 1;
+    }
+    let bound = if negative { "2147483648" } else { "2147483647" };
+    let width = digits.len() - start;
+    if width != bound.chars().count() {
+        return width < bound.chars().count();
+    }
+    let limit: List<char> = bound.chars().collect();
+    for let mut i = 0; i < limit.len(); i += 1 {
+        if digits[start + i] != limit[i] {
+            return digits[start + i] < limit[i];
+        }
+    }
+    return true;
+}
+
 /// The Wado type a literal argument evidently has, or `null` for anything a
 /// signature would have to guess at.
 fn literal_arg_type(text: &String) -> Option<String> {
@@ -358,8 +380,12 @@ fn literal_arg_type(text: &String) -> Option<String> {
         return Option::Some("bool");
     }
     let digits: List<char> = text.chars().collect();
-    let first = if digits[0] == '-' { 1 } else { 0 };
+    let negative = digits[0] == '-';
+    let first = if negative { 1 } else { 0 };
     if digits.len() > first && digits.iter_ref().skip(first).all(|c: &char| *c matches { '0'..='9' }) {
+        if !fits_i32(&digits, first, negative) {
+            return null;
+        }
         return Option::Some("i32");
     }
     return null;

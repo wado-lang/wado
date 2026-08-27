@@ -1250,9 +1250,11 @@ pub global RK_LOOP_SPAN: NodeKind = 3;
 pub global RK_DEEP: NodeKind = 4;
 pub global RK_GROUP_TEXT: NodeKind = 5;
 pub global RK_LOOP_TEXT: NodeKind = 6;
-pub global RK_A: NodeKind = 7;
+pub global RK_ARG_READER: NodeKind = 7;
+pub global RK_ARG_TAKER: NodeKind = 8;
+pub global RK_A: NodeKind = 9;
 
-global RULE_NAMES: List<String> = ["whole", "opt", "before", "loop_span", "deep", "group_text", "loop_text", "a"];
+global RULE_NAMES: List<String> = ["whole", "opt", "before", "loop_span", "deep", "group_text", "loop_text", "arg_reader", "arg_taker", "a"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1615,6 +1617,15 @@ struct DeepVals {
     _span_hi_r: i32 = -1,
 }
 
+struct ArgReaderVals {
+    _span_lo_r: i32 = 0,
+    _span_hi_r: i32 = -1,
+}
+
+struct ArgTakerVals {
+    s: String = "",
+}
+
 fn scan_whole(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     sg_0_done: {
@@ -1748,6 +1759,24 @@ fn scan_loop_text(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
         pos += 1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_arg_reader(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let scan_start = pos;
+    let mut pos = pos;
+    pos = scan_a(tokens, pos, &FOLLOW_MASK_0);
+    if pos < 0 { return -1; }
+    pos = scan_arg_taker(tokens, pos, follow);
+    if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
+    return pos;
+}
+
+fn scan_arg_taker(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
     pos += 1;
     return pos;
 }
@@ -1999,6 +2028,49 @@ fn _parse_loop_text(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
     }
 }
 
+fn _parse_arg_reader__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ArgReaderVals {
+    let mut vals = ArgReaderVals {};
+    vals._span_lo_r = p.pos;
+    let r = _parse_a(p, &FOLLOW_MASK_0);
+    vals._span_hi_r = p.pos - 1;
+    let arg_taker = _parse_arg_taker(p, follow, p.text_between(vals._span_lo_r, vals._span_hi_r));
+    return vals;
+}
+
+fn _parse_arg_reader(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ArgReaderVals {
+    if p.recovering { return ArgReaderVals {}; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_ARG_READER, _start);
+    let __vals = _parse_arg_reader__inner(p, follow);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("arg_reader");
+    }
+    return __vals;
+}
+
+fn _parse_arg_taker__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, s: String = "") -> ArgTakerVals {
+    let mut vals = ArgTakerVals {};
+    vals.s = s;
+    let b = p.expect(TK_B, &EMPTY_SYNC);
+    if !p.speculating {
+         p.emit(vals.s) 
+    }
+    return vals;
+}
+
+fn _parse_arg_taker(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, s: String = "") -> ArgTakerVals {
+    if p.recovering { return ArgTakerVals {}; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_ARG_TAKER, _start);
+    let __vals = _parse_arg_taker__inner(p, follow, s);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("arg_taker");
+    }
+    return __vals;
+}
+
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let a = p.expect(TK_A, &SYNC_1);
     let a_2 = p.expect(TK_A, &EMPTY_SYNC);
@@ -2064,6 +2136,14 @@ pub fn parse_group_text(input: &String, max_errors: i32 = i32::MAX) -> ParseResu
 
 pub fn parse_loop_text(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_loop_text(p));
+}
+
+pub fn parse_arg_reader(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_arg_reader(p); });
+}
+
+pub fn parse_arg_taker(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_arg_taker(p); });
 }
 
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

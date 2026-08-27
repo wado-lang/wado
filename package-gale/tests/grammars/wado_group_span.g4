@@ -29,6 +29,12 @@ group_text : ( A { p.emit($text) } | B ) C ;
 
 loop_text : ( A { p.emit($text) } )+ C ;
 
+// A rule-call argument is translated against the caller, so it reaches a
+// capture by the same substitution an action does.
+arg_reader : r=a arg_taker[$r.text] ;
+
+arg_taker [ String s ] : B { p.emit($s) } ;
+
 a : A A ;
 
 A : 'a' ;

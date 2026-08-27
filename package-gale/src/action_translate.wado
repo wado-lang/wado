@@ -246,6 +246,11 @@ fn push_element_action_bodies(elem: &Element, out: &mut List<String>) {
         Repeat(rep) => push_element_action_bodies(&rep.element, out),
         Label(lab) => push_element_action_bodies(&lab.element, out),
         Not(n) => push_element_action_bodies(&n.element, out),
+        // `a[$x.text]` is translated against the caller, so its arguments read
+        // the caller's captures exactly as an action body does.
+        RuleRef(r) => if let Some(src) = &r.arg_action {
+            out.push(src.text);
+        },
         _ => {
         },
     }
