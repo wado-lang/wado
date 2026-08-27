@@ -19,6 +19,7 @@ use {
     action_reads_rule_ctx,
     action_reads_rule_span,
     field_in_vals,
+    rule_action_bodies,
     rule_node_field,
     rule_returns_vals,
     rule_span_hi_field,
@@ -436,45 +437,6 @@ pub fn install_rule_captures(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &
         }
     }
     ctx.set_rule_captures(captures);
-}
-
-/// Every action and predicate body running in the rule's own frame: its
-/// prequels', its alternatives', and those of the groups nested in them.
-fn rule_action_bodies(rule: &ParserRule) -> List<String> {
-    let mut out: List<String> = [];
-    for let a of &[rule.init_action, rule.after_action] {
-        if let Some(src) = a {
-            out.push(src.text);
-        }
-    }
-    for let alt of &rule.alternatives {
-        push_alt_action_bodies(alt, &mut out);
-    }
-    return out;
-}
-
-fn push_alt_action_bodies(alt: &Alternative, out: &mut List<String>) {
-    for let a of &alt.actions {
-        out.push(a.source.text);
-    }
-    for let e of &alt.elements {
-        push_element_action_bodies(e, out);
-    }
-}
-
-fn push_element_action_bodies(elem: &Element, out: &mut List<String>) {
-    match elem {
-        Group(g) => {
-            for let alt of &g.alternatives {
-                push_alt_action_bodies(alt, out);
-            }
-        },
-        Repeat(rep) => push_element_action_bodies(&rep.element, out),
-        Label(lab) => push_element_action_bodies(&lab.element, out),
-        Not(n) => push_element_action_bodies(&n.element, out),
-        _ => {
-        },
-    }
 }
 
 fn body_reads_any(bodies: &List<String>, base: &String, want_node: bool) -> bool {

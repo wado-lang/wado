@@ -31,6 +31,18 @@ test "an @after reads the span of a call two groups deep" {
     assert r.output == "aa", `output: '${r.output}'`;
 }
 
+test "an action inside a group reads the rule's own span" {
+    let r = gs::parse_group_text(&"a c");
+    assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
+    assert r.output == "a", `output: '${r.output}'`;
+
+    // `$text` is what the rule has consumed so far, so each iteration sees one
+    // more `A` than the last.
+    let looped = gs::parse_loop_text(&"a a c");
+    assert looped.ok(), `clean parse: ${looped.diagnostics.len()} diagnostics`;
+    assert looped.output == "aaa", `output: '${looped.output}'`;
+}
+
 test "an action in an optional group renders that call's node" {
     let taken = gs::parse_opt(&"aab");
     assert taken.ok(), "clean parse with the optional present";

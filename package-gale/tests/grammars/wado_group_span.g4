@@ -22,6 +22,13 @@ loop_span @after { p.emit($r.text) } : ( r=a B )+ ;
 // Two groups deep, under a shape-lookahead optional.
 deep @after { p.emit($r.text) } : ( ( r=a B )? C )? D ;
 
+// A rule-span special (`$text` / `$start` / `$stop`) reads a local codegen
+// declares only for a rule whose actions ask for one, so the walk that decides
+// has to reach a group's alternatives as the translator's substitution does.
+group_text : ( A { p.emit($text) } | B ) C ;
+
+loop_text : ( A { p.emit($text) } )+ C ;
+
 a : A A ;
 
 A : 'a' ;

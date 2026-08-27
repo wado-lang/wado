@@ -4,7 +4,7 @@
 //! cannot emit returns a loud error naming it, so codegen surfaces a diagnostic
 //! rather than emitting invalid code. Shared with java2wado via `resolve_attr_ref`.
 
-use { ParserRule, AttrDecl, AltAction } from "./ir.wado";
+use { ParserRule, AttrDecl, AltAction, Alternative, Element } from "./ir.wado";
 use { resolve_attrs, ResolvedAttr, AttrTarget } from "./attr_resolve.wado";
 use { find_attr_refs, AttrRef } from "./attr_scan.wado";
 use { splice_attrs } from "./attr_substitute.wado";
@@ -209,24 +209,46 @@ pub fn rule_binding_for(bindings: &List<[bool, String, String]>, name: &String) 
 /// `$start`, `$stop`), so codegen must capture the rule's start token before the
 /// body.
 pub fn rule_uses_rule_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
-    if let Some(a) = &rule.init_action {
-        if body_uses_rule_span(&a.text, rule, rules) {
-            return true;
-        }
-    }
-    if let Some(a) = &rule.after_action {
-        if body_uses_rule_span(&a.text, rule, rules) {
-            return true;
+    return rule_action_bodies(rule).iter_ref().any(|b: &String| body_uses_rule_span(b, rule, rules));
+}
+
+/// Every action and predicate body running in the rule's own frame: its
+/// prequels', its alternatives', and those of the groups nested in them.
+pub fn rule_action_bodies(rule: &ParserRule) -> List<String> {
+    let mut out: List<String> = [];
+    for let a of &[rule.init_action, rule.after_action] {
+        if let Some(src) = a {
+            out.push(src.text);
         }
     }
     for let alt of &rule.alternatives {
-        for let a of &alt.actions {
-            if body_uses_rule_span(&a.source.text, rule, rules) {
-                return true;
-            }
-        }
+        push_alt_action_bodies(alt, &mut out);
     }
-    return false;
+    return out;
+}
+
+fn push_alt_action_bodies(alt: &Alternative, out: &mut List<String>) {
+    for let a of &alt.actions {
+        out.push(a.source.text);
+    }
+    for let e of &alt.elements {
+        push_element_action_bodies(e, out);
+    }
+}
+
+fn push_element_action_bodies(elem: &Element, out: &mut List<String>) {
+    match elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                push_alt_action_bodies(alt, out);
+            }
+        },
+        Repeat(rep) => push_element_action_bodies(&rep.element, out),
+        Label(lab) => push_element_action_bodies(&lab.element, out),
+        Not(n) => push_element_action_bodies(&n.element, out),
+        _ => {
+        },
+    }
 }
 
 fn body_uses_rule_span(body: &String, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
