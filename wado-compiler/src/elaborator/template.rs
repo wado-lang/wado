@@ -1,6 +1,6 @@
 //! Annotation pass for template string expressions.
 //!
-//! The combined walk now only records facts: each interpolation
+//! The body walk records facts only: each interpolation
 //! sub-expression is walked so its types, use→def edges, and any nested
 //! coercion / dispatch facts land on `ModuleSemantics`. Reify rebuilds
 //! the actual `TirExprKind::TemplateString` / `StringLiteral` shape from

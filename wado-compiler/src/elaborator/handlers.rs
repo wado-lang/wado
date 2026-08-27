@@ -17,10 +17,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// fact recording, and returns a placeholder.
     ///
     /// Reify rebuilds the `WithHandler` node — its handler bindings from
-    /// `HandlerBindingFacts` and its body from the AST. The combined walk's
-    /// TIR is dead (the AST-level missing-return analysis in
-    /// `control_flow.rs` reads `with`/`resume` off the AST, not the resolved
-    /// node), so this arm records facts and projects the body's result type.
+    /// `HandlerBindingFacts` and its body from the AST; the missing-return
+    /// analysis in `control_flow.rs` reads `with` / `resume` off the AST too.
+    /// Nothing needs a resolved node, so this arm records facts and projects
+    /// the body's result type.
     pub(super) fn resolve_with_handler(
         &mut self,
         with_expr: &ast::WithHandlerExpr,
@@ -60,7 +60,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the `WithHandler` node — its handler
         // bindings from `sem.types.handler_bindings` (recorded by
         // `resolve_handler_binding` above) and its body from the AST — so the
-        // combined walk only resolves the body for its fact-recording side
+        // body walk only resolves the body for its fact-recording side
         // effects and projects the result type. Missing-return analysis reads
         // `with`/`resume` off the AST via `control_flow.rs`, so nothing
         // consumes this node's structure.

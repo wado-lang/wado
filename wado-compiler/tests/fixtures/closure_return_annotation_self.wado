@@ -1,0 +1,47 @@
+// A closure's `-> Type` annotation is resolved once, by annotate, in the scope
+// the closure was written in. `Self` and `Self::Item` mean something only in
+// that scope, so reify must read the recorded answer rather than re-resolve the
+// annotation with no `Self` bound.
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&self) -> i32 {
+        let f = || -> Self {
+            return Counter { n: self.n + 1 };
+        };
+        return f().n;
+    }
+}
+
+trait Produce {
+    type Item;
+    fn make(&self) -> Self::Item;
+}
+
+struct Maker {
+    seed: i32,
+}
+
+impl Produce for Maker {
+    type Item = i32;
+
+    fn make(&self) -> Self::Item {
+        let g = || -> Self::Item {
+            return self.seed * 2;
+        };
+        return g();
+    }
+}
+
+test "closure return annotation names Self" {
+    let c = Counter { n: 1 };
+    assert c.bump() == 2;
+}
+
+test "closure return annotation names an associated type projection" {
+    let m = Maker { seed: 21 };
+    assert m.make() == 42;
+}

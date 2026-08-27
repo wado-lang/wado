@@ -8,10 +8,7 @@ use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, Matc
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
-use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirStruct, TirStructField,
-    TypeId, TypeTable,
-};
+use crate::tir::{FunctionRef, ResolvedType, TirField, TirStruct, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -39,8 +36,6 @@ enum FuncRefInference {
     /// fall through to the generic bare-reference diagnostic.
     NotApplicable,
 }
-
-use super::util::placeholder;
 
 /// How a subscript is being used, which decides the indexing trait it selects:
 /// `&mut xs[i]` reaches the element through `IndexRefMut` so the mutability rides
@@ -164,9 +159,36 @@ pub(super) fn compose_union_plan(
     merged.into_values().collect()
 }
 
+/// A struct-literal field as the body walk knows it: the name it was written
+/// under, its declared position, and the type its value resolved to.
+pub(super) struct ResolvedField {
+    name: String,
+    type_id: TypeId,
+    field_index: u32,
+    /// Where the value was written, for a diagnostic that names this field.
+    span: Span,
+}
+
+/// Pair each written field with the declared type of its slot. `fields` is
+/// neither ordered nor complete, so the index decides and the name confirms it.
+fn declared_pairs<'a>(
+    fields: &'a [ResolvedField],
+    declared: &'a [TypeId],
+    declared_names: &'a [&'a str],
+) -> impl Iterator<Item = (&'a ResolvedField, TypeId)> {
+    debug_assert_eq!(declared.len(), declared_names.len());
+    fields.iter().filter_map(|field| {
+        let slot = field.field_index as usize;
+        if declared_names.get(slot) != Some(&field.name.as_str()) {
+            return None;
+        }
+        declared.get(slot).map(|&type_id| (field, type_id))
+    })
+}
+
 /// Shape projection of a match-arm pattern, used solely for exhaustiveness /
 /// overlap analysis on the AST. It captures exactly the pattern shape the
-/// checks read, mirroring the `TirPattern` the combined walk used to build:
+/// checks read, one distinction per `TirPattern` distinction they depend on:
 /// catch-all (wildcard / binding / reversed-or-empty range / bad range bound),
 /// enum / variant case names, bool literals, integer ranges and points, an
 /// opaque `Other` (strings, structs, tuples, constant-value patterns), and
@@ -373,7 +395,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Reify rebuilds the `LabeledBlock` from the AST,
-                // re-running the same break-type unification. The combined walk
+                // re-running the same break-type unification. The body walk
                 // resolved the body and ran break-type / null diagnostics for
                 // their side effects; project only the unified result type.
                 result_type
@@ -398,7 +420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a method call
     pub(super) fn resolve_literal(&mut self, lit: &ast::LiteralExpr) -> TypeId {
         // Reify rebuilds every literal node from the AST; the
-        // combined walk only needs the literal's type and its parse / unescape
+        // body walk only needs the literal's type and its parse / unescape
         // diagnostics. The returned value is a placeholder, so this projects
         // only the type while preserving the validation side effects.
         match &lit.value {
@@ -626,8 +648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
-            // Resolve the constant body for its fact-recording side effects;
-            // reify re-reifies it (`reify_ident`). Not an l-value.
+            // Not an l-value.
             let vantage = (assoc.module.clone(), assoc.value.id().space());
             let const_module = assoc.module.clone();
             self.with_default_scope_module(Some(const_module), |s| {
@@ -1912,8 +1933,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
                 self.record_desugar(if_expr.id, super::sem::types::DesugarKind::IfLetChain);
-                // Resolve else_block in outer scope (chain bindings not visible
-                // there) for its fact-recording side effects; reify rebuilds it.
+                // The chain bindings are not visible in `else`, so resolve it
+                // in the outer scope.
                 if let Some(b) = &if_expr.else_block {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
@@ -2003,7 +2024,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Reify rebuilds the if-let-chain (recorded via
-                // `DesugarKind::IfLetChain`) from the AST. The combined walk
+                // `DesugarKind::IfLetChain`) from the AST. The body walk
                 // ran `resolve_let_chain_stmts` for its fact-recording side
                 // effects (pattern bindings, element resolution) and computed
                 // the result type. Project only the result type.
@@ -2119,7 +2140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Reify rebuilds the `If` node from the AST; the
-                // combined walk resolved the condition and both blocks for
+                // body walk resolved the condition and both blocks for
                 // their fact-recording side effects and ran branch-agreement /
                 // null diagnostics off the AST (`ast_block_result_type`).
                 // Project only the result type.
@@ -2276,9 +2297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
         match expr {
             ast::Expr::Block(block) => self.coerce_block_numeric_literal_tail(block, target),
-            _ => self
-                .try_coerce_numeric_literal(expr, target)
-                .map(|c| c.type_id),
+            _ => self.try_coerce_numeric_literal(expr, target),
         }
     }
 
@@ -2458,12 +2477,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Reify rebuilds the `Match` node from the AST
-        // (`reify_match_expr`); the combined walk resolved the scrutinee and
-        // arms above for their fact-recording side effects and ran
-        // exhaustiveness / null / arm-agreement diagnostics. No analysis reads
-        // the resolved match structure (missing-return walks arms off the AST
-        // in `control_flow.rs`), so project only the result type.
+        // No analysis reads a resolved match structure — missing-return walks
+        // the arms off the AST in `control_flow.rs`.
         type_id
     }
 
@@ -2493,12 +2508,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (body_type, arm.body.span())
     }
 
-    /// Exhaustiveness runs on the AST: the combined walk no longer materializes
-    /// a `TirMatchArm` / `TirPattern` for each arm. Each arm pattern is
-    /// classified into an [`ExhPattern`] — a shape projection that mirrors
-    /// exactly the `TirPattern` shape the old `resolve_if_pattern_inner` would
-    /// have produced (case-name disambiguation, range bounds, const-vs-literal,
-    /// reversed/empty-range → catch-all) — and the checks read that projection.
+    /// Exhaustiveness runs on the AST: the body walk materializes no
+    /// `TirMatchArm` / `TirPattern` to check. Each arm pattern is classified
+    /// into an [`ExhPattern`] — a shape projection carrying every distinction
+    /// the checks make (case-name disambiguation, range bounds,
+    /// const-vs-literal, reversed/empty-range → catch-all) — and the checks
+    /// read that projection.
     fn check_match_exhaustiveness(
         &mut self,
         arms: &[MatchArm],
@@ -3151,12 +3166,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // `[1, 2, 3] as List<i32>`, `[1, 2, 3] as SeqVec<i32>`
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
-            return coerced.type_id;
+            return coerced;
         }
 
         // `{ a: 1, b: 2 } as TreeMap<String, i32>`
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
-            return coerced.type_id;
+            return coerced;
         }
 
         // `[1, 2] as [i64, i64]`: each element takes the target's own element
@@ -3229,17 +3244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
 
                 match parse_result {
-                    Ok(value) => {
-                        return super::coercion::build_int128_literal_call(
-                            name,
-                            value,
-                            repr,
-                            true,
-                            target_type,
-                            cast.span,
-                        )
-                        .type_id;
-                    }
+                    Ok(_) => return target_type,
                     Err(_) => {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message: format!("invalid {name} literal: {repr}"),
@@ -3259,16 +3264,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 // Parse the negated value directly using Rust's i128
                 let negated_repr = format!("-{repr}");
-                if let Ok(value) = util::parse_i128_literal(&negated_repr) {
-                    return super::coercion::build_int128_literal_call(
-                        name,
-                        value,
-                        repr,
-                        false,
-                        target_type,
-                        unary.span,
-                    )
-                    .type_id;
+                if util::parse_i128_literal(&negated_repr).is_ok() {
+                    return target_type;
                 }
                 let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
@@ -3283,30 +3280,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().is_integer(source_type)
                 || self.tysys.type_table.borrow().is_float(source_type)
             {
-                let intermediate_type = if simple == "u128" {
-                    TypeTable::U64
-                } else {
-                    TypeTable::I64
-                };
-
-                // Cast the expression to intermediate type first, then
+                // Reify emits the two-step form,
                 // `name::from_u64/from_i64(expr as u64/i64)`.
-                let casted_expr = TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(placeholder(source_type, cast.expr.span())),
-                        target_type: intermediate_type,
-                    },
-                    intermediate_type,
-                    cast.span,
-                );
-
-                return super::coercion::build_int128_from_intermediate(
-                    name,
-                    casted_expr,
-                    target_type,
-                    cast.span,
-                )
-                .type_id;
+                return target_type;
             }
         }
 
@@ -3645,8 +3621,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve field expressions, converting tuple literals to arrays when needed.
         // For generic structs, tuple-to-sequence coercion may be deferred to a second
         // pass after type arguments are inferred from field values.
-        let mut deferred_coercions: Vec<(usize, usize)> = Vec::new(); // (field_index, ast_field_index)
-        let fields: Vec<TirStructField> = struct_lit
+        // Indexes into `struct_lit.fields`, not into `fields`, which is sorted
+        // into declaration order before the second pass reads it.
+        let mut deferred_coercions: Vec<usize> = Vec::new();
+        let fields: Vec<ResolvedField> = struct_lit
             .fields
             .iter()
             .enumerate()
@@ -3672,19 +3650,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
-                let value = placeholder(
-                    self.resolve_expr(&field.value, ctx, effective_expected),
-                    field.value.span(),
-                );
+                let type_id = self.resolve_expr(&field.value, ctx, effective_expected);
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
                 // re-coerce with the concrete type (the second pass below records
                 // the coercion via `try_coerce_tuple_to_sequence`; reify replays
-                // it). `resolve_tuple_literal` is a placeholder, so
-                // the old `value.kind == TupleLiteral` test is read from the AST —
-                // a spread tuple used to resolve to a block (never deferred), so
-                // only spread-free tuple literals are deferred here.
+                // it). The test is read from the AST — a spread tuple used to
+                // resolve to a block (never deferred), so only spread-free tuple
+                // literals are deferred here.
                 let tuple_is_spread_free = matches!(
                     &field.value,
                     ast::Expr::TupleLiteral(t)
@@ -3692,7 +3666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 let coercion_deferred = needs_deferred_coercion && tuple_is_spread_free;
                 if coercion_deferred {
-                    deferred_coercions.push((provided_idx, provided_idx));
+                    deferred_coercions.push(provided_idx);
                 }
                 // A field whose declared type names a slot is not a constraint
                 // on the value — the value is what fixes the slot. Fields
@@ -3723,7 +3697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && let Some((_, expected_type_id)) =
                         struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
-                    self.typecheck(value.type_id, *expected_type_id, field.value.span());
+                    self.typecheck(type_id, *expected_type_id, field.value.span());
                 }
 
                 let decl_idx = struct_field_types
@@ -3731,10 +3705,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .position(|(n, _)| n == &field.name)
                     .unwrap_or(provided_idx);
 
-                TirStructField {
+                ResolvedField {
                     name: field.name.clone(),
-                    value,
+                    type_id,
                     field_index: decl_idx as u32,
+                    span: field.value.span(),
                 }
             })
             .collect();
@@ -3778,10 +3753,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                     };
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
-                    fields.push(TirStructField {
+                    fields.push(ResolvedField {
                         name: expected_name.clone(),
-                        value: placeholder(resolved, default_expr.span()),
+                        type_id: resolved,
                         field_index: idx as u32,
+                        span: default_expr.span(),
                     });
                 } else {
                     let _ = self.emit(TypeError::MissingField {
@@ -3849,7 +3825,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // that only the struct's own TypeParam TypeIds are replaced. Index-based
             // substitution incorrectly replaces TypeParams from outer scopes (e.g., impl
             // type params) that happen to share the same index as the struct's TypeParams.
-            let mut fields: Vec<TirStructField> = if type_args.is_empty() {
+            let mut fields: Vec<ResolvedField> = if type_args.is_empty() {
                 fields
             } else {
                 let struct_param_map: IndexMap<TypeId, TypeId> = self
@@ -3865,8 +3841,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields
                     .into_iter()
                     .map(|mut field| {
-                        field.value.type_id = self
-                            .substitute_type_params_by_map(field.value.type_id, &struct_param_map);
+                        field.type_id =
+                            self.substitute_type_params_by_map(field.type_id, &struct_param_map);
                         field
                     })
                     .collect()
@@ -3876,11 +3852,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // concrete type arguments are known. For example, [10, 20, 30] in
             // `Container<i32> { items: [10, 20, 30] }` needs List<i32> coercion,
             // but at first pass the field type was List<T> (type param).
-            for &(field_idx, ast_idx) in &deferred_coercions {
-                let field_name = &fields[field_idx].name;
+            for &ast_idx in &deferred_coercions {
+                let ast_field = &struct_lit.fields[ast_idx];
                 let Some(concrete_type) = struct_field_types
                     .iter()
-                    .find(|(name, _)| name == field_name)
+                    .find(|(name, _)| name == &ast_field.name)
                     .map(|(_, type_id)| {
                         if type_args.is_empty() {
                             *type_id
@@ -3891,11 +3867,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 else {
                     continue;
                 };
-                let ast_field = &struct_lit.fields[ast_idx];
+                let Some(field_idx) = fields.iter().position(|f| f.name == ast_field.name) else {
+                    continue;
+                };
                 if let Some(coerced) =
                     self.try_coerce_tuple_to_sequence(&ast_field.value, ctx, concrete_type)
                 {
-                    fields[field_idx].value = coerced;
+                    fields[field_idx].type_id = coerced;
                 }
                 // The check the first pass skipped — but only once the slot is
                 // actually filled. A field type that still names a rigid
@@ -3909,7 +3887,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .contains_rigid_param(concrete_type)
                 {
                     self.typecheck(
-                        fields[field_idx].value.type_id,
+                        fields[field_idx].type_id,
                         concrete_type,
                         ast_field.value.span(),
                     );
@@ -4005,7 +3983,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify rebuilds the `StructLiteral` (`reify_struct_literal`)
         // from the AST + the recorded `generic_instantiations` mangled name /
-        // instance type; the combined walk resolved the fields (and applied any
+        // instance type; the body walk resolved the fields (and applied any
         // deferred tuple-to-sequence coercion) for their fact-recording side
         // effects. Project only the struct type.
         struct_type
@@ -4188,16 +4166,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let mut resolved_fields: Vec<TirStructField> = Vec::new();
+        let mut resolved_fields: Vec<ResolvedField> = Vec::new();
         for (index, field) in struct_lit.fields.iter().enumerate() {
-            let value = placeholder(
-                self.resolve_expr(&field.value, ctx, None),
-                field.value.span(),
-            );
-            resolved_fields.push(TirStructField {
+            let type_id = self.resolve_expr(&field.value, ctx, None);
+            resolved_fields.push(ResolvedField {
                 name: field.name.clone(),
-                value,
+                type_id,
                 field_index: index as u32,
+                span: field.value.span(),
             });
         }
 
@@ -4217,8 +4193,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .unwrap_or_default()
                 })
                 .collect();
-            let explicit_types: Vec<TypeId> =
-                resolved_fields.iter().map(|f| f.value.type_id).collect();
+            let explicit_types: Vec<TypeId> = resolved_fields.iter().map(|f| f.type_id).collect();
             compose_union_plan(struct_lit, &base_field_lists, &explicit_types)
                 .into_iter()
                 .map(|uf| (uf.name, uf.type_id))
@@ -4226,7 +4201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             resolved_fields
                 .iter()
-                .map(|f| (f.name.clone(), f.value.type_id))
+                .map(|f| (f.name.clone(), f.type_id))
                 .collect()
         };
 
@@ -4319,9 +4294,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         self.mark_generic_instantiation_union(struct_lit.id, compose_union);
 
-        // Reify rebuilds the anonymous `StructLiteral`; the combined
-        // walk registered the struct type, field info, and pending TirStruct
-        // above for their side effects. Project only the type.
+        // Reify rebuilds the anonymous `StructLiteral`; the body walk
+        // registered the struct type, field info, and pending TirStruct above
+        // for their side effects. Project only the type.
         struct_type
     }
 
@@ -4341,7 +4316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn infer_struct_type_args(
         &mut self,
         struct_decl: Option<crate::defs::DefId>,
-        fields: &[TirStructField],
+        fields: &[ResolvedField],
         expected_type: Option<TypeId>,
         span: Span,
     ) -> Vec<TypeId> {
@@ -4367,6 +4342,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
         let field_types = self.instantiate_types(&decl_field_types, &inst);
+        let decl_field_names: Vec<&str> = struct_info
+            .fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
 
         // Two fields mentioning one slot are each other's evidence: the slot
         // takes what the first of them says, so a later one has to agree.
@@ -4377,12 +4357,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // prelude's `IterChain { first: *self, second: other }` into `expected
         // StrCharIter, found J`. Only the literal's own fields are consulted.
         let mut agreed: IndexMap<TypeId, TypeId> = IndexMap::default();
-        for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
+        for (struct_field, expected_field_type) in
+            declared_pairs(fields, &field_types, &decl_field_names)
+        {
             let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
             super::infer::unify(
                 &self.tysys.type_table,
                 expected_field_type,
-                struct_field.value.type_id,
+                struct_field.type_id,
                 &mut bindings,
             );
             for (var, answer) in bindings {
@@ -4403,7 +4385,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.emit(TypeError::TypeMismatch {
                         expected: self.tysys.type_table.borrow().type_name(first),
                         found: self.tysys.type_table.borrow().type_name(answer),
-                        span: struct_field.value.span,
+                        span: struct_field.span,
                     });
                 }
             }
@@ -4411,8 +4393,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
 
-        for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
-            infer.add(expected_field_type, struct_field.value.type_id);
+        for (struct_field, expected_field_type) in
+            declared_pairs(fields, &field_types, &decl_field_names)
+        {
+            infer.add(expected_field_type, struct_field.type_id);
         }
 
         // Back-infer from the caller's expected type: if it's a GenericInstance
@@ -4737,6 +4721,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `..F::method()` — `result_type` repeated `|F|` times.
     fn spread_pack_map_type(&mut self, inner: &Expr, result_type: TypeId) -> Option<TypeId> {
         let (name, index) = self.call_pack_subject(inner)?;
+        // Only this scope knows `F` is a pack rather than a plain type param,
+        // so record the answer for reify instead of leaving it to re-derive one.
+        self.sem
+            .types
+            .pack_spread_subjects
+            .insert(inner.id(), (name.clone(), index));
         Some(
             self.tysys
                 .type_table
@@ -4843,7 +4833,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_option {
             self.resolve_question_mark_option(inner_type, ctx)
         } else {
-            self.resolve_question_mark_result(inner_type, ctx, qm.span, qm.id)
+            self.resolve_question_mark_result(inner_type, ctx, qm.id)
         }
     }
 
@@ -4866,7 +4856,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify rebuilds the `Option` `?` desugar
         // (`reify_question_mark_option`) from the AST, allocating its own
-        // `__qm_v` local. The combined walk keeps the scope/local allocation
+        // `__qm_v` local. The body walk keeps the scope/local allocation
         // (walk-order parity) and projects the unwrapped `Some` payload type.
         some_type
     }
@@ -4875,7 +4865,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         inner_type: TypeId,
         ctx: &mut FunctionContext,
-        span: Span,
         qm_id: AstId,
     ) -> TypeId {
         let return_type = ctx.return_type;
@@ -4899,48 +4888,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The `__qm_v` local is allocated for walk-order parity; reify rebuilds
         // the `?` desugar and its own bindings, so the index is not kept here.
         ctx.add_local("__qm_v".to_string(), ok_type, false, None);
-        let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
+        ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
 
         // Record the `From::from(e)` conversion facts when the inner and outer
         // error types differ (no-op when they match). `resolve_from_call`
         // writes `FromCallFacts` keyed by the `?` AstId; reify replays the
-        // conversion from the AST + those facts. The returned `TirExpr` is the
-        // dead `Err(From::from(e))` node, projected away here.
+        // conversion from the AST + those facts.
         if inner_err_type != outer_err_type {
-            let e_expr = TirExpr::new(
-                TirExprKind::Local {
-                    index: e_local,
-                    name: "__qm_e".to_string(),
-                },
-                inner_err_type,
-                span,
-            );
-            let _ = self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id);
+            let _ = self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
         }
 
         ctx.exit_scope();
 
         // Reify rebuilds the `Result` `?` desugar
         // (`reify_question_mark_result`) from the AST + the recorded
-        // `FromCallFacts`. The combined walk keeps the scope / local allocation
+        // `FromCallFacts`. The body walk keeps the scope / local allocation
         // and the `resolve_from_call` fact-recording, and projects the
         // unwrapped `Ok` payload type.
         ok_type
     }
 
-    /// Generate `target_type::from(value)` as a static call, off the
-    /// `impl From<from_type> for target_type`. `caller_id` is the source
-    /// expression that triggered the conversion — the `?` operator, an explicit
-    /// `T::from(v)` — and the resolved facts are recorded under it so reify can
-    /// rebuild the `Call` without re-walking impl blocks or re-mangling.
+    /// Record the facts for `target_type::from(value)` off the
+    /// `impl From<from_type> for target_type`, and answer with the conversion's
+    /// result type. `caller_id` is the source expression that triggered the
+    /// conversion — the `?` operator, an explicit `T::from(v)` — and the facts
+    /// are recorded under it so reify rebuilds the `Call` without re-walking
+    /// impl blocks or re-mangling.
     pub(super) fn resolve_from_call(
         &mut self,
         target_type: TypeId,
         from_type: TypeId,
-        value: TirExpr,
-        span: Span,
         caller_id: crate::ast::AstId,
-    ) -> TirExpr {
+    ) -> TypeId {
         let tt = self.tysys.type_table.borrow();
         let target_name = tt.type_name(target_type);
         let from_name = tt.fq_type_name(from_type);
@@ -4963,37 +4942,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             key,
             super::sem::types::FromCallFacts {
                 method_def: impl_def.and_then(|def| self.tysys.declared_method(def, "from")),
-                module_source: module_source.clone(),
-                mangled_name: method_name.clone(),
-                target_name: target_receiver.clone(),
+                module_source,
+                mangled_name: method_name,
+                target_name: target_receiver,
                 from_name,
                 from_trait_name,
             },
         );
 
-        TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source,
-                    name: method_name,
-                    monomorph_info: None,
-                    // Auto-derived `From` impl (synthesis-side): the dispatch
-                    // builder never needs `From`'s declaring module because
-                    // it's not an effect / resource, so `base_trait_module`
-                    // stays unset.
-                    method_info: Some(crate::name::LocalMethodName::new(
-                        target_receiver,
-                        Some(from_trait),
-                        "from".to_string(),
-                    )),
-                }),
-                type_args: vec![],
-                args: vec![CallArg::new(value, false)],
-                has_receiver: false,
-            },
-            target_type,
-            span,
-        )
+        target_type
     }
 
     /// The `impl From<from_name> for target_name` block and the module that
@@ -5236,9 +5193,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Mangled name for the resulting `TirExprKind::StructLiteral`.
         // The monomorphizer keys instantiation lookup on this form
-        // (`RangeExclusive<i32>`), so reify and the combined walk both emit
-        // the mangled name. Recorded so reify reads it instead of running
-        // its own `type_name(t)` + `mangle_generic_name`.
+        // (`RangeExclusive<i32>`), so there is one spelling of it: the body
+        // walk mangles it here and records it, and reify reads it back instead
+        // of running its own `type_name(t)` + `mangle_generic_name`.
         let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
         let mangled_name = mangle_generic_name(&struct_name, &arg_names);
         self.record_generic_instantiation_with_mangle(

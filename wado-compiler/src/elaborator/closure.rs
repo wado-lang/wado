@@ -205,15 +205,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 mut_captures,
                 captures: recorded_captures,
                 is_mutating: any_mutating_capture,
+                declared_return,
             },
         );
 
         // Diagnose missing returns / type mismatches on block-bodied
-        // closures via the AST-walker. Mirrors the pre-7-B return-type
-        // analysis (which gated this on `body.kind == TirExprKind::Block`)
-        // so an explicit `return` inside a partial branch reports the
-        // same error, without depending on the combined walk's body
-        // TIR. Single-expression closure bodies (e.g.
+        // closures via the AST-walker, gating on the AST block shape so an
+        // explicit `return` inside a partial branch reports the error with no
+        // `TirExpr` to inspect. Single-expression closure bodies (e.g.
         // `|c: char| c.to_ascii_uppercase()`) take the body's type as
         // the return type directly — no missing-return check applies.
         let return_type = if let Some(dt) = declared_return {

@@ -1657,8 +1657,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
 
             // Take this module's `ModuleSemantics` out of `state` so the
-            // elaborator owns it for the body walk, then reinstall it after
-            // `resolve_module` returns. `annotate_modules` pre-populated an
+            // elaborator owns it for the decl pass, then reinstall it after
+            // `annotate_module_decls` returns. `annotate_modules` pre-populated an
             // entry per module, so `expect` rather than `unwrap_or_default`
             // surfaces any divergence from `sorted_sources` loudly.
             let mut sem = state
@@ -1751,8 +1751,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user
-        // module to populate `ModuleSemantics`. The combined walk's own TIR is
-        // discarded; reify (Phase 2, below) is the sole TIR source. Liveness
+        // module to populate `ModuleSemantics`; reify (Phase 2, below) is the
+        // sole TIR source. Liveness
         // runs between the two phases so reify can gate on it.
         for module_source in &sorted_sources {
             if is_stdlib_snapshot_hit(module_source) {

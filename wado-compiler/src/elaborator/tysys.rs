@@ -106,12 +106,11 @@ impl TypeSystem {
         self.known_type_names_cache.contains(name)
     }
 
-    /// The `TypeId` of each field of the struct `(name, module)` in declaration
-    /// order, or `None` if no such struct is registered. Used by the resource
+    /// The `TypeId` of each field of the struct `type_id` names, in declaration
+    /// order, or `None` if it names no registered struct. Keyed by the type
+    /// itself rather than a spelling of it, which is what every caller holds:
+    /// each reached one by destructuring a `ResolvedType`. Used by the resource
     /// move check to decide whether an aggregate transitively owns a resource.
-    /// [`Self::struct_field_type_ids`] for a caller holding the type rather
-    /// than a spelling of it — which is every caller that reached one by
-    /// destructuring a `ResolvedType` for the pair naming its declaration.
     pub(crate) fn struct_field_type_ids_of(
         &self,
         type_id: TypeId,

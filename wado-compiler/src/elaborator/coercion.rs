@@ -3,14 +3,10 @@
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
-use super::util::placeholder;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
-use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
-use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
-use crate::token::Span;
+use crate::tir::{ResolvedType, TypeId};
 
 /// Whether `expr` is a literal — the only position implicit conversion reaches
 /// (WEP 2026-08-24). A template string, a variable, and a call are not.
@@ -36,7 +32,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         expr: &Expr,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let coerced = self.try_coerce_numeric_literal_inner(expr, target_type)?;
         self.record_coercion(
             expr.id(),
@@ -60,7 +56,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         expr: &Expr,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         // Number literal coercion to integer
         if let Expr::Literal(lit) = expr
             && let Literal::Number(repr) = &lit.value
@@ -73,7 +69,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: lit.span,
                 });
-                return Some(placeholder(target_type, lit.span));
+                return Some(target_type);
             }
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
@@ -88,14 +84,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: lit.span,
                         });
                     }
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
             });
         }
@@ -117,14 +113,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: lit.span,
                         });
                     }
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
             });
         }
@@ -143,7 +139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: unary.span,
                 });
-                return Some(placeholder(target_type, unary.span));
+                return Some(target_type);
             }
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
@@ -158,14 +154,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: unary.span,
                         });
                     }
-                    placeholder(target_type, unary.span)
+                    target_type
                 }
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, unary.span)
+                    target_type
                 }
             });
         }
@@ -176,13 +172,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_float(target_type)
         {
             return Some(match util::parse_float_literal(repr) {
-                Ok(_) => placeholder(target_type, lit.span),
+                Ok(_) => target_type,
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, lit.span)
+                    target_type
                 }
             });
         }
@@ -195,13 +191,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_float(target_type)
         {
             return Some(match util::parse_float_literal(repr) {
-                Ok(_) => placeholder(target_type, unary.span),
+                Ok(_) => target_type,
                 Err(message) => {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    placeholder(target_type, unary.span)
+                    target_type
                 }
             });
         }
@@ -229,7 +225,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 match parse_result {
                     Ok(_) => {
-                        return Some(placeholder(target_type, lit.span));
+                        return Some(target_type);
                     }
                     Err(_) => {
                         let _ = self.emit(TypeError::InvalidLiteral {
@@ -260,7 +256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let negated_repr = format!("-{repr}");
                 if util::parse_i128_literal(&negated_repr).is_ok() {
-                    return Some(placeholder(target_type, unary.span));
+                    return Some(target_type);
                 }
                 let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
@@ -280,7 +276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn recoerce_literal_args(
         &mut self,
         raw_args: &[Expr],
-        args: &mut [TirExpr],
+        args: &mut [TypeId],
         expected_param_types: &[TypeId],
     ) {
         for (i, arg) in args.iter_mut().enumerate() {
@@ -293,7 +289,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !Self::is_literal_number_arg(Some(raw)) {
                 continue;
             }
-            if arg.type_id == expected {
+            if *arg == expected {
                 continue;
             }
             let is_numeric = {
@@ -329,7 +325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // records `NumericLiteral` and `expression_types` for the visited
         // AST id (and the inner `-NUM` literal id, when applicable).
         if let Some(coerced) = self.try_coerce_numeric_literal(expr, target_type) {
-            return Some(coerced.type_id);
+            return Some(coerced);
         }
 
         // Null literal → Option<T>
@@ -458,13 +454,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and user types). The sub-helper records `TupleToSequence` and
         // `expression_types`.
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
-            return Some(coerced.type_id);
+            return Some(coerced);
         }
 
         // Key-value literal → a type with a `From<Array<[K, V]>>` impl. The
         // sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
-            return Some(coerced.type_id);
+            return Some(coerced);
         }
 
         // A key-value literal whose generic target builds from no pair array
@@ -516,7 +512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let coerced = self.try_coerce_struct_to_map_inner(expr, ctx, target_type)?;
         self.record_coercion(
             expr.id(),
@@ -532,7 +528,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let Expr::StructLiteral(struct_lit) = expr else {
             return None;
         };
@@ -583,7 +579,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             // Recover as the target type: the literal named a real impl, so a
             // second "not constructible" report would describe the same fault.
-            return Some(placeholder(target_type, span));
+            return Some(target_type);
         }
         self.solve_infer_holes_against(key_type, string_type);
 
@@ -667,7 +663,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx.exit_scope();
         }
 
-        Some(placeholder(target_type, span))
+        Some(target_type)
     }
 
     /// Coerce a sequence literal `[e0, e1, …]` into a type implementing
@@ -680,7 +676,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let coerced = self.try_coerce_tuple_to_sequence_inner(expr, ctx, target_type)?;
         self.record_coercion(
             expr.id(),
@@ -922,7 +918,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let tuple_lit = match expr {
             Expr::TupleLiteral(tuple_lit) => tuple_lit,
             Expr::Unary(unary) if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) => {
@@ -960,7 +956,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ),
                 span: spread.span(),
             });
-            return Some(placeholder(target_type, span));
+            return Some(target_type);
         }
 
         // WEP 2026-08-24: record the resolved `From<Array<E>>` so reify
@@ -1012,176 +1008,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Placeholder typed as the coercion's surface result — `target_type`
-        // when newtype-cast, otherwise what `from` returns. The outer wrapper
-        // records `expression_types[expr.id]` from this value's `type_id`, and
-        // reify reads it from the recorded
-        // `SequenceCoercionFacts.newtype_cast_to` / `output_type`.
+        // The coercion's surface result — `target_type` when newtype-cast,
+        // otherwise what `from` returns. Reify reads the shape it emits from
+        // the recorded `SequenceCoercionFacts.newtype_cast_to` / `output_type`.
         let result_type = if needs_newtype_cast {
             target_type
         } else {
             output_type
         };
-        Some(placeholder(result_type, span))
+        Some(result_type)
     }
-}
-
-/// Build the `from_pair` call that materializes a 128-bit value from its
-/// `(low: u64, high: u64/i64)` halves. Pure and `self`-free so the
-/// elaborator's coercion / cast paths and the reify pass produce
-/// byte-identical TIR.
-pub(super) fn build_int128_from_pair(
-    type_name: &FqTypeName,
-    low: u64,
-    high: i64,
-    target_type: TypeId,
-    span: Span,
-) -> TirExpr {
-    let low_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: low,
-            repr: low.to_string(),
-        },
-        TypeTable::U64,
-        span,
-    );
-    let high_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: high.cast_unsigned(),
-            repr: high.to_string(),
-        },
-        if type_name.decl_name() == "u128" {
-            TypeTable::U64
-        } else {
-            TypeTable::I64
-        },
-        span,
-    );
-
-    let method_info = LocalMethodName::new(type_name.clone(), None, "from_pair".to_string());
-    let mangled_func_name = method_info.to_mangled_name();
-
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: mangled_func_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: vec![
-                CallArg::new(low_literal, false),
-                CallArg::new(high_literal, false),
-            ],
-            has_receiver: false,
-        },
-        target_type,
-        span,
-    )
-}
-
-/// Construct the TIR call that materializes an `i128` / `u128` value from
-/// a parsed numeric-literal `value`. Values that fit 64 bits take the
-/// cheaper `from_u64` / `from_i64` path when `allow_small` is set; the
-/// negated `-NUM` shape passes `allow_small = false` so it always uses
-/// `from_pair`, matching the elaborator's historical output. Pure and
-/// `self`-free so both the elaborator and reify build identical TIR.
-pub(super) fn build_int128_literal_call(
-    name: &FqTypeName,
-    value: i128,
-    repr: &str,
-    allow_small: bool,
-    target_type: TypeId,
-    span: Span,
-) -> TirExpr {
-    let use_small = allow_small
-        && if name.decl_name() == "u128" {
-            u64::try_from(value).is_ok()
-        } else {
-            i64::try_from(value).is_ok()
-        };
-
-    if use_small {
-        let (inner_type, method_name, store_value) = if name.decl_name() == "u128" {
-            (
-                TypeTable::U64,
-                "from_u64",
-                u64::try_from(value).expect("value fits in u64"),
-            )
-        } else {
-            (
-                TypeTable::I64,
-                "from_i64",
-                i64::try_from(value)
-                    .expect("value fits in i64")
-                    .cast_unsigned(),
-            )
-        };
-
-        let inner_literal = TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: store_value,
-                repr: repr.to_string(),
-            },
-            inner_type,
-            span,
-        );
-
-        let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
-        let mangled_func_name = method_info.to_mangled_name();
-
-        return TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source: ModuleSource::int128(),
-                    name: mangled_func_name,
-                    monomorph_info: None,
-                    method_info: Some(method_info),
-                }),
-                type_args: vec![],
-                args: vec![CallArg::new(inner_literal, false)],
-                has_receiver: false,
-            },
-            target_type,
-            span,
-        );
-    }
-
-    let (low, high) = util::unpack_i128(value);
-    build_int128_from_pair(name, low, high, target_type, span)
-}
-
-/// Build `u128::from_u64(inner)` / `i128::from_i64(inner)` for the
-/// general (non-literal) `expr as i128/u128` cast path. `intermediate`
-/// is the source expression already cast to the `u64` / `i64` width.
-/// Pure and `self`-free so the elaborator and reify stay in lockstep.
-pub(super) fn build_int128_from_intermediate(
-    name: &FqTypeName,
-    intermediate: TirExpr,
-    target_type: TypeId,
-    span: Span,
-) -> TirExpr {
-    let method_name = if name.decl_name() == "u128" {
-        "from_u64"
-    } else {
-        "from_i64"
-    };
-    let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
-    let mangled_func_name = method_info.to_mangled_name();
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: mangled_func_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: vec![CallArg::new(intermediate, false)],
-            has_receiver: false,
-        },
-        target_type,
-        span,
-    )
 }

@@ -1506,7 +1506,8 @@ impl TraitEnv {
         self.entries_by_receiver(receiver).collect()
     }
 
-    /// Receiver-matched form of [`Self::has_any_methodful_impl`].
+    /// Whether any impl on `receiver` implements `trait_` with methods.
+    /// [`Self::has_methodful_impl_by_receiver`] narrows it to one module.
     pub(crate) fn has_any_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,

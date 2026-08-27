@@ -1,12 +1,7 @@
-//! Type resolution phase for Wado
-//!
-//! The type elaborator:
-//! 1. Takes the parsed AST and symbol table from the analyzer
-//! 2. Performs type inference and type checking
-//! 3. Produces the Typed Intermediate Representation (TIR)
-//!
-//! All type resolution happens in this phase. The output TIR has fully
-//! resolved types on every expression, making code generation mechanical.
+//! Type resolution for Wado. The body walk answers with types and records the
+//! facts reify then builds the TIR from — so a walker returning only a
+//! `TypeId` is the rule, and the resolutions it drops on the floor ran to
+//! record those facts.
 
 pub(crate) mod assert;
 mod call;
@@ -85,7 +80,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     pub(crate) tysys: tysys::TypeSystem,
     /// Per-module semantic facts (imports, decls, bindings, type
     /// annotations). The elaborator takes ownership of one
-    /// [`sem::ModuleSemantics`] at the start of [`Self::resolve_module`]
+    /// [`sem::ModuleSemantics`] at the start of each per-module pass
+    /// ([`Self::annotate_module_decls`], [`Self::annotate_module_bodies`])
     /// and the driver re-installs it into
     /// [`orchestration::AnnotateState::module_semantics`] afterwards. See
     /// the [`sem`] module-level documentation for the membership rules.
@@ -661,8 +657,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
     /// module's `expression_types` map. Used by the AST-level
-    /// missing-return / definite-exit walks that replaced the TIR
-    /// walkers consuming the combined walk's body TIR.
+    /// missing-return / definite-exit walks, which answer from the recorded
+    /// types rather than from a `TirBlock`.
     fn ctrl_flow_ctx(&self) -> control_flow::CtrlFlowCtx<'_> {
         control_flow::CtrlFlowCtx {
             expression_types: &self.sem.types.expression_types,
@@ -682,10 +678,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Result type of an AST block, read from `expression_types` rather
-    /// than a built `TirBlock`. AST-level replacement for
-    /// `Self::block_result_type(&TirBlock)`: lets the combined walk type
-    /// `{ … }`, `if`/`match` arms, loop and handler bodies without
-    /// inspecting the body TIR it produces.
+    /// than from a built `TirBlock`: types `{ … }`, `if` / `match` arms, and
+    /// loop and handler bodies with no TIR in hand.
     pub(super) fn ast_block_result_type(&self, block: &crate::ast::Block) -> TypeId {
         control_flow::block_result_type(self.ctrl_flow_ctx(), block)
     }
@@ -727,9 +721,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         // An indefinite type IS recorded, because the AST-level
-        // block-result-type analysis the combined walk uses (in place of
-        // reading the body TIR) needs to see an unresolved-null branch to type
-        // it the same way the TIR walker did. Readers that want a *definite*
+        // block-result-type analysis needs to see an unresolved-null branch to
+        // type the block it sits in. Readers that want a *definite*
         // type call `is_indefinite` explicitly: reify's `ann_expression_types`
         // (so a null still falls back to its `expected_type`) and the
         // missing-return walk in `control_flow.rs`.
@@ -737,10 +730,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Record a method-dispatch decision, centralised here rather than at the AST
-    /// wrapper so every path through [`Self::build_tir_method_call`] leaves one
-    /// uniform entry. A synthetic call passes `ast_id == None` and records
-    /// nothing. Reify feeds `is_ref_impl` and `self_kind` to
-    /// `adjust_receiver_for_self_kind` instead of re-running impl lookup.
+    /// wrapper so every dispatched call leaves one uniform entry. A synthetic
+    /// call passes `ast_id == None` and records nothing. Reify feeds
+    /// `is_ref_impl` and `self_kind` to `adjust_receiver_for_self_kind`
+    /// instead of re-running impl lookup.
     pub(super) fn record_method_dispatch(
         &mut self,
         ast_id: Option<crate::ast::AstId>,
@@ -1771,7 +1764,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // identity — the impl target's prefix canonicalized here, in the
         // declaring scope — so the driver-merged view cannot collide across
         // same-named types. Lookups canonicalize the queried prefix the
-        // same way ([`Self::lookup_associated_constant`]).
+        // same way ([`Self::associated_constant_of`] and its path / qualified
+        // forms).
         self.sem.decls.associated_constants.clear();
         type AssocConstInput = (
             String,
@@ -1936,9 +1930,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.resolve_variant_decl(variant_decl);
                 }
                 Item::Test(test_decl) => {
-                    // `test_index` only named the discarded combined-walk test
-                    // function; reify re-indexes its own tests. Pass the running
-                    // count for parity and resolve the body for its facts.
+                    // Reify indexes its own tests, so nothing reads this one.
+                    // Pass the running count for parity and resolve the body
+                    // for its facts.
                     let test_index = test_count;
                     let module_is_todo = module.has_todo();
                     if self
@@ -1953,7 +1947,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 // Enum / Flags / Newtype emit no body-level facts — reify
                 // rebuilds their `TirEnum` / `TirFlags` / `TirNewtype` from the
-                // AST + decl tables, so the combined walk does nothing for them.
+                // AST + decl tables, so the body walk does nothing for them.
                 Item::Enum(_) | Item::Flags(_) | Item::Newtype(_) => {}
                 Item::Interface(effect_decl) => {
                     // Records `effect_ops`; reify reads them.

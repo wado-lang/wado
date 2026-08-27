@@ -6,8 +6,7 @@ use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
-    TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -38,12 +37,12 @@ fn static_call_symbol_name(static_call: &ast::StaticMethodCallExpr) -> String {
 /// use→def edge — keeping internal helpers out of jump-to-definition — and the
 /// `method_dispatch` entry, since reify walks source-level nodes only.
 pub(super) struct MethodCallInput<'a> {
-    pub receiver: TirExpr,
-    /// The receiver's source AST when the call comes from user syntax.
-    /// `resolve_ident` leaves placeholder TIR at annotate time, so the
-    /// `&mut self` receiver-mutability check walks this instead. `None`
-    /// for synthetic dispatches (for-of desugaring), whose receivers are
-    /// compiler-owned locals.
+    pub receiver: TypeId,
+    /// The receiver's source AST when the call comes from user syntax. The
+    /// body walk holds only the receiver's type, so the `&mut self`
+    /// receiver-mutability check walks this instead. `None` for synthetic
+    /// dispatches (for-of desugaring), whose receivers are compiler-owned
+    /// locals.
     pub receiver_ast: Option<&'a ast::Expr>,
     pub method_name: &'a str,
     pub method_id: Option<AstId>,
@@ -63,14 +62,14 @@ pub(super) struct MethodCallInput<'a> {
     pub required_trait: Option<super::types::RequiredTrait>,
 }
 
-/// Result of [`Elaborator::resolve_method_call_with`]: the typed
-/// placeholder plus, on successful dispatch, the receiver-adjustment
+/// Result of [`Elaborator::resolve_method_call_with`]: the call's result
+/// type plus, on successful dispatch, the receiver-adjustment
 /// inputs and resolved target a synthetic caller (for-of's `into_iter()`
 /// / `next()`, whose `call_id == None` skips `record_method_dispatch`)
 /// needs to record the decision its own way. `None` when a short-circuit
 /// path returned early or method lookup failed.
 pub(super) struct MethodCallOutcome {
-    pub expr: TirExpr,
+    pub type_id: TypeId,
     pub dispatch: Option<DispatchedMethod>,
     /// The resolved signature, for a caller that suppressed
     /// `record_method_dispatch` with `call_id: None` and files its own record.
@@ -102,16 +101,14 @@ pub(super) struct MethodSignatureFacts {
 }
 
 impl MethodCallOutcome {
-    fn no_dispatch(expr: TirExpr) -> Self {
+    fn no_dispatch(type_id: TypeId) -> Self {
         Self {
-            expr,
+            type_id,
             dispatch: None,
             signature: None,
         }
     }
 }
-
-use super::util::placeholder;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_method_call(
@@ -127,13 +124,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(result) =
                 self.try_resolve_index_mut_method_call(index_expr, method_call, ctx)
         {
-            return result.type_id;
+            return result;
         }
 
-        let receiver = placeholder(
-            self.resolve_expr(&method_call.receiver, ctx, None),
-            method_call.receiver.span(),
-        );
+        let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
 
         // A `_` resolves to UNKNOWN here; its position is recorded in the hole
         // mask below so the dispatch fills it from inference.
@@ -166,7 +160,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         )
-        .expr
         .type_id
     }
 
@@ -207,7 +200,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Base (non-ref) type for method lookup. `mut`: deferred-inference may
         // concretise the receiver below.
-        let mut base_type_id = self.tysys.get_base_type(receiver.type_id);
+        let mut base_type_id = self.tysys.get_base_type(receiver);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
@@ -305,14 +298,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
         {
             let is_ref = matches!(
-                self.tysys.type_table.borrow().get(receiver.type_id),
+                self.tysys.type_table.borrow().get(receiver),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             );
             if is_ref {
-                let ref_kind = RefKind::from_resolved(
-                    &self.tysys.type_table.borrow().get(receiver.type_id).clone(),
-                )
-                .expect("ref classify");
+                let ref_kind =
+                    RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone())
+                        .expect("ref classify");
                 let result = self.find_trait_method_for_type(
                     &ImplTargetKey::Ref(ref_kind),
                     method_name,
@@ -353,7 +345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             this.trait_impl_declaring(&value_key, method_name)
                 .or_else(|| {
                     let kind = RefKind::from_resolved(
-                        &this.tysys.type_table.borrow().get(receiver.type_id).clone(),
+                        &this.tysys.type_table.borrow().get(receiver).clone(),
                     )?;
                     this.trait_impl_declaring(&ImplTargetKey::Ref(kind), method_name)
                 })
@@ -378,7 +370,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Look up method info based on receiver type (inherent + base type trait methods)
         if method_info.is_none() && required_trait.is_none() {
-            method_info = self.lookup_method_info(receiver.type_id, method_name);
+            method_info = self.lookup_method_info(receiver, method_name);
         }
 
         // Fall back to base type trait methods
@@ -570,105 +562,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         );
 
-        // Tuple.len() is a compile-time constant — return immediately without a function call.
+        // `Tuple.len()` needs no call: reify folds it to a literal, or leaves
+        // the fold to monomorphization when a `..T` pack makes the arity
+        // unknown. Either way the type is the same.
         if method_name == "len" && self.tysys.type_table.borrow().is_tuple(base_type_id) {
-            // A tuple whose type still contains a `..T` pack has an arity that is
-            // only known after monomorphization. Defer folding to a literal so it
-            // is not frozen at the (wrong) unsubstituted pack count.
-            if self.type_contains_pack(base_type_id) {
-                return MethodCallOutcome::no_dispatch(TirExpr::new(
-                    TirExprKind::TupleLen {
-                        expr: Box::new(receiver),
-                    },
-                    TypeTable::I32,
-                    span,
-                ));
-            }
-            let len = self
-                .tysys
-                .type_table
-                .borrow()
-                .as_tuple(base_type_id)
-                .unwrap()
-                .len() as i64;
-            return MethodCallOutcome::no_dispatch(TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: len as u64,
-                    repr: len.to_string(),
-                },
-                TypeTable::I32,
-                span,
-            ));
+            return MethodCallOutcome::no_dispatch(TypeTable::I32);
         }
 
-        // Tuple.zip() transposes a tuple-of-tuples.
-        // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
+        // `Tuple.zip()` transposes a tuple-of-tuples,
+        // `[[A0, A1], [B0, B1]]` → `[[A0, B0], [A1, B1]]`. Reify expands it,
+        // or leaves the expansion to monomorphization when a `..T` pack is
+        // present; `return_type` already says what it yields.
         if method_name == "zip" && self.tysys.type_table.borrow().is_tuple(base_type_id) {
-            let has_type_pack = self.type_contains_pack(base_type_id);
-            if has_type_pack {
-                // TypePack present: defer expansion to monomorphization.
-                return MethodCallOutcome::no_dispatch(TirExpr::new(
-                    TirExprKind::TupleZip {
-                        expr: Box::new(receiver),
-                    },
-                    return_type,
-                    span,
-                ));
-            }
-            // Concrete tuples: expand inline now.
-            let outer_elems = self
-                .tysys
-                .type_table
-                .borrow()
-                .as_tuple(base_type_id)
-                .unwrap();
-            let inner_arities: Vec<Vec<TypeId>> = outer_elems
-                .iter()
-                .map(|e| self.tysys.type_table.borrow().as_tuple(*e).unwrap())
-                .collect();
-            let arity = inner_arities[0].len();
-            let num_rows = outer_elems.len();
-            let mut col_exprs = Vec::with_capacity(arity);
-            for col in 0..arity {
-                let mut row_exprs = Vec::with_capacity(num_rows);
-                for (row, row_types) in inner_arities.iter().enumerate() {
-                    let row_access = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(receiver.clone()),
-                            field_index: row as u32,
-                            field_name: row.to_string(),
-                        },
-                        outer_elems[row],
-                        span,
-                    );
-                    let cell = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(row_access),
-                            field_index: col as u32,
-                            field_name: col.to_string(),
-                        },
-                        row_types[col],
-                        span,
-                    );
-                    row_exprs.push(cell);
-                }
-                let col_types: Vec<TypeId> = inner_arities.iter().map(|row| row[col]).collect();
-                let col_tuple_type = self.tysys.type_table.borrow_mut().make_tuple(col_types);
-                col_exprs.push(TirExpr::new(
-                    TirExprKind::TupleLiteral {
-                        elements: row_exprs,
-                    },
-                    col_tuple_type,
-                    span,
-                ));
-            }
-            return MethodCallOutcome::no_dispatch(TirExpr::new(
-                TirExprKind::TupleLiteral {
-                    elements: col_exprs,
-                },
-                return_type,
-                span,
-            ));
+            return MethodCallOutcome::no_dispatch(return_type);
         }
 
         // Static methods (no self parameter) cannot be called with instance method syntax.
@@ -683,18 +589,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ),
                 span,
             });
-            return MethodCallOutcome::no_dispatch(TirExpr::new(
-                TirExprKind::Unit,
-                TypeTable::ERROR,
-                span,
-            ));
+            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
 
         // Type check method arguments against expected parameter types (newtype-aware)
         // If method was inherited from a newtype's base type, substitute base->newtype in params
         let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = owner.newtype_base() {
             // Get the newtype that the method is being called on
-            let newtype_id = self.tysys.get_base_type(receiver.type_id);
+            let newtype_id = self.tysys.get_base_type(receiver);
             // Substitute base type with newtype in all parameter types
             param_types
                 .iter()
@@ -708,12 +610,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Resolve arguments with coercion using method parameter types
-        let mut args: Vec<TirExpr> = args_ast
+        let mut args: Vec<TypeId> = args_ast
             .iter()
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = expected_param_types.get(i).copied();
-                placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
+                self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
 
@@ -752,7 +654,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = s.with_foreign_vantage(vantage, |s| {
                         s.resolve_expr(&default_expr, ctx, Some(expected_type))
                     });
-                    args.push(placeholder(resolved, default_expr.span()));
+                    args.push(resolved);
                     if let Some(name) = param_names.get(i) {
                         subs.insert(name.clone(), default_expr);
                     }
@@ -768,9 +670,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // these argument types — has run. The check happens once below,
         // against the substituted parameter types.
         for (arg, &expected_type) in args.iter_mut().zip(expected_param_types.iter()) {
-            if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected_type) {
-                self.solve_infer_holes_against(arg.type_id, expected_type);
-                arg.type_id = self.apply_infer_holes(arg.type_id);
+            if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected_type) {
+                self.solve_infer_holes_against(*arg, expected_type);
+                *arg = self.apply_infer_holes(*arg);
             }
         }
 
@@ -779,7 +681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
         if let Some(base_type_id) = owner.newtype_base() {
-            let newtype_id = self.tysys.get_base_type(receiver.type_id);
+            let newtype_id = self.tysys.get_base_type(receiver);
             return_type =
                 self.tysys
                     .substitute_newtype_in_type(return_type, base_type_id, newtype_id);
@@ -787,16 +689,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Address-taken tracking for an implicit `&mut self` borrow on a
         // primitive local receiver is owned by reify (`reify.rs` method-call
-        // arm marks `address_taken_locals` on the TIR it emits); the combined
-        // walk does not compute it, since `resolve_ident` returns a
-        // placeholder.
+        // arm marks `address_taken_locals` on the TIR it emits); the body walk
+        // has no node to mark, since `resolve_ident` answers with a type.
 
         if self_kind == ast::SelfKind::MutRef && !is_ref_impl {
-            self.check_mut_receiver(&receiver, receiver_ast, method_name, span, ctx);
+            self.check_mut_receiver(receiver, receiver_ast, method_name, span, ctx);
         }
 
-        // Adjust receiver based on what the method expects (self_kind)
-        receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, span);
+        receiver = super::method_lookup::adjusted_receiver_type(
+            receiver,
+            self_kind,
+            is_ref_impl,
+            &self.tysys.type_table,
+        );
 
         let mut subst_ctx = SubstitutionContext::new();
 
@@ -806,7 +711,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let has_hole = type_arg_holes.iter().any(|&h| h);
         let method_type_args = if type_args.is_empty() || has_hole {
             let inferred = self.infer_method_type_args(MethodInferenceInput {
-                receiver_type: receiver.type_id,
+                receiver_type: receiver,
                 method_name,
                 slots: &method_type_param_ids,
                 own_params: &method_own_params,
@@ -856,12 +761,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // mangling/recording below embeds the receiver type in a name a later
         // TypeId sweep could not fix.
         if let Some(expected) = expected_type
-            && (self.type_has_infer_hole(return_type) || self.type_has_infer_hole(receiver.type_id))
+            && (self.type_has_infer_hole(return_type) || self.type_has_infer_hole(receiver))
         {
             self.solve_infer_holes_against(return_type, expected);
-            receiver.type_id = self.apply_infer_holes(receiver.type_id);
+            receiver = self.apply_infer_holes(receiver);
             return_type = self.apply_infer_holes(return_type);
-            base_type_id = self.tysys.get_base_type(receiver.type_id);
+            base_type_id = self.tysys.get_base_type(receiver);
         }
         // A hole may still ride the receiver (a deep chain's intermediate call,
         // `gen().keep().unwrap()`): the recorded name embeds `Type<?hole>`, but
@@ -887,7 +792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = substituted_param_types.get(i) {
                 self.typecheck(
-                    arg.type_id,
+                    *arg,
                     expected,
                     args_ast.get(i).map_or(span, super::ast::Expr::span),
                 );
@@ -1190,11 +1095,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
 
-        // Reify rebuilds the method-call TIR from the recorded dispatch;
-        // the walk projects only the result type. `receiver` and `args`
-        // were resolved above for their fact-recording side effects.
         MethodCallOutcome {
-            expr: placeholder(return_type, span),
+            type_id: return_type,
             dispatch,
             signature,
         }
@@ -1296,7 +1198,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // already replays.
         let outcome = self.resolve_method_call_with(
             MethodCallInput {
-                receiver: placeholder(receiver_type, receiver_ast.span()),
+                receiver: receiver_type,
                 receiver_ast: Some(receiver_ast),
                 method_name,
                 method_id,
@@ -1349,7 +1251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
             );
         }
-        outcome.expr.type_id
+        outcome.type_id
     }
 
     /// The receiver of a qualified call spells its own mode (WEP 2026-07-31);
@@ -1635,15 +1537,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Resolve arguments with expected types for coercion
-        let mut args: Vec<TirExpr> = static_call
+        // Resolve arguments with expected types for coercion. `arg_spans` runs
+        // parallel to `args` so a diagnostic still lands on the argument that
+        // caused it rather than on the whole call.
+        let mut args: Vec<TypeId> = static_call
             .args
             .iter()
             .enumerate()
             .map(|(i, a)| {
                 let expected_type = param_types.get(i).copied();
-                placeholder(self.resolve_expr(a, ctx, expected_type), a.span())
+                self.resolve_expr(a, ctx, expected_type)
             })
+            .collect();
+        let mut arg_spans: Vec<Span> = static_call
+            .args
+            .iter()
+            .map(super::ast::Expr::span)
             .collect();
 
         // Pad omitted trailing arguments with declared parameter defaults.
@@ -1673,7 +1582,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         s.resolve_expr(&default_expr, ctx, Some(expected_type))
                     })
                 });
-                args.push(placeholder(resolved, default_expr.span()));
+                args.push(resolved);
+                arg_spans.push(default_expr.span());
                 subs.insert(pname.clone(), default_expr);
             }
         }
@@ -1750,9 +1660,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
-                    // Reify rebuilds the `VariantConstruct` from
-                    // the AST + variant info; the combined walk projects only
-                    // the result type.
                     return target_type_id;
                 }
                 // If no matching case, fall through to general method lookup
@@ -1817,7 +1724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 &self.annotate_ctx,
                                 &variant_info,
                                 &case_data,
-                                args.first(),
+                                args.first().copied(),
                                 None,
                                 &explicit_args,
                                 &target_holes,
@@ -1853,14 +1760,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .args
                                 .first()
                                 .map_or(static_call.span, super::ast::Expr::span);
-                            self.typecheck(args[0].type_id, expected_type, span);
+                            self.typecheck(args[0], expected_type, span);
                         }
                     }
 
-                    // Reify rebuilds the `VariantConstruct` from
-                    // the AST + variant info; the combined walk projects only
-                    // the result type. The payload was already resolved (and
-                    // typechecked) above for its fact-recording side effects.
                     return result_type;
                 }
                 // If no matching case, fall through to general method lookup
@@ -1872,28 +1775,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The synthesized function doesn't exist during resolution, so we generate the call inline.
         if static_call.method == "from"
             && args.len() == 1
-            && self.has_from_synthesis_request(&static_call.target_type, &args[0].type_id)
+            && self.has_from_synthesis_request(&static_call.target_type, &args[0])
         {
-            return self
-                .resolve_from_call(
-                    target_type_id,
-                    args[0].type_id,
-                    args.into_iter().next().unwrap(),
-                    static_call.span,
-                    static_call.id,
-                )
-                .type_id;
+            return self.resolve_from_call(target_type_id, args[0], static_call.id);
         }
 
         // Reflexive identity: From<T> for T — return the value unchanged.
-        if static_call.method == "from" && args.len() == 1 && args[0].type_id == target_type_id {
-            return args.into_iter().next().unwrap().type_id;
+        if static_call.method == "from" && args.len() == 1 && args[0] == target_type_id {
+            return args.into_iter().next().unwrap();
         }
 
         // Newtype From conversions: From<Base> for Newtype and From<Newtype> for Base.
         // Newtypes share the same representation as their base type, so this is a Cast.
         if static_call.method == "from" && args.len() == 1 {
-            let arg_type = args[0].type_id;
+            let arg_type = args[0];
             let base_of_target = self
                 .tysys
                 .type_table
@@ -1901,8 +1796,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get_newtype_base(target_type_id);
             let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
             if base_of_target == Some(arg_type) || base_of_arg == Some(target_type_id) {
-                // Reify rebuilds the newtype `Cast`; the combined
-                // walk projects only the result type.
+                // Reify rebuilds the newtype `Cast`; the body walk projects
+                // only the result type.
                 return target_type_id;
             }
         }
@@ -2136,7 +2031,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let arg_type_hint = if (static_call.method == "from" || static_call.method == "try_from")
             && args.len() == 1
         {
-            Some(self.tysys.type_table.borrow().type_name(args[0].type_id))
+            Some(self.tysys.type_table.borrow().type_name(args[0]))
         } else {
             None
         };
@@ -2212,6 +2107,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &method_type_args,
                 &static_method_defaults,
                 &args,
+                &arg_spans,
                 static_call.span,
             )
         {
@@ -2332,10 +2228,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Reify rebuilds the static-method `Call` TIR from the
-        // recorded `static_method_dispatch` + resolved args; the combined
-        // walk projects only the result type. `args` was resolved above for
-        // its fact-recording side effects.
         return_type
     }
 
@@ -2352,7 +2244,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         method_type_args: &[TypeId],
         static_method_defaults: &[(String, Option<ast::Expr>)],
-        args: &[TirExpr],
+        args: &[TypeId],
+        arg_spans: &[Span],
         span: Span,
     ) -> Option<TypeId> {
         let (trait_name, blanket_param, blanket_module, blanket_def) =
@@ -2393,7 +2286,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             receiver_type_id,
         );
-        if !self.check_blanket_static_args(&param_types, args, static_method_defaults, span) {
+        if !self.check_blanket_static_args(
+            &param_types,
+            args,
+            arg_spans,
+            static_method_defaults,
+            span,
+        ) {
             return Some(TypeTable::ERROR);
         }
 
@@ -2530,10 +2429,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn check_blanket_static_args(
         &mut self,
         param_types: &[TypeId],
-        args: &[TirExpr],
+        args: &[TypeId],
+        arg_spans: &[Span],
         static_method_defaults: &[(String, Option<ast::Expr>)],
         span: Span,
     ) -> bool {
+        assert_eq!(
+            args.len(),
+            arg_spans.len(),
+            "every resolved argument carries the span it was written at"
+        );
         let optional = static_method_defaults
             .iter()
             .filter(|(_, d)| d.is_some())
@@ -2547,11 +2452,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return false;
         }
-        for (arg, &expected) in args.iter().zip(param_types) {
+        for (i, (arg, &expected)) in args.iter().zip(param_types).enumerate() {
             if self.tysys.type_table.borrow().contains_type_param(expected) {
                 continue;
             }
-            self.typecheck(arg.type_id, expected, arg.span);
+            self.typecheck(*arg, expected, arg_spans[i]);
         }
         true
     }
@@ -3709,20 +3614,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        args: &[TirExpr],
+        args: &[TypeId],
         impl_type_args: &[TypeId],
         method_type_args: &[TypeId],
         call_id: AstId,
         span: Span,
         _ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         // The call site may refer to the receiver type through a
         // `use { Counter as CounterA }` alias. Resolve the alias to its
         // canonical declaration name so the mangled TIR function
         // (`Counter::make`) can be found at WIR-build time — that name
         // is keyed by the *original* `Counter`, not the local alias.
         // The other lookups below still consume `struct_name` as-is and
-        // canonicalise internally via `Elaborator::canonical_decl_key`.
+        // canonicalise internally via `Elaborator::decl_key_or_local`.
         // Rebuilt from the canonical key, not the local alias.
         let qualified_struct_name = self.qualified_receiver_name(struct_name);
         let mangled_func_name_owned =
@@ -3803,7 +3708,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // rather than the default `ModuleSource::primitive()` for `i32`.
         let arg_type_hint =
             if (method_name == "from" || method_name == "try_from") && args.len() == 1 {
-                Some(self.tysys.type_table.borrow().type_name(args[0].type_id))
+                Some(self.tysys.type_table.borrow().type_name(args[0]))
             } else {
                 None
             };
@@ -3843,7 +3748,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_key.as_ref(),
             )
         {
-            return placeholder(TypeTable::ERROR, span);
+            return TypeTable::ERROR;
         }
 
         let method_ref = resolved.unwrap_or_else(|| {
@@ -3967,7 +3872,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        placeholder(return_type, span)
+        return_type
     }
 }
 

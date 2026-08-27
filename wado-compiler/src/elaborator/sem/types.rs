@@ -247,7 +247,7 @@ pub(crate) struct TypeAnnotations {
     /// Reify reads it instead of re-resolving the return annotation.
     pub(crate) fn_return_types: IndexMap<AstId, crate::tir::TypeId>,
     /// Resolved operation signatures per effect / resource decl `AstId`
-    /// (params, return type, `cm` name), as the combined walk resolved them
+    /// (params, return type, `cm` name), as the body walk resolved them
     /// with the decl's type-param / `Self` scope in place. Reify reads these
     /// instead of re-resolving the op signatures itself.
     pub(crate) effect_ops: IndexMap<AstId, Vec<crate::tir::TirEffectOp>>,
@@ -259,6 +259,11 @@ pub(crate) struct TypeAnnotations {
     /// after its own scope is torn down. `AstId` is dense per module across all
     /// item kinds, so function and decl entries never collide.
     pub(crate) decl_type_params: IndexMap<AstId, Vec<crate::tir::TirTypeParam>>,
+    /// The `(name, slot)` of the type pack a spread operand's static call is
+    /// made on (`..F::method()`), keyed by the spread's inner expression. Only
+    /// the scope that wrote `F` can say it is a pack rather than a plain type
+    /// param, so the body walk answers and reify reads.
+    pub(crate) pack_spread_subjects: IndexMap<AstId, (String, u32)>,
     /// Per-impl-method mangled / display names as `resolve_method` computed
     /// them (`MethodName::format_local(struct_name, trait_name, method_name)`
     /// and the trait-omitted display form). Reify reads these instead of
@@ -706,8 +711,8 @@ pub(crate) struct StaticMethodDispatch {
 pub(crate) struct GenericInstantiation {
     pub(crate) type_args: Vec<TypeId>,
     pub(crate) instance_type: TypeId,
-    /// Mangled name as the combined walk emitted it onto the TIR node
-    /// (`StructLiteral::struct_name`, `Call::FuncRef::name`, ...).
+    /// Mangled name the body walk computed, which reify writes onto the TIR
+    /// node (`StructLiteral::struct_name`, `Call::FuncRef::name`, ...).
     /// `None` for sites that don't carry a mangled name (e.g. when the
     /// instantiation is recorded purely for type-arg replay).
     ///
@@ -773,6 +778,13 @@ pub(crate) struct ClosureCaptureInfo {
     /// True when any capture mutates its outer binding. Drives the
     /// `fn mut(...)` vs `fn(...)` choice at the closure type.
     pub(crate) is_mutating: bool,
+    /// The `|…| -> Type` annotation, resolved in the scope the closure was
+    /// written in. `None` when the closure declares no return type.
+    ///
+    /// `Self` and `Self::Item` mean something only in that scope, so this is
+    /// the answer — reify re-resolving the annotation has no `Self` bound and
+    /// would disagree with what the caller was type-checked against.
+    pub(crate) declared_return: Option<TypeId>,
 }
 
 /// One power-assert capture slot — a sub-expression of the assert
@@ -924,7 +936,7 @@ pub(crate) struct OperatorDispatch {
     /// Self-kind of the trait method's receiver. Reify feeds this
     /// (with `is_ref_impl = false` — operator trait methods are
     /// always dispatched on the value type, not on a ref-impl) into
-    /// [`super::super::Elaborator::adjust_receiver_for_self_kind_static`].
+    /// reify's `adjust_receiver_for_self_kind`.
     pub(crate) self_kind: ast::SelfKind,
     /// Per-argument flag: `true` when the operator's trait parameter
     /// is declared as `&T` / `&mut T` and reify must wrap the
