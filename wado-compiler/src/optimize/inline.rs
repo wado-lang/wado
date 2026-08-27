@@ -16,7 +16,7 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 use cranelift_entity::EntityRef;
 
@@ -44,6 +44,49 @@ mod weight {
     /// A loop, for the same reason as [`BRANCH`], one step further: a loop
     /// spliced into a caller is a region of its own.
     pub const LOOP: usize = 3;
+}
+
+/// The Wasm value type a primitive occupies. `None` for one with no scalar
+/// shape of its own — a `v128`, a 128-bit pair, a reference.
+fn wasm_shape(type_table: &TypeTable, id: TypeId) -> Option<PrimitiveType> {
+    let ResolvedType::Primitive(prim) = type_table.get(id) else {
+        return None;
+    };
+    match prim {
+        PrimitiveType::I8
+        | PrimitiveType::U8
+        | PrimitiveType::I16
+        | PrimitiveType::U16
+        | PrimitiveType::I32
+        | PrimitiveType::U32
+        | PrimitiveType::Bool
+        | PrimitiveType::Char => Some(PrimitiveType::I32),
+        PrimitiveType::I64 | PrimitiveType::U64 => Some(PrimitiveType::I64),
+        PrimitiveType::F32 => Some(PrimitiveType::F32),
+        PrimitiveType::F64 => Some(PrimitiveType::F64),
+        PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => None,
+    }
+}
+
+/// Whether a cast emits an instruction, which is what the weights are counted
+/// in. `translate_cast` passes a cast between two types of the same Wasm shape
+/// straight through — `char`, `u32` and `bool` are all i32 — so charging one
+/// prices a callee above what it emits and holds it back from inlining. Only
+/// a shape change, or a narrowing the target has to mask, costs anything.
+/// Unknown shapes stay charged: this narrows the estimate, never widens it.
+fn cast_emits_instruction(type_table: &TypeTable, from: TypeId, to: TypeId) -> bool {
+    let (Some(from_shape), Some(to_shape)) =
+        (wasm_shape(type_table, from), wasm_shape(type_table, to))
+    else {
+        return true;
+    };
+    let narrows = matches!(
+        type_table.get(to),
+        ResolvedType::Primitive(
+            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::I16 | PrimitiveType::U16
+        )
+    );
+    from_shape != to_shape || narrows
 }
 
 /// True when an expression is a `builtin::cold_path()` marker call.
@@ -290,6 +333,14 @@ impl CostWalk<'_> {
         }
     }
 
+    /// The type an operand carries, where the body records one.
+    fn operand_type(&self, op: Operand) -> Option<TypeId> {
+        match op {
+            Operand::Expr(e) => Some(self.body.exprs[e].type_id),
+            Operand::Value(v) => self.body.values.type_of(v),
+        }
+    }
+
     /// Cost of a promoted pure value, charged once per distinct `ValueId`.
     fn value(&self, v: ValueId, seen: &mut SeenValues) -> usize {
         if !seen.insert(v) {
@@ -311,8 +362,14 @@ impl CostWalk<'_> {
             ValueKind::Binary { lhs, rhs, .. } => {
                 weight::OP + self.value(*lhs, seen) + self.value(*rhs, seen)
             }
-            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                weight::OP + self.value(*operand, seen)
+            ValueKind::Unary { operand, .. } => weight::OP + self.value(*operand, seen),
+            ValueKind::Cast { operand, target } => {
+                let emits = self
+                    .body
+                    .values
+                    .type_of(*operand)
+                    .is_none_or(|from| cast_emits_instruction(self.type_table, from, *target));
+                usize::from(emits) * weight::OP + self.value(*operand, seen)
             }
             // `select_lowering`'s branchless form: one instruction, three operands.
             ValueKind::Select { cond, then, else_ } => {
@@ -346,11 +403,16 @@ impl CostWalk<'_> {
                 weight::OP + self.operand(*left, seen) + self.operand(*right, seen)
             }
             ExprKind::Unary { expr, .. }
-            | ExprKind::Cast { expr, .. }
             | ExprKind::FieldAccess { expr, .. }
             | ExprKind::VariantTag { expr }
             | ExprKind::VariantTest { expr, .. }
             | ExprKind::VariantPayload { expr, .. } => weight::OP + self.operand(*expr, seen),
+            ExprKind::Cast { expr, target_type } => {
+                let emits = self
+                    .operand_type(*expr)
+                    .is_none_or(|from| cast_emits_instruction(self.type_table, from, *target_type));
+                usize::from(emits) * weight::OP + self.operand(*expr, seen)
+            }
             ExprKind::Index { expr, index, .. } => {
                 weight::OP + self.operand(*expr, seen) + self.operand(*index, seen)
             }
@@ -2515,5 +2577,52 @@ fn inline_calls_in_expr(
             },
         );
         body.exprs[e] = moved;
+    }
+}
+
+#[cfg(test)]
+mod cast_cost_tests {
+    use super::cast_emits_instruction;
+    use crate::tir::{TypeId, TypeTable};
+
+    fn emits(from: TypeId, to: TypeId) -> bool {
+        cast_emits_instruction(&TypeTable::new(), from, to)
+    }
+
+    #[test]
+    fn a_cast_within_one_wasm_shape_emits_nothing() {
+        // The chain `char::eq_ignore_ascii_case` folds in: all i32, all free.
+        assert!(!emits(TypeTable::CHAR, TypeTable::U32));
+        assert!(!emits(TypeTable::U8, TypeTable::CHAR));
+        assert!(!emits(TypeTable::BOOL, TypeTable::U32));
+        assert!(!emits(TypeTable::U32, TypeTable::I32));
+        assert!(!emits(TypeTable::I32, TypeTable::CHAR));
+    }
+
+    #[test]
+    fn a_cast_across_wasm_shapes_emits_a_conversion() {
+        assert!(emits(TypeTable::I32, TypeTable::I64));
+        assert!(emits(TypeTable::I64, TypeTable::I32));
+        assert!(emits(TypeTable::U32, TypeTable::F64));
+        assert!(emits(TypeTable::F64, TypeTable::I32));
+        assert!(emits(TypeTable::F32, TypeTable::F64));
+    }
+
+    #[test]
+    fn a_narrowing_below_i32_emits_its_mask() {
+        // `truncate_to_sub_i32` masks or sign-extends these even though the
+        // source already sits in an i32.
+        assert!(emits(TypeTable::I32, TypeTable::U8));
+        assert!(emits(TypeTable::I32, TypeTable::I8));
+        assert!(emits(TypeTable::CHAR, TypeTable::U16));
+        assert!(emits(TypeTable::U32, TypeTable::I16));
+    }
+
+    #[test]
+    fn a_shape_the_walk_cannot_read_stays_charged() {
+        // Narrowing the estimate is only safe where the shape is known; `v128`
+        // and the unit type are not scalars this classifies.
+        assert!(emits(TypeTable::V128, TypeTable::V128));
+        assert!(emits(TypeTable::UNIT, TypeTable::I32));
     }
 }
