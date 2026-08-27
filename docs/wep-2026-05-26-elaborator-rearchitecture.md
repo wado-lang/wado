@@ -351,12 +351,10 @@ scope-, inference-, dispatch-, or mangling-sensitive.
 Two boundary invariants keep it that way:
 
 - Fail-loud, not fail-safe. Reify does not fall back to recomputation when a
-  fact is absent; every decision-bearing read is an `.expect`. One
-  `resolve_type` call is sanctioned: the global read for a snapshot-rehydrated
+  fact is absent; every decision-bearing read is an `.expect`. Exactly one
+  `resolve_type` call survives: the global read for a snapshot-rehydrated
   callee module, whose `ModuleSemantics` legitimately carries no
-  `current_module_globals` — a documented exception, not a fallback. Reify
-  holds three further call sites, which the rule does not admit; see
-  [Known gaps](#known-gaps).
+  `current_module_globals` — a documented exception, not a fallback.
 - Single source for the projection rule. The "dense, real type params"
   predicate (`!effect && !fn-bound`) that fixes positional monomorph slots
   lives once, as `ast::GenericParam::is_real_type_param`; the annotate walk
@@ -543,7 +541,7 @@ Each is a grep:
 | `with_module_perspective_for` call sites         | 2      | 2   |
 | `with_reference_recording_suppressed` call sites | 1      | 1   |
 | Walker signatures taking or returning a TIR node | 0      | 24  |
-| Reify `resolve_type` call sites                  | 1      | 4   |
+| Reify `resolve_type` call sites                  | 1      | 1   |
 
 The perspective and suppression rows are floors, not zeroes, and each is a
 walker frame rather than a query: both perspective swaps are the callee-scope
@@ -573,17 +571,6 @@ Closing it: give each builder the `(TypeId, Span)` it actually reads, move the
 TIR builders reify shares to reify, and let the item-level `resolve_*` return
 what their callers use. `placeholder` and `placeholder_function` then have no
 callers, and the walker-signature row reaches its target.
-
-### Reify re-resolves three types annotate never recorded
-
-Beyond the sanctioned global read, reify resolves a type-parameter default, a
-closure's declared return type, and a type-pack's positional slot from AST.
-Each is decision-bearing, so the completeness rule does not admit it: annotate
-visits all three nodes and can record the answer.
-
-Closing it: record each as a fact on `ModuleSemantics.types`, keyed by the
-declaring node's `AstId`, and make reify's `resolve_type` private to the global
-read.
 
 ### The walker slim-down
 

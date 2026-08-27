@@ -340,7 +340,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
         }
+
+        // Resolved here, with the struct's own type params in scope, so a
+        // default naming a sibling param (`<A, B = A>`) means what it says —
+        // reify has only the enclosing function's params.
+        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
+                index: i as u32,
+                projected_from: None,
+            })
+            .collect();
         drop(scope);
+
+        self.sem
+            .types
+            .decl_type_params
+            .insert(struct_decl.id, type_params);
 
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
             return;

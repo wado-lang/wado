@@ -205,6 +205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 mut_captures,
                 captures: recorded_captures,
                 is_mutating: any_mutating_capture,
+                declared_return,
             },
         );
 

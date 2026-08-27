@@ -4737,6 +4737,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `..F::method()` — `result_type` repeated `|F|` times.
     fn spread_pack_map_type(&mut self, inner: &Expr, result_type: TypeId) -> Option<TypeId> {
         let (name, index) = self.call_pack_subject(inner)?;
+        // Only this scope knows `F` is a pack rather than a plain type param,
+        // so record the answer for reify instead of leaving it to re-derive one.
+        self.sem
+            .types
+            .pack_spread_subjects
+            .insert(inner.id(), (name.clone(), index));
         Some(
             self.tysys
                 .type_table
