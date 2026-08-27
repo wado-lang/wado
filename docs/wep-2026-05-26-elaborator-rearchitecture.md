@@ -144,9 +144,10 @@ foreign AST name its node exactly, whichever module's map it lands in.
 
 A fact has one home, the map the walk wrote it into, and every phase reads it
 there. `Semantics` — also keyed by bare `AstId` — holds no second copy: it
-routes an id to the module whose walk recorded it and reads through. Two walks
-reaching one node (a callee's parameter default, resolved in each caller's
-frame) resolve to the last, so a node's facts all come from one walk.
+routes a fact to the module whose walk recorded it and reads through. Per fact
+kind, not per node: a node two walks reach — a callee's parameter default,
+typed at each call site while its own module records the edges around it — has
+kinds only one of them holds, so the node alone does not name a walk.
 
 ### Signatures — every declaration signature is a decl-pass fact
 

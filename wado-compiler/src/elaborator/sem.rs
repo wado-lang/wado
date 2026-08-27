@@ -34,36 +34,51 @@ pub(crate) struct ModuleSemantics {
     pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
 }
 
+/// The fact kinds [`crate::semantics::Semantics`] answers by `AstId`, and so
+/// routes to a module by. One node's kinds do not all come from one walk — a
+/// module records the use→def edges around a parameter default while each
+/// caller types the expression itself — so the kind is part of the key.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum FactKind {
+    Reference,
+    LocalSymbol,
+    LocalType,
+    ExpressionType,
+    MethodDispatch,
+    Coercion,
+    Desugar,
+}
+
 impl ModuleSemantics {
-    /// Every node this module's walk recorded a fact for that
-    /// [`crate::semantics::Semantics`] answers from — the list its routing is
-    /// built over, and the same list [`Self::routed_fact_kinds`] reports on.
-    pub(crate) fn routed_fact_ids(&self) -> impl Iterator<Item = &AstId> {
+    /// Every fact this module's walk recorded that `Semantics` answers from —
+    /// the list its routing is built over.
+    pub(crate) fn routed_facts(&self) -> impl Iterator<Item = (AstId, FactKind)> + '_ {
+        let keys = |kind| move |id: &AstId| (*id, kind);
         self.bindings
             .references
             .keys()
-            .chain(self.bindings.local_symbols.keys())
-            .chain(self.types.local_types.keys())
-            .chain(self.types.expression_types.keys())
-            .chain(self.types.method_dispatch.keys())
-            .chain(self.types.coercions.keys())
-            .chain(self.types.desugars.keys())
-    }
-
-    /// Which of those fact kinds this walk recorded for `id`. Routing sends
-    /// every kind to one walk, so a later walk over the same node must record
-    /// at least what an earlier one did.
-    #[cfg(debug_assertions)]
-    pub(crate) fn routed_fact_kinds(&self, id: AstId) -> [bool; 7] {
-        [
-            self.bindings.references.contains_key(&id),
-            self.bindings.local_symbols.contains_key(&id),
-            self.types.local_types.contains_key(&id),
-            self.types.expression_types.contains_key(&id),
-            self.types.method_dispatch.contains_key(&id),
-            self.types.coercions.contains_key(&id),
-            self.types.desugars.contains_key(&id),
-        ]
+            .map(keys(FactKind::Reference))
+            .chain(
+                self.bindings
+                    .local_symbols
+                    .keys()
+                    .map(keys(FactKind::LocalSymbol)),
+            )
+            .chain(self.types.local_types.keys().map(keys(FactKind::LocalType)))
+            .chain(
+                self.types
+                    .expression_types
+                    .keys()
+                    .map(keys(FactKind::ExpressionType)),
+            )
+            .chain(
+                self.types
+                    .method_dispatch
+                    .keys()
+                    .map(keys(FactKind::MethodDispatch)),
+            )
+            .chain(self.types.coercions.keys().map(keys(FactKind::Coercion)))
+            .chain(self.types.desugars.keys().map(keys(FactKind::Desugar)))
     }
 }
 

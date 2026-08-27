@@ -11,6 +11,7 @@ use crate::compiler_host::{CompilerHost, LogLevel};
 use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::Elaborator;
 use crate::elaborator::orchestration::AnnotateState;
+use crate::elaborator::sem::FactKind;
 use crate::hashmap::IndexMap;
 use crate::loader;
 use crate::logger::Logger;
@@ -58,18 +59,18 @@ pub struct Semantics {
     /// module in every key.
     pub(crate) space_modules: IndexMap<crate::ast::AstIdSpace, ModuleSource>,
     /// Which module's [`ModuleSemantics`](crate::elaborator::sem::ModuleSemantics)
-    /// holds the body-walk facts for a node — the routing every `AstId`-keyed
-    /// query below goes through. The facts themselves have one home, the map the
-    /// walk wrote them into; this says which one that is.
+    /// holds a given fact — the routing every `AstId`-keyed query below goes
+    /// through. The facts themselves have one home, the map the walk wrote them
+    /// into; this says which one that is.
     ///
-    /// A node's facts live in the module whose walk recorded them, which is its
+    /// A fact lives in the module whose walk recorded it, which is its node's
     /// own module for everything but the foreign AST a walk crosses into (a
-    /// callee's parameter default, resolved in the caller's frame). Two walks
-    /// reaching one such node each record it; the last one wins, and every kind
-    /// of fact for that node is then read from that one walk.
+    /// callee's parameter default, resolved in the caller's frame). Keyed by
+    /// [`FactKind`] as well as node, because one node's kinds need not come
+    /// from one walk; where two walks do record the same kind, the last wins.
     ///
     /// Empty when resolve did not run or bailed before recording any fact.
-    pub(crate) fact_home: IndexMap<AstId, u32>,
+    pub(crate) fact_home: IndexMap<(AstId, FactKind), u32>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
@@ -230,7 +231,7 @@ impl Semantics {
         types: TypeTable,
         interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
         state: Option<AnnotateState>,
-        fact_home: IndexMap<AstId, u32>,
+        fact_home: IndexMap<(AstId, FactKind), u32>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         let space_modules = modules
@@ -264,10 +265,14 @@ impl Semantics {
         self.ast_indices.get(module)?.ast_id_at(line, column)
     }
 
-    /// The body-walk facts for `id`, from the module whose walk recorded them.
-    /// `None` when no walk reached the node. See [`Self::fact_home`].
-    fn facts_of(&self, id: AstId) -> Option<&crate::elaborator::sem::ModuleSemantics> {
-        let home = *self.fact_home.get(&id)? as usize;
+    /// The module holding the `kind` fact for `id`. `None` when no walk
+    /// recorded one. See [`Self::fact_home`].
+    fn facts_of(
+        &self,
+        id: AstId,
+        kind: FactKind,
+    ) -> Option<&crate::elaborator::sem::ModuleSemantics> {
+        let home = *self.fact_home.get(&(id, kind))? as usize;
         let (_source, sem) = self.state.as_ref()?.module_semantics.get_index(home)?;
         Some(sem)
     }
@@ -278,6 +283,7 @@ impl Semantics {
     /// left out; the module it lands in is the whole of what makes it live.
     fn iter_live<'s, V: 's>(
         &'s self,
+        kind: FactKind,
         map: impl Fn(&'s crate::elaborator::sem::ModuleSemantics) -> &'s IndexMap<AstId, V> + 's,
     ) -> impl Iterator<Item = (AstId, &'s V)> + 's {
         self.state
@@ -288,7 +294,7 @@ impl Semantics {
                 let home = u32::try_from(home).expect("module count fits in u32");
                 map(sem)
                     .iter()
-                    .filter(move |(id, _)| self.fact_home.get(*id) == Some(&home))
+                    .filter(move |(id, _)| self.fact_home.get(&(**id, kind)) == Some(&home))
                     .map(|(id, value)| (*id, value))
             })
     }
@@ -300,7 +306,10 @@ impl Semantics {
     pub fn symbol_at(&self, id: AstId) -> Option<&Symbol> {
         self.symbols
             .get(&id)
-            .or_else(|| self.facts_of(id)?.bindings.local_symbols.get(&id))
+            .or_else(|| self.facts_of(id, FactKind::LocalSymbol)?
+                    .bindings
+                    .local_symbols
+                    .get(&id))
     }
 
     /// Resolve a use-site `AstId` (typically an [`IdentExpr`](crate::ast::IdentExpr) id) to the
@@ -309,7 +318,11 @@ impl Semantics {
     /// fall back to name-based lookup via the symbol table.
     #[must_use]
     pub fn referenced_symbol(&self, id: AstId) -> Option<AstId> {
-        self.facts_of(id)?.bindings.references.get(&id).copied()
+        self.facts_of(id, FactKind::Reference)?
+            .bindings
+            .references
+            .get(&id)
+            .copied()
     }
 
     /// Iterate every declared symbol with its canonical key, across all
@@ -322,7 +335,7 @@ impl Semantics {
         self.symbols
             .iter()
             .map(|(id, s)| (*id, s))
-            .chain(self.iter_live(|sem| &sem.bindings.local_symbols))
+            .chain(self.iter_live(FactKind::LocalSymbol, |sem| &sem.bindings.local_symbols))
     }
 
     /// Iterate every recorded use-site `(use_key, def_key)` edge.
@@ -332,7 +345,7 @@ impl Semantics {
     /// item-level definitions (functions, types, globals) and imported items
     /// are all recorded here.
     pub fn iter_references(&self) -> impl Iterator<Item = (AstId, AstId)> {
-        self.iter_live(|sem| &sem.bindings.references)
+        self.iter_live(FactKind::Reference, |sem| &sem.bindings.references)
             .map(|(use_id, def_id)| (use_id, *def_id))
     }
 
@@ -378,7 +391,11 @@ impl Semantics {
     /// reached.
     #[must_use]
     pub fn local_type(&self, id: AstId) -> Option<TypeId> {
-        self.facts_of(id)?.types.local_types.get(&id).copied()
+        self.facts_of(id, FactKind::LocalType)?
+            .types
+            .local_types
+            .get(&id)
+            .copied()
     }
 
     /// Resolved [`TypeId`] for the expression at `key`, recorded by the
@@ -389,13 +406,17 @@ impl Semantics {
     /// id or a body the elaborator bailed on.
     #[must_use]
     pub fn expression_type(&self, id: AstId) -> Option<TypeId> {
-        self.facts_of(id)?.types.expression_types.get(&id).copied()
+        self.facts_of(id, FactKind::ExpressionType)?
+            .types
+            .expression_types
+            .get(&id)
+            .copied()
     }
 
     /// Iterate every expression the body walk typed, as `(AstId, TypeId)`.
     /// Pair with [`Self::module_of_id`] to filter by module.
     pub fn iter_expression_types(&self) -> impl Iterator<Item = (AstId, TypeId)> + '_ {
-        self.iter_live(|sem| &sem.types.expression_types)
+        self.iter_live(FactKind::ExpressionType, |sem| &sem.types.expression_types)
             .map(|(id, ty)| (id, *ty))
     }
 
@@ -411,7 +432,10 @@ impl Semantics {
         &self,
         id: AstId,
     ) -> Option<&crate::elaborator::sem::types::MethodDispatch> {
-        self.facts_of(id)?.types.method_dispatch.get(&id)
+        self.facts_of(id, FactKind::MethodDispatch)?
+            .types
+            .method_dispatch
+            .get(&id)
     }
 
     /// Stable public view onto the recorded method-dispatch decision:
@@ -456,7 +480,7 @@ impl Semantics {
     /// [`Self::method_dispatch_view`] for the stable public view onto
     /// each entry.
     pub fn iter_method_dispatch(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.iter_live(|sem| &sem.types.method_dispatch)
+        self.iter_live(FactKind::MethodDispatch, |sem| &sem.types.method_dispatch)
             .map(|(id, _)| id)
     }
 
@@ -468,7 +492,7 @@ impl Semantics {
     #[must_use]
     pub fn coercion_view(&self, id: AstId) -> Option<(String, TypeId)> {
         use crate::elaborator::sem::types::CoercionKind;
-        let choice = self.facts_of(id)?.types.coercions.get(&id)?;
+        let choice = self.facts_of(id, FactKind::Coercion)?.types.coercions.get(&id)?;
         let kind = match choice.kind {
             CoercionKind::NumericLiteral => "numeric_literal",
             CoercionKind::NullToOption => "null_to_option",
@@ -485,7 +509,7 @@ impl Semantics {
     /// expression's `(module, AstId)`. Pair with [`Self::coercion_view`]
     /// for the stable public view onto each entry.
     pub fn iter_coercions(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.iter_live(|sem| &sem.types.coercions).map(|(id, _)| id)
+        self.iter_live(FactKind::Coercion, |sem| &sem.types.coercions).map(|(id, _)| id)
     }
 
     /// WEP 2026-05-26: stable public view onto the recorded
@@ -500,7 +524,7 @@ impl Semantics {
     #[must_use]
     pub fn desugar_view(&self, id: AstId) -> Option<String> {
         use crate::elaborator::sem::types::DesugarKind;
-        let kind = self.facts_of(id)?.types.desugars.get(&id)?;
+        let kind = self.facts_of(id, FactKind::Desugar)?.types.desugars.get(&id)?;
         let name = match kind {
             DesugarKind::Assert => "assert",
             DesugarKind::Matches => "matches",
@@ -525,7 +549,7 @@ impl Semantics {
     /// node's `(module, AstId)`. Pair with [`Self::desugar_view`] for the
     /// stable public view onto each entry.
     pub fn iter_desugars(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.iter_live(|sem| &sem.types.desugars).map(|(id, _)| id)
+        self.iter_live(FactKind::Desugar, |sem| &sem.types.desugars).map(|(id, _)| id)
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -1216,29 +1240,17 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // `state.tysys.type_table`.
     let types = state.tysys.type_table.borrow().clone();
 
-    // Route each node the body walk reached to the module that recorded its
-    // facts. The `Semantics` API is keyed by bare `AstId` while the facts stay
-    // in the per-module `ModuleSemantics` the walk wrote them into — one home,
-    // whichever phase reads them. A node walked by two modules (a callee's
-    // parameter default, resolved in each caller's frame) resolves to the last,
-    // and every kind of fact for it then comes from that one walk.
-    let mut fact_home: IndexMap<AstId, u32> = IndexMap::default();
+    // Route each fact the body walk recorded to the module that holds it. The
+    // `Semantics` API is keyed by bare `AstId` while the facts stay in the
+    // per-module `ModuleSemantics` the walk wrote them into — one home,
+    // whichever phase reads them. A node reached by two walks (a callee's
+    // parameter default, typed at each call site while its own module records
+    // the edges around it) routes each kind to the walk that has it.
+    let mut fact_home: IndexMap<(AstId, FactKind), u32> = IndexMap::default();
     for (home, sem) in state.module_semantics.values().enumerate() {
         let home = u32::try_from(home).expect("module count fits in u32");
-        for id in sem.routed_fact_ids() {
-            #[cfg(debug_assertions)]
-            if let Some(prev) = fact_home
-                .get(id)
-                .and_then(|prev| state.module_semantics.get_index(*prev as usize))
-            {
-                let (before, after) = (prev.1.routed_fact_kinds(*id), sem.routed_fact_kinds(*id));
-                debug_assert!(
-                    before.iter().zip(after).all(|(had, has)| !had || has),
-                    "a later walk over {id:?} records fewer fact kinds than {}'s, so routing to it would drop one",
-                    prev.0
-                );
-            }
-            fact_home.insert(*id, home);
+        for fact in sem.routed_facts() {
+            fact_home.insert(fact, home);
         }
     }
 
