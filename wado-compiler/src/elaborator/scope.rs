@@ -177,7 +177,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Run `body` with [`Scope::default_scope_module`] replaced by
-    /// `module`. Unlike [`Self::with_self_type_if_known`], `None` here is
+    /// `module`. Unlike [`Self::with_self_type`], `None` here is
     /// a value: it clears the fallback.
     pub(super) fn with_default_scope_module<R>(
         &mut self,

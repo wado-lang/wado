@@ -2000,7 +2000,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `is_nullable` / `lazy_init` are populated by the lower phase
     /// (kept `false` here, matching `Elaborator::resolve_global`).
     fn reify_global(&mut self, global_decl: &ast::GlobalDecl) -> Option<TirGlobal> {
-        // `resolve_module` populates `current_module_globals` for every
+        // `annotate_module_decls` populates `current_module_globals` for every
         // global it sees before any per-item reify runs, so the lookup
         // never misses; reify is a pure read.
         let ty = self
@@ -2009,7 +2009,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .current_module_globals
             .get(&global_decl.name)
             .map(|(t, _)| *t)
-            .expect("resolve_module records every global in current_module_globals");
+            .expect("annotate_module_decls records every global in current_module_globals");
 
         let mut ctx = FunctionContext::new(
             ty,
@@ -9017,9 +9017,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // returned for any global present in `current_module_globals`, and
             // this branch only fires for a snapshot-rehydrated callee module,
             // which carries no `current_module_globals`. So resolve the declared
-            // type from the AST — the one documented reify type re-resolution
-            // (WEP 2026-05-26 §"Reify — mechanical"). Everywhere else reify
-            // reads a fact.
+            // type from the AST — the one re-resolution the completeness rule
+            // sanctions (WEP 2026-05-26 §"Reify — mechanical"); the other three
+            // `resolve_type` call sites are a known gap, not a licence.
             let ty = self.resolve_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
@@ -10425,8 +10425,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a struct destructuring pattern `Point { x, y }` or `{ x, y }`
     /// (anonymous). The field-name → index map comes from the scrutinee's own
-    /// head; sub-patterns recurse against the declared field type. Mirrors
-    /// `Elaborator::resolve_struct_pattern`'s shape; shorthand `{ x }`
+    /// head; sub-patterns recurse against the declared field type. Mirrors the
+    /// `Pattern::Struct` arm of the annotate-side pattern walk; shorthand `{ x }`
     /// (== `{ x: x }`) is encoded by the AST having the sub-pattern be an
     /// `Ident { name: x }` either way.
     fn reify_struct_pattern(
@@ -10630,9 +10630,9 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
     }
 }
 
-/// Free-function attribute extractors — mirror `Elaborator::extract_*`.
-/// The elaborator's instance methods take only `&[Attribute]`, so reify
-/// can call these without holding an Elaborator.
+/// Attribute extractors, reify's own. An attribute is uniquely determined by
+/// the AST alone, which is what the completeness rule lets reify re-derive, so
+/// these need no recorded fact and no elaborator to run.
 fn extract_is_ambient_attr(attrs: &[crate::ast::Attribute]) -> bool {
     attrs.iter().any(|a| a.name == "ambient")
 }

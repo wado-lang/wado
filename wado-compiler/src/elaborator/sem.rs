@@ -1,6 +1,7 @@
 //! [`ModuleSemantics`] — per-module semantic facts (WEP 2026-05-26), one
 //! instance per loaded module that the per-module [`super::Elaborator`] takes
-//! for the length of `resolve_module` and every other phase borrows. Membership
+//! for the length of one pass over that module and every other phase borrows.
+//! Membership
 //! splits across four sub-structs, each in its own file so the "does this fit?"
 //! question that gates a new field stays reviewable.
 

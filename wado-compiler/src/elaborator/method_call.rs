@@ -3717,7 +3717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (`Counter::make`) can be found at WIR-build time — that name
         // is keyed by the *original* `Counter`, not the local alias.
         // The other lookups below still consume `struct_name` as-is and
-        // canonicalise internally via `Elaborator::canonical_decl_key`.
+        // canonicalise internally via `Elaborator::decl_key_or_local`.
         // Rebuilt from the canonical key, not the local alias.
         let qualified_struct_name = self.qualified_receiver_name(struct_name);
         let mangled_func_name_owned =

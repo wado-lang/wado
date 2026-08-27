@@ -1676,8 +1676,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
 
             // Take this module's `ModuleSemantics` out of `state` so the
-            // elaborator owns it for the body walk, then reinstall it after
-            // `resolve_module` returns. `annotate_modules` pre-populated an
+            // elaborator owns it for the decl pass, then reinstall it after
+            // `annotate_module_decls` returns. `annotate_modules` pre-populated an
             // entry per module, so `expect` rather than `unwrap_or_default`
             // surfaces any divergence from `sorted_sources` loudly.
             let mut sem = state

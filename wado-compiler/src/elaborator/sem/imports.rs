@@ -16,9 +16,8 @@ pub(crate) struct ModuleImports {
     pub(crate) namespace_imports: IndexMap<String, ModuleSource>,
     /// Effect name → module-source map built from import declarations and
     /// local `interface` / `resource` declarations. Consulted by
-    /// [`super::super::Elaborator::resolve_effects`] and
-    /// [`super::super::Elaborator::canonical_decl_key`] when resolving
-    /// effect references in `with` clauses.
+    /// [`super::super::Elaborator::resolve_effects`] and by reify's
+    /// `reify_effects` when resolving effect references in `with` clauses.
     pub(crate) effect_sources: IndexMap<String, ModuleSource>,
 }
 

@@ -85,7 +85,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     pub(crate) tysys: tysys::TypeSystem,
     /// Per-module semantic facts (imports, decls, bindings, type
     /// annotations). The elaborator takes ownership of one
-    /// [`sem::ModuleSemantics`] at the start of [`Self::resolve_module`]
+    /// [`sem::ModuleSemantics`] at the start of each per-module pass
+    /// ([`Self::annotate_module_decls`], [`Self::annotate_module_bodies`])
     /// and the driver re-installs it into
     /// [`orchestration::AnnotateState::module_semantics`] afterwards. See
     /// the [`sem`] module-level documentation for the membership rules.
@@ -1771,7 +1772,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // identity — the impl target's prefix canonicalized here, in the
         // declaring scope — so the driver-merged view cannot collide across
         // same-named types. Lookups canonicalize the queried prefix the
-        // same way ([`Self::lookup_associated_constant`]).
+        // same way ([`Self::associated_constant_of`] and its path / qualified
+        // forms).
         self.sem.decls.associated_constants.clear();
         type AssocConstInput = (
             String,
