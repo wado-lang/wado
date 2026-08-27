@@ -185,7 +185,15 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
         }
         i = match this_call_at(&chars, i, n) {
             Some([name, close]) => {
-                out.push(SuperCall { name, args: call_args(&chars, i, close) });
+                let args = call_args(&chars, i, close);
+                // The rewrite descends into an argument, so the operations a
+                // nested call needs have to be collected from there too.
+                for let a of &args {
+                    for let c of &find_this_calls(a) {
+                        out.push(*c);
+                    }
+                }
+                out.push(SuperCall { name, args });
                 close;
             },
             None => i + 1,
@@ -963,7 +971,14 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
         }
         i = match this_call_at(&chars, i, n) {
             Some([method, close]) => {
-                out.push_str(&super_call_expr(base_name, &method, site, &call_args(&chars, i, close)));
+                // An argument is a body of its own: a call nested in one has to
+                // reach its operation too, or `this` survives into generated
+                // Wado, where nothing receives it.
+                let mut args: List<String> = [];
+                for let a of &call_args(&chars, i, close) {
+                    args.push(rewrite_this_calls(a, base_name, site));
+                }
+                out.push_str(&super_call_expr(base_name, &method, site, &args));
                 close;
             },
             None => {

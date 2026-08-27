@@ -1518,16 +1518,29 @@ fn scan_ng_bare(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_opt_labelled(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    sg_4_done: {
-        sg_4: {
-            if pos < tokens.len() && tokens[pos] == TK_A {
+    osl_4_done: {
+        if pos < tokens.len() && tokens[pos] == TK_A && pos + 1 < tokens.len() && tokens[pos + 1] == TK_B {
+            let sol_5_save = pos;
+            sol_5: {
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sol_5; }
                 pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sol_5; }
+                pos += 1;
+                break osl_4_done;
             }
-            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_4; }
-            pos += 1;
-            break sg_4_done;
+            pos = sol_5_save;
+            break osl_4_done;
         }
-        return -1;
+        if pos < tokens.len() && tokens[pos] == TK_B {
+            let sol_6_save = pos;
+            sol_6: {
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sol_6; }
+                pos += 1;
+                break osl_4_done;
+            }
+            pos = sol_6_save;
+            break osl_4_done;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
     pos += 1;
@@ -1538,16 +1551,29 @@ fn scan_opt_labelled(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_opt_bare(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    sg_5_done: {
-        sg_5: {
-            if pos < tokens.len() && tokens[pos] == TK_A {
+    osl_7_done: {
+        if pos < tokens.len() && tokens[pos] == TK_A && pos + 1 < tokens.len() && tokens[pos + 1] == TK_B {
+            let sol_8_save = pos;
+            sol_8: {
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sol_8; }
                 pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sol_8; }
+                pos += 1;
+                break osl_7_done;
             }
-            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_5; }
-            pos += 1;
-            break sg_5_done;
+            pos = sol_8_save;
+            break osl_7_done;
         }
-        return -1;
+        if pos < tokens.len() && tokens[pos] == TK_B {
+            let sol_9_save = pos;
+            sol_9: {
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sol_9; }
+                pos += 1;
+                break osl_7_done;
+            }
+            pos = sol_9_save;
+            break osl_7_done;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
     pos += 1;
@@ -1567,13 +1593,13 @@ fn _parse_ng_labelled__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_6_done: {
-                sg_6: {
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6; }
+            sg_10_done: {
+                sg_10: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_10; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_C { break sg_6; }
+                    if pos >= tokens.len() || tokens[pos] != TK_C { break sg_10; }
                     pos += 1;
-                    break sg_6_done;
+                    break sg_10_done;
                 }
                 break rep_scan;
             }
@@ -1610,13 +1636,13 @@ fn _parse_ng_bare__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_7_done: {
-                sg_7: {
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7; }
+            sg_11_done: {
+                sg_11: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_11; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_C { break sg_7; }
+                    if pos >= tokens.len() || tokens[pos] != TK_C { break sg_11; }
                     pos += 1;
-                    break sg_7_done;
+                    break sg_11_done;
                 }
                 break rep_scan;
             }
@@ -1643,10 +1669,14 @@ fn _parse_ng_bare(p: &mut Parser) -> () {
 }
 
 fn _parse_opt_labelled__inner(p: &mut Parser) -> () {
-    if p.peek_kind() == TK_A {
-        p.expect(TK_A, &EMPTY_SYNC);
+    if p.peek_kind() == TK_A && p.peek_at(1) == TK_B {
+        if p.peek_kind() == TK_A {
+            p.expect(TK_A, &EMPTY_SYNC);
+        }
+        p.expect(TK_B, &EMPTY_SYNC);
+    } else if p.peek_kind() == TK_B {
+        p.expect(TK_B, &EMPTY_SYNC);
     }
-    p.expect(TK_B, &EMPTY_SYNC);
     p.expect(TK_C, &SYNC_2);
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;
@@ -1664,10 +1694,14 @@ fn _parse_opt_labelled(p: &mut Parser) -> () {
 }
 
 fn _parse_opt_bare__inner(p: &mut Parser) -> () {
-    if p.peek_kind() == TK_A {
-        p.expect(TK_A, &EMPTY_SYNC);
+    if p.peek_kind() == TK_A && p.peek_at(1) == TK_B {
+        if p.peek_kind() == TK_A {
+            p.expect(TK_A, &EMPTY_SYNC);
+        }
+        p.expect(TK_B, &EMPTY_SYNC);
+    } else if p.peek_kind() == TK_B {
+        p.expect(TK_B, &EMPTY_SYNC);
     }
-    p.expect(TK_B, &EMPTY_SYNC);
     p.expect(TK_C, &SYNC_2);
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;

@@ -17,7 +17,7 @@ test "a labelled non-greedy repeat exits where its twin does" {
 }
 
 test "a labelled shape-lookahead optional enumerates like its twin" {
-    for let input of &["a b c", "b c"] {
+    for let input of &["a b c", "b c", "c"] {
         let labelled = lrs::parse_opt_labelled(input);
         let bare = lrs::parse_opt_bare(input);
         assert labelled.ok(), `'${*input}': ${labelled.diagnostics.len()} diagnostics`;

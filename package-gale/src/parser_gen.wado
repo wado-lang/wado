@@ -5285,7 +5285,7 @@ fn gen_op_repeat_optional_group(
     } else {
         panic("gen_op_repeat_optional_group: lower marked a Group body_shape but body op is not Op::Group");
     };
-    let g_elem = if let Group(g) = &rep.element {
+    let g_elem = if let Group(g) = peel_repeat_body_label(&rep.element) {
         g;
     } else {
         panic("gen_op_repeat_optional_group: surface element is not Element::Group");

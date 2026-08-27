@@ -155,6 +155,16 @@ test "a template's interpolation holds its own commas and quotes" {
     assert calls[0].args == ["`${f(1, 2)},x`", "3"], `args: ${calls[0].args}`;
 }
 
+test "a call nested in an argument gets its own operation and rewrite" {
+    let calls = find_this_calls(&"this.p(`${this.q()}`)");
+    assert calls.len() == 2, `calls: ${calls.len()}`;
+    assert calls[0].name == "q", `inner: ${calls[0].name}`;
+    assert calls[1].name == "p", `outer: ${calls[1].name}`;
+
+    let out = rewrite_this_calls(&"this.p(`${this.q()}`)", &"Base", SuperSite::ParserPredicate);
+    assert !body_names_this(&out), `a rewritten body keeps no receiver: ${out}`;
+}
+
 test "an integer argument types as i32 only inside the range" {
     for let arg of &["0", "7", "-7", "2147483647", "-2147483648", "0000000012"] {
         let mut ops: List<SuperOp> = [];

@@ -16,9 +16,9 @@ ng_labelled : xs += ( A B )*? ( A C )* EOF ;
 
 ng_bare : ( A B )*? ( A C )* EOF ;
 
-opt_labelled : x = ( A? B ) C EOF ;
+opt_labelled : x = ( A? B )? C EOF ;
 
-opt_bare : ( A? B ) C EOF ;
+opt_bare : ( A? B )? C EOF ;
 
 A : 'a' ;
 B : 'b' ;
