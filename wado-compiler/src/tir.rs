@@ -10,7 +10,7 @@ use crate::canonical::CmCallTarget;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::module_source::ModuleSource;
+use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{LocalMethodName, RefKind, TypeNameInfo, format_type_name};
 use crate::token::Span;
 
@@ -2260,13 +2260,20 @@ impl TypeTable {
     }
 
     /// Find any decl-backed named type scoped to a single CM *interface*,
-    /// addressed by the module it maps to (e.g. `sockets/ip_name_lookup.wado`).
+    /// addressed by the namespace that owns it and the module it maps to (e.g.
+    /// `(Wasi, sockets/ip_name_lookup.wado)`). `namespace` is `None` for a
+    /// `core:` module, which carries none.
     ///
     /// [`Self::find_named_type_by_cm_package`] scopes to the package, which
     /// holds several interfaces — two can declare the same name, and that scan
     /// returns whichever registered first.
     #[must_use]
-    pub fn find_named_type_by_module_name(&self, name: &str, module_name: &str) -> Option<TypeId> {
+    pub fn find_named_type_by_module_name(
+        &self,
+        name: &str,
+        module_name: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<TypeId> {
         for (type_id, _) in self.all_types() {
             let Some((n, ms)) = self.nominal_head(type_id) else {
                 continue;
@@ -2275,8 +2282,13 @@ impl TypeTable {
                 continue;
             }
             let matches = match ms {
-                ModuleSource::Binding { interface, .. } => interface.as_str() == module_name,
-                ModuleSource::Core { name: cm_name } => cm_name.as_str() == module_name,
+                ModuleSource::Binding {
+                    namespace: ns,
+                    interface,
+                } => namespace == Some(ns) && interface.as_str() == module_name,
+                ModuleSource::Core { name: cm_name } => {
+                    namespace.is_none() && cm_name.as_str() == module_name
+                }
                 _ => false,
             };
             if matches {
@@ -2287,11 +2299,18 @@ impl TypeTable {
     }
 
     /// Find a decl-backed named type scoped to a CM package, matching any
-    /// `module_source` under the `{cm_package}/` prefix — `Wasi` and `Core`
-    /// alike. `cm_package` is the bare segment (`"http"`, `"kiln"`), not a
-    /// fully-qualified source. Same-named types in distinct packages stay
-    /// distinct because `module_source` is part of the intern key.
-    pub fn find_named_type_by_cm_package(&self, name: &str, cm_package: &str) -> Option<TypeId> {
+    /// `module_source` under the `{cm_package}/` prefix within `namespace` —
+    /// `None` selecting the `core:` modules instead. `cm_package` is the bare
+    /// segment (`"http"`, `"kiln"`), not a fully-qualified source. A package
+    /// name is only unique inside its namespace, so the two are matched
+    /// together; same-named types in distinct packages stay distinct because
+    /// `module_source` is part of the intern key.
+    pub fn find_named_type_by_cm_package(
+        &self,
+        name: &str,
+        cm_package: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<TypeId> {
         let prefix = format!("{cm_package}/");
         for (type_id, _) in self.all_types() {
             let Some((n, ms)) = self.nominal_head(type_id) else {
@@ -2301,7 +2320,10 @@ impl TypeTable {
                 continue;
             }
             match ms {
-                ModuleSource::Binding { interface, .. } if interface.starts_with(&prefix) => {
+                ModuleSource::Binding {
+                    namespace: ns,
+                    interface,
+                } if namespace == Some(ns) && interface.starts_with(&prefix) => {
                     return Some(type_id);
                 }
                 // Core-packaged CM types (e.g. `core:kiln/types.wado`) are

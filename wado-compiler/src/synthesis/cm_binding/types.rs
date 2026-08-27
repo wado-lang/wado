@@ -11,7 +11,7 @@ use crate::cm_abi;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId, TypeTable,
@@ -283,15 +283,27 @@ pub fn cm_type_to_type_id(
                 .or_else(|| {
                     registry
                         .source_interface(named)
-                        .and_then(|fq| cm_interface_module_name(&fq))
-                        .and_then(|m| type_table.find_named_type_by_module_name(&named.name, &m))
+                        .and_then(|fq| cm_interface_module(&fq))
+                        .and_then(|(ns, m)| {
+                            type_table.find_named_type_by_module_name(&named.name, &m, ns)
+                        })
                 })
+                // The package hints below are WASI's own: `wasi_package` is the
+                // binding's package and `canonical_wasi_package` scans `wasi:`.
                 .or_else(|| {
-                    type_table.find_named_type_by_cm_package(named.name.as_str(), wasi_package)
+                    type_table.find_named_type_by_cm_package(
+                        named.name.as_str(),
+                        wasi_package,
+                        Some(CmNamespace::Wasi),
+                    )
                 })
                 .or_else(|| {
                     canonical_wasi_package(registry, named.name.as_str()).and_then(|pkg| {
-                        type_table.find_named_type_by_cm_package(named.name.as_str(), pkg)
+                        type_table.find_named_type_by_cm_package(
+                            named.name.as_str(),
+                            pkg,
+                            Some(CmNamespace::Wasi),
+                        )
                     })
                 })
                 // A lib-local type defined in a submodule: the interface FQ maps
@@ -413,26 +425,6 @@ pub(super) fn canonical_wasi_package<'a>(
     None
 }
 
-/// Derive the Wado-side `ModuleSource` interface suffix from a fully
-/// qualified `#[cm]` source interface like `"wasi:clocks/system-clock@0.3.0-rc-..."`.
-///
-/// Returns e.g. `"clocks/system_clock.wado"`. The WIT kebab-case interface
-/// name is converted to Wado's `snake_case` filename convention (matching
-/// `wado-from-idl`'s output). Returns an empty string if the source is not a
-/// `wasi:` interface (such inputs never occur in WASI-side synthesis because
-/// every caller supplies a `cm_interface_registry.source_interface(NamedType)` populated by stdlib
-/// bootstrap from a WASI module, but we're defensive).
-pub(super) fn wasi_interface_suffix(source_interface: &str) -> String {
-    let Some(after_colon) = source_interface.strip_prefix("wasi:") else {
-        return String::new();
-    };
-    let without_version = after_colon.split('@').next().unwrap_or(after_colon);
-    if let Some((pkg, iface)) = without_version.split_once('/') {
-        return format!("{pkg}/{}.wado", iface.replace('-', "_"));
-    }
-    format!("{without_version}.wado")
-}
-
 /// Resolve a CM source interface (e.g. `wasi:filesystem/types@0.3.0`,
 /// `core:kiln/types@0.1.0`) to the `ModuleSource` the elaborator uses when
 /// registering its types. Keeps the lift path's fabricated `TypeId`s
@@ -442,24 +434,28 @@ pub(super) fn module_source_for_cm_interface(
     interner: &mut ModuleSourceInterner,
     source_interface: &str,
 ) -> ModuleSource {
-    if source_interface.starts_with("wasi:") {
-        return interner.wasi(&wasi_interface_suffix(source_interface));
+    match cm_interface_module(source_interface) {
+        Some((Some(namespace), module)) => interner.binding(namespace, &module),
+        Some((None, module)) => interner.core(&module),
+        None => ModuleSource::default(),
     }
-    if let Some(rest) = source_interface.strip_prefix("core:") {
-        return interner.core(&interface_module_name(rest));
-    }
-    ModuleSource::default()
 }
 
-/// The module name a CM interface FQ maps to (`wasi:sockets/ip-name-lookup@0.3.0`
-/// → `sockets/ip_name_lookup.wado`), or `None` for an FQ in neither namespace.
-pub(super) fn cm_interface_module_name(source_interface: &str) -> Option<String> {
-    if source_interface.starts_with("wasi:") {
-        return Some(wasi_interface_suffix(source_interface));
+/// The module a bundled CM interface FQ maps to, with the namespace that owns
+/// it: `wasi:sockets/ip-name-lookup@0.3.0` → `(Wasi, sockets/ip_name_lookup.wado)`,
+/// `core:kiln/types@0.1.0` → `(None, kiln/types.wado)` since a `core:` module
+/// carries no [`CmNamespace`]. `None` for an FQ in neither.
+///
+/// The pair travels together: a module name alone cannot tell a `wasi:` type
+/// from a same-named `web:` one, and matching on it would resolve them
+/// interchangeably.
+pub(super) fn cm_interface_module(source_interface: &str) -> Option<(Option<CmNamespace>, String)> {
+    if let Some((namespace, rest)) = CmNamespace::split_specifier(source_interface) {
+        return Some((Some(namespace), interface_module_name(rest)));
     }
     source_interface
         .strip_prefix("core:")
-        .map(interface_module_name)
+        .map(|rest| (None, interface_module_name(rest)))
 }
 
 /// The `{package}/{interface}.wado` spelling of a version-stripped interface path.
@@ -1480,4 +1476,33 @@ pub(super) fn export_needs_param_lifting(
     user_params
         .iter()
         .any(|p| param_needs_lifting(p.type_id, &tt))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The namespace and the module name are one answer. Reading the module
+    /// alone cannot tell `wasi:dom/node` from `web:dom/node`, which is what let
+    /// a source-less reference take the wrong CM layout.
+    #[test]
+    fn a_cm_interface_module_carries_the_namespace_that_owns_it() {
+        assert_eq!(
+            cm_interface_module("wasi:sockets/ip-name-lookup@0.3.0"),
+            Some((
+                Some(CmNamespace::Wasi),
+                "sockets/ip_name_lookup.wado".into()
+            ))
+        );
+        assert_eq!(
+            cm_interface_module("web:dom/node"),
+            Some((Some(CmNamespace::Web), "dom/node.wado".into()))
+        );
+        // A `core:` module carries no `CmNamespace`, and must not pair with one.
+        assert_eq!(
+            cm_interface_module("core:kiln/types@0.1.0"),
+            Some((None, "kiln/types.wado".into()))
+        );
+        assert_eq!(cm_interface_module("my:pkg/iface"), None);
+    }
 }
