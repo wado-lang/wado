@@ -1883,10 +1883,11 @@ impl CmInterfaceRegistry {
                                         )
                                     })
                                     .clone();
+                                let ty = self.deref_extern_handle(&p.ty);
                                 (
                                     p.name.clone(),
                                     cm_name,
-                                    resolve_type(&p.ty, &self.newtypes, &self.source_interfaces),
+                                    resolve_type(&ty, &self.newtypes, &self.source_interfaces),
                                 )
                             })
                             .collect();
@@ -1935,10 +1936,11 @@ impl CmInterfaceRegistry {
                                 )
                             })
                             .clone();
+                        let ty = self.deref_extern_handle(&p.ty);
                         (
                             p.name.clone(),
                             cm_name,
-                            resolve_type(&p.ty, &self.newtypes, &self.source_interfaces),
+                            resolve_type(&ty, &self.newtypes, &self.source_interfaces),
                         )
                     })
                     .collect();
@@ -4802,6 +4804,71 @@ mod tests {
 
     fn make_span() -> Span {
         Span::new(0, 0, 1, 1)
+    }
+
+    /// One binding module, registered the way [`CmInterfaceRegistry::build_from_stdlib`]
+    /// registers each of its own.
+    fn registry_from(module_path: &'static str, source: &str) -> CmInterfaceRegistry {
+        let lexed = crate::lexer::lex(source);
+        assert!(lexed.errors.is_empty(), "lexer error: {:?}", lexed.errors);
+        let module = crate::parser::Parser::new(lexed.tokens)
+            .parse_strict()
+            .expect("parser error");
+        let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
+            IndexMap::default();
+        defs_by_module.insert(module_path, collect_cm_definitions(&module));
+        let local_names = build_local_name_resolver(module_path, &module, &defs_by_module);
+        let mut registry = CmInterfaceRegistry::new();
+        registry.extend_source_interfaces(collect_named_type_sources(&module, &local_names));
+        registry.register_module_decls(&module);
+        registry
+    }
+
+    /// The registered parameter types of `interface::method`.
+    fn param_types(registry: &CmInterfaceRegistry, interface: &str, method: &str) -> Vec<Type> {
+        registry
+            .interfaces()
+            .flat_map(|info| info.functions)
+            .find(|f| f.interface_name == interface && f.method_name == method)
+            .unwrap_or_else(|| panic!("{interface}::{method} was never registered"))
+            .params
+            .into_iter()
+            .map(|(_, _, ty)| ty)
+            .collect()
+    }
+
+    /// An extern-handle is a value, so `&Handle` crosses as the handle itself
+    /// wherever it is written. A `Type::Reference` surviving here reaches
+    /// `codegen::component`, which has no borrow type to lower it to and panics.
+    #[test]
+    fn an_extern_handle_argument_is_peeled_outside_a_resource_method() {
+        let registry = registry_from(
+            "web:dom",
+            r#"
+            #[cm("web:dom/handle", type = "extern-handle")]
+            pub resource Handle {
+                #[cm("web:dom/handle#sibling")]
+                #[cm_params("self", "other")]
+                fn sibling(&self, other: &Handle) -> Handle;
+            }
+
+            #[cm("web:dom/global")]
+            pub interface Dom {
+                #[cm("web:dom/global#adopt")]
+                #[cm_params("node")]
+                fn adopt(node: &Handle) -> Handle;
+            }
+            "#,
+        );
+        for (interface, method) in [("Handle", "sibling"), ("Dom", "adopt")] {
+            for ty in param_types(&registry, interface, method) {
+                assert_matches!(
+                    ty,
+                    Type::Named(n) if n.name == "u32",
+                    "{interface}::{method} keeps a handle behind a reference"
+                );
+            }
+        }
     }
 
     fn make_stream_u8_type() -> Type {

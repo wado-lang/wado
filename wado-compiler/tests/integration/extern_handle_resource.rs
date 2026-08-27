@@ -83,12 +83,12 @@ fn an_i32_backed_resource_stays_move_only() {
     );
 }
 
-const EXTERN_REF: &str = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]";
+const EXTERN_HANDLE: &str = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]";
 
 #[test]
 fn extends_links_two_extern_handle_resources() {
     let source = format!(
-        "{EXTERN_REF}\nresource EventTarget {{}}\n\
+        "{EXTERN_HANDLE}\nresource EventTarget {{}}\n\
          #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {{}}\n\
          export fn run() {{}}\n"

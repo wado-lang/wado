@@ -3905,13 +3905,14 @@ file-private name is a visibility error, like any other import. See [Re-export S
 | Source Type   | Syntax                        | Example                              |
 | ------------- | ----------------------------- | ------------------------------------ |
 | WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
+| Web platform  | `"web:<package>"`             | `"web:dom"`                          |
 | Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
 | CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
 | Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
 | Remote (HTTP) | `"https://..."`               | `"https://example.com/lib.wado"`     |
 | Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
-A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `wasi:`/`core:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
+A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `core:`/`wasi:`/`web:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 
 ### Module Path Validation
 
@@ -3921,7 +3922,7 @@ Module paths are validated before loading to provide clear error messages:
 
 Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
-1. Bundled namespaces `core:` / `wasi:` — resolved from embedded stdlib.
+1. Bundled namespaces `core:` / `wasi:` / `web:` — resolved from embedded stdlib.
 
 2. Open coordinates `<ns>:<pkg>` (any other namespace) — resolved from the default registry, or a `with`/manifest source override.
 
@@ -5535,7 +5536,7 @@ Component Model interop: The compiler automatically converts between Wado conven
 - CM: Wasm Component Model
 - module: a Wado file
 - project: a collection of modules
-- Wado standard library: consists of `core:` and `wasi:`
+- Wado standard library: consists of `core:`, `wasi:` and `web:`
 - effect: the concept; e.g., "the `Stdout` effect"
 - effect interface: the declaration (`effect Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
 - operation: a function in an effect interface; synonym: "effect operation"

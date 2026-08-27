@@ -1012,7 +1012,7 @@ fn parse_stdlib_identity_attribute(
     };
     if let Some(name) = path.strip_prefix("core:") {
         Ok(Some(interner.core(name)))
-    } else if let Some((namespace, interface)) = CmNamespace::split_specifier(&path) {
+    } else if let Some((namespace, interface)) = CmNamespace::split_specifier(path) {
         Ok(Some(interner.binding(namespace, interface)))
     } else {
         unreachable!("a registered stdlib path carries `core:` or a reserved namespace")

@@ -301,7 +301,7 @@ impl WasmAssetKind {
 pub enum CmNamespace {
     /// `wasi:*` — the WASI P3 bindings under `lib/wasi/`.
     Wasi,
-    /// `web:*` — the WebIDL bindings under `lib/web/`.
+    /// `web:*` — the `WebIDL` bindings under `lib/web/`.
     Web,
 }
 
@@ -331,9 +331,6 @@ impl CmNamespace {
         let (prefix, rest) = specifier.split_once(':')?;
         Some((Self::from_prefix(prefix)?, rest))
     }
-
-    /// Every bundled namespace, for the exhaustive sweeps that build registries.
-    pub const ALL: [Self; 2] = [Self::Wasi, Self::Web];
 }
 
 impl fmt::Display for CmNamespace {
@@ -657,21 +654,6 @@ impl ModuleSource {
     #[must_use]
     pub fn is_binding(&self) -> bool {
         matches!(self, Self::Binding { .. })
-    }
-
-    /// The bundled CM namespace this module belongs to, if any.
-    #[must_use]
-    pub fn cm_namespace(&self) -> Option<CmNamespace> {
-        match self {
-            Self::Binding { namespace, .. } => Some(*namespace),
-            Self::Core { .. }
-            | Self::Local { .. }
-            | Self::Dependency { .. }
-            | Self::Remote { .. }
-            | Self::EntryPoint { .. }
-            | Self::Redirected { .. }
-            | Self::Wasm { .. } => None,
-        }
     }
 
     /// Whether the entry package owns this module: the entry point and the
