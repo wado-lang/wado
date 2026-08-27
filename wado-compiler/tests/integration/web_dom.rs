@@ -26,6 +26,18 @@ export fn run() with Dom {
 }
 "#;
 
+/// The upcast to the ancestor and the call through it, both on the same handle.
+const UPCAST: &str = r#"
+use { Dom, Node } from "web:dom";
+
+export fn run() with Dom {
+    let doc = Dom::document();
+    let el = doc.create_element("div");
+    let parent: Node = el;
+    parent.set_text_content("Hello, Wado!");
+}
+"#;
+
 #[test]
 fn a_web_dom_program_type_checks() {
     assert_eq!(check_diagnostics(OWN_METHODS), Vec::<String>::new());
@@ -60,6 +72,14 @@ fn an_inherited_method_calls_the_declaring_interface() {
         wat.contains("web:dom/node"),
         "the declaring interface should be imported: {wat}"
     );
+}
+
+/// Both types are the same handle at the boundary, so an upcast converts
+/// nothing: the two programs compile to the same component.
+#[test]
+fn an_upcast_is_a_no_op() {
+    assert_eq!(check_diagnostics(UPCAST), Vec::<String>::new());
+    assert_eq!(compile_to_wat(UPCAST), compile_to_wat(INHERITED_METHOD));
 }
 
 fn compile_to_wat(source: &str) -> String {

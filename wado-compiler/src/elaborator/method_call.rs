@@ -688,7 +688,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Type check method arguments against expected parameter types (newtype-aware)
         // If method was inherited from a newtype's base type, substitute base->newtype in params
-        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = owner.inherited() {
+        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = owner.newtype_base() {
             // Get the newtype that the method is being called on
             let newtype_id = self.tysys.get_base_type(receiver.type_id);
             // Substitute base type with newtype in all parameter types
@@ -774,7 +774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
-        if let Some(base_type_id) = owner.inherited() {
+        if let Some(base_type_id) = owner.newtype_base() {
             let newtype_id = self.tysys.get_base_type(receiver.type_id);
             return_type =
                 self.tysys
@@ -1113,6 +1113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::Variant { .. }
                         | ResolvedType::Newtype { .. }
                         | ResolvedType::Flags { .. }
+                        | ResolvedType::Resource { .. }
                         | ResolvedType::GenericResource { .. } => self
                             .tysys
                             .type_table
