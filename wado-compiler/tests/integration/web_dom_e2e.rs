@@ -1,12 +1,10 @@
-//! A two-level `extends` program run against a host that implements the
-//! `web:dom` imports over a handle table. Proves the whole chain end to end:
-//! the handle crosses as one opaque value, an upcast converts nothing, and a
-//! method inherited from a grandparent reaches the interface that declares it.
-//! See `docs/wep-2026-04-28-resource-inheritance.md`.
+//! A two-level `extends` program run against a host implementing the `web:dom`
+//! imports. See `docs/wep-2026-04-28-resource-inheritance.md`.
 
 use std::sync::{Arc, Mutex};
 
 use wasmtime::Store;
+use wasmtime::StoreContextMut;
 use wasmtime::component::{Component, Linker};
 use wasmtime_wasi::ResourceTable;
 use wasmtime_wasi::WasiCtxBuilder;
@@ -42,6 +40,11 @@ export fn run() with (Dom, Event, EventTarget) {
     // Declared on `EventTarget`, two links above `Element`.
     let ev = Event::new("click");
     assert el.dispatch_event(&ev);
+
+    // A handle both taken as a non-receiver argument and handed back.
+    let child = doc.create_element("span");
+    child.set_text_content("world");
+    assert parent.append_child(&child).text_content() == "world";
 }
 "#;
 
@@ -50,13 +53,13 @@ export fn run() with (Dom, Event, EventTarget) {
 /// same object — which is what an upcast has to preserve.
 #[derive(Default)]
 struct DomObjects {
-    /// `(tag, id, text)` per element; a non-element object leaves them empty.
-    objects: Vec<Node>,
+    objects: Vec<Object>,
     dispatched: Vec<(u32, String)>,
 }
 
-#[derive(Default, Clone)]
-struct Node {
+/// Every field a `web:dom` method reads, on whichever object carries it.
+#[derive(Default)]
+struct Object {
     tag: String,
     id: String,
     text: String,
@@ -64,12 +67,12 @@ struct Node {
 }
 
 impl DomObjects {
-    fn insert(&mut self, node: Node) -> u32 {
-        self.objects.push(node);
+    fn insert(&mut self, object: Object) -> u32 {
+        self.objects.push(object);
         u32::try_from(self.objects.len() - 1).expect("the stub never grows past u32")
     }
 
-    fn at(&mut self, handle: u32) -> &mut Node {
+    fn at(&mut self, handle: u32) -> &mut Object {
         let index = usize::try_from(handle).expect("a handle indexes the table");
         self.objects
             .get_mut(index)
@@ -77,85 +80,86 @@ impl DomObjects {
     }
 }
 
-/// Bind every `web:dom` interface the program imports. Each closure takes the
-/// handle as an ordinary `u32` first parameter — the shape the extern-handle
-/// lowering produces, with no CM resource anywhere in it.
+/// A host binding over the object table, so each body below is only its own
+/// work. `Params` starts with the handle as a plain `u32` — the shape the
+/// extern-handle lowering produces, with no CM resource anywhere in it.
+fn over_dom<Params, Return>(
+    dom: &Arc<Mutex<DomObjects>>,
+    body: impl Fn(&mut DomObjects, Params) -> Return + Send + Sync + 'static,
+) -> impl Fn(StoreContextMut<'_, WasiState>, Params) -> wasmtime::Result<Return> + Send + Sync + 'static
+{
+    let dom = Arc::clone(dom);
+    move |_, params| Ok(body(&mut dom.lock().unwrap(), params))
+}
+
+/// Bind every `web:dom` interface the program imports.
 fn add_dom_to_linker(
     linker: &mut Linker<WasiState>,
     dom: &Arc<Mutex<DomObjects>>,
 ) -> anyhow::Result<()> {
-    let state = Arc::clone(dom);
-    linker
-        .instance("web:dom/global")?
-        .func_wrap("document", move |_, ()| {
-            let handle = state.lock().unwrap().insert(Node::default());
-            Ok((handle,))
-        })?;
+    linker.instance("web:dom/global")?.func_wrap(
+        "document",
+        over_dom(dom, |dom, ()| (dom.insert(Object::default()),)),
+    )?;
 
-    let state = Arc::clone(dom);
     linker.instance("web:dom/document")?.func_wrap(
         "create-element",
-        move |_, (_self_handle, local_name): (u32, String)| {
-            let handle = state.lock().unwrap().insert(Node {
+        over_dom(dom, |dom, (_self, local_name): (u32, String)| {
+            (dom.insert(Object {
                 tag: local_name,
-                ..Node::default()
-            });
-            Ok((handle,))
-        },
+                ..Object::default()
+            }),)
+        }),
     )?;
 
     let mut element = linker.instance("web:dom/element")?;
-    let state = Arc::clone(dom);
-    element.func_wrap("tag-name", move |_, (handle,): (u32,)| {
-        Ok((state.lock().unwrap().at(handle).tag.clone(),))
-    })?;
-    let state = Arc::clone(dom);
-    element.func_wrap("id", move |_, (handle,): (u32,)| {
-        Ok((state.lock().unwrap().at(handle).id.clone(),))
-    })?;
-    let state = Arc::clone(dom);
-    element.func_wrap("set-id", move |_, (handle, value): (u32, String)| {
-        state.lock().unwrap().at(handle).id = value;
-        Ok(())
-    })?;
+    element.func_wrap(
+        "tag-name",
+        over_dom(dom, |dom, (handle,): (u32,)| (dom.at(handle).tag.clone(),)),
+    )?;
+    element.func_wrap(
+        "id",
+        over_dom(dom, |dom, (handle,): (u32,)| (dom.at(handle).id.clone(),)),
+    )?;
+    element.func_wrap(
+        "set-id",
+        over_dom(dom, |dom, (handle, value): (u32, String)| {
+            dom.at(handle).id = value;
+        }),
+    )?;
 
     let mut node = linker.instance("web:dom/node")?;
-    let state = Arc::clone(dom);
-    node.func_wrap("text-content", move |_, (handle,): (u32,)| {
-        Ok((state.lock().unwrap().at(handle).text.clone(),))
-    })?;
-    let state = Arc::clone(dom);
+    node.func_wrap(
+        "text-content",
+        over_dom(dom, |dom, (handle,): (u32,)| (dom.at(handle).text.clone(),)),
+    )?;
     node.func_wrap(
         "set-text-content",
-        move |_, (handle, value): (u32, String)| {
-            state.lock().unwrap().at(handle).text = value;
-            Ok(())
-        },
+        over_dom(dom, |dom, (handle, value): (u32, String)| {
+            dom.at(handle).text = value;
+        }),
     )?;
     node.func_wrap("append-child", |_, (_parent, child): (u32, u32)| {
         Ok((child,))
     })?;
 
-    let state_new = Arc::clone(dom);
-    linker
-        .instance("web:dom/event")?
-        .func_wrap("new", move |_, (event_type,): (String,)| {
-            let handle = state_new.lock().unwrap().insert(Node {
+    linker.instance("web:dom/event")?.func_wrap(
+        "new",
+        over_dom(dom, |dom, (event_type,): (String,)| {
+            (dom.insert(Object {
                 event_type,
-                ..Node::default()
-            });
-            Ok((handle,))
-        })?;
+                ..Object::default()
+            }),)
+        }),
+    )?;
 
-    let state = Arc::clone(dom);
     linker.instance("web:dom/event-target")?.func_wrap(
         "dispatch-event",
-        move |_, (target, event): (u32, u32)| {
-            let mut dom = state.lock().unwrap();
+        over_dom(dom, |dom, (target, event): (u32, u32)| {
             let event_type = dom.at(event).event_type.clone();
             dom.dispatched.push((target, event_type));
-            Ok((true,))
-        },
+            (true,)
+        }),
     )?;
     Ok(())
 }
@@ -207,8 +211,8 @@ fn a_two_level_extends_program_runs_against_a_host_stub() {
         });
 
     let dom = dom.lock().unwrap();
-    // `document`, the element, and the event — three distinct objects.
-    assert_eq!(dom.objects.len(), 3);
+    // `document`, the element, the event, and the child.
+    assert_eq!(dom.objects.len(), 4);
     assert_eq!(dom.objects[1].tag, "div");
     assert_eq!(dom.objects[1].id, "app");
     assert_eq!(dom.objects[1].text, "hello");

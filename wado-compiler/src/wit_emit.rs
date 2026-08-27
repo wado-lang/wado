@@ -759,10 +759,8 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// The universal handle an extern-handle-backed resource crosses as. It names
-    /// no WIT type: the boundary sees one opaque `u32`, whatever Wado type the
-    /// signature spells, and a `&handle` is that same value rather than a
-    /// `borrow` ([Resource Inheritance](../../docs/wep-2026-04-28-resource-inheritance.md)).
+    /// The universal handle an extern-handle-backed resource crosses as. It
+    /// names no WIT type, so `&handle` renders as the handle, not a `borrow`.
     fn extern_handle(&self, named: &crate::ast::NamedType) -> Option<Type> {
         let registry = self.cm_interface_registry?;
         let source = registry.source_interface(named)?;

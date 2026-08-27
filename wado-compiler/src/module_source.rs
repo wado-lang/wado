@@ -253,12 +253,11 @@ impl ModuleSourceInterner {
             [] => ModuleSource::entry_point_synthetic(),
             [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
             [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
-            [first, rest @ ..] if CmNamespace::from_prefix(first).is_some() => {
-                let namespace = CmNamespace::from_prefix(first).expect("guarded above");
-                self.binding(namespace, &rest.join("/"))
-            }
             [first, rest @ ..] if first == "dep" => self.dependency(&rest.join("/")),
-            segments => self.local(&segments.join("/")),
+            all @ [first, rest @ ..] => match CmNamespace::from_prefix(first) {
+                Some(namespace) => self.binding(namespace, &rest.join("/")),
+                None => self.local(&all.join("/")),
+            },
         }
     }
 }
@@ -301,7 +300,7 @@ impl WasmAssetKind {
 pub enum CmNamespace {
     /// `wasi:*` — the WASI P3 bindings under `lib/wasi/`.
     Wasi,
-    /// `web:*` — the `WebIDL` bindings under `lib/web/`.
+    /// `web:*` — the web platform bindings under `lib/web/`.
     Web,
 }
 

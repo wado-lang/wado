@@ -1,36 +1,13 @@
 //! `#[cm(..., type = "extern-handle")]` backing and `resource extends`.
 //! See `docs/wep-2026-04-28-resource-inheritance.md`.
 
-use crate::common::InMemoryHost;
+use crate::common::{InMemoryHost, check_diagnostics as diagnostics, runtime};
+use wado_compiler::check_resource_moves_semantic;
 use wado_compiler::semantics::semantics;
-use wado_compiler::{check_effects_semantic, check_resource_moves_semantic};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
-
-/// Everything a `wado check` would report: elaboration diagnostics and the
-/// effect check that runs after it. Both, because a form the elaborator
-/// accepts can still be rejected downstream.
-fn diagnostics(source: &str) -> Vec<String> {
-    let host = InMemoryHost::new();
-    let sem = block_on(semantics(source, &host, Some("entry.wado")));
-    let mut out: Vec<String> = host
-        .diagnostics()
-        .into_iter()
-        .map(|d| format!("{:?}: {}", d.code, d.message))
-        .collect();
-    out.extend(
-        check_effects_semantic(&sem)
-            .into_iter()
-            .map(|e| format!("Effect: {e}")),
-    );
-    out
-}
 
 fn move_errors(source: &str) -> Vec<String> {
     let host = InMemoryHost::new();
-    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let sem = runtime().block_on(semantics(source, &host, Some("entry.wado")));
     check_resource_moves_semantic(&sem)
         .into_iter()
         .map(|e| e.to_string())

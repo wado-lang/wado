@@ -549,11 +549,8 @@ fn extern_handle_backed(attrs: &[crate::ast::Attribute]) -> bool {
         .any(|a| a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternHandle))
 }
 
-/// The CM type an extern-handle crosses the boundary as. The Component Model
-/// has no reference value type: `own` and `borrow` are its only handle types,
-/// and both carry uniqueness and drop obligations a copyable handle cannot
-/// meet. So the handle is an opaque integer, and CM-GC does not change that —
-/// it swaps the representation of `own` / `borrow`, not their semantics.
+/// The CM type an extern-handle crosses the boundary as. No CM value type is a
+/// reference, so a copyable handle is an integer — the WEP records why.
 fn extern_handle_type(span: crate::token::Span) -> Type {
     Type::Named(crate::ast::NamedType::new(
         crate::ast::AstId::fresh(),
@@ -835,12 +832,8 @@ pub struct CmInterfaceRegistry {
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
 
-    /// Resources declared `#[cm(..., type = "extern-handle")]`. They are absent
-    /// from [`Self::resources`] — at the CM boundary the universal handle is an
-    /// opaque `u32`, registered as a newtype, not a CM `resource`. Kept so a
-    /// `&handle` receiver can drop its reference: the handle is a value, so a
-    /// method takes it directly rather than as a `borrow`.
-    /// See `docs/wep-2026-04-28-resource-inheritance.md`.
+    /// Resources declared `#[cm(..., type = "extern-handle")]`, registered as
+    /// `u32` newtypes rather than in [`Self::resources`].
     extern_handle_resources: IndexSet<(String, String)>,
 
     /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`).
@@ -1512,9 +1505,18 @@ impl CmInterfaceRegistry {
             .contains(&(source.to_string(), name.to_string()))
     }
 
-    /// Drop the reference around an extern-handle: the handle is a value,
-    /// so `&self` and a `&Handle` argument both cross the boundary as the
-    /// handle itself, never as a CM `borrow`.
+    /// The CM type of a declared parameter: an extern-handle loses its
+    /// reference, then newtypes resolve.
+    fn cm_param_type(&self, ty: &Type) -> Type {
+        resolve_type(
+            &self.deref_extern_handle(ty),
+            &self.newtypes,
+            &self.source_interfaces,
+        )
+    }
+
+    /// Drop the reference around an extern-handle: the handle is a value, so
+    /// `&self` and a `&Handle` argument both cross as the handle itself.
     fn deref_extern_handle(&self, ty: &Type) -> Type {
         let (Type::Reference(inner) | Type::MutReference(inner)) = ty else {
             return ty.clone();
@@ -1883,12 +1885,7 @@ impl CmInterfaceRegistry {
                                         )
                                     })
                                     .clone();
-                                let ty = self.deref_extern_handle(&p.ty);
-                                (
-                                    p.name.clone(),
-                                    cm_name,
-                                    resolve_type(&ty, &self.newtypes, &self.source_interfaces),
-                                )
+                                (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
                             })
                             .collect();
 
@@ -1936,12 +1933,7 @@ impl CmInterfaceRegistry {
                                 )
                             })
                             .clone();
-                        let ty = self.deref_extern_handle(&p.ty);
-                        (
-                            p.name.clone(),
-                            cm_name,
-                            resolve_type(&ty, &self.newtypes, &self.source_interfaces),
-                        )
+                        (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
                     })
                     .collect();
                 self.register_world_import(
@@ -1981,12 +1973,7 @@ impl CmInterfaceRegistry {
                                     &resource.name,
                                     &resource_source,
                                 );
-                                let ty = self.deref_extern_handle(&ty);
-                                (
-                                    p.name.clone(),
-                                    cm_name,
-                                    resolve_type(&ty, &self.newtypes, &self.source_interfaces),
-                                )
+                                (p.name.clone(), cm_name, self.cm_param_type(&ty))
                             })
                             .collect();
 

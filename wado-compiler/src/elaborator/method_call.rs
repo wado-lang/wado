@@ -1096,10 +1096,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `module_source` is the body's home module. The body lives:
         //   1. In the trait-impl block's module for cross-module trait impls
         //      (e.g. `impl Display for String` in `core:prelude/format`).
-        //   2. In the *base* type's module when the method was inherited
+        //   2. In the declaring type's module when the method was inherited —
         //      through a newtype (`type MyArray<T> = List<T>`; `arr.len()`
-        //      reaches `List::len` in `core:prelude/array`, not the
-        //      newtype's module).
+        //      reaches `List::len` in `core:prelude/array`, not the newtype's
+        //      module) or through an `extends` chain.
         //   3. In the receiver type's module otherwise — inherent methods
         //      live alongside the type they're declared on.
         let method_module_source = trait_impl_module_source
