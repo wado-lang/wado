@@ -204,7 +204,7 @@ fn synthesize_record_stream_read_func(
     });
     // Scope element layout to the record's own package (from `source`) so
     // nested field names resolve the same way the scoped lift reads them.
-    let elem_pkg = super::types::wasi_package_from_cm_source(&source);
+    let elem_pkg = super::types::cm_package_from_source(&source).map(|(_, pkg)| pkg);
     let elem_size =
         crate::component_model::cm_size_with_registry_scoped(&ast_type, registry, elem_pkg) as i32;
     let elem_align =
@@ -221,7 +221,10 @@ fn synthesize_record_stream_read_func(
         elem_size,
         elem_align,
         &ast_type,
-        "filesystem",
+        // The record's own package, the same one its layout was measured
+        // under. A literal here read every nested field name against
+        // `wasi:filesystem`, whichever interface actually declared the record.
+        elem_pkg.unwrap_or_default(),
         registry,
         ctx.type_table,
         ctx.interner,

@@ -298,12 +298,8 @@ pub fn cm_type_to_type_id(
                     )
                 })
                 .or_else(|| {
-                    canonical_wasi_package(registry, named.name.as_str()).and_then(|pkg| {
-                        type_table.find_named_type_by_cm_package(
-                            named.name.as_str(),
-                            pkg,
-                            Some(CmNamespace::Wasi),
-                        )
+                    canonical_cm_package(registry, named.name.as_str()).and_then(|(ns, pkg)| {
+                        type_table.find_named_type_by_cm_package(named.name.as_str(), pkg, Some(ns))
                     })
                 })
                 // A lib-local type defined in a submodule: the interface FQ maps
@@ -390,24 +386,25 @@ pub fn cm_type_to_type_id(
     }
 }
 
-/// Extract the WASI package (e.g. `"filesystem"`) from a CM source string like
-/// `"wasi:filesystem/types@0.3.0"`. Returns `None` for
-/// non-`wasi:` sources or malformed strings.
-pub(super) fn wasi_package_from_cm_source(source: &str) -> Option<&str> {
-    let after_colon = source.strip_prefix("wasi:")?;
-    let without_version = after_colon.split('@').next().unwrap_or(after_colon);
-    without_version.split('/').next()
+/// The namespace and package a CM source string names:
+/// `"wasi:filesystem/types@0.3.0"` → `(Wasi, "filesystem")`. `None` for a
+/// source outside the bundled namespaces, or a malformed one. A package name
+/// is unique only inside its namespace, so the two answer together.
+pub(super) fn cm_package_from_source(source: &str) -> Option<(CmNamespace, &str)> {
+    let (namespace, rest) = CmNamespace::split_specifier(source)?;
+    let without_version = rest.split('@').next().unwrap_or(rest);
+    Some((namespace, without_version.split('/').next()?))
 }
 
 /// Given a bare type name, ask the registry for its canonical owner and return
-/// the WASI package (e.g. `"filesystem"`). Used to disambiguate name lookups
-/// for types whose canonical owner differs from the currently-processed WASI
-/// package (e.g. `ErrorCode` is owned by `filesystem` but referenced from
-/// `http` bindings).
-pub(super) fn canonical_wasi_package<'a>(
+/// the namespace and package that own it (e.g. `(Wasi, "filesystem")`). Used to
+/// disambiguate name lookups for types whose canonical owner differs from the
+/// currently-processed package (e.g. `ErrorCode` is owned by `filesystem` but
+/// referenced from `http` bindings).
+pub(super) fn canonical_cm_package<'a>(
     registry: &'a CmInterfaceRegistry,
     name: &str,
-) -> Option<&'a str> {
+) -> Option<(CmNamespace, &'a str)> {
     for kind in [
         "variants",
         "enums",
@@ -417,9 +414,9 @@ pub(super) fn canonical_wasi_package<'a>(
         "newtypes",
     ] {
         if let Some(source) = registry.bare_name_owner(kind, name)
-            && let Some(pkg) = wasi_package_from_cm_source(source)
+            && let Some(found) = cm_package_from_source(source)
         {
-            return Some(pkg);
+            return Some(found);
         }
     }
     None

@@ -263,7 +263,9 @@ fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
 /// file paths -> file stem.
 fn module_filename_stem(input: &str) -> String {
     if is_stdlib_module(input) {
-        return input.replace(':', "-");
+        // Both separators go: `{module}` fills a filename, and a surviving `/`
+        // would have `write_to_file` create a directory instead.
+        return input.replace([':', '/'], "-");
     }
     Path::new(input)
         .file_stem()
@@ -1277,6 +1279,22 @@ mod tests {
         let mut out = String::new();
         render_md_doc(&mut out, input);
         out
+    }
+
+    /// `{module}` fills a filename, so the stem must be one path component. A
+    /// surviving `/` makes `write_to_file` create a directory and write inside
+    /// it, scattering the batch across a tree the user did not ask for.
+    #[test]
+    fn a_bundled_module_stem_is_a_single_path_component() {
+        for input in ["wasi:http/types", "web:dom", "core:kiln/types"] {
+            let stem = module_filename_stem(input);
+            assert!(
+                !stem.contains('/') && !stem.contains(':'),
+                "`{input}` gave the stem `{stem}`, which names a path, not a file"
+            );
+        }
+        assert_eq!(module_filename_stem("wasi:http/types"), "wasi-http-types");
+        assert_eq!(module_filename_stem("src/app.wado"), "app");
     }
 
     #[test]
