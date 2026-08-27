@@ -117,9 +117,9 @@ fn "newtype_string_coercion.wado/greet"(name) {
 }
 
 fn "newtype_string_coercion.wado/run"() with Stdout {
-    let label: ref "core:prelude/string.wado//String";
     let greeting: ref "core:prelude/string.wado//String";
     let label2: ref "core:prelude/string.wado//String";
+    let message_90: ref "core:prelude/string.wado//String";
     let handle_93: i32;
     let packed_95: i64;
     let rx_96: i32;
@@ -138,13 +138,13 @@ fn "newtype_string_coercion.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:newtype_string_coercion.wado::__modules_initialized = 1;
     };
-    label = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     greeting = "newtype_string_coercion.wado/greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
     label2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello world"), used: 11 };
+    message_90 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     rx_96 = builtin::i32_wrap_i64(local.tee packed_95("wasi/stream-new"()));
     tx_97 = builtin::i32_wrap_i64(packed_95 >> 32_i64);
     handle_93 = "newtype_string_coercion.wado/__cm_binding__Stdout_write_via_stream"(rx_96);
-    "core:cli/write_to_stream"(tx_97, label, 1);
+    "core:cli/write_to_stream"(tx_97, message_90, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_93);
     rx_105 = builtin::i32_wrap_i64(local.tee packed_104("wasi/stream-new"()));
     tx_106 = builtin::i32_wrap_i64(packed_104 >> 32_i64);
