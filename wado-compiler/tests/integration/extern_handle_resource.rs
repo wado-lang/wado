@@ -642,16 +642,16 @@ fn a_ref_trait_impl_does_not_hide_the_ambiguity() {
 }
 
 #[test]
-fn the_backing_is_confined_to_the_bindings_it_lowers_for() {
-    // On a resource the compiler does lower, the backing would keep the
-    // own-handle surface while turning off the drop and the move check.
-    let source = "#[cm(\"wasi:cli/terminal-output@0.3.0\", type = \"extern-handle\")]\n\
-         resource TerminalOutput {}\n\
-         export fn run() {}\n";
-    let d = diagnostics(source);
+fn the_backing_is_declared_not_inferred_from_the_namespace() {
+    // The backing is whatever the declaration spells: it erases the resource
+    // wherever it appears, so no namespace is privileged.
+    let source = format!(
+        "#[cm(\"wasi:demo/handle\", type = \"extern-handle\")]\nresource Handle {{}}\n{USE_TWICE}"
+    );
+    assert_eq!(diagnostics(&source), Vec::<String>::new());
     assert!(
-        d.iter().any(|e| e.contains("not built yet")),
-        "expected the unbuilt-lowering error, got {d:?}"
+        move_errors(&source).is_empty(),
+        "the backing is copyable outside `web:*` too"
     );
 }
 

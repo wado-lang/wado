@@ -59,6 +59,7 @@ mod wasm_import_dce;
 mod wasm_module_optimize;
 mod wat;
 mod web_dom;
+mod web_dom_e2e;
 mod wit;
 mod wit_bundle;
 mod wit_import_plan;

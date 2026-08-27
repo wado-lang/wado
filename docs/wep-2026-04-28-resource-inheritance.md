@@ -55,7 +55,7 @@ Backing is **declared on the resource** and **structurally verified** by the com
 
 Concretely:
 
-- `#[cm(...)]` on a `resource` takes a `type=...` field, `"extern-handle"` or `"i32"`. `extern-handle` is rejected outside `web:*` while its lowering is unbuilt: on a resource the compiler does lower, the backing turns off the drop and the move check while the own-handle surface stays, leaking a handle and admitting a double use. The CM-layer naming is used; the backing has no user-facing Wado type name. Making it mandatory means migrating every stdlib resource, which no consumer needs.
+- `#[cm(...)]` on a `resource` takes a `type=...` field, `"extern-handle"` or `"i32"`. The CM-layer naming is used; the backing has no user-facing Wado type name. Making it mandatory means migrating every stdlib resource, which no consumer needs.
   ```wado
   #[cm("web:dom/element", type = "extern-handle")]
   pub resource Element { ... }
@@ -66,7 +66,6 @@ Concretely:
 - A resource without `#[cm(...)]` is `i32`-backed and **cannot use `extends`** in v1. Hierarchies require explicit CM identity.
 - `resource X extends Y { ... }` is a compile error unless **both** `X` and `Y` declare `type = "extern-handle"`. Mismatched backings in an `extends` family is a hard error, not a warning.
 - A resource declared with `type = "extern-handle"` but without any `extends` relationship is allowed (an opt-in to value semantics on its own).
-- The gate is the namespace the declaration spells, not a provenance: it keeps the unbuilt lowering out of the resources the compiler does lower, and grants nothing a hand-written `#[cm("web:...")]` resource could not already reach. Not inference — the backing is still declared. Consumers outside `web:*` are expected; the gate goes with Tide M3.
 
 ### Why mandatory + structural over namespace inference
 

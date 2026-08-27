@@ -7,8 +7,19 @@ pub interface Dom {
     fn document() -> Document;
 }
 
+#[cm("web:dom/event", type = "extern-handle")]
+pub resource Event {
+    #[cm("web:dom/event#new")]
+    #[cm_params("event-type")]
+    fn new(event_type: String) -> Event;
+}
+
 #[cm("web:dom/event-target", type = "extern-handle")]
-pub resource EventTarget;
+pub resource EventTarget {
+    #[cm("web:dom/event-target#dispatch-event")]
+    #[cm_params("self", "event")]
+    fn dispatch_event(&self, event: &Event) -> bool;
+}
 
 #[cm("web:dom/node", type = "extern-handle")]
 pub resource Node extends EventTarget {

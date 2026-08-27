@@ -29,14 +29,6 @@ use super::types::{
 };
 use super::tysys::TypeSystem;
 
-/// Whether a resource may take the extern-handle backing yet: while the lowering
-/// is unbuilt, only the namespace the declaration spells keeps it out of a
-/// resource the compiler does lower. See the WEP linked from
-/// [`resolve_resource_extends`].
-fn extern_handle_backing_allowed(attr: &crate::ast::Attribute) -> bool {
-    attr.as_cm_import().is_some_and(|cm| cm.namespace == "web")
-}
-
 /// One `resource Child extends Parent` clause, held until every resource has
 /// been collected: a parent may be declared after its child, or elsewhere.
 struct PendingExtends {
@@ -540,24 +532,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     defined_at: resource_decl.id,
                                 },
                             );
-                            if let Some(attr) = resource_decl.attrs.iter().find(|a| {
+                            if resource_decl.attrs.iter().any(|a| {
                                 a.cm_resource_backing()
                                     == Some(crate::ast::CmResourceBacking::ExternHandle)
                             }) {
-                                if extern_handle_backing_allowed(attr) {
-                                    type_table.borrow_mut().mark_extern_handle_resource(def);
-                                } else {
-                                    let _ = logger.error_in(
-                                        module_source,
-                                        TypeError::ResourceBacking {
-                                            message: format!(
-                                                "`{}` declares `type = \"extern-handle\"` outside `web:*`; that lowering is not built yet",
-                                                resource_decl.name
-                                            ),
-                                            span: resource_decl.span,
-                                        },
-                                    );
-                                }
+                                type_table.borrow_mut().mark_extern_handle_resource(def);
                             }
                             let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
                             if is_generic {

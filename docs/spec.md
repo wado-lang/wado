@@ -5213,7 +5213,7 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 
 #### Resource handle backing
 
-A `#[cm(...)]` resource may declare how its handle is represented: `type = "i32"`, a Component Model handle, or `type = "extern-handle"`, a handle to a host object. Omitting the field reads as `i32`. `extern-handle` is confined to `web:*` bindings until its lowering exists.
+A `#[cm(...)]` resource may declare how its handle is represented: `type = "i32"`, a Component Model handle, or `type = "extern-handle"`, an opaque index into a host table. Omitting the field reads as `i32`.
 
 An extern-handle is a copyable value — assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope. An `i32` handle is move-only, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 

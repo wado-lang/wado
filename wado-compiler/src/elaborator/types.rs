@@ -843,12 +843,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A `#[cm(..., type = ...)]` backing the elaborator rejected.
-    ResourceBacking {
-        message: String,
-        span: Span,
-    },
-
     /// A `resource Child extends Parent` clause the elaborator rejected: the
     /// parent is not a resource, a backing does not match, the chain is
     /// cyclic, or the parent carries generic arguments (out of scope in v1).
@@ -1702,9 +1696,6 @@ impl TypeError {
             }
             TypeError::ResourceExtends { message, span } => {
                 (Code::ResourceExtends, message.clone(), *span)
-            }
-            TypeError::ResourceBacking { message, span } => {
-                (Code::ResourceBacking, message.clone(), *span)
             }
             TypeError::AmbiguousResourceMethod {
                 method,
