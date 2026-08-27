@@ -995,10 +995,10 @@ fn rewrite_calls_in_expr(
                 .decl_key()
         };
         let mut qualified = DeclPath::method_of(&head, &method_info.method_name);
-        // Resolve through type aliases (e.g., Headers -> Fields). Scoped to
-        // `wasi:` — the method resolution path is WASI-only.
+        // Resolve through type aliases (e.g., Headers -> Fields), scoped to the
+        // bundled CM namespaces.
         if !adapters.contains_key(&qualified)
-            && let Some(source) = cm_interface_registry.find_wasi_newtype_source(&head)
+            && let Some(source) = cm_interface_registry.find_binding_newtype_source(&head)
             && let Some(Type::Named(resolved)) =
                 cm_interface_registry.get_newtype_by_source(source, &head)
         {
@@ -1388,8 +1388,9 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                         .is_some()
                     {
                         self.effects.insert(qualified);
-                    } else if let Some(source) =
-                        self.cm_interface_registry.find_wasi_newtype_source(&head)
+                    } else if let Some(source) = self
+                        .cm_interface_registry
+                        .find_binding_newtype_source(&head)
                         && let Some(Type::Named(resolved)) = self
                             .cm_interface_registry
                             .get_newtype_by_source(source, &head)

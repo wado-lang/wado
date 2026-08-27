@@ -985,7 +985,7 @@ fn expose_self_owned_resources(
             continue;
         }
         let Some(cm_name) = registry
-            .find_wasi_resource_source(resource_name)
+            .find_binding_resource_source(resource_name)
             .and_then(|source| registry.get_resource_cm_name_by_source(source, resource_name))
             .map(str::to_string)
         else {
@@ -2367,7 +2367,7 @@ fn generate_cm_imports(
             for resource_name in &needed_resources {
                 if let Some(source) = project
                     .cm_interface_registry
-                    .find_wasi_resource_source(resource_name)
+                    .find_binding_resource_source(resource_name)
                     && let Some(cm_name) = project
                         .cm_interface_registry
                         .get_resource_cm_name_by_source(source, resource_name)
@@ -2574,7 +2574,7 @@ fn generate_cm_imports(
             for flags_name in &needed_flags {
                 let Some(source) = project
                     .cm_interface_registry
-                    .find_wasi_flags_source(flags_name)
+                    .find_binding_flags_source(flags_name)
                 else {
                     continue;
                 };
@@ -2796,7 +2796,7 @@ fn generate_cm_imports(
         for resource_name in &needed_resources {
             if let Some(source) = project
                 .cm_interface_registry
-                .find_wasi_resource_source(resource_name)
+                .find_binding_resource_source(resource_name)
                 && let Some(cm_name) = project
                     .cm_interface_registry
                     .get_resource_cm_name_by_source(source, resource_name)
@@ -3805,7 +3805,7 @@ fn import_resource_using_interfaces(
         for resource_name in &needed_resources {
             let Some(source) = project
                 .cm_interface_registry
-                .find_wasi_resource_source(resource_name)
+                .find_binding_resource_source(resource_name)
             else {
                 continue;
             };
@@ -3851,7 +3851,7 @@ fn import_resource_using_interfaces(
             for resource_name in &needed_resources {
                 if let Some(source) = project
                     .cm_interface_registry
-                    .find_wasi_resource_source(resource_name)
+                    .find_binding_resource_source(resource_name)
                     && let Some(cm_name) = project
                         .cm_interface_registry
                         .get_resource_cm_name_by_source(source, resource_name)

@@ -1694,7 +1694,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         source: &ModuleSource,
         path: &str,
     ) -> Result<Vec<u8>, LoadError> {
-        if path.starts_with("core:") || path.starts_with("wasi:") {
+        if crate::module_source::is_bundled_specifier(path) {
             return stdlib::get_stdlib_wasm_asset(path)
                 .map(<[u8]>::to_vec)
                 .ok_or_else(|| LoadError::ModuleNotFound {

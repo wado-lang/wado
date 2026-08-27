@@ -666,7 +666,7 @@ impl CmFunctionInfo {
         if let Type::Named(named) = ty {
             let source = registry.source_interface(named).or_else(|| {
                 registry
-                    .find_wasi_variant_source(&named.name)
+                    .find_binding_variant_source(&named.name)
                     .map(str::to_string)
             });
             if let Some(src) = &source {
@@ -962,6 +962,18 @@ fn find_unique_source_with_prefix<'a, V>(
     name: &str,
 ) -> Option<&'a str> {
     find_unique_source_in_set(map, name, &|src| src.starts_with(prefix))
+}
+
+/// The unique source interface registering `name` across every bundled CM
+/// namespace. A name declared by two of them is ambiguous — `None` — never
+/// silently the `wasi:` one.
+fn find_unique_source_in_binding<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    name: &str,
+) -> Option<&'a str> {
+    find_unique_source_in_set(map, name, &|src| {
+        crate::module_source::CmNamespace::split_specifier(src).is_some()
+    })
 }
 
 /// The unique source interface registering `name` among sources for which
@@ -2492,20 +2504,21 @@ impl CmInterfaceRegistry {
             .map(|(_, members)| members.as_slice())
     }
 
-    // -- "Find in wasi namespace" helpers for callers without AST context.
+    // -- "Find in a bundled CM namespace" helpers for callers without AST
+    // context.
     //
     // A handful of synthesis paths operate on a Wado-side type *name* that
     // arrived via resolved symbol info (not an AST `Type::Named` node), so
     // they cannot consult `self.source_interface(NamedType)`. These helpers walk
-    // every `wasi:*` interface and return the unique match; an ambiguous
-    // name (the same type declared by two different wasi packages) returns
-    // `None`, which the caller must propagate. Kiln and other non-wasi
+    // every [`CmNamespace`] interface and return the unique match; an ambiguous
+    // name (the same type declared by two different bundled packages) returns
+    // `None`, which the caller must propagate. Kiln and other non-binding
     // namespaces are intentionally excluded from this search.
 
-    /// Find the source interface of a struct declared in `wasi:*` by its Wado
-    /// name, when exactly one wasi interface registers the name.
-    pub fn find_wasi_struct_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.structs, "wasi:", name)
+    /// Find the source interface of a struct declared in a bundled CM
+    /// namespace, when exactly one such interface registers the name.
+    pub fn find_binding_struct_source(&self, name: &str) -> Option<&str> {
+        find_unique_source_in_binding(&self.structs, name)
     }
 
     /// Find the source interface of a struct declared in `core:kiln/*` by its
@@ -2531,40 +2544,39 @@ impl CmInterfaceRegistry {
         find_unique_source_with_prefix(&self.enums, "core:kiln/", name)
     }
 
-    /// Find the source interface of a newtype declared in `wasi:*` by its
-    /// Wado name, when exactly one wasi interface registers the name.
-    pub fn find_wasi_newtype_source(&self, name: &crate::name::DeclName) -> Option<&str> {
-        let name = name.as_decl_str();
-        find_unique_source_with_prefix(&self.newtypes, "wasi:", name)
+    /// Find the source interface of a newtype declared in a bundled CM
+    /// namespace, when exactly one such interface registers the name.
+    pub fn find_binding_newtype_source(&self, name: &crate::name::DeclName) -> Option<&str> {
+        find_unique_source_in_binding(&self.newtypes, name.as_decl_str())
     }
 
-    /// Find the source interface of a resource declared in `wasi:*` by its
-    /// Wado name, when exactly one wasi interface registers the name.
-    pub fn find_wasi_resource_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.resources, "wasi:", name)
+    /// Find the source interface of a resource declared in a bundled CM
+    /// namespace, when exactly one such interface registers the name.
+    pub fn find_binding_resource_source(&self, name: &str) -> Option<&str> {
+        find_unique_source_in_binding(&self.resources, name)
     }
 
-    /// Find the source interface of a variant declared in `wasi:*` by its
-    /// Wado name, when exactly one wasi interface registers the name.
-    pub fn find_wasi_variant_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.variants, "wasi:", name)
+    /// Find the source interface of a variant declared in a bundled CM
+    /// namespace, when exactly one such interface registers the name.
+    pub fn find_binding_variant_source(&self, name: &str) -> Option<&str> {
+        find_unique_source_in_binding(&self.variants, name)
     }
 
-    /// Find the source interface of an enum declared in `wasi:*` by its
-    /// Wado name, when exactly one wasi interface registers the name.
-    pub fn find_wasi_enum_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.enums, "wasi:", name)
+    /// Find the source interface of an enum declared in a bundled CM
+    /// namespace, when exactly one such interface registers the name.
+    pub fn find_binding_enum_source(&self, name: &str) -> Option<&str> {
+        find_unique_source_in_binding(&self.enums, name)
     }
 
-    /// Find the source interface of a flags type declared in `wasi:*` by its
-    /// Wado name, when exactly one wasi interface registers the name.
-    pub fn find_wasi_flags_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.flags, "wasi:", name)
+    /// Find the source interface of a flags type declared in a bundled CM
+    /// namespace, when exactly one such interface registers the name.
+    pub fn find_binding_flags_source(&self, name: &str) -> Option<&str> {
+        find_unique_source_in_binding(&self.flags, name)
     }
 
     /// The owning interface FQ of a component-imported named type, when exactly
     /// one composed dependency interface declares `name`. Mirrors the
-    /// `find_wasi_*` fallbacks for a type re-exported from a CM component
+    /// `find_binding_*` fallbacks for a type re-exported from a CM component
     /// dependency (whose FQ carries no `wasi:` / `core:kiln/` prefix). `None` if
     /// no or more than one dependency interface declares `name`, across all type
     /// kinds — so a struct in one dependency and an enum in another are
@@ -2602,18 +2614,21 @@ impl CmInterfaceRegistry {
             .or_else(|| find_unique_source_with_prefix(&self.newtypes, prefix, name))
     }
 
-    /// Resolve the `wasi:*` source interface for a `NamedType`. The reference's
-    /// own `source_interface` answers when bootstrap filled it. A reference
-    /// synthesized at lower time has none, so every wasi kind is searched,
+    /// Resolve the bundled-namespace source interface for a `NamedType`. The
+    /// reference's own `source_interface` answers when bootstrap filled it. A
+    /// reference synthesized at lower time has none, so every kind is searched,
     /// preferring `wasi:{wasi_package_hint}/` — which separates the `ErrorCode`
-    /// of filesystem, http and sockets — else taking the unique registrant.
-    pub fn resolve_wasi_source_for(
+    /// of filesystem, http and sockets — else taking the unique registrant
+    /// across all of [`CmNamespace`].
+    pub fn resolve_binding_source_for(
         &self,
         named: &crate::ast::NamedType,
         wasi_package_hint: Option<&str>,
     ) -> Option<String> {
         if let Some(s) = self.source_interface(named) {
-            return s.starts_with("wasi:").then_some(s);
+            return crate::module_source::CmNamespace::split_specifier(&s)
+                .is_some()
+                .then_some(s);
         }
         if let Some(pkg) = wasi_package_hint {
             let prefix = format!("wasi:{pkg}/");
@@ -2627,12 +2642,12 @@ impl CmInterfaceRegistry {
                 return Some(s.to_string());
             }
         }
-        self.find_wasi_newtype_source(&crate::name::DeclName::new(&named.name))
-            .or_else(|| self.find_wasi_resource_source(&named.name))
-            .or_else(|| self.find_wasi_struct_source(&named.name))
-            .or_else(|| self.find_wasi_variant_source(&named.name))
-            .or_else(|| self.find_wasi_enum_source(&named.name))
-            .or_else(|| self.find_wasi_flags_source(&named.name))
+        self.find_binding_newtype_source(&crate::name::DeclName::new(&named.name))
+            .or_else(|| self.find_binding_resource_source(&named.name))
+            .or_else(|| self.find_binding_struct_source(&named.name))
+            .or_else(|| self.find_binding_variant_source(&named.name))
+            .or_else(|| self.find_binding_enum_source(&named.name))
+            .or_else(|| self.find_binding_flags_source(&named.name))
             .map(str::to_string)
     }
 
@@ -2667,7 +2682,7 @@ impl CmInterfaceRegistry {
         if let Some(s) = self.source_interface(named) {
             return Some(s);
         }
-        if let Some(s) = self.resolve_wasi_source_for(named, wasi_package_hint) {
+        if let Some(s) = self.resolve_binding_source_for(named, wasi_package_hint) {
             return Some(s);
         }
         self.find_kiln_struct_source(&named.name)
@@ -4008,11 +4023,11 @@ impl CmTypeGen {
                         .or(interface_hint_match)
                         .or_else(|| {
                             cm_interface_registry
-                                .find_wasi_resource_source(name)
-                                .or_else(|| cm_interface_registry.find_wasi_variant_source(name))
-                                .or_else(|| cm_interface_registry.find_wasi_struct_source(name))
-                                .or_else(|| cm_interface_registry.find_wasi_enum_source(name))
-                                .or_else(|| cm_interface_registry.find_wasi_flags_source(name))
+                                .find_binding_resource_source(name)
+                                .or_else(|| cm_interface_registry.find_binding_variant_source(name))
+                                .or_else(|| cm_interface_registry.find_binding_struct_source(name))
+                                .or_else(|| cm_interface_registry.find_binding_enum_source(name))
+                                .or_else(|| cm_interface_registry.find_binding_flags_source(name))
                                 .map(str::to_string)
                         })
                         .or_else(|| {
@@ -4149,7 +4164,7 @@ impl CmTypeGen {
                         .filter(|s| s.starts_with("wasi:"))
                         .or_else(|| {
                             cm_interface_registry
-                                .find_wasi_resource_source(&n.name)
+                                .find_binding_resource_source(&n.name)
                                 .map(str::to_string)
                         })
                     && let Some(cm_name) =
@@ -4856,6 +4871,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The bare-name fallbacks used to read `"wasi:"` literally, so a `web:`
+    /// declaration was invisible to them — and a same-named `wasi:` one
+    /// answered in its place. Every bundled namespace is searched, and a
+    /// cross-namespace collision is ambiguous rather than silently `wasi:`.
+    #[test]
+    fn a_bare_name_resolves_within_every_bundled_namespace() {
+        let registry = registry_from(
+            "web:dom",
+            r#"
+            #[cm("web:dom/node", type = "extern-handle")]
+            pub resource Node {}
+
+            #[cm("web:dom/types")]
+            pub interface Types {}
+
+            #[cm("web:dom/types")]
+            pub struct Rect {
+                #[cm("x")]
+                pub x: u32,
+            }
+            "#,
+        );
+        assert_eq!(
+            registry.find_binding_newtype_source(&crate::name::DeclName::new("Node")),
+            Some("web:dom/node")
+        );
+        assert_eq!(
+            registry.find_binding_struct_source("Rect"),
+            Some("web:dom/types")
+        );
     }
 
     fn make_stream_u8_type() -> Type {

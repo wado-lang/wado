@@ -332,6 +332,14 @@ impl CmNamespace {
     }
 }
 
+/// `true` for a specifier in a namespace the compiler bundles: `core:` or any
+/// [`CmNamespace`]. Such a specifier resolves out of the embedded stdlib, never
+/// off the host filesystem.
+#[must_use]
+pub fn is_bundled_specifier(specifier: &str) -> bool {
+    specifier.starts_with("core:") || CmNamespace::split_specifier(specifier).is_some()
+}
+
 impl fmt::Display for CmNamespace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.prefix())
@@ -830,6 +838,16 @@ impl fmt::Display for ModuleSource {
 mod tests {
     use super::*;
     use std::assert_matches;
+
+    #[test]
+    fn every_bundled_namespace_is_a_bundled_specifier() {
+        assert!(is_bundled_specifier("core:libm.wat"));
+        assert!(is_bundled_specifier("wasi:cli/stdout.wado"));
+        assert!(is_bundled_specifier("web:dom/dom.wat"));
+        assert!(!is_bundled_specifier("./libm.wat"));
+        assert!(!is_bundled_specifier("dep:../greet/src/lib.wado"));
+        assert!(!is_bundled_specifier("https://example.com/x.wasm"));
+    }
 
     #[test]
     fn dependency_identity_is_the_resolved_path() {

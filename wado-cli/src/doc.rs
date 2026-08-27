@@ -193,7 +193,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
 }
 
 fn is_stdlib_module(input: &str) -> bool {
-    input.starts_with("core:") || input.starts_with("wasi:")
+    wado_compiler::module_source::is_bundled_specifier(input)
 }
 
 pub fn run(opts: DocOptions) -> Result<(), CliExit> {

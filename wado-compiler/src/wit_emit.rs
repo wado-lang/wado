@@ -1184,11 +1184,16 @@ impl FqParts {
 }
 
 /// The `use` target for a type defined in `source_fq` referenced from
-/// `current_fq`: a bare interface name within the same package, else the full
-/// `namespace:package/interface@version` path.
+/// `current_fq`: a bare interface name within the same package — the same
+/// version of it, since a bare name resolves against the current package — else
+/// the full `namespace:package/interface@version` path.
 fn use_target(current_fq: &str, source_fq: &str) -> String {
     match (FqParts::parse(current_fq), FqParts::parse(source_fq)) {
-        (Some(cur), Some(src)) if cur.namespace == src.namespace && cur.package == src.package => {
+        (Some(cur), Some(src))
+            if cur.namespace == src.namespace
+                && cur.package == src.package
+                && cur.version == src.version =>
+        {
             src.interface
         }
         (_, Some(src)) => src.to_fq(),
@@ -1238,7 +1243,7 @@ fn collect_named_type_sources(
     match ty {
         Type::Named(named) => {
             if let Some(src) = registry.source_interface(named)
-                && (src.starts_with("wasi:") || src.starts_with("core:"))
+                && crate::module_source::is_bundled_specifier(&src)
             {
                 out.push(src);
             }
@@ -1320,5 +1325,27 @@ mod tests {
         assert_eq!(world_local_name("wasi:cli/command"), "command");
         assert_eq!(world_local_name("wasi:http/service@0.3.0"), "service");
         assert_eq!(world_local_name("root"), "root");
+    }
+
+    /// A bare interface name resolves within the *current* package, version
+    /// included, so it may stand in only for a source of that same version.
+    #[test]
+    fn a_bare_use_target_needs_the_same_package_version() {
+        assert_eq!(
+            use_target("wasi:http/types@0.3.0", "wasi:http/handler@0.3.0"),
+            "handler"
+        );
+        assert_eq!(
+            use_target("wasi:http/types", "wasi:http/handler"),
+            "handler"
+        );
+        assert_eq!(
+            use_target("wasi:http/types@0.3.0", "wasi:http/handler@0.2.0"),
+            "wasi:http/handler@0.2.0"
+        );
+        assert_eq!(
+            use_target("wasi:http/types", "wasi:http/handler@0.3.0"),
+            "wasi:http/handler@0.3.0"
+        );
     }
 }

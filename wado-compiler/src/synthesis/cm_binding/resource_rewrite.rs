@@ -179,11 +179,11 @@ fn synthesize_record_stream_read_func(
     let registry = ctx.cm_interface_registry;
     let elem_name = ctx.type_table.borrow().base_type_name(elem_type_id);
     let source = registry
-        .find_wasi_struct_source(&elem_name)
+        .find_binding_struct_source(&elem_name)
         .unwrap_or_else(|| {
             panic!(
                 "record `{elem_name}` used as a stream-read element has no defining \
-                 `wasi:*` interface in the CM interface registry; cannot synthesize \
+                 bundled interface in the CM interface registry; cannot synthesize \
                  its stream-read binding"
             )
         })
