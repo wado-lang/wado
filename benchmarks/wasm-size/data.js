@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787849002557,
+  "lastUpdate": 1787851164228,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51581,6 +51581,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/542c4926eae6651112530bbb5eac5774d1d98623"
         },
         "date": 1787849001737,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 258212,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9c60090098692b5882a5753dccc54f137ca032b8",
+          "message": "Merge pull request #1911 from wado-lang/claude/elaborator-architecture-wep-mm69h4\n\nrefactor(elaborator): the body walk speaks types, reify builds TIR",
+          "timestamp": "2026-08-28T02:05:40+09:00",
+          "tree_id": "643f03a86aa12004bfedd4d403f434e2509ec3af",
+          "url": "https://github.com/wado-lang/wado/commit/9c60090098692b5882a5753dccc54f137ca032b8"
+        },
+        "date": 1787851163576,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
