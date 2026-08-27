@@ -12,37 +12,37 @@ pub resource EventTarget;
 
 #[cm("web:dom/node", type = "extern-ref")]
 pub resource Node extends EventTarget {
-    #[cm("web:dom/node#[method]node.text-content")]
+    #[cm("web:dom/node#text-content")]
     #[cm_params("self")]
     fn text_content(&self) -> String;
 
-    #[cm("web:dom/node#[method]node.set-text-content")]
+    #[cm("web:dom/node#set-text-content")]
     #[cm_params("self", "value")]
     fn set_text_content(&self, value: String);
 
-    #[cm("web:dom/node#[method]node.append-child")]
+    #[cm("web:dom/node#append-child")]
     #[cm_params("self", "child")]
     fn append_child(&self, child: &Node) -> Node;
 }
 
 #[cm("web:dom/element", type = "extern-ref")]
 pub resource Element extends Node {
-    #[cm("web:dom/element#[method]element.id")]
+    #[cm("web:dom/element#id")]
     #[cm_params("self")]
     fn id(&self) -> String;
 
-    #[cm("web:dom/element#[method]element.set-id")]
+    #[cm("web:dom/element#set-id")]
     #[cm_params("self", "value")]
     fn set_id(&self, value: String);
 
-    #[cm("web:dom/element#[method]element.tag-name")]
+    #[cm("web:dom/element#tag-name")]
     #[cm_params("self")]
     fn tag_name(&self) -> String;
 }
 
 #[cm("web:dom/document", type = "extern-ref")]
 pub resource Document extends Node {
-    #[cm("web:dom/document#[method]document.create-element")]
+    #[cm("web:dom/document#create-element")]
     #[cm_params("self", "local-name")]
     fn create_element(&self, local_name: String) -> Element;
 }

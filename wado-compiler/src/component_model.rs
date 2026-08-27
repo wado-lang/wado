@@ -542,6 +542,24 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
+/// Whether a resource declares `#[cm(..., type = "extern-ref")]`.
+fn extern_ref_backed(attrs: &[crate::ast::Attribute]) -> bool {
+    attrs.iter().any(|a| {
+        a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternRef)
+    })
+}
+
+/// The CM type an extern-ref-backed handle takes at the boundary: an opaque
+/// index into the host's table, until CM-GC replaces it with a real
+/// `externref` ([GC in Components](../../docs/wep-2026-03-28-gc-in-components.md)).
+fn extern_ref_handle_type(span: crate::token::Span) -> Type {
+    Type::Named(crate::ast::NamedType::new(
+        crate::ast::AstId::fresh(),
+        "u32".to_string(),
+        span,
+    ))
+}
+
 /// Extract CM parameter names from a `#[cm_params("param-a", "param-b")]` attribute.
 fn extract_cm_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
     attrs
@@ -814,6 +832,14 @@ pub struct CmInterfaceRegistry {
     /// Resource types collected from WASI modules (e.g., `TerminalInput`).
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
+
+    /// Resources declared `#[cm(..., type = "extern-ref")]`. They are absent
+    /// from [`Self::resources`] — at the CM boundary the universal handle is an
+    /// opaque `u32`, registered as a newtype, not a CM `resource`. Kept so a
+    /// `&handle` receiver can drop its reference: the handle is a value, so a
+    /// method takes it directly rather than as a `borrow`.
+    /// See `docs/wep-2026-04-28-resource-inheritance.md`.
+    extern_ref_resources: IndexSet<(String, String)>,
 
     /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`).
     /// Key: `(source_interface, wado_name)`. Value:
@@ -1476,6 +1502,32 @@ impl CmInterfaceRegistry {
         Self::default()
     }
 
+    /// Whether the resource `name` declared in `source` takes the extern-ref
+    /// backing, and so crosses the boundary as the universal handle.
+    #[must_use]
+    pub fn is_extern_ref_resource(&self, source: &str, name: &str) -> bool {
+        self.extern_ref_resources
+            .contains(&(source.to_string(), name.to_string()))
+    }
+
+    /// Drop the reference around an extern-ref handle: the handle is a value,
+    /// so `&self` and a `&Handle` argument both cross the boundary as the
+    /// handle itself, never as a CM `borrow`.
+    fn deref_extern_ref_handle(&self, ty: &Type) -> Type {
+        let (Type::Reference(inner) | Type::MutReference(inner)) = ty else {
+            return ty.clone();
+        };
+        let Type::Named(named) = inner.as_ref() else {
+            return ty.clone();
+        };
+        match self.source_interface(named) {
+            Some(source) if self.is_extern_ref_resource(&source, &named.name) => {
+                inner.as_ref().clone()
+            }
+            _ => ty.clone(),
+        }
+    }
+
     /// The CM interface the reference at `named` resolves to, or `None` when
     /// no pass has answered for that site.
     #[must_use]
@@ -1675,6 +1727,21 @@ impl CmInterfaceRegistry {
                 // Extract source interface path from #[cm] attribute
                 // Format: #[cm("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
                 let source_interface = Self::cm_source_interface(&resource.attrs);
+                // An extern-ref backing erases the resource: the boundary sees
+                // the universal handle, a copyable `u32`, so it registers as a
+                // newtype and every `own`/`borrow` path passes it by.
+                if extern_ref_backed(&resource.attrs) {
+                    self.extern_ref_resources
+                        .insert((source_interface.clone(), resource.name.clone()));
+                    register_unique(
+                        &mut self.newtypes,
+                        "newtype",
+                        source_interface,
+                        resource.name.clone(),
+                        extern_ref_handle_type(resource.span),
+                    );
+                    continue;
+                }
                 register_unique(
                     &mut self.resources,
                     "resource",
@@ -1910,6 +1977,7 @@ impl CmInterfaceRegistry {
                                     &resource.name,
                                     &resource_source,
                                 );
+                                let ty = self.deref_extern_ref_handle(&ty);
                                 (
                                     p.name.clone(),
                                     cm_name,

@@ -2,37 +2,68 @@
 //! `web:dom` is the extern-ref binding slice Tide's generator will replace.
 //! See `docs/wep-2026-04-01-tide.md`.
 
-use crate::common::check_diagnostics;
+use crate::common::{check_diagnostics, compile_source};
 
-const CREATE_AND_LABEL: &str = r#"
+/// Every call here resolves on the receiver's own declaration.
+const OWN_METHODS: &str = r#"
 use { Dom } from "web:dom";
 
 export fn run() with Dom {
     let doc = Dom::document();
     let el = doc.create_element("div");
     el.set_id("app");
+}
+"#;
+
+/// `set_text_content` is declared on `Node`, which `Element` extends.
+const INHERITED_METHOD: &str = r#"
+use { Dom } from "web:dom";
+
+export fn run() with Dom {
+    let doc = Dom::document();
+    let el = doc.create_element("div");
     el.set_text_content("Hello, Wado!");
 }
 "#;
 
 #[test]
 fn a_web_dom_program_type_checks() {
-    assert_eq!(check_diagnostics(CREATE_AND_LABEL), Vec::<String>::new());
+    assert_eq!(check_diagnostics(OWN_METHODS), Vec::<String>::new());
 }
 
-/// `set_text_content` is declared on `Node`, two levels above `Document`'s
-/// sibling `Element` — the call resolves through the chain.
 #[test]
-fn an_inherited_method_resolves_on_a_bundled_resource() {
-    let source = r#"
-use { Dom, Node } from "web:dom";
-
-export fn run() with Dom {
-    let doc = Dom::document();
-    let el = doc.create_element("div");
-    let parent: Node = el;
-    parent.set_text_content("Hello");
+fn an_inherited_method_type_checks() {
+    assert_eq!(check_diagnostics(INHERITED_METHOD), Vec::<String>::new());
 }
-"#;
-    assert_eq!(check_diagnostics(source), Vec::<String>::new());
+
+/// An extern-ref-backed resource is an opaque `u32` at the CM boundary, not a
+/// CM `resource`, so the component's imports carry no handle type.
+#[test]
+fn an_extern_ref_handle_crosses_as_a_bare_u32() {
+    let wat = compile_to_wat(OWN_METHODS);
+    assert!(
+        wat.contains("web:dom/element"),
+        "the element interface should be imported: {wat}"
+    );
+    assert!(
+        !wat.contains("(resource"),
+        "an extern-ref resource declares no CM resource type: {wat}"
+    );
+}
+
+/// An inherited method is imported from the interface of the resource that
+/// declares it, with the receiver passed through unchanged.
+#[test]
+fn an_inherited_method_calls_the_declaring_interface() {
+    let wat = compile_to_wat(INHERITED_METHOD);
+    assert!(
+        wat.contains("web:dom/node"),
+        "the declaring interface should be imported: {wat}"
+    );
+}
+
+fn compile_to_wat(source: &str) -> String {
+    let result = compile_source(source)
+        .unwrap_or_else(|e| panic!("expected the web:dom slice to compile, got {e}"));
+    wasmprinter::print_bytes(&result.wasm).expect("the component should print")
 }
