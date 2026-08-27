@@ -825,12 +825,7 @@ fn gen_lr_suffix_dispatch(
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
         let group = &lr_dispatch.groups[g];
 
-        let mut union_first: List<String> = [];
-        for let idx of group {
-            dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
-        }
-
-        let cond = ctx.kind_check_str(&union_first, &"suffix_kind");
+        let cond = ctx.kind_check_str(&group_first_union(group, &suffix_first_sets), &"suffix_kind");
         if is_first {
             w.begin(&`if ${cond}`);
             is_first = false;
@@ -1854,13 +1849,8 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     // suppresses it. On a gate miss a lenient group matches zero and falls
     // through; a strict group fails, since a mandatory group must be started.
     let has_wildcard = !ge.wildcard_alt_indices.is_empty();
-    let mut union_first: List<String> = [];
-    if !has_wildcard {
-        for let fs of first_sets {
-            dedup_append_arr(&mut union_first, fs);
-        }
-    }
-    let gate_emitted = !has_wildcard && union_first.len() > 0;
+    let union_first: List<String> = if has_wildcard { [] } else { first_sets_union(first_sets) };
+    let gate_emitted = !union_first.is_empty();
     if gate_emitted {
         let sgk_var = `sgk_${gc}`;
         w.line(&`let ${sgk_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
@@ -4369,10 +4359,7 @@ fn gen_op_transparent_optional_with_cond(
 }
 
 /// Emit a rule prequel (`@init` / `@after`) with the expected-token set its body
-/// may print in scope. Empty for a rule whose FOLLOW is not exact. An `@init`
-/// runs before the rule matches anything and an `@after` once it has matched
-/// everything, so the position is stated here rather than left at whatever the
-/// last alternative emitted set it to.
+/// may print in scope. Empty for a rule whose FOLLOW is not exact.
 fn gen_prequel_action(w: &mut CodeWriter, src: &ActionSource, rule_name: &String, at_entry: bool, ctx: &mut GenContext) {
     ctx.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
     gen_action_body(w, src, ctx, !at_entry);
@@ -4396,12 +4383,10 @@ fn prequel_expected_names(rule_name: &String, at_entry: bool, ctx: &mut GenConte
     return ctx.render_expected(&first);
 }
 
-/// Whether any overlap group carries an alt-initial predicate the dispatch
-/// gates on. Only a lone alternative has a branch of its own to hang one on
-/// (`group_gate`), so an alternative sharing its branch with another is not
-/// gated however gateable its predicate reads. Off with action execution, so a
-/// grammar whose predicates are inert keeps the dispatch `alt_gate_and_suffix`
-/// would emit for it — byte-identical.
+/// Whether any branch carries an alt-initial predicate the dispatch gates on.
+/// Only a lone alternative has a branch of its own to hang one on
+/// (`group_gate`); off with action execution, so an inert grammar stays
+/// byte-identical.
 fn any_alt_gated(groups: &List<List<i32>>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
     return ctx.emit_actions() && groups.iter_ref().any(|g: &List<i32>| g.len() == 1 && alt_has_gate(&alts[g[0]], ctx));
 }
@@ -4415,34 +4400,30 @@ fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with st
     return null;
 }
 
-/// What admits a group at all: `(kind ∈ FIRST(branch) && gate) || …`, branch for
-/// branch the same disjunction its dispatch tests, paired with whether any
-/// branch carries a gate and with the union of the branches' first sets.
-/// Reading it per alternative instead would gate one the dispatch cannot:
+/// What admits a group at all, branch for branch the same disjunction its
+/// dispatch tests.
+struct GroupAdmits {
+    condition: String,
+    gated: bool,
+    expected: List<String>,
+}
+
+/// Read per alternative instead, this would gate one the dispatch cannot:
 /// alternatives sharing a branch are picked by the scan tournament, which no
 /// predicate reaches, and registering a gate there suppresses the inline guard
 /// that was enforcing it. `null` when the body is not a group.
-fn group_admits(
-    inner: &Element,
-    kind: GroupBranchKind,
-    ctx: &mut GenContext,
-) -> Option<[bool, String, List<String>]> {
+fn group_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> Option<GroupAdmits> {
     let alts = repeat_body_group_alts(inner)?;
     let [first_sets, groups] = group_partition(alts, kind, ctx);
     let mut parts: List<String> = [];
-    let mut gated = false;
     for let group of &groups {
-        let gate = group_gate(group, alts, ctx);
-        if !gate.is_empty() {
-            gated = true;
-        }
-        parts.push(`(${group_branch_cond(group, &first_sets, alts, &"p.peek_kind()", ctx)}${gate})`);
+        parts.push(`(${group_branch_test(group, &first_sets, alts, &"p.peek_kind()", ctx)})`);
     }
-    let mut expected: List<String> = [];
-    for let f of &first_sets {
-        dedup_append_arr(&mut expected, f);
-    }
-    return Option::Some([gated, parts.join(" || "), expected]);
+    return Option::Some(GroupAdmits {
+        condition: parts.join(" || "),
+        gated: any_alt_gated(&groups, alts, ctx),
+        expected: first_sets_union(&first_sets),
+    });
 }
 
 /// The disjunction for a caller whose own first-set test already agrees with
@@ -4452,10 +4433,10 @@ fn group_entry_condition(inner: &Element, kind: GroupBranchKind, ctx: &mut GenCo
         return null;
     }
     let admits = group_admits(inner, kind, ctx)?;
-    if !admits.0 {
+    if !admits.gated {
         return null;
     }
-    return Option::Some(admits.1);
+    return Option::Some(admits.condition);
 }
 
 /// A loop iteration with no mandatory-first flag — the common case.
@@ -4494,11 +4475,9 @@ fn shape_branch_kind(shape: &GroupShape) -> GroupBranchKind {
 
 
 /// Discharge what `entry` owes before the group's own emit, and return what is
-/// left for the dispatch. A loop owes the break its gate needs, so it is emitted
-/// here rather than at each of the loop shapes — the site that decides it is a
-/// loop cannot also forget to guard it. Clearing the mandatory-first flag is
-/// owed here too, and only here: cleared at the loop shape it would already read
-/// false at the break, which is the one place its whole point is to read true.
+/// left for the dispatch. A loop's gate break, its unscanned first iteration's
+/// report, and the flag both read all belong here — the site that decides it is
+/// a loop cannot also forget to guard it.
 fn open_group_entry(
     w: &mut CodeWriter,
     elem: &Element,
@@ -4520,11 +4499,9 @@ fn open_group_entry(
     return GroupEntry::Guaranteed;
 }
 
-/// Report a token the mandatory first iteration admits nowhere. The loop's scan
-/// guard covers only the iterations after it, and the dispatch it runs into
-/// answers for `Guaranteed` — every branch conditional and none taking the rest
-/// — so without this the required iteration matches nothing and says nothing.
-/// A gated group is already reported by its own dispatch (`report`).
+/// Report a token the mandatory first iteration admits nowhere — the one
+/// position the loop's scan guard does not cover. A gated group is already
+/// reported by its own dispatch.
 fn gen_mandatory_first_report(
     w: &mut CodeWriter,
     inner: &Element,
@@ -4535,22 +4512,19 @@ fn gen_mandatory_first_report(
     let Some(admits) = group_admits(inner, kind, ctx) else {
         return;
     };
-    if admits.0 {
+    if admits.gated || repeat_body_reports_itself(inner, ctx) {
         return;
     }
-    let expected_ref = sync_set_ref(ctx, &admits.2);
-    w.begin(&`if ${*plus_flag} && !(${admits.1})`);
+    let expected_ref = sync_set_ref(ctx, &admits.expected);
+    w.begin(&`if ${*plus_flag} && !(${admits.condition})`);
     w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     w.line(&"break;");
     w.end();
 }
 
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s
-/// mandatory first iteration (`plus_flag`) is a required position, so it does
-/// not exit on the gate: it runs on to a dispatch that reports, or — with a
-/// single-alternative body, which is emitted straight through and has no
-/// dispatch — reports here, the answer its suppressed inline guard would have
-/// given.
+/// mandatory first iteration is a required position, so it does not exit on the
+/// gate: it reports — at the dispatch, or here where there is none.
 fn gen_repeat_gate_break(
     w: &mut CodeWriter,
     inner: &Element,
@@ -4575,10 +4549,24 @@ fn gen_repeat_gate_break(
     w.end();
 }
 
+/// Whether the group's own emit already answers a position it cannot match: one
+/// alternative, emitted straight through, whose first mandatory element expects
+/// and reports there. A group of several is a dispatch whose branches are all
+/// conditional under `Guaranteed`, and a nullable alternative matches zero
+/// tokens and says nothing.
+fn repeat_body_reports_itself(inner: &Element, ctx: &mut GenContext) -> bool {
+    let Some(alts) = repeat_body_group_alts(inner) else {
+        return false;
+    };
+    if alts.len() != 1 {
+        return false;
+    }
+    return !ctx.tail_is_nullable_deep(&alts[0].elements, 0);
+}
+
 /// Whether the group's own emit reports a position no alternative admits. Only
-/// a group of several has the dispatch that does (`gen_group_dispatch`); one
-/// alternative is emitted straight through, so its gate is the only place its
-/// predicate is answered.
+/// a group of several has the dispatch that does; one is emitted straight
+/// through.
 fn group_dispatch_reports(inner: &Element) -> bool {
     return match repeat_body_group_alts(inner) {
         Some(alts) => alts.len() > 1,
@@ -6136,7 +6124,7 @@ fn gen_group_dispatch(
         let cond = if last_takes_rest {
             String::new();
         } else {
-            `${group_branch_cond(group, first_sets, alts, &grp_var, ctx)}${group_gate(group, alts, ctx)}`;
+            group_branch_test(group, first_sets, alts, &grp_var, ctx);
         };
         if g == 0 {
             w.begin(&`if ${cond}`);
@@ -6148,15 +6136,42 @@ fn gen_group_dispatch(
         gen_group_branch_body(w, group, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
     }
     if report {
-        let mut expected: List<String> = [];
-        for let f of first_sets {
-            dedup_append_arr(&mut expected, f);
-        }
-        let expected_ref = sync_set_ref(ctx, &expected);
+        let expected_ref = sync_set_ref(ctx, &first_sets_union(first_sets));
         w.else_begin(&"else");
         w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     }
     w.end();
+}
+
+/// One branch of a dispatch: its lookahead test, narrowed by the gate a lone
+/// alternative contributes.
+fn group_branch_test(
+    group: &List<i32>,
+    first_sets: &List<List<String>>,
+    alts: &List<Alternative>,
+    kind_expr: &String,
+    ctx: &mut GenContext,
+) -> String {
+    return `${group_branch_cond(group, first_sets, alts, kind_expr, ctx)}${group_gate(group, alts, ctx)}`;
+}
+
+/// The union of a dispatch's branches, the expected set its no-match reports.
+fn first_sets_union(first_sets: &List<List<String>>) -> List<String> {
+    let mut expected: List<String> = [];
+    for let f of first_sets {
+        dedup_append_arr(&mut expected, f);
+    }
+    return expected;
+}
+
+/// The union of the first sets of one branch's alternatives — what its
+/// lookahead test admits.
+fn group_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
+    let mut union_first: List<String> = [];
+    for let idx of group {
+        dedup_append_arr(&mut union_first, &first_sets[*idx]);
+    }
+    return union_first;
 }
 
 /// The lookahead test admitting an overlap group. A wildcard-led alternative
@@ -6169,12 +6184,11 @@ fn group_branch_cond(
     grp_var: &String,
     ctx: &mut GenContext,
 ) -> String {
-    let mut union_first: List<String> = [];
-    if !group.iter_ref().any(|idx: &i32| alt_is_wildcard_led(&alts[*idx])) {
-        for let idx of group {
-            dedup_append_arr(&mut union_first, &first_sets[*idx]);
-        }
-    }
+    let union_first: List<String> = if group.iter_ref().any(|idx: &i32| alt_is_wildcard_led(&alts[*idx])) {
+        [];
+    } else {
+        group_first_union(group, first_sets);
+    };
     return ctx.kind_check_str(&union_first, grp_var);
 }
 
@@ -6893,11 +6907,7 @@ fn gen_multi_alt_body_alt(
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
-        let mut union_first: List<String> = [];
-        for let idx of group {
-            dedup_append_arr(&mut union_first, &first_sets[*idx]);
-        }
-
+        let union_first = group_first_union(group, first_sets);
         let gate = if group.len() == 1 {
             alt_gate_and_suffix(&rule.alternatives[non_lr_indices[group[0]]], ctx);
         } else {

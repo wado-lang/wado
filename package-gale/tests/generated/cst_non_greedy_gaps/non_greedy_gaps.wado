@@ -1635,10 +1635,6 @@ fn _parse_file__inner(p: &mut Parser) -> () {
             }
             if rep_scan_pos < 0 { break; }
         }
-        if _plus_first && !((p.peek_kind() == TK_LIT_PUBLIC)) {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
-            break;
-        }
         _plus_first = false;
         _parse_constant(p);
         while !_kind_set_0(p.peek_kind()) {
@@ -1661,10 +1657,10 @@ fn _parse_file(p: &mut Parser) -> () {
 }
 
 fn _parse_constant__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_PUBLIC, &SYNC_1);
-    p.expect(TK_LIT_STATIC, &SYNC_2);
-    p.expect(TK_LIT_FINAL, &SYNC_3);
-    p.expect(TK_LIT_INT, &SYNC_4);
+    p.expect(TK_LIT_PUBLIC, &SYNC_0);
+    p.expect(TK_LIT_STATIC, &SYNC_1);
+    p.expect(TK_LIT_FINAL, &SYNC_2);
+    p.expect(TK_LIT_INT, &SYNC_3);
     p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
@@ -1742,9 +1738,8 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_PUBLIC];
-global SYNC_1: List<i32> = [TK_LIT_STATIC];
-global SYNC_2: List<i32> = [TK_LIT_FINAL];
-global SYNC_3: List<i32> = [TK_LIT_INT];
-global SYNC_4: List<i32> = [TK_ID];
+global SYNC_0: List<i32> = [TK_LIT_STATIC];
+global SYNC_1: List<i32> = [TK_LIT_FINAL];
+global SYNC_2: List<i32> = [TK_LIT_INT];
+global SYNC_3: List<i32> = [TK_ID];
 

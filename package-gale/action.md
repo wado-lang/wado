@@ -133,7 +133,7 @@ All predicates false at a decision produces a "no viable alternative" diagnostic
 
 A group's alternatives are a decision like a rule's, so the three paths above are the same three inside a group: the alternative's gate condition joins the group's kind check, the scan tournament excludes a gated alternative before scanning it, and a group decision that escalates seeds the simulator with the false ones disabled. Nothing about a group makes its predicates a different kind of predicate — `('s' | 'x' | {pred}? NL)+` decides per iteration exactly as `s : 's' | 'x' | {pred}? NL ;` decides per call.
 
-That includes the report: a **required** group whose dispatch takes no alternative — a token outside every first set, or every alt-initial predicate false — reports no viable alternative, as a rule dispatch does. Only where the group is optional, or where a loop guard has already ruled the iteration viable, is taking no alternative silent.
+That includes the report: a **required** group whose dispatch takes no alternative — a token outside every first set, or every alt-initial predicate false — reports no viable alternative, as a rule dispatch does. A `+`'s mandatory first iteration is such a position, since the loop guard covers only the iterations after it. Silence is for a group the caller may legitimately skip: an optional, or a loop iteration that guard has already ruled viable.
 
 ## Actions inside a group
 

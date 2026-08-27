@@ -1610,10 +1610,6 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             }
             if rep_scan_pos < 0 { break; }
         }
-        if _plus_first && !((p.peek_kind() == TK_A)) {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
-            break;
-        }
         _plus_first = false;
         let a = p.expect(TK_A, &EMPTY_SYNC);
         if !p.speculating {
@@ -1691,5 +1687,4 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_A];
 
