@@ -3391,6 +3391,10 @@ fn lower_repeat_op(
     gate_caller_follow: bool,
 ) -> Op {
     let outer_field = compute_repeat_outer_field(rep, name_counts, *group_counter);
+    // Every shape decision below reads the body the op was lowered from, not
+    // the label wrapping it — a label changes a repeat's typing, never its
+    // shape. Positional reads (`first_of_element`, scannability) take either.
+    let body_elem = peel_repeat_body_label(&rep.element);
 
     // Pre-compute the inner's first set; used both by the strategy
     // decision (mask subtraction / suppression) and by the
@@ -3425,7 +3429,7 @@ fn lower_repeat_op(
                 site: DiagnosticSite::Optional(outer_field),
             };
             opt_specialised = pick_optional_specialised(
-                peel_repeat_body_label(&rep.element),
+                body_elem,
                 body_has_field,
                 &owner,
                 ctx,
@@ -3447,7 +3451,7 @@ fn lower_repeat_op(
             ctx.mark_needs_atn();
             RepeatStrategy::Plain;
         } else {
-            compute_non_greedy_strategy(peel_repeat_body_label(&rep.element), outer_follow, ctx);
+            compute_non_greedy_strategy(body_elem, outer_follow, ctx);
         }
     } else {
         // Greedy: a specialised Optional strategy when one fires,
@@ -3518,7 +3522,7 @@ fn lower_repeat_op(
         FollowArg::NoFollow,
         gate_caller_follow,
     );
-    let body_is_single_alt_group = if let Group(g) = peel_repeat_body_label(&rep.element) {
+    let body_is_single_alt_group = if let Group(g) = body_elem {
         g.alternatives.len() == 1;
     } else {
         false;

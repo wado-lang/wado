@@ -38,8 +38,7 @@ use {
 } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
-use { body_is_base_calls_only, body_names_this, scan_template } from "./superclass.wado";
-use { scan_string } from "./g4/scan.wado";
+use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
 use { escape_ident } from "./ident.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
@@ -168,17 +167,15 @@ fn split_top_level_commas(text: &String) -> List<String> {
     let chars: List<char> = text.chars().collect();
     let mut i = 0;
     while i < chars.len() {
-        let c = chars[i];
-        // A string or a template is one opaque span, so `a["x,y"]` passes one
-        // argument rather than two.
-        if c == '"' || c == '\'' || c == '`' {
-            let end = if c == '`' { scan_template(&chars, i, chars.len()).0 } else { scan_string(&chars, i) };
+        // `a["x,y"]` passes one argument, not two.
+        if let Some(end) = opaque_span_end(&chars, i, chars.len()) {
             while i < end {
                 cur.push(chars[i]);
                 i += 1;
             }
             continue;
         }
+        let c = chars[i];
         if c matches { '(' | '[' | '{' | '<' } {
             depth += 1;
         } else if c matches { ')' | ']' | '}' | '>' } {

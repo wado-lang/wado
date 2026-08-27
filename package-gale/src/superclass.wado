@@ -240,7 +240,7 @@ fn inert_at(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
 
 /// Split a template literal at `i` into `[end, spans]`: past the closing
 /// backtick, and the `${ ... }` bodies. Only the text between them is inert.
-pub fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
+fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
     let mut spans: List<[i32, i32]> = [];
     let mut k = i + 1;
     while k < n {
@@ -252,7 +252,7 @@ pub fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32
             return [k + 1, spans];
         }
         if chars[k] == '$' && k + 1 < n && chars[k + 1] == '{' {
-            let close = match_brace(chars, k + 1, n);
+            let close = match_delim(chars, k + 1, n, '{', '}');
             assert close > k + 1, "match_brace never returns before the brace it opened";
             spans.push([k + 2, close - 1]);
             k = close;
@@ -263,26 +263,28 @@ pub fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32
     return [n, spans];
 }
 
-/// The index just past the `}` matching the `{` at `open`.
-fn match_brace(chars: &List<char>, open: i32, n: i32) -> i32 {
-    return match_delim(chars, open, n, '{', '}');
+/// The end of the string or template span opening at `i`, or `null` where none
+/// does. What a scanner must step over whole: a delimiter, a comma, or a quote
+/// inside one is text, not structure.
+pub fn opaque_span_end(chars: &List<char>, i: i32, n: i32) -> Option<i32> {
+    return match chars[i] {
+        '"' | '\'' => Option::Some(scan_string(chars, i)),
+        '`' => Option::Some(scan_template(chars, i, n).0),
+        _ => null,
+    };
 }
 
-/// Scan to the delimiter matching the one at `open`. A string or a template is
-/// one opaque span: a delimiter inside either closes nothing.
+/// Scan to the delimiter matching the one at `open`, or `n` when unbalanced —
+/// a body the g4 parser would already have rejected.
 fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_ch: char) -> i32 {
     let mut depth = 0;
     let mut i = open;
     while i < n {
+        if let Some(end) = opaque_span_end(chars, i, n) {
+            i = end;
+            continue;
+        }
         let c = chars[i];
-        if c == '"' || c == '\'' {
-            i = scan_string(chars, i);
-            continue;
-        }
-        if c == '`' {
-            i = scan_template(chars, i, n).0;
-            continue;
-        }
         if c == open_ch {
             depth += 1;
         } else if c == close_ch {
@@ -312,15 +314,11 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
     let mut arg_start = open + 1;
     let mut i = open + 1;
     while i + 1 < close {
+        if let Some(end) = opaque_span_end(chars, i, close) {
+            i = end;
+            continue;
+        }
         match chars[i] {
-            '"' | '\'' => {
-                i = scan_string(chars, i);
-                continue;
-            },
-            '`' => {
-                i = scan_template(chars, i, close).0;
-                continue;
-            },
             '(' | '[' | '{' => depth += 1,
             ')' | ']' | '}' => depth -= 1,
             ',' => {
@@ -370,12 +368,10 @@ fn fits_i32(digits: &List<char>, first: i32, negative: bool) -> bool {
     while start + 1 < digits.len() && digits[start] == '0' {
         start += 1;
     }
-    let bound = if negative { "2147483648" } else { "2147483647" };
-    let width = digits.len() - start;
-    if width != bound.chars().count() {
-        return width < bound.chars().count();
+    let limit: List<char> = if negative { "2147483648" } else { "2147483647" }.chars().collect();
+    if digits.len() - start != limit.len() {
+        return digits.len() - start < limit.len();
     }
-    let limit: List<char> = bound.chars().collect();
     for let mut i = 0; i < limit.len(); i += 1 {
         if digits[start + i] != limit[i] {
             return digits[start + i] < limit[i];
@@ -459,7 +455,7 @@ fn call_at(chars: &List<char>, i: i32, n: i32, receiver: &List<char>, sep: &List
         return null;
     }
     let name = collect_range(chars, name_start, name_end);
-    return Option::Some([name, match_paren(chars, paren, n)]);
+    return Option::Some([name, match_delim(chars, paren, n, '(', ')')]);
 }
 
 /// Whether `word` sits at `i` as a whole word (not part of a longer ident).
@@ -988,13 +984,6 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
         };
     }
     return out;
-}
-
-/// Index just past the `)` matching the `(` at `open`, skipping nested parens
-/// and string spans. Returns `n` if unbalanced (a malformed body the g4 parser
-/// would already have rejected).
-fn match_paren(chars: &List<char>, open: i32, n: i32) -> i32 {
-    return match_delim(chars, open, n, '(', ')');
 }
 
 /// Copy `chars[start..end]` into `out` and return `end` — the scanner's next
