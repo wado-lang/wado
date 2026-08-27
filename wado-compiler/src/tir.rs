@@ -1835,13 +1835,7 @@ impl TypeTable {
 
     /// Whether `id` is an instance of the compiler's `List` struct.
     pub fn is_list(&self, id: TypeId) -> bool {
-        let Some(decl) = self
-            .compiler_items
-            .struct_decl(crate::compiler_item::CompilerItem::List)
-        else {
-            return false;
-        };
-        self.decl_of_type(id) == Some(decl)
+        self.is_compiler_item_type(id, crate::compiler_item::CompilerItem::List)
     }
 
     /// Whether `id` is the compiler's `String` struct.
@@ -1849,13 +1843,30 @@ impl TypeTable {
     /// Compares declarations; `name == "String"` answered yes for any module's
     /// own `String`.
     pub fn is_string(&self, id: TypeId) -> bool {
-        let Some(decl) = self
-            .compiler_items
-            .struct_decl(crate::compiler_item::CompilerItem::String)
-        else {
+        self.is_compiler_item_type(id, crate::compiler_item::CompilerItem::String)
+    }
+
+    /// Whether `id` is the type a compiler item declares.
+    ///
+    /// The `def` a nominal type carries is the identity (WEP 2026-08-12). One
+    /// declaration reaches the table under more than one `TypeId` — a module
+    /// that names it interns its own — and `symbol_by_type` holds the declaring
+    /// node for only the first, so asking through [`Self::decl_of_type`]
+    /// answers no for every other spelling of the same type. A `String`
+    /// answered that way is copied as a plain struct, backing array and all,
+    /// rather than right-sized to `used`.
+    ///
+    /// A type table built without defs — an anonymous-struct unit fixture — has
+    /// no identity to compare and answers by the declaring node instead.
+    fn is_compiler_item_type(&self, id: TypeId, item: crate::compiler_item::CompilerItem) -> bool {
+        let Some(decl) = self.compiler_items.decl(item) else {
             return false;
         };
-        self.decl_of_type(id) == Some(decl)
+        let id = self.peel_refs(id);
+        match (self.nominal_def(id), self.defs.of_ast_id(decl)) {
+            (Some(named), Some(declared)) => named == declared,
+            _ => self.decl_of_type(id) == Some(decl),
+        }
     }
 
     pub fn compiler_enum_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
