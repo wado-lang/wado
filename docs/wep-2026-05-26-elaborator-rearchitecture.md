@@ -262,13 +262,13 @@ Every convergence below was forced by a defect where two of them disagreed:
 - Which declaration a name means — from the module that wrote it. A name as
   written and the name a declaration calls itself differ exactly when an alias
   is in play, so a lookup keyed by the wrong one answers with another module's
-  same-named type. Superseded by
-  [`wep-2026-08-12-declaration-identity.md`](./wep-2026-08-12-declaration-identity.md):
-  a reference site is resolved
-  once, by its writing module, and the consumers take the answer rather than
-  each deriving one. The position-scoped variants this section listed — a
-  trait-position lookup where only trait declarations are candidates — are what
-  the site answers directly, since it knows the position it was written in.
+  same-named type. A reference site is resolved once, by its writing module,
+  and the consumers take the answer rather than each deriving one; a
+  position-scoped lookup — a trait position where only trait declarations are
+  candidates — is what the site answers directly, since it knows the position
+  it was written in.
+  [`wep-2026-08-12-declaration-identity.md`](./wep-2026-08-12-declaration-identity.md)
+  owns the identity model.
 - What a projection means in a frame — `frame_projection`, answering from the
   bindings a projection receiver carries and then from the enclosing `where`
   clause. Three implementations of this question disagreed, and the

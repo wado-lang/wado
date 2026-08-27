@@ -1008,11 +1008,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Placeholder typed as the coercion's surface result — `target_type`
-        // when newtype-cast, otherwise what `from` returns. The outer wrapper
-        // records `expression_types[expr.id]` from this value's `type_id`, and
-        // reify reads it from the recorded
-        // `SequenceCoercionFacts.newtype_cast_to` / `output_type`.
+        // The coercion's surface result — `target_type` when newtype-cast,
+        // otherwise what `from` returns. Reify reads the shape it emits from
+        // the recorded `SequenceCoercionFacts.newtype_cast_to` / `output_type`.
         let result_type = if needs_newtype_cast {
             target_type
         } else {

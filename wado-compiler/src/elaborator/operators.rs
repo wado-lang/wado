@@ -63,7 +63,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Pass the binary's source AstId so the operator-trait
         // dispatch path can record the decision under it.
-        self.resolve_binary_op(left, binary.op, right, binary.span, Some(binary.id))
+        self.resolve_binary_op(
+            left,
+            binary.op,
+            right,
+            binary.right.span(),
+            binary.span,
+            Some(binary.id),
+        )
     }
 
     /// Resolve both operands of a binary op with the bidirectional
@@ -243,6 +250,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         left: TypeId,
         op: BinaryOp,
         right: TypeId,
+        right_span: Span,
         span: Span,
         origin: Option<ast::AstId>,
     ) -> TypeId {
@@ -396,8 +404,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return TypeTable::ERROR;
                     };
-                    let call =
-                        self.dispatch_trait_op_method(left, vec![right], &resolved, span, origin);
+                    let call = self.dispatch_trait_op_method(
+                        left,
+                        vec![(right, right_span)],
+                        &resolved,
+                        span,
+                        origin,
+                    );
                     if op == BinaryOp::NotEq && call == TypeTable::BOOL {
                         // reify rebuilds the `!` wrapper for `!=`; project BOOL.
                         return TypeTable::BOOL;
@@ -443,8 +456,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return TypeTable::ERROR;
                     };
-                    let cmp_call =
-                        self.dispatch_trait_op_method(left, vec![right], &resolved, span, origin);
+                    let cmp_call = self.dispatch_trait_op_method(
+                        left,
+                        vec![(right, right_span)],
+                        &resolved,
+                        span,
+                        origin,
+                    );
                     if cmp_call == TypeTable::ERROR {
                         return TypeTable::ERROR;
                     }
@@ -498,8 +516,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         param_types: info.param_types,
                         is_type_param_receiver: true,
                     };
-                    let call =
-                        self.dispatch_trait_op_method(left, vec![right], &resolved, span, origin);
+                    let call = self.dispatch_trait_op_method(
+                        left,
+                        vec![(right, right_span)],
+                        &resolved,
+                        span,
+                        origin,
+                    );
                     if op == BinaryOp::NotEq && call == TypeTable::BOOL {
                         // reify rebuilds the `!` wrapper for `!=`; project BOOL.
                         return TypeTable::BOOL;
@@ -530,8 +553,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         param_types: info.param_types,
                         is_type_param_receiver: true,
                     };
-                    let cmp_call =
-                        self.dispatch_trait_op_method(left, vec![right], &resolved, span, origin);
+                    let cmp_call = self.dispatch_trait_op_method(
+                        left,
+                        vec![(right, right_span)],
+                        &resolved,
+                        span,
+                        origin,
+                    );
                     if cmp_call == TypeTable::ERROR {
                         return TypeTable::ERROR;
                     }
@@ -637,7 +665,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     return self.dispatch_trait_op_method(
                         left,
-                        vec![right],
+                        vec![(right, right_span)],
                         &resolved,
                         span,
                         origin,
@@ -679,7 +707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     return self.dispatch_trait_op_method(
                         left,
-                        vec![right],
+                        vec![(right, right_span)],
                         &resolved,
                         span,
                         origin,
@@ -742,7 +770,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_types: info.param_types,
                     is_type_param_receiver: true,
                 };
-                return self.dispatch_trait_op_method(left, vec![right], &resolved, span, origin);
+                return self.dispatch_trait_op_method(
+                    left,
+                    vec![(right, right_span)],
+                    &resolved,
+                    span,
+                    origin,
+                );
             }
             if let ResolvedType::TypeParam { name, .. } = &left_type {
                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
@@ -815,7 +849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     return self.dispatch_trait_op_method(
                         left,
-                        vec![right],
+                        vec![(right, right_span)],
                         &resolved,
                         span,
                         origin,
@@ -1613,8 +1647,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trait method (`Div::div` → `div_rem`). Tag the record with the
         // compound's AstId so reify replays that method call instead of a raw
         // `Binary` (a primitive `/` on struct operands is invalid Wasm).
-        let combined =
-            self.resolve_binary_op(read_type, op, rhs_type, compound.span, Some(compound.id));
+        let combined = self.resolve_binary_op(
+            read_type,
+            op,
+            rhs_type,
+            compound.value.span(),
+            compound.span,
+            Some(compound.id),
+        );
         let result = self.assign_to_target(
             &compound.target,
             AssignValue::Resolved {
@@ -1665,6 +1705,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 left_tir,
                 cmp.op,
                 right_tir,
+                cmp.right.span(),
                 cmp.op_span,
                 Some(chain.id),
             );
@@ -1692,7 +1733,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Bind `right0` to `__m0` — it is reused by the next comparison.
         self.bind_chain_middle(0, right0_tir, ctx);
-        let mut acc = self.resolve_binary_op(first_tir, cmp0.op, right0_tir, cmp0.op_span, None);
+        let mut acc = self.resolve_binary_op(
+            first_tir,
+            cmp0.op,
+            right0_tir,
+            cmp0.right.span(),
+            cmp0.op_span,
+            None,
+        );
         let mut prev = right0_tir;
 
         let last_idx = chain.comparisons.len() - 1;
@@ -1706,8 +1754,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Tail operand: only one use, no binding needed.
                 self.bind_chain_middle(idx, right, ctx);
             }
-            let cmp_type = self.resolve_binary_op(prev, cmp.op, right, cmp.op_span, None);
-            acc = self.resolve_binary_op(acc, BinaryOp::And, cmp_type, chain.span, None);
+            let cmp_type =
+                self.resolve_binary_op(prev, cmp.op, right, cmp.right.span(), cmp.op_span, None);
+            // The `&&` joining two comparisons is synthesised, so its right
+            // operand is the comparison the chain just built, not written text.
+            acc =
+                self.resolve_binary_op(acc, BinaryOp::And, cmp_type, cmp.op_span, chain.span, None);
             prev = right;
         }
 
@@ -1782,7 +1834,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn dispatch_trait_op_method(
         &mut self,
         receiver: TypeId,
-        args: Vec<TypeId>,
+        args: Vec<(TypeId, Span)>,
         resolved: &ResolvedTraitMethod,
         span: Span,
         origin: Option<ast::AstId>,
@@ -1806,7 +1858,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // apply identical `check_assignable` rules and cannot diverge. Mismatches
         // accumulate in the logger rather than early-returning, as method calls do.
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
-        for (&arg, &param_ty) in args.iter().zip(resolved.param_types.iter()) {
+        for (&(arg, arg_span), &param_ty) in args.iter().zip(resolved.param_types.iter()) {
             let wrap = matches!(
                 self.tysys.type_table.borrow().get(param_ty),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
@@ -1834,7 +1886,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 param_ty
             };
-            self.typecheck(arg, expected, span);
+            self.typecheck(arg, expected, arg_span);
             wrap_flags.push(wrap);
         }
 
