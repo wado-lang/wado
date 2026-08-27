@@ -156,14 +156,21 @@ they operate on CM green threads managed by the runtime, and until
 shared-everything-threads lands they interleave on a single core.
 
 Wado declares none of them, and should not until the encoding settles. The opcodes are
-still being reassigned in place: against the pinned `wasmparser` 0.252, `0x28` is
-`thread.suspend-to-suspended`, `0x2a` is `thread.unsuspend` and `0x2c` is
-`thread.suspend-to`; upstream the same three bytes are `thread.resume-later`,
-`thread.suspend-then-resume` and `thread.suspend-then-promote`. The set moved with them:
-`thread.suspend-to` is gone, `thread.{suspend,yield}-then-promote` are new. Since the
-built-ins share `[] -> [i32]` shapes, a declaration written against either generation
-validates under the other and means something else, so a wasmtime bump would break it
-silently rather than loudly.
+still being reassigned in place:
+
+| Opcode | `wasmparser` 0.252 (pinned)                    | Upstream                                       |
+| ------ | ---------------------------------------------- | ---------------------------------------------- |
+| `0x28` | `thread.suspend-to-suspended` `[i32] -> [i32]` | `thread.resume-later` `[i32] -> []`            |
+| `0x2a` | `thread.unsuspend` `[i32] -> []`               | `thread.suspend-then-resume` `[i32] -> [i32]`  |
+| `0x2b` | `thread.yield-to-suspended` `[i32] -> [i32]`   | `thread.yield-then-resume` `[i32] -> [i32]`    |
+| `0x2c` | `thread.suspend-to` `[i32] -> [i32]`           | `thread.suspend-then-promote` `[i32] -> [i32]` |
+
+`0x2b` and `0x2c` keep their signature across the rename, so a declaration written
+against one generation validates under the other and means something else. `0x28` and
+`0x2a` differ in result arity and would at least fail validation; `0x28` also changes its
+immediates, reading a `cancellable` byte in the pinned generation and none upstream. The
+set moved too: `thread.suspend-to` is gone, `thread.{suspend,yield}-then-promote` are
+new.
 
 Two further gates: the 🧵 feature is off by default in both `wasmparser` and wasmtime,
 whose own docs call its support "very incomplete"; and `thread.new-indirect` passes the
