@@ -2088,7 +2088,7 @@ fn lower_scan_repeat(
     // optional shape, breaking `( (a)? b )?`-style cases).
     if !rep.non_greedy {
         if let Optional = rep.kind {
-            if let Group(g) = rep.element {
+            if let Group(g) = peel_repeat_body_label(&rep.element) {
                 if g.alternatives.len() == 1
                     && has_nested_optional_in_alt(&g.alternatives[0])
                     && !alt_has_variable_repeat(&g.alternatives[0])
@@ -3549,7 +3549,7 @@ fn lower_repeat_op(
 /// at emit time: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> List<String> {
-    if let Group(g) = elem {
+    if let Group(g) = peel_repeat_body_label(elem) {
         if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
             return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
         }
@@ -3596,11 +3596,7 @@ fn compute_caller_follow_second(elements: &List<Element>, start: i32, ctx: &mut 
     }
     let follow_elem = &elements[start];
     if let Repeat(rep) = follow_elem {
-        if let Group(g) = rep.element {
-            if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
-                return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
-            }
-        }
+        return compute_body_second_position_first(&rep.element, ctx);
     }
     return [];
 }

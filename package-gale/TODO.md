@@ -37,7 +37,7 @@ Empty right now.
 
 Design in [`action.md`](./action.md). A hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.
 
-What is left is one path that still warns and a surface nothing in the corpus or the real-world grammars asks for. Each entry states the symptom and how it was reproduced; the design for all of them is in `action.md`.
+What is left is one path that still warns, and a surface that nothing in the corpus or the real-world grammars asks for. Each entry states the symptom and how it was reproduced; the design for all of them is in `action.md`.
 
 ### Lexer actions under a restructured `Repeat`
 

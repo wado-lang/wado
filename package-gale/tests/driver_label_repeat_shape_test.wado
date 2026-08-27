@@ -1,0 +1,26 @@
+//! A label on a repeat's body changes its typing, never its shape decisions.
+//! Each rule is checked against its label-free twin on the same inputs.
+
+use lrs from "./grammars/wado_label_repeat_shape.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/label_repeat_shape" },
+    };
+use { normalize_tree } from "./support/tree_compare.wado";
+
+test "a labelled non-greedy repeat exits where its twin does" {
+    for let input of &["a b a c", "a c", "a b a b a c"] {
+        let labelled = lrs::parse_ng_labelled(input);
+        let bare = lrs::parse_ng_bare(input);
+        assert labelled.ok() == bare.ok(), `'${*input}': ok ${labelled.ok()} vs ${bare.ok()}`;
+        assert labelled.diagnostics.len() == bare.diagnostics.len(), `'${*input}': diagnostics differ`;
+    }
+}
+
+test "a labelled shape-lookahead optional enumerates like its twin" {
+    for let input of &["a b c", "b c"] {
+        let labelled = lrs::parse_opt_labelled(input);
+        let bare = lrs::parse_opt_bare(input);
+        assert labelled.ok(), `'${*input}': ${labelled.diagnostics.len()} diagnostics`;
+        assert labelled.ok() == bare.ok(), `'${*input}': ok ${labelled.ok()} vs ${bare.ok()}`;
+    }
+}
