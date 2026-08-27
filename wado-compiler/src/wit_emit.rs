@@ -953,10 +953,16 @@ impl<'a> Emitter<'a> {
                     .0;
                 Ok(self.named(&name, id))
             }
+            ResolvedType::Resource { def } if self.types.is_extern_handle_resource(*def) => {
+                Ok(Type::U32)
+            }
             ResolvedType::Resource { def } => Ok(Type::named(to_kebab(self.types.def_name(*def)))),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
                 if let ResolvedType::Resource { def } = self.types.get(inner) {
+                    if self.types.is_extern_handle_resource(*def) {
+                        return Ok(Type::U32);
+                    }
                     Ok(Type::borrow(to_kebab(self.types.def_name(*def))))
                 } else {
                     self.map_type(inner)

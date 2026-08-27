@@ -164,7 +164,7 @@ fn test_format_keeps_resource_extends() {
     let source = concat!(
         "#[cm(\"web:dom/node\", type=\"extern-handle\")]\n",
         "pub resource Node extends EventTarget {\n",
-        "    #[cm(\"web:dom/node#[method]node.text-content\")]\n",
+        "    #[cm(\"web:dom/node#text-content\")]\n",
         "    #[cm_params(\"self\")]\n",
         "    fn text_content(&self) -> Option<String>;\n",
         "}\n"

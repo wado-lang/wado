@@ -247,6 +247,29 @@ fn full_scope_reconstructs_an_extern_handle_interface_per_wado_type() {
         .expect("extern-handle WIT failed to re-parse");
 }
 
+/// A handle in an exported signature is resolved from the type table, not from
+/// the CM registry, and is the same opaque `u32` there.
+#[test]
+fn an_exported_signature_renders_a_handle_as_the_universal_one() {
+    let text = emit(
+        "use { Element } from \"web:dom\";\n\
+         export fn relabel(el: Element, id: String) -> Element { el.set_id(id); return el; }",
+    );
+    assert!(
+        text.contains("relabel: func(el: u32, id: string) -> u32;"),
+        "\n{text}"
+    );
+    assert!(
+        !text.contains("borrow<") && !text.contains("resource"),
+        "\n{text}"
+    );
+
+    let mut resolve = wit_parser::Resolve::new();
+    resolve
+        .push_str("export.wit", &text)
+        .expect("an exported handle should re-parse");
+}
+
 #[test]
 fn full_scope_inlines_referenced_interfaces_and_reparses() {
     // `full` scope inlines the referenced WASI interfaces as nested packages,
