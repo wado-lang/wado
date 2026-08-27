@@ -1042,28 +1042,23 @@ impl Analyzer<'_> {
     /// `&place` is left to that arm, which knows the field it borrows: taking
     /// it here would answer the whole local and pin its every other field.
     fn escape_if_reference(&mut self, expr: &TirExpr) {
-        if matches!(
-            strip_casts(expr).kind,
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                ..
-            }
-        ) {
-            return;
-        }
-        if is_reference_type(expr.type_id, self.type_table)
-            && let Some(root) = alias_root(expr)
-        {
-            self.mark_escaped(root, borrow_top_field(expr));
+        if let Some((root, field)) = reference_escape(expr, self.type_table) {
+            self.mark_escaped(root, field);
         }
     }
 
     /// Walk `expr` in a position that outlives it — an aggregate literal, a
     /// global, a write through a place, the function's result — where a
-    /// reference pins its referent as the `&place` spelling would.
+    /// reference pins its referent as the `&place` spelling would. A control
+    /// form there hands on whichever value it yields, so the escape follows it
+    /// to the arms.
     fn walk_persisting(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
         if record {
-            self.escape_if_reference(expr);
+            let mut escapes = Vec::new();
+            yielded_escapes(expr, self.type_table, &mut escapes);
+            for (root, field) in escapes {
+                self.mark_escaped(root, field);
+            }
         }
         self.walk_expr(expr, live, record);
     }
@@ -1706,6 +1701,88 @@ impl Analyzer<'_> {
                     self.walk_expr(child, live, record);
                 }
             }
+        }
+    }
+}
+
+/// The referent a value names when it is a reference handed on as it stands,
+/// with the field it was read from. `&place` is not one: [`Analyzer::walk_expr`]
+/// takes that spelling, and takes it with the field it borrows.
+fn reference_escape(expr: &TirExpr, type_table: &TypeTable) -> Option<(u32, Option<u32>)> {
+    if matches!(
+        strip_casts(expr).kind,
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            ..
+        }
+    ) {
+        return None;
+    }
+    if !is_reference_type(expr.type_id, type_table) {
+        return None;
+    }
+    Some((alias_root(expr)?, borrow_top_field(expr)))
+}
+
+/// What a form hands to a position outliving it: its own value, or the arm,
+/// tail and `break` values of a control form — whichever one runs.
+fn yielded_escapes(expr: &TirExpr, type_table: &TypeTable, out: &mut Vec<(u32, Option<u32>)>) {
+    match &expr.kind {
+        TirExprKind::Match { arms, .. } => {
+            for arm in arms {
+                yielded_escapes(&arm.body, type_table, out);
+            }
+        }
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            block_yielded_escapes(then_branch, type_table, out);
+            if let Some(eb) = else_branch {
+                block_yielded_escapes(eb, type_table, out);
+            }
+        }
+        TirExprKind::Block(block) => block_yielded_escapes(block, type_table, out),
+        TirExprKind::LabeledBlock { block, .. } => {
+            block_yielded_escapes(block, type_table, out);
+            break_escapes(block, type_table, out);
+        }
+        _ => out.extend(reference_escape(expr, type_table)),
+    }
+}
+
+/// A block hands on its final statement's value.
+fn block_yielded_escapes(
+    block: &TirBlock,
+    type_table: &TypeTable,
+    out: &mut Vec<(u32, Option<u32>)>,
+) {
+    if let Some(TirStmtKind::Expr(e)) = block.stmts.last().map(|s| &s.kind) {
+        yielded_escapes(e, type_table, out);
+    }
+}
+
+/// What a labeled block's `break`s hand out of it, from anywhere inside. Which
+/// label one targets is not distinguished — an outer one only over-counts.
+fn break_escapes(block: &TirBlock, type_table: &TypeTable, out: &mut Vec<(u32, Option<u32>)>) {
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            TirStmtKind::Break { value: Some(v), .. } => yielded_escapes(v, type_table, out),
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                break_escapes(then_block, type_table, out);
+                if let Some(eb) = else_block {
+                    break_escapes(eb, type_table, out);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                break_escapes(body, type_table, out);
+            }
+            _ => {}
         }
     }
 }
