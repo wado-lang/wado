@@ -63,10 +63,8 @@ impl CallGraph {
     }
 
     /// The strongly connected components of the call graph, each callee
-    /// component before the components that call it. An analysis whose answer
-    /// for one member depends on another's needs the cycle as a unit; Tarjan
-    /// emits exactly that, and in the order that leaves everything outside a
-    /// component already settled when it is reached.
+    /// component before the components that call it — so an analysis whose
+    /// answer for one member depends on another's has the cycle as a unit.
     pub fn sccs(&self) -> Vec<Vec<u32>> {
         let n = self.callees.len();
         const UNVISITED: u32 = u32::MAX;

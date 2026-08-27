@@ -1,9 +1,8 @@
-// A builtin declares no `stores` and has no body to read, so where it routes a
-// reference cannot be read off its facts: `array_get_ref` — what `index_ref`
-// lowers to — hands back a slot of its first argument. A reference-typed call
-// result therefore carries every argument, which is what makes `index_ref` and
-// every wrapper of it report storing its receiver. Read the other way, the
-// caller moves the list out from under the `&T` it is still holding.
+// Where a builtin routes a reference cannot be read off its facts — it has no
+// body and declares no `stores` — and `array_get_ref`, what `index_ref` lowers
+// to, hands back a slot of its first argument. So a reference-typed call result
+// carries every argument; read the other way, the caller moves the list out
+// from under the `&T` it is still holding.
 
 use { println, Stdout } from "core:cli";
 

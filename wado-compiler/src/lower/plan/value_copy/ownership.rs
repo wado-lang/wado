@@ -205,15 +205,9 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
 /// its first parameter (`return *self`). `returns_owned` is a subset of
 /// `returns_self_projection`.
 ///
-/// Inside a component the answer is assumed and then disproved, not built up. A
-/// least fixpoint cannot start a cycle whose members return each other's result
-/// — `lower_element` returns `lower_group`'s value and `lower_group` returns
-/// `lower_element`'s — so each reads the other's unproven "borrowed" and the
-/// pair stays there, deep-copying every result the family builds. Assuming the
-/// component owned and dropping the members a walk refutes reaches the answer a
-/// self-recursive function already got, for the same reason: the returns that
-/// do not go through the cycle are checked on their own, and those base cases
-/// are what a recursive result is built from.
+/// Inside a component the answer is assumed and then disproved, not built up: a
+/// cycle whose members return each other's result has no base to build from,
+/// and the returns that avoid the cycle are what decide it either way.
 pub fn compute_return_conventions(
     project: &FlatPackage,
     call_graph: &CallGraph,

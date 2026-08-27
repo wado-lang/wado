@@ -1,13 +1,10 @@
 // A `String` copy is right-sized to `used`, never to its backing array's
-// capacity — a builder's slack is not part of the value.
+// capacity — a builder's slack is not part of the value. What decides it is
+// whether the copy helper recognises the type as the compiler's `String`,
+// which is a question about the declaration a type names (WEP 2026-08-12).
 //
-// What decides it is whether the copy helper recognises the type as the
-// compiler's `String`, which is a question about the declaration a type names
-// (WEP 2026-08-12). Asked instead of the node registered against one of its
-// ids, it answers no for every id but the first, and the helper built for the
-// other copies `String` as a plain struct — over the whole capacity. This pins
-// the shape; the miss it guards needs a second id for one declaration, which
-// only a package-scale program has.
+// This pins the shape only: the miss it guards needs one declaration reaching
+// the type table under two ids, which takes a package-scale program.
 
 use { println, Stdout } from "core:cli";
 

@@ -239,13 +239,7 @@ where it cannot prove move / share / fresh; no elision pass):
   way: the temp it reads is private to the unroll and each field has exactly one
   reader, so the field is the binding's to take.
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
-  returns owned), settled one call-graph component at a time with the
-  component's own members assumed owned and the ones a walk refutes dropped.
-  Grown from nothing instead, a cycle whose members return each other's result —
-  `lower_element` yields `lower_group`'s value and `lower_group` yields
-  `lower_element`'s — has each reading the other's unproven "borrowed", so the
-  pair stays there and every result the family builds is deep-copied. Plus the
-  literals that materialize their own storage: a string
+  returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
   array. An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
@@ -265,6 +259,12 @@ where it cannot prove move / share / fresh; no elision pass):
   the rule `match` arms already followed. A router dispatch — a response bound
   from an `if let` over the matched route — needs both this and the
   indirect-call rule, or every later field read of the binding is deep-copied.
+- Component-wise return conventions — a call-graph component settles with its
+  own members assumed owned and the ones a walk refutes dropped. Grown from
+  nothing, a cycle whose members return each other's result (`lower_element`
+  yields `lower_group`'s value and `lower_group` yields `lower_element`'s) has
+  each reading the other's unproven "borrowed", and every result the family
+  builds is deep-copied.
 - Transient borrows — a borrow that ends before the move does not pin its
   referent. A `&` call argument to a non-storing callee already did not; a
   `match` / `if let` over a `&place` scrutinee is the same borrow and now reads
@@ -284,17 +284,14 @@ where it cannot prove move / share / fresh; no elision pass):
 - Where a stored reference lands — `stores.rs` separates the position a callee
   routes into its _return value_ from one that reaches a global or is written
   through a reference the caller owns. A caller must assume the union, but the
-  fixpoint must not: an iterator holds a reference to what it walks, so
-  collapsing the two made every `&List` parameter a stored one the moment the
-  body iterated it, and that pinned every caller's value against a move. A
-  `collect()` that drops the iterator stores nothing, and the enclosing function
-  now says so. A declared `stores[p]` names no destination: a value-returning
-  body is read as handing it out with the result and the walk finds any further
-  escape itself, while a void one (`List::push`, storing through a builtin) has
-  nowhere visible to put it and keeps the strong reading. A builtin has no body
-  to read either, so a reference-typed call result is read as carrying every
-  argument — `array_get_ref` aliases its container, and `List::index_ref` is
-  nothing but that call.
+  fixpoint must not: an iterator holds a reference to what it walks, so one set
+  makes every `&List` parameter stored the moment the body iterates it, while a
+  `collect()` that drops the iterator stores nothing. A declared `stores[p]`
+  names no destination: a value-returning body is read as handing it out with
+  the result, a void one (`List::push`, storing through a builtin) has nowhere
+  visible to put it and keeps the strong reading. A builtin has no body to read
+  either, so a reference-typed call result carries every argument —
+  `array_get_ref` aliases its container, and `List::index_ref` is that call.
 - Read-only-share — a read-only binding whose storage is never mutated while
   live. See _Sharing_ below.
 

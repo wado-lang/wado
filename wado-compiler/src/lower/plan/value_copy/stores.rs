@@ -1,31 +1,21 @@
 //! Interprocedural reference-storage analysis: which reference-parameter
-//! *positions* a function may persist beyond its call. A least fixpoint over the
-//! call graph, sound as long as `carries` over-approximates.
+//! *positions* a function may persist beyond its call. A least fixpoint over
+//! the call graph, sound as long as `carries` over-approximates.
 //!
-//! A reference persists in one of two ways, tracked apart because only the first
-//! is a property of the callee alone:
-//!
-//! - it reaches a global, or is written through a reference the caller owns
-//!   ([`StoresFacts::escapes`]) — persists however the call is used;
-//! - it reaches the return value ([`StoresFacts::into_result`]) — persists
-//!   exactly as long as the caller keeps the result.
-//!
-//! Keeping them apart is what stops a transient carrier from poisoning its
-//! source: `a.iter()` hands the iterator a reference to `a`, but a `.collect()`
-//! that drops the iterator stores nothing, so the enclosing function does not
-//! store `a`. Collapsing the two — as marking every carrying argument did —
-//! makes every `&List` parameter a stored one the moment the body iterates it.
-//!
-//! What a *caller* must assume is the union: the returned reference may be kept.
-//! That is what [`compute_stored_params`] publishes.
+//! Two channels, apart because only the first is the callee's property alone:
+//! [`StoresFacts::escapes`] reaches a global or the caller's own storage,
+//! [`StoresFacts::into_result`] reaches the return value. Why they cannot be
+//! one set is in WEP 2026-05-21; [`compute_stored_params`] publishes the union,
+//! which is what a caller must assume.
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
+use super::is_reference_type;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirParam, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeTable,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -106,12 +96,10 @@ pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> S
     for func in &project.functions {
         let func = func.borrow();
         // A declared `stores[p]` says the reference persists, not where. A
-        // value-returning body — the iterator and adapter shape, `iter()`,
-        // `as_slice()` — hands it out with the result, and the walk finds any
-        // further escape itself. With no result to hand it to, or no body to
-        // read (`List::push` stores through a builtin), the strong reading is
-        // the only sound one. See the known gap in WEP 2026-05-21 for what the
-        // reading still rests on.
+        // value-returning body hands it out with the result — `iter()`,
+        // `as_slice()` — and the walk finds any further escape itself; with no
+        // result to hand it to, or no body to read, only the strong reading is
+        // sound. What that rests on is a known gap in WEP 2026-05-21.
         let declared = declared_positions(&func);
         let hands_out_result =
             func.body.is_some() && !matches!(type_table.get(func.return_type), ResolvedType::Unit);
@@ -215,8 +203,7 @@ struct StoresWalker<'a> {
 
 impl StoresWalker<'_> {
     /// The parameter positions the value of `expr` carries: a reference derived
-    /// from a parameter, or an aggregate holding one — copying a struct copies
-    /// its reference fields, so a projection out of a carrier carries too.
+    /// from a parameter, or an aggregate holding one.
     fn carries(&self, expr: &TirExpr) -> IndexSet<u32> {
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
@@ -226,9 +213,8 @@ impl StoresWalker<'_> {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
             } => self.place_roots(place),
-            // A projection hands back the reference it names; a projection to a
-            // value reads data out of one, and copying data does not copy the
-            // reference that found it.
+            // A projection to a value reads data out of a reference; copying
+            // data does not copy the reference that found it.
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -261,13 +247,10 @@ impl StoresWalker<'_> {
                         .unwrap_or_default()
                 })
                 .collect(),
-            // Only the positions the callee routes into its result reach the
-            // caller through the call's value; an escaping one is marked at the
-            // call site instead. That routing is read off a body, and a builtin
-            // has none: `a[i]`'s `array_get_ref` hands back a slot of its first
-            // argument while declaring nothing, so a reference-typed result is
-            // read as carrying every argument — the reading `List::index_ref`
-            // and every wrapper of it depends on.
+            // Which positions a call routes to its result is read off a body,
+            // and a builtin has none — `a[i]`'s `array_get_ref` hands back a
+            // slot of its first argument while declaring nothing — so a
+            // reference-typed result carries every argument.
             TirExprKind::Call { func, args, .. } => {
                 if is_reference_type(expr.type_id, self.type_table) {
                     return args.iter().flat_map(|a| self.carries(&a.expr)).collect();
@@ -331,27 +314,19 @@ impl StoresWalker<'_> {
             .collect()
     }
 
-    /// The parameter positions a *place* (the operand of `&`) is rooted at,
-    /// regardless of the place's own type — `&p.field` roots at `p`.
+    /// What a *place* (the operand of `&`) carries, read off its root —
+    /// `&p.field` roots at `p`, whatever the field's own type.
     fn place_roots(&self, place: &TirExpr) -> IndexSet<u32> {
-        match &place.kind {
-            TirExprKind::Local { index, .. } => {
-                self.carries.get(index).cloned().unwrap_or_default()
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. } => self.place_roots(inner),
-            _ => IndexSet::default(),
-        }
+        Self::place_root(place)
+            .and_then(|(local, _)| self.carries.get(&local).cloned())
+            .unwrap_or_default()
     }
 
-    /// The root local of a place, or `None` for a place this analysis cannot
-    /// root (a call result, an rvalue).
-    fn place_root(place: &TirExpr) -> Option<&TirExpr> {
+    /// The local a place is rooted at, with its type, or `None` for a place
+    /// this analysis cannot root (a call result, an rvalue).
+    fn place_root(place: &TirExpr) -> Option<(u32, TypeId)> {
         match &place.kind {
-            TirExprKind::Local { .. } => Some(place),
+            TirExprKind::Local { index, .. } => Some((*index, place.type_id)),
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
@@ -393,26 +368,23 @@ impl StoresWalker<'_> {
         // Writing through a reference local lands in its referent, storage the
         // caller owns; writing into a local's own aggregate does not.
         match Self::place_root(target) {
-            Some(root) if !is_reference_type(root.type_id, self.type_table) => {
-                let TirExprKind::Local { index, .. } = &root.kind else {
-                    unreachable!("place_root yields a Local")
-                };
-                self.carry_into(*index, &carried);
+            Some((root, ty)) if !is_reference_type(ty, self.type_table) => {
+                self.carry_into(root, &carried);
             }
             _ => self.escape(&carried),
         }
     }
 
-    /// A call's arguments: an escaping position persists here, a result-bound
-    /// one through the call's value (see [`StoresWalker::carries`]).
-    fn call_args<'e>(&mut self, args: impl Iterator<Item = &'e TirExpr>, facts: &StoresFacts) {
-        for (i, a) in args.enumerate() {
-            if !facts.escapes.contains(&u32::try_from(i).unwrap()) {
-                continue;
-            }
-            let carried = self.carries(a);
-            self.escape(&carried);
-        }
+    /// A call's arguments at the callee's escaping positions; a result-bound
+    /// one reaches the caller through the call's value instead (see
+    /// [`StoresWalker::carries`]).
+    fn escape_args<'e>(
+        &mut self,
+        args: impl Iterator<Item = &'e TirExpr>,
+        positions: &IndexSet<u32>,
+    ) {
+        let carried = self.carried_args(args, positions);
+        self.escape(&carried);
     }
 
     fn bind_pattern(&mut self, pattern: &crate::tir::TirPattern, source: &TirExpr) {
@@ -479,21 +451,14 @@ impl TirRefVisitor for StoresWalker<'_> {
             }
             TirExprKind::Call { func, args, .. } => {
                 let facts = self.oracle.direct(func);
-                self.call_args(args.iter().map(|a| &a.expr), &facts);
+                self.escape_args(args.iter().map(|a| &a.expr), &facts.escapes);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let facts = self.oracle.indirect(callee, args.len());
-                self.call_args(args.iter(), &facts);
+                self.escape_args(args.iter(), &facts.escapes);
             }
             _ => {}
         }
         self.walk_expr(expr);
     }
-}
-
-fn is_reference_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    )
 }

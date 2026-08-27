@@ -13,6 +13,7 @@ use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::ModuleSource;
 use crate::tir::{
     FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
@@ -111,7 +112,7 @@ fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
         let func = func.borrow();
         let kind = if matches!(func.kind, FunctionKind::ValueCopy { .. }) {
             Kind::ValueCopy
-        } else if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+        } else if is_builtin(&func.module_source) {
             Kind::Builtin
         } else if func.body.is_some() {
             Kind::HasBody
@@ -130,17 +131,15 @@ struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    /// A builtin declares no function, so it is absent from the table a walk
-    /// over the package builds — its own reference is what says it is one.
-    /// Reading absence as `Opaque` instead made every parameter handed to a
-    /// builtin escape, `a[i]`'s `array_get_value` included, which is every
-    /// element read there is.
+    /// A builtin declares no function, so it is absent from the table — and
+    /// absence read as `Opaque` leaks every parameter handed to one, which
+    /// `a[i]`'s `array_get_value` makes every element read there is.
     fn kind(&self, func: &FunctionRef) -> Kind {
         self.kinds
             .get(&func.module_source, &func.name)
             .copied()
             .unwrap_or_else(|| {
-                if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+                if is_builtin(&func.module_source) {
                     Kind::Builtin
                 } else {
                     Kind::Opaque
@@ -483,6 +482,10 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
         )
 }
 
+fn is_builtin(module: &ModuleSource) -> bool {
+    module.is_core_builtin() || module.is_wasm_asset()
+}
+
 fn is_mut_ref(expr: &TirExpr, type_table: &TypeTable) -> bool {
     matches!(type_table.get(expr.type_id), ResolvedType::MutRef(_))
         || matches!(
@@ -495,16 +498,14 @@ fn is_mut_ref(expr: &TirExpr, type_table: &TypeTable) -> bool {
 }
 
 fn is_ref_typed(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(expr.type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    ) || matches!(
-        &expr.kind,
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            ..
-        }
-    )
+    super::is_reference_type(expr.type_id, type_table)
+        || matches!(
+            &expr.kind,
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                ..
+            }
+        )
 }
 
 fn union(mut a: Taint, b: Taint) -> Taint {

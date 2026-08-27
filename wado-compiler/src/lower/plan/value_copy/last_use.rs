@@ -7,6 +7,7 @@
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
+use super::is_reference_type;
 use super::ownership::OwnedCalls;
 use super::stores::StoredParams;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1026,32 +1027,32 @@ impl Analyzer<'_> {
                 self.mark_escaped(r, borrow_top_field(place));
             }
         } else {
-            // A reference-typed local passed on as-is needs no `&` of its own,
-            // so a storing position holds the storage it names.
-            if record
-                && let TirExprKind::Local { index, .. } = &arg.kind
-                && is_reference_type(arg.type_id, self.type_table)
-                && callee.is_some_and(|c| self.callee_stores(c, pos))
-            {
-                self.mark_escaped(*index, None);
+            if record && callee.is_some_and(|c| self.callee_stores(c, pos)) {
+                self.escape_if_reference_local(arg);
             }
             self.walk_expr(arg, live, record);
         }
     }
 
-    /// A reference-typed value reaching a position that outlives the expression
-    /// — an aggregate literal, a global, a write through a place, the function's
-    /// result — persists exactly as the `&place` in that position would, so its
-    /// referent escapes. [`Analyzer::walk_expr`] catches the `&` spelling; this
-    /// is the other one, a reference *local* handed on as is, which is what a
-    /// match arm binding over a `&`-borrowed scrutinee always is.
-    fn escape_persisting_ref(&mut self, expr: &TirExpr, record: bool) {
-        if record
-            && let TirExprKind::Local { index, .. } = &expr.kind
+    /// A reference *local* handed on as is — the spelling [`Analyzer::walk_expr`]
+    /// misses, since it catches only `&place`. It is what a match arm binding
+    /// over a `&`-borrowed scrutinee always is.
+    fn escape_if_reference_local(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Local { index, .. } = &expr.kind
             && is_reference_type(expr.type_id, self.type_table)
         {
             self.mark_escaped(*index, None);
         }
+    }
+
+    /// Walk `expr` in a position that outlives it — an aggregate literal, a
+    /// global, a write through a place, the function's result — where a
+    /// reference pins its referent as the `&place` spelling would.
+    fn walk_persisting(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
+        if record {
+            self.escape_if_reference_local(expr);
+        }
+        self.walk_expr(expr, live, record);
     }
 
     /// Record that binding `local` derives from `source`: if the local whose
@@ -1373,8 +1374,7 @@ impl Analyzer<'_> {
             TirStmtKind::Return { value } => {
                 live.clear();
                 if let Some(v) = value {
-                    self.escape_persisting_ref(v, record);
-                    self.walk_expr(v, live, record);
+                    self.walk_persisting(v, live, record);
                 }
             }
             TirStmtKind::If {
@@ -1410,8 +1410,7 @@ impl Analyzer<'_> {
                 self.exits.pop();
             }
             TirStmtKind::TaskReturn { value } => {
-                self.escape_persisting_ref(value, record);
-                self.walk_expr(value, live, record);
+                self.walk_persisting(value, live, record);
             }
             TirStmtKind::VariadicForOf { .. } => unreachable!("filtered by has_unsupported_form"),
         }
@@ -1490,11 +1489,9 @@ impl Analyzer<'_> {
 
     /// A scrutinee that is a place over a `&` / `&mut` is a transient borrow,
     /// like a `&` call argument: it holds only for the match, so the referent
-    /// stays move-eligible afterwards. Its arm bindings name that storage, and
-    /// an escape of one of them reaches the referent through
-    /// [`Analyzer::propagate_escapes_to_referents`]. Reads of an arm binding
-    /// never move it — `&scrut` is not an owned value, so the binding is never
-    /// fresh — which is what leaves a borrow as the only way out.
+    /// stays move-eligible afterwards. What the arms bind reaches the referent
+    /// through [`Analyzer::propagate_escapes_to_referents`] instead — and only
+    /// as a borrow, `&scrut` never being an owned value to move out of.
     fn walk_scrutinee(&mut self, scrut: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
         if is_borrowed_place(scrut) {
             self.borrow_read(scrut, live, record);
@@ -1504,11 +1501,9 @@ impl Analyzer<'_> {
     }
 
     /// Close the escape set over the reference bindings that name someone else's
-    /// storage: an escaped reference local reaches the root it was taken over,
-    /// so that root escapes too. Deferred to here because the backward walk
-    /// reaches the escape before the binding that roots it — and because a match
-    /// arm binding over a `&`-borrowed scrutinee is exactly this shape, which is
-    /// what keeps [`Analyzer::walk_scrutinee`]'s transient reading sound.
+    /// storage: an escaped reference local carries the root it was taken over
+    /// with it. Deferred to here because the backward walk reaches the escape
+    /// before the binding that roots it.
     fn propagate_escapes_to_referents(&mut self, func: &TirFunction, type_table: &TypeTable) {
         let mut work: Vec<u32> = self.borrow_escaped.keys().copied().collect();
         let mut seen: IndexSet<u32> = work.iter().copied().collect();
@@ -1561,8 +1556,7 @@ impl Analyzer<'_> {
                     live.swap_remove(index);
                     self.walk_expr(value, live, record);
                 } else {
-                    self.escape_persisting_ref(value, record);
-                    self.walk_expr(value, live, record);
+                    self.walk_persisting(value, live, record);
                     self.walk_expr(target, live, record);
                 }
             }
@@ -1654,8 +1648,7 @@ impl Analyzer<'_> {
                     self.collect_place_moves(&children, live);
                 }
                 for f in fields.iter().rev() {
-                    self.escape_persisting_ref(&f.value, record);
-                    self.walk_expr(&f.value, live, record);
+                    self.walk_persisting(&f.value, live, record);
                 }
             }
             TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
@@ -1664,19 +1657,16 @@ impl Analyzer<'_> {
                     self.collect_place_moves(&children, live);
                 }
                 for e in elements.iter().rev() {
-                    self.escape_persisting_ref(e, record);
-                    self.walk_expr(e, live, record);
+                    self.walk_persisting(e, live, record);
                 }
             }
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => {
-                self.escape_persisting_ref(p, record);
-                self.walk_expr(p, live, record);
+                self.walk_persisting(p, live, record);
             }
             TirExprKind::GlobalVarSet { value, .. } => {
-                self.escape_persisting_ref(value, record);
-                self.walk_expr(value, live, record);
+                self.walk_persisting(value, live, record);
             }
             // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
@@ -1900,13 +1890,6 @@ fn is_scalar_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
 
 /// A `&T` / `&mut T` parameter borrows the caller's storage, so it is never a
 /// movable owned value. Everything else a function takes by value it owns.
-fn is_reference_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    )
-}
-
 fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {
     let mut out = a.clone();
     for &id in b {
