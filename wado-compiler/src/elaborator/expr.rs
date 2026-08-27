@@ -4279,9 +4279,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         self.mark_generic_instantiation_union(struct_lit.id, compose_union);
 
-        // Reify rebuilds the anonymous `StructLiteral`; the combined
-        // walk registered the struct type, field info, and pending TirStruct
-        // above for their side effects. Project only the type.
+        // Reify rebuilds the anonymous `StructLiteral`; the body walk
+        // registered the struct type, field info, and pending TirStruct above
+        // for their side effects. Project only the type.
         struct_type
     }
 

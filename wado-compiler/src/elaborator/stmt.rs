@@ -23,8 +23,8 @@ enum RefBinding {
 }
 
 /// Variables a pattern binds into the function context, as `(name,
-/// local_index, type_id)` triples in declaration (pre-order). The combined
-/// walk's pattern resolvers return these instead of a `TirPattern`: reify
+/// local_index, type_id)` triples in declaration (pre-order). The body walk's
+/// pattern resolvers return these instead of a `TirPattern`: reify
 /// rebuilds the real pattern node independently, so the only thing the walk
 /// must surface is the binding set (used by or-pattern validation).
 type PatBindings = Vec<(String, u32, TypeId)>;
@@ -2005,8 +2005,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_info.cases.iter().any(|c| c.name == none_case_name)
     }
 
-    /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the combined
-    /// walk, emitting the bad-bounds / reversed / empty diagnostics. Range
+    /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,
+    /// emitting the bad-bounds / reversed / empty diagnostics. Range
     /// patterns bind nothing and reify rebuilds the real `TirPattern::Range`,
     /// so no pattern node is produced here.
     fn resolve_range_pattern(

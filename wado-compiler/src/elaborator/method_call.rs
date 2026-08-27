@@ -680,16 +680,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
-<<<<<<< HEAD
-        if let Some(base_type_id) = owner.inherited() {
-            let newtype_id = self.tysys.get_base_type(receiver);
-||||||| abef9eff1
-        if let Some(base_type_id) = owner.inherited() {
-            let newtype_id = self.tysys.get_base_type(receiver.type_id);
-=======
         if let Some(base_type_id) = owner.newtype_base() {
-            let newtype_id = self.tysys.get_base_type(receiver.type_id);
->>>>>>> origin/main
+            let newtype_id = self.tysys.get_base_type(receiver);
             return_type =
                 self.tysys
                     .substitute_newtype_in_type(return_type, base_type_id, newtype_id);
@@ -697,9 +689,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Address-taken tracking for an implicit `&mut self` borrow on a
         // primitive local receiver is owned by reify (`reify.rs` method-call
-        // arm marks `address_taken_locals` on the TIR it emits); the combined
-        // walk does not compute it, since `resolve_ident` returns a
-        // placeholder.
+        // arm marks `address_taken_locals` on the TIR it emits); the body walk
+        // has no node to mark, since `resolve_ident` answers with a type.
 
         if self_kind == ast::SelfKind::MutRef && !is_ref_impl {
             self.check_mut_receiver(receiver, receiver_ast, method_name, span, ctx);
@@ -1811,8 +1802,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get_newtype_base(target_type_id);
             let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
             if base_of_target == Some(arg_type) || base_of_arg == Some(target_type_id) {
-                // Reify rebuilds the newtype `Cast`; the combined
-                // walk projects only the result type.
+                // Reify rebuilds the newtype `Cast`; the body walk projects
+                // only the result type.
                 return target_type_id;
             }
         }
@@ -2243,10 +2234,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Reify rebuilds the static-method `Call` TIR from the
-        // recorded `static_method_dispatch` + resolved args; the combined
-        // walk projects only the result type. `args` was resolved above for
-        // its fact-recording side effects.
+        // Reify rebuilds the static-method `Call` TIR from the recorded
+        // `static_method_dispatch` + resolved args; the body walk projects only
+        // the result type. `args` was resolved above for its fact-recording
+        // side effects.
         return_type
     }
 
