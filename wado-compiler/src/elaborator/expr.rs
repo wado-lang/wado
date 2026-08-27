@@ -170,6 +170,22 @@ pub(super) struct ResolvedField {
     span: Span,
 }
 
+/// Pair each written field with the declared type of the slot it fills.
+///
+/// `declared` is in declaration order; `fields` is not. A literal carrying a
+/// spread holds only the fields written beside it, so position in `fields` says
+/// nothing about which slot a field fills — `field_index` is what does.
+fn declared_pairs<'a>(
+    fields: &'a [ResolvedField],
+    declared: &'a [TypeId],
+) -> impl Iterator<Item = (&'a ResolvedField, TypeId)> {
+    fields.iter().filter_map(|field| {
+        declared
+            .get(field.field_index as usize)
+            .map(|&type_id| (field, type_id))
+    })
+}
+
 /// Shape projection of a match-arm pattern, used solely for exhaustiveness /
 /// overlap analysis on the AST. It captures exactly the pattern shape the
 /// checks read, one distinction per `TirPattern` distinction they depend on:
@@ -4337,7 +4353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // prelude's `IterChain { first: *self, second: other }` into `expected
         // StrCharIter, found J`. Only the literal's own fields are consulted.
         let mut agreed: IndexMap<TypeId, TypeId> = IndexMap::default();
-        for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
+        for (struct_field, expected_field_type) in declared_pairs(fields, &field_types) {
             let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
             super::infer::unify(
                 &self.tysys.type_table,
@@ -4371,7 +4387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
 
-        for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
+        for (struct_field, expected_field_type) in declared_pairs(fields, &field_types) {
             infer.add(expected_field_type, struct_field.type_id);
         }
 
