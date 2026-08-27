@@ -530,18 +530,22 @@ fn rule_call_bindings(rule: &Rule) -> List<[String, String]> {
 
 fn push_rule_call_bindings(ops: &List<Op>, out: &mut List<[String, String]>) {
     for let op of ops {
-        match op {
-            RuleCall(rc) => out.push([rc.dedup_base, rc.field]),
-            Repeat(rep) => push_rule_call_bindings(&[rep.body], out),
-            ListLabel(ll) => push_rule_call_bindings(&[ll.inner], out),
-            Group(g) => {
-                for let a of &g.alts {
-                    push_rule_call_bindings(&a.ops, out);
-                }
-            },
-            _ => {
-            },
-        }
+        push_op_rule_call_bindings(op, out);
+    }
+}
+
+fn push_op_rule_call_bindings(op: &Op, out: &mut List<[String, String]>) {
+    match op {
+        RuleCall(rc) => out.push([rc.dedup_base, rc.field]),
+        Repeat(rep) => push_op_rule_call_bindings(&rep.body, out),
+        ListLabel(ll) => push_op_rule_call_bindings(&ll.inner, out),
+        Group(g) => {
+            for let a of &g.alts {
+                push_rule_call_bindings(&a.ops, out);
+            }
+        },
+        _ => {
+        },
     }
 }
 
@@ -559,20 +563,19 @@ pub fn gen_alt_actions_at(
     if !ctx.emit_actions() {
         return;
     }
-    ctx.set_action_at_alt_end(at_alt_end);
     for let a of actions {
         if a.before_index != before {
             continue;
         }
         match a.kind {
-            Action => gen_action_body(w, &a.source, ctx),
+            Action => gen_action_body(w, &a.source, ctx, at_alt_end),
             Predicate => {
                 if ctx.is_predicate_gated(a.source.action_id) {
                     ctx.mark_action_seen(a.source.action_id);
                 } else if predicate_selects_alternative(before, ctx) {
                     warn_unsupported_prediction_predicate(&a.source, ctx);
                 } else {
-                    gen_predicate_guard(w, &a.source, ctx);
+                    gen_predicate_guard(w, &a.source, ctx, at_alt_end);
                 }
             },
         }
@@ -998,16 +1001,21 @@ pub fn join_gate_conds(conds: &List<String>) -> String {
 /// rule's environment — its own `vals` local (`$v`) and child bindings
 /// (`$a.v`). A reference the translator cannot emit yet is a loud
 /// `UnsupportedAction` diagnostic rather than invalid `$x`.
-pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext, at_alt_end: bool) {
     ctx.mark_action_seen(src.action_id);
-    if let Some(code) = translate_action_or_warn(src, false, ctx) {
+    if let Some(code) = translate_action_or_warn(src, false, ctx, at_alt_end) {
         emit_action_stmt(w, &code);
     }
 }
 
 /// Translate an action (a statement list) or a predicate condition (an
 /// expression) to Wado, warning (loud) and returning `null` on failure.
-fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
+fn translate_action_or_warn(
+    src: &ActionSource,
+    is_predicate: bool,
+    ctx: &mut GenContext,
+    at_alt_end: bool,
+) -> Option<String> {
     if body_names_unwired_base(&src.text, ctx) {
         // A refused base already reported the cause; an undeclared one has not.
         if !ctx.parser_superclass_declared() {
@@ -1043,7 +1051,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             ctx.alt_bindings(),
             ctx.grammar_name(),
             ctx.action_member_methods(),
-            ctx.action_at_alt_end(),
+            at_alt_end,
         );
     } else {
         translate_action(
@@ -1056,7 +1064,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             ctx.grammar_name(),
             ctx.action_member_methods(),
             ctx.expected_names(),
-            ctx.action_at_alt_end(),
+            at_alt_end,
         );
     };
     return match translated {
@@ -1092,9 +1100,9 @@ pub fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext
 /// rule fails into normal recovery. Prediction-time gating of which alt to
 /// take is Phase 2 proper; this serves mid-alt predicates and single-alt-rule
 /// gates, where a false predicate is a parse failure at that point.
-fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext, at_alt_end: bool) {
     ctx.mark_action_seen(src.action_id);
-    let cond = match translate_action_or_warn(src, true, ctx) {
+    let cond = match translate_action_or_warn(src, true, ctx, at_alt_end) {
         Some(c) => c,
         None => {
             return;

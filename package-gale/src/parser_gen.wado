@@ -4375,8 +4375,7 @@ fn gen_op_transparent_optional_with_cond(
 /// last alternative emitted set it to.
 fn gen_prequel_action(w: &mut CodeWriter, src: &ActionSource, rule_name: &String, at_entry: bool, ctx: &mut GenContext) {
     ctx.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
-    ctx.set_action_at_alt_end(!at_entry);
-    gen_action_body(w, src, ctx);
+    gen_action_body(w, src, ctx, !at_entry);
     ctx.set_expected_names(String::new());
 }
 
@@ -4463,9 +4462,16 @@ fn optional_entry_test(own: &String, inner: &Element, kind: GroupBranchKind, ctx
 /// General shape holds a wildcard-led alternative; every other has one branch.
 fn group_branch_kind(op: &Op) -> GroupBranchKind {
     if let Group(g) = op {
-        if let General(_) = &g.shape {
-            return GroupBranchKind::General;
-        }
+        return shape_branch_kind(&g.shape);
+    }
+    return GroupBranchKind::RuleRef;
+}
+
+/// The same answer for a group op already in hand — reading its shape must not
+/// cost a copy of the whole op.
+fn shape_branch_kind(shape: &GroupShape) -> GroupBranchKind {
+    if let General(_) = shape {
+        return GroupBranchKind::General;
     }
     return GroupBranchKind::RuleRef;
 }
@@ -4800,7 +4806,7 @@ fn gen_op_group(
     // `peel_scalar_label` helper handles theoretical multi-level
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
-    let entry = open_group_entry(w, elem, group_branch_kind(&Op::Group(*g_op)), ctx, entry);
+    let entry = open_group_entry(w, elem, shape_branch_kind(&g_op.shape), ctx, entry);
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts),

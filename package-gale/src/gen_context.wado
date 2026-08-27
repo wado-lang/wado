@@ -236,9 +236,6 @@ pub struct GenContext {
     /// Whether the group body being emitted has alternatives to choose between,
     /// or null outside every group — an alt-initial predicate selects only there.
     alt_choice: Option<bool>,
-    /// Whether the action being emitted runs after the alternative's last
-    /// element, so every element it binds has matched.
-    action_at_alt_end: bool,
     /// Vocabulary display names by kind id (`vocab_display_names`), the names an
     /// expected-token set renders through.
     vocab_names: List<String>,
@@ -313,7 +310,6 @@ impl GenContext {
             action_seen: [],
             predicate_gated: [],
             alt_choice: null,
-            action_at_alt_end: false,
             vocab_names: [],
             expected_names: "",
             predicate_fns: [],
@@ -722,16 +718,6 @@ impl GenContext {
     /// outside every group, where the rule's own alternative count answers.
     pub fn in_alt_choice(&self) -> Option<bool> {
         return self.alt_choice;
-    }
-
-    /// Whether the action being emitted runs past the alternative's last
-    /// element. Only there has every element the alternative binds matched.
-    pub fn set_action_at_alt_end(&mut self, at_end: bool) {
-        self.action_at_alt_end = at_end;
-    }
-
-    pub fn action_at_alt_end(&self) -> bool {
-        return self.action_at_alt_end;
     }
 
     /// The rendered expected-token set the action about to be emitted would see.
