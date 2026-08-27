@@ -148,19 +148,28 @@ same codegen, just faster runtime behavior.
 
 ### CM Thread Primitives
 
-Wado already declares CM thread primitives in `wado-compiler/lib/core/builtin.wado`:
+The CM defines a `thread.*` built-in family — `thread.index`, `thread.new-indirect`,
+`thread.resume-later`, `thread.suspend`, `thread.yield`, and the
+`thread.{suspend,yield}-then-{resume,promote}` switching pairs. These are **CM-level**
+cooperative scheduling primitives, distinct from the Wasm Stack Switching instructions:
+they operate on CM green threads managed by the runtime, and until
+shared-everything-threads lands they interleave on a single core.
 
-```wado
-fn thread_yield(cancellable: i32);
-fn thread_suspend(cancellable: i32) -> i32;
-fn thread_suspend_to(target: i32, cancellable: i32) -> i32;
-fn thread_suspend_to_suspended(target: i32, cancellable: i32);
-fn thread_unsuspend(target: i32);
-fn thread_new_indirect(func_type_index: i32, table_index: i32);
-```
+Wado declares none of them, and should not until the encoding settles. The opcodes are
+still being reassigned in place: against the pinned `wasmparser` 0.252, `0x28` is
+`thread.suspend-to-suspended`, `0x2a` is `thread.unsuspend` and `0x2c` is
+`thread.suspend-to`; upstream the same three bytes are `thread.resume-later`,
+`thread.suspend-then-resume` and `thread.suspend-then-promote`. The set moved with them:
+`thread.suspend-to` is gone, `thread.{suspend,yield}-then-promote` are new. Since the
+built-ins share `[] -> [i32]` shapes, a declaration written against either generation
+validates under the other and means something else, so a wasmtime bump would break it
+silently rather than loudly.
 
-These are **CM-level** cooperative scheduling primitives, distinct from the Wasm Stack
-Switching instructions. They operate on CM tasks/threads managed by the runtime.
+Two further gates: the 🧵 feature is off by default in both `wasmparser` and wasmtime,
+whose own docs call its support "very incomplete"; and `thread.new-indirect` passes the
+new thread a single `i32`, so a GC language needs a side table to hand a spawned thread
+anything else — the spec defers loosening this until the Canonical ABI is extended for
+GC. See [Non-Goals](#5-non-goals).
 
 ---
 
@@ -419,15 +428,16 @@ suspension truly invisible at the language level.
 
 ## Appendix: Wasmtime Status
 
-As of wasmtime v42 (2026-03):
+As of wasmtime v47.0.3 (the pinned version), per `wado-cli/src/runtime.rs`:
 
-| Feature              | Config Flag                                 | Status                          |
-| -------------------- | ------------------------------------------- | ------------------------------- |
-| CM Async             | `wasm_component_model_async(true)`          | Enabled                         |
-| CM Async Built-ins   | `wasm_component_model_async_builtins(true)` | Enabled                         |
-| CM Async Stackful    | `wasm_component_model_async_stackful(true)` | Enabled (host fibers)           |
-| Wasm Stack Switching | `wasm_stack_switching(true)`                | Commented out (platform issues) |
+| Feature              | Config Flag                                      | Status                                                          |
+| -------------------- | ------------------------------------------------ | --------------------------------------------------------------- |
+| CM Async             | `wasm_component_model_async(true)`               | Enabled                                                         |
+| CM Async Built-ins   | `wasm_component_model_more_async_builtins(true)` | Enabled                                                         |
+| CM Async Stackful    | `wasm_component_model_async_stackful(true)`      | Enabled (host fibers)                                           |
+| CM Threading (🧵)    | `wasm_component_model_threading(true)`           | Not enabled; wasmtime calls its own support "_very_ incomplete" |
+| Wasm Stack Switching | `wasm_stack_switching(true)`                     | Commented out (platform issues)                                 |
 
-The `wasm_stack_switching` flag is disabled in `wado-cli/src/runtime.rs:71` with
-the comment "Not supported on macOS". When enabled, it would activate the
+The `wasm_stack_switching` flag is commented out in `wado-cli/src/runtime.rs` with
+the note "Not supported on macOS". When enabled, it would activate the
 `cont.new`/`resume`/`suspend` instructions in cranelift's code generator.
