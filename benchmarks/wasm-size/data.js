@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787809771710,
+  "lastUpdate": 1787840847566,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51449,6 +51449,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/abef9eff1ac2da98ae97edc844fec83d600c2861"
         },
         "date": 1787809771296,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 258232,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "120f1358e31e6f5c59ea8e06b2b19285c24f7fa1",
+          "message": "Merge pull request #1909 from wado-lang/claude/extern-ref-resource-continuation-nfvff0\n\nfeat(cm): lower an extern-handle resource to the universal handle",
+          "timestamp": "2026-08-27T22:58:33+09:00",
+          "tree_id": "6e326fdf360179073b8f8b923ee6c0b475138678",
+          "url": "https://github.com/wado-lang/wado/commit/120f1358e31e6f5c59ea8e06b2b19285c24f7fa1"
+        },
+        "date": 1787840847203,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
