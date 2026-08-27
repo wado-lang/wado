@@ -696,8 +696,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_mut_receiver(receiver, receiver_ast, method_name, span, ctx);
         }
 
-        // Adjust receiver based on what the method expects (self_kind)
-        receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl);
+        receiver = super::method_lookup::adjusted_receiver_type(
+            receiver,
+            self_kind,
+            is_ref_impl,
+            &self.tysys.type_table,
+        );
 
         let mut subst_ctx = SubstitutionContext::new();
 
@@ -1091,9 +1095,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
 
-        // Reify rebuilds the method-call TIR from the recorded dispatch;
-        // the walk projects only the result type. `receiver` and `args`
-        // were resolved above for their fact-recording side effects.
         MethodCallOutcome {
             type_id: return_type,
             dispatch,
@@ -1659,9 +1660,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
-                    // Reify rebuilds the `VariantConstruct` from
-                    // the AST + variant info; the body walk projects only
-                    // the result type.
                     return target_type_id;
                 }
                 // If no matching case, fall through to general method lookup
@@ -1766,10 +1764,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
 
-                    // Reify rebuilds the `VariantConstruct` from
-                    // the AST + variant info; the body walk projects only
-                    // the result type. The payload was already resolved (and
-                    // typechecked) above for its fact-recording side effects.
                     return result_type;
                 }
                 // If no matching case, fall through to general method lookup
@@ -2234,10 +2228,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Reify rebuilds the static-method `Call` TIR from the recorded
-        // `static_method_dispatch` + resolved args; the body walk projects only
-        // the result type. `args` was resolved above for its fact-recording
-        // side effects.
         return_type
     }
 

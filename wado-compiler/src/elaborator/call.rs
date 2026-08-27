@@ -1019,11 +1019,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     self.record_generic_instantiation(call.id, type_args, variant_type);
 
-                    // Reify rebuilds the `VariantConstruct` from
-                    // the AST + variant info + recorded `generic_instantiations`;
-                    // the body walk projects only the result type. The
-                    // payload was resolved above (and fed variant type-arg
-                    // inference) for its fact-recording side effects.
                     return variant_type;
                 }
                 // If no matching case, check for From<T> synthesis requests
@@ -1176,8 +1171,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             };
                             self.record_generic_instantiation(call.id, type_args, variant_type);
 
-                            // Reify rebuilds the `VariantConstruct`;
-                            // the body walk projects only the result type.
                             return variant_type;
                         }
                     }
@@ -1683,7 +1676,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify (`reify_call`'s indirect-call branch) rebuilds
         // the `IndirectCall` from the AST — resolving the callee, applying
-        // `deref_to_value_static`, and reifying the args — so the body walk
+        // `deref_to_value`, and reifying the args — so the body walk
         // projects only the result type. The `args` Vec was built above for the
         // `resolve_expr` / `typecheck` fact-recording side effects.
         return_type

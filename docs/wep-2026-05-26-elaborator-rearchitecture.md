@@ -580,7 +580,7 @@ an empty map instead of failing.
 Closing it: one home. Either the flat `Semantics` maps become views over
 `ModuleSemantics`, or the five fields leave `TypeAnnotations` outright.
 
-### Two more implementations of "how a frame is left"
+### Two more implementations of type-parameter substitution
 
 `elaborator/type_resolution.rs` holds an AST-level `substitute_type_params`
 that replaces type parameters by _name_ over an `ast::Type` — one helper
@@ -596,8 +596,9 @@ one implementation this WEP names, and delete them.
 Boundaries by type hold for the four components, but the walker still carries
 544 methods against `TypeSystem`'s 74, and the dispatch and call paths
 (`method_lookup.rs`, `call.rs`) remain predominantly walker-side even where
-they ask no walk-state question. 17 methods exceed 400 lines, `resolve_call`
-among them at 1308. Separately, the decl pass answers each of its questions
+they ask no walk-state question. Methods exceeding 400 lines remain, with
+`resolve_call` the largest at 1282. Separately, the decl pass answers each of
+its questions
 with its own scan of every module's item list — more than a dozen in total — so
 a new declaration fact defaults to a new scan rather than a place in an
 existing walk.

@@ -1422,20 +1422,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Adjust the receiver expression to match what the method's self parameter expects.
-    ///
-    /// When `is_ref_impl` is true, the method was found on a reference type impl
-    /// (e.g., `impl Trait for &T`). In this case, Self is `&T`, so `&self` means `&&T`.
-    /// The receiver (which is `&T`) needs an additional `&` wrapping.
-    pub(super) fn adjust_receiver_for_self_kind(
-        &mut self,
-        receiver: TypeId,
-        self_kind: ast::SelfKind,
-        is_ref_impl: bool,
-    ) -> TypeId {
-        adjusted_receiver_type(receiver, self_kind, is_ref_impl, &self.tysys.type_table)
-    }
-
     /// The typed receiver chain: `type_key` plus the newtype/flags base heads
     /// reachable from it. A reference head has no newtype base, so it is
     /// returned as a singleton; a named head walks its newtype chain via
@@ -3304,17 +3290,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::DesugarKind::IndexMutMethodCall,
         );
 
-        // Reify (`reify_index_mut_method_call`) rebuilds the
-        // outer method call (and the `__index_mut_val` synthesis) from the
-        // recorded `method_dispatch` + `IndexMutMethodCall` desugar; the
-        // body walk projects only the result type. The args were resolved
-        // above for their fact-recording side effects.
+        // The `__index_mut_val` local reify synthesizes comes from the
+        // recorded `IndexMutMethodCall` desugar, not from this walk.
         Some(return_type)
     }
 }
 
 /// The type a receiver takes on once adjusted for the callee's `self` kind.
-/// The body walk needs only this; reify's `adjust_receiver_for_self_kind_static`
+/// The body walk needs only this; reify's `adjust_receiver_for_self_kind`
 /// builds the node that carries the same type.
 pub(super) fn adjusted_receiver_type(
     receiver: TypeId,

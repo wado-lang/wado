@@ -160,8 +160,7 @@ pub(super) fn compose_union_plan(
 }
 
 /// A struct-literal field as the body walk knows it: the name it was written
-/// under, its declared position, and the type its value resolved to. Reify
-/// builds the `TirStructField` from the AST and the recorded types.
+/// under, its declared position, and the type its value resolved to.
 pub(super) struct ResolvedField {
     name: String,
     type_id: TypeId,
@@ -170,20 +169,14 @@ pub(super) struct ResolvedField {
     span: Span,
 }
 
-/// Pair each written field with the declared type of the slot it fills.
-///
-/// `declared` is in declaration order; `fields` is not. A literal carrying a
-/// spread holds only the fields written beside it, so position in `fields` says
-/// nothing about which slot a field fills — `field_index` is what does.
-///
-/// A field the declaration does not have keeps the position it was written at,
-/// so the name is what confirms the slot: a typo must not stand as evidence for
-/// whichever slot its position happens to land on.
+/// Pair each written field with the declared type of its slot. `fields` is
+/// neither ordered nor complete, so the index decides and the name confirms it.
 fn declared_pairs<'a>(
     fields: &'a [ResolvedField],
     declared: &'a [TypeId],
     declared_names: &'a [&'a str],
 ) -> impl Iterator<Item = (&'a ResolvedField, TypeId)> {
+    debug_assert_eq!(declared.len(), declared_names.len());
     fields.iter().filter_map(|field| {
         let slot = field.field_index as usize;
         if declared_names.get(slot) != Some(&field.name.as_str()) {
@@ -655,8 +648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
-            // Resolve the constant body for its fact-recording side effects;
-            // reify re-reifies it (`reify_ident`). Not an l-value.
+            // Not an l-value.
             let vantage = (assoc.module.clone(), assoc.value.id().space());
             let const_module = assoc.module.clone();
             self.with_default_scope_module(Some(const_module), |s| {
@@ -1941,8 +1933,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
                 self.record_desugar(if_expr.id, super::sem::types::DesugarKind::IfLetChain);
-                // Resolve else_block in outer scope (chain bindings not visible
-                // there) for its fact-recording side effects; reify rebuilds it.
+                // The chain bindings are not visible in `else`, so resolve it
+                // in the outer scope.
                 if let Some(b) = &if_expr.else_block {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
@@ -2485,12 +2477,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Reify rebuilds the `Match` node from the AST
-        // (`reify_match_expr`); the body walk resolved the scrutinee and
-        // arms above for their fact-recording side effects and ran
-        // exhaustiveness / null / arm-agreement diagnostics. No analysis reads
-        // the resolved match structure (missing-return walks arms off the AST
-        // in `control_flow.rs`), so project only the result type.
+        // No analysis reads a resolved match structure — missing-return walks
+        // the arms off the AST in `control_flow.rs`.
         type_id
     }
 
@@ -3633,10 +3621,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve field expressions, converting tuple literals to arrays when needed.
         // For generic structs, tuple-to-sequence coercion may be deferred to a second
         // pass after type arguments are inferred from field values.
-        // Indexes into `struct_lit.fields`. The resolved field this reopens is
-        // found by name: `fields` is sorted into declaration order before the
-        // second pass runs, so a position captured here would name another
-        // field by then.
+        // Indexes into `struct_lit.fields`, not into `fields`, which is sorted
+        // into declaration order before the second pass reads it.
         let mut deferred_coercions: Vec<usize> = Vec::new();
         let fields: Vec<ResolvedField> = struct_lit
             .fields

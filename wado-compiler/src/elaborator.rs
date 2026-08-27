@@ -1,12 +1,7 @@
-//! Type resolution phase for Wado
-//!
-//! The type elaborator:
-//! 1. Takes the parsed AST and symbol table from the analyzer
-//! 2. Performs type inference and type checking
-//! 3. Produces the Typed Intermediate Representation (TIR)
-//!
-//! All type resolution happens in this phase. The output TIR has fully
-//! resolved types on every expression, making code generation mechanical.
+//! Type resolution for Wado. The body walk answers with types and records the
+//! facts reify then builds the TIR from — so a walker returning only a
+//! `TypeId` is the rule, and the resolutions it drops on the floor ran to
+//! record those facts.
 
 pub(crate) mod assert;
 mod call;
@@ -737,7 +732,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Record a method-dispatch decision, centralised here rather than at the AST
     /// wrapper so every dispatched call leaves one uniform entry. A synthetic
     /// call passes `ast_id == None` and records nothing. Reify feeds
-    /// `is_ref_impl` and `self_kind` to `adjust_receiver_for_self_kind_static`
+    /// `is_ref_impl` and `self_kind` to `adjust_receiver_for_self_kind`
     /// instead of re-running impl lookup.
     pub(super) fn record_method_dispatch(
         &mut self,

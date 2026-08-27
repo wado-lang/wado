@@ -40,11 +40,8 @@ const BUILTIN_GENERIC_HEADS: &[&str] = &[
 ];
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Walk a block for its fact-recording side effects. Reify rebuilds the
-    /// `TirBlock` from the AST; this walk
-    /// resolves each statement (recording types / dispatch / desugar facts and
-    /// emitting diagnostics) and manages the lexical scope. `expected_type` is
-    /// still propagated to the trailing statement so the coercion fact lands.
+    /// Walk a block: resolve each statement and manage the lexical scope.
+    /// `expected_type` reaches the trailing statement so its coercion fact lands.
     pub(super) fn resolve_block(
         &mut self,
         block: &Block,

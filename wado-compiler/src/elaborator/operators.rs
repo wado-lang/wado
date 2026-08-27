@@ -1765,12 +1765,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.exit_scope();
 
-        // Reify rebuilds the `(a<b) && (b<c) …` Block (with the
-        // `__mK` middle bindings) from the recorded `ComparisonChain`
-        // desugar + the AST; the body walk projects only the boolean
-        // result type. The operand resolutions, middle-binding local
-        // allocations, and per-comparison dispatch above ran for their
-        // fact-recording side effects.
         TypeTable::BOOL
     }
 
