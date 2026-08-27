@@ -110,7 +110,8 @@ pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> S
         // `as_slice()` — hands it out with the result, and the walk finds any
         // further escape itself. With no result to hand it to, or no body to
         // read (`List::push` stores through a builtin), the strong reading is
-        // the only sound one.
+        // the only sound one. See the known gap in WEP 2026-05-21 for what the
+        // reading still rests on.
         let declared = declared_positions(&func);
         let hands_out_result =
             func.body.is_some() && !matches!(type_table.get(func.return_type), ResolvedType::Unit);
@@ -262,8 +263,15 @@ impl StoresWalker<'_> {
                 .collect(),
             // Only the positions the callee routes into its result reach the
             // caller through the call's value; an escaping one is marked at the
-            // call site instead.
+            // call site instead. That routing is read off a body, and a builtin
+            // has none: `a[i]`'s `array_get_ref` hands back a slot of its first
+            // argument while declaring nothing, so a reference-typed result is
+            // read as carrying every argument — the reading `List::index_ref`
+            // and every wrapper of it depends on.
             TirExprKind::Call { func, args, .. } => {
+                if is_reference_type(expr.type_id, self.type_table) {
+                    return args.iter().flat_map(|a| self.carries(&a.expr)).collect();
+                }
                 let facts = self.oracle.direct(func);
                 self.carried_args(args.iter().map(|a| &a.expr), &facts.into_result)
             }
@@ -341,14 +349,14 @@ impl StoresWalker<'_> {
 
     /// The root local of a place, or `None` for a place this analysis cannot
     /// root (a call result, an rvalue).
-    fn place_root_local(place: &TirExpr) -> Option<u32> {
+    fn place_root(place: &TirExpr) -> Option<&TirExpr> {
         match &place.kind {
-            TirExprKind::Local { index, .. } => Some(*index),
+            TirExprKind::Local { .. } => Some(place),
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. } => Self::place_root_local(inner),
+            | TirExprKind::Cast { expr: inner, .. } => Self::place_root(inner),
             _ => None,
         }
     }
@@ -375,34 +383,23 @@ impl StoresWalker<'_> {
         if carried.is_empty() {
             return;
         }
-        match Self::place_root_local(target) {
-            Some(root)
-                if !self
-                    .local_is_reference(root, target)
-                    .unwrap_or(/* unknown root type */ true) =>
-            {
-                self.carry_into(root, &carried);
+        // A bare local target rebinds the local — `cur = cur.next` retargets the
+        // walker, it does not write through it — so even a reference-typed one
+        // only becomes a carrier. Only a projection reaches a referent.
+        if let TirExprKind::Local { index, .. } = &target.kind {
+            self.carry_into(*index, &carried);
+            return;
+        }
+        // Writing through a reference local lands in its referent, storage the
+        // caller owns; writing into a local's own aggregate does not.
+        match Self::place_root(target) {
+            Some(root) if !is_reference_type(root.type_id, self.type_table) => {
+                let TirExprKind::Local { index, .. } = &root.kind else {
+                    unreachable!("place_root yields a Local")
+                };
+                self.carry_into(*index, &carried);
             }
             _ => self.escape(&carried),
-        }
-    }
-
-    /// Whether writing through `root` reaches storage the caller owns: the root
-    /// is a reference local, so the write lands in its referent. `None` when the
-    /// root's type is not on hand.
-    fn local_is_reference(&self, root: u32, target: &TirExpr) -> Option<bool> {
-        if let TirExprKind::Local { index, .. } = &target.kind
-            && *index == root
-        {
-            return Some(is_reference_type(target.type_id, self.type_table));
-        }
-        match &target.kind {
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. } => self.local_is_reference(root, inner),
-            _ => None,
         }
     }
 

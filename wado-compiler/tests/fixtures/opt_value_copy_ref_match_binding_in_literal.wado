@@ -1,0 +1,50 @@
+// The companion to `opt_value_copy_ref_match_binding_stored`: a `stores` callee
+// is not the only way an arm binding over a `&`-borrowed scrutinee outlives the
+// match. An aggregate literal keeps the reference just as well, so the borrow
+// still outlives the call and the later whole-value read copies rather than
+// moves.
+
+use { println, Stdout } from "core:cli";
+
+struct Rep { tags: List<String> }
+
+variant Op { Plain(i32), Repeat(Rep) }
+
+struct Held { r: &Rep }
+
+fn make(i: i32) -> Op {
+    if i % 2 == 0 {
+        return Op::Repeat(Rep { tags: ["a", "b"] });
+    }
+    return Op::Plain(i);
+}
+
+fn build(n: i32) -> i32 {
+    let mut ops: List<Op> = [];
+    let mut held: List<Held> = [];
+    let mut tagged = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let op = make(i);
+        if let Repeat(rep) = &op {
+            held.push(Held { r: rep });
+            tagged += rep.tags.len();
+        }
+        ops.push(op);
+    }
+    return ops.len() * 10 + tagged + held.len();
+}
+
+export fn run() with Stdout {
+    println(`${build(4)}`);
+}
+
+__DATA__
+{
+    "stdout": "46\n",
+    "wir_expect:O0": [
+        "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"
+    ],
+    "wir_expect:O2": [
+        "array_clone_deep_prefix"
+    ]
+}

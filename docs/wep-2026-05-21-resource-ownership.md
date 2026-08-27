@@ -271,8 +271,10 @@ where it cannot prove move / share / fresh; no elision pass):
   the same way, so `if let Repeat(r) = &op { … }; ops.push(op)` moves `op`
   instead of deep-copying it. What the arms bind names the scrutinee's storage,
   so an escape recorded against a binding closes back over the binding's
-  referent (`propagate_escapes_to_referents`) — a reference binding handed to a
-  `stores` callee pins the scrutinee exactly as `&op` itself would.
+  referent (`propagate_escapes_to_referents`). A reference binding therefore
+  pins the scrutinee exactly as `&op` itself would wherever it outlives the
+  match — a `stores` callee, an aggregate literal, a global, a write through a
+  place, the result.
 - Confinement — `confine.rs` per-parameter escape fixpoint. A builtin declares
   no function, so it is absent from the table that walk builds; reading absence
   as an opaque callee made every parameter handed to one escape. `a[i]` is a
@@ -289,7 +291,10 @@ where it cannot prove move / share / fresh; no elision pass):
   now says so. A declared `stores[p]` names no destination: a value-returning
   body is read as handing it out with the result and the walk finds any further
   escape itself, while a void one (`List::push`, storing through a builtin) has
-  nowhere visible to put it and keeps the strong reading.
+  nowhere visible to put it and keeps the strong reading. A builtin has no body
+  to read either, so a reference-typed call result is read as carrying every
+  argument — `array_get_ref` aliases its container, and `List::index_ref` is
+  nothing but that call.
 - Read-only-share — a read-only binding whose storage is never mutated while
   live. See _Sharing_ below.
 
@@ -380,6 +385,28 @@ the materialization into that payload as a share rather than a copy. Neither the
 inliner nor any NIR pass can substitute — the copy is chosen before NIR exists,
 and `#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
 untouched even with the cloned array provably unread.
+
+### Known gap: a declared `stores` the walk does not confirm
+
+`stores.rs` reads a `stores[p]` on a value-returning body as naming the result,
+which is what `iter()` and `as_slice()` do and what keeps a `collect()` that
+drops the iterator from pinning the list it walked. The reading is not derived:
+a body that instead puts the reference somewhere the walk cannot follow — a raw
+builtin, a `CmRawCall` — and returns a value is read as routing it to the
+result. What still covers it is not the analysis: the published answer is the
+union of both channels, so every direct caller stays conservative, and the
+frontend makes a caller handing on its own reference parameter declare
+`stores` in turn. A carried value that is neither — a reference inside an
+aggregate — passed to such a callee whose result the caller drops is the shape
+that would escape both.
+
+Deriving it instead means promoting a declaration the walk did not confirm to
+the strong reading, and that is only sound-and-precise once the walk confirms
+the routings that are real: measured, it promotes `List::as_slice` and every
+`AsSlice` iterator built on it, which restores the deep copy of each `Op` in
+`lower_alt_body` and costs gale-gen ~2%. So the order is fixed — make `carries`
+follow a reference through the adapter chain first, then let an unconfirmed
+declaration mean "anywhere".
 
 ## Amendments to earlier WEPs
 

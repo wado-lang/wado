@@ -1039,6 +1039,21 @@ impl Analyzer<'_> {
         }
     }
 
+    /// A reference-typed value reaching a position that outlives the expression
+    /// — an aggregate literal, a global, a write through a place, the function's
+    /// result — persists exactly as the `&place` in that position would, so its
+    /// referent escapes. [`Analyzer::walk_expr`] catches the `&` spelling; this
+    /// is the other one, a reference *local* handed on as is, which is what a
+    /// match arm binding over a `&`-borrowed scrutinee always is.
+    fn escape_persisting_ref(&mut self, expr: &TirExpr, record: bool) {
+        if record
+            && let TirExprKind::Local { index, .. } = &expr.kind
+            && is_reference_type(expr.type_id, self.type_table)
+        {
+            self.mark_escaped(*index, None);
+        }
+    }
+
     /// Record that binding `local` derives from `source`: if the local whose
     /// storage `source` aliases (a projection / whole-value move — `None` for a
     /// fresh allocation, whose result aliases nothing observable) is live
@@ -1358,6 +1373,7 @@ impl Analyzer<'_> {
             TirStmtKind::Return { value } => {
                 live.clear();
                 if let Some(v) = value {
+                    self.escape_persisting_ref(v, record);
                     self.walk_expr(v, live, record);
                 }
             }
@@ -1393,7 +1409,10 @@ impl Analyzer<'_> {
                 self.walk_block(block, live, record);
                 self.exits.pop();
             }
-            TirStmtKind::TaskReturn { value } => self.walk_expr(value, live, record),
+            TirStmtKind::TaskReturn { value } => {
+                self.escape_persisting_ref(value, record);
+                self.walk_expr(value, live, record);
+            }
             TirStmtKind::VariadicForOf { .. } => unreachable!("filtered by has_unsupported_form"),
         }
     }
@@ -1542,6 +1561,7 @@ impl Analyzer<'_> {
                     live.swap_remove(index);
                     self.walk_expr(value, live, record);
                 } else {
+                    self.escape_persisting_ref(value, record);
                     self.walk_expr(value, live, record);
                     self.walk_expr(target, live, record);
                 }
@@ -1634,6 +1654,7 @@ impl Analyzer<'_> {
                     self.collect_place_moves(&children, live);
                 }
                 for f in fields.iter().rev() {
+                    self.escape_persisting_ref(&f.value, record);
                     self.walk_expr(&f.value, live, record);
                 }
             }
@@ -1643,8 +1664,19 @@ impl Analyzer<'_> {
                     self.collect_place_moves(&children, live);
                 }
                 for e in elements.iter().rev() {
+                    self.escape_persisting_ref(e, record);
                     self.walk_expr(e, live, record);
                 }
+            }
+            TirExprKind::VariantConstruct {
+                payload: Some(p), ..
+            } => {
+                self.escape_persisting_ref(p, record);
+                self.walk_expr(p, live, record);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.escape_persisting_ref(value, record);
+                self.walk_expr(value, live, record);
             }
             // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {

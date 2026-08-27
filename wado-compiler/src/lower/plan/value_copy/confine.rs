@@ -136,13 +136,16 @@ impl Ctx<'_> {
     /// builtin escape, `a[i]`'s `array_get_value` included, which is every
     /// element read there is.
     fn kind(&self, func: &FunctionRef) -> Kind {
-        if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
-            return Kind::Builtin;
-        }
         self.kinds
             .get(&func.module_source, &func.name)
             .copied()
-            .unwrap_or(Kind::Opaque)
+            .unwrap_or_else(|| {
+                if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+                    Kind::Builtin
+                } else {
+                    Kind::Opaque
+                }
+            })
     }
 
     fn callee_ret(&self, func: &FunctionRef, param_index: usize) -> bool {
