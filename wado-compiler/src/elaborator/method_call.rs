@@ -38,11 +38,11 @@ fn static_call_symbol_name(static_call: &ast::StaticMethodCallExpr) -> String {
 /// `method_dispatch` entry, since reify walks source-level nodes only.
 pub(super) struct MethodCallInput<'a> {
     pub receiver: TypeId,
-    /// The receiver's source AST when the call comes from user syntax.
-    /// `resolve_ident` leaves placeholder TIR at annotate time, so the
-    /// `&mut self` receiver-mutability check walks this instead. `None`
-    /// for synthetic dispatches (for-of desugaring), whose receivers are
-    /// compiler-owned locals.
+    /// The receiver's source AST when the call comes from user syntax. The
+    /// body walk holds only the receiver's type, so the `&mut self`
+    /// receiver-mutability check walks this instead. `None` for synthetic
+    /// dispatches (for-of desugaring), whose receivers are compiler-owned
+    /// locals.
     pub receiver_ast: Option<&'a ast::Expr>,
     pub method_name: &'a str,
     pub method_id: Option<AstId>,
@@ -1532,7 +1532,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Resolve arguments with expected types for coercion
+        // Resolve arguments with expected types for coercion. `arg_spans` runs
+        // parallel to `args` so a diagnostic still lands on the argument that
+        // caused it rather than on the whole call.
         let mut args: Vec<TypeId> = static_call
             .args
             .iter()
@@ -1541,6 +1543,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let expected_type = param_types.get(i).copied();
                 self.resolve_expr(a, ctx, expected_type)
             })
+            .collect();
+        let mut arg_spans: Vec<Span> = static_call
+            .args
+            .iter()
+            .map(super::ast::Expr::span)
             .collect();
 
         // Pad omitted trailing arguments with declared parameter defaults.
@@ -1571,6 +1578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     })
                 });
                 args.push(resolved);
+                arg_spans.push(default_expr.span());
                 subs.insert(pname.clone(), default_expr);
             }
         }
@@ -2101,6 +2109,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &method_type_args,
                 &static_method_defaults,
                 &args,
+                &arg_spans,
                 static_call.span,
             )
         {
@@ -2242,6 +2251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_args: &[TypeId],
         static_method_defaults: &[(String, Option<ast::Expr>)],
         args: &[TypeId],
+        arg_spans: &[Span],
         span: Span,
     ) -> Option<TypeId> {
         let (trait_name, blanket_param, blanket_module, blanket_def) =
@@ -2282,7 +2292,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             receiver_type_id,
         );
-        if !self.check_blanket_static_args(&param_types, args, static_method_defaults, span) {
+        if !self.check_blanket_static_args(
+            &param_types,
+            args,
+            arg_spans,
+            static_method_defaults,
+            span,
+        ) {
             return Some(TypeTable::ERROR);
         }
 
@@ -2420,9 +2436,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         param_types: &[TypeId],
         args: &[TypeId],
+        arg_spans: &[Span],
         static_method_defaults: &[(String, Option<ast::Expr>)],
         span: Span,
     ) -> bool {
+        assert_eq!(
+            args.len(),
+            arg_spans.len(),
+            "every resolved argument carries the span it was written at"
+        );
         let optional = static_method_defaults
             .iter()
             .filter(|(_, d)| d.is_some())
@@ -2436,11 +2458,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return false;
         }
-        for (arg, &expected) in args.iter().zip(param_types) {
+        for (i, (arg, &expected)) in args.iter().zip(param_types).enumerate() {
             if self.tysys.type_table.borrow().contains_type_param(expected) {
                 continue;
             }
-            self.typecheck(*arg, expected, span);
+            self.typecheck(*arg, expected, arg_spans[i]);
         }
         true
     }

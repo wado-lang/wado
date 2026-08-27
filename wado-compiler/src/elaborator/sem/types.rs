@@ -936,7 +936,7 @@ pub(crate) struct OperatorDispatch {
     /// Self-kind of the trait method's receiver. Reify feeds this
     /// (with `is_ref_impl = false` — operator trait methods are
     /// always dispatched on the value type, not on a ref-impl) into
-    /// [`super::super::Elaborator::adjust_receiver_for_self_kind_static`].
+    /// reify's `adjust_receiver_for_self_kind_static`.
     pub(crate) self_kind: ast::SelfKind,
     /// Per-argument flag: `true` when the operator's trait parameter
     /// is declared as `&T` / `&mut T` and reify must wrap the

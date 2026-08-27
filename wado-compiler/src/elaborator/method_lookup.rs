@@ -3304,9 +3304,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 /// The type a receiver takes on once adjusted for the callee's `self` kind.
-/// The one statement of the rule: the TIR builder
-/// [`Elaborator::adjust_receiver_for_self_kind_static`] wraps the node, this
-/// says what the wrapping means, and the body walk needs only this.
+/// The body walk needs only this; reify's `adjust_receiver_for_self_kind_static`
+/// builds the node that carries the same type.
 pub(super) fn adjusted_receiver_type(
     receiver: TypeId,
     self_kind: ast::SelfKind,

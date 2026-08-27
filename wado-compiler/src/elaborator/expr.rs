@@ -159,13 +159,6 @@ pub(super) fn compose_union_plan(
     merged.into_values().collect()
 }
 
-/// Shape projection of a match-arm pattern, used solely for exhaustiveness /
-/// overlap analysis on the AST. It captures exactly the pattern shape the
-/// checks read, one distinction per `TirPattern` distinction they depend on:
-/// catch-all (wildcard / binding / reversed-or-empty range / bad range bound),
-/// enum / variant case names, bool literals, integer ranges and points, an
-/// opaque `Other` (strings, structs, tuples, constant-value patterns), and
-/// `Or` alternatives.
 /// A struct-literal field as the body walk knows it: the name it was written
 /// under, its declared position, and the type its value resolved to. Reify
 /// builds the `TirStructField` from the AST and the recorded types.
@@ -177,6 +170,13 @@ pub(super) struct ResolvedField {
     span: Span,
 }
 
+/// Shape projection of a match-arm pattern, used solely for exhaustiveness /
+/// overlap analysis on the AST. It captures exactly the pattern shape the
+/// checks read, one distinction per `TirPattern` distinction they depend on:
+/// catch-all (wildcard / binding / reversed-or-empty range / bad range bound),
+/// enum / variant case names, bool literals, integer ranges and points, an
+/// opaque `Other` (strings, structs, tuples, constant-value patterns), and
+/// `Or` alternatives.
 enum ExhPattern {
     CatchAll,
     EnumCase(String),

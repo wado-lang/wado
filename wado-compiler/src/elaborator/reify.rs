@@ -6205,7 +6205,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     cmp.op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
-                    return self.wrap_ord_bool_from_cmp(method_call, cmp.op, chain.span);
+                    return ord_bool_from_cmp(
+                        method_call,
+                        cmp.op,
+                        chain.span,
+                        &self.tysys.type_table,
+                    );
                 }
                 if cmp.op == BinaryOp::NotEq && method_call.type_id == TypeTable::BOOL {
                     return TirExpr::new(
@@ -7692,17 +7697,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Wrap `Ord::cmp` into a `bool`: `<` → `cmp == Less`, `>` →
-    /// `cmp == Greater`, `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
-    fn wrap_ord_bool_from_cmp(
-        &mut self,
-        cmp_call: TirExpr,
-        op: ast::BinaryOp,
-        span: crate::token::Span,
-    ) -> TirExpr {
-        ord_bool_from_cmp(cmp_call, op, span, &self.tysys.type_table)
-    }
-
     /// A function-typed global's `GlobalVarGet` parts
     /// `(module_source, global_name, type)`, or `None` for a non-global or
     /// non-function name. Shares `ModuleDecls::lookup_global` with the
@@ -8436,8 +8430,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     }
                     "zip" => {
-                        // Mirror the elaborator (`method_call.rs`): a
-                        // concrete tuple-of-tuples transposes inline now;
+                        // A concrete tuple-of-tuples transposes inline here;
                         // only a type-pack receiver defers expansion to the
                         // monomorphiser via `TupleZip`. Non-generic bodies
                         // never reach the monomorphiser, so emitting
@@ -8933,8 +8926,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // this branch only fires for a snapshot-rehydrated callee module,
             // which carries no `current_module_globals`. So resolve the declared
             // type from the AST — the one re-resolution the completeness rule
-            // sanctions (WEP 2026-05-26 §"Reify — mechanical"); the other three
-            // `resolve_type` call sites are a known gap, not a licence.
+            // sanctions (WEP 2026-05-26 §"Reify — mechanical"), and reify's
+            // only `resolve_type` call site.
             let ty = self.resolve_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
@@ -10641,13 +10634,32 @@ fn unescape_checked(raw: &str) -> String {
         .expect("the body walk rejects a malformed template escape before reify runs")
 }
 
-/// `&TypeTable`-only version of [`Self::adjust_receiver_for_self_kind`]
-/// — [`super::reify::Reify`] calls this directly so it can
-/// reproduce the receiver adjustment from the recorded
-/// `(self_kind, is_ref_impl)` pair without holding an [`Elaborator`].
-/// The instance method above stays as a thin delegate so existing
-/// elaborator callers don't need to change.
+/// Build the receiver node the recorded `(self_kind, is_ref_impl)` pair asks
+/// for. The type it lands on is the body walk's own answer
+/// ([`super::method_lookup::adjusted_receiver_type`]), asserted here so the
+/// node builder and the rule it implements cannot drift apart silently.
 fn adjust_receiver_for_self_kind_static(
+    receiver: TirExpr,
+    self_kind: ast::SelfKind,
+    is_ref_impl: bool,
+    span: crate::token::Span,
+    type_table: &std::cell::RefCell<crate::tir::TypeTable>,
+) -> TirExpr {
+    let expected = super::method_lookup::adjusted_receiver_type(
+        receiver.type_id,
+        self_kind,
+        is_ref_impl,
+        type_table,
+    );
+    let adjusted = adjust_receiver_node(receiver, self_kind, is_ref_impl, span, type_table);
+    assert_eq!(
+        adjusted.type_id, expected,
+        "the receiver node reify built disagrees with the adjusted type annotate recorded"
+    );
+    adjusted
+}
+
+fn adjust_receiver_node(
     receiver: TirExpr,
     self_kind: ast::SelfKind,
     is_ref_impl: bool,

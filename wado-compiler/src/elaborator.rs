@@ -735,10 +735,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Record a method-dispatch decision, centralised here rather than at the AST
-    /// wrapper so every path through [`Self::build_tir_method_call`] leaves one
-    /// uniform entry. A synthetic call passes `ast_id == None` and records
-    /// nothing. Reify feeds `is_ref_impl` and `self_kind` to
-    /// `adjust_receiver_for_self_kind` instead of re-running impl lookup.
+    /// wrapper so every dispatched call leaves one uniform entry. A synthetic
+    /// call passes `ast_id == None` and records nothing. Reify feeds
+    /// `is_ref_impl` and `self_kind` to `adjust_receiver_for_self_kind_static`
+    /// instead of re-running impl lookup.
     pub(super) fn record_method_dispatch(
         &mut self,
         ast_id: Option<crate::ast::AstId>,

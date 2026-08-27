@@ -980,7 +980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
-                    let payload = args.into_iter().next().map(Box::new);
+                    let payload = args.into_iter().next();
 
                     // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
@@ -994,7 +994,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 &self.annotate_ctx,
                                 &variant_info,
                                 &case_data,
-                                payload.as_deref().copied(),
+                                payload,
                                 expected_type,
                                 &[],
                                 &[],
@@ -1064,7 +1064,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return self.resolve_from_call(target_type_id, from_type, call.id);
                     }
                     if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, call.span,
+                        prefix, suffix, call.id, &args, &call.args, call.span,
                     ) {
                         return return_type;
                     }
@@ -1075,7 +1075,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return TypeTable::ERROR;
                 } else {
                     if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, call.span,
+                        prefix, suffix, call.id, &args, &call.args, call.span,
                     ) {
                         return return_type;
                     }
@@ -1089,9 +1089,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
-                if let Some(return_type) = self
-                    .resolve_named_type_blanket_static(prefix, suffix, call.id, &args, call.span)
-                {
+                if let Some(return_type) = self.resolve_named_type_blanket_static(
+                    prefix, suffix, call.id, &args, &call.args, call.span,
+                ) {
                     return return_type;
                 }
                 let _ = self.emit(TypeError::UnknownFunction {
@@ -1140,7 +1140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 });
                                 return TypeTable::ERROR;
                             }
-                            let payload = args.into_iter().next().map(Box::new);
+                            let payload = args.into_iter().next();
                             let variant_type = if variant_info.type_params.is_empty() {
                                 self.tysys
                                     .type_table
@@ -1152,7 +1152,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         &self.annotate_ctx,
                                         &variant_info,
                                         &case_data,
-                                        payload.as_deref().copied(),
+                                        payload,
                                         expected_type,
                                         &[],
                                         &[],
@@ -2770,6 +2770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method: &str,
         call_id: crate::AstId,
         args: &[TypeId],
+        raw_args: &[Expr],
         span: crate::Span,
     ) -> Option<TypeId> {
         // `type_name` is the receiver spelling after `Self::` / `T::`
@@ -2792,7 +2793,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return Some(TypeTable::ERROR);
         }
-        self.resolve_blanket_static_method(receiver_ty, method, call_id, &[], &[], args, span)
+        // Built here rather than on the caller's hot path: only a call that
+        // actually reaches a blanket static needs the per-argument spans.
+        let arg_spans: Vec<crate::Span> = raw_args.iter().map(Expr::span).collect();
+        self.resolve_blanket_static_method(
+            receiver_ty,
+            method,
+            call_id,
+            &[],
+            &[],
+            args,
+            &arg_spans,
+            span,
+        )
     }
 }
 
