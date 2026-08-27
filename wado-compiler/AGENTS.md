@@ -12,9 +12,8 @@ optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 - Walk IR through the visitor utilities, not by hand, and answer a question
   once: one resolver total over the IR, rather than partial walkers, which
   multiply until each misses a different shape.
-- Take a finding one altitude up before fixing it. It names a line; ask whether
-  that shape occurs at all, and what else answers the same question. A fix aimed
-  at the line leaves the invariant free to break again elsewhere.
+- Take a finding one altitude up before fixing it: it names a line, so ask
+  whether that shape occurs at all, and what else answers the same question.
 - Optimize as far as correctness allows. A conservatism is a claim about
   precision: measure what it buys before keeping it, and drop the ones that buy
   nothing.

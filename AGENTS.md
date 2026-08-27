@@ -8,6 +8,8 @@ Note: `CLAUDE.md` is a symlink to `AGENTS.md`.
 
 - Succinctly — say and write the least that fully conveys the point.
 - Fix-forward — fix the cause of a defect and move forward; never backtrack.
+- Fix the class — a defect names an instance; fix what admits the class. Fixes
+  that keep drawing new findings are naming the design, not the code.
 
 ## Development
 
