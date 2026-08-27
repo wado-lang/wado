@@ -3424,7 +3424,7 @@ fn lower_repeat_op(
                 rule: *rule_name,
                 site: DiagnosticSite::Optional(outer_field),
             };
-            opt_specialised = pick_optional_specialised(&rep.element, body_has_field, &owner, ctx);
+            opt_specialised = pick_optional_specialised(peel_repeat_body_label(&rep.element), body_has_field, &owner, ctx);
         }
     }
 
@@ -3442,7 +3442,7 @@ fn lower_repeat_op(
             ctx.mark_needs_atn();
             RepeatStrategy::Plain;
         } else {
-            compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+            compute_non_greedy_strategy(peel_repeat_body_label(&rep.element), outer_follow, ctx);
         }
     } else {
         // Greedy: a specialised Optional strategy when one fires,

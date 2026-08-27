@@ -38,7 +38,8 @@ use {
 } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
-use { body_is_base_calls_only, body_names_this } from "./superclass.wado";
+use { body_is_base_calls_only, body_names_this, scan_template } from "./superclass.wado";
+use { scan_string } from "./g4/scan.wado";
 use { escape_ident } from "./ident.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
@@ -168,23 +169,29 @@ fn split_top_level_commas(text: &String) -> List<String> {
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
-        match c {
-            '(' | '[' | '{' | '<' => {
-                depth += 1;
-                cur.push(c);
-            },
-            ')' | ']' | '}' | '>' => {
-                if depth > 0 {
-                    depth -= 1;
-                }
-                cur.push(c);
-            },
-            ',' && depth == 0 => {
-                out.push(cur.trim());
-                cur = String::new();
-            },
-            _ => cur.push(c),
+        // A string or a template is one opaque span, so `a["x,y"]` passes one
+        // argument rather than two.
+        if c == '"' || c == '\'' || c == '`' {
+            let end = if c == '`' { scan_template(&chars, i, chars.len()).0 } else { scan_string(&chars, i) };
+            while i < end {
+                cur.push(chars[i]);
+                i += 1;
+            }
+            continue;
         }
+        if c matches { '(' | '[' | '{' | '<' } {
+            depth += 1;
+        } else if c matches { ')' | ']' | '}' | '>' } {
+            if depth > 0 {
+                depth -= 1;
+            }
+        } else if c == ',' && depth == 0 {
+            out.push(cur.trim());
+            cur = String::new();
+            i += 1;
+            continue;
+        }
+        cur.push(c);
         i += 1;
     }
     if !cur.trim().is_empty() {

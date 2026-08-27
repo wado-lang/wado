@@ -14,6 +14,7 @@ use {
     binding_name,
     rule_binding_for,
     rule_is_left_recursive,
+    ref_is_call_ctx,
     ref_is_ctx_to_string_tree,
     RULE_START_TOK_LOCAL,
     LR_ACC_LOCAL,
@@ -483,7 +484,7 @@ fn emit_member_call(
     // `$x.ctx.toStringTree(this)`: `$x.ctx` already resolves to the rendered
     // node, so the call the `$`-attr scanner left behind is dropped.
     if meth == "toStringTree" {
-        if let Attr(t) = &m.recv {
+        if let Attr(t) = &m.recv && ref_is_call_ctx(t) {
             return resolve_attr_ref(rule, rules, t, vals_in_scope, bindings, &env.this_bind);
         }
     }

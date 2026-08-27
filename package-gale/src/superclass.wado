@@ -232,7 +232,7 @@ fn inert_at(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
 
 /// Split a template literal at `i` into `[end, spans]`: past the closing
 /// backtick, and the `${ ... }` bodies. Only the text between them is inert.
-fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
+pub fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
     let mut spans: List<[i32, i32]> = [];
     let mut k = i + 1;
     while k < n {
@@ -257,24 +257,33 @@ fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] 
 
 /// The index just past the `}` matching the `{` at `open`.
 fn match_brace(chars: &List<char>, open: i32, n: i32) -> i32 {
+    return match_delim(chars, open, n, '{', '}');
+}
+
+/// Scan to the delimiter matching the one at `open`. A string or a template is
+/// one opaque span: a delimiter inside either closes nothing.
+fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_ch: char) -> i32 {
     let mut depth = 0;
-    for let mut i = open; i < n; i += 1 {
-        match chars[i] {
-            '"' | '\'' => i = scan_string(chars, i) - 1,
-            '`' => {
-                let [end, _] = scan_template(chars, i, n);
-                i = end - 1;
-            },
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return i + 1;
-                }
-            },
-            _ => {
-            },
+    let mut i = open;
+    while i < n {
+        let c = chars[i];
+        if c == '"' || c == '\'' {
+            i = scan_string(chars, i);
+            continue;
         }
+        if c == '`' {
+            i = scan_template(chars, i, n).0;
+            continue;
+        }
+        if c == open_ch {
+            depth += 1;
+        } else if c == close_ch {
+            depth -= 1;
+            if depth == 0 {
+                return i + 1;
+            }
+        }
+        i += 1;
     }
     return n;
 }
@@ -970,23 +979,7 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
 /// and string spans. Returns `n` if unbalanced (a malformed body the g4 parser
 /// would already have rejected).
 fn match_paren(chars: &List<char>, open: i32, n: i32) -> i32 {
-    let mut depth = 0;
-    for let mut i = open; i < n; i += 1 {
-        match chars[i] {
-            // Skip a string span; `- 1` because the loop step re-adds one.
-            '"' | '\'' => i = scan_string(chars, i) - 1,
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 {
-                    return i + 1;
-                }
-            },
-            _ => {
-            },
-        }
-    }
-    return n;
+    return match_delim(chars, open, n, '(', ')');
 }
 
 /// Copy `chars[start..end]` into `out` and return `end` — the scanner's next

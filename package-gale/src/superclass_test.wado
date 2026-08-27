@@ -142,6 +142,13 @@ test "a Wado template argument is one String argument" {
     assert super_ops_without_signature(&ops).is_empty(), "a template has an evident type";
 }
 
+test "a delimiter inside a template does not close the call" {
+    let calls = find_this_calls(&"this.p(`)`) && this.q(1)");
+    assert calls.len() == 2, `calls: ${calls.len()}`;
+    assert calls[0].args == ["`)`"], `args: ${calls[0].args}`;
+    assert calls[1].name == "q", `second call: ${calls[1].name}`;
+}
+
 test "a template's interpolation holds its own commas and quotes" {
     let calls = find_this_calls(&"this.log(`${f(1, 2)},x`, 3)");
     assert calls.len() == 1, `calls: ${calls.len()}`;

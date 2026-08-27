@@ -86,6 +86,13 @@ pub fn ref_is_ctx_to_string_tree(ref_text: &String) -> bool {
     return refs.len() == 1 && is_ctx_to_string_tree_ref(&refs[0].name, &refs[0].member);
 }
 
+/// Whether `ref_text` is exactly one `$<label>.ctx` — the node reference a
+/// trailing `toStringTree` call resolves to. Any other reference keeps its call.
+pub fn ref_is_call_ctx(ref_text: &String) -> bool {
+    let refs = find_attr_refs(ref_text);
+    return refs.len() == 1 && refs[0].member matches { Some("ctx") };
+}
+
 /// Extend past an immediately-following call `(...)` (skipping leading spaces),
 /// so `$ctx.toStringTree()` and `$ctx.toStringTree(this)` both reduce to a bare
 /// call. Bails (returns `end` unchanged) if a nested `$`-ref lives inside the

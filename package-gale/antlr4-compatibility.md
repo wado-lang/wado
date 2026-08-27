@@ -483,7 +483,7 @@ Every decision over a group's alternatives — general or rule-reference shape,
 overlapping first sets or not, standing alone or as a repeat's body — is
 emitted by one function, and the only thing its callers vary is the body of a
 branch and what happens when no branch is taken. That no-match answer is the
-policy, stated once per call site, and it has two values:
+policy, stated once per call site, and it has three values:
 
 - **Required** — the group must match here, so a token no alternative admits is
   a no-viable-alternative, over the union of the alternatives' first sets.
@@ -494,6 +494,10 @@ policy, stated once per call site, and it has two values:
   guard is what skips it. A gated alternative forces Guaranteed back to
   Required: a false predicate must not land in an unconditional `else` meant
   for the alternative it excludes.
+- **Looped** — a loop iteration, carrying the mandatory-first-iteration flag or
+  none. It is what a repeat states, and `open_group_entry` discharges it into
+  one of the two above: the loop's own obligations are emitted there, and the
+  dispatch is left the answer for the position they do not cover.
 
 Guaranteed rests on that scan, and a `+`'s first iteration is the one position
 no scan covers — it is mandatory, so the loop enters it unguarded. Both answers
