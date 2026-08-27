@@ -288,13 +288,12 @@ pub fn cm_type_to_type_id(
                             type_table.find_named_type_by_module_name(&named.name, &m, ns)
                         })
                 })
-                // The package hints below are WASI's own: `wasi_package` is the
-                // binding's package and `canonical_wasi_package` scans `wasi:`.
+                // The binding's own package, whose namespace it does not carry.
                 .or_else(|| {
                     type_table.find_named_type_by_cm_package(
                         named.name.as_str(),
                         wasi_package,
-                        Some(CmNamespace::Wasi),
+                        None,
                     )
                 })
                 .or_else(|| {
@@ -386,10 +385,9 @@ pub fn cm_type_to_type_id(
     }
 }
 
-/// The namespace and package a CM source string names:
-/// `"wasi:filesystem/types@0.3.0"` → `(Wasi, "filesystem")`. `None` for a
-/// source outside the bundled namespaces, or a malformed one. A package name
-/// is unique only inside its namespace, so the two answer together.
+/// The namespace and package a CM source names: `"wasi:filesystem/types@0.3.0"`
+/// → `(Wasi, "filesystem")`. A package is unique only inside its namespace, so
+/// the two answer together. `None` outside the bundled namespaces.
 pub(super) fn cm_package_from_source(source: &str) -> Option<(CmNamespace, &str)> {
     let (namespace, rest) = CmNamespace::split_specifier(source)?;
     let without_version = rest.split('@').next().unwrap_or(rest);
@@ -438,14 +436,9 @@ pub(super) fn module_source_for_cm_interface(
     }
 }
 
-/// The module a bundled CM interface FQ maps to, with the namespace that owns
-/// it: `wasi:sockets/ip-name-lookup@0.3.0` → `(Wasi, sockets/ip_name_lookup.wado)`,
-/// `core:kiln/types@0.1.0` → `(None, kiln/types.wado)` since a `core:` module
-/// carries no [`CmNamespace`]. `None` for an FQ in neither.
-///
-/// The pair travels together: a module name alone cannot tell a `wasi:` type
-/// from a same-named `web:` one, and matching on it would resolve them
-/// interchangeably.
+/// The module a bundled CM interface FQ maps to, with its owning namespace —
+/// `None` for a `core:` module, which carries none. A module name alone cannot
+/// tell a `wasi:` type from a same-named `web:` one, so the two travel together.
 pub(super) fn cm_interface_module(source_interface: &str) -> Option<(Option<CmNamespace>, String)> {
     if let Some((namespace, rest)) = CmNamespace::split_specifier(source_interface) {
         return Some((Some(namespace), interface_module_name(rest)));
@@ -1480,8 +1473,6 @@ mod tests {
     use super::*;
 
     /// The scope a record's stream-read lift reads nested field names under.
-    /// A `web:` source used to answer `None` here, leaving the layout unscoped
-    /// while the lift itself got the literal `"filesystem"`.
     #[test]
     fn a_cm_package_comes_from_the_source_in_every_bundled_namespace() {
         assert_eq!(
@@ -1497,9 +1488,7 @@ mod tests {
         assert_eq!(cm_package_from_source("my:pkg/iface"), None);
     }
 
-    /// The namespace and the module name are one answer. Reading the module
-    /// alone cannot tell `wasi:dom/node` from `web:dom/node`, which is what let
-    /// a source-less reference take the wrong CM layout.
+    /// A module name alone cannot tell `wasi:dom/node` from `web:dom/node`.
     #[test]
     fn a_cm_interface_module_carries_the_namespace_that_owns_it() {
         assert_eq!(

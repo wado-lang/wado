@@ -332,18 +332,18 @@ impl CmNamespace {
     }
 }
 
+impl fmt::Display for CmNamespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.prefix())
+    }
+}
+
 /// `true` for a specifier in a namespace the compiler bundles: `core:` or any
 /// [`CmNamespace`]. Such a specifier resolves out of the embedded stdlib, never
 /// off the host filesystem.
 #[must_use]
 pub fn is_bundled_specifier(specifier: &str) -> bool {
     specifier.starts_with("core:") || CmNamespace::split_specifier(specifier).is_some()
-}
-
-impl fmt::Display for CmNamespace {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.prefix())
-    }
 }
 
 /// Structured source location of a module. String payloads are [`InternedStr`]:

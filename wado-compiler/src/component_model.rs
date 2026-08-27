@@ -12,7 +12,7 @@ use wasm_encoder::ValType;
 
 use crate::ast::{Attribute, CmImport, GenericType, Type};
 use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
-use crate::module_source::ModuleSource;
+use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::to_kebab;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -964,6 +964,13 @@ fn find_unique_source_with_prefix<'a, V>(
     find_unique_source_in_set(map, name, &|src| src.starts_with(prefix))
 }
 
+/// The package a bundled CM source interface names: `wasi:filesystem/types`
+/// gives `"filesystem"`. `None` outside [`CmNamespace`].
+fn binding_package(source: &str) -> Option<&str> {
+    let (_, rest) = CmNamespace::split_specifier(source)?;
+    rest.split('/').next()
+}
+
 /// The unique source interface registering `name` across every bundled CM
 /// namespace. A name declared by two of them is ambiguous — `None` — never
 /// silently the `wasi:` one.
@@ -972,7 +979,7 @@ fn find_unique_source_in_binding<'a, V>(
     name: &str,
 ) -> Option<&'a str> {
     find_unique_source_in_set(map, name, &|src| {
-        crate::module_source::CmNamespace::split_specifier(src).is_some()
+        CmNamespace::split_specifier(src).is_some()
     })
 }
 
@@ -2614,40 +2621,43 @@ impl CmInterfaceRegistry {
             .or_else(|| find_unique_source_with_prefix(&self.newtypes, prefix, name))
     }
 
+    /// The unique source registering `name` among those `is_member` admits,
+    /// across every type kind in the order the CM boundary resolves them.
+    fn find_unique_source_by_kind(
+        &self,
+        name: &str,
+        is_member: &dyn Fn(&str) -> bool,
+    ) -> Option<&str> {
+        find_unique_source_in_set(&self.newtypes, name, is_member)
+            .or_else(|| find_unique_source_in_set(&self.resources, name, is_member))
+            .or_else(|| find_unique_source_in_set(&self.structs, name, is_member))
+            .or_else(|| find_unique_source_in_set(&self.variants, name, is_member))
+            .or_else(|| find_unique_source_in_set(&self.enums, name, is_member))
+            .or_else(|| find_unique_source_in_set(&self.flags, name, is_member))
+    }
+
     /// Resolve the bundled-namespace source interface for a `NamedType`. The
     /// reference's own `source_interface` answers when bootstrap filled it. A
     /// reference synthesized at lower time has none, so every kind is searched,
-    /// preferring `wasi:{wasi_package_hint}/` — which separates the `ErrorCode`
-    /// of filesystem, http and sockets — else taking the unique registrant
-    /// across all of [`CmNamespace`].
+    /// preferring the hinted package — which separates the `ErrorCode` of
+    /// filesystem, http and sockets — else taking the unique registrant across
+    /// all of [`CmNamespace`].
     pub fn resolve_binding_source_for(
         &self,
         named: &crate::ast::NamedType,
-        wasi_package_hint: Option<&str>,
+        package_hint: Option<&str>,
     ) -> Option<String> {
         if let Some(s) = self.source_interface(named) {
-            return crate::module_source::CmNamespace::split_specifier(&s)
-                .is_some()
-                .then_some(s);
+            return CmNamespace::split_specifier(&s).is_some().then_some(s);
         }
-        if let Some(pkg) = wasi_package_hint {
-            let prefix = format!("wasi:{pkg}/");
-            if let Some(s) = find_unique_source_with_prefix(&self.newtypes, &prefix, &named.name)
-                .or_else(|| find_unique_source_with_prefix(&self.resources, &prefix, &named.name))
-                .or_else(|| find_unique_source_with_prefix(&self.structs, &prefix, &named.name))
-                .or_else(|| find_unique_source_with_prefix(&self.variants, &prefix, &named.name))
-                .or_else(|| find_unique_source_with_prefix(&self.enums, &prefix, &named.name))
-                .or_else(|| find_unique_source_with_prefix(&self.flags, &prefix, &named.name))
-            {
-                return Some(s.to_string());
-            }
-        }
-        self.find_binding_newtype_source(&crate::name::DeclName::new(&named.name))
-            .or_else(|| self.find_binding_resource_source(&named.name))
-            .or_else(|| self.find_binding_struct_source(&named.name))
-            .or_else(|| self.find_binding_variant_source(&named.name))
-            .or_else(|| self.find_binding_enum_source(&named.name))
-            .or_else(|| self.find_binding_flags_source(&named.name))
+        let in_binding = |src: &str| CmNamespace::split_specifier(src).is_some();
+        package_hint
+            .and_then(|pkg| {
+                self.find_unique_source_by_kind(&named.name, &|src| {
+                    binding_package(src) == Some(pkg)
+                })
+            })
+            .or_else(|| self.find_unique_source_by_kind(&named.name, &in_binding))
             .map(str::to_string)
     }
 
@@ -4873,9 +4883,7 @@ mod tests {
         }
     }
 
-    /// The bare-name fallbacks used to read `"wasi:"` literally, so a `web:`
-    /// declaration was invisible to them — and a same-named `wasi:` one
-    /// answered in its place. Every bundled namespace is searched, and a
+    /// The bare-name fallbacks search every bundled namespace, and a
     /// cross-namespace collision is ambiguous rather than silently `wasi:`.
     #[test]
     fn a_bare_name_resolves_within_every_bundled_namespace() {

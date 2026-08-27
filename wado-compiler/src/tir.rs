@@ -2298,13 +2298,12 @@ impl TypeTable {
         None
     }
 
-    /// Find a decl-backed named type scoped to a CM package, matching any
-    /// `module_source` under the `{cm_package}/` prefix within `namespace` —
-    /// `None` selecting the `core:` modules instead. `cm_package` is the bare
-    /// segment (`"http"`, `"kiln"`), not a fully-qualified source. A package
-    /// name is only unique inside its namespace, so the two are matched
-    /// together; same-named types in distinct packages stay distinct because
-    /// `module_source` is part of the intern key.
+    /// Find a decl-backed named type scoped to a CM package: any
+    /// `module_source` under the `{cm_package}/` prefix, restricted to
+    /// `namespace` when the caller knows it and searching every bundled one
+    /// when it does not. `cm_package` is the bare segment (`"http"`, `"kiln"`),
+    /// not a fully-qualified source; same-named types in distinct packages stay
+    /// distinct because `module_source` is part of the intern key.
     pub fn find_named_type_by_cm_package(
         &self,
         name: &str,
@@ -2323,7 +2322,7 @@ impl TypeTable {
                 ModuleSource::Binding {
                     namespace: ns,
                     interface,
-                } if namespace == Some(ns) && interface.starts_with(&prefix) => {
+                } if namespace.is_none_or(|want| want == ns) && interface.starts_with(&prefix) => {
                     return Some(type_id);
                 }
                 // Core-packaged CM types (e.g. `core:kiln/types.wado`) are

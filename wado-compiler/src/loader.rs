@@ -1211,11 +1211,11 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// [`ModuleSource::Wasm`] via the dependency index. Drained like
     /// `pending_implicit_wasm_imports`, but from the resolved source directly.
     pending_component_imports: Vec<(ModuleSource, WasmAssetKind)>,
-    /// WASI stdlib packages a decoded CM component transitively imports (its
+    /// Bundled stdlib packages a decoded CM component transitively imports (its
     /// host-leaf capabilities). Loaded once every component import is seen, so
     /// effect reconstruction can require the effects behind the component;
     /// otherwise an impure dependency's capability would go unrequested.
-    pending_host_leaf_wasi: IndexSet<ModuleSource>,
+    pending_host_leaf_bindings: IndexSet<ModuleSource>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
     /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
@@ -1248,7 +1248,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             loaded_wasm_namespaces: IndexSet::default(),
             pending_implicit_wasm_imports: Vec::new(),
             pending_component_imports: Vec::new(),
-            pending_host_leaf_wasi: IndexSet::default(),
+            pending_host_leaf_bindings: IndexSet::default(),
             entry_module_source: None,
             entry_canonical_name: None,
             entry_dir: String::new(),
@@ -1440,7 +1440,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         // Now that every component import (file-path and registry-coordinate)
         // has been seen, load the WASI packages behind their host-leaf imports.
-        self.load_pending_host_leaf_wasi();
+        self.load_pending_host_leaf_bindings();
         let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
         for (from_ms, kind, use_decl) in queued {
             self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
@@ -1639,14 +1639,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&span);
         let bindings = built?;
 
-        // Queue the WASI packages behind this component's host-leaf imports so
-        // effect reconstruction sees the effects it transitively needs (a
+        // Queue the bundled packages behind this component's host-leaf imports
+        // so effect reconstruction sees the effects it transitively needs (a
         // `wasi:clocks/monotonic-clock@…` import loads the `clocks` package).
         for fq in &bindings.host_leaf_imports {
-            if let Some(rest) = fq.strip_prefix("wasi:") {
+            if let Some((namespace, rest)) = CmNamespace::split_specifier(fq) {
                 let package = rest.split('/').next().unwrap_or(rest);
-                let ms = self.interner.wasi(package);
-                self.pending_host_leaf_wasi.insert(ms);
+                let ms = self.interner.binding(namespace, package);
+                self.pending_host_leaf_bindings.insert(ms);
             }
         }
 
@@ -1722,8 +1722,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// registry-coordinate — has been processed, since a coordinate dependency
     /// is drained after `load_implicit_modules` yet still contributes host-leaf
     /// imports; loading here catches both paths in one place.
-    fn load_pending_host_leaf_wasi(&mut self) {
-        let sources: Vec<ModuleSource> = std::mem::take(&mut self.pending_host_leaf_wasi)
+    fn load_pending_host_leaf_bindings(&mut self) {
+        let sources: Vec<ModuleSource> = std::mem::take(&mut self.pending_host_leaf_bindings)
             .into_iter()
             .collect();
         self.load_stdlib_sources(sources);
