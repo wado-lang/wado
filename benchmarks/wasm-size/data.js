@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787788704695,
+  "lastUpdate": 1787790173255,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51317,6 +51317,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8de31a0317adc879cf1b4284e5cd2fe34129e99c"
         },
         "date": 1787788703815,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254936,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e641dc3454d8e0f11ccdc8358f393c01f22bd11",
+          "message": "Merge pull request #1901 from wado-lang/fix-variant-place-writes\n\nfix(compiler): land or refuse a whole-value write through a `&mut` to a variant place",
+          "timestamp": "2026-08-27T08:59:14+09:00",
+          "tree_id": "22967e4785de6c2899fdd4ca0d9f852b81f37af4",
+          "url": "https://github.com/wado-lang/wado/commit/6e641dc3454d8e0f11ccdc8358f393c01f22bd11"
+        },
+        "date": 1787790172579,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
