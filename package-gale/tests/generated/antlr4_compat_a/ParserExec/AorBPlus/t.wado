@@ -1682,6 +1682,10 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_ID) || (p.peek_kind() == TK_INT)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
+        }
         _plus_first = false;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_ID {
@@ -1771,4 +1775,5 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_ID, TK_INT];
 

@@ -1194,11 +1194,12 @@ pub global RK_TOK: NodeKind = 0;
 pub global RK_GATED: NodeKind = 1;
 pub global RK_PLUS_GATED: NodeKind = 2;
 pub global RK_PLUS_SOLO: NodeKind = 3;
-pub global RK_REFS: NodeKind = 4;
-pub global RK_RA: NodeKind = 5;
-pub global RK_RB: NodeKind = 6;
+pub global RK_PLUS_SCAN: NodeKind = 4;
+pub global RK_REFS: NodeKind = 5;
+pub global RK_RA: NodeKind = 6;
+pub global RK_RB: NodeKind = 7;
 
-global RULE_NAMES: List<String> = ["tok", "gated", "plus_gated", "plus_solo", "refs", "ra", "rb"];
+global RULE_NAMES: List<String> = ["tok", "gated", "plus_gated", "plus_solo", "plus_scan", "refs", "ra", "rb"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1681,25 +1682,91 @@ fn scan_plus_solo(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_refs(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_plus_scan(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_6 = pos;
     let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(sgk_6) {
+    if sgk_6 == TK_A {
+        let mut sg_6_best = -1;
         sg_6: {
             pos = gp_6;
             sg_6_0: {
-                pos = scan_ra(tokens, pos);
-                if pos < 0 { break sg_6_0; }
-                break sg_6;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6_0; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sg_6_0; }
+                pos += 1;
+                if pos > sg_6_best { sg_6_best = pos; }
             }
             pos = gp_6;
             sg_6_1: {
-                pos = scan_rb(tokens, pos);
-                if pos < 0 { break sg_6_1; }
-                break sg_6;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6_1; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_C { break sg_6_1; }
+                pos += 1;
+                if pos > sg_6_best { sg_6_best = pos; }
             }
+            if sg_6_best >= 0 { pos = sg_6_best; break sg_6; }
             pos = gp_6;
+        }
+    }
+    while pos < tokens.len() && tokens[pos] == TK_A {
+        let sp = pos;
+        let gp_7 = pos;
+        let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_7 == TK_A {
+            let mut sg_7_best = -1;
+            sg_7: {
+                pos = gp_7;
+                sg_7_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_0; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_7_0; }
+                    pos += 1;
+                    if pos > sg_7_best { sg_7_best = pos; }
+                }
+                pos = gp_7;
+                sg_7_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_1; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_C { break sg_7_1; }
+                    pos += 1;
+                    if pos > sg_7_best { sg_7_best = pos; }
+                }
+                if sg_7_best >= 0 { pos = sg_7_best; break sg_7; }
+                pos = -1;
+            }
+        } else {
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_refs(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_8 = pos;
+    let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(sgk_8) {
+        sg_8: {
+            pos = gp_8;
+            sg_8_0: {
+                pos = scan_ra(tokens, pos);
+                if pos < 0 { break sg_8_0; }
+                break sg_8;
+            }
+            pos = gp_8;
+            sg_8_1: {
+                pos = scan_rb(tokens, pos);
+                if pos < 0 { break sg_8_1; }
+                break sg_8;
+            }
+            pos = gp_8;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
@@ -1788,23 +1855,23 @@ fn _parse_plus_gated__inner(p: &mut Parser) -> () {
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                let gp_7 = pos;
-                let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(sgk_7) {
-                    sg_7: {
-                        pos = gp_7;
-                        sg_7_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_0; }
+                let gp_9 = pos;
+                let sgk_9 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_0(sgk_9) {
+                    sg_9: {
+                        pos = gp_9;
+                        sg_9_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_9_0; }
                             pos += 1;
-                            break sg_7;
+                            break sg_9;
                         }
-                        pos = gp_7;
-                        sg_7_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_7_1; }
+                        pos = gp_9;
+                        sg_9_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_9_1; }
                             pos += 1;
-                            break sg_7;
+                            break sg_9;
                         }
-                        pos = gp_7;
+                        pos = gp_9;
                     }
                 }
                 if pos <= p.pos { break rep_scan; }
@@ -1851,13 +1918,13 @@ fn _parse_plus_solo__inner(p: &mut Parser) -> () {
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_8_done: {
-                    sg_8: {
-                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_8; }
+                sg_10_done: {
+                    sg_10: {
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_10; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_8; }
+                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_10; }
                         pos += 1;
-                        break sg_8_done;
+                        break sg_10_done;
                     }
                     break rep_scan;
                 }
@@ -1887,6 +1954,112 @@ fn _parse_plus_solo(p: &mut Parser) -> () {
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("plus_solo");
+    }
+}
+
+fn _parse_plus_scan__inner(p: &mut Parser) -> () {
+    let mut _plus_first = true;
+    loop {
+        if p.recovering { break; }
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                let gp_11 = pos;
+                let sgk_11 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if sgk_11 == TK_A {
+                    let mut sg_11_best = -1;
+                    sg_11: {
+                        pos = gp_11;
+                        sg_11_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_11_0; }
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_11_0; }
+                            pos += 1;
+                            if pos > sg_11_best { sg_11_best = pos; }
+                        }
+                        pos = gp_11;
+                        sg_11_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_11_1; }
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_C { break sg_11_1; }
+                            pos += 1;
+                            if pos > sg_11_best { sg_11_best = pos; }
+                        }
+                        if sg_11_best >= 0 { pos = sg_11_best; break sg_11; }
+                        pos = gp_11;
+                    }
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        if _plus_first && !((p.peek_kind() == TK_A)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_3);
+            break;
+        }
+        _plus_first = false;
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_A {
+            let mut gd_winner: i32 = -1;
+            let mut gd_best: i32 = -1;
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan; }
+                    pos += 1;
+                    gd_end = pos;
+                }
+                if gd_end > gd_best {
+                    gd_best = gd_end;
+                    gd_winner = 0;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan_2; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_C { break gd_scan_2; }
+                    pos += 1;
+                    gd_end_2 = pos;
+                }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 1;
+                }
+            }
+            if gd_winner == 0 {
+                let a = p.expect(TK_A, &SYNC_2);
+                let b = p.expect(TK_B, &EMPTY_SYNC);
+            } else {
+                let a = p.expect(TK_A, &SYNC_4);
+                let c = p.expect(TK_C, &EMPTY_SYNC);
+            }
+        }
+    }
+    let c = p.expect(TK_C, &SYNC_1);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_plus_scan(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_PLUS_SCAN, _start);
+    _parse_plus_scan__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("plus_scan");
     }
 }
 
@@ -1997,6 +2170,10 @@ pub fn parse_plus_solo(input: &String, max_errors: i32 = i32::MAX) -> ParseResul
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_plus_solo(p));
 }
 
+pub fn parse_plus_scan(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_plus_scan(p));
+}
+
 pub fn parse_refs(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_refs(p));
 }
@@ -2047,4 +2224,6 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_A, TK_B];
 global SYNC_1: List<i32> = [TK_EOF];
 global SYNC_2: List<i32> = [TK_B];
+global SYNC_3: List<i32> = [TK_A];
+global SYNC_4: List<i32> = [TK_C];
 

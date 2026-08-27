@@ -495,11 +495,17 @@ policy, stated once per call site, and it has two values:
   Required: a false predicate must not land in an unconditional `else` meant
   for the alternative it excludes.
 
-A single-alternative body has no dispatch to force back, so a `+`'s mandatory
-first iteration — the one position its loop gate does not cover — reports at
-the gate instead. Without that the gate registers the predicate, the body drops
-its inline guard, and the first iteration matches whatever the predicate
-excludes.
+Guaranteed rests on that scan, and a `+`'s first iteration is the one position
+no scan covers — it is mandatory, so the loop enters it unguarded. Both answers
+it needs are emitted where the flag still reads true, before the body:
+
+- Gated, single-alternative body — no dispatch to force Guaranteed back, so the
+  gate reports. Without it the gate registers the predicate, the body drops its
+  inline guard, and the first iteration matches what the predicate excludes.
+- Ungated — the dispatch has no report at all, and where every branch is
+  conditional (one overlap group, so none takes the rest) it has no arm either:
+  `( A B | A C )+ E` matched nothing on `E` and said nothing, so the `+`
+  accepted zero iterations. A first-set test over the same partition reports it.
 
 Splitting the policy across per-shape emitters is what let a required group
 take no alternative, append nothing, and report nothing while the sequence

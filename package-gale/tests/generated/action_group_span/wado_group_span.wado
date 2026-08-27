@@ -1827,6 +1827,10 @@ fn _parse_loop_span__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_A)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
+        }
         _plus_first = false;
         vals._span_lo_r = p.pos;
         let r = _parse_a(p, &FOLLOW_MASK_0);

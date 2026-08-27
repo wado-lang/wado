@@ -1670,6 +1670,10 @@ fn _parse_alts__inner(p: &mut Parser) -> () {
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_A) || (p.peek_kind() == TK_B)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
+        }
         _plus_first = false;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_A {
@@ -1700,7 +1704,7 @@ fn _parse_alts(p: &mut Parser) -> () {
 }
 
 fn _parse_one__inner(p: &mut Parser) -> () {
-    let a = p.expect(TK_A, &SYNC_0);
+    let a = p.expect(TK_A, &SYNC_1);
     let b = p.expect(TK_B, &EMPTY_SYNC);
     if !p.speculating {
          p.emit("ab") 
@@ -1727,7 +1731,7 @@ fn _parse_opt__inner(p: &mut Parser) -> () {
              p.emit("opt") 
         }
     }
-    let b = p.expect(TK_B, &SYNC_1);
+    let b = p.expect(TK_B, &SYNC_2);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
@@ -1786,10 +1790,10 @@ fn _parse_gated__inner(p: &mut Parser) -> () {
                  p.emit("gated") 
             }
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_2);
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
         }
     }
-    let b = p.expect(TK_B, &SYNC_1);
+    let b = p.expect(TK_B, &SYNC_2);
     if !p.speculating {
          p.emit("out") 
     }
@@ -1885,7 +1889,7 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_B];
-global SYNC_1: List<i32> = [TK_EOF];
-global SYNC_2: List<i32> = [TK_A, TK_B];
+global SYNC_0: List<i32> = [TK_A, TK_B];
+global SYNC_1: List<i32> = [TK_B];
+global SYNC_2: List<i32> = [TK_EOF];
 

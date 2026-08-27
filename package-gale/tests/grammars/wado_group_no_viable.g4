@@ -18,6 +18,11 @@ plus_gated : ( { false }? A { p.emit("x") } | B )+ A EOF ;
 // only place the predicate is answered, and the first iteration runs past it.
 plus_solo : ( { false }? A B )+ A EOF ;
 
+// One overlap group, so every branch of the dispatch is conditional and none
+// takes the rest. The loop's scan guard covers the iterations after the first;
+// the mandatory one has nothing to answer with.
+plus_scan : ( A B | A C )+ C EOF ;
+
 // Rule-reference alternatives (SimpleCst).
 refs : ( ra | rb ) C EOF ;
 

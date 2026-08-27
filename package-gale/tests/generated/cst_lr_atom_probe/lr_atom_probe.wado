@@ -1809,6 +1809,10 @@ fn _parse_e__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_LIT_WHEN)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_2);
+            break;
+        }
         _plus_first = false;
         p.expect(TK_LIT_WHEN, &SYNC_0);
         _parse_e(p, &FOLLOW_MASK_2);
@@ -2053,6 +2057,7 @@ fn _kind_set_2(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID, TK_LIT_CASE, TK_LIT_END, TK_LIT_THEN, TK_LIT_WHEN];
 global SYNC_1: List<i32> = [TK_EOF, TK_LIT_Z];
+global SYNC_2: List<i32> = [TK_LIT_WHEN];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_RPAREN]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_EOF]];

@@ -1677,6 +1677,10 @@ fn _parse_m__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_X)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_1);
+            break;
+        }
         _plus_first = false;
         p.expect(TK_X, &SYNC_2);
         p.expect(TK_Y, &EMPTY_SYNC);

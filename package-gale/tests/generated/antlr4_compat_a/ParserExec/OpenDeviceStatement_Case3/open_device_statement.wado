@@ -1880,6 +1880,10 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_LIT_DEVICE)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
+        }
         _plus_first = false;
         let lit_device = p.expect(TK_LIT_DEVICE, &SYNC_1);
         let mut opt_scan_pos: i32 = -1;

@@ -42,6 +42,14 @@ test "a single-alternative group's predicate is answered on the mandatory iterat
     assert ok.has_errors(), "the predicate never holds, so the first iteration cannot match";
 }
 
+test "a scanned loop still reports on the iteration its scan does not cover" {
+    let ok = gnv::parse_plus_scan(&"ab c");
+    assert ok.ok(), `clean parse: ${ok.diagnostics.len()} diagnostics`;
+
+    let bad = gnv::parse_plus_scan(&"c");
+    assert bad.has_errors(), "the mandatory first iteration admits no alternative";
+}
+
 test "a rule-reference group reports the token no alternative admits" {
     let ok = gnv::parse_refs(&"ac");
     assert ok.ok(), `clean parse: ${ok.diagnostics.len()} diagnostics`;

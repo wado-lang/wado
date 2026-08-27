@@ -4416,15 +4416,17 @@ fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with st
 }
 
 /// What admits a group at all: `(kind ∈ FIRST(branch) && gate) || …`, branch for
-/// branch the same disjunction its dispatch tests. Reading it per alternative
-/// instead would gate one the dispatch cannot: alternatives sharing a branch are
-/// picked by the scan tournament, which no predicate reaches, and registering a
-/// gate there suppresses the inline guard that was enforcing it. `null` when no
-/// branch is gated, where the caller's own first-set test already agrees.
-fn group_entry_condition(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> Option<String> {
-    if !ctx.emit_actions() {
-        return null;
-    }
+/// branch the same disjunction its dispatch tests, paired with whether any
+/// branch carries a gate and with the union of the branches' first sets.
+/// Reading it per alternative instead would gate one the dispatch cannot:
+/// alternatives sharing a branch are picked by the scan tournament, which no
+/// predicate reaches, and registering a gate there suppresses the inline guard
+/// that was enforcing it. `null` when the body is not a group.
+fn group_admits(
+    inner: &Element,
+    kind: GroupBranchKind,
+    ctx: &mut GenContext,
+) -> Option<[bool, String, List<String>]> {
     let alts = repeat_body_group_alts(inner)?;
     let [first_sets, groups] = group_partition(alts, kind, ctx);
     let mut parts: List<String> = [];
@@ -4436,10 +4438,24 @@ fn group_entry_condition(inner: &Element, kind: GroupBranchKind, ctx: &mut GenCo
         }
         parts.push(`(${group_branch_cond(group, &first_sets, alts, &"p.peek_kind()", ctx)}${gate})`);
     }
-    if !gated {
+    let mut expected: List<String> = [];
+    for let f of &first_sets {
+        dedup_append_arr(&mut expected, f);
+    }
+    return Option::Some([gated, parts.join(" || "), expected]);
+}
+
+/// The disjunction for a caller whose own first-set test already agrees with
+/// the dispatch: only a gate narrows it, so `null` where no branch has one.
+fn group_entry_condition(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> Option<String> {
+    if !ctx.emit_actions() {
         return null;
     }
-    return Option::Some(parts.join(" || "));
+    let admits = group_admits(inner, kind, ctx)?;
+    if !admits.0 {
+        return null;
+    }
+    return Option::Some(admits.1);
 }
 
 /// A loop iteration with no mandatory-first flag — the common case.
@@ -4498,9 +4514,35 @@ fn open_group_entry(
     };
     gen_repeat_gate_break(w, elem, kind, ctx, &plus_flag);
     if !plus_flag.is_empty() {
+        gen_mandatory_first_report(w, elem, kind, ctx, &plus_flag);
         w.line(&`${plus_flag} = false;`);
     }
     return GroupEntry::Guaranteed;
+}
+
+/// Report a token the mandatory first iteration admits nowhere. The loop's scan
+/// guard covers only the iterations after it, and the dispatch it runs into
+/// answers for `Guaranteed` — every branch conditional and none taking the rest
+/// — so without this the required iteration matches nothing and says nothing.
+/// A gated group is already reported by its own dispatch (`report`).
+fn gen_mandatory_first_report(
+    w: &mut CodeWriter,
+    inner: &Element,
+    kind: GroupBranchKind,
+    ctx: &mut GenContext,
+    plus_flag: &String,
+) {
+    let Some(admits) = group_admits(inner, kind, ctx) else {
+        return;
+    };
+    if admits.0 {
+        return;
+    }
+    let expected_ref = sync_set_ref(ctx, &admits.2);
+    w.begin(&`if ${*plus_flag} && !(${admits.1})`);
+    w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
+    w.line(&"break;");
+    w.end();
 }
 
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s

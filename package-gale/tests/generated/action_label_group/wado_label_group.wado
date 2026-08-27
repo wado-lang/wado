@@ -1678,6 +1678,10 @@ fn _parse_t__inner(p: &mut Parser) -> () {
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_ID)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_1);
+            break;
+        }
         _plus_first = false;
         let id = p.expect(TK_ID, &SYNC_2);
         let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);

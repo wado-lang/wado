@@ -1565,6 +1565,10 @@ fn _parse_line__inner(p: &mut Parser) -> () {
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((p.peek_kind() == TK_WORD) || (p.peek_kind() == TK_NUM) || (p.peek_kind() == TK_SPACE)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
+        }
         _plus_first = false;
         p.expect_set(&SYNC_0);
     }

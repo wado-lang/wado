@@ -1665,6 +1665,10 @@ fn _parse_a__inner(p: &mut Parser) -> () {
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((true)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
+        }
         _plus_first = false;
         let grp_kind = p.peek_kind();
         if true {
@@ -1723,9 +1727,9 @@ fn _parse_a(p: &mut Parser) -> () {
 
 fn _parse_assign__inner(p: &mut Parser) -> () {
     let _rule_start_tok = p.pos;
-    let id = p.expect(TK_ID, &SYNC_0);
-    let eq = p.expect(TK_LIT_EQ, &SYNC_1);
-    let int = p.expect(TK_INT, &SYNC_2);
+    let id = p.expect(TK_ID, &SYNC_1);
+    let eq = p.expect(TK_LIT_EQ, &SYNC_2);
+    let int = p.expect(TK_INT, &SYNC_3);
     let semicolon = p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
     if !p.speculating {
         p.emit(`${p.rule_text(_rule_start_tok)}\n`);
@@ -1805,7 +1809,8 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_EQ];
-global SYNC_1: List<i32> = [TK_INT];
-global SYNC_2: List<i32> = [TK_LIT_SEMI];
+global SYNC_0: List<i32> = [TK_ID];
+global SYNC_1: List<i32> = [TK_LIT_EQ];
+global SYNC_2: List<i32> = [TK_INT];
+global SYNC_3: List<i32> = [TK_LIT_SEMI];
 

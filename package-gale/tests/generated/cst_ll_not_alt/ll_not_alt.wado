@@ -1620,6 +1620,10 @@ fn _parse_a__inner(p: &mut Parser) -> () {
             }
             if rep_scan_pos < 0 { break; }
         }
+        if _plus_first && !((true)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
+        }
         _plus_first = false;
         let grp_kind = p.peek_kind();
         if true {
@@ -1657,7 +1661,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
             if gd_winner == 0 {
                 _parse_assign(p);
             } else {
-                p.expect_not(&SYNC_0);
+                p.expect_not(&SYNC_1);
             }
         }
     }
@@ -1705,6 +1709,10 @@ fn _parse_b__inner(p: &mut Parser) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
+        }
+        if _plus_first && !((true)) {
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            break;
         }
         _plus_first = false;
         let grp_kind = p.peek_kind();
@@ -1763,9 +1771,9 @@ fn _parse_b(p: &mut Parser) -> () {
 }
 
 fn _parse_assign__inner(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_1);
-    p.expect(TK_LIT_EQ, &SYNC_2);
-    p.expect(TK_INT, &SYNC_0);
+    p.expect(TK_ID, &SYNC_2);
+    p.expect(TK_LIT_EQ, &SYNC_3);
+    p.expect(TK_INT, &SYNC_1);
     p.expect(TK_SEMI, &EMPTY_SYNC);
     return;
 }
@@ -1843,7 +1851,8 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_SEMI];
-global SYNC_1: List<i32> = [TK_LIT_EQ];
-global SYNC_2: List<i32> = [TK_INT];
+global SYNC_0: List<i32> = [TK_ID];
+global SYNC_1: List<i32> = [TK_SEMI];
+global SYNC_2: List<i32> = [TK_LIT_EQ];
+global SYNC_3: List<i32> = [TK_INT];
 
