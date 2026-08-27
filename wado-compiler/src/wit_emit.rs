@@ -513,12 +513,16 @@ impl<'a> Emitter<'a> {
 
         let mut packages = Vec::new();
         for ((namespace, package, version), fqs) in by_package {
-            let semver = semver::Version::parse(&version).map_err(|_| {
-                WitEmitError::UnrepresentableType {
-                    description: format!("package version `{version}` is not valid semver"),
-                }
-            })?;
-            let name = PackageName::new(namespace, package, Some(semver));
+            let semver = if version.is_empty() {
+                None
+            } else {
+                Some(semver::Version::parse(&version).map_err(|_| {
+                    WitEmitError::UnrepresentableType {
+                        description: format!("package version `{version}` is not valid semver"),
+                    }
+                })?)
+            };
+            let name = PackageName::new(namespace, package, semver);
             let mut nested = wit_encoder::NestedPackage::new(name);
             for fq in fqs {
                 nested.interface(self.reconstruct_interface(&fq, &infos, registry)?);
@@ -755,6 +759,18 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// The universal handle an extern-ref-backed resource crosses as. It names
+    /// no WIT type: the boundary sees one opaque `u32`, whatever Wado type the
+    /// signature spells, and a `&handle` is that same value rather than a
+    /// `borrow` ([Resource Inheritance](../../docs/wep-2026-04-28-resource-inheritance.md)).
+    fn extern_ref_handle(&self, named: &crate::ast::NamedType) -> Option<Type> {
+        let registry = self.cm_interface_registry?;
+        let source = registry.source_interface(named)?;
+        registry
+            .is_extern_ref_resource(&source, &named.name)
+            .then_some(Type::U32)
+    }
+
     /// Render an AST leaf: primitive, named CM type, or `&Resource` borrow.
     fn map_ast_leaf(
         &self,
@@ -764,14 +780,22 @@ impl<'a> Emitter<'a> {
     ) -> Result<Type, WitEmitError> {
         use crate::ast::Type as AstType;
         match ty {
-            AstType::Named(named) => match primitive_by_name(&named.name) {
-                Some(prim) => Ok(prim),
-                None => Ok(Type::named(self.cm_type_name(named, current_fq, uses))),
-            },
+            AstType::Named(named) => {
+                if let Some(handle) = self.extern_ref_handle(named) {
+                    return Ok(handle);
+                }
+                match primitive_by_name(&named.name) {
+                    Some(prim) => Ok(prim),
+                    None => Ok(Type::named(self.cm_type_name(named, current_fq, uses))),
+                }
+            }
             // `&Resource` becomes `borrow<resource>`; other references are
             // transparent (already peeled by `classify_ast`).
             AstType::Reference(inner) | AstType::MutReference(inner) => {
                 if let AstType::Named(named) = inner.as_ref() {
+                    if let Some(handle) = self.extern_ref_handle(named) {
+                        return Ok(handle);
+                    }
                     Ok(Type::borrow(self.cm_type_name(named, current_fq, uses)))
                 } else {
                     self.map_ast_type(inner, current_fq, uses)
@@ -1123,12 +1147,13 @@ struct FqParts {
     namespace: String,
     package: String,
     interface: String,
+    /// Empty for a package that carries no version, as a `web:*` one does.
     version: String,
 }
 
 impl FqParts {
     fn parse(fq: &str) -> Option<Self> {
-        let (path, version) = fq.split_once('@')?;
+        let (path, version) = fq.split_once('@').unwrap_or((fq, ""));
         let (ns_pkg, interface) = path.split_once('/')?;
         let (namespace, package) = ns_pkg.split_once(':')?;
         Some(Self {
@@ -1137,6 +1162,20 @@ impl FqParts {
             interface: interface.to_string(),
             version: version.to_string(),
         })
+    }
+
+    /// The FQ this parsed, rebuilt.
+    fn to_fq(&self) -> String {
+        let Self {
+            namespace,
+            package,
+            interface,
+            version,
+        } = self;
+        if version.is_empty() {
+            return format!("{namespace}:{package}/{interface}");
+        }
+        format!("{namespace}:{package}/{interface}@{version}")
     }
 }
 
@@ -1148,10 +1187,7 @@ fn use_target(current_fq: &str, source_fq: &str) -> String {
         (Some(cur), Some(src)) if cur.namespace == src.namespace && cur.package == src.package => {
             src.interface
         }
-        (_, Some(src)) => format!(
-            "{}:{}/{}@{}",
-            src.namespace, src.package, src.interface, src.version
-        ),
+        (_, Some(src)) => src.to_fq(),
         _ => source_fq.to_string(),
     }
 }

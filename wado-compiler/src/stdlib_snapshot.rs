@@ -151,7 +151,9 @@ pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
         .filter(|ms| {
             matches!(
                 ms,
-                ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. }
+                ModuleSource::Core { .. }
+                    | ModuleSource::Binding { .. }
+                    | ModuleSource::Wasm { .. }
             )
         })
         .cloned()

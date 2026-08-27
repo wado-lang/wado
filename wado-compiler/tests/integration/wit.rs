@@ -212,6 +212,41 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
         .expect("resource WIT failed to re-parse");
 }
 
+/// An extern-ref-backed resource has no CM handle type: one interface per Wado
+/// type, every handle position the same opaque `u32`, and nothing naming the
+/// `extends` relation. See `docs/wep-2026-04-28-resource-inheritance.md`.
+#[test]
+fn full_scope_reconstructs_an_extern_ref_interface_per_wado_type() {
+    let text = emit_scope(
+        "use { Dom, Node } from \"web:dom\";\n\
+         export fn run() with Dom {\n\
+             let el = Dom::document().create_element(\"div\");\n\
+             el.set_id(\"app\");\n\
+             let parent: Node = el;\n\
+             parent.append_child(&el);\n\
+         }",
+        WitScope::Full,
+    );
+    assert!(text.contains("package web:dom {"), "\n{text}");
+    assert!(
+        text.contains("append-child: func(self: u32, child: u32) -> u32;"),
+        "a handle is the same opaque u32 in every position\n{text}"
+    );
+    assert!(
+        text.contains("set-id: func(self: u32, value: string);"),
+        "\n{text}"
+    );
+    assert!(
+        !text.contains("resource") && !text.contains("borrow<") && !text.contains("extends"),
+        "an extern-ref handle is neither a CM resource nor a borrow\n{text}"
+    );
+
+    let mut resolve = wit_parser::Resolve::new();
+    resolve
+        .push_str("dom.wit", &text)
+        .expect("extern-ref WIT failed to re-parse");
+}
+
 #[test]
 fn full_scope_inlines_referenced_interfaces_and_reparses() {
     // `full` scope inlines the referenced WASI interfaces as nested packages,

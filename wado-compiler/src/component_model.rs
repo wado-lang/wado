@@ -544,9 +544,9 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
 
 /// Whether a resource declares `#[cm(..., type = "extern-ref")]`.
 fn extern_ref_backed(attrs: &[crate::ast::Attribute]) -> bool {
-    attrs.iter().any(|a| {
-        a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternRef)
-    })
+    attrs
+        .iter()
+        .any(|a| a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternRef))
 }
 
 /// The CM type an extern-ref-backed handle takes at the boundary: an opaque
@@ -2968,7 +2968,12 @@ impl CmInterfaceRegistry {
         self.newtypes
             .iter()
             .filter_map(move |((source, name), ty)| {
-                if source.starts_with(interface_prefix) {
+                // An extern-ref handle registers here to reach the `u32` every
+                // boundary path lowers it to, but it names no CM type: the WIT
+                // spells the handle inline, so no alias declares it.
+                if source.starts_with(interface_prefix)
+                    && !self.is_extern_ref_resource(source, name)
+                {
                     Some((name.as_str(), ty))
                 } else {
                     None
