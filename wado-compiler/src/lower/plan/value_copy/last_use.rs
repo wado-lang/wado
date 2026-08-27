@@ -1746,7 +1746,7 @@ fn yielded_escapes(expr: &TirExpr, type_table: &TypeTable, out: &mut Vec<(u32, O
         TirExprKind::Block(block) => block_yielded_escapes(block, type_table, out),
         TirExprKind::LabeledBlock { block, .. } => {
             block_yielded_escapes(block, type_table, out);
-            break_escapes(block, type_table, out);
+            BreakEscapes { type_table, out }.visit_block(block);
         }
         _ => out.extend(reference_escape(expr, type_table)),
     }
@@ -1763,27 +1763,21 @@ fn block_yielded_escapes(
     }
 }
 
-/// What a labeled block's `break`s hand out of it, from anywhere inside. Which
-/// label one targets is not distinguished — an outer one only over-counts.
-fn break_escapes(block: &TirBlock, type_table: &TypeTable, out: &mut Vec<(u32, Option<u32>)>) {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            TirStmtKind::Break { value: Some(v), .. } => yielded_escapes(v, type_table, out),
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                break_escapes(then_block, type_table, out);
-                if let Some(eb) = else_block {
-                    break_escapes(eb, type_table, out);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                break_escapes(body, type_table, out);
-            }
-            _ => {}
+/// What a labeled block's `break`s hand out of it, from anywhere inside — a
+/// match arm and a nested block included, which is why this rides the shared
+/// visitor rather than naming statement kinds by hand. Which label a break
+/// targets is not distinguished; an outer one only over-counts.
+struct BreakEscapes<'a> {
+    type_table: &'a TypeTable,
+    out: &'a mut Vec<(u32, Option<u32>)>,
+}
+
+impl TirRefVisitor for BreakEscapes<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Break { value: Some(v), .. } = &stmt.kind {
+            yielded_escapes(v, self.type_table, self.out);
         }
+        self.walk_stmt(stmt);
     }
 }
 
