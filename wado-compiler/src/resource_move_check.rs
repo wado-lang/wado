@@ -20,7 +20,7 @@ fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<Typ
     }
     visited.push(base);
     let children: Vec<TypeId> = match sem.types.get(base) {
-        ResolvedType::Resource { def } => return !sem.types.is_extern_ref_resource(*def),
+        ResolvedType::Resource { def } => return !sem.types.is_extern_handle_resource(*def),
         ResolvedType::GenericResource { .. } => return true,
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
         ResolvedType::Struct { .. } => sem.struct_field_type_ids_of(base).unwrap_or_default(),

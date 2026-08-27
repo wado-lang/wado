@@ -1,0 +1,55 @@
+#![stdlib("web:dom")]
+
+/// The DOM entry points, which hand out the first handle.
+#[cm("web:dom/global")]
+pub interface Dom {
+    #[cm("web:dom/global#document")]
+    fn document() -> Document;
+}
+
+#[cm("web:dom/event", type = "extern-handle")]
+pub resource Event {
+    #[cm("web:dom/event#new")]
+    #[cm_params("event-type")]
+    fn new(event_type: String) -> Event;
+}
+
+#[cm("web:dom/event-target", type = "extern-handle")]
+pub resource EventTarget {
+    #[cm("web:dom/event-target#dispatch-event")]
+    #[cm_params("self", "event")]
+    fn dispatch_event(&self, event: &Event) -> bool;
+}
+
+#[cm("web:dom/node", type = "extern-handle")]
+pub resource Node extends EventTarget {
+    #[cm("web:dom/node#text-content")]
+    #[cm_params("self")]
+    fn text_content(&self) -> String;
+    #[cm("web:dom/node#set-text-content")]
+    #[cm_params("self", "value")]
+    fn set_text_content(&self, value: String);
+    #[cm("web:dom/node#append-child")]
+    #[cm_params("self", "child")]
+    fn append_child(&self, child: &Node) -> Node;
+}
+
+#[cm("web:dom/element", type = "extern-handle")]
+pub resource Element extends Node {
+    #[cm("web:dom/element#id")]
+    #[cm_params("self")]
+    fn id(&self) -> String;
+    #[cm("web:dom/element#set-id")]
+    #[cm_params("self", "value")]
+    fn set_id(&self, value: String);
+    #[cm("web:dom/element#tag-name")]
+    #[cm_params("self")]
+    fn tag_name(&self) -> String;
+}
+
+#[cm("web:dom/document", type = "extern-handle")]
+pub resource Document extends Node {
+    #[cm("web:dom/document#create-element")]
+    #[cm_params("self", "local-name")]
+    fn create_element(&self, local_name: String) -> Element;
+}

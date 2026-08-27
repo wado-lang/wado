@@ -352,7 +352,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if required_trait.is_none()
             && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
-            && self.tysys.type_table.borrow().is_extern_ref_resource(def)
+            && self
+                .tysys
+                .type_table
+                .borrow()
+                .is_extern_handle_resource(def)
             && let Some((declaring, _)) = self.resource_instance_method(def, method_name)
             && let Some(trait_name) = colliding_trait(self)
         {
@@ -590,7 +594,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Type check method arguments against expected parameter types (newtype-aware)
         // If method was inherited from a newtype's base type, substitute base->newtype in params
-        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = owner.inherited() {
+        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = owner.newtype_base() {
             // Get the newtype that the method is being called on
             let newtype_id = self.tysys.get_base_type(receiver);
             // Substitute base type with newtype in all parameter types
@@ -676,8 +680,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
+<<<<<<< HEAD
         if let Some(base_type_id) = owner.inherited() {
             let newtype_id = self.tysys.get_base_type(receiver);
+||||||| abef9eff1
+        if let Some(base_type_id) = owner.inherited() {
+            let newtype_id = self.tysys.get_base_type(receiver.type_id);
+=======
+        if let Some(base_type_id) = owner.newtype_base() {
+            let newtype_id = self.tysys.get_base_type(receiver.type_id);
+>>>>>>> origin/main
             return_type =
                 self.tysys
                     .substitute_newtype_in_type(return_type, base_type_id, newtype_id);
@@ -994,10 +1006,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `module_source` is the body's home module. The body lives:
         //   1. In the trait-impl block's module for cross-module trait impls
         //      (e.g. `impl Display for String` in `core:prelude/format`).
-        //   2. In the *base* type's module when the method was inherited
+        //   2. In the declaring type's module when the method was inherited —
         //      through a newtype (`type MyArray<T> = List<T>`; `arr.len()`
-        //      reaches `List::len` in `core:prelude/array`, not the
-        //      newtype's module).
+        //      reaches `List::len` in `core:prelude/array`, not the newtype's
+        //      module) or through an `extends` chain.
         //   3. In the receiver type's module otherwise — inherent methods
         //      live alongside the type they're declared on.
         let method_module_source = trait_impl_module_source
@@ -1015,6 +1027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::Variant { .. }
                         | ResolvedType::Newtype { .. }
                         | ResolvedType::Flags { .. }
+                        | ResolvedType::Resource { .. }
                         | ResolvedType::GenericResource { .. } => self
                             .tysys
                             .type_table

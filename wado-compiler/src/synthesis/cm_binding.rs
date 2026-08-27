@@ -22,7 +22,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
-use crate::module_source::ModuleSource;
+use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::DeclPath;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
@@ -74,12 +74,9 @@ fn effect_owner_module_sources(
     out
 }
 
-/// Look up the canonical owning module for an effect/resource named `name`
-/// whose binding targets WASI `package` (e.g. `"cli"`).
-///
-/// Preferred match: a `ModuleSource::Wasi { interface }` whose interface starts
-/// with `"{package}/"` (e.g. `wasi:cli/stdio.wado` for package `"cli"`).
-/// Falls back to any other owner with the same name if no WASI match exists.
+/// The canonical owning module for an effect/resource named `name` whose
+/// binding targets CM `package`. A [`ModuleSource::Binding`] under
+/// `"{package}/"` wins; any other owner of the name is the fallback.
 fn lookup_effect_owner(
     owners: &IndexSet<(ModuleSource, String)>,
     name: &str,
@@ -90,7 +87,7 @@ fn lookup_effect_owner(
         if n != name {
             continue;
         }
-        if let ModuleSource::Wasi { interface } = ms
+        if let ModuleSource::Binding { interface, .. } = ms
             && interface
                 .strip_prefix(package)
                 .is_some_and(|rest| rest.starts_with('/'))
@@ -451,7 +448,17 @@ fn generate_import_adapters(project: &mut Package) {
                 &func_info.interface_name,
                 &func_info.package,
             )
-            .unwrap_or_else(|| project.interner.borrow_mut().wasi(&func_info.package));
+            // No declaring module: a placeholder owner in the function's own
+            // namespace. A world-level import carries none, and falls back to
+            // `Wasi` as it did when that was the only bundled namespace.
+            .unwrap_or_else(|| {
+                let namespace =
+                    CmNamespace::from_prefix(&func_info.namespace).unwrap_or(CmNamespace::Wasi);
+                project
+                    .interner
+                    .borrow_mut()
+                    .binding(namespace, &func_info.package)
+            });
             let produced = synthesize_adapter(
                 &func_info,
                 &project.cm_interface_registry,

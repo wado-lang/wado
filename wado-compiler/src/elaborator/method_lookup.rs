@@ -1038,7 +1038,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .find_map(|(step, current)| {
                 let args = if step == 0 { receiver_type_args } else { None };
-                self.resource_method_info_on(current, method_name, args)
+                let mut info = self.resource_method_info_on(current, method_name, args)?;
+                // An ancestor's method keeps its own name and module: one
+                // declaration, reached through the chain, so the call names the
+                // resource that declares it and the receiver passes through.
+                if step > 0
+                    && let Some(declaring) =
+                        self.tysys.type_table.borrow().find_resource_type(current)
+                {
+                    info.owner = MethodOwner::Ancestor(declaring);
+                }
+                Some(info)
             })
     }
 

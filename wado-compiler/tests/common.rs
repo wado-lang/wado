@@ -801,6 +801,29 @@ pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     linker(engine)
 }
 
+/// Everything a `wado check` would report: elaboration diagnostics and the
+/// effect check that runs after it. Both, because a form the elaborator
+/// accepts can still be rejected downstream.
+pub fn check_diagnostics(source: &str) -> Vec<String> {
+    let host = InMemoryHost::new();
+    let sem = runtime().block_on(wado_compiler::semantics::semantics(
+        source,
+        &host,
+        Some("entry.wado"),
+    ));
+    let mut out: Vec<String> = host
+        .diagnostics()
+        .into_iter()
+        .map(|d| format!("{:?}: {}", d.code, d.message))
+        .collect();
+    out.extend(
+        wado_compiler::check_effects_semantic(&sem)
+            .into_iter()
+            .map(|e| format!("Effect: {e}")),
+    );
+    out
+}
+
 /// Compile source string using in-memory host
 pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, CompileError> {
     let host = InMemoryHost::new();

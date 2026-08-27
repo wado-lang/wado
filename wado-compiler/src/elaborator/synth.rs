@@ -726,7 +726,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: MethodOwner,
         receiver: TypeId,
     ) -> TypeId {
-        let Some(base_type_id) = owner.inherited() else {
+        let Some(base_type_id) = owner.newtype_base() else {
             return return_type;
         };
         let newtype_id = self.tysys.get_base_type(receiver);

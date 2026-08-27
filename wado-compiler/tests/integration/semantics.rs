@@ -185,7 +185,7 @@ export fn run() with Stdout {
     // (where the user imports from) or a re-exported origin.
     assert_matches!(
         sem.module_of_id(def_id),
-        Some(ModuleSource::Core { .. } | ModuleSource::Wasi { .. }),
+        Some(ModuleSource::Core { .. } | ModuleSource::Binding { .. }),
         "println def should live in stdlib"
     );
 

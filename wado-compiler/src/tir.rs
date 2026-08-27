@@ -10,7 +10,7 @@ use crate::canonical::CmCallTarget;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::module_source::ModuleSource;
+use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{LocalMethodName, RefKind, TypeNameInfo, format_type_name};
 use crate::token::Span;
 
@@ -820,9 +820,9 @@ pub struct TypeTable {
     /// any point in the pipeline rather than only after a declaration's type is
     /// interned.
     decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
-    /// Resources declared `#[cm(..., type = "extern-ref")]`: a copyable handle
+    /// Resources declared `#[cm(..., type = "extern-handle")]`: a copyable handle
     /// to a host object, outside the affine resource discipline.
-    extern_ref_resources: IndexSet<crate::defs::DefId>,
+    extern_handle_resources: IndexSet<crate::defs::DefId>,
     /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<crate::defs::DefId, crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
@@ -949,7 +949,7 @@ impl TypeTable {
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
             decl_index: IndexMap::default(),
-            extern_ref_resources: IndexSet::default(),
+            extern_handle_resources: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
@@ -1102,15 +1102,15 @@ impl TypeTable {
             .copied()
     }
 
-    pub fn mark_extern_ref_resource(&mut self, def: crate::defs::DefId) {
-        self.extern_ref_resources.insert(def);
+    pub fn mark_extern_handle_resource(&mut self, def: crate::defs::DefId) {
+        self.extern_handle_resources.insert(def);
     }
 
-    /// Whether `def` declares an extern-ref-backed resource, which no affine
+    /// Whether `def` declares an extern-handle-backed resource, which no affine
     /// check and no cleanup pass owns.
     #[must_use]
-    pub fn is_extern_ref_resource(&self, def: crate::defs::DefId) -> bool {
-        self.extern_ref_resources.contains(&def)
+    pub fn is_extern_handle_resource(&self, def: crate::defs::DefId) -> bool {
+        self.extern_handle_resources.contains(&def)
     }
 
     /// Record `child extends parent`, already validated by the caller.
@@ -2260,13 +2260,20 @@ impl TypeTable {
     }
 
     /// Find any decl-backed named type scoped to a single CM *interface*,
-    /// addressed by the module it maps to (e.g. `sockets/ip_name_lookup.wado`).
+    /// addressed by the namespace that owns it and the module it maps to (e.g.
+    /// `(Wasi, sockets/ip_name_lookup.wado)`). `namespace` is `None` for a
+    /// `core:` module, which carries none.
     ///
     /// [`Self::find_named_type_by_cm_package`] scopes to the package, which
     /// holds several interfaces — two can declare the same name, and that scan
     /// returns whichever registered first.
     #[must_use]
-    pub fn find_named_type_by_module_name(&self, name: &str, module_name: &str) -> Option<TypeId> {
+    pub fn find_named_type_by_module_name(
+        &self,
+        name: &str,
+        module_name: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<TypeId> {
         for (type_id, _) in self.all_types() {
             let Some((n, ms)) = self.nominal_head(type_id) else {
                 continue;
@@ -2275,8 +2282,13 @@ impl TypeTable {
                 continue;
             }
             let matches = match ms {
-                ModuleSource::Wasi { interface } => interface.as_str() == module_name,
-                ModuleSource::Core { name: cm_name } => cm_name.as_str() == module_name,
+                ModuleSource::Binding {
+                    namespace: ns,
+                    interface,
+                } => namespace == Some(ns) && interface.as_str() == module_name,
+                ModuleSource::Core { name: cm_name } => {
+                    namespace.is_none() && cm_name.as_str() == module_name
+                }
                 _ => false,
             };
             if matches {
@@ -2286,12 +2298,18 @@ impl TypeTable {
         None
     }
 
-    /// Find a decl-backed named type scoped to a CM package, matching any
-    /// `module_source` under the `{cm_package}/` prefix — `Wasi` and `Core`
-    /// alike. `cm_package` is the bare segment (`"http"`, `"kiln"`), not a
-    /// fully-qualified source. Same-named types in distinct packages stay
+    /// Find a decl-backed named type scoped to a CM package: any
+    /// `module_source` under the `{cm_package}/` prefix, restricted to
+    /// `namespace` when the caller knows it and searching every bundled one
+    /// when it does not. `cm_package` is the bare segment (`"http"`, `"kiln"`),
+    /// not a fully-qualified source; same-named types in distinct packages stay
     /// distinct because `module_source` is part of the intern key.
-    pub fn find_named_type_by_cm_package(&self, name: &str, cm_package: &str) -> Option<TypeId> {
+    pub fn find_named_type_by_cm_package(
+        &self,
+        name: &str,
+        cm_package: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<TypeId> {
         let prefix = format!("{cm_package}/");
         for (type_id, _) in self.all_types() {
             let Some((n, ms)) = self.nominal_head(type_id) else {
@@ -2301,7 +2319,10 @@ impl TypeTable {
                 continue;
             }
             match ms {
-                ModuleSource::Wasi { interface } if interface.starts_with(&prefix) => {
+                ModuleSource::Binding {
+                    namespace: ns,
+                    interface,
+                } if namespace.is_none_or(|want| want == ns) && interface.starts_with(&prefix) => {
                     return Some(type_id);
                 }
                 // Core-packaged CM types (e.g. `core:kiln/types.wado`) are

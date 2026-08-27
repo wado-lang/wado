@@ -1,36 +1,13 @@
-//! `#[cm(..., type = "extern-ref")]` backing and `resource extends`.
+//! `#[cm(..., type = "extern-handle")]` backing and `resource extends`.
 //! See `docs/wep-2026-04-28-resource-inheritance.md`.
 
-use crate::common::InMemoryHost;
+use crate::common::{InMemoryHost, check_diagnostics as diagnostics, runtime};
+use wado_compiler::check_resource_moves_semantic;
 use wado_compiler::semantics::semantics;
-use wado_compiler::{check_effects_semantic, check_resource_moves_semantic};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
-
-/// Everything a `wado check` would report: elaboration diagnostics and the
-/// effect check that runs after it. Both, because a form the elaborator
-/// accepts can still be rejected downstream.
-fn diagnostics(source: &str) -> Vec<String> {
-    let host = InMemoryHost::new();
-    let sem = block_on(semantics(source, &host, Some("entry.wado")));
-    let mut out: Vec<String> = host
-        .diagnostics()
-        .into_iter()
-        .map(|d| format!("{:?}: {}", d.code, d.message))
-        .collect();
-    out.extend(
-        check_effects_semantic(&sem)
-            .into_iter()
-            .map(|e| format!("Effect: {e}")),
-    );
-    out
-}
 
 fn move_errors(source: &str) -> Vec<String> {
     let host = InMemoryHost::new();
-    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let sem = runtime().block_on(semantics(source, &host, Some("entry.wado")));
     check_resource_moves_semantic(&sem)
         .into_iter()
         .map(|e| e.to_string())
@@ -61,14 +38,14 @@ fn a_plain_resource_is_move_only() {
 }
 
 #[test]
-fn an_extern_ref_resource_is_copyable() {
+fn an_extern_handle_resource_is_copyable() {
     let source = format!(
-        "#[cm(\"web:dom/handle\", type=\"extern-ref\")]\nresource Handle {{}}\n{USE_TWICE}"
+        "#[cm(\"web:dom/handle\", type=\"extern-handle\")]\nresource Handle {{}}\n{USE_TWICE}"
     );
     let errors = move_errors(&source);
     assert!(
         errors.is_empty(),
-        "an extern-ref handle is copyable, got {errors:?}"
+        "an extern-handle handle is copyable, got {errors:?}"
     );
 }
 
@@ -83,13 +60,13 @@ fn an_i32_backed_resource_stays_move_only() {
     );
 }
 
-const EXTERN_REF: &str = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]";
+const EXTERN_HANDLE: &str = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]";
 
 #[test]
-fn extends_links_two_extern_ref_resources() {
+fn extends_links_two_extern_handle_resources() {
     let source = format!(
-        "{EXTERN_REF}\nresource EventTarget {{}}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+        "{EXTERN_HANDLE}\nresource EventTarget {{}}\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {{}}\n\
          export fn run() {{}}\n"
     );
@@ -101,14 +78,14 @@ fn extends_links_two_extern_ref_resources() {
 }
 
 #[test]
-fn extends_requires_extern_ref_on_both_sides() {
+fn extends_requires_extern_handle_on_both_sides() {
     let source = "resource EventTarget {}
          resource Node extends EventTarget {}
          export fn run() {}
 ";
     let d = diagnostics(source);
     assert!(
-        d.iter().any(|e| e.contains("extern-ref")),
+        d.iter().any(|e| e.contains("extern-handle")),
         "expected a backing-mismatch error, got {d:?}"
     );
 }
@@ -116,7 +93,7 @@ fn extends_requires_extern_ref_on_both_sides() {
 #[test]
 fn extends_parent_must_be_a_resource() {
     let source = "struct EventTarget {}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -128,9 +105,9 @@ fn extends_parent_must_be_a_resource() {
 
 #[test]
 fn extends_rejects_a_cycle() {
-    let source = "#[cm(\"web:dom/a\", type = \"extern-ref\")]
+    let source = "#[cm(\"web:dom/a\", type = \"extern-handle\")]
          resource A extends B {}
-         #[cm(\"web:dom/b\", type = \"extern-ref\")]
+         #[cm(\"web:dom/b\", type = \"extern-handle\")]
          resource B extends A {}
          export fn run() {}
 ";
@@ -143,9 +120,9 @@ fn extends_rejects_a_cycle() {
 
 #[test]
 fn extends_rejects_a_generic_parent_written_with_arguments() {
-    let source = "#[cm(\"web:dom/base\", type = \"extern-ref\")]
+    let source = "#[cm(\"web:dom/base\", type = \"extern-handle\")]
          resource Base<T> {}
-         #[cm(\"web:dom/leaf\", type = \"extern-ref\")]
+         #[cm(\"web:dom/leaf\", type = \"extern-handle\")]
          resource Leaf extends Base<i32> {}
          export fn run() {}
 ";
@@ -156,7 +133,7 @@ fn extends_rejects_a_generic_parent_written_with_arguments() {
     );
 }
 
-/// Two extern-ref resources in a chain, plus whatever the case needs.
+/// Two extern-handle resources in a chain, plus whatever the case needs.
 fn chain(rest: &str) -> String {
     chain_with_method("", rest)
 }
@@ -214,7 +191,7 @@ fn a_container_is_invariant() {
 #[test]
 fn unrelated_resources_are_incomparable() {
     let source = chain(
-        "#[cm(\"web:dom/other\", type = \"extern-ref\")]\n\
+        "#[cm(\"web:dom/other\", type = \"extern-handle\")]\n\
          resource Other {}\n\
          fn takes(t: EventTarget) -> EventTarget { return t; }\n\
          fn give(o: Other) -> EventTarget { return takes(o); }",
@@ -226,9 +203,9 @@ fn unrelated_resources_are_incomparable() {
 /// A parent carrying one instance method, plus whatever the case needs.
 fn chain_with_method(parent_body: &str, rest: &str) -> String {
     format!(
-        "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+        "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\n\
          resource EventTarget {{\n{parent_body}\n}}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {{}}\n\
          {rest}\n\
          export fn run() {{}}\n"
@@ -292,9 +269,9 @@ fn an_inherited_return_type_is_checked() {
 
 #[test]
 fn a_self_return_is_checked() {
-    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\n\
          resource EventTarget {\n    fn me(&self) -> Self;\n}\n\
-         #[cm(\"web:dom/other\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/other\", type = \"extern-handle\")]\n\
          resource Other {}\n\
          fn narrow(e: EventTarget) -> Other { return e.me(); }\n\
          export fn run() {}\n";
@@ -307,9 +284,9 @@ fn a_self_return_is_checked() {
 
 #[test]
 fn a_child_cannot_redeclare_an_inherited_method() {
-    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\n\
          resource EventTarget {\n    fn tag(&self) -> String;\n}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {\n    fn tag(&self) -> String;\n}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -321,9 +298,9 @@ fn a_child_cannot_redeclare_an_inherited_method() {
 
 #[test]
 fn a_child_may_declare_its_own_method_names() {
-    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\n\
          resource EventTarget {\n    fn tag(&self) -> String;\n}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {\n    fn text(&self) -> String;\n}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -332,7 +309,7 @@ fn a_child_may_declare_its_own_method_names() {
 
 #[test]
 fn a_trait_impl_colliding_with_a_resource_method_is_ambiguous() {
-    let source = "#[cm(\"web:dom/element\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/element\", type = \"extern-handle\")]\n\
          resource Element {\n    fn id(&self) -> String;\n}\n\
          trait Identified {\n    fn id(&self) -> String;\n}\n\
          impl Identified for Element {\n    fn id(&self) -> String { return \"x\"; }\n}\n\
@@ -347,7 +324,7 @@ fn a_trait_impl_colliding_with_a_resource_method_is_ambiguous() {
 
 #[test]
 fn a_trait_impl_without_a_collision_is_fine() {
-    let source = "#[cm(\"web:dom/element\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/element\", type = \"extern-handle\")]\n\
          resource Element {\n    fn id(&self) -> String;\n}\n\
          trait Named {\n    fn name(&self) -> String;\n}\n\
          impl Named for Element {\n    fn name(&self) -> String { return \"x\"; }\n}\n\
@@ -361,11 +338,11 @@ fn a_trait_impl_without_a_collision_is_fine() {
 fn a_cycle_above_the_child_terminates() {
     // `A extends B` is well-formed on its own; the cycle is between its
     // ancestors, so the override walk must not follow it forever.
-    let source = "#[cm(\"web:dom/a\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/a\", type = \"extern-handle\")]\n\
          resource A extends B {\n    fn tag(&self) -> String;\n}\n\
-         #[cm(\"web:dom/b\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/b\", type = \"extern-handle\")]\n\
          resource B extends C {\n    fn tag(&self) -> String;\n}\n\
-         #[cm(\"web:dom/c\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/c\", type = \"extern-handle\")]\n\
          resource C extends B {\n    fn tag(&self) -> String;\n}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -413,7 +390,7 @@ fn probe_the_declaring_resource_qualifies_its_own_method() {
 
 #[test]
 fn probe_a_resource_qualifies_its_own_method() {
-    let source = "#[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node {\n    fn tag(&self) -> String;\n}\n\
          fn own(n: Node) -> String { return Node::tag(&n); }\n\
          export fn run() {}\n";
@@ -438,7 +415,7 @@ fn the_qualified_form_reaches_an_inherited_method() {
 
 #[test]
 fn extends_rejects_an_unknown_parent() {
-    let source = "#[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends Nope {}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -450,7 +427,7 @@ fn extends_rejects_an_unknown_parent() {
 
 #[test]
 fn extends_rejects_a_type_parameter_as_parent() {
-    let source = "#[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node<T> extends T {}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -459,9 +436,9 @@ fn extends_rejects_a_type_parameter_as_parent() {
 
 #[test]
 fn extends_rejects_a_generic_parent_named_without_arguments() {
-    let source = "#[cm(\"web:dom/base\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/base\", type = \"extern-handle\")]\n\
          resource Base<T> {\n    fn get(&self) -> T;\n}\n\
-         #[cm(\"web:dom/leaf\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/leaf\", type = \"extern-handle\")]\n\
          resource Leaf extends Base {}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -473,9 +450,9 @@ fn extends_rejects_a_generic_parent_named_without_arguments() {
 
 #[test]
 fn extends_rejects_a_generic_child() {
-    let source = "#[cm(\"web:dom/parent\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/parent\", type = \"extern-handle\")]\n\
          resource Parent {}\n\
-         #[cm(\"web:dom/child\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/child\", type = \"extern-handle\")]\n\
          resource Child<T> extends Parent {}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -499,9 +476,9 @@ fn another_attributes_type_field_is_its_own_business() {
 
 #[test]
 fn a_child_may_declare_a_static_the_parent_also_declares() {
-    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\n\
          resource EventTarget {\n    fn make() -> EventTarget;\n}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {\n    fn make() -> Node;\n}\n\
          export fn run() {}\n";
     let d = diagnostics(source);
@@ -543,9 +520,9 @@ fn shared_reference_match_arms_join_in_both_orders() {
 
 #[test]
 fn if_let_branches_join_on_the_ancestor() {
-    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\n\
          resource EventTarget {}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {}\n\
          fn pick(maybe: Option<Node>, t: EventTarget) -> EventTarget {\n\
          \x20   let x = if let Option::Some(n) = maybe { n } else { t };\n\
@@ -575,9 +552,9 @@ fn a_block_tail_if_joins_on_the_ancestor() {
 fn the_ambiguity_names_the_resource_declaring_the_instance_method() {
     // `Node::id` is a static, so it is not what `n.id()` reaches; the
     // colliding declaration is the one it inherits.
-    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\n\
          resource EventTarget {\n    fn id(&self) -> String;\n}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {\n    fn id() -> String;\n}\n\
          trait Identified {\n    fn id(&self) -> String;\n}\n\
          impl Identified for Node {\n    fn id(&self) -> String { return \"x\"; }\n}\n\
@@ -642,16 +619,16 @@ fn a_ref_trait_impl_does_not_hide_the_ambiguity() {
 }
 
 #[test]
-fn the_backing_is_confined_to_the_bindings_it_lowers_for() {
-    // On a resource the compiler does lower, the backing would keep the
-    // own-handle surface while turning off the drop and the move check.
-    let source = "#[cm(\"wasi:cli/terminal-output@0.3.0\", type = \"extern-ref\")]\n\
-         resource TerminalOutput {}\n\
-         export fn run() {}\n";
-    let d = diagnostics(source);
+fn the_backing_is_declared_not_inferred_from_the_namespace() {
+    // The backing is whatever the declaration spells: it erases the resource
+    // wherever it appears, so no namespace is privileged.
+    let source = format!(
+        "#[cm(\"wasi:demo/handle\", type = \"extern-handle\")]\nresource Handle {{}}\n{USE_TWICE}"
+    );
+    assert_eq!(diagnostics(&source), Vec::<String>::new());
     assert!(
-        d.iter().any(|e| e.contains("not built yet")),
-        "expected the unbuilt-lowering error, got {d:?}"
+        move_errors(&source).is_empty(),
+        "the backing is copyable outside `web:*` too"
     );
 }
 
@@ -660,9 +637,9 @@ fn the_backing_is_confined_to_the_bindings_it_lowers_for() {
 /// merely shares its name.
 #[test]
 fn a_child_static_shadows_a_parent_instance_method_name() {
-    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\n\
          resource EventTarget {\n    fn make(&self, tag: String) -> EventTarget;\n}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         #[cm(\"web:dom/node\", type = \"extern-handle\")]\n\
          resource Node extends EventTarget {\n    fn make() -> Node;\n}\n\
          fn build() -> Node { return Node::make(); }\n\
          export fn run() {}\n";

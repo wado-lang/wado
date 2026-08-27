@@ -29,7 +29,10 @@ pub(crate) fn module_uri(
             Some(resolve_local_uri(path, request_uri))
         }
         ModuleSource::Core { name } => Some(format!("core:{name}")),
-        ModuleSource::Wasi { interface } => Some(format!("wasi:{interface}")),
+        ModuleSource::Binding {
+            namespace,
+            interface,
+        } => Some(format!("{namespace}:{interface}")),
         ModuleSource::Remote { url, .. } => Some(url.to_string()),
         // Kiln-redirected modules already carry a fully-qualified URI;
         // hand it to the LSP client unchanged.

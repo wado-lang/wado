@@ -14,7 +14,7 @@ use crate::ast::{Item, Module};
 use crate::bind;
 use crate::compiler_host::{CompilerHost, SourceError};
 use crate::logger::Logger;
-use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
+use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind};
 use crate::name::{normalize_module_path, resolve_module_path};
 use crate::parser::Parser;
 use crate::stdlib;
@@ -133,7 +133,7 @@ impl std::fmt::Display for LoadError {
             LoadError::UnknownNamespace { namespace } => {
                 write!(
                     f,
-                    "unknown module namespace '{namespace}'; expected 'core' or 'wasi'"
+                    "unknown module namespace '{namespace}'; expected 'core', 'wasi' or 'web'"
                 )
             }
             LoadError::InvalidModulePath { path } => {
@@ -527,8 +527,11 @@ pub fn resolve_wasm_asset_path(
             "core:{}",
             join_namespace_relative_path(name, import_source)
         )),
-        ModuleSource::Wasi { interface } => Ok(format!(
-            "wasi:{}",
+        ModuleSource::Binding {
+            namespace,
+            interface,
+        } => Ok(format!(
+            "{namespace}:{}",
             join_namespace_relative_path(interface, import_source)
         )),
         ModuleSource::Local { path } => Ok(crate::name::resolve_local_identity(
@@ -1009,10 +1012,10 @@ fn parse_stdlib_identity_attribute(
     };
     if let Some(name) = path.strip_prefix("core:") {
         Ok(Some(interner.core(name)))
-    } else if let Some(interface) = path.strip_prefix("wasi:") {
-        Ok(Some(interner.wasi(interface)))
+    } else if let Some((namespace, interface)) = CmNamespace::split_specifier(path) {
+        Ok(Some(interner.binding(namespace, interface)))
     } else {
-        unreachable!("a registered stdlib path is `core:`- or `wasi:`-prefixed")
+        unreachable!("a registered stdlib path carries `core:` or a reserved namespace")
     }
 }
 
@@ -1107,12 +1110,12 @@ fn stdlib_slots() -> &'static StdlibSlotMap {
 
     static SLOTS: OnceLock<StdlibSlotMap> = OnceLock::new();
     SLOTS.get_or_init(|| {
-        let total = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_WASI_MODULES.len();
+        let total = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_BINDING_MODULES.len();
         let mut slots: StdlibSlotMap =
             crate::hashmap::IndexMap::with_capacity_and_hasher(total, FxBuildHasher);
         for &(path, source) in stdlib::ALL_CORE_MODULES
             .iter()
-            .chain(stdlib::ALL_WASI_MODULES.iter())
+            .chain(stdlib::ALL_BINDING_MODULES.iter())
         {
             slots.insert(
                 path,
@@ -1165,7 +1168,10 @@ fn cached_wasm_binding_module(import_path: &str, source: &str) -> Option<&'stati
 fn stdlib_cache_key(ms: &ModuleSource) -> Option<String> {
     match ms {
         ModuleSource::Core { name } => Some(format!("core:{name}")),
-        ModuleSource::Wasi { interface } => Some(format!("wasi:{interface}")),
+        ModuleSource::Binding {
+            namespace,
+            interface,
+        } => Some(format!("{namespace}:{interface}")),
         _ => None,
     }
 }
@@ -1205,11 +1211,11 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// [`ModuleSource::Wasm`] via the dependency index. Drained like
     /// `pending_implicit_wasm_imports`, but from the resolved source directly.
     pending_component_imports: Vec<(ModuleSource, WasmAssetKind)>,
-    /// WASI stdlib packages a decoded CM component transitively imports (its
+    /// Bundled stdlib packages a decoded CM component transitively imports (its
     /// host-leaf capabilities). Loaded once every component import is seen, so
     /// effect reconstruction can require the effects behind the component;
     /// otherwise an impure dependency's capability would go unrequested.
-    pending_host_leaf_wasi: IndexSet<ModuleSource>,
+    pending_host_leaf_bindings: IndexSet<ModuleSource>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
     /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
@@ -1242,7 +1248,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             loaded_wasm_namespaces: IndexSet::default(),
             pending_implicit_wasm_imports: Vec::new(),
             pending_component_imports: Vec::new(),
-            pending_host_leaf_wasi: IndexSet::default(),
+            pending_host_leaf_bindings: IndexSet::default(),
             entry_module_source: None,
             entry_canonical_name: None,
             entry_dir: String::new(),
@@ -1434,7 +1440,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         // Now that every component import (file-path and registry-coordinate)
         // has been seen, load the WASI packages behind their host-leaf imports.
-        self.load_pending_host_leaf_wasi();
+        self.load_pending_host_leaf_bindings();
         let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
         for (from_ms, kind, use_decl) in queued {
             self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
@@ -1633,14 +1639,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&span);
         let bindings = built?;
 
-        // Queue the WASI packages behind this component's host-leaf imports so
-        // effect reconstruction sees the effects it transitively needs (a
+        // Queue the bundled packages behind this component's host-leaf imports
+        // so effect reconstruction sees the effects it transitively needs (a
         // `wasi:clocks/monotonic-clock@…` import loads the `clocks` package).
         for fq in &bindings.host_leaf_imports {
-            if let Some(rest) = fq.strip_prefix("wasi:") {
+            if let Some((namespace, rest)) = CmNamespace::split_specifier(fq) {
                 let package = rest.split('/').next().unwrap_or(rest);
-                let ms = self.interner.wasi(package);
-                self.pending_host_leaf_wasi.insert(ms);
+                let ms = self.interner.binding(namespace, package);
+                self.pending_host_leaf_bindings.insert(ms);
             }
         }
 
@@ -1688,7 +1694,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         source: &ModuleSource,
         path: &str,
     ) -> Result<Vec<u8>, LoadError> {
-        if path.starts_with("core:") || path.starts_with("wasi:") {
+        if crate::module_source::is_bundled_specifier(path) {
             return stdlib::get_stdlib_wasm_asset(path)
                 .map(<[u8]>::to_vec)
                 .ok_or_else(|| LoadError::ModuleNotFound {
@@ -1716,8 +1722,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// registry-coordinate — has been processed, since a coordinate dependency
     /// is drained after `load_implicit_modules` yet still contributes host-leaf
     /// imports; loading here catches both paths in one place.
-    fn load_pending_host_leaf_wasi(&mut self) {
-        let sources: Vec<ModuleSource> = std::mem::take(&mut self.pending_host_leaf_wasi)
+    fn load_pending_host_leaf_bindings(&mut self) {
+        let sources: Vec<ModuleSource> = std::mem::take(&mut self.pending_host_leaf_bindings)
             .into_iter()
             .collect();
         self.load_stdlib_sources(sources);
@@ -1847,8 +1853,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         if let Some(name) = import_source.strip_prefix("core:") {
             return Ok(self.interner.core(name));
         }
-        if let Some(interface) = import_source.strip_prefix("wasi:") {
-            return Ok(self.interner.wasi(interface));
+        if let Some((namespace, interface)) = CmNamespace::split_specifier(import_source) {
+            return Ok(self.interner.binding(namespace, interface));
         }
 
         // Handle remote modules (http:// or https://)
@@ -1968,8 +1974,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     Err(LoadError::ModuleNotFound { path: import_path })
                 }
             }
-            ModuleSource::Wasi { interface } => {
-                let import_path = format!("wasi:{interface}");
+            ModuleSource::Binding {
+                namespace,
+                interface,
+            } => {
+                let import_path = format!("{namespace}:{interface}");
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
                     Ok(source.to_string())
                 } else {

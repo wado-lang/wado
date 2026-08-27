@@ -193,7 +193,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
 }
 
 fn is_stdlib_module(input: &str) -> bool {
-    input.starts_with("core:") || input.starts_with("wasi:")
+    wado_compiler::module_source::is_bundled_specifier(input)
 }
 
 pub fn run(opts: DocOptions) -> Result<(), CliExit> {
@@ -263,7 +263,8 @@ fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
 /// file paths -> file stem.
 fn module_filename_stem(input: &str) -> String {
     if is_stdlib_module(input) {
-        return input.replace(':', "-");
+        // A surviving `/` would have `write_to_file` create a directory.
+        return input.replace([':', '/'], "-");
     }
     Path::new(input)
         .file_stem()
@@ -1277,6 +1278,20 @@ mod tests {
         let mut out = String::new();
         render_md_doc(&mut out, input);
         out
+    }
+
+    /// `{module}` fills a filename, so the stem must be one path component.
+    #[test]
+    fn a_bundled_module_stem_is_a_single_path_component() {
+        for input in ["wasi:http/types", "web:dom", "core:kiln/types"] {
+            let stem = module_filename_stem(input);
+            assert!(
+                !stem.contains('/') && !stem.contains(':'),
+                "`{input}` gave the stem `{stem}`, which names a path, not a file"
+            );
+        }
+        assert_eq!(module_filename_stem("wasi:http/types"), "wasi-http-types");
+        assert_eq!(module_filename_stem("src/app.wado"), "app");
     }
 
     #[test]
