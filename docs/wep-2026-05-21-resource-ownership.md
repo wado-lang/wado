@@ -239,7 +239,13 @@ where it cannot prove move / share / fresh; no elision pass):
   way: the temp it reads is private to the unroll and each field has exactly one
   reader, so the field is the binding's to take.
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
-  returns owned), plus the literals that materialize their own storage: a string
+  returns owned), settled one call-graph component at a time with the
+  component's own members assumed owned and the ones a walk refutes dropped.
+  Grown from nothing instead, a cycle whose members return each other's result —
+  `lower_element` yields `lower_group`'s value and `lower_group` yields
+  `lower_element`'s — has each reading the other's unproven "borrowed", so the
+  pair stays there and every result the family builds is deep-copied. Plus the
+  literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
   array. An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
@@ -267,7 +273,12 @@ where it cannot prove move / share / fresh; no elision pass):
   so an escape recorded against a binding closes back over the binding's
   referent (`propagate_escapes_to_referents`) — a reference binding handed to a
   `stores` callee pins the scrutinee exactly as `&op` itself would.
-- Confinement — `confine.rs` per-parameter escape fixpoint.
+- Confinement — `confine.rs` per-parameter escape fixpoint. A builtin declares
+  no function, so it is absent from the table that walk builds; reading absence
+  as an opaque callee made every parameter handed to one escape. `a[i]` is a
+  builtin call, so that was every function that indexes an array — including
+  `String::cmp`, and so `TreeMap::find_index`, whose key every lookup then
+  deep-copied.
 - Where a stored reference lands — `stores.rs` separates the position a callee
   routes into its _return value_ from one that reaches a global or is written
   through a reference the caller owns. A caller must assume the union, but the

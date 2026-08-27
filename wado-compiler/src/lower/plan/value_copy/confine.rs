@@ -130,7 +130,15 @@ struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
+    /// A builtin declares no function, so it is absent from the table a walk
+    /// over the package builds — its own reference is what says it is one.
+    /// Reading absence as `Opaque` instead made every parameter handed to a
+    /// builtin escape, `a[i]`'s `array_get_value` included, which is every
+    /// element read there is.
     fn kind(&self, func: &FunctionRef) -> Kind {
+        if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+            return Kind::Builtin;
+        }
         self.kinds
             .get(&func.module_source, &func.name)
             .copied()
