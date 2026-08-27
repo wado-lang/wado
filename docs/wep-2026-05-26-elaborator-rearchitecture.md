@@ -38,8 +38,9 @@ LSP can query and `build_tir` is the batch-only extension that emits TIR. The
 implementation did not honour it: `annotate_modules` covered only
 declaration-level information, and all body-level work — inference, name
 resolution, dispatch, coercion choice, the desugar rewrites — happened inside
-`build_tir_from_state` as a side effect of TIR emission. Every editor
-`didChange` therefore paid for a full TIR emission whose output was discarded.
+`build_tir_from_state` as a side effect of TIR emission. There was no point at
+which the facts were complete, so what the LSP read was a by-product of a
+batch-only artefact rather than a phase output with a contract.
 
 ### Queries re-resolved foreign declaration ASTs on demand
 
@@ -56,17 +57,16 @@ four-way seam — it interns through `tysys`, records use→def edges into
 of `Elaborator`, `&mut`. A suppression flag existed so a query re-resolution
 would not record non-authoritative edges over the owning module's. A
 perspective swap replaced ten fields so `resolve_type` could run under a
-foreign module's import context. And it was quadratic in places: the
-per-module preamble rescanned every loaded module for associated constants.
+foreign module's import context.
 
 ### Reachability had no home
 
 `elaborate` must produce reachability information: the LSP renders unused
 locals, imports and items (see
 [`wep-2026-05-16-unused-diagnostics.md`](./wep-2026-05-16-unused-diagnostics.md)),
-and reify can skip items unreachable from world exports, shrinking the input
-to `monomorphize` / `lower` / `optimize`. Neither was possible while the
-elaborator exposed no "annotation complete" checkpoint.
+and reify emits only the items reachable from world exports, so what reaches
+`monomorphize` / `lower` / `optimize` is what the program can run. Neither was
+possible while the elaborator exposed no "annotation complete" checkpoint.
 
 ## Decision
 
@@ -262,7 +262,9 @@ Every convergence below was forced by a defect where two of them disagreed:
 - Which declaration a name means — from the module that wrote it. A name as
   written and the name a declaration calls itself differ exactly when an alias
   is in play, so a lookup keyed by the wrong one answers with another module's
-  same-named type. Superseded by WEP 2026-08-10: a reference site is resolved
+  same-named type. Superseded by
+  [`wep-2026-08-12-declaration-identity.md`](./wep-2026-08-12-declaration-identity.md):
+  a reference site is resolved
   once, by its writing module, and the consumers take the answer rather than
   each deriving one. The position-scoped variants this section listed — a
   trait-position lookup where only trait declarations are candidates — are what
@@ -299,13 +301,18 @@ of scope fields outside `scope.rs`.
 
 ```rust
 pub struct Elaborator<'a, H: CompilerHost> {
-    env: ElabEnv<'a, H>,   // symbols, logger, interner, invocations, entry module
-    tysys: TypeSystem,     // shared handle (+ Signatures)
-    sem: ModuleSemantics,  // owned; driver swaps per module
-    module: ModuleSource,  // current module, set at entry
-    scope: Scope,          // guard-managed transient state
-    infer_holes: InferHoleTable,
+    tysys: TypeSystem,          // shared handle (+ Signatures)
+    sem: ModuleSemantics,       // owned; driver swaps per module
+    symbols: &'a SymbolTable,
+    logger: &'a Logger<'a, H>,
+    current_module_source: ModuleSource,  // set at entry
+    entry_module_source: ModuleSource,
+    annotate_ctx: Scope,        // guard-managed transient state
+    invocations: Rc<InvocationIndex>,
+    interner: Rc<RefCell<ModuleSourceInterner>>,
     suppress_reference_recording: bool,  // the argument-classification probe
+    infer_holes: InferHoleTable,
+    assoc_binding_stack: IndexSet<(TypeId, String)>,
 }
 ```
 
@@ -344,10 +351,12 @@ scope-, inference-, dispatch-, or mangling-sensitive.
 Two boundary invariants keep it that way:
 
 - Fail-loud, not fail-safe. Reify does not fall back to recomputation when a
-  fact is absent; every decision-bearing read is an `.expect`. The sole
-  surviving `resolve_type` call is the global read for a snapshot-rehydrated
+  fact is absent; every decision-bearing read is an `.expect`. One
+  `resolve_type` call is sanctioned: the global read for a snapshot-rehydrated
   callee module, whose `ModuleSemantics` legitimately carries no
-  `current_module_globals` — a documented exception, not a fallback.
+  `current_module_globals` — a documented exception, not a fallback. Reify
+  holds three further call sites, which the rule does not admit; see
+  [Known gaps](#known-gaps).
 - Single source for the projection rule. The "dense, real type params"
   predicate (`!effect && !fn-bound`) that fixes positional monomorph slots
   lives once, as `ast::GenericParam::is_real_type_param`; the annotate walk
@@ -449,8 +458,8 @@ Lean, Idris) for the same kind of work.
 Passing a narrow "resolution context" — type table, reference sink, logger,
 scope — into the query layer, keeping on-demand foreign-signature resolution.
 Rejected: it re-creates the God Object as a parameter bundle. The suppression
-gate, the perspective swaps, and the per-use-site re-resolution cost all stay —
-it treats the symptom, and the query layer still cannot be tested without a
+gate, the perspective swaps, and the per-use-site re-resolution all stay — it
+treats the symptom, and the query layer still cannot be tested without a
 walker. The digest removes the cause.
 
 ## Implementation
@@ -524,29 +533,111 @@ neither swaps a perspective nor suppresses a recording.
 
 Each is a grep:
 
-| Rule                                             | Count |
-| ------------------------------------------------ | ----- |
-| AST-map reads outside reify / decl pass          | 0     |
-| Whole-module AST scans                           | 0     |
-| Name-keyed AST predicates                        | 0     |
-| AST-level type-param substitution helpers        | 0     |
-| Manual scope save/restore outside `scope.rs`     | 0     |
-| `with_module_perspective_for` call sites         | 2     |
-| `with_reference_recording_suppressed` call sites | 1     |
+| Rule                                             | Target | Now |
+| ------------------------------------------------ | ------ | --- |
+| AST-map reads outside reify / decl pass          | 0      | 0   |
+| Whole-module AST scans outside the decl pass     | 0      | 0   |
+| Name-keyed AST predicates                        | 0      | 1   |
+| AST-level type-param substitution helpers        | 0      | 1   |
+| Manual scope save/restore outside `scope.rs`     | 0      | 0   |
+| `with_module_perspective_for` call sites         | 2      | 2   |
+| `with_reference_recording_suppressed` call sites | 1      | 1   |
+| Walker signatures taking or returning a TIR node | 0      | 24  |
+| Reify `resolve_type` call sites                  | 1      | 4   |
 
-The last two are floors, not zeroes, and each is a walker frame rather than a
-query: both perspective swaps are the callee-scope retry a parameter default
-needs when the caller cannot name the callee's type
+The perspective and suppression rows are floors, not zeroes, and each is a
+walker frame rather than a query: both perspective swaps are the callee-scope
+retry a parameter default needs when the caller cannot name the callee's type
 ([`wep-2026-04-11-default-arguments.md`](./wep-2026-04-11-default-arguments.md)),
-and the surviving suppression is the argument-classification probe.
+and the surviving suppression is the argument-classification probe. Every row
+whose count exceeds its target is a [known gap](#known-gaps).
 
-### Remaining
+## Known gaps
 
-- [ ] Walker slim-down: bundle the borrowed compilation-unit inputs (symbols,
-      logger, interner, invocations, entry module) behind one `ElabEnv` field,
-      dissolve `AnnotateState` — `tysys` and `module_semantics` land on
-      `Semantics`, the rest are driver locals — and collapse the per-module
-      construction site.
+### `annotate` still speaks TIR
+
+The phase boundary holds — reify is the sole `TirModule` producer — but the
+walker's own vocabulary does not. `util::placeholder(type_id, span)` mints a
+`TirExpr` whose kind is `Unit` and whose only readable content is its type and
+span, so that walker code can keep calling builders whose signatures were
+written for the combined walk: `build_binary_op_tir` takes two `TirExpr` and
+returns a `TypeId`. 61 placeholder sites feed 24 such signatures. In the same
+seam, `resolve_function` / `resolve_struct` / `resolve_effect_decl` /
+`resolve_resource_decl` return TIR nodes no caller reads, which is why
+`placeholder_function` exists at all — an empty shell built to satisfy a return
+type. The dependency also runs backwards: reify calls the walker's
+`build_tir_method_call` at 14 sites, so the TIR builder lives on the walker,
+the phase that emits no TIR.
+
+Closing it: give each builder the `(TypeId, Span)` it actually reads, move the
+TIR builders reify shares to reify, and let the item-level `resolve_*` return
+what their callers use. `placeholder` and `placeholder_function` then have no
+callers, and the walker-signature row reaches its target.
+
+### Reify re-resolves three types annotate never recorded
+
+Beyond the sanctioned global read, reify resolves a type-parameter default, a
+closure's declared return type, and a type-pack's positional slot from AST.
+Each is decision-bearing, so the completeness rule does not admit it: annotate
+visits all three nodes and can record the answer.
+
+Closing it: record each as a fact on `ModuleSemantics.types`, keyed by the
+declaring node's `AstId`, and make reify's `resolve_type` private to the global
+read.
+
+### The walker slim-down
+
+The borrowed compilation-unit inputs (symbols, logger, interner, invocations,
+entry module) are still five separate fields rather than one `ElabEnv`, and
+`AnnotateState` still exists, reaching `effect_check.rs`, `lib.rs` and
+`package.rs` as a carrier. `assoc_binding_stack` is transient walk state that
+landed on `Elaborator` rather than `Scope`, and is mutated by a hand-written
+insert / `shift_remove` pair rather than a guard — the "another field on
+`Elaborator`" default the membership rules exist to refuse.
+
+Closing it: bundle the borrowed inputs behind `ElabEnv`, dissolve
+`AnnotateState` — `tysys` and `module_semantics` land on `Semantics`, the rest
+are driver locals — collapse the per-module construction site, and move the
+recursion stack into `Scope` behind a guard.
+
+### One fact, two homes
+
+`TypeAnnotations` carries 31 fields. Five of them — `local_types`,
+`expression_types`, `method_dispatch`, `coercions`, `desugars` — are
+`mem::take`n out of every `ModuleSemantics` and re-published as flat maps on
+`Semantics`, leaving those five empty behind them. The other 26 stay where the
+walker wrote them, and `effect_check` reads them there. Nothing
+in either type says which half is live, so a consumer that guesses wrong reads
+an empty map instead of failing.
+
+Closing it: one home. Either the flat `Semantics` maps become views over
+`ModuleSemantics`, or the five fields leave `TypeAnnotations` outright.
+
+### Two more implementations of "how a frame is left"
+
+`elaborator/type_resolution.rs` holds an AST-level `substitute_type_params`
+that replaces type parameters by _name_ over an `ast::Type` — one helper
+answering for both AST rows above. `expr.rs::substitute_type_params_by_map` is
+a hand-rolled recursion over a handful of `ResolvedType` arms, so it is partial
+by construction wherever the arm list is not.
+
+Closing it: route both through `TypeTable::substitute_type_params_with`, the
+one implementation this WEP names, and delete them.
+
+### The query layer is only partly moved
+
+Boundaries by type hold for the four components, but the walker still carries
+544 methods against `TypeSystem`'s 74, and the dispatch and call paths
+(`method_lookup.rs`, `call.rs`) remain predominantly walker-side even where
+they ask no walk-state question. 17 methods exceed 400 lines, `resolve_call`
+among them at 1308. Separately, the decl pass answers each of its questions
+with its own scan of every module's item list — more than a dozen in total — so
+a new declaration fact defaults to a new scan rather than a place in an
+existing walk.
+
+Closing it: move each query that writes no walk state onto `TypeSystem`, which
+is also what makes it testable without a walker, and give the decl pass one
+walk that the individual collectors hang off.
 
 ## Consequences
 
@@ -556,30 +647,27 @@ and the surviving suppression is the argument-classification probe.
   a walker arm cannot open-code a foreign-AST lookup because the map is gone.
   Every new field has a sub-struct it belongs to, and the membership criterion
   is mechanical.
-- `annotate` actually annotates. `Semantics` is complete when it returns, and
-  the LSP no longer pays for thrown-away TIR.
-- Each signature is resolved once, not once per use site. Associated-const
-  collection drops from O(N²) to O(N).
+- `annotate` actually annotates. `Semantics` is complete when it returns, so
+  the LSP path has a phase output with a contract rather than a by-product of
+  TIR emission.
+- Each signature is resolved once, in its declaring frame, rather than once per
+  use site under whatever context the use site could reconstruct.
 - One recorded truth for use→def edges, which removes the "query clobbers the
   owning module's edge" bug class at the root rather than suppressing it.
 - Liveness has a place to live: it slots between `annotate` and `reify`, gives
-  the LSP its unused diagnostics, and shrinks reify's output before
-  monomorphization sees it.
+  the LSP its unused diagnostics, and decides what reify emits.
 - `Rc<RefCell<…>>` retreats to where it is genuinely needed. Borrow-check
   pressure now reflects the conceptual model rather than working around it.
 
 ### Trade-offs
 
-- Batch compilation walks bodies twice: once in `annotate_bodies` (inference,
-  resolution, dispatch) and once in `reify` (mechanical). The remedy, should
-  one be wanted, is to specialise `reify` over the recorded annotations, not
-  to merge the phases back. The clean phase boundary is the load-bearing
-  decision.
-- Eager signature resolution interns types that may never be used. Bounded by
-  declaration count, not use count; joins the stdlib snapshot like the other
-  decl tables.
-- Digests clone AST fragments (default exprs, trait default bodies). `Rc`
-  where a body is heavy; the clones replace per-use-site clones.
+- Batch compilation walks each body twice: `annotate_bodies` for the facts,
+  `reify` for the emission. Merging the two back into one walk is not on the
+  table — the phase boundary is the load-bearing decision.
+- Every declaration's signature is resolved whether or not a use site names it,
+  so a declaration nothing reaches must still be resolvable in its own frame.
+- Digests hold AST fragments (default exprs, associated-const values, trait
+  default bodies), so for those nodes the AST outlives the walk that read it.
 - Diagnostic timing shifts: a broken signature errors once at its declaration,
   not at each use.
 - Bigger up-front design surface. The membership rules must be respected when
