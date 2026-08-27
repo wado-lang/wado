@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787791344825,
+  "lastUpdate": 1787809771710,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51425,6 +51425,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 254936,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "abef9eff1ac2da98ae97edc844fec83d600c2861",
+          "message": "Merge pull request #1908 from wado-lang/claude/stage-c-cleanup-design-aahcrn\n\nfeat(gale): run actions and predicates inside a group, and answer every required group position",
+          "timestamp": "2026-08-27T14:39:36+09:00",
+          "tree_id": "cbf6b31e90cb79dc1653666b84f65fd985e6ede6",
+          "url": "https://github.com/wado-lang/wado/commit/abef9eff1ac2da98ae97edc844fec83d600c2861"
+        },
+        "date": 1787809771296,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 258232,
             "unit": "bytes"
           }
         ]
