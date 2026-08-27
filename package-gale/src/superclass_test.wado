@@ -158,14 +158,20 @@ test "a template's interpolation holds its own commas and quotes" {
 test "an integer argument types as i32 only inside the range" {
     for let arg of &["0", "7", "-7", "2147483647", "-2147483648", "0000000012"] {
         let mut ops: List<SuperOp> = [];
-        add_super_op(&mut ops, &SuperCall { name: "m", args: [*arg] }, &ActionKind::Action);
+        add_super_op(&mut ops, &SuperCall {
+            name: "m",
+            args: [*arg],
+        }, &ActionKind::Action);
         assert ops[0].params == ["i32"], `${*arg}: params ${ops[0].params}`;
     }
     // Splicing one of these into an `i32` parameter would not compile, so it has
     // no evident type either.
     for let arg of &["2147483648", "-2147483649", "99999999999999999999"] {
         let mut ops: List<SuperOp> = [];
-        add_super_op(&mut ops, &SuperCall { name: "m", args: [*arg] }, &ActionKind::Action);
+        add_super_op(&mut ops, &SuperCall {
+            name: "m",
+            args: [*arg],
+        }, &ActionKind::Action);
         assert super_ops_without_signature(&ops) == ["m"], `${*arg} must be refused`;
     }
 }
