@@ -2626,7 +2626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `let mut __iter_N = …;` — `defining_ast_id: None` keeps this
         // synthetic local out of `local_symbols`. Reify rebuilds the `let`;
         // we reserve the local slot here for walk-order parity.
-        ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
+        ctx.add_local(iter_var, iter_type, /* is_mut */ true, None);
 
         // Make `__for_of_N` visible to a body-level `break __for_of_N`
         // (no existing user does this, but the validation in `resolve_break`

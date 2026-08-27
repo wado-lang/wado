@@ -4918,9 +4918,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             key,
             super::sem::types::FromCallFacts {
                 method_def: impl_def.and_then(|def| self.tysys.declared_method(def, "from")),
-                module_source: module_source.clone(),
-                mangled_name: method_name.clone(),
-                target_name: target_receiver.clone(),
+                module_source,
+                mangled_name: method_name,
+                target_name: target_receiver,
                 from_name,
                 from_trait_name,
             },
