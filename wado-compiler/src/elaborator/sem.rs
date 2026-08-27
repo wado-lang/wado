@@ -34,6 +34,39 @@ pub(crate) struct ModuleSemantics {
     pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
 }
 
+impl ModuleSemantics {
+    /// Every node this module's walk recorded a fact for that
+    /// [`crate::semantics::Semantics`] answers from — the list its routing is
+    /// built over, and the same list [`Self::routed_fact_kinds`] reports on.
+    pub(crate) fn routed_fact_ids(&self) -> impl Iterator<Item = &AstId> {
+        self.bindings
+            .references
+            .keys()
+            .chain(self.bindings.local_symbols.keys())
+            .chain(self.types.local_types.keys())
+            .chain(self.types.expression_types.keys())
+            .chain(self.types.method_dispatch.keys())
+            .chain(self.types.coercions.keys())
+            .chain(self.types.desugars.keys())
+    }
+
+    /// Which of those fact kinds this walk recorded for `id`. Routing sends
+    /// every kind to one walk, so a later walk over the same node must record
+    /// at least what an earlier one did.
+    #[cfg(debug_assertions)]
+    pub(crate) fn routed_fact_kinds(&self, id: AstId) -> [bool; 7] {
+        [
+            self.bindings.references.contains_key(&id),
+            self.bindings.local_symbols.contains_key(&id),
+            self.types.local_types.contains_key(&id),
+            self.types.expression_types.contains_key(&id),
+            self.types.method_dispatch.contains_key(&id),
+            self.types.coercions.contains_key(&id),
+            self.types.desugars.contains_key(&id),
+        ]
+    }
+}
+
 #[cfg(debug_assertions)]
 impl ModuleSemantics {
     /// How many facts have been recorded, for the guard that a *query* left no

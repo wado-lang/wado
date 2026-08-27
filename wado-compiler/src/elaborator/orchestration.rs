@@ -3793,8 +3793,9 @@ fn spelled_references(
     (direct, inherited)
 }
 
-/// The callees a dispatch fact names. Only the facts `Semantics` drains are
-/// re-seeded into a snapshot module's `ModuleSemantics`, so both are read.
+/// The callees a dispatch fact names. Seeding copies a snapshot module's
+/// `types` but not the per-impl `default_method_semantics` hanging off it, so
+/// the snapshot is read alongside this compile's own state.
 fn dispatched_callee_edges(
     state: &AnnotateState,
     snapshot: Option<&crate::semantics::Semantics>,

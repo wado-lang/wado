@@ -272,13 +272,25 @@ impl Semantics {
         Some(sem)
     }
 
-    /// Every loaded module's facts, in load order — the iteration side of
-    /// [`Self::facts_of`].
-    fn all_facts(&self) -> impl Iterator<Item = &crate::elaborator::sem::ModuleSemantics> {
+    /// Every entry of one fact map that [`Self::facts_of`] would answer with —
+    /// the iteration side of the same routing, so what an `iter_*` yields is
+    /// exactly what a point lookup returns. An entry a later walk shadowed is
+    /// left out; the module it lands in is the whole of what makes it live.
+    fn iter_live<'s, V: 's>(
+        &'s self,
+        map: impl Fn(&'s crate::elaborator::sem::ModuleSemantics) -> &'s IndexMap<AstId, V> + 's,
+    ) -> impl Iterator<Item = (AstId, &'s V)> + 's {
         self.state
             .as_ref()
             .into_iter()
-            .flat_map(|state| state.module_semantics.values())
+            .flat_map(|state| state.module_semantics.values().enumerate())
+            .flat_map(move |(home, sem)| {
+                let home = u32::try_from(home).expect("module count fits in u32");
+                map(sem)
+                    .iter()
+                    .filter(move |(id, _)| self.fact_home.get(*id) == Some(&home))
+                    .map(|(id, value)| (*id, value))
+            })
     }
 
     /// Symbol for the given key, or `None` if the key does not refer to a
@@ -307,10 +319,10 @@ impl Semantics {
     /// semantic-token highlighting to classify declaration sites in one pass
     /// instead of a positional lookup per token.
     pub fn iter_symbols(&self) -> impl Iterator<Item = (AstId, &Symbol)> {
-        self.symbols.iter().map(|(id, s)| (*id, s)).chain(
-            self.all_facts()
-                .flat_map(|sem| sem.bindings.local_symbols.iter().map(|(id, s)| (*id, s))),
-        )
+        self.symbols
+            .iter()
+            .map(|(id, s)| (*id, s))
+            .chain(self.iter_live(|sem| &sem.bindings.local_symbols))
     }
 
     /// Iterate every recorded use-site `(use_key, def_key)` edge.
@@ -320,12 +332,8 @@ impl Semantics {
     /// item-level definitions (functions, types, globals) and imported items
     /// are all recorded here.
     pub fn iter_references(&self) -> impl Iterator<Item = (AstId, AstId)> {
-        self.all_facts().flat_map(|sem| {
-            sem.bindings
-                .references
-                .iter()
-                .map(|(use_id, def_id)| (*use_id, *def_id))
-        })
+        self.iter_live(|sem| &sem.bindings.references)
+            .map(|(use_id, def_id)| (use_id, *def_id))
     }
 
     /// Find every use-site `AstId` whose definition is `def_id`.
@@ -387,8 +395,8 @@ impl Semantics {
     /// Iterate every expression the body walk typed, as `(AstId, TypeId)`.
     /// Pair with [`Self::module_of_id`] to filter by module.
     pub fn iter_expression_types(&self) -> impl Iterator<Item = (AstId, TypeId)> + '_ {
-        self.all_facts()
-            .flat_map(|sem| sem.types.expression_types.iter().map(|(id, ty)| (*id, *ty)))
+        self.iter_live(|sem| &sem.types.expression_types)
+            .map(|(id, ty)| (id, *ty))
     }
 
     /// Method-dispatch decision recorded for the `MethodCallExpr` at
@@ -448,8 +456,8 @@ impl Semantics {
     /// [`Self::method_dispatch_view`] for the stable public view onto
     /// each entry.
     pub fn iter_method_dispatch(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.all_facts()
-            .flat_map(|sem| sem.types.method_dispatch.keys().copied())
+        self.iter_live(|sem| &sem.types.method_dispatch)
+            .map(|(id, _)| id)
     }
 
     /// Stable public view onto the recorded coercion choice:
@@ -477,8 +485,7 @@ impl Semantics {
     /// expression's `(module, AstId)`. Pair with [`Self::coercion_view`]
     /// for the stable public view onto each entry.
     pub fn iter_coercions(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.all_facts()
-            .flat_map(|sem| sem.types.coercions.keys().copied())
+        self.iter_live(|sem| &sem.types.coercions).map(|(id, _)| id)
     }
 
     /// WEP 2026-05-26: stable public view onto the recorded
@@ -518,8 +525,7 @@ impl Semantics {
     /// node's `(module, AstId)`. Pair with [`Self::desugar_view`] for the
     /// stable public view onto each entry.
     pub fn iter_desugars(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.all_facts()
-            .flat_map(|sem| sem.types.desugars.keys().copied())
+        self.iter_live(|sem| &sem.types.desugars).map(|(id, _)| id)
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -1219,17 +1225,19 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let mut fact_home: IndexMap<AstId, u32> = IndexMap::default();
     for (home, sem) in state.module_semantics.values().enumerate() {
         let home = u32::try_from(home).expect("module count fits in u32");
-        let ids = sem
-            .bindings
-            .references
-            .keys()
-            .chain(sem.bindings.local_symbols.keys())
-            .chain(sem.types.local_types.keys())
-            .chain(sem.types.expression_types.keys())
-            .chain(sem.types.method_dispatch.keys())
-            .chain(sem.types.coercions.keys())
-            .chain(sem.types.desugars.keys());
-        for id in ids {
+        for id in sem.routed_fact_ids() {
+            #[cfg(debug_assertions)]
+            if let Some(prev) = fact_home
+                .get(id)
+                .and_then(|prev| state.module_semantics.get_index(*prev as usize))
+            {
+                let (before, after) = (prev.1.routed_fact_kinds(*id), sem.routed_fact_kinds(*id));
+                debug_assert!(
+                    before.iter().zip(after).all(|(had, has)| !had || has),
+                    "a later walk over {id:?} records fewer fact kinds than {}'s, so routing to it would drop one",
+                    prev.0
+                );
+            }
             fact_home.insert(*id, home);
         }
     }
@@ -1350,5 +1358,41 @@ mod tests {
                 !sem.types.expression_types.is_empty() && !sem.bindings.references.is_empty()
             });
         assert!(stdlib_facts);
+    }
+
+    /// What an `iter_*` yields is what a point lookup answers. A node two walks
+    /// reached is recorded in both modules' maps; only the one it routes to is
+    /// live, so iterating the raw maps would hand out an entry no query returns.
+    #[test]
+    fn iteration_yields_only_live_facts() {
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics(
+            "fn main() { let x = 1 + 2; println(`${x}`); }",
+            &host,
+            Some("entry.wado"),
+        ));
+
+        let mut live: crate::hashmap::IndexSet<AstId> = crate::hashmap::IndexSet::default();
+        for (id, type_id) in sem.iter_expression_types() {
+            assert!(live.insert(id), "iteration yielded {id:?} twice");
+            assert_eq!(sem.expression_type(id), Some(type_id));
+        }
+        let mut seen_uses: crate::hashmap::IndexSet<AstId> = crate::hashmap::IndexSet::default();
+        for (use_id, def_id) in sem.iter_references() {
+            assert!(seen_uses.insert(use_id), "iteration yielded {use_id:?} twice");
+            assert_eq!(sem.referenced_symbol(use_id), Some(def_id));
+        }
+
+        // The dedup is load-bearing here, not vacuous: this program does have
+        // nodes two walks reached.
+        let recorded: usize = sem
+            .state
+            .as_ref()
+            .expect("annotate state")
+            .module_semantics
+            .values()
+            .map(|module_sem| module_sem.types.expression_types.len())
+            .sum();
+        assert!(recorded > live.len());
     }
 }
