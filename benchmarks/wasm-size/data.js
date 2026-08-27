@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787840847566,
+  "lastUpdate": 1787844765036,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51493,6 +51493,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/120f1358e31e6f5c59ea8e06b2b19285c24f7fa1"
         },
         "date": 1787840847203,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 258232,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a7c6f66a420f292fe007a70f7c7ec8f158b58b0",
+          "message": "Merge pull request #1912 from wado-lang/chore/cloudflare-worker-engine-strict\n\nchore(cloudflare-worker): enforce the npm floor",
+          "timestamp": "2026-08-28T00:12:04+09:00",
+          "tree_id": "0771f4de16ba8a01a2980a0ef95fbc43596bad04",
+          "url": "https://github.com/wado-lang/wado/commit/3a7c6f66a420f292fe007a70f7c7ec8f158b58b0"
+        },
+        "date": 1787844764120,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
