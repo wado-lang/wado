@@ -12,7 +12,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, RefKind};
-use crate::tir::{FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable};
+use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -26,8 +26,6 @@ use super::types::{
     MethodOwner, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
-
-use super::util::placeholder;
 
 /// Shared so the explicit `&mut x.f` and the implicit `&mut self` borrow say
 /// the same thing about the same refusal.
@@ -1294,13 +1292,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// owned temporary is well-defined.
     pub(super) fn check_mut_receiver(
         &mut self,
-        receiver: &TirExpr,
+        receiver: TypeId,
         receiver_ast: Option<&ast::Expr>,
         method_name: &str,
         span: Span,
         ctx: &FunctionContext,
     ) {
-        let immutable = match self.tysys.type_table.borrow().get(receiver.type_id) {
+        let immutable = match self.tysys.type_table.borrow().get(receiver) {
             ResolvedType::Ref(_) => true,
             ResolvedType::MutRef(_) => false,
             _ => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
@@ -1329,7 +1327,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // borrow must match it.
         if receiver_ast
             .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
-            && self.is_replace_on_assign_place_type(receiver.type_id)
+            && self.is_replace_on_assign_place_type(receiver)
         {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
@@ -1421,142 +1419,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The receiver (which is `&T`) needs an additional `&` wrapping.
     pub(super) fn adjust_receiver_for_self_kind(
         &mut self,
-        receiver: TirExpr,
+        receiver: TypeId,
         self_kind: ast::SelfKind,
         is_ref_impl: bool,
-        span: Span,
-    ) -> TirExpr {
-        Self::adjust_receiver_for_self_kind_static(
-            receiver,
-            self_kind,
-            is_ref_impl,
-            span,
-            &self.tysys.type_table,
-        )
-    }
-
-    /// `&TypeTable`-only version of [`Self::adjust_receiver_for_self_kind`]
-    /// — [`super::reify::Reify`] calls this directly so it can
-    /// reproduce the receiver adjustment from the recorded
-    /// `(self_kind, is_ref_impl)` pair without holding an [`Elaborator`].
-    /// The instance method above stays as a thin delegate so existing
-    /// elaborator callers don't need to change.
-    pub(super) fn adjust_receiver_for_self_kind_static(
-        receiver: TirExpr,
-        self_kind: ast::SelfKind,
-        is_ref_impl: bool,
-        span: Span,
-        type_table: &std::cell::RefCell<crate::tir::TypeTable>,
-    ) -> TirExpr {
-        if is_ref_impl {
-            // For ref-type impls, Self is &T (or &mut T).
-            // &self means &&T, &mut self means &mut &T.
-            // The receiver is already &T, so we need to add an extra reference layer.
-            return match self_kind {
-                ast::SelfKind::Ref => {
-                    let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(receiver),
-                        },
-                        ref_type,
-                        span,
-                    )
-                }
-                ast::SelfKind::MutRef => {
-                    let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::MutRef,
-                            expr: Box::new(receiver),
-                        },
-                        mut_ref_type,
-                        span,
-                    )
-                }
-                ast::SelfKind::None | ast::SelfKind::Value => {
-                    Self::deref_to_value_static(receiver, span, type_table)
-                }
-            };
-        }
-
-        let receiver_type = type_table.borrow().get(receiver.type_id).clone();
-
-        match self_kind {
-            ast::SelfKind::None | ast::SelfKind::Value => {
-                // No auto-ref: static method context, or a by-value `self`
-                // receiver that transfers the resource. Deref all refs.
-                Self::deref_to_value_static(receiver, span, type_table)
-            }
-            ast::SelfKind::Ref => {
-                // Method expects &self
-                match &receiver_type {
-                    ResolvedType::Ref(_) => {
-                        // Already &T, use as-is
-                        receiver
-                    }
-                    ResolvedType::MutRef(_) => {
-                        // &mut T can be coerced to &T, use as-is
-                        receiver
-                    }
-                    _ => {
-                        // Value T, need to add &
-                        let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
-                        TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Ref,
-                                expr: Box::new(receiver),
-                            },
-                            ref_type,
-                            span,
-                        )
-                    }
-                }
-            }
-            ast::SelfKind::MutRef => {
-                // Method expects &mut self
-                if let ResolvedType::MutRef(_) = &receiver_type {
-                    // Already &mut T, use as-is
-                    receiver
-                } else {
-                    // Value T, need to add &mut
-                    let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::MutRef,
-                            expr: Box::new(receiver),
-                        },
-                        mut_ref_type,
-                        span,
-                    )
-                }
-            }
-        }
-    }
-
-    /// `&TypeTable`-only version of the receiver-deref loop, paired
-    /// with [`Self::adjust_receiver_for_self_kind_static`] for reify's reuse.
-    pub(super) fn deref_to_value_static(
-        mut receiver: TirExpr,
-        span: Span,
-        type_table: &std::cell::RefCell<crate::tir::TypeTable>,
-    ) -> TirExpr {
-        loop {
-            match type_table.borrow().get(receiver.type_id).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    receiver = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(receiver),
-                        },
-                        inner,
-                        span,
-                    );
-                }
-                _ => return receiver,
-            }
-        }
+    ) -> TypeId {
+        adjusted_receiver_type(receiver, self_kind, is_ref_impl, &self.tysys.type_table)
     }
 
     /// The typed receiver chain: `type_key` plus the newtype/flags base heads
@@ -3166,14 +3033,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Try to resolve a method call on an index expression using `IndexMut`.
-    /// Returns Some(TirExpr) if the method needs &mut self and the type implements `IndexMut`.
+    /// Answers the call's result type when the method needs `&mut self` and the
+    /// type implements `IndexMut`.
     /// Returns None if we should fall back to normal resolution (using Index).
     pub(super) fn try_resolve_index_mut_method_call(
         &mut self,
         index_expr: &ast::IndexExpr,
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         // First, resolve the indexed container to get its type
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
 
@@ -3431,7 +3299,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // recorded `method_dispatch` + `IndexMutMethodCall` desugar; the
         // body walk projects only the result type. The args were resolved
         // above for their fact-recording side effects.
-        Some(placeholder(return_type, method_call.span))
+        Some(return_type)
+    }
+}
+
+/// The type a receiver takes on once adjusted for the callee's `self` kind.
+/// The one statement of the rule: the TIR builder
+/// [`Elaborator::adjust_receiver_for_self_kind_static`] wraps the node, this
+/// says what the wrapping means, and the body walk needs only this.
+pub(super) fn adjusted_receiver_type(
+    receiver: TypeId,
+    self_kind: ast::SelfKind,
+    is_ref_impl: bool,
+    type_table: &std::cell::RefCell<TypeTable>,
+) -> TypeId {
+    // A ref-target impl binds `Self` to `&T`, so `&self` is `&&T`: the receiver
+    // already carries one layer and the declaration asks for another.
+    if is_ref_impl {
+        return match self_kind {
+            ast::SelfKind::Ref => type_table.borrow_mut().make_ref(receiver),
+            ast::SelfKind::MutRef => type_table.borrow_mut().make_mut_ref(receiver),
+            ast::SelfKind::None | ast::SelfKind::Value => type_table.borrow().peel_refs(receiver),
+        };
+    }
+    match self_kind {
+        ast::SelfKind::None | ast::SelfKind::Value => type_table.borrow().peel_refs(receiver),
+        // `&mut T` already satisfies `&self`; only a value needs the wrap.
+        ast::SelfKind::Ref => {
+            let already_ref = matches!(
+                type_table.borrow().get(receiver),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
+            if already_ref {
+                receiver
+            } else {
+                type_table.borrow_mut().make_ref(receiver)
+            }
+        }
+        ast::SelfKind::MutRef => {
+            let already_mut = matches!(type_table.borrow().get(receiver), ResolvedType::MutRef(_));
+            if already_mut {
+                receiver
+            } else {
+                type_table.borrow_mut().make_mut_ref(receiver)
+            }
+        }
     }
 }
 

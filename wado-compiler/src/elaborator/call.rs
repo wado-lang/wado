@@ -924,18 +924,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // construction, or monomorph-info shaping — facts reify
                 // cannot reconstruct from the AST alone. It returns only a
                 // typed placeholder.
-                return self
-                    .resolve_static_method_call_from_qualified(
-                        prefix,
-                        suffix,
-                        &args,
-                        &impl_type_args_inferred,
-                        &method_type_args,
-                        call.id,
-                        call.span,
-                        ctx,
-                    )
-                    .type_id;
+                return self.resolve_static_method_call_from_qualified(
+                    prefix,
+                    suffix,
+                    &args,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                    call.id,
+                    call.span,
+                    ctx,
+                );
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
             else if let Some(flags_info) =

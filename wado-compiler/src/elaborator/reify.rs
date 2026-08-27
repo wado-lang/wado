@@ -2771,7 +2771,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // be rejected by codegen (`expected i32, found (ref $T)`),
                     // so replay the recorded method call instead. Unary
                     // operators take no extra arguments.
-                    let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                    let receiver = adjust_receiver_for_self_kind_static(
                         inner,
                         dispatch.self_kind,
                         /* is_ref_impl */ false,
@@ -2966,7 +2966,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
                 {
                     let receiver = self.reify_expr(&index_expr.expr, ctx, None);
-                    let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                    let receiver = adjust_receiver_for_self_kind_static(
                         receiver,
                         dispatch.self_kind,
                         false,
@@ -3745,7 +3745,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let label = format!("__for_of_{unique_id}");
 
         let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
-        let into_iter_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+        let into_iter_receiver = adjust_receiver_for_self_kind_static(
             into_iter_receiver,
             info.into_iter_self_kind,
             info.into_iter_is_ref_impl,
@@ -3787,7 +3787,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             iter_type,
             span,
         );
-        let next_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+        let next_receiver = adjust_receiver_for_self_kind_static(
             iter_local_ref,
             info.next_self_kind,
             info.next_is_ref_impl,
@@ -5038,7 +5038,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // adjuster (statically; no Elaborator needed) and the
             // shared arg-wrap helper to produce TIR identical to what
             // `build_trait_op_method_call_on_resolved` emitted.
-            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            let receiver = adjust_receiver_for_self_kind_static(
                 left,
                 dispatch.self_kind,
                 /* is_ref_impl */ false,
@@ -5592,7 +5592,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         let combined_type = read.type_id;
         if let Some(dispatch) = self.ann_operator_dispatch(compound.id) {
-            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            let receiver = adjust_receiver_for_self_kind_static(
                 read,
                 dispatch.self_kind,
                 /* is_ref_impl */ false,
@@ -5682,7 +5682,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         deref_type: TypeId,
         span: crate::token::Span,
     ) -> TirExpr {
-        let adjusted = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+        let adjusted = adjust_receiver_for_self_kind_static(
             receiver,
             dispatch.self_kind,
             false,
@@ -5799,7 +5799,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
             let combined = self.build_compound_combined(read, rhs, op, compound);
 
-            let write_recv = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            let write_recv = adjust_receiver_for_self_kind_static(
                 recv,
                 assign_dispatch.self_kind,
                 false,
@@ -6157,7 +6157,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Non-primitive comparison dispatches through `Eq::eq` /
             // `Ord::cmp`; the recording fires on `chain.id`.
             if let Some(dispatch) = self.ann_operator_dispatch(chain.id) {
-                let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                let receiver = adjust_receiver_for_self_kind_static(
                     left,
                     dispatch.self_kind,
                     /* is_ref_impl */ false,
@@ -8004,11 +8004,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Auto-deref a `&fn` / `&mut fn` callee down to the function
             // value, exactly as `build_indirect_call`'s final
             // `deref_to_value` does in the production path.
-            let callee_expr = super::Elaborator::<H>::deref_to_value_static(
-                callee_expr,
-                ident.span,
-                &self.tysys.type_table,
-            );
+            let callee_expr =
+                deref_to_value_static(callee_expr, ident.span, &self.tysys.type_table);
             let arg_exprs: Vec<TirExpr> = call
                 .args
                 .iter()
@@ -8043,11 +8040,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 callee_ty,
                 ident.span,
             );
-            let callee_expr = super::Elaborator::<H>::deref_to_value_static(
-                callee_expr,
-                ident.span,
-                &self.tysys.type_table,
-            );
+            let callee_expr =
+                deref_to_value_static(callee_expr, ident.span, &self.tysys.type_table);
             let arg_exprs: Vec<TirExpr> = call
                 .args
                 .iter()
@@ -8094,11 +8088,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if is_fn {
                 // Auto-deref a `&fn` / `&mut fn` callee, matching
                 // `build_indirect_call`'s `deref_to_value` in production.
-                let callee_expr = super::Elaborator::<H>::deref_to_value_static(
-                    callee_expr,
-                    call.callee.span(),
-                    &self.tysys.type_table,
-                );
+                let callee_expr =
+                    deref_to_value_static(callee_expr, call.callee.span(), &self.tysys.type_table);
                 let arg_exprs: Vec<TirExpr> = call
                     .args
                     .iter()
@@ -8323,7 +8314,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 1: build the `container.index_mut(idx)` call.
         let container = self.reify_expr(&index_expr.expr, ctx, None);
-        let receiver_for_index_mut = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+        let receiver_for_index_mut = adjust_receiver_for_self_kind_static(
             container,
             inner_dispatch.self_kind,
             false,
@@ -8342,7 +8333,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 2: adjust the index_mut result for the outer method's
         // self_kind and build the outer method-call TIR.
-        let receiver_for_method = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+        let receiver_for_method = adjust_receiver_for_self_kind_static(
             index_mut_call,
             outer_dispatch.self_kind,
             outer_dispatch.is_ref_impl,
@@ -8563,7 +8554,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.address_taken_locals.insert(*index);
         }
 
-        let adjusted_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+        let adjusted_receiver = adjust_receiver_for_self_kind_static(
             raw_receiver,
             dispatch.self_kind,
             dispatch.is_ref_impl,
@@ -9238,7 +9229,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let value = parse_result.ok()?;
 
-        Some(super::coercion::build_int128_literal_call(
+        Some(build_int128_literal_call(
             &name,
             value,
             &repr,
@@ -9293,7 +9284,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 super::util::parse_i128_literal(repr)
             };
             if let Ok(value) = parsed {
-                return Some(super::coercion::build_int128_literal_call(
+                return Some(build_int128_literal_call(
                     &name,
                     value,
                     repr,
@@ -9315,7 +9306,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !super::util::is_float_only_literal(repr)
             && let Ok(value) = super::util::parse_i128_literal(&format!("-{repr}"))
         {
-            return Some(super::coercion::build_int128_literal_call(
+            return Some(build_int128_literal_call(
                 &name,
                 value,
                 repr,
@@ -9357,7 +9348,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             intermediate_type,
             cast.span,
         );
-        Some(super::coercion::build_int128_from_intermediate(
+        Some(build_int128_from_intermediate(
             &name,
             casted,
             target_type,
@@ -9508,7 +9499,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Lowering::Identity => Some(inner),
             Lowering::Method(item) => {
                 let func = make_func_ref(&self.tysys, item);
-                let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                let receiver = adjust_receiver_for_self_kind_static(
                     inner,
                     ast::SelfKind::Ref,
                     /* is_ref_impl */ false,
@@ -9525,7 +9516,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CompilerItem::U128Low
                 };
                 let func = make_func_ref(&self.tysys, item);
-                let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                let receiver = adjust_receiver_for_self_kind_static(
                     inner,
                     ast::SelfKind::Ref,
                     /* is_ref_impl */ false,
@@ -10648,6 +10639,293 @@ fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate:
 fn unescape_checked(raw: &str) -> String {
     super::util::unescape_template_string(raw)
         .expect("the body walk rejects a malformed template escape before reify runs")
+}
+
+/// `&TypeTable`-only version of [`Self::adjust_receiver_for_self_kind`]
+/// — [`super::reify::Reify`] calls this directly so it can
+/// reproduce the receiver adjustment from the recorded
+/// `(self_kind, is_ref_impl)` pair without holding an [`Elaborator`].
+/// The instance method above stays as a thin delegate so existing
+/// elaborator callers don't need to change.
+fn adjust_receiver_for_self_kind_static(
+    receiver: TirExpr,
+    self_kind: ast::SelfKind,
+    is_ref_impl: bool,
+    span: crate::token::Span,
+    type_table: &std::cell::RefCell<crate::tir::TypeTable>,
+) -> TirExpr {
+    if is_ref_impl {
+        // For ref-type impls, Self is &T (or &mut T).
+        // &self means &&T, &mut self means &mut &T.
+        // The receiver is already &T, so we need to add an extra reference layer.
+        return match self_kind {
+            ast::SelfKind::Ref => {
+                let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref,
+                        expr: Box::new(receiver),
+                    },
+                    ref_type,
+                    span,
+                )
+            }
+            ast::SelfKind::MutRef => {
+                let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        expr: Box::new(receiver),
+                    },
+                    mut_ref_type,
+                    span,
+                )
+            }
+            ast::SelfKind::None | ast::SelfKind::Value => {
+                deref_to_value_static(receiver, span, type_table)
+            }
+        };
+    }
+
+    let receiver_type = type_table.borrow().get(receiver.type_id).clone();
+
+    match self_kind {
+        ast::SelfKind::None | ast::SelfKind::Value => {
+            // No auto-ref: static method context, or a by-value `self`
+            // receiver that transfers the resource. Deref all refs.
+            deref_to_value_static(receiver, span, type_table)
+        }
+        ast::SelfKind::Ref => {
+            // Method expects &self
+            match &receiver_type {
+                ResolvedType::Ref(_) => {
+                    // Already &T, use as-is
+                    receiver
+                }
+                ResolvedType::MutRef(_) => {
+                    // &mut T can be coerced to &T, use as-is
+                    receiver
+                }
+                _ => {
+                    // Value T, need to add &
+                    let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(receiver),
+                        },
+                        ref_type,
+                        span,
+                    )
+                }
+            }
+        }
+        ast::SelfKind::MutRef => {
+            // Method expects &mut self
+            if let ResolvedType::MutRef(_) = &receiver_type {
+                // Already &mut T, use as-is
+                receiver
+            } else {
+                // Value T, need to add &mut
+                let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        expr: Box::new(receiver),
+                    },
+                    mut_ref_type,
+                    span,
+                )
+            }
+        }
+    }
+}
+
+/// `&TypeTable`-only version of the receiver-deref loop, paired
+/// with [`adjust_receiver_for_self_kind_static`] for reify's reuse.
+fn deref_to_value_static(
+    mut receiver: TirExpr,
+    span: crate::token::Span,
+    type_table: &std::cell::RefCell<crate::tir::TypeTable>,
+) -> TirExpr {
+    loop {
+        match type_table.borrow().get(receiver.type_id).clone() {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                receiver = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: Box::new(receiver),
+                    },
+                    inner,
+                    span,
+                );
+            }
+            _ => return receiver,
+        }
+    }
+}
+
+/// Build the `from_pair` call that materializes a 128-bit value from its
+/// `(low: u64, high: u64/i64)` halves. Pure and `self`-free so the
+/// elaborator's coercion / cast paths and the reify pass produce
+/// byte-identical TIR.
+fn build_int128_from_pair(
+    type_name: &FqTypeName,
+    low: u64,
+    high: i64,
+    target_type: TypeId,
+    span: crate::token::Span,
+) -> TirExpr {
+    let low_literal = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: low,
+            repr: low.to_string(),
+        },
+        TypeTable::U64,
+        span,
+    );
+    let high_literal = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: high.cast_unsigned(),
+            repr: high.to_string(),
+        },
+        if type_name.decl_name() == "u128" {
+            TypeTable::U64
+        } else {
+            TypeTable::I64
+        },
+        span,
+    );
+
+    let method_info =
+        crate::name::LocalMethodName::new(type_name.clone(), None, "from_pair".to_string());
+    let mangled_func_name = method_info.to_mangled_name();
+
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(crate::tir::FunctionRef {
+                module_source: ModuleSource::int128(),
+                name: mangled_func_name,
+                monomorph_info: None,
+                method_info: Some(method_info),
+            }),
+            type_args: vec![],
+            args: vec![
+                CallArg::new(low_literal, false),
+                CallArg::new(high_literal, false),
+            ],
+            has_receiver: false,
+        },
+        target_type,
+        span,
+    )
+}
+
+/// Construct the TIR call that materializes an `i128` / `u128` value from
+/// a parsed numeric-literal `value`. Values that fit 64 bits take the
+/// cheaper `from_u64` / `from_i64` path when `allow_small` is set; the
+/// negated `-NUM` shape passes `allow_small = false` so it always uses
+/// `from_pair`, matching the elaborator's historical output. Pure and
+/// `self`-free so both the elaborator and reify build identical TIR.
+fn build_int128_literal_call(
+    name: &FqTypeName,
+    value: i128,
+    repr: &str,
+    allow_small: bool,
+    target_type: TypeId,
+    span: crate::token::Span,
+) -> TirExpr {
+    let use_small = allow_small
+        && if name.decl_name() == "u128" {
+            u64::try_from(value).is_ok()
+        } else {
+            i64::try_from(value).is_ok()
+        };
+
+    if use_small {
+        let (inner_type, method_name, store_value) = if name.decl_name() == "u128" {
+            (
+                TypeTable::U64,
+                "from_u64",
+                u64::try_from(value).expect("value fits in u64"),
+            )
+        } else {
+            (
+                TypeTable::I64,
+                "from_i64",
+                i64::try_from(value)
+                    .expect("value fits in i64")
+                    .cast_unsigned(),
+            )
+        };
+
+        let inner_literal = TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: store_value,
+                repr: repr.to_string(),
+            },
+            inner_type,
+            span,
+        );
+
+        let method_info =
+            crate::name::LocalMethodName::new(name.clone(), None, method_name.to_string());
+        let mangled_func_name = method_info.to_mangled_name();
+
+        return TirExpr::new(
+            TirExprKind::Call {
+                func: Box::new(crate::tir::FunctionRef {
+                    module_source: ModuleSource::int128(),
+                    name: mangled_func_name,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                }),
+                type_args: vec![],
+                args: vec![CallArg::new(inner_literal, false)],
+                has_receiver: false,
+            },
+            target_type,
+            span,
+        );
+    }
+
+    let (low, high) = super::util::unpack_i128(value);
+    build_int128_from_pair(name, low, high, target_type, span)
+}
+
+/// Build `u128::from_u64(inner)` / `i128::from_i64(inner)` for the
+/// general (non-literal) `expr as i128/u128` cast path. `intermediate`
+/// is the source expression already cast to the `u64` / `i64` width.
+/// Pure and `self`-free so the elaborator and reify stay in lockstep.
+fn build_int128_from_intermediate(
+    name: &FqTypeName,
+    intermediate: TirExpr,
+    target_type: TypeId,
+    span: crate::token::Span,
+) -> TirExpr {
+    let method_name = if name.decl_name() == "u128" {
+        "from_u64"
+    } else {
+        "from_i64"
+    };
+    let method_info =
+        crate::name::LocalMethodName::new(name.clone(), None, method_name.to_string());
+    let mangled_func_name = method_info.to_mangled_name();
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(crate::tir::FunctionRef {
+                module_source: ModuleSource::int128(),
+                name: mangled_func_name,
+                monomorph_info: None,
+                method_info: Some(method_info),
+            }),
+            type_args: vec![],
+            args: vec![CallArg::new(intermediate, false)],
+            has_receiver: false,
+        },
+        target_type,
+        span,
+    )
 }
 
 /// Wrap an `Ord::cmp` call into a `bool` by comparing the returned

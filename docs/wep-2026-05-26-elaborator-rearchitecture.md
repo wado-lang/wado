@@ -540,7 +540,7 @@ Each is a grep:
 | Manual scope save/restore outside `scope.rs`     | 0      | 0   |
 | `with_module_perspective_for` call sites         | 2      | 2   |
 | `with_reference_recording_suppressed` call sites | 1      | 1   |
-| Walker signatures taking or returning a TIR node | 0      | 24  |
+| Walker signatures taking or returning a TIR node | 0      | 0   |
 | Reify `resolve_type` call sites                  | 1      | 1   |
 
 The perspective and suppression rows are floors, not zeroes, and each is a
@@ -551,26 +551,6 @@ and the surviving suppression is the argument-classification probe. Every row
 whose count exceeds its target is a [known gap](#known-gaps).
 
 ## Known gaps
-
-### `annotate` still speaks TIR
-
-The phase boundary holds — reify is the sole `TirModule` producer — but the
-walker's own vocabulary does not. `util::placeholder(type_id, span)` mints a
-`TirExpr` whose kind is `Unit` and whose only readable content is its type and
-span, so that walker code can keep calling builders whose signatures are
-shaped for TIR: `build_binary_op_tir` takes two `TirExpr` and
-returns a `TypeId`. 61 placeholder sites feed 24 such signatures. In the same
-seam, `resolve_function` / `resolve_struct` / `resolve_effect_decl` /
-`resolve_resource_decl` return TIR nodes no caller reads, which is why
-`placeholder_function` exists at all — an empty shell built to satisfy a return
-type. The dependency also runs backwards: reify calls the walker's
-`build_tir_method_call` at 14 sites, so the TIR builder lives on the walker,
-the phase that emits no TIR.
-
-Closing it: give each builder the `(TypeId, Span)` it actually reads, move the
-TIR builders reify shares to reify, and let the item-level `resolve_*` return
-what their callers use. `placeholder` and `placeholder_function` then have no
-callers, and the walker-signature row reaches its target.
 
 ### The walker slim-down
 
