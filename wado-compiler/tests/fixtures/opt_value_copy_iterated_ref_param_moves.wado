@@ -1,0 +1,44 @@
+// An iterator holds a reference to what it walks, so `iter()` hands the caller
+// one back — but a `collect()` that drops the iterator keeps nothing, so the
+// enclosing function does not store its `&List` parameter. The caller's value
+// is then still move-eligible after the call, rather than deep-copied.
+
+use { println, Stdout } from "core:cli";
+
+struct Item { tags: List<String> }
+
+fn count_long(names: &List<String>) -> i32 {
+    let long: List<String> = names.iter_value().filter(|n: String| n.len() > 2).collect();
+    return long.len();
+}
+
+fn make(i: i32) -> Item {
+    return Item { tags: [`aa${i}`, "b"] };
+}
+
+fn build(n: i32) -> i32 {
+    let mut out: List<Item> = [];
+    let mut total = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let it = make(i);
+        total += count_long(&it.tags);
+        out.push(it);
+    }
+    return out.len() * 10 + total;
+}
+
+export fn run() with Stdout {
+    println(`${build(3)}`);
+}
+
+__DATA__
+{
+    "stdout": "33\n",
+    "wir_not_expect:O0": [
+        "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"
+    ],
+    "wir_not_expect:O2": [
+        "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>",
+        "array_clone_deep_prefix"
+    ]
+}

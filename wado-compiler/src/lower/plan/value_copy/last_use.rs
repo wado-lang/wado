@@ -168,6 +168,7 @@ pub fn compute_move_eligible(
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
     a.resolve_pending_mut_aliases();
+    a.propagate_escapes_to_referents(func, type_table);
 
     // Structural freshness: the locals *holding* an owned value, however often
     // read. A least fixpoint — seed every sourced local, drop those whose source
@@ -1025,6 +1026,15 @@ impl Analyzer<'_> {
                 self.mark_escaped(r, borrow_top_field(place));
             }
         } else {
+            // A reference-typed local passed on as-is needs no `&` of its own,
+            // so a storing position holds the storage it names.
+            if record
+                && let TirExprKind::Local { index, .. } = &arg.kind
+                && is_reference_type(arg.type_id, self.type_table)
+                && callee.is_some_and(|c| self.callee_stores(c, pos))
+            {
+                self.mark_escaped(*index, None);
+            }
             self.walk_expr(arg, live, record);
         }
     }
@@ -1456,7 +1466,65 @@ impl Analyzer<'_> {
             merged = union(&merged, &arm_live);
         }
         *live = merged;
-        self.walk_expr(scrut, live, record);
+        self.walk_scrutinee(scrut, live, record);
+    }
+
+    /// A scrutinee that is a place over a `&` / `&mut` is a transient borrow,
+    /// like a `&` call argument: it holds only for the match, so the referent
+    /// stays move-eligible afterwards. Its arm bindings name that storage, and
+    /// an escape of one of them reaches the referent through
+    /// [`Analyzer::propagate_escapes_to_referents`]. Reads of an arm binding
+    /// never move it — `&scrut` is not an owned value, so the binding is never
+    /// fresh — which is what leaves a borrow as the only way out.
+    fn walk_scrutinee(&mut self, scrut: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
+        if is_borrowed_place(scrut) {
+            self.borrow_read(scrut, live, record);
+        } else {
+            self.walk_expr(scrut, live, record);
+        }
+    }
+
+    /// Close the escape set over the reference bindings that name someone else's
+    /// storage: an escaped reference local reaches the root it was taken over,
+    /// so that root escapes too. Deferred to here because the backward walk
+    /// reaches the escape before the binding that roots it — and because a match
+    /// arm binding over a `&`-borrowed scrutinee is exactly this shape, which is
+    /// what keeps [`Analyzer::walk_scrutinee`]'s transient reading sound.
+    fn propagate_escapes_to_referents(&mut self, func: &TirFunction, type_table: &TypeTable) {
+        let mut work: Vec<u32> = self.borrow_escaped.keys().copied().collect();
+        let mut seen: IndexSet<u32> = work.iter().copied().collect();
+        while let Some(local) = work.pop() {
+            if !func
+                .locals
+                .get(local as usize)
+                .is_some_and(|l| is_reference_type(l.type_id, type_table))
+            {
+                continue;
+            }
+            for root in self.referent_roots(local) {
+                self.mark_escaped(root, None);
+                if seen.insert(root) {
+                    work.push(root);
+                }
+            }
+        }
+    }
+
+    /// The locals whose storage reference local `local` names: its match
+    /// scrutinee's root, and the root of every `let` / assignment source.
+    fn referent_roots(&self, local: u32) -> Vec<u32> {
+        self.match_sources
+            .iter()
+            .filter(|(b, _)| *b == local)
+            .filter_map(|(_, scrut)| alias_root(scrut))
+            .chain(
+                self.let_sources
+                    .get(&local)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(alias_root),
+            )
+            .collect()
     }
 
     fn walk_expr(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
@@ -1604,6 +1672,27 @@ impl Analyzer<'_> {
                 }
             }
         }
+    }
+}
+
+/// Whether `expr` is a place chain bottoming out in a `&` / `&mut` — the shape
+/// a match takes on a borrowed scrutinee, where the pattern's own projection
+/// (`(&op).value`) sits on top of the borrow.
+fn is_borrowed_place(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            ..
+        } => true,
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: inner,
+        } => is_borrowed_place(inner),
+        _ => false,
     }
 }
 

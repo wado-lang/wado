@@ -1,8 +1,23 @@
 //! Interprocedural reference-storage analysis: which reference-parameter
-//! *positions* a function may persist beyond its call. A reference escapes only
-//! when a reference-typed value derived from a parameter reaches a persistence
-//! sink; a value read copies data, not the reference. A least fixpoint over the
+//! *positions* a function may persist beyond its call. A least fixpoint over the
 //! call graph, sound as long as `carries` over-approximates.
+//!
+//! A reference persists in one of two ways, tracked apart because only the first
+//! is a property of the callee alone:
+//!
+//! - it reaches a global, or is written through a reference the caller owns
+//!   ([`StoresFacts::escapes`]) — persists however the call is used;
+//! - it reaches the return value ([`StoresFacts::into_result`]) — persists
+//!   exactly as long as the caller keeps the result.
+//!
+//! Keeping them apart is what stops a transient carrier from poisoning its
+//! source: `a.iter()` hands the iterator a reference to `a`, but a `.collect()`
+//! that drops the iterator stores nothing, so the enclosing function does not
+//! store `a`. Collapsing the two — as marking every carrying argument did —
+//! makes every `&List` parameter a stored one the moment the body iterates it.
+//!
+//! What a *caller* must assume is the union: the returned reference may be kept.
+//! That is what [`compute_stored_params`] publishes.
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
@@ -17,43 +32,97 @@ use crate::tir_visitor::TirRefVisitor;
 /// Per-function set of reference-parameter positions the function may store.
 pub type StoredParams = FuncKeyMap<IndexSet<u32>>;
 
-/// A callee's stored positions, in the current fixpoint iteration.
+/// The two ways a reference parameter outlives its call. See the module doc.
+#[derive(Clone, Default)]
+struct StoresFacts {
+    escapes: IndexSet<u32>,
+    into_result: IndexSet<u32>,
+}
+
+impl StoresFacts {
+    /// Absorb `other`, reporting whether anything grew.
+    fn absorb(&mut self, other: &StoresFacts) -> bool {
+        extend(&mut self.escapes, &other.escapes)
+            | extend(&mut self.into_result, &other.into_result)
+    }
+
+    fn union(&self) -> IndexSet<u32> {
+        let mut out = self.escapes.clone();
+        for &p in &self.into_result {
+            out.insert(p);
+        }
+        out
+    }
+}
+
+/// Insert every element of `src` into `dst`, reporting whether `dst` grew.
+fn extend(dst: &mut IndexSet<u32>, src: &IndexSet<u32>) -> bool {
+    let mut grew = false;
+    for &p in src {
+        grew |= dst.insert(p);
+    }
+    grew
+}
+
+/// A callee's facts, in the current fixpoint iteration.
 struct StoresOracle<'a> {
-    computed: &'a StoredParams,
+    computed: &'a FuncKeyMap<StoresFacts>,
     type_table: &'a TypeTable,
 }
 
 impl StoresOracle<'_> {
-    /// Positions a directly-called function stores. Unknown callee (not in the
-    /// map — a bodyless / not-yet-computed function) → its declared positions
-    /// are already folded into `computed` at seeding, so absence means "stores
+    /// Facts for a directly-called function. Unknown callee (not in the map — a
+    /// bodyless / not-yet-computed function) → its declared positions are
+    /// already folded into `computed` at seeding, so absence means "stores
     /// nothing known".
-    fn direct(&self, func: &FunctionRef) -> IndexSet<u32> {
+    fn direct(&self, func: &FunctionRef) -> StoresFacts {
         self.computed
             .get(&func.module_source, &func.name)
             .cloned()
             .unwrap_or_default()
     }
 
-    /// Positions an indirect (functor) callee may store, from its functor type's
-    /// declared `stores`. A non-`Function` callee type is conservative: every
-    /// position may be stored.
-    fn indirect(&self, callee: &TirExpr, arity: usize) -> Option<IndexSet<u32>> {
-        match self.type_table.get(callee.type_id) {
-            ResolvedType::Function { stores, .. } => Some(stores.iter().copied().collect()),
-            _ => Some((0..u32::try_from(arity).unwrap()).collect()),
+    /// Facts for an indirect (functor) callee, from its functor type's declared
+    /// `stores`. A non-`Function` callee type is conservative: every position
+    /// may escape.
+    fn indirect(&self, callee: &TirExpr, arity: usize) -> StoresFacts {
+        let positions: IndexSet<u32> =
+            if let ResolvedType::Function { stores, .. } = self.type_table.get(callee.type_id) {
+                stores.iter().copied().collect()
+            } else {
+                (0..u32::try_from(arity).unwrap()).collect()
+            };
+        StoresFacts {
+            escapes: positions.clone(),
+            into_result: positions,
         }
     }
 }
 
 pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> StoredParams {
     let type_table = project.type_table.borrow();
-    let mut computed: StoredParams = FuncKeyMap::default();
+    let mut computed: FuncKeyMap<StoresFacts> = FuncKeyMap::default();
 
     for func in &project.functions {
         let func = func.borrow();
+        // A declared `stores[p]` says the reference persists, not where. A
+        // value-returning body — the iterator and adapter shape, `iter()`,
+        // `as_slice()` — hands it out with the result, and the walk finds any
+        // further escape itself. With no result to hand it to, or no body to
+        // read (`List::push` stores through a builtin), the strong reading is
+        // the only sound one.
         let declared = declared_positions(&func);
-        computed.insert(func.module_source.clone(), func.name.clone(), declared);
+        let hands_out_result =
+            func.body.is_some() && !matches!(type_table.get(func.return_type), ResolvedType::Unit);
+        let facts = StoresFacts {
+            escapes: if hands_out_result {
+                IndexSet::default()
+            } else {
+                declared.clone()
+            },
+            into_result: declared,
+        };
+        computed.insert(func.module_source.clone(), func.name.clone(), facts);
     }
 
     call_graph.solve(project, |id| {
@@ -66,25 +135,29 @@ pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> S
                 computed: &computed,
                 type_table: &type_table,
             };
-            function_stored_params(body, &func.params, &oracle, &type_table)
+            function_stores_facts(body, &func.params, &oracle, &type_table)
         };
-        let current = computed
+        let mut merged = computed
             .get(&func.module_source, &func.name)
             .cloned()
             .unwrap_or_default();
-        if found.iter().all(|p| current.contains(p)) {
+        if !merged.absorb(&found) {
             return false;
-        }
-        let mut merged = current;
-        for p in found {
-            merged.insert(p);
         }
         computed.insert(func.module_source.clone(), func.name.clone(), merged);
         true
     });
 
+    let mut out = StoredParams::default();
+    for func in &project.functions {
+        let func = func.borrow();
+        if let Some(facts) = computed.get(&func.module_source, &func.name) {
+            out.insert(func.module_source.clone(), func.name.clone(), facts.union());
+        }
+    }
+
     drop(type_table);
-    computed
+    out
 }
 
 /// The reference-parameter positions named in a function's `stores[...]` clause.
@@ -97,12 +170,12 @@ fn declared_positions(func: &crate::tir::TirFunction) -> IndexSet<u32> {
         .collect()
 }
 
-fn function_stored_params(
+fn function_stores_facts(
     body: &TirBlock,
     params: &[TirParam],
     oracle: &StoresOracle,
     type_table: &TypeTable,
-) -> IndexSet<u32> {
+) -> StoresFacts {
     let mut carries: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
     for (i, p) in params.iter().enumerate() {
         if is_reference_type(p.type_id, type_table) {
@@ -116,27 +189,34 @@ fn function_stored_params(
         carries,
         oracle,
         type_table,
-        stored: IndexSet::default(),
+        facts: StoresFacts::default(),
+        grew: false,
     };
-    walker.visit_block(body);
-    walker.stored
+    // One walk propagates a carrier only as far forward as it appears; a loop
+    // carrying a reference backwards needs another. Repeat until nothing grows.
+    loop {
+        walker.grew = false;
+        walker.visit_block(body);
+        if !walker.grew {
+            break;
+        }
+    }
+    walker.facts
 }
 
 struct StoresWalker<'a> {
     carries: IndexMap<u32, IndexSet<u32>>,
     oracle: &'a StoresOracle<'a>,
     type_table: &'a TypeTable,
-    stored: IndexSet<u32>,
+    facts: StoresFacts,
+    grew: bool,
 }
 
 impl StoresWalker<'_> {
-    /// The parameter positions the reference produced by `expr` carries. Non
-    /// reference-typed expressions carry nothing (a value read copies data, not
-    /// the reference).
+    /// The parameter positions the value of `expr` carries: a reference derived
+    /// from a parameter, or an aggregate holding one — copying a struct copies
+    /// its reference fields, so a projection out of a carrier carries too.
     fn carries(&self, expr: &TirExpr) -> IndexSet<u32> {
-        if !is_reference_type(expr.type_id, self.type_table) {
-            return IndexSet::default();
-        }
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 self.carries.get(index).cloned().unwrap_or_default()
@@ -145,6 +225,9 @@ impl StoresWalker<'_> {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
             } => self.place_roots(place),
+            // A projection hands back the reference it names; a projection to a
+            // value reads data out of one, and copying data does not copy the
+            // reference that found it.
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -152,15 +235,92 @@ impl StoresWalker<'_> {
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. } => self.carries(inner),
-            TirExprKind::Call { args, .. } => {
-                args.iter().flat_map(|a| self.carries(&a.expr)).collect()
+            | TirExprKind::Cast { expr: inner, .. } => {
+                if is_reference_type(expr.type_id, self.type_table) {
+                    self.carries(inner)
+                } else {
+                    IndexSet::default()
+                }
             }
-            TirExprKind::IndirectCall { args, .. } => {
-                args.iter().flat_map(|a| self.carries(a)).collect()
+            TirExprKind::StructLiteral { fields, .. } => {
+                fields.iter().flat_map(|f| self.carries(&f.value)).collect()
             }
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
+                elements.iter().flat_map(|e| self.carries(e)).collect()
+            }
+            TirExprKind::VariantConstruct {
+                payload: Some(p), ..
+            } => self.carries(p),
+            TirExprKind::Closure { captures, .. } => captures
+                .iter()
+                .flat_map(|c| {
+                    self.carries
+                        .get(&c.outer_index)
+                        .cloned()
+                        .unwrap_or_default()
+                })
+                .collect(),
+            // Only the positions the callee routes into its result reach the
+            // caller through the call's value; an escaping one is marked at the
+            // call site instead.
+            TirExprKind::Call { func, args, .. } => {
+                let facts = self.oracle.direct(func);
+                self.carried_args(args.iter().map(|a| &a.expr), &facts.into_result)
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                let facts = self.oracle.indirect(callee, args.len());
+                self.carried_args(args.iter(), &facts.into_result)
+            }
+            // A control form's value is the tail of whichever arm runs, plus
+            // whatever a `break` hands out of a labeled block.
+            TirExprKind::Block(block) => self.block_carries(block),
+            TirExprKind::LabeledBlock { block, .. } => {
+                let mut out = self.block_carries(block);
+                let mut breaks = BreakScan {
+                    walker: self,
+                    found: IndexSet::default(),
+                };
+                breaks.walk_block(block);
+                extend(&mut out, &breaks.found);
+                out
+            }
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                let mut out = self.block_carries(then_branch);
+                if let Some(eb) = else_branch {
+                    let e = self.block_carries(eb);
+                    extend(&mut out, &e);
+                }
+                out
+            }
+            TirExprKind::Match { arms, .. } => arms
+                .iter()
+                .flat_map(|arm| self.carries(&arm.body))
+                .collect(),
             _ => IndexSet::default(),
         }
+    }
+
+    /// A block's value is its final statement's expression.
+    fn block_carries(&self, block: &TirBlock) -> IndexSet<u32> {
+        match block.stmts.last().map(|s| &s.kind) {
+            Some(TirStmtKind::Expr(e)) => self.carries(e),
+            _ => IndexSet::default(),
+        }
+    }
+
+    fn carried_args<'e>(
+        &self,
+        args: impl Iterator<Item = &'e TirExpr>,
+        positions: &IndexSet<u32>,
+    ) -> IndexSet<u32> {
+        args.enumerate()
+            .filter(|(i, _)| positions.contains(&u32::try_from(*i).unwrap()))
+            .flat_map(|(_, a)| self.carries(a))
+            .collect()
     }
 
     /// The parameter positions a *place* (the operand of `&`) is rooted at,
@@ -179,24 +339,111 @@ impl StoresWalker<'_> {
         }
     }
 
-    fn mark(&mut self, positions: IndexSet<u32>) {
-        self.stored.extend(positions);
+    /// The root local of a place, or `None` for a place this analysis cannot
+    /// root (a call result, an rvalue).
+    fn place_root_local(place: &TirExpr) -> Option<u32> {
+        match &place.kind {
+            TirExprKind::Local { index, .. } => Some(*index),
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Index { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. } => Self::place_root_local(inner),
+            _ => None,
+        }
     }
 
-    /// A call/method/indirect argument at `pos`: a carried reference escapes iff
-    /// the callee stores that position.
-    fn arg(&mut self, arg: &TirExpr, pos: usize, stores: &Option<IndexSet<u32>>) {
-        let carried = self.carries(arg);
+    fn escape(&mut self, positions: &IndexSet<u32>) {
+        self.grew |= extend(&mut self.facts.escapes, positions);
+    }
+
+    fn reaches_result(&mut self, positions: &IndexSet<u32>) {
+        self.grew |= extend(&mut self.facts.into_result, positions);
+    }
+
+    fn carry_into(&mut self, local: u32, positions: &IndexSet<u32>) {
+        if positions.is_empty() {
+            return;
+        }
+        self.grew |= extend(self.carries.entry(local).or_default(), positions);
+    }
+
+    /// A write of `value` into `target`: through a reference the caller owns it
+    /// is an escape; into a local's own storage it makes that local a carrier.
+    fn write(&mut self, target: &TirExpr, value: &TirExpr) {
+        let carried = self.carries(value);
         if carried.is_empty() {
             return;
         }
-        let escapes = match stores {
-            Some(s) => s.contains(&u32::try_from(pos).unwrap()),
-            None => true,
-        };
-        if escapes {
-            self.mark(carried);
+        match Self::place_root_local(target) {
+            Some(root)
+                if !self
+                    .local_is_reference(root, target)
+                    .unwrap_or(/* unknown root type */ true) =>
+            {
+                self.carry_into(root, &carried);
+            }
+            _ => self.escape(&carried),
         }
+    }
+
+    /// Whether writing through `root` reaches storage the caller owns: the root
+    /// is a reference local, so the write lands in its referent. `None` when the
+    /// root's type is not on hand.
+    fn local_is_reference(&self, root: u32, target: &TirExpr) -> Option<bool> {
+        if let TirExprKind::Local { index, .. } = &target.kind
+            && *index == root
+        {
+            return Some(is_reference_type(target.type_id, self.type_table));
+        }
+        match &target.kind {
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Index { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. } => self.local_is_reference(root, inner),
+            _ => None,
+        }
+    }
+
+    /// A call's arguments: an escaping position persists here, a result-bound
+    /// one through the call's value (see [`StoresWalker::carries`]).
+    fn call_args<'e>(&mut self, args: impl Iterator<Item = &'e TirExpr>, facts: &StoresFacts) {
+        for (i, a) in args.enumerate() {
+            if !facts.escapes.contains(&u32::try_from(i).unwrap()) {
+                continue;
+            }
+            let carried = self.carries(a);
+            self.escape(&carried);
+        }
+    }
+
+    fn bind_pattern(&mut self, pattern: &crate::tir::TirPattern, source: &TirExpr) {
+        let carried = self.carries(source);
+        if carried.is_empty() {
+            return;
+        }
+        let mut binds: IndexSet<u32> = IndexSet::default();
+        super::analyze::collect_pattern_bindings(pattern, &mut binds);
+        for b in binds {
+            self.carry_into(b, &carried);
+        }
+    }
+}
+
+/// Unions what every `break` inside a labeled block hands out of it. Which
+/// label a break targets is not distinguished — an outer one only over-counts.
+struct BreakScan<'a, 'w> {
+    walker: &'a StoresWalker<'w>,
+    found: IndexSet<u32>,
+}
+
+impl TirRefVisitor for BreakScan<'_, '_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Break { value: Some(v), .. } = &stmt.kind {
+            extend(&mut self.found, &self.walker.carries(v));
+        }
+        self.walk_stmt(stmt);
     }
 }
 
@@ -207,13 +454,14 @@ impl TirRefVisitor for StoresWalker<'_> {
                 local_index, value, ..
             } => {
                 let c = self.carries(value);
-                if !c.is_empty() {
-                    self.carries.entry(*local_index).or_default().extend(c);
-                }
+                self.carry_into(*local_index, &c);
+            }
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
+                self.bind_pattern(pattern, value);
             }
             TirStmtKind::Return { value: Some(v) } => {
                 let c = self.carries(v);
-                self.mark(c);
+                self.reaches_result(&c);
             }
             _ => {}
         }
@@ -222,50 +470,23 @@ impl TirRefVisitor for StoresWalker<'_> {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            TirExprKind::Assign { target, value } => {
-                let c = self.carries(value);
-                if !c.is_empty() {
-                    match &target.kind {
-                        TirExprKind::Local { index, .. } => {
-                            self.carries.entry(*index).or_default().extend(c);
-                        }
-                        _ => self.mark(c),
-                    }
-                }
-            }
+            TirExprKind::Assign { target, value } => self.write(target, value),
             TirExprKind::GlobalVarSet { value, .. } => {
                 let c = self.carries(value);
-                self.mark(c);
+                self.escape(&c);
             }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for f in fields {
-                    let c = self.carries(&f.value);
-                    self.mark(c);
+            TirExprKind::Match { expr: scrut, arms } => {
+                for arm in arms {
+                    self.bind_pattern(&arm.pattern, scrut);
                 }
-            }
-            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
-                for e in elements {
-                    let c = self.carries(e);
-                    self.mark(c);
-                }
-            }
-            TirExprKind::VariantConstruct {
-                payload: Some(p), ..
-            } => {
-                let c = self.carries(p);
-                self.mark(c);
             }
             TirExprKind::Call { func, args, .. } => {
-                let stores = Some(self.oracle.direct(func));
-                for (i, a) in args.iter().enumerate() {
-                    self.arg(&a.expr, i, &stores);
-                }
+                let facts = self.oracle.direct(func);
+                self.call_args(args.iter().map(|a| &a.expr), &facts);
             }
             TirExprKind::IndirectCall { callee, args } => {
-                let stores = self.oracle.indirect(callee, args.len());
-                for (i, a) in args.iter().enumerate() {
-                    self.arg(a, i, &stores);
-                }
+                let facts = self.oracle.indirect(callee, args.len());
+                self.call_args(args.iter(), &facts);
             }
             _ => {}
         }

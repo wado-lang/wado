@@ -259,7 +259,26 @@ where it cannot prove move / share / fresh; no elision pass):
   the rule `match` arms already followed. A router dispatch — a response bound
   from an `if let` over the matched route — needs both this and the
   indirect-call rule, or every later field read of the binding is deep-copied.
+- Transient borrows — a borrow that ends before the move does not pin its
+  referent. A `&` call argument to a non-storing callee already did not; a
+  `match` / `if let` over a `&place` scrutinee is the same borrow and now reads
+  the same way, so `if let Repeat(r) = &op { … }; ops.push(op)` moves `op`
+  instead of deep-copying it. What the arms bind names the scrutinee's storage,
+  so an escape recorded against a binding closes back over the binding's
+  referent (`propagate_escapes_to_referents`) — a reference binding handed to a
+  `stores` callee pins the scrutinee exactly as `&op` itself would.
 - Confinement — `confine.rs` per-parameter escape fixpoint.
+- Where a stored reference lands — `stores.rs` separates the position a callee
+  routes into its _return value_ from one that reaches a global or is written
+  through a reference the caller owns. A caller must assume the union, but the
+  fixpoint must not: an iterator holds a reference to what it walks, so
+  collapsing the two made every `&List` parameter a stored one the moment the
+  body iterated it, and that pinned every caller's value against a move. A
+  `collect()` that drops the iterator stores nothing, and the enclosing function
+  now says so. A declared `stores[p]` names no destination: a value-returning
+  body is read as handing it out with the result and the walk finds any further
+  escape itself, while a void one (`List::push`, storing through a builtin) has
+  nowhere visible to put it and keeps the strong reading.
 - Read-only-share — a read-only binding whose storage is never mutated while
   live. See _Sharing_ below.
 
