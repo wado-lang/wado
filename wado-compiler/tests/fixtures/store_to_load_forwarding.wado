@@ -1,9 +1,9 @@
 // Store-to-load forwarding on struct fields. The forwarded constant is pinned
-// on the scalar assignment rather than on the `fmt_decimal` argument: a `let
-// mut` local is clobbered frame-wide by `niri`'s `clobbered_locals`, so once
-// `sroa_param` hands the field to the call directly — instead of wrapped in the
-// `Box<i32>` that const-object globalization used to fold — region seeding can
-// no longer supply its value. Flow-sensitive clobbering would restore it.
+// on the scalar the field decomposes to rather than on the `fmt_decimal`
+// argument: `${p2.a}` reads it inside a template region, and an address-taken
+// primitive is stored boxed, so the region sees a `Box<i32>`-typed mention
+// where the environment holds a scalar — which `region_free_reads` refuses to
+// seed. Seeding a boxed scalar would restore it.
 use { println, Stdout } from "core:cli";
 
 struct Pair {
