@@ -27,9 +27,7 @@ use {
     collect_unhandled_lexer_alt_action_ids,
     collect_lexer_predicate_ids,
     vocab_display_names,
-    resolve_ci,
     lexer_grammar_run_action_ids,
-    lexer_rule_replayable,
 } from "./lexer_gen.wado";
 use { gen_parser, grammar_has_at_end_conflict } from "./parser_gen.wado";
 use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
@@ -404,17 +402,15 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
     let grammar_executes = lexer_grammar_executes_actions(grammar);
     for let rule of &grammar.lexer_rules {
         let executes = lexer_rule_executes_actions(grammar_executes, rule);
-        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules, resolve_ci(&grammar.options, &rule.options));
         let reason = unhandled_lexer_action_reason(grammar_executes, rule);
         for let mut ai = 0; ai < rule.body.len(); ai += 1 {
             // Every alt's top-level actions run for an executing rule (the
-            // winning alt is picked at replay); a nested action runs only when
-            // the replay can reach it, so the rest warn.
+            // winning alt is picked at replay); a nested action runs only where
+            // the replay reaches it, so the rest warn.
             let mut ids: List<i32> = [];
             collect_unhandled_lexer_alt_action_ids(
                 &rule.body[ai],
                 executes,
-                replays,
                 &grammar.lexer_rules,
                 &mut ids,
             );
@@ -442,7 +438,7 @@ fn unhandled_lexer_action_reason(grammar_executes: bool, rule: &LexerRule) -> St
     if rule.is_fragment || rule.is_virtual {
         return "its rule has no match of its own to replay; only a caller inlining it runs the action";
     }
-    return "nested inside an element; only top-level rule/alt actions and predicates run today";
+    return "nested below an element the replay does not walk into (a `~`, or a recursive fragment the emit calls rather than inlines)";
 }
 
 /// Refuse a semantic predicate in an ATN-class lexer rule: the lexer ATN carries

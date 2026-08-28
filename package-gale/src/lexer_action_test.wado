@@ -248,6 +248,48 @@ WS : ' ' -> skip ;
     assert out.contains("lx.set_type(TK_B);"), "the action is emitted inside the replayed loop";
 }
 
+test "a lexer action under a lookahead-aware repeat runs once per accepted iteration" {
+    // `~'b'` can eat the `'c'` the suffix needs, so the loop scans forward and
+    // rewinds to the last position the suffix could start at. The replay
+    // re-walks exactly the iterations that scan kept, not the ones it tried.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' (~'b' { lx.set_type(TK_B) })+ 'c' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "an action under a lookahead-aware repeat no longer warns";
+    let out = gen_source(src);
+    assert out.contains("lx.set_type(TK_B);"), "the action is emitted";
+    assert out.contains("while pos < accept_"), "the replay stops at the accept the scan settled on";
+}
+
+test "a lexer action under a non-greedy repeat runs once per iteration" {
+    // The exit probe stays match-only on the replay path, so the rest's actions
+    // run once — from the iteration that ended the loop.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' (~'b' { lx.set_type(TK_B) })*? 'c' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "an action under a non-greedy repeat no longer warns";
+    assert gen_source(src).contains("lx.set_type(TK_B);"), "the action is emitted";
+}
+
+test "an action after a restructured repeat keeps its place in the alt" {
+    // The lookahead-aware emit consumes the suffix itself, so an action written
+    // between the repeat and the alt's end travels with the suffix or is lost.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' ~('b')+ { lx.set_type(TK_B) } 'c' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "a mid-alt action after a restructured repeat must not warn";
+    assert gen_source(src).contains("lx.set_type(TK_B);"), "the action is emitted";
+}
+
 test "a multi-alt lexer rule runs each alt's top-level action (no warn)" {
     let src = gen_source(&"lexer grammar L;
 options { language = Wado; }
@@ -265,16 +307,19 @@ WS : ' ' -> skip ;
 ") == 0, "multi-alt top-level actions must not warn";
 }
 
-test "a rule the replay cannot follow keeps the winning_alt helper" {
-    // A lookahead-aware repeat rewrites the sequence the replay would walk, so
-    // alt selection falls back to the helper and the actions run flat.
+test "a multi-alt rule around a restructured repeat replays instead of running flat" {
+    // The lookahead-aware repeat used to force the whole rule onto the flat
+    // emit — every alt's actions at the end of the match, the arm picked by a
+    // `winning_alt_` helper. The replay now walks this shape, so the helper is
+    // gone and each alt runs its own actions in place.
     let src = gen_source(&"lexer grammar L;
 options { language = Wado; }
 A : 'a' ~('b')+ 'c' { lx.set_type(TK_X) } | 'd' { lx.set_type(TK_Y) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ");
-    assert src.contains("fn winning_alt_A"), "non-replayable multi-alt rule gets a winning_alt helper";
+    assert !src.contains("fn winning_alt_A"), "the replay selects the arm itself";
+    assert src.contains("sel_alt_"), "the replay selects the winning arm match-only first";
 }
 
 test "an action inside an inlined fragment runs, and is not warned as unhandled" {

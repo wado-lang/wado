@@ -1,0 +1,41 @@
+//! Stage C lexer actions under a repeat the emitter restructures the sequence
+//! around. The scan stays match-only and a second walk re-runs what it kept, so
+//! an iteration the loop tried and gave back leaves no trace and an action
+//! written after the repeat still reads the cursor it was written at.
+
+use rr from "./grammars/wado_lex_restructured_repeat.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_restructured_repeat" },
+    };
+
+test "a lookahead-aware repeat runs its action once per kept iteration" {
+    // The scan walks `z z c m` before rewinding to the `c`; only `z z` are part
+    // of the match, so the action runs twice.
+    let two = rr::parse_s(&"azzcm");
+    assert two.ok(), "clean parse";
+    assert two.output == "a-ok", `two kept iterations, got '${two.output}'`;
+
+    let one = rr::parse_s(&"azcm");
+    assert one.ok(), "clean parse";
+    assert one.output == "a-bad", `one kept iteration, got '${one.output}'`;
+}
+
+test "a non-greedy repeat runs the rest's action only from the iteration that exits" {
+    // One inner iteration plus one run of the rest. The exit try that failed at
+    // the first position must not have run the rest's action.
+    let exact = rr::parse_t(&"dzcm");
+    assert exact.ok(), "clean parse";
+    assert exact.output == "d-ok", `one iteration and one rest run, got '${exact.output}'`;
+
+    let none = rr::parse_t(&"dcm");
+    assert none.ok(), "clean parse";
+    assert none.output == "d-bad", `no iteration, one rest run, got '${none.output}'`;
+}
+
+test "an action after a restructured repeat reads the cursor it was written at" {
+    // `pos - start` is 2 there — where the repeat stopped — and 3 at the end of
+    // the match, which is where the flat emit used to run it.
+    let mid = rr::parse_u(&"ezcm");
+    assert mid.ok(), "clean parse";
+    assert mid.output == "e-ok", `the action reads the repeat's stop, got '${mid.output}'`;
+}
