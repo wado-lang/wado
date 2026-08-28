@@ -1304,28 +1304,16 @@ impl SemEffectWalker<'_> {
         self.index.method_param_types(func_ref)
     }
 
-    /// Type of an indirect call's callee. When the callee is an identifier
-    /// bound to a local or parameter, its type lives in `local_types` keyed by
-    /// the binding's def (resolved through `references`); function-typed
-    /// parameters are recorded there, not in `expression_types`. Other callee
-    /// shapes fall back to the expression's recorded type.
+    /// Type of an indirect call's callee, preferring the enclosing function's
+    /// parameter types: a function-typed parameter callee leaves no `references`
+    /// edge or recorded expression type at the call, so nothing else names it.
     fn indirect_callee_type(&self, call: &crate::ast::CallExpr) -> Option<TypeId> {
-        if let Expr::Ident(ident) = &call.callee {
-            // A function-typed parameter callee leaves no `references` edge or
-            // recorded expression type at the call, so resolve it against the
-            // enclosing function's parameter types by name first.
-            if let Some(type_id) = self.param_types.get(&ident.name) {
-                return Some(*type_id);
-            }
-            if let Some(type_id) = self
-                .sem
-                .referenced_symbol(ident.id)
-                .and_then(|def| self.sem.local_type(def))
-            {
-                return Some(type_id);
-            }
+        if let Expr::Ident(ident) = &call.callee
+            && let Some(type_id) = self.param_types.get(&ident.name)
+        {
+            return Some(*type_id);
         }
-        self.sem.expression_type(call.callee.id())
+        expr_type_of(&call.callee, self.sem)
     }
 }
 
@@ -1931,9 +1919,8 @@ struct ReturnedCall<'e> {
     args: Vec<&'e Expr>,
 }
 
-/// Type of `expr`, preferring a binding's declared type (parameters and
-/// function-typed locals live in `local_types`, keyed by the binding's def)
-/// over the expression's recorded type.
+/// Type of `expr`, preferring the type of the binding an identifier names —
+/// where a parameter or a function-typed local has one and the use site does not.
 fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
     if let Expr::Ident(ident) = expr
         && let Some(def) = sem.referenced_symbol(ident.id)
@@ -1942,17 +1929,6 @@ fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
         return Some(ty);
     }
     sem.expression_type(expr.id())
-}
-
-/// Type of an indirect call's callee identifier (a functor local / param).
-fn indirect_callee_type_of(callee: &Expr, sem: &Semantics) -> Option<TypeId> {
-    if let Expr::Ident(ident) = callee
-        && let Some(def) = sem.referenced_symbol(ident.id)
-        && let Some(ty) = sem.local_type(def)
-    {
-        return Some(ty);
-    }
-    sem.expression_type(callee.id())
 }
 
 /// The parameter positions the *place* operand of `&` is rooted at, ignoring
@@ -2069,7 +2045,7 @@ fn resolve_returned_args<'e>(
                     args,
                 });
             }
-            if let Some(callee_ty) = indirect_callee_type_of(&call.callee, sem) {
+            if let Some(callee_ty) = expr_type_of(&call.callee, sem) {
                 let returned = match sem.types.get(callee_ty) {
                     ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
                     _ => (0..u32::try_from(args.len()).unwrap()).collect(),
@@ -2181,10 +2157,6 @@ fn carries_of(
 }
 
 impl RefFlow<'_, '_> {
-    fn expr_type(&self, expr: &Expr) -> Option<TypeId> {
-        expr_type_of(expr, self.ctx.sem)
-    }
-
     /// Parameter positions the reference produced by `expr` carries — the escape
     /// walk's view, sharing [`carries_of`] with the return-provenance fixpoint so
     /// both fold calls at the same return-provenance positions.
@@ -2228,7 +2200,7 @@ impl RefFlow<'_, '_> {
                         args,
                     });
                 }
-                if let Some(callee_ty) = self.indirect_callee_type(&call.callee) {
+                if let Some(callee_ty) = expr_type_of(&call.callee, self.ctx.sem) {
                     let stored = match self.ctx.sem.types.get(callee_ty) {
                         ResolvedType::Function { stores, .. } => stores.clone(),
                         _ => (0..u32::try_from(args.len()).unwrap()).collect(),
@@ -2275,11 +2247,6 @@ impl RefFlow<'_, '_> {
             .unwrap_or_default()
     }
 
-    /// Type of an indirect call's callee identifier (a functor local / param).
-    fn indirect_callee_type(&self, callee: &Expr) -> Option<TypeId> {
-        indirect_callee_type_of(callee, self.ctx.sem)
-    }
-
     fn sink_value(&mut self, value: &Expr, sink: Sink) {
         let carried = self.carries(value);
         self.mark(&carried, value.span(), &sink);
@@ -2295,8 +2262,7 @@ impl RefFlow<'_, '_> {
         let Some(call) = self.call_stored_args(expr) else {
             return;
         };
-        if self
-            .expr_type(expr)
+        if expr_type_of(expr, self.ctx.sem)
             .is_some_and(|ty| self.ctx.tyctx.can_hold_ref(&self.ctx.sem.types, ty))
         {
             return;
@@ -2376,12 +2342,6 @@ impl RefFlow<'_, '_> {
             }
             _ => None,
         }
-    }
-
-    /// Whether an identifier's binding is a reference (`&T` / `&mut T`), so a
-    /// write into its projection reaches caller-visible memory.
-    fn ident_is_ref(&self, ident: &ast::IdentExpr) -> bool {
-        ident_is_ref_of(ident, self.ctx.sem)
     }
 
     /// Reject a named-function reference argument whose declared `stores`
@@ -2496,7 +2456,7 @@ impl AstVisitor for RefFlow<'_, '_> {
                                 if let Some(def) = self.ctx.sem.referenced_symbol(ident.id) {
                                     self.carries.entry(def).or_default().extend(carried);
                                 }
-                            } else if through_deref || self.ident_is_ref(ident) {
+                            } else if through_deref || ident_is_ref_of(ident, self.ctx.sem) {
                                 self.mark(&carried, span, &Sink::ThroughRef);
                             } else if let Some(def) = self.ctx.sem.referenced_symbol(ident.id) {
                                 self.carries.entry(def).or_default().extend(carried);

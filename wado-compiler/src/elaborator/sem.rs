@@ -37,9 +37,7 @@ pub(crate) struct ModuleSemantics {
 }
 
 /// The fact kinds [`crate::semantics::Semantics`] answers by `AstId`, and so
-/// routes to a module by. One node's kinds do not all come from one walk — a
-/// module records the use→def edges around a parameter default while each
-/// caller types the expression itself — so the kind is part of the key.
+/// routes to a module by.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum FactKind {
     Reference,
@@ -51,9 +49,8 @@ pub(crate) enum FactKind {
     Desugar,
 }
 
-/// A routed fact kind and the map it lives in, paired once. A query names a
-/// [`Fact`], never a kind and a map separately, so it cannot route by one and
-/// read the other.
+/// A routed fact kind and the map it lives in, paired once: a query names a
+/// [`Fact`], so it cannot route by one kind and read another.
 #[derive(Clone, Copy)]
 pub(crate) struct Fact<V: 'static> {
     pub(crate) kind: FactKind,

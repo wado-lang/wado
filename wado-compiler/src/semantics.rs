@@ -58,24 +58,10 @@ pub struct Semantics {
     /// resolved back to their owning module (spans, URIs) without carrying a
     /// module in every key.
     pub(crate) space_modules: IndexMap<crate::ast::AstIdSpace, ModuleSource>,
-    /// Which module's [`ModuleSemantics`](crate::elaborator::sem::ModuleSemantics)
-    /// holds a given fact — the routing every `AstId`-keyed query below goes
-    /// through. The facts themselves have one home, the map the walk wrote them
-    /// into; this says which one that is.
-    ///
-    /// A fact lives in the module whose walk recorded it, which is its node's
-    /// own module for everything but the foreign AST a walk crosses into (a
-    /// callee's parameter default, resolved in the caller's frame). Keyed by
-    /// [`FactKind`] as well as node, because one node's kinds need not come
-    /// from one walk; where two walks do record the same kind, the last wins.
-    ///
-    /// The value is a position in [`AnnotateState::module_semantics`], which
-    /// the body walk reorders (`swap_remove` + `insert`); it is minted after
-    /// the last such move and `state` is immutable from then on. [`Self::fact_at`]
-    /// asserts the routed module really holds the fact, so a stale index fails
-    /// rather than answering `None`.
-    ///
-    /// Empty when resolve did not run or bailed before recording any fact.
+    /// The [`ModuleSemantics`] holding each fact the body walk recorded, as a
+    /// position in [`AnnotateState::module_semantics`] — the routing every
+    /// `AstId`-keyed query below reads through, in place of a second copy.
+    /// Keyed by [`FactKind`] too: one node's kinds need not come from one walk.
     pub(crate) fact_home: IndexMap<(AstId, FactKind), u32>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
@@ -234,11 +220,7 @@ impl Semantics {
         modules: IndexMap<ModuleSource, Module>,
         ast_indices: IndexMap<ModuleSource, AstIndex>,
         symbols: SymbolTable,
-        types: TypeTable,
         interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
-        state: Option<AnnotateState>,
-        fact_home: IndexMap<(AstId, FactKind), u32>,
-        tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         let space_modules = modules
             .iter()
@@ -248,13 +230,13 @@ impl Semantics {
             entry_module_source,
             modules,
             symbols,
-            types,
+            types: TypeTable::new(),
             interner,
             ast_indices,
-            state,
+            state: None,
             space_modules,
-            fact_home,
-            tir_modules,
+            fact_home: IndexMap::default(),
+            tir_modules: IndexMap::default(),
             liveness: crate::elaborator::liveness::Liveness::default(),
             is_complete: false,
             wit_contract: None,
@@ -285,10 +267,8 @@ impl Semantics {
         found
     }
 
-    /// Every entry of one fact map that [`Self::fact_at`] would answer with —
-    /// the iteration side of the same routing, so what an `iter_*` yields is
-    /// exactly what a point lookup returns. An entry a later walk shadowed is
-    /// left out; the module it lands in is the whole of what makes it live.
+    /// Every entry [`Self::fact_at`] would answer with — iteration through the
+    /// same routing, so a shadowed entry no query returns is left out.
     fn iter_live<V>(&self, fact: Fact<V>) -> impl Iterator<Item = (AstId, &V)> {
         self.state
             .as_ref()
@@ -1072,11 +1052,7 @@ impl Semantics {
             IndexMap::default(),
             IndexMap::default(),
             SymbolTable::new(),
-            TypeTable::new(),
             interner,
-            None,
-            IndexMap::default(),
-            IndexMap::default(),
         )
     }
 }
@@ -1161,11 +1137,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             load_result.modules,
             ast_indices,
             symbols,
-            TypeTable::new(),
             interner,
-            None,
-            IndexMap::default(),
-            IndexMap::default(),
         );
     }
 
@@ -1191,11 +1163,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             load_result.modules,
             ast_indices,
             symbols,
-            TypeTable::new(),
             interner,
-            None,
-            IndexMap::default(),
-            IndexMap::default(),
         );
     };
 
@@ -1226,12 +1194,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // `state.tysys.type_table`.
     let types = state.tysys.type_table.borrow().clone();
 
-    // Route each fact the body walk recorded to the module that holds it. The
-    // `Semantics` API is keyed by bare `AstId` while the facts stay in the
-    // per-module `ModuleSemantics` the walk wrote them into — one home,
-    // whichever phase reads them. A node reached by two walks (a callee's
-    // parameter default, typed at each call site while its own module records
-    // the edges around it) routes each kind to the walk that has it.
+    // Route each fact to the module that holds it, rather than copying it out:
+    // where two walks reached a node, each kind goes to the walk that has it.
     let mut fact_home: IndexMap<(AstId, FactKind), u32> = IndexMap::default();
     for (home, sem) in state.module_semantics.values().enumerate() {
         let home = u32::try_from(home).expect("module count fits in u32");
@@ -1310,10 +1274,8 @@ mod tests {
         tokio::runtime::Runtime::new().unwrap().block_on(future)
     }
 
-    /// One home: the body walk's facts stay in the [`ModuleSemantics`] that
-    /// recorded them, and `Semantics` reads through to it. A second copy leaves
-    /// the first empty, so a consumer reading the wrong one gets no facts
-    /// instead of a failure (WEP 2026-05-26 "One fact, two homes").
+    /// The body walk's facts stay in the [`ModuleSemantics`] that recorded
+    /// them, and `Semantics` reads through to it rather than holding a copy.
     #[test]
     fn body_facts_have_one_home() {
         let host = InMemoryCompilerHost::new();
@@ -1354,9 +1316,8 @@ mod tests {
         assert!(stdlib_facts);
     }
 
-    /// What an `iter_*` yields is what a point lookup answers. A node two walks
-    /// reached is recorded in both modules' maps; only the one it routes to is
-    /// live, so iterating the raw maps would hand out an entry no query returns.
+    /// What an `iter_*` yields is what a point lookup answers, so the entry a
+    /// node's other walk recorded is not handed out.
     #[test]
     fn iteration_yields_only_live_facts() {
         let host = InMemoryCompilerHost::new();
