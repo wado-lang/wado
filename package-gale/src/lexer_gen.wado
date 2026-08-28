@@ -1043,9 +1043,9 @@ pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
 /// single-alt and multi-alt rules run their
 /// alternatives' top-level `{ ... }` actions (a multi-alt rule re-matches to
 /// find the winning alternative in `apply_<rule>_actions`). Fragments and
-/// actions nested inside an element still warn. (A single-literal rule folded
-/// into the keyword classifier does not set `best_act`, so its action does not
-/// run — see the known limitations in `action.md`.)
+/// actions nested inside an element still warn. A rule carrying a body never
+/// folds into the keyword classifier (`keyword_rule_carries_body`), so it keeps
+/// the `try_` fn that sets `best_act`.
 pub fn lexer_rule_executes_actions(grammar_executes: bool, rule: &LexerRule) -> bool {
     return grammar_executes && !rule.is_fragment && !rule.is_virtual;
 }

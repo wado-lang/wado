@@ -1,4 +1,4 @@
-use { translate_action, translate_predicate, translate_members } from "./java2wado.wado";
+use { translate_action, translate_predicate, translate_members, stage_lexer_bodies } from "./java2wado.wado";
 use { grammar_has_superclass } from "./superclass.wado";
 use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
@@ -531,6 +531,53 @@ test "java members: void method, no params" {
     let m = translate_members(&lang, &"public void foo() { System.out.println(\"foo\"); }", &"T").unwrap();
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
     assert m.methods[0].source == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '${m.methods[0].source}'`;
+}
+
+test "java members: a member method stands outside every match" {
+    // The cursor locals and the rule's start token live in the generated
+    // functions, not on the struct, so a window read here has to be a loud
+    // error rather than an emit naming something that is not in scope.
+    let lang = ActionLanguage::Java;
+    for let body of &[
+        "boolean head() { return getText(); }", "int col() { return getCharPositionInLine(); }",
+        "int col() { return _tokenStartCharPositionInLine; }", "boolean head() { return $text; }",
+    ] {
+        assert translate_members(&lang, body, &"T", /*lexer=*/ true).is_err(), `must refuse: '${*body}'`;
+    }
+    assert translate_members(&lang, &"boolean head() { return getText(); }", &"T").is_err(), "parser side too";
+}
+
+test "java members: a lexer member resolves against the lexer's own surface" {
+    // Collected for the lexer, so a name Gale does not model on it is reported
+    // by name rather than passed through into the generated module.
+    let lang = ActionLanguage::Java;
+    let unmodelled = translate_members(&lang, &"boolean at() { return _input; }", &"T", /*lexer=*/ true);
+    assert unmodelled.is_err(), "an unmodelled recognizer field must be reported";
+
+    let src = "int n = 0; boolean deep() { return this.n > 1; }";
+    let ok = translate_members(&lang, &src, &"T", /*lexer=*/ true).unwrap();
+    assert ok.methods.len() == 1, `methods: ${ok.methods.len()}`;
+    assert ok.methods[0].source == "fn deep(&self) -> bool { return self.n > 1; }", `method: '${ok.methods[0].source}'`;
+}
+
+test "the parser's token-stream API is refused in a lexer body" {
+    // The generated `Lexer` has characters and a cursor, not tokens and rules,
+    // so each of these would have emitted a method it does not carry.
+    let lang = ActionLanguage::Java;
+    for let body of &[
+        "_input.LA(1) == 0", "_input.LT(1).getText().equals(\"x\")", "_input.getText().equals(\"x\")",
+        "getRuleInvocationStack().isEmpty()",
+    ] {
+        let mut g = parse(`lexer grammar L;
+A : 'a' { ${*body} }? ;
+`).unwrap();
+        let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
+        assert msgs.len() == 1, `must refuse '${*body}': ${msgs.len()} diagnostics`;
+    }
+
+    // The same call in a parser body is the API it belongs to.
+    let ok = java_pred(&"_input.LA(1) == 0", &"a : ID ;", false);
+    assert ok == "p.la(1) == 0", `out: '${ok}'`;
 }
 
 test "grammar_has_superclass keys the Phase 4 carve-out" {

@@ -76,6 +76,44 @@ pub struct JEnv {
     /// Whether the grammar declares a lexer mode, which is what gives `$mode` a
     /// latch to write.
     pub uses_modes: bool = false,
+    /// True inside a `@members` method body. A member is a method on the
+    /// recognizer struct, so it reaches the fields and the sibling methods but
+    /// stands outside any one match: the cursor locals and the rule's start
+    /// token belong to the generated functions, not to the struct.
+    pub in_members: bool = false,
+}
+
+/// The recognizer API is not one surface: what a body may reach depends on which
+/// recognizer carries it and on whether the body sits inside a match at all.
+/// Both questions are asked once, here, rather than at each entry of the table
+/// below — an entry that forgot to ask emitted a method the generated
+/// recognizer does not have, and the failure surfaced as the generated module's
+/// own compile error instead of a diagnostic naming the call.
+///
+/// A read of the match window: the lexer's `chars` / `start` / `pos`, or the
+/// parser's rule-start token. A `@members` method is a method on the recognizer
+/// struct and stands outside every match, so those locals name nothing there.
+fn match_window_expr(env: &JEnv, what: &String, expr: String) -> Result<String, String> {
+    if env.in_members {
+        builtin::cold_path();
+        return Result::Err(
+            `java2wado: @members: '${*what}' reads the match window, which a member method stands outside of`,
+        );
+    }
+    return Result::Ok(expr);
+}
+
+/// A call into the parser's token-stream / rule-context API. The generated
+/// `Lexer` carries none of it — it has characters and a cursor, not tokens and
+/// rules — so a lexer body reaching for it is refused by name.
+fn parser_api_expr(env: &JEnv, what: &String, expr: String) -> Result<String, String> {
+    if env.lexer {
+        builtin::cold_path();
+        return Result::Err(
+            `java2wado: '${*what}' reads the parser's token stream, which a lexer body has no access to`,
+        );
+    }
+    return Result::Ok(expr);
 }
 
 /// Translate a lexer `{ ... }` action body. The lexer has no enclosing parser
@@ -232,7 +270,7 @@ fn emit_assign_target(
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
-    if let Attr(text) = &a.target && env.lexer {
+    if let Attr(text) = &a.target && env.lexer && !env.in_members {
         let use_ = if a.op == "=" { AttrUse::Write } else { AttrUse::ReadWrite };
         return resolve_lexer_attr_ref(text, &lexer_attr_env(env), use_);
     }
@@ -317,7 +355,12 @@ pub fn emit_expr(
         Bool(b) => Result::Ok(if *b { String::from("true") } else { String::from("false") }),
         Str(c) => Result::Ok(`"${*c}"`),
         Attr(text) => {
-            if env.lexer {
+            if env.in_members {
+                builtin::cold_path();
+                Result::Err(
+                    `java2wado: @members: '${*text}' is an attribute of a match, which a member method stands outside of`,
+                );
+            } else if env.lexer {
                 resolve_lexer_attr_ref(text, &lexer_attr_env(env));
             } else {
                 resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, &env.this_bind);
@@ -419,15 +462,15 @@ fn emit_call(
         Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, env),
         Name(n) => {
             if *n == "getText" {
-                if env.lexer {
-                    Result::Ok(lexer_matched_text_expr());
+                match_window_expr(env, n, if env.lexer {
+                    lexer_matched_text_expr();
                 } else {
-                    Result::Ok(`${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`);
-                }
+                    `${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`;
+                });
             } else if env.lexer && *n == "getCharPositionInLine" {
-                Result::Ok(lexer_cursor_column_expr());
-            } else if !env.lexer && *n == "getRuleInvocationStack" {
-                Result::Ok(`${env.this_bind}.rule_stack()`);
+                match_window_expr(env, n, lexer_cursor_column_expr());
+            } else if *n == "getRuleInvocationStack" {
+                parser_api_expr(env, n, `${env.this_bind}.rule_stack()`);
             } else {
                 check_member_call_reachable(env, n)?;
                 Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
@@ -540,16 +583,16 @@ fn emit_member_call(
     }
     if meth == "getText" {
         if name_is(&m.recv, &"_input") {
-            return Result::Ok(`${env.this_bind}.input_text()`);
+            return parser_api_expr(env, &"_input.getText()", `${env.this_bind}.input_text()`);
         }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-        return Result::Ok(`${env.this_bind}.token_text(${r})`);
+        return parser_api_expr(env, &"<token>.getText()", `${env.this_bind}.token_text(${r})`);
     }
     if meth == "LA" && name_is(&m.recv, &"_input") {
-        return Result::Ok(`${env.this_bind}.la(${*args_w})`);
+        return parser_api_expr(env, &"_input.LA()", `${env.this_bind}.la(${*args_w})`);
     }
     if meth == "LT" && name_is(&m.recv, &"_input") {
-        return Result::Ok(`${env.this_bind}.lt(${*args_w})`);
+        return parser_api_expr(env, &"_input.LT()", `${env.this_bind}.lt(${*args_w})`);
     }
     if meth == "equals" {
         if raw_args.is_empty() {
@@ -620,7 +663,7 @@ fn name_expr(
     env: &JEnv,
 ) -> Result<String, String> {
     if env.lexer && *name == "_tokenStartCharPositionInLine" {
-        return Result::Ok(lexer_token_start_column_expr());
+        return match_window_expr(env, name, lexer_token_start_column_expr());
     }
     return match resolve_name(env, name) {
         Local => Result::Ok(*name),

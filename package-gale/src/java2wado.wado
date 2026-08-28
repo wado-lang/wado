@@ -17,8 +17,6 @@ use {
     AltAction,
     Alternative,
     Element,
-    NamedAction,
-    GrammarKind,
     is_parser_members,
 } from "./ir.wado";
 use { map_java_type } from "./java2wado/jemit.wado";
@@ -207,9 +205,17 @@ fn lexer_env(grammar_name: &String, members: &MemberNames, uses_modes: bool) -> 
     };
 }
 
-pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
+/// Translate a recognizer's `@members` block. `lexer` says which recognizer it
+/// declares members on, so a lexer body resolves the lexer's own API and refuses
+/// the names Gale does not model rather than passing them through.
+pub fn translate_members(
+    lang: &ActionLanguage,
+    body: &String,
+    grammar_name: &String,
+    lexer: bool = false,
+) -> Result<MemberDecls, String> {
     return match lang {
-        Java => translate_java_members(body, grammar_name),
+        Java => translate_java_members(body, grammar_name, lexer),
         Wado => translate_wado_members(body),
         Other(name) => Result::Err(`unsupported action language '${*name}' for @members`),
     };

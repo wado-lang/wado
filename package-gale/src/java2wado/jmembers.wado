@@ -74,7 +74,7 @@ struct ParsedMethod {
 /// Translate a `@members` block body to fields + methods. `grammar_name` keys the
 /// `<Name>Parser` token-constant qualifier; a call inside a method body resolves
 /// against the block's own method names.
-pub fn translate_java_members(body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
+pub fn translate_java_members(body: &String, grammar_name: &String, lexer: bool = false) -> Result<MemberDecls, String> {
     let tokens = tokenize_java(body)?;
     // A method body resolves names against the whole block: its siblings, and
     // the fields declared after it as much as before it.
@@ -84,6 +84,8 @@ pub fn translate_java_members(body: &String, grammar_name: &String) -> Result<Me
         grammar: *grammar_name,
         methods: scanned.methods,
         fields: scanned.fields,
+        lexer,
+        in_members: true,
     };
     let mut fields: List<MemberField> = [];
     let mut parsed: List<ParsedMethod> = [];

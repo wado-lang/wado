@@ -370,7 +370,7 @@ pub fn collect_members(grammar: &Grammar, ctx: &mut GenContext, lexer: bool) -> 
         return empty;
     }
     let owner = if lexer { "@lexer::members" } else { "@members" };
-    return match translate_members(&ctx.action_language(), &body, &grammar.name) {
+    return match translate_members(&ctx.action_language(), &body, &grammar.name, lexer) {
         Ok(m) => m,
         Err(msg) => {
             ctx.warn(&DiagnosticOwner::host(&owner), DiagnosticKind::UnsupportedAction, msg);
