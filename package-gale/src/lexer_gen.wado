@@ -1748,7 +1748,17 @@ fn gen_lexer_alt_seq(
                 NonGreedy => {
                     // `return`: the rest alt covers `i + 1` through the trailing
                     // predicate, so the post-loop pass must not run again.
-                    gen_lexer_non_greedy_repeat(w, rep, &lexer_alt_rest(alt, i), all_rules, fail_action, ci, ea, hm, replay);
+                    gen_lexer_non_greedy_repeat(
+                        w,
+                        rep,
+                        &lexer_alt_rest(alt, i),
+                        all_rules,
+                        fail_action,
+                        ci,
+                        ea,
+                        hm,
+                        replay,
+                    );
                     return;
                 },
                 LookaheadAware => {
@@ -2311,8 +2321,7 @@ fn gen_lexer_repeat_lookahead_aware(
         // Each iteration consumes exactly one char (`PlainInnerNotPerChar` is
         // the alternative emit otherwise), so the accept position alone says how
         // many of them the match kept.
-        assert lexer_element_can_consume_simple(&rep.element),
-            "a lookahead-aware repeat's inner consumes exactly one char per iteration";
+        assert lexer_element_can_consume_simple(&rep.element), "a lookahead-aware repeat's inner consumes exactly one char per iteration";
         w.line(&`pos = la_start_${id};`);
         gen_lexer_replay_to(w, &rep.element, all_rules, &accept_var, ci, hm);
         gen_lexer_alt_seq(w, rest, all_rules, fail_action, ci, ea, hm, tail, /*replay=*/ true);

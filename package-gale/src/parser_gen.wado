@@ -4601,11 +4601,7 @@ fn close_call_capture(w: &mut CodeWriter, span_field: &Option<String>) {
 /// Scope an inlined group alternative's label bindings to its own ops while its
 /// actions are emitted, and hand back the enclosing body's bindings to restore.
 /// A no-op (and byte-identical) for an alternative carrying no action.
-fn enter_group_alt_bindings(
-    ops: &List<Op>,
-    actions: &List<AltAction>,
-    ctx: &mut GenContext,
-) -> List<AltBinding> {
+fn enter_group_alt_bindings(ops: &List<Op>, actions: &List<AltAction>, ctx: &mut GenContext) -> List<AltBinding> {
     let outer = *ctx.alt_bindings();
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(collect_alt_bindings(ops));

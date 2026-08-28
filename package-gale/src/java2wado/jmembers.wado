@@ -333,12 +333,7 @@ fn parse_field(
     return Result::Ok(MemberField { name: *name, ty, init });
 }
 
-fn parse_method(
-    tokens: &List<JToken>,
-    pos: &mut i32,
-    name: &String,
-    ret_java: &String,
-) -> Result<ParsedMethod, String> {
+fn parse_method(tokens: &List<JToken>, pos: &mut i32, name: &String, ret_java: &String) -> Result<ParsedMethod, String> {
     let params = parse_params(tokens, pos)?;
     if !punct_is(tokens, *pos, &"{") {
         return Result::Err(`java2wado: @members: expected '\{' for method '${*name}'`);
