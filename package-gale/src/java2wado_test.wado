@@ -107,7 +107,33 @@ test "java members: method name is snake_cased at definition to match calls" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"boolean isKeyword() { return true; }", &"T").unwrap();
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0] == "fn is_keyword(&mut self) -> bool { return true; }", `method: '${m.methods[0]}'`;
+    assert m.methods[0].source == "fn is_keyword(&self) -> bool { return true; }", `method: '${m.methods[0].source}'`;
+}
+
+test "java members: the receiver follows what the body does" {
+    // Fixed point over the block: a reader that only calls readers stays `&self`,
+    // and one that reaches a writer through a call chain does not.
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int n = 0;
+          boolean reads() { return this.n > 0; }
+          void writes() { this.n = 1; }
+          boolean delegates() { return this.reads(); }
+          void indirect() { this.writes(); }",
+        &"T",
+    ).unwrap();
+    assert m.methods.len() == 4, `methods: ${m.methods.len()}`;
+    assert !m.methods[0].mutates && m.methods[0].source.contains("fn reads(&self)"), `reads: '${m.methods[0].source}'`;
+    assert m.methods[1].mutates && m.methods[1].source.contains("fn writes(&mut self)"), `writes: '${m.methods[1].source}'`;
+    assert !m.methods[2].mutates, `delegates: '${m.methods[2].source}'`;
+    assert m.methods[3].mutates, `indirect: '${m.methods[3].source}'`;
+}
+
+test "java members: printing writes the output sink, so its method takes &mut self" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, &"void say() { System.out.println(\"x\"); }", &"T").unwrap();
+    assert m.methods[0].mutates && m.methods[0].source.contains("fn say(&mut self)"), `say: '${m.methods[0].source}'`;
 }
 
 test "java predicate: boolean literal" {
@@ -396,14 +422,14 @@ test "java members: method with a param, print, and return" {
     ).unwrap();
     assert m.fields.is_empty(), "no fields expected";
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0] == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\\n`); return v; }", `method: '${m.methods[0]}'`;
+    assert m.methods[0].source == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\\n`); return v; }", `method: '${m.methods[0].source}'`;
 }
 
 test "java members: void method, no params" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"public void foo() { System.out.println(\"foo\"); }", &"T").unwrap();
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0] == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '${m.methods[0]}'`;
+    assert m.methods[0].source == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '${m.methods[0].source}'`;
 }
 
 test "grammar_has_superclass keys the Phase 4 carve-out" {

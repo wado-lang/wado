@@ -19,7 +19,9 @@ use {
     LexerElement,
     LexerRepeatElement,
     LexerNotElement,
+    NamedAction,
 } from "./ir.wado";
+use { is_lexer_members } from "./java2wado.wado";
 use { scan_string, scan_line_comment, scan_block_comment, is_id_start_char, is_id_continue_char } from "./g4/scan.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { to_snake_case } from "./ident.wado";
@@ -641,10 +643,21 @@ pub fn lexer_action_bodies_are_base_calls(grammar: &Grammar, base_name: &String)
         || body_is_base_calls_only(&b.text, base_name));
 }
 
-/// Whether a lexer body still names `this` after wiring. Only a `this.m()` call
-/// under a lexer base lowers to an operation; anything else has no receiver.
+/// Whether a lexer body still names `this` after wiring, with nothing to
+/// receive it. Only a `this.m()` call under a lexer base lowers to an operation
+/// — and a `@lexer::members` block gives `this` a receiver of its own, so there
+/// the translator resolves each reference and reports the ones it cannot.
 pub fn lexer_bodies_name_unwired_base(grammar: &Grammar) -> bool {
+    if grammar_has_lexer_members(grammar) {
+        return false;
+    }
     return lexer_bodies(grammar).iter_ref().any(|b: &SuperBody| body_names_this(&b.text));
+}
+
+fn grammar_has_lexer_members(grammar: &Grammar) -> bool {
+    return grammar.named_actions.iter_ref().any(
+        |a: &NamedAction| is_lexer_members(a, &grammar.kind) && !a.body.text.trim().is_empty(),
+    );
 }
 
 /// Why a lexer base cannot be wired, or empty when it can. The message names

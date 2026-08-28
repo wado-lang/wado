@@ -131,18 +131,48 @@ WS : ' ' -> skip ;
     assert !src.contains("best_act"), "predicates need no best_act";
 }
 
-test "a language=Java lexer grammar emits no @lexer::members fields" {
-    // A Java member method takes `&mut self`, but a lexer predicate runs inside
-    // `try_<rule>(lx: &Lexer, ...)`. Emitting the members would let a body reach
-    // one and produce a call the compiler rejects, so Java lexer bodies see no
-    // members and a reference is reported and dropped.
+test "a language=Java lexer grammar carries its @lexer::members" {
     let src = &"lexer grammar L;
 @members { int nest = 0; }
 A : 'a' { nest = nest + 1; } ;
 WS : ' ' -> skip ;
 ";
-    assert !gen_source(src).contains("nest: i32"), "Java lexer members must not be emitted";
-    assert unsupported_count(src) == 1, "a body reaching a Java lexer member must be reported";
+    assert gen_source(src).contains("nest: i32"), "a Java lexer member field lands on the Lexer";
+    assert unsupported_count(src) == 0, "a body reaching a Java lexer member must not warn";
+}
+
+test "a Java lexer member method takes the receiver its body needs" {
+    // A predicate runs inside `try_<rule>(lx: &Lexer, ...)`, so only a `&self`
+    // method is reachable from one. The receiver follows the body: `deep` reads,
+    // `push` writes.
+    let src = gen_source(&"lexer grammar L;
+@members {
+    int depth = 0;
+    boolean deep() { return this.depth > 1; }
+    void push() { this.depth = this.depth + 1; }
+}
+A : 'a' { this.push(); } ;
+B : 'b' { this.deep() }? ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("fn deep(&self) -> bool"), "a reading member method takes &self";
+    assert src.contains("fn push(&mut self)"), "a writing member method takes &mut self";
+    assert src.contains("if !(lx.deep()) { return -1; }"), "the predicate calls the member through the lexer handle";
+}
+
+test "a lexer predicate calling a writing member method is refused" {
+    // The tournament evaluates a predicate for every candidate rule, losers
+    // included, so it holds `&Lexer` and a `&mut self` call cannot be emitted.
+    let src = &"lexer grammar L;
+@members {
+    int depth = 0;
+    boolean bump() { this.depth = this.depth + 1; return true; }
+}
+A : 'a' { this.bump() }? ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 1, "a mutating member call from a lexer predicate must be reported";
+    assert !gen_source(src).contains("lx.bump()"), "the refused call must not be emitted";
 }
 
 test "a lexer predicate that prints is reported, not wired to the sink" {

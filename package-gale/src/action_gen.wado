@@ -36,7 +36,7 @@ use {
     translate_members,
     translate_predicate,
 } from "./java2wado.wado";
-use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
+use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
 use { escape_ident } from "./ident.wado";
@@ -344,7 +344,7 @@ fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
 /// untranslatable block is a loud diagnostic, not a silent drop.
 pub fn collect_parser_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
     let mut fields: List<MemberField> = [];
-    let mut methods: List<String> = [];
+    let mut methods: List<MemberMethod> = [];
     // Members are a java2wado product, so a wired parser base — which turns
     // `emit_actions` on for a carved-out host language — must not un-carve them.
     if !ctx.emit_actions() || !action_language_is_emittable(grammar) {
@@ -380,7 +380,7 @@ pub fn gen_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
     }
     ImplSpec::new(&"Parser").emit_begin(w);
     for let m of &members.methods {
-        w.line(m);
+        w.line(&m.source);
     }
     w.end();
     w.blank();

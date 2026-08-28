@@ -74,6 +74,10 @@ pub fn translate_action(
 /// one there is reported rather than given a set that is not ANTLR's.
 global NO_EXPECTED: String = "";
 
+/// No member method writes through the recognizer — the default where a caller
+/// declares none.
+global NO_MUT_METHODS: List<String> = [];
+
 /// Translate a semantic-predicate body (`{ cond }?`) to a Wado boolean
 /// expression, dispatching on the action language as `translate_action` does.
 pub fn translate_predicate(
@@ -110,9 +114,10 @@ pub fn stage_lexer_bodies(
     lang: &ActionLanguage,
     member_methods: &List<String>,
     member_fields: &List<String>,
+    mut_methods: &List<String> = &NO_MUT_METHODS,
 ) -> List<String> {
     let mut errors: List<String> = [];
-    let env = lexer_env(&grammar.name, member_methods, member_fields);
+    let env = lexer_env(&grammar.name, member_methods, member_fields, mut_methods);
     for let rule of &mut grammar.lexer_rules {
         for let alt of &mut rule.body {
             stage_lexer_alt(alt, lang, &env, &mut errors);
@@ -177,13 +182,19 @@ fn stage_lexer_elem(elem: &LexerElement, lang: &ActionLanguage, env: &JEnv, erro
     };
 }
 
-fn lexer_env(grammar_name: &String, member_methods: &List<String>, member_fields: &List<String>) -> JEnv {
+fn lexer_env(
+    grammar_name: &String,
+    member_methods: &List<String>,
+    member_fields: &List<String>,
+    mut_methods: &List<String>,
+) -> JEnv {
     return JEnv {
         this_bind: LEXER_HANDLE,
         grammar: *grammar_name,
         methods: *member_methods,
         lexer: true,
         fields: *member_fields,
+        mut_methods: *mut_methods,
     };
 }
 

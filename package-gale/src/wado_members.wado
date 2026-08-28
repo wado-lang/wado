@@ -1,20 +1,49 @@
-use { MemberField, MemberDecls } from "./java2wado/jmembers.wado";
+use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
 
 pub fn translate_wado_members(body: &String) -> Result<MemberDecls, String> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut fields: List<MemberField> = [];
-    let mut methods: List<String> = [];
+    let mut methods: List<MemberMethod> = [];
     for let mut i = skip_ws_semi(&chars, 0, n); i < n; i = skip_ws_semi(&chars, i, n) {
         if is_method_start(&chars, i, n) {
             let close = capture_fn(&chars, i, n)?;
-            methods.push(collect_range(&chars, i, close));
+            let head = method_head(&chars, i, n);
+            methods.push(MemberMethod { name: head.0, mutates: head.1, source: collect_range(&chars, i, close) });
             i = close;
         } else {
             i = parse_field(&chars, i, n, &mut fields)?;
         }
     }
     return Result::Ok(MemberDecls { fields, methods });
+}
+
+/// A method's name, and whether it takes `&mut self` — the receiver a lexer
+/// predicate cannot reach, since it holds `&Lexer`. A Wado member writes its own
+/// receiver, so the source says which those are.
+fn method_head(chars: &List<char>, start: i32, n: i32) -> [String, bool] {
+    let mut i = skip_ws(chars, start, n);
+    if word_at(chars, i, n, &"pub") {
+        i = skip_ws(chars, i + 3, n);
+    }
+    i = skip_ws(chars, i + 2, n);
+    let name_start = i;
+    while i < n && is_ident_char(chars[i]) {
+        i += 1;
+    }
+    let name = collect_range(chars, name_start, i);
+    while i < n && chars[i] != '(' {
+        i = skip_span(chars, i, n);
+    }
+    if i >= n {
+        return [name, false];
+    }
+    let mut r = skip_ws(chars, i + 1, n);
+    if !word_at(chars, r, n, &"&mut") {
+        return [name, false];
+    }
+    r = skip_ws(chars, r + 4, n);
+    return [name, word_at(chars, r, n, &"self")];
 }
 
 fn skip_ws_semi(chars: &List<char>, start: i32, n: i32) -> i32 {

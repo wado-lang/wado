@@ -61,6 +61,13 @@ pub struct JEnv {
     /// statement can read them. Collected up front because the emitter walks
     /// statements without carrying a scope.
     pub locals: List<String> = [],
+    /// The `@members` methods taking `&mut self`. A lexer predicate holds
+    /// `&Lexer` — the tournament must not mutate through a losing candidate —
+    /// so a call to one from there is refused, not emitted.
+    pub mut_methods: List<String> = [],
+    /// Whether the recognizer handle here is a shared reference. True only in a
+    /// lexer predicate; every other body may write.
+    pub read_only: bool = false,
 }
 
 /// Translate a lexer `{ ... }` action body. The lexer has no enclosing parser
@@ -94,6 +101,7 @@ fn declared_local_names(stmts: &List<JStmt>) -> List<String> {
 pub fn translate_java_lexer_expr(body: &String, env: &JEnv) -> Result<String, String> {
     let mut env = *env;
     env.sink = false;
+    env.read_only = true;
     let rule = lexer_body_rule();
     let rules: List<ParserRule> = [];
     let bindings: List<AltBinding> = [];
@@ -516,6 +524,11 @@ fn emit_member_call(
     }
     if !method_declared(env, &meth) {
         return Result::Err(unknown_method_err(&meth));
+    }
+    if env.read_only && env.mut_methods.contains(&to_snake_case(&meth)) {
+        return Result::Err(
+            `java2wado: @members method '${meth}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
+        );
     }
     let recv_w = if name_is(&m.recv, &"this") {
         env.this_bind;

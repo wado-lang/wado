@@ -41,7 +41,14 @@ use {
     translate_members,
     is_lexer_members,
 } from "./java2wado.wado";
-use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
+use {
+    MemberDecls,
+    MemberField,
+    MemberMethod,
+    member_field_names,
+    member_method_names,
+    mutating_method_names,
+} from "./java2wado/jmembers.wado";
 use {
     lexer_superclass_name,
     parser_superclass_name,
@@ -177,15 +184,22 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // Stage the lexer bodies into Wado on exactly the grammars whose lexer
     // bodies `gen_lexer` emits (its `ea`), so the emitters splice ready text:
     // they hold no `GenContext`, so a failure reaching one could only panic.
+    // Before staging: a Java lexer body resolves its bare names and `this.`
+    // calls against the members this block declares.
+    let lexer_members = collect_lexer_members(grammar, &mut ctx);
     if lexer_grammar_executes_actions(grammar) || ctx.has_superclass() {
-        // A Java lexer gets no members (see `collect_lexer_members`), so nothing
-        // resolves against them and a reference is reported.
-        let none: List<String> = [];
         // The call rewrite already turned a body under a wired base into Wado,
         // so it stages through the identity translator whatever the grammar
         // declares — the carve-out `action_language_is_emittable` names.
         let lang = if action_language_is_emittable(grammar) { grammar.action_language } else { ActionLanguage::Wado };
-        for let msg of &stage_lexer_bodies(grammar, &lang, &none, &none) {
+        let msgs = stage_lexer_bodies(
+            grammar,
+            &lang,
+            &member_method_names(&lexer_members),
+            &member_field_names(&lexer_members),
+            &mutating_method_names(&lexer_members),
+        );
+        for let msg of &msgs {
             ctx.warn(&DiagnosticOwner::host(&"lexer action"), DiagnosticKind::UnsupportedAction, *msg);
         }
     }
@@ -258,7 +272,6 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight, ctx.has_superclass());
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
-    let lexer_members = collect_lexer_members(grammar, &mut ctx);
     let has_members = members_present(&lexer_members);
     gen_lexer(
         &mut w,
@@ -470,18 +483,17 @@ fn members_present(members: &MemberDecls) -> bool {
     return !members.fields.is_empty() || !members.methods.is_empty();
 }
 
-/// Translate every `@lexer::members` block into `Lexer` fields/methods.
-/// Wado-only: a Java member method takes `&mut self`, but a lexer predicate runs
-/// inside `try_<rule>(lx: &Lexer, ...)` — the tournament must not mutate through
-/// a losing candidate — so a Java body that reached one would emit a call the
-/// compiler rejects. Java lexer bodies therefore see no members at all and a
-/// reference to one is reported and dropped. Lives here rather than in
+/// Translate every `@lexer::members` block into `Lexer` fields/methods. A method
+/// takes `&mut self` only where its body writes, so a lexer predicate — which
+/// runs inside `try_<rule>(lx: &Lexer, ...)`, where the tournament must not
+/// mutate through a losing candidate — can still call the read-only ones; a call
+/// to a mutating one from there is reported. Lives here rather than in
 /// `lexer_gen` to keep that module free of a `GenContext` dependency (which
 /// would cycle through `gen_context`'s `LitToken` import).
 fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
     let mut fields: List<MemberField> = [];
-    let mut methods: List<String> = [];
-    if !ctx.emit_actions() || !ctx.action_language() matches { Wado } {
+    let mut methods: List<MemberMethod> = [];
+    if !ctx.emit_actions() {
         return MemberDecls { fields, methods };
     }
     let lang = ctx.action_language();

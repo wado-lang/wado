@@ -16,7 +16,7 @@ use {
     resolve_ci,
 } from "./lexer_gen.wado";
 use { CodeWriter } from "./wadopoet.wado";
-use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
+use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { SuperOp } from "./superclass.wado";
 use { TreeMap } from "core:collections";
 
@@ -159,7 +159,7 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     let mut w = CodeWriter::new();
     let atn_class = TreeMap::<String, i32>::new();
     let fields: List<MemberField> = [];
-    let methods: List<String> = [];
+    let methods: List<MemberMethod> = [];
     let members = MemberDecls { fields, methods };
     let no_ops: List<SuperOp> = [];
     gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, &"", &no_ops);
@@ -174,7 +174,7 @@ fn lexer_source(src: String) -> String {
     let mut w = CodeWriter::new();
     let atn_class = TreeMap::<String, i32>::new();
     let fields: List<MemberField> = [];
-    let methods: List<String> = [];
+    let methods: List<MemberMethod> = [];
     let members = MemberDecls { fields, methods };
     let no_ops: List<SuperOp> = [];
     gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, &"", &no_ops);
