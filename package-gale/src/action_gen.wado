@@ -2,7 +2,16 @@
 //! `<Rule>Vals` channel, `@members`, threaded rule arguments, span
 //! capture. All inert when `emit_actions()` is off.
 
-use { ActionSource, AltAction, Alternative, AttrDecl, Element, Grammar, ParserRule } from "./ir.wado";
+use {
+    ActionSource,
+    AltAction,
+    Alternative,
+    AttrDecl,
+    Element,
+    Grammar,
+    ParserRule,
+    is_parser_members,
+} from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, LoweredGrammar, Op, Rule, RuleCallOp } from "./gir.wado";
 use { GenContext, RuleCaptures } from "./gen_context.wado";
 use { TreeMap } from "core:collections";
@@ -29,13 +38,7 @@ use {
     vals_struct_name,
     wado_type_default,
 } from "./action_translate.wado";
-use {
-    action_language_is_emittable,
-    is_parser_members,
-    translate_action,
-    translate_members,
-    translate_predicate,
-} from "./java2wado.wado";
+use { action_language_is_emittable, translate_action, translate_members, translate_predicate } from "./java2wado.wado";
 use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";

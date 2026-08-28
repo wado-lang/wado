@@ -205,6 +205,11 @@ fn expr_mutates(e: &JExpr, scope: &List<String>, mutators: &List<String>) -> boo
             if is_print_call(&c.callee) || mutators.contains(&to_snake_case(&call_method_name(&c.callee))) {
                 return true;
             }
+            // The callee too: `this.bump().toString()` hides the write one
+            // receiver down.
+            if expr_mutates(&c.callee, scope, mutators) {
+                return true;
+            }
             for let a of &c.args {
                 if expr_mutates(a, scope, mutators) {
                     return true;
@@ -330,7 +335,10 @@ fn parse_field(
         return Result::Err(`java2wado: @members: expected ';' after field '${*name}'`);
     }
     *pos += 1;
-    return Result::Ok(MemberField { name: *name, ty, init });
+    // snake_cased at the declaration, as a method name is: every read of it —
+    // `this.nestLevel` and the bare `nestLevel` alike — resolves through
+    // `to_snake_case`, so the field must be spelled the same way.
+    return Result::Ok(MemberField { name: to_snake_case(name), ty, init });
 }
 
 fn parse_method(tokens: &List<JToken>, pos: &mut i32, name: &String, ret_java: &String) -> Result<ParsedMethod, String> {

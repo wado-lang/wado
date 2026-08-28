@@ -55,8 +55,9 @@ test "java predicate: rule arg reference" {
 }
 
 test "java predicate: negation with parens" {
+    // The field declaration is snake_cased, so every read of it is too.
     let out = java_pred(&"!(this.enumKeyword)", &"a : ID ;", false);
-    assert out == "!(p.enumKeyword)", `out: '${out}'`;
+    assert out == "!(p.enum_keyword)", `out: '${out}'`;
 }
 
 test "java predicate: input lookahead vs token constant" {
@@ -128,6 +129,19 @@ test "java members: the receiver follows what the body does" {
     assert m.methods[1].mutates && m.methods[1].source.contains("fn writes(&mut self)"), `writes: '${m.methods[1].source}'`;
     assert !m.methods[2].mutates, `delegates: '${m.methods[2].source}'`;
     assert m.methods[3].mutates, `indirect: '${m.methods[3].source}'`;
+}
+
+test "java members: a write one receiver down still counts" {
+    // The mutating call is the *callee's* receiver, not an argument.
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int n = 0;
+          String writes() { this.n = 1; return \"x\"; }
+          boolean hidden() { return this.writes().equals(\"x\"); }",
+        &"T",
+    ).unwrap();
+    assert m.methods[1].mutates, `hidden: '${m.methods[1].source}'`;
 }
 
 test "java members: printing writes the output sink, so its method takes &mut self" {
@@ -397,7 +411,7 @@ test "java members: field declarations become struct fields" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"boolean enumKeyword = true; int i = 0;", &"T").unwrap();
     assert m.fields.len() == 2, `fields: ${m.fields.len()}`;
-    assert m.fields[0].name == "enumKeyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: ${m.fields[0].name}:${m.fields[0].ty}=${m.fields[0].init}`;
+    assert m.fields[0].name == "enum_keyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: ${m.fields[0].name}:${m.fields[0].ty}=${m.fields[0].init}`;
     assert m.fields[1].name == "i" && m.fields[1].ty == "i32" && m.fields[1].init == "0", `f1: ${m.fields[1].name}:${m.fields[1].ty}=${m.fields[1].init}`;
     assert m.methods.is_empty(), "no methods expected";
 }

@@ -329,8 +329,10 @@ fn emit_member(
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
+    // `this.<x>` is a member field read, and `parse_field` snake_cased the
+    // declaration, so this read has to agree with the bare-name one.
     if name_is(&m.recv, &"this") {
-        return Result::Ok(`${env.this_bind}.${m.name}`);
+        return Result::Ok(`${env.this_bind}.${to_snake_case(&m.name)}`);
     }
     if is_upper_ident(&m.name) && is_name(&m.recv) {
         if recv_is_grammar_class(env, &m.recv) {
@@ -394,10 +396,9 @@ fn emit_call(
                 Result::Ok(lexer_cursor_column_expr());
             } else if !env.lexer && *n == "getRuleInvocationStack" {
                 Result::Ok(`${env.this_bind}.rule_stack()`);
-            } else if method_declared(env, n) {
-                Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
             } else {
-                Result::Err(unknown_method_err(n));
+                check_member_call_reachable(env, n)?;
+                Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
             }
         },
         _ => Result::Err("java2wado: unsupported call target"),
@@ -526,14 +527,7 @@ fn emit_member_call(
         let a = emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, env)?;
         return Result::Ok(`(${r} == ${a})`);
     }
-    if !method_declared(env, &meth) {
-        return Result::Err(unknown_method_err(&meth));
-    }
-    if env.read_only && env.mut_methods.contains(&to_snake_case(&meth)) {
-        return Result::Err(
-            `java2wado: @members method '${meth}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
-        );
-    }
+    check_member_call_reachable(env, &meth)?;
     let recv_w = if name_is(&m.recv, &"this") {
         env.this_bind;
     } else {
@@ -563,6 +557,24 @@ fn lexer_name_expr(env: &JEnv, name: &String) -> Result<String, String> {
     }
     builtin::cold_path();
     return Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
+}
+
+/// Refuse a member call this body cannot make. Both spellings — `this.m()` and
+/// the bare `m()` — reach the same method, so both come through here: a lexer
+/// predicate holds `&Lexer`, the tournament having no business mutating through
+/// a losing candidate, and a `&mut self` member is unreachable from one.
+fn check_member_call_reachable(env: &JEnv, meth: &String) -> Result<(), String> {
+    if !method_declared(env, meth) {
+        builtin::cold_path();
+        return Result::Err(unknown_method_err(meth));
+    }
+    if env.read_only && env.mut_methods.contains(&to_snake_case(meth)) {
+        builtin::cold_path();
+        return Result::Err(
+            `java2wado: @members method '${*meth}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
+        );
+    }
+    return Result::Ok(());
 }
 
 /// Whether `name` resolves to a declared `@members` method (compared

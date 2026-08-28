@@ -32,6 +32,14 @@ test "a non-greedy repeat runs the rest's action only from the iteration that ex
     assert none.output == "d-bad", `no iteration, one rest run, got '${none.output}'`;
 }
 
+test "the replay's exit try keeps the predicate that decided the loop" {
+    // Only `pos > start + 2` carries the loop past the first `'c'`. A probe that
+    // dropped it would exit two chars early and run the action there.
+    let out = rr::parse_v(&"gcxcm");
+    assert out.ok(), "clean parse";
+    assert out.output == "g-ok", `the loop ends where the match ended it, got '${out.output}'`;
+}
+
 test "an action after a restructured repeat reads the cursor it was written at" {
     // `pos - start` is 2 there — where the repeat stopped — and 3 at the end of
     // the match, which is where the flat emit used to run it.

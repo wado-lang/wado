@@ -131,6 +131,19 @@ WS : ' ' -> skip ;
     assert !src.contains("best_act"), "predicates need no best_act";
 }
 
+test "a Wado lexer body naming `this` is still reported, members or not" {
+    // The identity translator analyses no host text, so `this` has nothing to
+    // receive it whatever the grammar declares. Only java2wado resolves one.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+@members { count: i32 = 0 }
+A : 'a' { this.count += 1 } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) > 0, "a Wado body naming `this` must be reported";
+    assert !gen_source(src).contains("this.count"), "the untranslatable body must not be emitted";
+}
+
 test "a language=Java lexer grammar carries its @lexer::members" {
     let src = &"lexer grammar L;
 @members { int nest = 0; }
@@ -163,7 +176,8 @@ WS : ' ' -> skip ;
 test "a lexer predicate calling a writing member method is refused" {
     // The tournament evaluates a predicate for every candidate rule, losers
     // included, so it holds `&Lexer` and a `&mut self` call cannot be emitted.
-    let src = &"lexer grammar L;
+    // Both spellings reach the same method, so both are refused.
+    let qualified = &"lexer grammar L;
 @members {
     int depth = 0;
     boolean bump() { this.depth = this.depth + 1; return true; }
@@ -171,8 +185,33 @@ test "a lexer predicate calling a writing member method is refused" {
 A : 'a' { this.bump() }? ;
 WS : ' ' -> skip ;
 ";
-    assert unsupported_count(src) == 1, "a mutating member call from a lexer predicate must be reported";
-    assert !gen_source(src).contains("lx.bump()"), "the refused call must not be emitted";
+    assert unsupported_count(qualified) == 1, "a mutating `this.m()` from a lexer predicate must be reported";
+    assert !gen_source(qualified).contains("lx.bump()"), "the refused call must not be emitted";
+
+    let bare = &"lexer grammar L;
+@members {
+    int depth = 0;
+    boolean bump() { this.depth = this.depth + 1; return true; }
+}
+A : 'a' { bump() }? ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(bare) == 1, "a mutating bare `m()` from a lexer predicate must be reported";
+    assert !gen_source(bare).contains("lx.bump()"), "the refused call must not be emitted";
+}
+
+test "a camelCase Java member field reads the same by either spelling" {
+    // The declaration is snake_cased like a method name, so `this.nestLevel` and
+    // the bare `nestLevel` resolve to the one field the struct carries.
+    let src = &"lexer grammar L;
+@members { int nestLevel = 0; }
+A : 'a' { nestLevel = this.nestLevel + 1; } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "both spellings must resolve";
+    let out = gen_source(src);
+    assert out.contains("nest_level: i32"), "the field is declared snake_cased";
+    assert out.contains("lx.nest_level = lx.nest_level + 1;"), `both reads agree: ${out}`;
 }
 
 test "a lexer predicate that prints is reported, not wired to the sink" {
@@ -337,6 +376,36 @@ WS : ' ' -> skip ;
     let out = gen_source(src);
     assert out.contains("lx.set_type(TK_B);"), "the action is emitted";
     assert out.contains("while pos < accept_"), "the replay stops at the accept the scan settled on";
+}
+
+test "a replay's decision probe evaluates the predicates the match evaluated" {
+    // The non-greedy exit try decides which iteration ends the loop. Emitting it
+    // without the predicate the match saw would exit earlier, running the
+    // alternative's actions at a cursor the match never stopped at.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' .*? { pos > start + 2 }? 'c' { lx.set_type(TK_B) } ;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 0, "a predicate after a non-greedy repeat must not warn";
+    let out = gen_source(src);
+    // Twice: once in `try_A`, once in the replay's exit try.
+    assert count_occurrences(&out, &"pos > start + 2") == 2, `the replay probe keeps the predicate: ${out}`;
+}
+
+/// How many times `needle` appears in `haystack`.
+fn count_occurrences(haystack: &String, needle: &String) -> i32 {
+    let mut n = 0;
+    let mut pos = 0;
+    loop {
+        let rest = haystack.substr_bytes(pos, haystack.len());
+        let found = rest.find(*needle);
+        if found matches { None } {
+            return n;
+        }
+        n += 1;
+        pos += found.unwrap() + needle.len();
+    }
 }
 
 test "a lexer action under a non-greedy repeat runs once per iteration" {

@@ -33,8 +33,16 @@ u : E M { p.emit("e-bad") }
   | E N { p.emit("e-ok") }
   ;
 
+v : G M { p.emit("g-bad") }
+  | G N { p.emit("g-ok") }
+  ;
+
 A : 'a' ( ~'b' { lx.count += 1 } )+ 'c' ;
 D : 'd' ( ~'b' { lx.count += 1 } )*? ( { lx.count += 1 } 'c' ) ;
 E : 'e' ~('b')+ { lx.count = pos - start } 'c' ;
+// The exit try is a decision, and only the predicate keeps the loop past the
+// first `'c'`: a replay that dropped it would end the loop two chars early and
+// run the action at a cursor the match never stopped at.
+G : 'g' .*? { pos > start + 2 }? 'c' { lx.count = pos - start - 2 } ;
 M : 'm' { if lx.count == 2 { lx.set_type(TK_N) } } ;
 N : 'n' ;

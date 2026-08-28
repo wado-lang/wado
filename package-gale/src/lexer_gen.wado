@@ -1364,7 +1364,10 @@ fn gen_lexer_alts_replay(
         let label = `sel_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = sel_saved_${id};`);
-        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break ${label}`, ci, ea, hm, longest, false);
+        // The selection has to pick the arm the match picked, so it evaluates
+        // the predicates the match evaluated even where the enclosing replay
+        // body does not (`probe_ea`).
+        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break ${label}`, ci, probe_ea(true, ea), hm, longest, false);
         if longest {
             w.line(&`if pos > sel_best_${id} \{ sel_best_${id} = pos; sel_alt_${id} = ${i}; \}`);
         } else {
@@ -1563,6 +1566,17 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
         },
         Repeat(_) => null,
     };
+}
+
+/// The predicate setting a match-only probe runs under. Under a replay it is
+/// always on: a probe reproduces a decision the match already made — which arm
+/// won, how many iterations a loop kept, where a non-greedy loop exited — and
+/// the match fn evaluates predicates wherever an `apply_<rule>_actions` exists
+/// at all (`gen_lexer`'s `ea` is true whenever a rule executes actions). The
+/// walk that follows a probe still does not, so a state-dependent predicate
+/// cannot reject the winner's actions after the decision is settled.
+fn probe_ea(replay: bool, ea: bool) -> bool {
+    return replay || ea;
 }
 
 /// How a repeat at `alt.elements[index]` is emitted, and — when the plain
@@ -2279,6 +2293,9 @@ fn gen_lexer_repeat_lookahead_aware(
     let accept_var = `accept_${id}`;
     let loop_label = `la_rep_${id}`;
     let suffix = &rest.elements;
+    // The scan settles where the loop stops, so on the replay path it evaluates
+    // the predicates the match evaluated (`probe_ea`); the walk below does not.
+    let pea = probe_ea(replay, ea);
 
     if replay {
         w.line(&`let la_start_${id} = pos;`);
@@ -2289,13 +2306,13 @@ fn gen_lexer_repeat_lookahead_aware(
     // legally start at the current position even before any inner
     // consumption.
     if let Star = rep.kind {
-        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea, hm, tail);
+        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, pea, hm, tail);
     }
 
     // Plus: the first iteration is mandatory and may not be skipped.
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
-        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea, hm, tail);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, pea, hm, false, false);
+        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, pea, hm, tail);
     }
 
     // Forward scan: each iteration of the inner advances pos and
@@ -2305,8 +2322,8 @@ fn gen_lexer_repeat_lookahead_aware(
     w.begin(&"loop");
     w.line(&`let la_saved_${id} = pos;`);
     w.begin(&`${loop_label}:`);
-    gen_lexer_elem(w, &rep.element, all_rules, &`break ${loop_label}`, ci, ea, hm, false, false);
-    gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea, hm, tail);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break ${loop_label}`, ci, pea, hm, false, false);
+    gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, pea, hm, tail);
     w.line(&"continue;");
     w.end();
     w.line(&`pos = la_saved_${id};`);
@@ -2675,8 +2692,11 @@ fn gen_lexer_repeat_iteration(
         gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
         return;
     }
+    // Whether this iteration ran is the match's decision, so the probe evaluates
+    // the predicates the match evaluated (`probe_ea`); the walk below does not.
+    let pea = probe_ea(replay, ea);
     if !lexer_element_has_action(&rep.element, all_rules) {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, false);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, pea, hm, false, false);
         // Same bound as the action-carrying form below: the replay stops where
         // the match did, whatever the match consulted to stop there.
         w.line(&`if pos > end \{ ${*fail_action}; \}`);
@@ -2686,7 +2706,7 @@ fn gen_lexer_repeat_iteration(
     w.line(&`let ${probe}_saved = pos;`);
     w.line(&`let mut ${probe}_ok = false;`);
     w.begin(&`${probe}:`);
-    gen_lexer_elem(w, &rep.element, all_rules, &`break ${probe}`, ci, ea, hm, false, false);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break ${probe}`, ci, pea, hm, false, false);
     w.line(&`${probe}_ok = true;`);
     w.end();
     // The winner's extent bounds the replay: an iteration reaching past `end`
@@ -2738,6 +2758,10 @@ fn gen_lexer_non_greedy_repeat(
 ) {
     let id = w.next_id();
     let label = `ng_${id}`;
+    // The exit try decides which iteration ends the loop, so on the replay path
+    // it evaluates the predicates the match evaluated (`probe_ea`); the rest is
+    // then re-run below without them, its decision already made.
+    let pea = probe_ea(replay, ea);
     // For Plus, match at least one element first
     if let Plus = rep.kind {
         gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm, false, replay);
@@ -2748,7 +2772,7 @@ fn gen_lexer_non_greedy_repeat(
     w.line(&`let ng_saved_${id} = pos;`);
     w.line(&`let mut ng_exit_${id} = false;`);
     w.begin(&`${label}:`);
-    gen_lexer_alt_seq(w, rest, all_rules, &`break ${label}`, ci, ea, hm, false, false);
+    gen_lexer_alt_seq(w, rest, all_rules, &`break ${label}`, ci, pea, hm, false, false);
     w.line(&`ng_exit_${id} = true;`);
     w.end();
     if replay {

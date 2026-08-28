@@ -14,6 +14,7 @@ use {
     assign_action_ids,
     find_lexer_rule,
     ActionLanguage,
+    is_lexer_members,
 } from "./ir.wado";
 use { build as build_follow_env } from "./follow_env.wado";
 use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
@@ -39,7 +40,6 @@ use {
     stage_lexer_bodies,
     translate_attr_types,
     translate_members,
-    is_lexer_members,
 } from "./java2wado.wado";
 use {
     MemberDecls,
@@ -493,7 +493,10 @@ fn members_present(members: &MemberDecls) -> bool {
 fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
     let mut fields: List<MemberField> = [];
     let mut methods: List<MemberMethod> = [];
-    if !ctx.emit_actions() {
+    // Members are a translator product, as on the parser side: a host language
+    // java2wado carves out has no member translation to report on, so asking
+    // would only raise a diagnostic about a block nothing was going to read.
+    if !ctx.emit_actions() || !action_language_is_emittable(grammar) {
         return MemberDecls { fields, methods };
     }
     let lang = ctx.action_language();
