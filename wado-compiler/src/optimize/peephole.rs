@@ -10,6 +10,7 @@ use crate::nir::NirFunction;
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
+use super::aggregate_forward::AggregateForwardRule;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
 use super::elide_box_local::build_elide_box_local;
@@ -53,6 +54,7 @@ pub(super) fn run_peephole(
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
+    let aggregate_forward_rule = AggregateForwardRule;
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let tuple_projection_rule = TupleProjectionRule;
 
@@ -136,7 +138,8 @@ pub(super) fn run_peephole(
             rules.push(slot_temp_sroa_rule);
         }
         rules.extend([
-            &elide_rule as &dyn Rule,
+            &aggregate_forward_rule as &dyn Rule,
+            &elide_rule,
             &const_fold_rule,
             &branch_prune_rule,
             &tuple_projection_rule,
