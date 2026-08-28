@@ -85,7 +85,7 @@ The AST is parser-immutable from this point on. The desugar-replacement surface 
 
 The LSP path stops after liveness and builds no TIR.
 
-The result, `Semantics`, carries the TIR modules plus an `AstIndex` and a use→def map (`AstId → AstId`, globally-unique ids). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
+The result, `Semantics`, carries the TIR modules plus an `AstIndex`, and answers every fact query — the use→def edges among them — by routing a globally-unique `AstId` to the `ModuleSemantics` whose walk recorded it, rather than holding a copy. This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
 
 The elaborator covers trait selection, generic inference, method dispatch, coercion, and effect typing. All trait calls are resolved statically — by the end of the pipeline every call targets a concrete monomorphized function. There is no runtime vtable.
 
