@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787851164228,
+  "lastUpdate": 1787877789408,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51625,6 +51625,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9c60090098692b5882a5753dccc54f137ca032b8"
         },
         "date": 1787851163576,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 258212,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c13b1a9c8c19672732e3c75990bb0856d6a673f",
+          "message": "Merge pull request #1913 from wado-lang/claude/wasm-cm-wasi-threads-oxmayu\n\nchore: remove the unwired CM thread builtins",
+          "timestamp": "2026-08-28T09:29:32+09:00",
+          "tree_id": "98dccbdf87cd3cc1a8eecd3e64806fc40fd92770",
+          "url": "https://github.com/wado-lang/wado/commit/3c13b1a9c8c19672732e3c75990bb0856d6a673f"
+        },
+        "date": 1787877788672,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
