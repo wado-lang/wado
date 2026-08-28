@@ -133,8 +133,8 @@ mod rewrite;
 mod trackability;
 
 pub use callee::{Callee, CalleeKey, CalleeMap};
-pub(crate) use rewrite::guard_declares_locals;
 use pattern::PatternMatch;
+pub(crate) use rewrite::guard_declares_locals;
 use trackability::Trackability;
 
 /// Commit sink for niri's body rewrites, so one set of rewrites serves two

@@ -116,7 +116,10 @@ fn build_field_table_index(project: &NirPackage) -> FieldTableIndex {
     for s in &project.structs {
         out.insert(
             (s.name.clone(), s.module_source.clone()),
-            s.fields.iter().map(|f| (f.name.clone(), f.type_id)).collect(),
+            s.fields
+                .iter()
+                .map(|f| (f.name.clone(), f.type_id))
+                .collect(),
         );
     }
     out
@@ -192,12 +195,9 @@ fn collect_and_validate(
             else {
                 continue;
             };
-            info.form = func
-                .body
-                .as_ref()
-                .map_or(FieldForm::Value, |body| {
-                    param_field_form(body, param.local_index)
-                });
+            info.form = func.body.as_ref().map_or(FieldForm::Value, |body| {
+                param_field_form(body, param.local_index)
+            });
             // A shared borrow of the field would make the call site pass
             // `&place.f`, and `sroa` mishandles that shape: it decomposes the
             // caller's struct, rewrites the argument, and leaves the reads the
@@ -821,8 +821,9 @@ fn check_operand(
     if is_local_operand(body, op, idx) {
         return FieldUse::Invalid;
     }
-    op.as_expr()
-        .map_or(FieldUse::Unresolved, |e| check_expr(body, e, idx, candidates))
+    op.as_expr().map_or(FieldUse::Unresolved, |e| {
+        check_expr(body, e, idx, candidates)
+    })
 }
 
 // -----------------------------------------------------------------------
@@ -861,7 +862,8 @@ fn mint_scalarized_clones(
         // This pass runs once per fixpoint iteration, so a clone it minted on an
         // earlier one already stands under this name. Reuse it rather than mint
         // a second function with the same identity.
-        let func_key = FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
+        let func_key =
+            FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
         if let Some(&existing) = project.func_index.get(&func_key) {
             clones.insert(*key, existing);
             continue;

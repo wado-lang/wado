@@ -106,20 +106,15 @@ impl Rule for AggregateForwardRule {
     /// and the binding must have this one reader.
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
-        let Some(at) = stmts.windows(2).position(|pair| {
-            binding(engine.body, pair[0]).is_some_and(|(local, source)| {
-                consumer(engine.body, pair[1], local, source).is_some()
-                    && engine.local_reads(local).len() == 1
-            })
-        }) else {
+        let found = stmts.windows(2).enumerate().find_map(|(at, pair)| {
+            let (local, source) = binding(engine.body, pair[0])?;
+            let forward = consumer(engine.body, pair[1], local, source)?;
+            (engine.local_reads(local).len() == 1 && engine.local_has_one_version(local))
+                .then_some((at, forward))
+        });
+        let Some((at, (read, forwarded))) = found else {
             return false;
         };
-        let (local, source) = binding(engine.body, stmts[at]).expect("just matched");
-        if !engine.local_has_one_version(local) {
-            return false;
-        }
-        let (read, forwarded) = consumer(engine.body, stmts[at + 1], local, source)
-            .expect("just matched");
         engine.become_expr(read, forwarded);
         let mut kept = stmts;
         kept.remove(at);

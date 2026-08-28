@@ -215,7 +215,6 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 
-
 /// Prefix every compiler-synthesised block label carries.
 ///
 /// Reserved in source — the parser rejects a label that starts with it — so a
