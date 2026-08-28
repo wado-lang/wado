@@ -16,6 +16,18 @@ use super::tysys::TypeSystem;
 
 use super::util::placeholder;
 
+/// `-<integer literal>`, the shape both the coercion path and the defaulting
+/// path treat as a single literal so the boundary is the signed minimum.
+fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &str)> {
+    if unary.op != UnaryOp::Neg {
+        return None;
+    }
+    let ast::Expr::Literal(lit) = &unary.expr else {
+        return None;
+    };
+    super::expr::int_literal_repr(lit).map(|repr| (lit, repr))
+}
+
 /// The right-hand side of an assignment passed to
 /// [`Elaborator::assign_to_target`]. Either an AST expression (the
 /// regular [`Elaborator::resolve_assign`] path) or an already-resolved
@@ -1115,7 +1127,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (UnaryOp::Ref, ast::Expr::Index(index)) => {
                 self.resolve_index_access(index, ctx, super::expr::IndexAccess::Shared)
             }
-            _ => self.resolve_expr(&unary.expr, ctx, inner_expected),
+            _ => match negated_int_literal(unary).filter(|_| expected_type.is_none()) {
+                Some((lit, repr)) => {
+                    self.check_default_int_literal(repr, true, unary.span);
+                    self.record_expression_type(lit.id, TypeTable::I32);
+                    TypeTable::I32
+                }
+                None => self.resolve_expr(&unary.expr, ctx, inner_expected),
+            },
         };
 
         if unary.op == UnaryOp::MutRef

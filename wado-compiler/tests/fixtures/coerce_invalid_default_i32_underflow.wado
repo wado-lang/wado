@@ -1,0 +1,8 @@
+// `-NUM` is one literal, so the defaulted check uses the signed minimum:
+// -2147483649 is out of range where -2147483648 is not.
+export fn run() {
+    let i = -2147483649;
+}
+
+__DATA__
+{"compile_error": "literal out of range for `i32`: -2147483649"}

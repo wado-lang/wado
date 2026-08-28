@@ -79,8 +79,17 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
 
 3. **Range checking for literals**:
 
+   Against the type the literal lands on, whether that comes from an
+   annotation or from the `i32` default. `-NUM` is one literal, so the
+   boundary is the signed minimum. A literal directly under `as` is exempt:
+   it takes the target's width, which is what makes the cast the way to write
+   a bit pattern.
+
    ```wado
-   let overflow: i8 = 128;  // ❌ Compile error: out of range
+   let overflow: i8 = 128;   // ❌ Compile error: out of range
+   let defaulted = 4294967296;  // ❌ Compile error: out of range for i32
+   let min = -2147483648;    // ✅ i32 minimum
+   let bits = 0xFF as i8;    // ✅ bit pattern: -1
    ```
 
 4. **No literal type suffixes**:
