@@ -869,14 +869,23 @@ fn print_inlay_hints_json(filename: &str, hints: &[wado_lsp::InlayHint]) {
     let json_hints: Vec<serde_json::Value> = hints
         .iter()
         .map(|h| {
-            json!({
+            let mut hint = json!({
                 "file": filename,
                 "position": { "line": h.position.line, "character": h.position.character },
                 "label": h.label,
                 "kind": inlay_hint_kind_str(h.kind),
-                "paddingLeft": h.padding_left,
-                "paddingRight": h.padding_right,
-            })
+            });
+            // Absent, not null: the wire omits an unset padding flag, and this
+            // output is here to show what the client receives.
+            for (key, flag) in [
+                ("paddingLeft", h.padding_left),
+                ("paddingRight", h.padding_right),
+            ] {
+                if let Some(flag) = flag {
+                    hint[key] = flag.into();
+                }
+            }
+            hint
         })
         .collect();
     println!("{}", serde_json::to_string_pretty(&json_hints).unwrap());

@@ -120,3 +120,29 @@ fn engine_returns_empty_for_unknown_document() {
         );
     });
 }
+
+/// LSP reads an absent `paddingLeft` / `paddingRight` as "no padding"; `null`
+/// is not the same value to every client, so an unset flag leaves the wire
+/// form entirely, and both names are camelCase.
+#[test]
+fn unset_padding_is_absent_from_the_wire_form() {
+    let hint = InlayHint {
+        position: Position {
+            line: 0,
+            character: 0,
+        },
+        label: ": i32".to_string(),
+        kind: InlayHintKind::Type,
+        padding_left: None,
+        padding_right: Some(true),
+    };
+    let wire = serde_json::to_string(&hint).unwrap();
+    assert!(
+        !wire.contains("padding_left") && !wire.contains("paddingLeft"),
+        "an unset padding flag must not reach the wire at all; got {wire}",
+    );
+    assert!(
+        wire.contains(r#""paddingRight":true"#),
+        "a set padding flag is camelCase on the wire; got {wire}",
+    );
+}

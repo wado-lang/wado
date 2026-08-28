@@ -2454,6 +2454,12 @@ fn query_inlay_hints_json_output() {
     // `    let x = 1;` — the hint anchors right after the binding name.
     assert_eq!(hint["position"]["line"], 1);
     assert_eq!(hint["position"]["character"], 9);
+    // A type hint sets no padding, and the wire omits an unset flag rather
+    // than sending null; this output mirrors what the client receives.
+    assert!(
+        hint.get("paddingLeft").is_none() && hint.get("paddingRight").is_none(),
+        "unset padding must be absent, not null; got {hint}",
+    );
 }
 
 /// A hint's anchor is a position in the negotiated encoding, so a line with
