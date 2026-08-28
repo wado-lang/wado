@@ -86,6 +86,11 @@ for `Array<T>`-backed `String` / `List`).
   reasonable pre-size. Size it about right, or grow.
 - **GC-array access is bounds-checked, no unchecked variant.** A lookup table in
   a GC array adds a checked load per access — it lost to plain arithmetic.
+- **`array.copy` is fast; leave it alone.** It has a fast path that does not call
+  out to the runtime, and it beats a hand-written loop from a couple of bytes on
+  — the loop pays the bounds check above on both the get and the set of every
+  byte. Neither hand-roll it nor contort an algorithm to avoid it
+  (`dead-ends.md`).
 - **Constant `/` and `%` are cheap** (Cranelift magic-multiply, `x/k` and `x%k`
   fused) — don't trade a divide for extra multiplies.
 - **A compare cascade is not a dispatch problem.** Cranelift lowers a short

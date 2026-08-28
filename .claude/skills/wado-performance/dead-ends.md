@@ -163,19 +163,25 @@ are the work.
 Generalizes: this is the dev-vs-release rule with a number on it. A grow-removal
 sized from a dev profile is sized wrong.
 
-## Copying a short string with a byte loop (2026-08-28)
+## Working around `array.copy` (2026-08-28)
 
-A dynamic-length `array.copy` lowers to a `memory_copy` libcall — a wasm/host
-transition and an indirect call — and wasmtime only expands the copy inline when
-the length is a compile-time constant (`INLINE_COPY_MAX_BYTES`, 128). Every
-short `String::push_str` therefore pays the full call to move a dozen bytes, so
-a length-gated byte loop looked free.
+`array.copy` has a fast path that does not call out to the runtime, and it beats
+anything hand-written. Two attempts to route around it, from opposite
+directions, both lost:
 
-It is not close. json-twitter serialize, best of 3: **677 → 479 MB/s** with the
-loop taken up to 32 bytes. A GC array has no unchecked accessor, so the loop
-pays a bounds check on both the `array.get` and the `array.set` of every byte;
-the libcall's fixed cost is smaller than that from about two bytes on.
+- **Replacing a short copy with a byte loop.** `String::push_str` moves a dozen
+  bytes at a time, so a length-gated loop looked like it would skip a call.
+  json-twitter serialize, best of 3: **677 -> 479 MB/s** with the loop taken up
+  to 32 bytes. A GC array has no unchecked accessor, so the loop pays a bounds
+  check on both the `array.get` and the `array.set` of every byte.
+- **Restructuring so the copy is not needed.** `fpfmt` inserts a float's decimal
+  point by writing the digits flush and shifting the fraction one byte right,
+  five sites over. Rewriting them into one right-to-left pass that writes both
+  digit runs around the point removes every copy at the same division and store
+  count — and measured flat: json-canada **198.60 -> 199.94 MB/s**, inside the
+  baseline arm's own 195.2-198.6 spread, `fts` unchanged, `-Os` output 33-36
+  bytes larger. Reverted.
 
-Generalizes: on WasmGC, per-element beats bulk only when the bulk form is doing
-real work the element form skips. `array.copy` is not one of those — reach for
-the builtin and let the reservation, not the copy, be what you fuse.
+Generalizes: reach for `array.copy` and leave it alone. It is not what your
+profile is pointing at, so neither hand-rolling it nor contorting the algorithm
+to avoid it is worth spending a measurement on.
