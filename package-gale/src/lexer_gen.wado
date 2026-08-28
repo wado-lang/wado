@@ -3017,8 +3017,6 @@ fn try_extract_keyword_char(elem: &LexerElement, all_rules: &List<LexerRule>, ru
     };
 }
 
-/// Analyzes a lexer rule to determine if it's a fixed keyword pattern.
-/// Returns KeywordInfo if it matches a sequence of case-insensitive (or literal) chars.
 /// Whether the rule carries any `{ ... }` action or `{ ... }?` predicate, the
 /// fragments it inlines included.
 fn keyword_rule_carries_body(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
@@ -3030,6 +3028,8 @@ fn keyword_rule_carries_body(rule: &LexerRule, all_rules: &List<LexerRule>) -> b
     return !preds.is_empty();
 }
 
+/// Analyzes a lexer rule to determine if it's a fixed keyword pattern.
+/// Returns KeywordInfo if it matches a sequence of case-insensitive (or literal) chars.
 fn try_extract_keyword_info(
     rule: &LexerRule,
     all_rules: &List<LexerRule>,

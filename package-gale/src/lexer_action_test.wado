@@ -200,6 +200,24 @@ WS : ' ' -> skip ;
     assert !gen_source(bare).contains("lx.bump()"), "the refused call must not be emitted";
 }
 
+test "a superClass grammar's `this` is not excused by its @lexer::members" {
+    // `@lexer::members` gives `this` a receiver only where java2wado resolves it,
+    // and a `superClass` grammar is carved out of the Java emit — its bodies
+    // stage through the identity translator, which resolves nothing. Here the
+    // base is refused too (one method used as both a predicate and an action),
+    // so nothing is wired and every `this.` would be emitted verbatim.
+    let src = &"lexer grammar L;
+options { superClass = B; }
+@members { int n = 0; }
+A : { this.m() }? 'a' { this.m() } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) > 0, "an unwired `this` must be reported, members or not";
+    let out = gen_source(src);
+    assert !out.contains("this.m()"), "the untranslatable body must not be emitted verbatim";
+    assert !out.contains("fn apply_A_actions"), "and the rule must not run actions at all";
+}
+
 test "a camelCase Java member field reads the same by either spelling" {
     // The declaration is snake_cased like a method name, so `this.nestLevel` and
     // the bare `nestLevel` resolve to the one field the struct carries.

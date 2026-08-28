@@ -647,14 +647,27 @@ pub fn lexer_action_bodies_are_base_calls(grammar: &Grammar, base_name: &String)
 /// receive it. Only a `this.m()` call under a lexer base lowers to an operation.
 /// A Java grammar's `@lexer::members` block gives `this` a receiver of its own —
 /// java2wado resolves each reference against the block and reports by name the
-/// ones it cannot — so there the question belongs to the translator. The
-/// identity translator analyses no host text, so a Wado body naming `this` still
-/// has nothing to receive it whatever the grammar declares.
+/// ones it cannot — so there the question belongs to the translator, and only
+/// where the translator runs. A `superClass` grammar is carved out of the Java
+/// emit, so its bodies reach the identity translator with no members collected;
+/// that translator analyses no host text, so a body it stages naming `this` has
+/// nothing to receive it whatever the grammar declares. The two terms below are
+/// `action_language_is_emittable`'s Java case, which is what that carve-out is.
 pub fn lexer_bodies_name_unwired_base(grammar: &Grammar) -> bool {
-    if grammar.action_language matches { Java } && grammar_has_lexer_members(grammar) {
+    if grammar.action_language matches { Java }
+        && !grammar_has_superclass(grammar)
+        && grammar_has_lexer_members(grammar) {
         return false;
     }
     return lexer_bodies(grammar).iter_ref().any(|b: &SuperBody| body_names_this(&b.text));
+}
+
+/// Whether the grammar declares `options { superClass = ... }` for either
+/// recognizer. Its actions call a hand-written base class outside the `.g4` that
+/// Gale cannot see, which is what the SuperClass mechanism here wires and what
+/// java2wado's rollout carves out. See `action.md`.
+pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
+    return !grammar.lexer_superclass.is_empty() || !grammar.parser_superclass.is_empty();
 }
 
 fn grammar_has_lexer_members(grammar: &Grammar) -> bool {

@@ -38,6 +38,7 @@ use {
 } from "./java2wado/jemit.wado";
 use { translate_java_members, java_member_names, MemberDecls, MemberNames } from "./java2wado/jmembers.wado";
 use { translate_wado_members } from "./wado_members.wado";
+use { grammar_has_superclass } from "./superclass.wado";
 use { AltBinding } from "./attr_resolve.wado";
 
 /// Translate an action body to Wado: `Wado` routes to the identity translator,
@@ -234,13 +235,6 @@ pub fn collect_member_names(grammar: &Grammar) -> MemberNames {
         }
     }
     return out;
-}
-
-/// Whether the grammar declares `options { superClass = ... }`. Its actions call
-/// a hand-written base class outside the `.g4` that Gale cannot see — Phase 4,
-/// carved out of the Java emit-actions rollout. See `action.md`.
-pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
-    return !grammar.lexer_superclass.is_empty() || !grammar.parser_superclass.is_empty();
 }
 
 /// Whether java2wado can emit the grammar's non-superClass action bodies:
