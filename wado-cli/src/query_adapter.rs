@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -831,24 +833,15 @@ fn print_highlights_text(filename: &str, highlights: &[DocumentHighlight]) {
     }
 }
 
-/// Whole-document window: `inlay_hints` filters by the requested range, and a
-/// CLI query has no viewport to narrow it to.
-const WHOLE_DOCUMENT: wado_lsp::Range = wado_lsp::Range {
-    start: Position {
-        line: 0,
-        character: 0,
-    },
-    end: Position {
-        line: u32::MAX,
-        character: u32::MAX,
-    },
-};
-
 pub async fn run_inlay_hints(filename: &str, json_output: bool) -> Result<(), CliExit> {
     let prepared = prepare_query(filename).await?;
     let hints = prepared
         .engine
-        .inlay_hints(&prepared.uri, WHOLE_DOCUMENT, &prepared.host)
+        .inlay_hints(
+            &prepared.uri,
+            wado_lsp::Range::WHOLE_DOCUMENT,
+            &prepared.host,
+        )
         .await;
     let source = prepared
         .engine
@@ -890,8 +883,7 @@ fn print_inlay_hints_json(filename: &str, hints: &[wado_lsp::InlayHint]) {
 }
 
 /// Print every line that carries a hint, with the hints spliced in at the
-/// anchors the client would render them at. Reading the positions off a list
-/// leaves a misplaced anchor to be checked by hand; splicing shows it.
+/// anchors the client would render them at.
 fn print_inlay_hints_text(
     source: &str,
     encoding: wado_lsp::PositionEncoding,
@@ -902,31 +894,20 @@ fn print_inlay_hints_text(
         return;
     }
     let lines: Vec<&str> = source.lines().collect();
-    let mut by_line: std::collections::BTreeMap<u32, Vec<(usize, &wado_lsp::InlayHint)>> =
-        std::collections::BTreeMap::new();
+    let mut by_line: BTreeMap<u32, Vec<&wado_lsp::InlayHint>> = BTreeMap::new();
     for hint in hints {
-        let line = lines
-            .get(hint.position.line as usize)
-            .copied()
-            .unwrap_or("");
-        let byte =
-            wado_lsp::text::character_to_byte_offset(line, hint.position.character, encoding);
-        by_line
-            .entry(hint.position.line)
-            .or_default()
-            .push((byte, hint));
+        by_line.entry(hint.position.line).or_default().push(hint);
     }
-    for (line_index, mut anchors) in by_line {
-        let mut rendered = lines
-            .get(line_index as usize)
-            .copied()
-            .unwrap_or_default()
-            .to_string();
+    for (index, mut anchored) in by_line {
+        let line = lines.get(index as usize).copied().unwrap_or_default();
+        let mut rendered = line.to_string();
         // Right to left, so each splice leaves the offsets still to come valid.
-        anchors.sort_by_key(|(byte, _)| std::cmp::Reverse(*byte));
-        for (byte, hint) in &anchors {
-            rendered.insert_str(*byte, &format!("‹{}›", hint.label));
+        anchored.sort_by_key(|h| Reverse(h.position.character));
+        for hint in anchored {
+            let byte =
+                wado_lsp::text::character_to_byte_offset(line, hint.position.character, encoding);
+            rendered.insert_str(byte, &format!("‹{}›", hint.label));
         }
-        println!("{:>5} | {rendered}", line_index + 1);
+        println!("{:>5} | {rendered}", index + 1);
     }
 }

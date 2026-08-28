@@ -1850,7 +1850,7 @@ fn query_unknown_kind_lists_available_kinds() {
     let stderr = String::from_utf8(output).unwrap();
     assert_eq!(
         stderr,
-        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover\n",
+        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover, inlay-hints\n",
     );
 }
 
@@ -2477,8 +2477,7 @@ fn query_inlay_hints_anchor_past_a_surrogate_pair() {
         .stdout(predicate::str::contains("return take(‹s: ›\"😀\", ‹n: ›1)"));
 }
 
-/// The receiver of a path-form method call occupies argument slot 0, so the
-/// remaining labels must not shift left onto it.
+/// End to end, through the splice: the receiver holds argument slot 0.
 #[test]
 fn query_inlay_hints_path_form_call_keeps_the_receiver_slot() {
     let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();

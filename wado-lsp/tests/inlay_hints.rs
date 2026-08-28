@@ -8,21 +8,10 @@
 use wado_lsp::test_support::{self, MapHost};
 use wado_lsp::{Engine, InlayHint, InlayHintKind, Position, Range};
 
-const WHOLE_DOCUMENT: Range = Range {
-    start: Position {
-        line: 0,
-        character: 0,
-    },
-    end: Position {
-        line: u32::MAX,
-        character: u32::MAX,
-    },
-};
-
 async fn hints(source: &str) -> Vec<InlayHint> {
     let doc = test_support::open(source);
     doc.engine
-        .inlay_hints(&doc.uri, WHOLE_DOCUMENT, &doc.host)
+        .inlay_hints(&doc.uri, Range::WHOLE_DOCUMENT, &doc.host)
         .await
 }
 
@@ -124,17 +113,7 @@ fn engine_returns_empty_for_unknown_document() {
         let uri = format!("file://{path}");
         let host = MapHost::empty();
         let engine = Engine::new();
-        let range = Range {
-            start: Position {
-                line: 0,
-                character: 0,
-            },
-            end: Position {
-                line: u32::MAX,
-                character: u32::MAX,
-            },
-        };
-        let hints = engine.inlay_hints(&uri, range, &host).await;
+        let hints = engine.inlay_hints(&uri, Range::WHOLE_DOCUMENT, &host).await;
         assert!(
             hints.is_empty(),
             "closed/unknown document must produce no hints; got {hints:?}",

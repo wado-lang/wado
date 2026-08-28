@@ -15,6 +15,55 @@ enum QueryKind {
     InlayHints,
 }
 
+impl QueryKind {
+    /// Every kind, in the order the help lists them. The parse arm, the help
+    /// text, and the "Available:" error all read from here.
+    const ALL: &[Self] = &[
+        Self::Diagnostics,
+        Self::References,
+        Self::DocumentHighlight,
+        Self::Definition,
+        Self::Hover,
+        Self::InlayHints,
+    ];
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Diagnostics => "diagnostics",
+            Self::References => "references",
+            Self::DocumentHighlight => "document-highlight",
+            Self::Definition => "definition",
+            Self::Hover => "hover",
+            Self::InlayHints => "inlay-hints",
+        }
+    }
+
+    const fn desc(self) -> &'static str {
+        match self {
+            Self::Diagnostics => "Show errors and warnings",
+            Self::References => "Find references to the symbol at --line/--column",
+            Self::DocumentHighlight => "Highlight occurrences of the symbol at --line/--column",
+            Self::Definition => "Jump to the definition of the symbol at --line/--column",
+            Self::Hover => "Show the signature of the symbol at --line/--column",
+            Self::InlayHints => "Show the inferred-type and parameter-name hints, in the source",
+        }
+    }
+
+    fn parse(name: &str) -> Result<Self, CliExit> {
+        Self::ALL
+            .iter()
+            .find(|kind| kind.name() == name)
+            .copied()
+            .ok_or_else(|| {
+                let available: Vec<&str> = Self::ALL.iter().map(|k| k.name()).collect();
+                CliExit::error(format!(
+                    "unknown query kind '{name}'. Available: {}",
+                    available.join(", ")
+                ))
+            })
+    }
+}
+
 pub struct QueryOptions {
     kind: QueryKind,
     input: Option<String>,
@@ -112,32 +161,9 @@ fn format_usage() -> String {
     writeln!(buf, "Query compiler information about a source file.").unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Kinds:").unwrap();
-    writeln!(buf, "  diagnostics          Show errors and warnings").unwrap();
-    writeln!(
-        buf,
-        "  references           Find references to the symbol at --line/--column"
-    )
-    .unwrap();
-    writeln!(
-        buf,
-        "  document-highlight   Highlight occurrences of the symbol at --line/--column"
-    )
-    .unwrap();
-    writeln!(
-        buf,
-        "  definition           Jump to the definition of the symbol at --line/--column"
-    )
-    .unwrap();
-    writeln!(
-        buf,
-        "  hover                Show the signature of the symbol at --line/--column"
-    )
-    .unwrap();
-    writeln!(
-        buf,
-        "  inlay-hints          Show the inferred-type and parameter-name hints, spliced into the source"
-    )
-    .unwrap();
+    for kind in QueryKind::ALL {
+        writeln!(buf, "  {:<20} {}", kind.name(), kind.desc()).unwrap();
+    }
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
@@ -185,19 +211,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
         } else if let Value(val) = arg {
             let val_str = val.to_string_lossy();
             if kind.is_none() {
-                kind = Some(match val_str.as_ref() {
-                    "diagnostics" => QueryKind::Diagnostics,
-                    "references" => QueryKind::References,
-                    "document-highlight" => QueryKind::DocumentHighlight,
-                    "definition" => QueryKind::Definition,
-                    "hover" => QueryKind::Hover,
-                    "inlay-hints" => QueryKind::InlayHints,
-                    other => {
-                        return Err(CliExit::error(format!(
-                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight, definition, hover, inlay-hints"
-                        )));
-                    }
-                });
+                kind = Some(QueryKind::parse(val_str.as_ref())?);
             } else {
                 args::reject_multiple_inputs(&input)?;
                 input = Some(val_str.into_owned());

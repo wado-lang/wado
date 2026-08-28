@@ -201,11 +201,8 @@ fn character_to_codepoint_offset(line: &str, character: u32, encoding: PositionE
 }
 
 /// Byte offset inside `line` of an LSP `character` (0-based, in `encoding`
-/// code units), saturating at the end of the line.
-///
-/// For callers that already hold the line and want to splice text into it.
-/// Re-deriving the offset through [`lsp_position_to_line_col`] rescans the
-/// whole document per item, which is `O(items × document length)`.
+/// code units), saturating at the end of the line. For callers holding a line
+/// already: [`lsp_position_to_line_col`] rescans the document to find it.
 #[must_use]
 pub fn character_to_byte_offset(line: &str, character: u32, encoding: PositionEncoding) -> usize {
     let codepoint = character_to_codepoint_offset(line, character, encoding);

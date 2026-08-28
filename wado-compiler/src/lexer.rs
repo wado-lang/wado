@@ -1344,8 +1344,6 @@ impl<'a> Lexer<'a> {
 
     /// Lex a byte literal `b'x'`; lowers to a `u8` integer literal.
     fn lex_byte_char(&mut self) -> TokenKind {
-        // Taken before the `b`: the literal is `b'x'`, so an error span that
-        // opens at the quote underlines part of the literal, not the literal.
         let start = self.position();
         self.advance(); // consume `b`
         TokenKind::ByteCharLit(self.scan_char_raw(start))
