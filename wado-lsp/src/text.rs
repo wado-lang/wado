@@ -200,6 +200,17 @@ fn character_to_codepoint_offset(line: &str, character: u32, encoding: PositionE
     line.chars().count()
 }
 
+/// Byte offset inside `line` of an LSP `character` (0-based, in `encoding`
+/// code units), saturating at the end of the line. For callers holding a line
+/// already: [`lsp_position_to_line_col`] rescans the document to find it.
+#[must_use]
+pub fn character_to_byte_offset(line: &str, character: u32, encoding: PositionEncoding) -> usize {
+    let codepoint = character_to_codepoint_offset(line, character, encoding);
+    line.char_indices()
+        .nth(codepoint)
+        .map_or(line.len(), |(byte, _)| byte)
+}
+
 /// Code units `ch` occupies in `encoding`.
 fn code_units_of(ch: char, encoding: PositionEncoding) -> usize {
     match encoding {
@@ -449,5 +460,30 @@ mod tests {
     fn negotiate_falls_back_to_utf16_for_unknown_encodings() {
         let off = ["utf-7".to_string(), "utf-1024".to_string()];
         assert_eq!(PositionEncoding::negotiate(&off), PositionEncoding::Utf16);
+    }
+
+    #[test]
+    fn character_to_byte_offset_counts_code_units_and_returns_bytes() {
+        // `😀` is 2 UTF-16 units, 1 UTF-32 unit, and 4 UTF-8 bytes; the
+        // character after it must land on the same byte in every encoding.
+        let line = "a😀b";
+        assert_eq!(
+            character_to_byte_offset(line, 3, PositionEncoding::Utf16),
+            5
+        );
+        assert_eq!(
+            character_to_byte_offset(line, 2, PositionEncoding::Utf32),
+            5
+        );
+        assert_eq!(character_to_byte_offset(line, 5, PositionEncoding::Utf8), 5);
+    }
+
+    #[test]
+    fn character_to_byte_offset_saturates_past_the_line_end() {
+        assert_eq!(
+            character_to_byte_offset("ab", 99, PositionEncoding::Utf16),
+            2
+        );
+        assert_eq!(character_to_byte_offset("", 0, PositionEncoding::Utf16), 0);
     }
 }

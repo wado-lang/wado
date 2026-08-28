@@ -1850,7 +1850,7 @@ fn query_unknown_kind_lists_available_kinds() {
     let stderr = String::from_utf8(output).unwrap();
     assert_eq!(
         stderr,
-        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover\n",
+        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover, inlay-hints\n",
     );
 }
 
@@ -2399,4 +2399,117 @@ fn query_degrades_when_generator_cannot_run() {
         .assert()
         .stderr(predicate::str::contains("kiln generators could not run"))
         .stdout(predicate::str::contains("KILN_STALE_CACHE"));
+}
+
+#[test]
+fn query_inlay_hints_splices_labels_into_the_source() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "fn add(a: i32, b: i32) -> i32 { return a + b }\n\
+         export fn run() -> i32 {\n\
+         \x20   let x = add(1, 2);\n\
+         \x20   return x\n\
+         }\n",
+    )
+    .unwrap();
+
+    wado()
+        .args(["query", "inlay-hints", tmp.path().to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "let x‹: i32› = add(‹a: ›1, ‹b: ›2);",
+        ));
+}
+
+#[test]
+fn query_inlay_hints_json_output() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "export fn run() -> i32 {\n    let x = 1;\n    return x\n}\n",
+    )
+    .unwrap();
+
+    let output = wado()
+        .args([
+            "query",
+            "inlay-hints",
+            "--json",
+            tmp.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let parsed: Vec<Value> = serde_json::from_slice(&output).unwrap();
+    let hint = parsed
+        .iter()
+        .find(|h| h["label"] == ": i32")
+        .expect("the unannotated `let x = 1` should carry a type hint");
+    assert_eq!(hint["kind"], "type");
+    // `    let x = 1;` — the hint anchors right after the binding name.
+    assert_eq!(hint["position"]["line"], 1);
+    assert_eq!(hint["position"]["character"], 9);
+    // A type hint sets no padding, and the wire omits an unset flag rather
+    // than sending null; this output mirrors what the client receives.
+    assert!(
+        hint.get("paddingLeft").is_none() && hint.get("paddingRight").is_none(),
+        "unset padding must be absent, not null; got {hint}",
+    );
+}
+
+/// A hint's anchor is a position in the negotiated encoding, so a line with
+/// non-BMP text must still splice where the client would render it.
+#[test]
+fn query_inlay_hints_anchor_past_a_surrogate_pair() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "fn take(s: String, n: i32) -> i32 { return n }\n\
+         export fn run() -> i32 {\n\
+         \x20   return take(\"😀\", 1)\n\
+         }\n",
+    )
+    .unwrap();
+
+    wado()
+        .args(["query", "inlay-hints", tmp.path().to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("return take(‹s: ›\"😀\", ‹n: ›1)"));
+}
+
+/// End to end, through the splice: the receiver holds argument slot 0.
+#[test]
+fn query_inlay_hints_path_form_call_keeps_the_receiver_slot() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "trait Scale {\n\
+         \x20   fn scaled(&self, factor: i32, bias: i32) -> i32;\n\
+         }\n\
+         struct P { x: i32 }\n\
+         impl Scale for P {\n\
+         \x20   fn scaled(&self, factor: i32, bias: i32) -> i32 {\n\
+         \x20       return self.x * factor + bias\n\
+         \x20   }\n\
+         }\n\
+         export fn run() -> i32 {\n\
+         \x20   let p = P { x: 1 };\n\
+         \x20   return Scale::scaled(&p, 2, 3)\n\
+         }\n",
+    )
+    .unwrap();
+
+    wado()
+        .args(["query", "inlay-hints", tmp.path().to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "return Scale::scaled(&p, ‹factor: ›2, ‹bias: ›3)",
+        ));
 }

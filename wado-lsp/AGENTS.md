@@ -112,8 +112,9 @@ passthrough) → UTF-8 → UTF-16 (LSP default; only chosen when the
 client offers nothing else). The codepoint semantics come from
 `lexer.rs::Lexer::advance`, which increments `column` per Unicode
 scalar value, not per byte and not per UTF-16 code unit. Every
-conversion lives in `text.rs`: `character_to_codepoint_offset` inbound,
-`range_from_codepoints` / `codepoints_to_code_units` outbound.
+conversion lives in `text.rs`: `character_to_codepoint_offset` /
+`character_to_byte_offset` inbound, `range_from_codepoints` /
+`codepoints_to_code_units` outbound.
 
 ### Diagnostics
 

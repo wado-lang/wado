@@ -137,7 +137,7 @@ The ones you reach for while developing the toolchain:
 - `test` — run the `test` blocks in Wado source files.
 - `serve` — compile and serve an HTTP service.
 - `dump` — dump compiler internal state at every stage: AST, modules, symbols, types, TIR, NIR, WIR.
-- `query` — ask the language service for hover / definition / references / diagnostics, by position or by `MODULE#SYMBOL` notation.
+- `query` — ask the language service for hover / definition / references / diagnostics, by position or by `MODULE#SYMBOL` notation. `query inlay-hints` splices the hints into the source, so a misplaced anchor is visible rather than a number to check by hand.
 - `format` — format Wado source code.
 
 The rest (`init`, `update`, `fetch`, `build`, `publish`, `doc`, `wit`, `syntax`, `lsp`, `clean`) serve packaging, registry, and editor integration.
