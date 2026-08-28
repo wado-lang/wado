@@ -513,9 +513,11 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
 /// over the latches themselves.
 ///
 /// A command also moves the current mode `$mode` reads, as ANTLR's `mode(X)` /
-/// `pushMode(X)` do — except `pop_mode`, whose restored mode lives on the
-/// tokenize loop's stack and not on the `Lexer`. It clears the field instead, so
-/// a read after it fails loudly rather than answering the mode just left.
+/// `pushMode(X)` do. `set_mode` needs no write of its own — its latch is what
+/// the reader answers with first — and `pop_mode` cannot make one: its restored
+/// mode lives on the tokenize loop's stack and not on the `Lexer`. It clears the
+/// field instead, so a read after it fails loudly rather than answering the mode
+/// just left.
 fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, mode_use: &ModeAttrUse) {
     let mut fp = FnSpec::new(&"push_mode", vis);
     fp.set_receiver(&"&mut self");
@@ -544,7 +546,6 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, mode_use: &ModeAttrUse)
     fs.emit_begin(w);
     gen_one_mode_command_assert(w);
     w.line(&`self.${LEXER_SET_MODE_FIELD} = m;`);
-    gen_current_mode_write(w, mode_use, &"m");
     w.end();
     w.blank();
 
@@ -562,13 +563,17 @@ fn gen_current_mode_write(w: &mut CodeWriter, mode_use: &ModeAttrUse, value: &St
 }
 
 /// What `$mode` reads: the mode this token is being matched in, moved by any
-/// command the action has already issued. The assert covers the one mode the
-/// `Lexer` cannot name — `pop_mode`'s restore target.
+/// command the action has already issued. A `$mode` assignment reaches the set
+/// latch without passing a command method, so the pending switch answers first —
+/// `$mode = X` and `lx.set_mode(X)` are one write, and a read after either sees
+/// `X`. The assert covers the one mode the `Lexer` cannot name — `pop_mode`'s
+/// restore target.
 fn gen_current_mode_reader(w: &mut CodeWriter, vis: Vis) {
     let mut f = FnSpec::new(&LEXER_MODE_READER, vis);
     f.set_receiver(&"&self");
     f.set_return_type(&"i32");
     f.emit_begin(w);
+    w.line(&`if self.${LEXER_SET_MODE_FIELD} >= 0 \{ return self.${LEXER_SET_MODE_FIELD}; \}`);
     w.line(
         &`assert self.${LEXER_MODE_FIELD} >= 0, "\$mode after pop_mode reads a mode only the mode stack holds";`,
     );
@@ -985,7 +990,11 @@ pub fn lexer_mode_attr_use(grammar: &Grammar) -> ModeAttrUse {
 
 fn alt_mode_attr_use(alt: &LexerAlternative, out: &mut ModeAttrUse) {
     for let a of &alt.actions {
-        body_mode_attr_use(&a.source.text, out);
+        // A predicate reaching a commit latch is refused, so a `$mode` there
+        // reaches neither field and must not turn one on.
+        if a.kind matches { Action } {
+            body_mode_attr_use(&a.source.text, out);
+        }
     }
     for let e of &alt.elements {
         element_mode_attr_use(e, out);

@@ -64,7 +64,7 @@ pub fn translate_action(
                 grammar: *grammar_name,
                 methods: members.methods,
                 fields: members.fields,
-                locals: arg_names(rule),
+                args: arg_names(rule),
                 expected: *expected,
                 at_alt_end,
             };
@@ -78,9 +78,9 @@ pub fn translate_action(
 /// one there is reported rather than given a set that is not ANTLR's.
 global NO_EXPECTED: String = "";
 
-/// A rule's argument names, which are parameters of the generated parse fn and
-/// so are in scope bare — shadowing a `@members` field of the same name, as they
-/// do in ANTLR's own output.
+/// A rule's argument names in their surface spelling, which is how a Java body
+/// reaches one. The generated parameter is spelled differently (escaped and
+/// snake_cased), so the name a body writes resolves through the value channel.
 fn arg_names(rule: &ParserRule) -> List<String> {
     let mut out: List<String> = [];
     for let a of &rule.args {
@@ -110,7 +110,7 @@ pub fn translate_predicate(
                 grammar: *grammar_name,
                 methods: members.methods,
                 fields: members.fields,
-                locals: arg_names(rule),
+                args: arg_names(rule),
                 at_alt_end,
             };
             translate_java_expr(rule, rules, body, vals_in_scope, bindings, &env);

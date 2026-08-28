@@ -62,6 +62,10 @@ pub struct JEnv {
     /// statement can read them. Collected up front because the emitter walks
     /// statements without carrying a scope.
     pub locals: List<String> = [],
+    /// The enclosing rule's argument names, in their surface spelling. Java
+    /// reaches an argument bare; Gale stores it in the value channel, so the
+    /// bare name resolves to `$name` rather than to the generated parameter.
+    pub args: List<String> = [],
     /// The `@members` methods taking `&mut self`. A lexer predicate holds
     /// `&Lexer` — the tournament must not mutate through a losing candidate —
     /// so a call to one from there is refused, not emitted.
@@ -323,7 +327,7 @@ pub fn emit_expr(
             if *n == "this" {
                 Result::Ok(env.this_bind);
             } else {
-                name_expr(env, n);
+                name_expr(rule, rules, n, vals_in_scope, bindings, env);
             }
         },
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, env),
@@ -359,10 +363,8 @@ fn emit_member(
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
-    // `this.<x>` is a member field read, and `parse_field` snake_cased the
-    // declaration, so this read has to agree with the bare-name one.
     if name_is(&m.recv, &"this") {
-        return Result::Ok(`${env.this_bind}.${to_snake_case(&m.name)}`);
+        return this_field_expr(env, &m.name);
     }
     if is_upper_ident(&m.name) && is_name(&m.recv) {
         if recv_is_grammar_class(env, &m.recv) {
@@ -566,29 +568,85 @@ fn emit_member_call(
     return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${*args_w})`);
 }
 
-/// A bare name: the body's own local reads as itself, a declared `@members`
-/// field through the recognizer handle — `nestLevel` and `this.nestLevel` are
-/// one field, so both resolve through `to_snake_case`. What is left in a lexer
-/// body is an ANTLR recognizer field Gale does not model
-/// (`_tokenStartCharPositionInLine`, `_input`, ...) — a loud error, because
-/// passing it through verbatim emits Wado that references nothing. A parser body
-/// keeps it: the surrounding host text there is the rule's own scope.
-fn name_expr(env: &JEnv, name: &String) -> Result<String, String> {
-    if env.lexer && *name == "_tokenStartCharPositionInLine" {
-        return Result::Ok(lexer_token_start_column_expr());
-    }
+/// What a name in a recognizer body denotes. Java spells the same declaration
+/// several ways — bare, through `this.`, as a call — and each spelling used to
+/// decide for itself what it had found, so a rule about a name (which receiver
+/// it emits under, whether it must be declared, whether the site may write
+/// through it) held at some spellings and not others. Every spelling resolves
+/// here instead, so each rule is stated once.
+enum NameTarget {
+    /// A local the body declares, or a method parameter. Shadows the rest, as
+    /// Java's own scoping does.
+    Local,
+    /// A rule argument. It is `$name` under another spelling — the generated
+    /// parameter is stored into the value channel at entry — so it resolves
+    /// there and a write through either spelling is visible to both.
+    RuleArg,
+    Field,
+    Method,
+    /// Nothing the recognizer declares.
+    Unknown,
+}
+
+fn resolve_name(env: &JEnv, name: &String) -> NameTarget {
     if env.locals.contains(name) {
-        return Result::Ok(*name);
+        return NameTarget::Local;
+    }
+    if env.args.contains(name) {
+        return NameTarget::RuleArg;
     }
     let snake = to_snake_case(name);
     if env.fields.contains(&snake) {
+        return NameTarget::Field;
+    }
+    if env.methods.contains(&snake) {
+        return NameTarget::Method;
+    }
+    return NameTarget::Unknown;
+}
+
+/// The access a name emits, or a loud error. `nestLevel` and `this.nestLevel`
+/// are one field, so both come through here and both go through `to_snake_case`.
+/// What a lexer body has left over is an ANTLR recognizer field Gale does not
+/// model (`_tokenStartCharPositionInLine`, `_input`, ...) — an error, because
+/// passing it through verbatim emits Wado that references nothing. A parser body
+/// keeps it: the surrounding host text there is the rule's own scope.
+fn name_expr(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    name: &String,
+    vals_in_scope: bool,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> Result<String, String> {
+    if env.lexer && *name == "_tokenStartCharPositionInLine" {
+        return Result::Ok(lexer_token_start_column_expr());
+    }
+    return match resolve_name(env, name) {
+        Local => Result::Ok(*name),
+        RuleArg => resolve_attr_ref(rule, rules, &`$${*name}`, vals_in_scope, bindings, &env.this_bind),
+        Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
+        // A bare method name with no call, or a name nothing declares: neither
+        // is an access this translator can emit.
+        Method | Unknown => if env.lexer {
+            builtin::cold_path();
+            Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
+        } else {
+            Result::Ok(*name);
+        },
+    };
+}
+
+/// The access `this.<name>` emits. `this.` reaches a field and nothing else in
+/// Java — never a local, never an argument — so the resolution that admits those
+/// is not the one this site may take.
+fn this_field_expr(env: &JEnv, name: &String) -> Result<String, String> {
+    let snake = to_snake_case(name);
+    if env.fields.contains(&snake) || !env.lexer {
         return Result::Ok(`${env.this_bind}.${snake}`);
     }
-    if env.lexer {
-        builtin::cold_path();
-        return Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
-    }
-    return Result::Ok(*name);
+    builtin::cold_path();
+    return Result::Err(`java2wado: unsupported lexer name 'this.${*name}': not a @members field`);
 }
 
 /// Refuse a member call this body cannot make. Both spellings — `this.m()` and
@@ -596,7 +654,7 @@ fn name_expr(env: &JEnv, name: &String) -> Result<String, String> {
 /// predicate holds `&Lexer`, the tournament having no business mutating through
 /// a losing candidate, and a `&mut self` member is unreachable from one.
 fn check_member_call_reachable(env: &JEnv, meth: &String) -> Result<(), String> {
-    if !method_declared(env, meth) {
+    if !resolve_name(env, meth) matches { Method } {
         builtin::cold_path();
         return Result::Err(unknown_method_err(meth));
     }
@@ -607,13 +665,6 @@ fn check_member_call_reachable(env: &JEnv, meth: &String) -> Result<(), String> 
         );
     }
     return Result::Ok(());
-}
-
-/// Whether `name` resolves to a declared `@members` method (compared
-/// snake_cased, matching the call-site rewrite and the method definition).
-fn method_declared(env: &JEnv, name: &String) -> bool {
-    let snake = to_snake_case(name);
-    return env.methods.iter_ref().any(|m| *m == snake);
 }
 
 fn unknown_method_err(name: &String) -> String {

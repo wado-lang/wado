@@ -202,10 +202,7 @@ fn stmts_mutate(stmts: &List<JStmt>, scope: &mut List<String>, mutators: &List<S
 fn assigns_field(target: &JExpr, scope: &List<String>) -> bool {
     return match target {
         Name(n) => !scope.contains(n),
-        Member(m) => match &m.recv {
-            Name(q) => *q == "this",
-            _ => false,
-        },
+        Member(m) => name_is_this(&m.recv),
         _ => false,
     };
 }
@@ -250,12 +247,21 @@ fn is_print_call(callee: &JExpr) -> bool {
     };
 }
 
-/// The method name a callee names, whether written bare or through `this.`.
+/// The member method a callee names, whether written bare or through `this.`.
+/// A call on anything else (`s.trim()`, `_input.LT(1).getText()`) only shares
+/// the name — it writes through no recognizer, so it is not one.
 fn call_method_name(callee: &JExpr) -> String {
     return match callee {
         Name(n) => *n,
-        Member(m) => m.name,
+        Member(m) => if name_is_this(&m.recv) { m.name } else { "" },
         _ => "",
+    };
+}
+
+fn name_is_this(e: &JExpr) -> bool {
+    return match e {
+        Name(n) => *n == "this",
+        _ => false,
     };
 }
 

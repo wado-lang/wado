@@ -214,6 +214,26 @@ WS : ' ' -> skip ;
     assert out.contains("lx.nest_level = lx.nest_level + 1;"), `both reads agree: ${out}`;
 }
 
+test "an undeclared Java lexer field is reported by either spelling" {
+    // A lexer body reaches only what `@members` declares. Emitting `lx.<name>`
+    // for a name the block never declared would put a field on the `Lexer` that
+    // does not exist, so `this.<x>` is refused exactly as the bare `x` is.
+    let qualified = &"lexer grammar L;
+@members { int depth = 0; }
+A : 'a' { this.missing = 1; } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(qualified) == 1, "an undeclared `this.<field>` must be reported";
+    assert !gen_source(qualified).contains("lx.missing"), "the refused read must not be emitted";
+
+    let bare = &"lexer grammar L;
+@members { int depth = 0; }
+A : 'a' { missing = 1; } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(bare) == 1, "an undeclared bare field must be reported";
+}
+
 test "a lexer predicate that prints is reported, not wired to the sink" {
     // A predicate is evaluated for every candidate rule, losers included, so
     // printing from one would emit output the tournament discards.
@@ -368,6 +388,21 @@ B : 'b' ;
     assert out.contains("lexer.reset_actions(best_kind, best_channel, mode_stack.len(), current_mode);"), "the current mode is seeded per token";
     assert out.contains("self.act_mode = m;"), "a mode command moves what a later read answers";
     assert out.contains("assert self.act_mode >= 0,"), "pop_mode's restore target is not on the Lexer, and says so";
+}
+
+test "a $mode read only a predicate asks for turns nothing on" {
+    // The predicate is refused (a latch answers nothing during the tournament),
+    // so the read never reaches the field — which must therefore not be emitted.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $mode == 0 }? ;
+mode TAIL;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "a latch read from a lexer predicate must be reported";
+    let out = gen_source(src);
+    assert !out.contains("fn mode(&self)"), "no current-mode reader for a read that is refused";
+    assert !out.contains("act_mode ="), "and no field to seed";
 }
 
 test "$mode cannot be read and assigned in one site" {

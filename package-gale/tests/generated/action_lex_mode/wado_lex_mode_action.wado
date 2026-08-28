@@ -1169,10 +1169,10 @@ impl Lexer {
     fn set_mode(&mut self, m: i32) {
         assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_set_mode = m;
-        self.act_mode = m;
     }
 
     fn mode(&self) -> i32 {
+        if self.act_set_mode >= 0 { return self.act_set_mode; }
         assert self.act_mode >= 0, "$mode after pop_mode reads a mode only the mode stack holds";
         return self.act_mode;
     }

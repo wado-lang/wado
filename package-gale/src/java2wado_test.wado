@@ -87,10 +87,28 @@ test "java action: a bare @members field reads through the recognizer" {
     let out = java_action_m(&"calls = calls + 1;", &"a : ID ;", false, &members);
     assert out == "p.calls = p.calls + 1;", `out: '${out}'`;
 
-    // A rule argument is a parameter of the generated fn, so it shadows the
-    // field, as it does in ANTLR's own output.
+    // A rule argument shadows the field, as it does in ANTLR's own output — and
+    // it is `$calls` under another spelling, so both land on the one storage a
+    // write has to be visible through.
     let shadowed = java_action_m(&"calls = calls + 1;", &"a[i32 calls] : ID ;", true, &members);
-    assert shadowed == "calls = calls + 1;", `shadowed: '${shadowed}'`;
+    assert shadowed == "vals.calls = vals.calls + 1;", `shadowed: '${shadowed}'`;
+}
+
+test "java action: a bare rule argument is `$arg` under another spelling" {
+    // The generated parameter is `escape_ident(to_snake_case(...))` and `$arg`
+    // reads `vals.<raw>`, so passing the surface name through would name nothing
+    // for a camelCased arg — and would leave a write invisible to `$arg`.
+    let out = java_action_m(
+        &"maxDepth = maxDepth + 1;",
+        &"a[i32 maxDepth] : ID ;",
+        true,
+        &NO_MEMBERS,
+    );
+    assert out == "vals.maxDepth = vals.maxDepth + 1;", `out: '${out}'`;
+
+    // A body-declared local of the same name shadows the argument.
+    let local = java_action_m(&"int maxDepth = 2; maxDepth = 3;", &"a[i32 maxDepth] : ID ;", true, &NO_MEMBERS);
+    assert local == "let mut maxDepth: i32 = 2; maxDepth = 3;", `local: '${local}'`;
 }
 
 test "java: an undeclared recognizer method is a loud error" {
@@ -190,6 +208,22 @@ test "java members: a local or parameter shadows a field of the same name" {
     ).unwrap();
     assert m.methods[0].source.contains("return n;"), `param: '${m.methods[0].source}'`;
     assert m.methods[1].source.contains("return n;"), `local: '${m.methods[1].source}'`;
+}
+
+test "java members: a call on something other than the recognizer is not a member call" {
+    // `s.trim()` only shares the name of the mutating member; it writes through
+    // no recognizer, so `reads` keeps `&self` — and stays reachable from a lexer
+    // predicate.
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int n = 0;
+          void trim() { this.n = 1; }
+          boolean reads(String s) { return s.trim().equals(\"x\"); }",
+        &"T",
+    ).unwrap();
+    assert m.methods[0].mutates, `trim: '${m.methods[0].source}'`;
+    assert !m.methods[1].mutates && m.methods[1].source.contains("fn reads(&self"), `reads: '${m.methods[1].source}'`;
 }
 
 test "java members: printing writes the output sink, so its method takes &mut self" {
