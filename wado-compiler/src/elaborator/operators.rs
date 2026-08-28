@@ -1127,9 +1127,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (UnaryOp::Ref, ast::Expr::Index(index)) => {
                 self.resolve_index_access(index, ctx, super::expr::IndexAccess::Shared)
             }
-            _ => match negated_int_literal(unary).filter(|_| expected_type.is_none()) {
+            _ => match negated_int_literal(unary) {
+                // The operand must not be resolved on its own: `-NUM` is one
+                // literal, and reading `NUM` alone judges it against the
+                // *positive* `i32` boundary. Only the defaulted case is decided
+                // here — an expectation that reached this far is one no
+                // coercion took (a type parameter awaiting inference), and it
+                // range-checks the literal once it settles.
                 Some((lit, repr)) => {
-                    self.check_default_int_literal(repr, true, unary.span);
+                    if expected_type.is_none() {
+                        self.check_default_int_literal(repr, true, unary.span);
+                    } else {
+                        self.check_int_literal_parses(repr, lit.span);
+                    }
                     self.record_expression_type(lit.id, TypeTable::I32);
                     TypeTable::I32
                 }

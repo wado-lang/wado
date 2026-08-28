@@ -53,7 +53,7 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 
 /// An integer literal standing as an operand, bare or negated — the shape
 /// reify re-types to a cast's target width.
-fn int_literal_operand(expr: &Expr) -> Option<&ast::LiteralExpr> {
+fn int_literal_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str)> {
     let lit = match expr {
         Expr::Literal(lit) => lit,
         Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => match &unary.expr {
@@ -62,7 +62,7 @@ fn int_literal_operand(expr: &Expr) -> Option<&ast::LiteralExpr> {
         },
         _ => return None,
     };
-    int_literal_repr(lit).map(|_| lit)
+    int_literal_repr(lit).map(|repr| (lit, repr))
 }
 
 /// How a subscript is being used, which decides the indexing trait it selects:
@@ -415,24 +415,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Diagnostics for an integer literal that reaches its default type,
-    /// `i32` — the last place its range can be checked, since no coercion
-    /// will look at it again. `negated` selects the boundary: `-NUM` is one
-    /// literal, so `-2147483648` fits where the bare `2147483648` does not.
+    /// Range-check an integer literal against the `i32` it defaults to — the
+    /// last place its range is judged, since no coercion looks at it again.
+    /// `negated` selects the boundary: `-NUM` is one literal, so `-2147483648`
+    /// fits where the bare `2147483648` does not.
     pub(super) fn check_default_int_literal(&mut self, repr: &str, negated: bool, span: Span) {
-        let message = match util::parse_u128_literal(repr) {
-            Ok(value) => {
-                let table = self.tysys.type_table.borrow();
-                if negated {
-                    util::check_int_range_negative(value, TypeTable::I32, &table, repr)
-                } else {
-                    util::check_int_range_positive(value, TypeTable::I32, &table, repr)
-                }
+        let Some(value) = self.check_int_literal_parses(repr, span) else {
+            return;
+        };
+        let message = {
+            let table = self.tysys.type_table.borrow();
+            if negated {
+                util::check_int_range_negative(value, TypeTable::I32, &table, repr)
+            } else {
+                util::check_int_range_positive(value, TypeTable::I32, &table, repr)
             }
-            Err(message) => Some(message),
         };
         if let Some(message) = message {
             let _ = self.emit(TypeError::InvalidLiteral { message, span });
+        }
+    }
+
+    /// Parse an integer literal, reporting a malformed or wider-than-`u128`
+    /// one. Always this walk's job: nothing downstream reports it, and reify
+    /// reads such a literal as `0`.
+    pub(super) fn check_int_literal_parses(&mut self, repr: &str, span: Span) -> Option<u128> {
+        match util::parse_u128_literal(repr) {
+            Ok(value) => Some(value),
+            Err(message) => {
+                let _ = self.emit(TypeError::InvalidLiteral { message, span });
+                None
+            }
         }
     }
 
@@ -465,11 +478,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // is decided here.
                     if expected_type.is_none() {
                         self.check_default_int_literal(repr, false, lit.span);
-                    } else if let Err(message) = util::parse_u128_literal(repr) {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
+                    } else {
+                        self.check_int_literal_parses(repr, lit.span);
                     }
                     TypeTable::I32
                 }
@@ -3367,7 +3377,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // target. It never lands on `i32`, so the defaulted range check must
         // not judge it either.
         let source_type = match int_literal_operand(&cast.expr) {
-            Some(lit) => {
+            Some((lit, repr)) => {
+                self.check_int_literal_parses(repr, lit.span);
                 self.record_expression_type(cast.expr.id(), TypeTable::I32);
                 self.record_expression_type(lit.id, TypeTable::I32);
                 TypeTable::I32

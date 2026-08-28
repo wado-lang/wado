@@ -7,7 +7,10 @@ export fn run() with Stdout {
     let lo = -2147483648;
     let hi = 2147483647;
     let generic_arg = identity::<i64>(4294967296);
-    println(`${lo} ${hi} ${generic_arg}`);
+    // The negated form takes its range from the same expectation. Resolving the
+    // operand on its own would judge `4294967296` against the `i32` default.
+    let generic_neg = identity::<i64>(-4294967296);
+    println(`${lo} ${hi} ${generic_arg} ${generic_neg}`);
 }
 
 fn identity<T>(v: T) -> T {
@@ -16,5 +19,5 @@ fn identity<T>(v: T) -> T {
 
 __DATA__
 {
-    "stdout": "-2147483648 2147483647 4294967296\n"
+    "stdout": "-2147483648 2147483647 4294967296 -4294967296\n"
 }
