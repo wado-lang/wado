@@ -214,6 +214,15 @@ impl Formatter {
         self.pad(s);
     }
 
+    /// Write the sign character, if this value carries one.
+    fn write_sign(&mut self, is_negative: bool) {
+        if is_negative {
+            self.buf.push('-');
+        } else if self.sign_plus {
+            self.buf.push('+');
+        }
+    }
+
     /// Prepare the output buffer for integer digits.
     ///
     /// Writes sign, prefix, and any padding/fill, then reserves `digit_count`
@@ -221,22 +230,13 @@ impl Formatter {
     /// The caller **must** fill exactly `digit_count` bytes (backwards) via
     /// `buf.internal_raw_bytes()` at the returned offset.
     pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
-        let mut sign = "";
-        if is_negative {
-            sign = "-";
-        } else if self.sign_plus {
-            sign = "+";
-        }
-
-        let sign_len = sign.len();
+        let sign_len = if is_negative || self.sign_plus { 1 } else { 0 };
         let prefix_len = prefix.len();
         let content_len = sign_len + prefix_len + digit_count;
 
         if self.width <= 0 || content_len >= self.width {
             // No padding — write sign/prefix, reserve digit area
-            if sign_len > 0 {
-                self.buf.push_str(&sign);
-            }
+            self.write_sign(is_negative);
             if prefix_len > 0 {
                 self.buf.push_str(&prefix);
             }
@@ -247,9 +247,7 @@ impl Formatter {
 
         if self.zero_pad {
             // sign + prefix + zeros + [digits]
-            if sign_len > 0 {
-                self.buf.push_str(&sign);
-            }
+            self.write_sign(is_negative);
             if prefix_len > 0 {
                 self.buf.push_str(&prefix);
             }
@@ -260,9 +258,7 @@ impl Formatter {
         let align = self.align;
         if align matches { Left } {
             // [sign prefix digits] [fill...]
-            if sign_len > 0 {
-                self.buf.push_str(&sign);
-            }
+            self.write_sign(is_negative);
             if prefix_len > 0 {
                 self.buf.push_str(&prefix);
             }
@@ -274,9 +270,7 @@ impl Formatter {
             let left_pad = padding / 2;
             let right_pad = padding - left_pad;
             self.write_char_n(self.fill, left_pad);
-            if sign_len > 0 {
-                self.buf.push_str(&sign);
-            }
+            self.write_sign(is_negative);
             if prefix_len > 0 {
                 self.buf.push_str(&prefix);
             }
@@ -286,9 +280,7 @@ impl Formatter {
         } else {
             // Right: [fill...] [sign prefix digits]
             self.write_char_n(self.fill, padding);
-            if sign_len > 0 {
-                self.buf.push_str(&sign);
-            }
+            self.write_sign(is_negative);
             if prefix_len > 0 {
                 self.buf.push_str(&prefix);
             }
