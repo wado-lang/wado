@@ -5,7 +5,7 @@
 //! rather than emitting invalid code. Shared with java2wado via `resolve_attr_ref`.
 
 use { ParserRule, AttrDecl, AltAction, Alternative, Element } from "./ir.wado";
-use { resolve_attrs, ResolvedAttr, AttrTarget } from "./attr_resolve.wado";
+use { resolve_attrs, ResolvedAttr, AttrTarget, AltBinding } from "./attr_resolve.wado";
 use { find_attr_refs, AttrRef } from "./attr_scan.wado";
 use { splice_attrs } from "./attr_substitute.wado";
 use { to_pascal_case, to_snake_case, escape_ident } from "./ident.wado";
@@ -33,7 +33,7 @@ pub fn translate_wado_action(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules, bindings)?;
@@ -60,7 +60,7 @@ pub fn resolve_attr_ref(
     rules: &List<ParserRule>,
     ref_text: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
     return translate_wado_action(rule, rules, ref_text, vals_in_scope, bindings, handle);
@@ -128,9 +128,9 @@ fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
 
 /// The actual local a `$ref` binds to: the post-dedup binding (so `e_2` resolves
 /// correctly), falling back to `base` when the reference is not in the map.
-fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &String) -> String {
-    return match bindings.iter_ref().find(|b: &[bool, String, String]| b.0 == is_token && b.1 == *base) {
-        Some(b) => b.2,
+fn binding_for(bindings: &List<AltBinding>, is_token: bool, base: &String) -> String {
+    return match bindings.iter_ref().find(|b: &AltBinding| b.is_token == is_token && b.base == *base) {
+        Some(b) => b.field,
         None => *base,
     };
 }
@@ -208,7 +208,7 @@ pub global LR_ACC_LOCAL: String = "_lr_acc";
 /// The Wado local a rule-child reference binds to (post-dedup), for a rule child
 /// named `name` — the same lookup the identity translator uses for `$rule`.
 /// Shared with java2wado's ctx-child accessor (`((Ctx)$ctx).<rule>(k)`).
-pub fn rule_binding_for(bindings: &List<[bool, String, String]>, name: &String) -> String {
+pub fn rule_binding_for(bindings: &List<AltBinding>, name: &String) -> String {
     return binding_for(bindings, false, &binding_name(name));
 }
 
@@ -281,7 +281,7 @@ fn action_attr_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String,
 ) -> Result<String, String> {
     if r.target matches { ParserSpecial } {
@@ -421,7 +421,7 @@ pub fn binding_name(name: &String) -> String {
 /// token through the context API.
 fn token_member_expr(
     r: &ResolvedAttr,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String,
 ) -> Result<String, String> {
     return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member, handle);
@@ -451,7 +451,7 @@ fn token_member_of(idx: &String, member: &Option<String>, handle: &String) -> Re
 fn rule_member_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String,
 ) -> Result<String, String> {
     let binding = binding_for(bindings, false, &binding_name(&r.name));

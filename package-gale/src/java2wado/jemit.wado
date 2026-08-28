@@ -20,6 +20,7 @@ use {
     LR_ACC_LOCAL,
 } from "../action_translate.wado";
 use { to_snake_case } from "../ident.wado";
+use { AltBinding } from "../attr_resolve.wado";
 use { str_lit } from "../wadopoet.wado";
 use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
 use { tokenize_java } from "./jlexer.wado";
@@ -69,7 +70,7 @@ pub struct JEnv {
 pub fn translate_java_lexer_stmts(body: &String, env: &JEnv) -> Result<String, String> {
     let rule = lexer_body_rule();
     let rules: List<ParserRule> = [];
-    let bindings: List<[bool, String, String]> = [];
+    let bindings: List<AltBinding> = [];
     let tokens = tokenize_java(body)?;
     let stmts = parse_java_stmts(&tokens)?;
     let mut scoped = *env;
@@ -95,7 +96,7 @@ pub fn translate_java_lexer_expr(body: &String, env: &JEnv) -> Result<String, St
     env.sink = false;
     let rule = lexer_body_rule();
     let rules: List<ParserRule> = [];
-    let bindings: List<[bool, String, String]> = [];
+    let bindings: List<AltBinding> = [];
     let tokens = tokenize_java(body)?;
     let expr = parse_java_expr(&tokens)?;
     return emit_expr(&rule, &rules, &expr, false, &bindings, &env);
@@ -112,7 +113,7 @@ pub fn translate_java_expr(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let tokens = tokenize_java(body)?;
@@ -125,7 +126,7 @@ pub fn translate_java_stmts(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let tokens = tokenize_java(body)?;
@@ -139,7 +140,7 @@ pub fn emit_java_stmts(
     rules: &List<ParserRule>,
     stmts: &List<JStmt>,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("");
@@ -157,7 +158,7 @@ fn emit_stmt(
     rules: &List<ParserRule>,
     s: &JStmt,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     return match s {
@@ -195,7 +196,7 @@ fn emit_local(
     rules: &List<ParserRule>,
     l: &JLocal,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let ty = match map_java_type(&l.ty) {
@@ -220,7 +221,7 @@ fn emit_print(
     rules: &List<ParserRule>,
     args: &List<JExpr>,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
     newline: bool,
 ) -> Result<String, String> {
@@ -260,7 +261,7 @@ pub fn emit_expr(
     rules: &List<ParserRule>,
     e: &JExpr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     return match e {
@@ -313,7 +314,7 @@ fn emit_member(
     rules: &List<ParserRule>,
     m: &JMember,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     if name_is(&m.recv, &"this") {
@@ -334,7 +335,7 @@ fn emit_call(
     rules: &List<ParserRule>,
     c: &JCall,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     if let Member(m) = &c.callee {
@@ -395,7 +396,7 @@ fn emit_call(
 /// that token *by this point* — a constant only past the last element, where a
 /// token the alternative binds has certainly matched. Before then the answer
 /// depends on the action's position, which is not folded.
-fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<[bool, String, String]>, env: &JEnv) -> Option<String> {
+fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<AltBinding>, env: &JEnv) -> Option<String> {
     if !env.at_alt_end {
         return null;
     }
@@ -425,8 +426,8 @@ fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<[bool, String, String]>
 }
 
 /// Whether the current alternative binds a token named `name`.
-fn token_is_bound(bindings: &List<[bool, String, String]>, name: &String) -> bool {
-    return bindings.iter_ref().any(|b: &[bool, String, String]| b.0 && b.1 == binding_name(name));
+fn token_is_bound(bindings: &List<AltBinding>, name: &String) -> bool {
+    return bindings.iter_ref().any(|b: &AltBinding| b.is_token && b.base == binding_name(name));
 }
 
 /// Whether `e` reduces (through parens and casts) to the `$ctx` special — the
@@ -447,7 +448,7 @@ fn emit_ctx_child(
     rule: &ParserRule,
     m: &JMember,
     args: &List<JExpr>,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
 ) -> Result<String, String> {
     if !rule_is_left_recursive(rule) {
         return Result::Err("java2wado: `$ctx` child access is only supported in a left-recursive rule");
@@ -477,7 +478,7 @@ fn emit_member_call(
     raw_args: &List<JExpr>,
     args_w: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let meth = m.name;
@@ -579,7 +580,7 @@ fn emit_args(
     rules: &List<ParserRule>,
     args: &List<JExpr>,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("");
@@ -648,7 +649,7 @@ fn emit_template(
     rules: &List<ParserRule>,
     e: &JExpr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("`");
@@ -662,7 +663,7 @@ fn append_parts(
     rules: &List<ParserRule>,
     e: &JExpr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
     out: &mut String,
 ) -> Result<(), String> {
@@ -696,7 +697,7 @@ fn append_interp(
     rules: &List<ParserRule>,
     e: &JExpr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
     out: &mut String,
 ) -> Result<(), String> {

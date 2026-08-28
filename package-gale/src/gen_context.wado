@@ -19,6 +19,7 @@ use {
     dedup_append_arr,
 } from "./gen_util.wado";
 use { Diagnostic, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
+use { AltBinding } from "./attr_resolve.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
 use { TreeMap } from "core:collections";
 
@@ -256,7 +257,7 @@ pub struct GenContext {
     /// `[is_token, base, field]`. The action translator maps a `$ref` to its
     /// real local (`e_2`) instead of re-deriving `binding_name`, which diverges
     /// when a token / rule field-name collision deduped the reference.
-    alt_bindings: List<[bool, String, String]>,
+    alt_bindings: List<AltBinding>,
 }
 
 impl GenContext {
@@ -690,11 +691,11 @@ impl GenContext {
 
     /// Set the actual bindings for the alternative whose actions are about to be
     /// emitted, so the translator resolves `$ref` to its real (post-dedup) local.
-    pub fn set_alt_bindings(&mut self, bindings: List<[bool, String, String]>) {
+    pub fn set_alt_bindings(&mut self, bindings: List<AltBinding>) {
         self.alt_bindings = bindings;
     }
 
-    pub fn alt_bindings(&self) -> &List<[bool, String, String]> with stores[self] {
+    pub fn alt_bindings(&self) -> &List<AltBinding> with stores[self] {
         return &self.alt_bindings;
     }
 

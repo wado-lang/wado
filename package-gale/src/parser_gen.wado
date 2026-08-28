@@ -140,6 +140,7 @@ use {
     gen_trace_helpers,
 } from "./parser_runtime_gen.wado";
 use { gen_parser_super_interface } from "./superclass.wado";
+use { AltBinding } from "./attr_resolve.wado";
 use {
     EMPTY_SYNC,
     build_lookahead_condition,
@@ -2751,26 +2752,30 @@ fn peel_scalar_label(elem: &Element) -> &Element with stores[elem] {
     return cur;
 }
 
-/// Collect the actual post-dedup bindings of an alt's ops (`[is_token, base,
-/// field]`), so the action translator resolves a `$ref` to its real local even
-/// when a token / rule field-name collision deduped it (`e_2`). Top-level leaf
-/// ops only; a `Repeat` / group inner binds in its own block, so a ref to one
-/// falls back to `binding_name` and is reported where it does not resolve.
-fn collect_alt_bindings(ops: &List<Op>) -> List<[bool, String, String]> {
-    let mut out: List<[bool, String, String]> = [];
+/// Collect the actual post-dedup bindings of an alt's ops, so the action
+/// translator resolves a `$ref` to its real local even when a token / rule
+/// field-name collision deduped it (`e_2`), and to the rule this alternative
+/// called when the same label names a different one elsewhere (`x=a | x=b`).
+/// Top-level leaf ops only; a `Repeat` / group inner binds in its own block, so
+/// a ref to one falls back to `binding_name` and is reported where it does not
+/// resolve.
+fn collect_alt_bindings(ops: &List<Op>) -> List<AltBinding> {
+    let mut out: List<AltBinding> = [];
     for let op of ops {
         collect_op_binding(op, &mut out);
     }
     return out;
 }
 
-fn collect_op_binding(op: &Op, out: &mut List<[bool, String, String]>) {
+fn collect_op_binding(op: &Op, out: &mut List<AltBinding>) {
     match *op {
-        Token(t) => out.push([true, t.dedup_base, t.field]),
-        Literal(l) => out.push([true, l.dedup_base, l.field]),
-        Excluded(e) => out.push([true, e.dedup_base, e.field]),
-        Wildcard(wop) => out.push([true, wop.dedup_base, wop.field]),
-        RuleCall(rc) => out.push([false, rc.dedup_base, rc.field]),
+        Token(t) => out.push(AltBinding { is_token: true, base: t.dedup_base, field: t.field }),
+        Literal(l) => out.push(AltBinding { is_token: true, base: l.dedup_base, field: l.field }),
+        Excluded(e) => out.push(AltBinding { is_token: true, base: e.dedup_base, field: e.field }),
+        Wildcard(wop) => out.push(AltBinding { is_token: true, base: wop.dedup_base, field: wop.field }),
+        RuleCall(rc) => out.push(
+            AltBinding { is_token: false, base: rc.dedup_base, field: rc.field, ref_name: rc.target_name },
+        ),
         // A repeat's body binds inside the loop / `if` it is emitted in, out of
         // scope here — and `A?` may not bind at all, unlike `A`.
         Repeat(_) => {
@@ -4600,7 +4605,7 @@ fn enter_group_alt_bindings(
     ops: &List<Op>,
     actions: &List<AltAction>,
     ctx: &mut GenContext,
-) -> List<[bool, String, String]> {
+) -> List<AltBinding> {
     let outer = *ctx.alt_bindings();
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(collect_alt_bindings(ops));
@@ -4608,7 +4613,7 @@ fn enter_group_alt_bindings(
     return outer;
 }
 
-fn leave_group_alt_bindings(outer: &List<[bool, String, String]>, actions: &List<AltAction>, ctx: &mut GenContext) {
+fn leave_group_alt_bindings(outer: &List<AltBinding>, actions: &List<AltAction>, ctx: &mut GenContext) {
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(*outer);
     }

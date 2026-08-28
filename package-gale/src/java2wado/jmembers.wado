@@ -8,6 +8,7 @@ use { tokenize_java } from "./jlexer.wado";
 use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr } from "./jparser.wado";
 use { emit_java_stmts, emit_expr, map_java_type, JEnv } from "./jemit.wado";
 use { to_snake_case } from "../ident.wado";
+use { AltBinding } from "../attr_resolve.wado";
 
 /// One field on the generated recognizer struct, from a `@members` field decl.
 pub struct MemberField {
@@ -159,7 +160,7 @@ fn parse_method(
     let stmts = parse_java_stmts(&body_tokens)?;
     let dummy = ParserRule::new("", Visibility::Default, [], []);
     let no_rules: List<ParserRule> = [];
-    let no_bindings: List<[bool, String, String]> = [];
+    let no_bindings: List<AltBinding> = [];
     let body_wado = emit_java_stmts(&dummy, &no_rules, &stmts, false, &no_bindings, env)?;
     return build_method(name, &params, ret_java, &body_wado);
 }
@@ -168,7 +169,7 @@ fn parse_method(
 fn emit_member_expr(e: &JExpr, env: &JEnv) -> Result<String, String> {
     let dummy = ParserRule::new("", Visibility::Default, [], []);
     let no_rules: List<ParserRule> = [];
-    let no_bindings: List<[bool, String, String]> = [];
+    let no_bindings: List<AltBinding> = [];
     return emit_expr(&dummy, &no_rules, e, false, &no_bindings, env);
 }
 

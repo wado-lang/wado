@@ -1,8 +1,9 @@
 use { translate_action, translate_predicate, translate_members, grammar_has_superclass } from "./java2wado.wado";
 use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
+use { AltBinding } from "./attr_resolve.wado";
 
-global NO_BINDINGS: List<[bool, String, String]> = [];
+global NO_BINDINGS: List<AltBinding> = [];
 global NO_METHODS: List<String> = [];
 
 fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
@@ -314,8 +315,8 @@ test "java action: ctx-cast LR-binary value idiom" {
 e returns [i32 v] : e '+' e | INT ;
 ").unwrap();
     let lang = ActionLanguage::Java;
-    let bindings: List<[bool, String, String]> = [
-        [false, "e", "e"],
+    let bindings: List<AltBinding> = [
+        AltBinding { is_token: false, base: "e", field: "e", ref_name: "e" },
     ];
     let out = translate_action(
         &lang,
@@ -421,8 +422,8 @@ a : A ;
 test "a ctx token accessor folds only for a token the alternative always matches" {
     // `((SContext)$ctx).A() != null` asks whether the alternative matched `A`:
     // a constant for a mandatory element, unanswerable for an optional one.
-    let bindings: List<[bool, String, String]> = [
-        [true, "a", "a"],
+    let bindings: List<AltBinding> = [
+        AltBinding { is_token: true, base: "a", field: "a" },
     ];
     let g = parse("grammar T;
 s : ID A ;

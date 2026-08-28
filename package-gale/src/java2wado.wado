@@ -37,6 +37,7 @@ use {
 } from "./java2wado/jemit.wado";
 use { translate_java_members, java_member_method_names, MemberDecls } from "./java2wado/jmembers.wado";
 use { translate_wado_members } from "./wado_members.wado";
+use { AltBinding } from "./attr_resolve.wado";
 
 /// Translate an action body to Wado: `Wado` routes to the identity translator,
 /// `Java` to java2wado, any other language is a loud error. `grammar_name` and
@@ -47,7 +48,7 @@ pub fn translate_action(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     grammar_name: &String,
     member_methods: &List<String>,
     expected: &String = &NO_EXPECTED,
@@ -81,7 +82,7 @@ pub fn translate_predicate(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     grammar_name: &String,
     member_methods: &List<String>,
     at_alt_end: bool = false,
