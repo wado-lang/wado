@@ -133,6 +133,7 @@ mod rewrite;
 mod trackability;
 
 pub use callee::{Callee, CalleeKey, CalleeMap};
+pub(crate) use rewrite::guard_declares_locals;
 use pattern::PatternMatch;
 use trackability::Trackability;
 

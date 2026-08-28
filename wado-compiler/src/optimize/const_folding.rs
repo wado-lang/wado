@@ -837,7 +837,14 @@ impl ConstFoldVisitor<'_> {
                         .interpreter
                         .arm_bindings(engine.body, scrutinee, arm.pattern);
                     let scope = self.interpreter.enter_arm(&binds);
-                    if let Some(g) = arm.guard {
+                    // A guard that declares locals is not just a test: this
+                    // lowering puts a nested pattern's sub-bindings in it
+                    // (`… && { let x = p.end.x; true }`) and the arm body reads
+                    // them. Folding it to its constant would take the bindings
+                    // with it.
+                    if let Some(g) = arm.guard
+                        && !crate::niri::guard_declares_locals(engine.body, g)
+                    {
                         changed |= self.visit_operand(engine, g);
                     }
                     changed |= self.visit_operand(engine, arm.body);

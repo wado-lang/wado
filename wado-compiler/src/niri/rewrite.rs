@@ -525,6 +525,16 @@ impl Interpreter<'_> {
         if operand_reads_any_local(sink.body(), body_op, &binds) {
             return false;
         }
+        // Splicing keeps the body and drops the guard, which is sound only while
+        // the guard is a test. A nested pattern lowers its sub-bindings into one
+        // (`… && { let x = p.end.x; true }`), and dropping that leaves the body
+        // reading a local nothing binds any more.
+        if arm
+            .guard
+            .is_some_and(|g| guard_bindings_escape(sink.body(), g, body_op))
+        {
+            return false;
+        }
         let span = match body_op {
             Operand::Expr(ex) => sink.body().exprs[ex].span,
             Operand::Value(_) => arm.span,
@@ -700,6 +710,90 @@ fn collapse_equal_arms<S: EditSink>(
 }
 
 /// Whether the subtree under `op` reads any of the locals `binds` binds.
+/// The locals a match-arm guard declares. Non-empty means the guard is more
+/// than a test: this lowering puts a nested pattern's sub-bindings inside it,
+/// and the arm body reads them, so neither folding it to its value nor
+/// splicing the arm without it preserves the program.
+pub(crate) fn guard_declares_locals(body: &Body, guard: Operand) -> bool {
+    let Some(g) = guard.as_expr() else {
+        return false;
+    };
+    let mut bound = Bound {
+        locals: crate::hashmap::IndexSet::default(),
+    };
+    bound.visit_node(body, NodeRef::Expr(g));
+    !bound.locals.is_empty()
+}
+
+struct Bound {
+    locals: crate::hashmap::IndexSet<u32>,
+}
+
+impl NirRefVisitor for Bound {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+        {
+            self.locals.insert(*local_index);
+        }
+        self.walk_node(body, node);
+    }
+}
+
+/// Whether `guard` binds a local that `body_op` reads — the locals a nested
+/// pattern's sub-bindings occupy, which only the guard declares.
+fn guard_bindings_escape(body: &Body, guard: Operand, body_op: Operand) -> bool {
+    struct Reads<'a> {
+        locals: &'a crate::hashmap::IndexSet<u32>,
+        found: bool,
+    }
+    impl NirRefVisitor for Reads<'_> {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+                && self.locals.contains(index)
+            {
+                self.found = true;
+            }
+            // A promoted operand reads its local just as a skeleton `Local` does.
+            body.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    let mut opaque = crate::hashmap::IndexSet::default();
+                    body.values.collect_opaque_locals(v, &mut opaque);
+                    self.found |= opaque.iter().any(|l| self.locals.contains(l));
+                }
+            });
+            self.walk_node(body, node);
+        }
+    }
+    // A promoted guard is a pure value: it declares nothing, so nothing escapes.
+    let Some(g) = guard.as_expr() else {
+        return false;
+    };
+    let mut bound = Bound {
+        locals: crate::hashmap::IndexSet::default(),
+    };
+    bound.visit_node(body, NodeRef::Expr(g));
+    if bound.locals.is_empty() {
+        return false;
+    }
+    match body_op {
+        Operand::Expr(b) => {
+            let mut reads = Reads {
+                locals: &bound.locals,
+                found: false,
+            };
+            reads.visit_node(body, NodeRef::Expr(b));
+            reads.found
+        }
+        Operand::Value(v) => {
+            let mut opaque = crate::hashmap::IndexSet::default();
+            body.values.collect_opaque_locals(v, &mut opaque);
+            opaque.iter().any(|l| bound.locals.contains(l))
+        }
+    }
+}
+
 pub(super) fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> bool {
     struct Reads<'a> {
         binds: &'a PatBindings,
