@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787916285336,
+  "lastUpdate": 1787917193582,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51713,6 +51713,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0ddc7e9ddb498739ef7507563eea90d82b50d630"
         },
         "date": 1787916284622,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 258212,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dfe845d35fc48c7a5c9a4bcbf7fdd55c2a9bc0ff",
+          "message": "Merge pull request #1914 from wado-lang/claude/elaborator-architecture-wep-cvh6m1\n\nrefactor(elaborator): give a body-walk fact one home",
+          "timestamp": "2026-08-28T20:11:49+09:00",
+          "tree_id": "a2ab058219c69ab0ae1d74b3fed1257b801a03da",
+          "url": "https://github.com/wado-lang/wado/commit/dfe845d35fc48c7a5c9a4bcbf7fdd55c2a9bc0ff"
+        },
+        "date": 1787917192738,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
