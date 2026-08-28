@@ -792,11 +792,10 @@ impl ConstFoldVisitor<'_> {
                 let then_block = *then_block;
                 let else_block = *else_block;
                 let writes = collect_write_effects(engine.body, NodeRef::Stmt(s));
-                self.apply_loop_invalidations(&writes);
                 let mut changed = self.visit_operand(engine, condition);
-                changed |= self.visit_block(engine, then_block);
+                changed |= self.visit_alternative_block(engine, &writes, then_block);
                 if let Some(eb) = else_block {
-                    changed |= self.visit_block(engine, eb);
+                    changed |= self.visit_alternative_block(engine, &writes, eb);
                 }
                 self.apply_loop_invalidations(&writes);
                 changed
@@ -830,11 +829,10 @@ impl ConstFoldVisitor<'_> {
         match expr_shape(engine.body, e) {
             ExprShape::If(condition, then_branch, else_branch) => {
                 let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
-                self.apply_loop_invalidations(&writes);
                 let mut changed = self.visit_operand(engine, condition);
-                changed |= self.visit_block(engine, then_branch);
+                changed |= self.visit_alternative_block(engine, &writes, then_branch);
                 if let Some(eb) = else_branch {
-                    changed |= self.visit_block(engine, eb);
+                    changed |= self.visit_alternative_block(engine, &writes, eb);
                 }
                 self.apply_loop_invalidations(&writes);
                 changed |= self.reduce_local(engine, e);
@@ -842,9 +840,9 @@ impl ConstFoldVisitor<'_> {
             }
             ExprShape::Match(scrutinee, arms) => {
                 let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
-                self.apply_loop_invalidations(&writes);
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
+                    self.apply_loop_invalidations(&writes);
                     // Under a constant scrutinee the arm's guard and body reduce
                     // under the bindings its pattern makes.
                     let binds = self
@@ -870,12 +868,11 @@ impl ConstFoldVisitor<'_> {
             }
             ExprShape::Switch(scrutinee, arms, default) => {
                 let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
-                self.apply_loop_invalidations(&writes);
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
-                    changed |= self.visit_block(engine, *arm);
+                    changed |= self.visit_alternative_block(engine, &writes, *arm);
                 }
-                changed |= self.visit_block(engine, default);
+                changed |= self.visit_alternative_block(engine, &writes, default);
                 self.apply_loop_invalidations(&writes);
                 changed |= self.reduce_local(engine, e);
                 changed
@@ -1171,6 +1168,18 @@ impl ConstFoldVisitor<'_> {
             }
             _ => None,
         }
+    }
+
+    /// Walk one alternative of a branch, from the environment its siblings see:
+    /// only one runs, so neither may fold against what another assigned.
+    fn visit_alternative_block(
+        &mut self,
+        engine: &mut Engine,
+        writes: &LoopWriteEffects,
+        block: BlockId,
+    ) -> bool {
+        self.apply_loop_invalidations(writes);
+        self.visit_block(engine, block)
     }
 
     /// Apply a [`LoopWriteEffects`] summary to the interpreter,
