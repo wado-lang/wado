@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787877789408,
+  "lastUpdate": 1787916285336,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51669,6 +51669,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3c13b1a9c8c19672732e3c75990bb0856d6a673f"
         },
         "date": 1787877788672,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6487,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 258212,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ddc7e9ddb498739ef7507563eea90d82b50d630",
+          "message": "Merge pull request #1915 from wado-lang/claude/wado-lsp-inlay-hints-1o3ijj\n\nfix(lsp): keep the receiver's argument slot in path-form parameter hints",
+          "timestamp": "2026-08-28T20:11:26+09:00",
+          "tree_id": "1dbc0b17372d950f946cfab29fea915b0fe6c7fa",
+          "url": "https://github.com/wado-lang/wado/commit/0ddc7e9ddb498739ef7507563eea90d82b50d630"
+        },
+        "date": 1787916284622,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
