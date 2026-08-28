@@ -231,3 +231,26 @@ fn error_spans_are_correct() {
     assert_eq!(err.span.line, 1);
     assert_eq!(err.span.column, 4);
 }
+
+#[test]
+fn byte_char_error_span_covers_the_b_prefix() {
+    // `b'ab'` is one literal, `b` included. A span that starts at the quote
+    // draws the squiggle inside the literal instead of under it.
+    let r = lex("let b = b'ab';");
+    assert_eq!(r.errors.len(), 1);
+    assert_matches!(r.errors[0].kind, LexErrorKind::CharLiteralTooLong);
+    assert_eq!(r.errors[0].span.start, 8);
+    assert_eq!(r.errors[0].span.end, 13);
+    assert_eq!(r.errors[0].span.column, 9);
+    assert_eq!(r.errors[0].span.end_column, 14);
+}
+
+#[test]
+fn empty_byte_char_error_span_covers_the_b_prefix() {
+    let r = lex("let b = b'';");
+    assert_eq!(r.errors.len(), 1);
+    assert_matches!(r.errors[0].kind, LexErrorKind::EmptyCharLiteral);
+    assert_eq!(r.errors[0].span.start, 8);
+    assert_eq!(r.errors[0].span.end, 11);
+    assert_eq!(r.errors[0].span.column, 9);
+}

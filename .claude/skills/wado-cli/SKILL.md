@@ -177,7 +177,14 @@ wado query definition --symbol core:cbor#CborDeserializer.peek_byte
 wado query references --symbol core:cli#println --base example     # all uses (workspace)
 wado query hover --line 5 --column 10 file.wado                   # position-based
 wado query diagnostics file.wado                                  # errors/warnings
+wado query inlay-hints file.wado                                  # hints, spliced into the source
 ```
+
+`inlay-hints` takes a file, not a symbol, and prints every line that carries a
+hint with the labels spliced in at the anchors an editor would render them at
+(`let x‹: i32› = add(‹a: ›1, ‹b: ›2);`), in the LSP's default UTF-16 encoding.
+That is how to check anchor placement — against `example/`, say — without
+reading positions off a list.
 
 Common options:
 

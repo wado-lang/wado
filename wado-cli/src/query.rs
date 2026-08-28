@@ -12,6 +12,7 @@ enum QueryKind {
     DocumentHighlight,
     Definition,
     Hover,
+    InlayHints,
 }
 
 pub struct QueryOptions {
@@ -132,6 +133,11 @@ fn format_usage() -> String {
         "  hover                Show the signature of the symbol at --line/--column"
     )
     .unwrap();
+    writeln!(
+        buf,
+        "  inlay-hints          Show the inferred-type and parameter-name hints, spliced into the source"
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
@@ -185,9 +191,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                     "document-highlight" => QueryKind::DocumentHighlight,
                     "definition" => QueryKind::Definition,
                     "hover" => QueryKind::Hover,
+                    "inlay-hints" => QueryKind::InlayHints,
                     other => {
                         return Err(CliExit::error(format!(
-                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight, definition, hover"
+                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight, definition, hover, inlay-hints"
                         )));
                     }
                 });
@@ -215,9 +222,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                 &usage,
             ));
         }
-        if matches!(kind, QueryKind::Diagnostics) {
+        if matches!(kind, QueryKind::Diagnostics | QueryKind::InlayHints) {
             return Err(CliExit::error_with_usage(
-                "--symbol is not supported for the `diagnostics` kind",
+                "--symbol is not supported for the `diagnostics` / `inlay-hints` kinds",
                 &usage,
             ));
         }
@@ -308,7 +315,9 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
             QueryKind::Hover => {
                 query_adapter::run_hover_by_symbol(notation, base, public_only, opts.json).await
             }
-            QueryKind::Diagnostics => unreachable!("--symbol rejected for diagnostics"),
+            QueryKind::Diagnostics | QueryKind::InlayHints => {
+                unreachable!("--symbol rejected for diagnostics / inlay-hints")
+            }
         };
     }
 
@@ -316,6 +325,7 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
     let input = opts.input.as_deref().unwrap_or_default();
     match opts.kind {
         QueryKind::Diagnostics => query_adapter::run_diagnostics(input, opts.json).await,
+        QueryKind::InlayHints => query_adapter::run_inlay_hints(input, opts.json).await,
         QueryKind::References => {
             query_adapter::run_references(
                 input,

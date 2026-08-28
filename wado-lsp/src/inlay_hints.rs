@@ -41,8 +41,14 @@ lsp_repr_u32_enum!(
     }
 );
 
+/// The name a receiver parameter carries in a positional name list. `self` is
+/// reserved in Wado, so no declared parameter collides with it, and the symbol
+/// table spells a resource method's receiver exactly this way.
+const SELF_PARAM: &str = "self";
+
 /// An inlay hint produced for the requesting document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InlayHint {
     pub position: Position,
     pub label: String,
@@ -191,8 +197,11 @@ impl HintCollector<'_> {
     /// 2. The use→def edge points at an impl method's `AstId`, which the
     ///    analyzer does not register as a symbol. `Semantics::function_at`
     ///    looks the `Function` AST node up through the per-module
-    ///    [`AstIndex`] in O(1); we read its params from there (self
-    ///    params filtered out).
+    ///    [`AstIndex`] in O(1); we read its params from there.
+    ///
+    /// Both routes name a path-form call, so a receiver passed positionally
+    /// (`Scale::scaled(&p, …)`) keeps its argument slot — see
+    /// [`path_form_param_names`].
     fn callee_param_names(&self, callee: &Expr) -> Option<Vec<String>> {
         let ident = match callee {
             Expr::Ident(i) => i,
@@ -215,7 +224,7 @@ impl HintCollector<'_> {
             return Some(f.params.clone());
         }
         let func = self.ctx.sem.function_at(def_key)?;
-        Some(filter_non_self_param_names(func))
+        Some(path_form_param_names(func))
     }
 
     /// Hint parameters for a `MethodCallExpr` (`receiver.method(args)`).
@@ -225,29 +234,27 @@ impl HintCollector<'_> {
     /// [`AstIndex`] indexes that mapping so `Semantics::function_at`
     /// resolves it in O(1).
     fn hint_method_call_args(&mut self, call: &ast::MethodCallExpr) {
-        let Some(param_names) = self.method_param_names(call.method_id) else {
+        let Some(func) = self.method_decl(call.method_id) else {
             return;
         };
-        self.emit_arg_param_hints(&param_names, &call.args);
+        self.emit_arg_param_hints(&dot_form_param_names(func), &call.args);
     }
 
     /// Hint parameters for a `StaticMethodCallExpr` (`Type::method(args)`).
-    /// Same resolution as `hint_method_call_args` — the elaborator records
-    /// the same use→def edge for both call shapes.
+    /// Same resolution as `hint_method_call_args`, but the receiver of a
+    /// method reached this way is `args[0]`, so its slot is kept.
     fn hint_static_method_call_args(&mut self, call: &ast::StaticMethodCallExpr) {
-        let Some(param_names) = self.method_param_names(call.method_id) else {
+        let Some(func) = self.method_decl(call.method_id) else {
             return;
         };
-        self.emit_arg_param_hints(&param_names, &call.args);
+        self.emit_arg_param_hints(&path_form_param_names(func), &call.args);
     }
 
-    /// Parameter names of the impl/trait method whose declaration `AstId`
-    /// is the use→def target of `method_id_at_call`. Returns `None` for
-    /// synthetic / unresolved call sites.
-    fn method_param_names(&self, method_id_at_call: ast::AstId) -> Option<Vec<String>> {
+    /// The impl/trait method whose declaration `AstId` is the use→def target
+    /// of `method_id_at_call`. `None` for synthetic / unresolved call sites.
+    fn method_decl(&self, method_id_at_call: ast::AstId) -> Option<&'_ Function> {
         let def_key = self.ctx.sem.referenced_symbol(method_id_at_call)?;
-        let func = self.ctx.sem.function_at(def_key)?;
-        Some(filter_non_self_param_names(func))
+        self.ctx.sem.function_at(def_key)
     }
 
     fn emit_arg_param_hints(&mut self, param_names: &[String], args: &[Expr]) {
@@ -255,6 +262,12 @@ impl HintCollector<'_> {
         // mismatch (more args than params) terminates the loop early; the
         // elaborator flags that as a diagnostic on its own path.
         for (param_name, arg) in param_names.iter().zip(args.iter()) {
+            // The receiver of a path-form method call reads as the receiver;
+            // `self:` in front of it is noise. `self` is reserved, so no
+            // declared parameter can collide with the name.
+            if param_name == SELF_PARAM {
+                continue;
+            }
             self.push_param_hint(param_name, arg.span());
         }
     }
@@ -266,16 +279,34 @@ impl HintCollector<'_> {
     }
 }
 
-/// Parameter names of `func` with self params filtered out.
+/// Parameter names of `func` positioned for a call that does **not** pass the
+/// receiver in `args` — the dot form, `recv.m(a, b)`.
 ///
 /// `&self` / `&mut self` are surfaced as `SelfKind::Ref` / `SelfKind::MutRef`
-/// by the parser; only `SelfKind::None` params can ever appear as positional
-/// call arguments.
-fn filter_non_self_param_names(func: &Function) -> Vec<String> {
+/// by the parser; dropping them lines the remaining names up with `args`.
+fn dot_form_param_names(func: &Function) -> Vec<String> {
     func.params
         .iter()
         .filter(|p| matches!(p.self_kind, ast::SelfKind::None))
         .map(|p| p.name.clone())
+        .collect()
+}
+
+/// Parameter names of `func` positioned for a call written in path form —
+/// `Scale::scaled(&p, 2, 3)`, where the receiver *is* `args[0]`.
+///
+/// The self param keeps its slot so every later argument still meets its own
+/// name; it is named [`SELF_PARAM`] so the receiver itself goes unlabelled.
+/// Dropping it instead shifts every label one argument to the left.
+fn path_form_param_names(func: &Function) -> Vec<String> {
+    func.params
+        .iter()
+        .map(|p| match p.self_kind {
+            ast::SelfKind::None => p.name.clone(),
+            ast::SelfKind::Value | ast::SelfKind::Ref | ast::SelfKind::MutRef => {
+                SELF_PARAM.to_string()
+            }
+        })
         .collect()
 }
 
@@ -857,6 +888,79 @@ mod tests {
                 param_labels.contains(&"a: ".to_string())
                     && param_labels.contains(&"b: ".to_string()),
                 "cross-module `add(1, 2)` should still surface `a:`/`b:`; got {param_labels:?}",
+            );
+        });
+    }
+
+    /// Sugar: parameter-name labels paired with the 0-based character the
+    /// hint anchors at, for the call shapes where alignment is the point.
+    fn param_anchors(hints: &[InlayHint]) -> Vec<(String, u32)> {
+        hints
+            .iter()
+            .filter(|h| h.kind == InlayHintKind::Parameter)
+            .map(|h| (h.label.clone(), h.position.character))
+            .collect()
+    }
+
+    #[test]
+    fn path_form_method_call_aligns_names_past_the_receiver() {
+        // `Scale::scaled(&p, 2, 3)` passes the receiver positionally, so the
+        // declared `&self` still occupies argument slot 0. Dropping it from
+        // the name list labelled `&p` as `factor` and left the last argument
+        // unlabelled — every hint one argument to the left of its parameter.
+        block_on(async {
+            let src = concat!(
+                "trait Scale {\n",
+                "    fn scaled(&self, factor: i32, bias: i32) -> i32;\n",
+                "}\n",
+                "struct P { x: i32 }\n",
+                "impl Scale for P {\n",
+                "    fn scaled(&self, factor: i32, bias: i32) -> i32 {\n",
+                "        return self.x * factor + bias\n",
+                "    }\n",
+                "}\n",
+                "fn f() -> i32 {\n",
+                "    let p = P { x: 1 };\n",
+                "    return Scale::scaled(&p, 2, 3);\n",
+                "}\n",
+            );
+            let hints = hints_for(src).await;
+            let anchors = param_anchors(&hints);
+            // `    return Scale::scaled(&p, 2, 3);`
+            //                           ^25 ^29 ^32
+            assert_eq!(
+                anchors,
+                vec![("factor: ".to_string(), 29), ("bias: ".to_string(), 32)],
+                "the receiver takes no label and the rest keep their own; got {anchors:?}",
+            );
+        });
+    }
+
+    #[test]
+    fn method_call_syntax_still_skips_the_receiver_param() {
+        // The dot form does not pass the receiver in `args`, so the declared
+        // `&self` must be dropped rather than consuming an argument slot.
+        block_on(async {
+            let src = concat!(
+                "struct P { x: i32 }\n",
+                "impl P {\n",
+                "    fn scaled(&self, factor: i32, bias: i32) -> i32 {\n",
+                "        return self.x * factor + bias\n",
+                "    }\n",
+                "}\n",
+                "fn f() -> i32 {\n",
+                "    let p = P { x: 1 };\n",
+                "    return p.scaled(2, 3);\n",
+                "}\n",
+            );
+            let hints = hints_for(src).await;
+            let anchors = param_anchors(&hints);
+            // `    return p.scaled(2, 3);`
+            //                      ^20 ^23
+            assert_eq!(
+                anchors,
+                vec![("factor: ".to_string(), 20), ("bias: ".to_string(), 23)],
+                "dot-form args align with the non-self params; got {anchors:?}",
             );
         });
     }

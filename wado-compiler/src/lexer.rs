@@ -292,6 +292,16 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// The cursor as a [`Position`], for scans that must anchor their spans
+    /// before the dispatch consumed a prefix.
+    fn position(&self) -> Position {
+        Position {
+            offset: self.pos,
+            line: self.line,
+            column: self.column,
+        }
+    }
+
     /// Build a span from a saved start position to the current cursor.
     /// Captures `(start, self.pos, start_line, start_column, self.line,
     /// self.column)` — the recurring pattern at every error site and every
@@ -1328,21 +1338,29 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_char(&mut self) -> TokenKind {
-        TokenKind::CharLit(self.scan_char_raw())
+        let start = self.position();
+        TokenKind::CharLit(self.scan_char_raw(start))
     }
 
     /// Lex a byte literal `b'x'`; lowers to a `u8` integer literal.
     fn lex_byte_char(&mut self) -> TokenKind {
+        // Taken before the `b`: the literal is `b'x'`, so an error span that
+        // opens at the quote underlines part of the literal, not the literal.
+        let start = self.position();
         self.advance(); // consume `b`
-        TokenKind::ByteCharLit(self.scan_char_raw())
+        TokenKind::ByteCharLit(self.scan_char_raw(start))
     }
 
     /// Scan a single-quoted literal (opening `'` current), returning the raw
     /// text between the quotes. Shared by char `'x'` and byte `b'x'` literals.
-    fn scan_char_raw(&mut self) -> String {
-        let start = self.pos;
-        let start_line = self.line;
-        let start_column = self.column;
+    /// `open` is where the literal opens — the `b` of a byte literal, the
+    /// quote otherwise — and anchors every error span this recovers with.
+    fn scan_char_raw(&mut self, open: Position) -> String {
+        let Position {
+            offset: start,
+            line: start_line,
+            column: start_column,
+        } = open;
 
         self.advance(); // consume opening '
         let inner_start = self.pos;
