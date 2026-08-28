@@ -1,7 +1,8 @@
-// Formatter struct hoisting in loops:
-// When a template string uses a format specifier (e.g., :0.6f), the optimizer
-// should hoist the Formatter struct allocation before the loop alongside the
-// String buffer, reusing it across iterations instead of allocating a new one.
+// Formatter and buffer hoisting in loops:
+// A template string with a format specifier (e.g. :0.6f) must not allocate per
+// iteration. The String buffer is hoisted before the loop; the Formatter is no
+// longer hoisted because `sroa_param` scalarizes its methods down to the `buf`
+// field, so the struct is never built at all.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -33,4 +34,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "total=30\ntotal2=5\ntotal3=33\n", "wir_expect:O2": ["__fmt_buf_", ".indent = 0"]}
+{"stdout": "total=30\ntotal2=5\ntotal3=33\n", "wir_expect:O2": ["__tmpl_buf_"]}

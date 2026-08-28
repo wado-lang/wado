@@ -1,12 +1,29 @@
-//! Single-field parameter SROA: an internal function taking `&S` / `&mut S` for
-//! a one-field struct — canonically `Box<T>` — is rewritten to take the inner
-//! scalar, collapsing the call site's `StructLiteral` allocation to the value.
-//! Every read of a candidate param must be the scalar `FieldAccess` or an
-//! argument to another candidate position, iterated to a fixpoint.
+//! One-field parameter SROA: a function taking `&S` / `&mut S` and
+//! reading exactly one of `S`'s fields — canonically `Box<T>`, but equally an
+//! options record whose other fields `param_spec` already folded away — is
+//! rewritten to take that field, collapsing the call site's `StructLiteral`
+//! allocation to the field's value.
+//!
+//! Which field that is falls out of the same fixpoint that checks for escape:
+//! every use of a candidate param must be a `FieldAccess`, or an argument to
+//! another candidate position, and all of them must name the same field.
+//!
+//! The rewrite **mints a clone** and leaves the original standing. Signatures
+//! are not this pass's alone to change: a `#[compiler_item]` marker has
+//! peepholes synthesizing calls against it, and `wir_build` writes a forwarding
+//! wrapper for each closure functor method after every NIR pass has run. Neither
+//! call exists here to retarget, so reshaping in place breaks them — and the set
+//! of passes that synthesize calls is not something this one can enumerate and
+//! stay correct as more are added. Cloning sidesteps the question: calls this
+//! pass can see move to the clone, calls it cannot keep finding the original,
+//! and `dce` drops whichever of the two nothing reaches.
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -14,7 +31,7 @@ use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::place_root_local;
+use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
 
@@ -25,28 +42,53 @@ type FnKey = crate::nir::FuncId;
 struct SroaInfo {
     /// Canonical struct identity — `(struct_name, module_source)`.
     struct_key: (String, ModuleSource),
-    /// Type of the wrapper's sole field — the new scalar parameter type.
+    /// Type of the field the callee reads — the new scalar parameter type.
     inner_type_id: TypeId,
-    /// Field name of the wrapper struct's sole field.
+    /// Name of the field the callee reads.
     field_name: String,
+    /// Its declaration index, which is what the rewrites match on: a name can
+    /// repeat between the wrapper and the field's own type (`b.value.value`).
+    field_index: u32,
+    /// How the callee holds the field — see [`param_field_form`].
+    form: FieldForm,
+    /// The type the scalarized parameter takes: `inner_type_id` in `form`.
+    /// Interned by [`resolve_scalar_param_types`] once the fixpoint has settled
+    /// which field this is.
+    scalar_type_id: TypeId,
 }
 
 pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let candidates = collect_and_validate(project, gate);
+    let mut candidates = collect_and_validate(project, gate);
     if candidates.is_empty() {
         return false;
     }
+    resolve_scalar_param_types(project, &mut candidates);
     // Interprocedural and scans all functions, but reports the ones it touched
-    // (param-scalarized callees + callers whose call sites were rewritten) so
-    // the gated passes re-examine only those. The call graph is unaffected: arg
-    // rewrites and the receiver collapse keep the same callee.
+    // (the minted clones + callers whose call sites moved to one) so the gated
+    // passes re-examine only those.
     let mut touched: IndexSet<usize> = IndexSet::default();
-    rewrite_callees(project, &candidates, &mut touched);
-    rewrite_call_sites(project, &candidates, &mut touched);
+    let clones = mint_scalarized_clones(project, &candidates, &mut touched);
+    if clones.is_empty() {
+        return false;
+    }
+    rewrite_call_sites(project, &candidates, &clones, &mut touched);
     for idx in touched {
         gate.mark_changed(FuncId::new(idx));
     }
     true
+}
+
+/// Intern each candidate's scalar parameter type, now that the fixpoint has
+/// settled which field it is. Separate from [`collect_and_validate`], which
+/// holds the type table shared while it walks every candidate body.
+fn resolve_scalar_param_types(
+    project: &NirPackage,
+    candidates: &mut IndexMap<(FnKey, usize), SroaInfo>,
+) {
+    let mut type_table = project.type_table.borrow_mut();
+    for info in candidates.values_mut() {
+        info.scalar_type_id = info.form.of(&mut type_table, info.inner_type_id);
+    }
 }
 
 /// Move `src`'s node content into `id`; `src` is left as a dead node.
@@ -54,28 +96,56 @@ fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     if id == src {
         return;
     }
-    body.exprs[id] = body.take_expr(src);
+    // Copy rather than take. `take_expr` leaves `ExprKind::Dead` behind, and a
+    // promoted operand can still name `src` through `OpaqueSource::Expr` — the
+    // value graph then extracts a dead node, which reads as zero. `src` drops
+    // out of the tree with the literal that held it, so the duplicated child
+    // ids have one live parent either way.
+    body.exprs[id] = body.exprs[src].clone();
 }
 
 // -----------------------------------------------------------------------
 // Phase 1 + 2
 // -----------------------------------------------------------------------
 
-type SingleFieldIndex = IndexMap<(String, ModuleSource), (String, TypeId)>;
+/// Every field of each struct, in declaration order.
+type FieldTableIndex = IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>;
 
-fn build_single_field_index(project: &NirPackage) -> SingleFieldIndex {
-    let mut out: SingleFieldIndex = IndexMap::default();
+fn build_field_table_index(project: &NirPackage) -> FieldTableIndex {
+    let mut out: FieldTableIndex = IndexMap::default();
     for s in &project.structs {
-        if s.fields.len() != 1 {
-            continue;
-        }
-        let f = &s.fields[0];
         out.insert(
             (s.name.clone(), s.module_source.clone()),
-            (f.name.clone(), f.type_id),
+            s.fields.iter().map(|f| (f.name.clone(), f.type_id)).collect(),
         );
     }
     out
+}
+
+/// What a candidate parameter is used for. A parameter qualifies exactly when
+/// every use agrees on one field, so this is that agreement or its failure —
+/// resolved to a fixpoint, since a use may be "whatever the position I forward
+/// to resolves to".
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FieldUse {
+    /// Nothing decided yet: unread, or only forwarded to positions that are
+    /// themselves still unresolved.
+    Unresolved,
+    /// Every use so far reads this field.
+    Field(u32),
+    /// Escapes whole, is assigned through, or reads two different fields.
+    Invalid,
+}
+
+impl FieldUse {
+    fn meet(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Invalid, _) | (_, Self::Invalid) => Self::Invalid,
+            (Self::Unresolved, x) | (x, Self::Unresolved) => x,
+            (Self::Field(a), Self::Field(b)) if a == b => Self::Field(a),
+            (Self::Field(_), Self::Field(_)) => Self::Invalid,
+        }
+    }
 }
 
 fn collect_and_validate(
@@ -83,13 +153,19 @@ fn collect_and_validate(
     gate: &mut FunctionGate,
 ) -> IndexMap<(FnKey, usize), SroaInfo> {
     let type_table = project.type_table.borrow();
-    let single_field = build_single_field_index(project);
+    let field_table = build_field_table_index(project);
     let struct_fields = build_struct_fields_index(project);
     let reachable_writes = transitive_reachable_writes(project);
     let global_types = global_type_index(project);
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
+        // This pass's own output. A clone is already scalarized in every
+        // position found for it, and unwrapping it again chains `$scalar$scalar`
+        // names whose depth depends on how many fixpoint iterations ran.
+        if project.sroa_param_clones.contains(&fid) {
+            continue;
+        }
         let func = project.functions[fid.index()].borrow();
         if !is_eligible(&func) {
             continue;
@@ -97,12 +173,9 @@ fn collect_and_validate(
         let Some(key) = func.id else { continue };
         let is_trait_method = func.is_trait_method();
         for (pi, param) in func.params.iter().enumerate() {
-            // A trait method's `self` receiver stays pinned. Scalarizing a
-            // single-field-struct receiver (e.g. a sequence wrapper like
-            // `SeqVec { items: List<T> }`) changes the receiver
-            // shape that later collapse passes match on. Non-receiver params —
-            // notably serde's boxed `value: &T` — are still unwrapped, which is
-            // where the box-per-scalar win comes from.
+            // A trait method's `self` stays put: its shape is the vtable slot's.
+            // Every other receiver is fair game, because the original function
+            // survives this pass — see `mint_scalarized_clones`.
             if is_trait_method && pi == 0 && param.name == "self" {
                 continue;
             }
@@ -115,9 +188,25 @@ fn collect_and_validate(
             if func.stores.iter().any(|s| s == &param.name) {
                 continue;
             }
-            let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
+            let Some(mut info) = candidate_info_for(param.type_id, &type_table, &field_table)
+            else {
                 continue;
             };
+            info.form = func
+                .body
+                .as_ref()
+                .map_or(FieldForm::Value, |body| {
+                    param_field_form(body, param.local_index)
+                });
+            // A shared borrow of the field would make the call site pass
+            // `&place.f`, and `sroa` mishandles that shape: it decomposes the
+            // caller's struct, rewrites the argument, and leaves the reads the
+            // inliner had already planted behind — dropping the binding while
+            // they still name it. Left alone until that is fixed, so these call
+            // sites keep the form they had.
+            if info.form == FieldForm::Shared {
+                continue;
+            }
             let aliasing_write = may_write_aliasing_location(
                 &reachable_writes[key.index()],
                 &info.struct_key,
@@ -142,10 +231,13 @@ fn collect_and_validate(
         return candidates;
     }
 
-    // Phase 2: drop candidates whose param escapes — iterate to a fix-point.
+    // Phase 2: resolve each param to the one field it reads, dropping the ones
+    // that escape or disagree — one fixpoint, since a param forwarded to another
+    // candidate position takes its answer from there.
     loop {
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
-        for ((key, pi), _info) in &candidates {
+        let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
+        for ((key, pi), info) in &candidates {
             let Some(func_rc) = project.functions.get(key.index()) else {
                 invalid.insert((*key, *pi));
                 continue;
@@ -156,12 +248,50 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
-            if !body_uses_param_safely(body, local_index, &candidates) {
-                invalid.insert((*key, *pi));
+            match param_field_use(body, local_index, &candidates) {
+                FieldUse::Invalid => {
+                    invalid.insert((*key, *pi));
+                }
+                FieldUse::Field(fi) if fi != info.field_index => {
+                    resolved.push(((*key, *pi), fi));
+                }
+                FieldUse::Field(_) | FieldUse::Unresolved => {}
             }
         }
-        if invalid.is_empty() {
-            break;
+        for (k, fi) in &resolved {
+            let Some(info) = candidates.get_mut(k) else {
+                continue;
+            };
+            let Some(fields) = field_table.get(&info.struct_key) else {
+                invalid.insert(*k);
+                continue;
+            };
+            let Some((name, ty)) = fields.get(*fi as usize).cloned() else {
+                invalid.insert(*k);
+                continue;
+            };
+            info.field_index = *fi;
+            info.field_name = name;
+            info.inner_type_id = ty;
+        }
+        if invalid.is_empty() && resolved.is_empty() {
+            // Converged, so a param still holding no field never names one, and
+            // a field the rewrite cannot make a parameter is out too. Both are
+            // dropped inside the loop, not after it: a param that forwards to a
+            // dropped position loses the answer it was taking from there, and
+            // must be re-checked. `TreeMap::get(&self)` reads `self.root` and
+            // hands `self` to `search_in_node(&self)`, which only ever forwards
+            // to itself and so resolves to nothing — dropping it after the
+            // fixpoint left `get` scalarized around a position that no longer
+            // existed.
+            let before = candidates.len();
+            candidates.retain(|_, info| {
+                info.field_index != u32::MAX && is_sroa_eligible_inner_type(info.inner_type_id)
+            });
+            if candidates.len() == before {
+                break;
+            }
+            continue;
         }
         for k in &invalid {
             candidates.swap_remove(k);
@@ -171,10 +301,13 @@ fn collect_and_validate(
     candidates
 }
 
+/// A provisional candidate: the struct is known, the field is not. A one-field
+/// struct resolves immediately; anything wider waits for the use fixpoint,
+/// which is also what rejects a param that reads more than one.
 fn candidate_info_for(
     param_type: TypeId,
     type_table: &TypeTable,
-    single_field: &SingleFieldIndex,
+    field_table: &FieldTableIndex,
 ) -> Option<SroaInfo> {
     let struct_type_id = match type_table.get(param_type) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
@@ -182,14 +315,19 @@ fn candidate_info_for(
         _ => return None,
     };
     let key = struct_key_of(struct_type_id, type_table)?;
-    let (field_name, inner_type_id) = single_field.get(&key)?.clone();
-    if !is_sroa_eligible_inner_type(inner_type_id) {
+    let fields = field_table.get(&key)?;
+    if fields.is_empty() {
         return None;
     }
+    // Seed on field 0; a wider struct has this overwritten once its uses agree.
+    let (field_name, inner_type_id) = fields[0].clone();
     Some(SroaInfo {
         struct_key: key,
         inner_type_id,
         field_name,
+        field_index: if fields.len() == 1 { 0 } else { u32::MAX },
+        form: FieldForm::Value,
+        scalar_type_id: inner_type_id,
     })
 }
 
@@ -504,12 +642,82 @@ fn may_write_aliasing_location(
 // Phase 2 — use checker (arena)
 // -----------------------------------------------------------------------
 
-fn body_uses_param_safely(
+/// How the callee holds the field, and so how the scalar parameter is typed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FieldForm {
+    /// Read as a value — the canonical `Box<T>` case, where a reference would
+    /// only re-box what the unwrap just removed.
+    Value,
+    Shared,
+    Mutable,
+}
+
+impl FieldForm {
+    fn of(self, type_table: &mut TypeTable, inner: TypeId) -> TypeId {
+        match self {
+            Self::Value => inner,
+            Self::Shared => type_table.make_ref(inner),
+            Self::Mutable => type_table.make_mut_ref(inner),
+        }
+    }
+
+    fn borrow_op(self) -> Option<NirUnaryOp> {
+        match self {
+            Self::Value => None,
+            Self::Shared => Some(NirUnaryOp::Ref),
+            Self::Mutable => Some(NirUnaryOp::MutRef),
+        }
+    }
+}
+
+/// The form in which the body holds param `idx`'s field.
+///
+/// The pass runs after `value_copy` has placed the copies value semantics call
+/// for, so a by-value scalar parameter gets none: handing the callee `p.f`
+/// hands it the caller's storage. That is what the pass means and what codegen
+/// does — `&F` and `F` are the same `ref` once lowered — but not what a
+/// by-value signature *says*, and `niri` reads the signature, duly copying.
+///
+/// Matching the callee's own borrow also keeps the rewrite from leaving one
+/// behind. Rewriting `self.f` to the param turns `&self.f` into `&param`, a
+/// borrow of what is already a reference; that makes the local address-taken,
+/// which stops `copy_prop` folding it back and strands a temporary at every
+/// call site. Taking the borrow into the parameter's type lets
+/// [`borrow_of_scalarized`] absorb it instead.
+/// Only a borrow of the field *itself* counts — `&p.f`, not `&p.f.g`, which
+/// borrows a sub-field and leaves `p.f` read as a value. This has to agree
+/// exactly with what [`borrow_of_scalarized`] absorbs: a form claiming a borrow
+/// the rewrite then fails to find leaves the parameter typed as a reference
+/// while the body still reads it as a value.
+fn param_field_form(body: &Body, idx: u32) -> FieldForm {
+    let mut form = FieldForm::Value;
+    for node in body.exprs.values() {
+        let ExprKind::Unary { op, expr: inner } = &node.kind else {
+            continue;
+        };
+        let borrows_field = inner.as_expr().is_some_and(|e| {
+            matches!(&body.exprs[e].kind, ExprKind::FieldAccess { expr: recv, .. }
+                if is_local_operand(body, *recv, idx))
+        });
+        if !borrows_field {
+            continue;
+        }
+        match op {
+            NirUnaryOp::MutRef => return FieldForm::Mutable,
+            NirUnaryOp::Ref => form = FieldForm::Shared,
+            _ => {}
+        }
+    }
+    form
+}
+
+/// The one field every use of param `local_index` reads, or why there isn't one.
+fn param_field_use(
     body: &Body,
-    local_index: u32,
+    idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
-    check_node(body, NodeRef::Block(body.root), local_index, candidates)
+) -> FieldUse {
+    check_node(body, NodeRef::Block(body.root), idx, candidates)
 }
 
 fn check_node(
@@ -517,15 +725,15 @@ fn check_node(
     node: NodeRef,
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
+) -> FieldUse {
     if let NodeRef::Expr(id) = node {
         return check_expr(body, id, idx, candidates);
     }
-    let mut ok = true;
+    let mut use_ = FieldUse::Unresolved;
     body.for_each_child(node, |c| {
-        ok = ok && check_node(body, c, idx, candidates);
+        use_ = use_.meet(check_node(body, c, idx, candidates));
     });
-    ok
+    use_
 }
 
 fn check_expr(
@@ -533,17 +741,19 @@ fn check_expr(
     id: ExprId,
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
+) -> FieldUse {
     match &body.exprs[id].kind {
         // Bare local read reaching here (not consumed by a borrowing parent)
         // is an unwrapped use → invalid.
-        ExprKind::Local { index, .. } if *index == idx => false,
-        ExprKind::FieldAccess { expr: inner, .. } => {
-            let inner = *inner;
-            if inner.as_expr().is_some_and(
-                |e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. } if *index == idx),
-            ) {
-                return true;
+        ExprKind::Local { index, .. } if *index == idx => FieldUse::Invalid,
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let (inner, field_index) = (*inner, *field_index);
+            if is_local_operand(body, inner, idx) {
+                return FieldUse::Field(field_index);
             }
             check_operand(body, inner, idx, candidates)
         }
@@ -552,21 +762,24 @@ fn check_expr(
             let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             args.iter()
                 .enumerate()
-                .all(|(i, &a)| check_call_arg(body, key, i, a, idx, candidates))
+                .fold(FieldUse::Unresolved, |acc, (i, &a)| {
+                    acc.meet(check_call_arg(body, key, i, a, idx, candidates))
+                })
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             if place_root_local(body, target) == Some(idx) {
-                return false;
+                return FieldUse::Invalid;
             }
-            check_expr(body, target, idx, candidates) && check_operand(body, value, idx, candidates)
+            check_expr(body, target, idx, candidates)
+                .meet(check_operand(body, value, idx, candidates))
         }
         _ => {
-            let mut ok = true;
+            let mut use_ = FieldUse::Unresolved;
             body.for_each_child(NodeRef::Expr(id), |c| {
-                ok = ok && check_node(body, c, idx, candidates);
+                use_ = use_.meet(check_node(body, c, idx, candidates));
             });
-            ok
+            use_
         }
     }
 }
@@ -578,90 +791,241 @@ fn check_call_arg(
     arg: Operand,
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
-    // A promoted constant arg never references the SROA candidate local.
-    let Some(arg) = arg.as_expr() else {
-        return true;
-    };
-    if matches!(&body.exprs[arg].kind, ExprKind::Local { index, .. } if *index == idx) {
-        // The candidate local is passed directly; safe only if the callee SROAs
-        // this position too.
-        return candidates.contains_key(&(callee, pos));
+) -> FieldUse {
+    if is_local_operand(body, arg, idx) {
+        // Passed on whole: this use reads whatever the callee's position reads,
+        // which the fixpoint may not have settled yet.
+        return match candidates.get(&(callee, pos)) {
+            Some(info) if info.field_index != u32::MAX => FieldUse::Field(info.field_index),
+            Some(_) => FieldUse::Unresolved,
+            None => FieldUse::Invalid,
+        };
     }
+    // A promoted constant that is not the candidate local cannot reference it.
+    let Some(arg) = arg.as_expr() else {
+        return FieldUse::Unresolved;
+    };
     check_expr(body, arg, idx, candidates)
 }
 
-/// [`check_expr`] for an operand: a promoted constant never references the SROA
-/// candidate local, so it never blocks.
+/// [`check_expr`] for an operand. Reaching the candidate local here means it was
+/// read whole without a borrowing parent consuming it — the same unwrapped use
+/// the `Local` arm rejects, in the promoted form. Any other promoted value
+/// cannot reference it, so it constrains nothing.
 fn check_operand(
     body: &Body,
     op: Operand,
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
+) -> FieldUse {
+    if is_local_operand(body, op, idx) {
+        return FieldUse::Invalid;
+    }
     op.as_expr()
-        .is_none_or(|e| check_expr(body, e, idx, candidates))
+        .map_or(FieldUse::Unresolved, |e| check_expr(body, e, idx, candidates))
 }
 
 // -----------------------------------------------------------------------
 // Phase 3a: callee body rewrite (arena)
 // -----------------------------------------------------------------------
 
-fn rewrite_callees(
+/// Mint one scalarized clone per function with a candidate parameter, leaving
+/// the original untouched. Returns the original → clone map the call-site
+/// rewrite retargets through.
+fn mint_scalarized_clones(
     project: &mut NirPackage,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
     touched: &mut IndexSet<usize>,
-) {
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
-        let Some(key) = func.id else { continue };
-        let mut affected: Vec<u32> = Vec::new();
-        for pi in 0..func.params.len() {
-            if let Some(info) = candidates.get(&(key, pi)) {
-                let local_index = func.params[pi].local_index;
-                affected.push(local_index);
-                func.params[pi].type_id = info.inner_type_id;
-                if let Some(local) = func.locals.get_mut(local_index as usize) {
-                    local.type_id = info.inner_type_id;
-                }
-            }
+) -> IndexMap<FnKey, FnKey> {
+    use cranelift_entity::EntityRef as _;
+
+    let mut by_fn: IndexMap<FnKey, Vec<usize>> = IndexMap::default();
+    for (key, pi) in candidates.keys() {
+        by_fn.entry(*key).or_default().push(*pi);
+    }
+
+    let mut clones: IndexMap<FnKey, FnKey> = IndexMap::default();
+    let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
+    let mut next_id = project.next_func_id().index();
+    for (key, positions) in &by_fn {
+        let Some(original) = project.functions.get(key.index()) else {
+            continue;
+        };
+        let mut clone = original.borrow().clone();
+        let origin = (clone.module_source.clone(), clone.name.clone());
+        let name = crate::name::sroa_param_name(&clone.name);
+        clone.name.clone_from(&name);
+        if let Some(info) = &mut clone.method_info {
+            info.method_name = crate::name::sroa_param_name(&info.method_name);
         }
-        if affected.is_empty() {
+        // This pass runs once per fixpoint iteration, so a clone it minted on an
+        // earlier one already stands under this name. Reuse it rather than mint
+        // a second function with the same identity.
+        let func_key = FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
+        if let Some(&existing) = project.func_index.get(&func_key) {
+            clones.insert(*key, existing);
             continue;
         }
-        if let Some(body) = func.body.as_mut() {
+        let id = FuncId::new(next_id);
+        next_id += 1;
+        clone.id = Some(id);
+        clone.visibility = crate::ast::Visibility::Private;
+        clone.is_export = false;
+        clone.export_name = None;
+        // The marker names the one canonical function behind a compiler item, and
+        // that is the original — peepholes resolve it to synthesize calls wearing
+        // the original signature, which the clone no longer has.
+        clone.compiler_item = None;
+
+        let mut affected: Vec<Scalarized> = Vec::new();
+        for pi in positions {
+            let info = &candidates[&(*key, *pi)];
+            let local_index = clone.params[*pi].local_index;
+            affected.push(Scalarized {
+                local: local_index,
+                field_index: info.field_index,
+                name: clone.params[*pi].name.clone(),
+                borrow: info.form.borrow_op(),
+            });
+            clone.params[*pi].type_id = info.scalar_type_id;
+            if let Some(local) = clone.locals.get_mut(local_index as usize) {
+                local.type_id = info.scalar_type_id;
+            }
+        }
+        if let Some(body) = clone.body.as_mut() {
             let root = body.root;
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }
-        touched.insert(i);
+
+        project.func_index.insert(func_key, id);
+        project.sroa_param_clone_fields.insert(
+            id,
+            positions
+                .iter()
+                .map(|pi| {
+                    (
+                        clone.params[*pi].local_index,
+                        candidates[&(*key, *pi)].struct_key.clone(),
+                    )
+                })
+                .collect(),
+        );
+        copy_function_strings(project, &origin, (clone.module_source.clone(), name));
+        clones.insert(*key, id);
+        minted.push(Rc::new(RefCell::new(clone)));
+    }
+    for f in minted {
+        let id = FuncId::new(project.functions.len());
+        touched.insert(project.functions.len());
+        project.sroa_param_clones.insert(id);
+        project.functions.push(f);
+    }
+    clones
+}
+
+/// Give the clone its own entry in `function_strings`, which is name-keyed: DCE
+/// reads it to decide which string literals survive, so without one the clone's
+/// literals are pruned out from under it.
+fn copy_function_strings(
+    project: &mut NirPackage,
+    origin: &(ModuleSource, String),
+    clone: (ModuleSource, String),
+) {
+    if let Some(strings) = project.function_strings.get(origin).cloned() {
+        project.function_strings.insert(clone, strings);
     }
 }
 
-/// Pre-order: replace `FieldAccess(Local(idx), field_index: 0)` for a SROA'd
-/// param `idx` with the bare scalar `Local`, before children are reshaped. The
-/// wrapper is a single-field struct, so its sole field is index 0 — matching by
-/// index (not name) avoids over-stripping a same-named field of the inner type
-/// (e.g. `b.value.value` where the inner `.value` belongs to a different struct).
-fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[u32]) {
+/// A parameter this clone scalarized: the local it occupies, the field it now
+/// stands for, and whether it holds that field by reference.
+struct Scalarized {
+    local: u32,
+    field_index: u32,
+    name: String,
+    /// The borrow the param's type already carries, if any.
+    borrow: Option<NirUnaryOp>,
+}
+
+/// The affected param a `&`/`&mut` of a scalarized field access borrows, when
+/// the param already holds that field by reference.
+///
+/// `&mut self.repr` on a `repr: &mut Array<u8>` param is `&mut (&mut …)`. The
+/// extra borrow is not just noise: it makes the local address-taken, which
+/// stops `copy_prop` folding it back into the call and leaves a temporary per
+/// call site where the field read used to sit inline.
+fn borrow_of_scalarized<'a>(
+    body: &Body,
+    id: ExprId,
+    affected: &'a [Scalarized],
+) -> Option<&'a Scalarized> {
+    let ExprKind::Unary {
+        op: op @ (NirUnaryOp::Ref | NirUnaryOp::MutRef),
+        expr: inner,
+    } = &body.exprs[id].kind
+    else {
+        return None;
+    };
+    let ExprKind::FieldAccess {
+        expr: recv,
+        field_index,
+        ..
+    } = &body.exprs[inner.as_expr()?].kind
+    else {
+        return None;
+    };
+    let (op, recv, field_index) = (*op, *recv, *field_index);
+    affected.iter().find(|s| {
+        s.borrow == Some(op)
+            && s.field_index == field_index
+            && is_local_operand(body, recv, s.local)
+    })
+}
+
+/// Pre-order: replace the SROA'd param's `FieldAccess` with the bare scalar
+/// `Local`, before children are reshaped. Matching on the field's index rather
+/// than its name avoids over-stripping a same-named field of the field's own
+/// type (e.g. `b.value.value`, whose inner `.value` belongs to another struct).
+///
+/// A `Local` read left standing — the param forwarded whole to another
+/// scalarized position — is retyped in place. Leaving the node claiming the
+/// wrapper's type makes every later reader of it wrong, and the call-site
+/// rewrite is one: it would take the stale type as licence to project the
+/// wrapper's field onto a value that is already the field.
+fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) {
     if let NodeRef::Expr(id) = node {
-        // The SROA'd field access whose inner `Local` should replace it, if any.
-        let local_inner = if let ExprKind::FieldAccess {
+        // `&mut self.f` where the param is already `&mut F`: the whole borrow
+        // becomes the param, not just its operand.
+        if let Some(s) = borrow_of_scalarized(body, id, affected) {
+            body.exprs[id].kind = ExprKind::Local {
+                index: s.local,
+                name: s.name.clone(),
+            };
+            return;
+        }
+        // The SROA'd field access, and the param it reads. The receiver is
+        // matched as an *operand*: a promoted value that extracts back to the
+        // local reads it just as a skeleton `Local` does, and skipping that form
+        // leaves a `f.buf` behind on a param whose type is now the field's.
+        let read = if let ExprKind::FieldAccess {
             expr: inner,
-            field_index: 0,
+            field_index,
             ..
         } = &body.exprs[id].kind
         {
-            inner.as_expr().filter(|&e| {
-                matches!(&body.exprs[e].kind, ExprKind::Local { index, .. }
-                if affected.contains(index))
-            })
+            let (inner, field_index) = (*inner, *field_index);
+            affected
+                .iter()
+                .find(|s| s.field_index == field_index && is_local_operand(body, inner, s.local))
         } else {
             None
         };
-        if let Some(inner) = local_inner {
+        if let Some(s) = read {
             // The node keeps its (field-scalar) type_id / span; its kind becomes
-            // the inner Local.
-            body.exprs[id].kind = body.exprs[inner].kind.clone();
+            // the read of the scalarized param.
+            body.exprs[id].kind = ExprKind::Local {
+                index: s.local,
+                name: s.name.clone(),
+            };
             return;
         }
     }
@@ -679,26 +1043,33 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[u32]) {
 fn rewrite_call_sites(
     project: &mut NirPackage,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+    clones: &IndexMap<FnKey, FnKey>,
     touched: &mut IndexSet<usize>,
 ) {
-    let mut sroa_positions: IndexMap<FnKey, IndexMap<usize, SroaInfo>> = IndexMap::default();
+    let mut sroa_positions: IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)> =
+        IndexMap::default();
     for ((key, pi), info) in candidates {
+        let Some(clone) = clones.get(key) else {
+            continue;
+        };
         sroa_positions
             .entry(*key)
-            .or_default()
+            .or_insert_with(|| (*clone, IndexMap::default()))
+            .1
             .insert(*pi, info.clone());
     }
 
     let type_table_rc = project.type_table.clone();
+    let clone_fields = project.sroa_param_clone_fields.clone();
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let Some(key) = func.id else { continue };
-        let mut scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = IndexMap::default();
-        for (pi, param) in func.params.iter().enumerate() {
-            if let Some(info) = candidates.get(&(key, pi)) {
-                scalar_param_struct.insert(param.local_index, info.struct_key.clone());
-            }
-        }
+        // Inside a clone the scalarized params already hold the field, so an
+        // onward call at another candidate position passes them straight
+        // through. Read from the package, not from this run's `clones`: a clone
+        // minted on an earlier fixpoint iteration is still a clone, and losing
+        // that fact projects the wrapper's field onto it a second time.
+        let scalar_param_struct = clone_fields.get(&key).cloned().unwrap_or_default();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
             let type_table = type_table_rc.borrow();
@@ -732,7 +1103,7 @@ fn rewrite_call_sites(
 fn rewrite_calls_node(
     body: &mut Body,
     node: NodeRef,
-    sroa_positions: &IndexMap<FnKey, IndexMap<usize, SroaInfo>>,
+    sroa_positions: &IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)>,
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
 ) -> bool {
@@ -751,7 +1122,7 @@ fn rewrite_calls_node(
 fn rewrite_call_expr(
     body: &mut Body,
     id: ExprId,
-    sroa_positions: &IndexMap<FnKey, IndexMap<usize, SroaInfo>>,
+    sroa_positions: &IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)>,
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
 ) -> bool {
@@ -764,14 +1135,29 @@ fn rewrite_call_expr(
     else {
         return false;
     };
-    let Some(positions) = sroa_positions.get(func_id).cloned() else {
+    let Some((clone, positions)) = sroa_positions.get(func_id).cloned() else {
         return false;
     };
+    let span = body.exprs[id].span;
+    let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+    // Both checks run before anything is mutated: a call the rewrite cannot make
+    // safely is left calling the original.
+    if !hoist_order_preserved(body, &arg_ops, &positions, scalar_param_struct)
+        || !positions.iter().all(|(pi, info)| {
+            arg_rewritable(
+                body,
+                scalarized_arg(&arg_ops, *pi),
+                info,
+                scalar_param_struct,
+                type_table,
+            )
+        })
+    {
+        return false;
+    }
     // Scalarizing position 0 replaces a method's receiver with a plain scalar,
     // so the call stops being one.
     let receiver_scalarized = *has_receiver && positions.contains_key(&0);
-    let span = body.exprs[id].span;
-    let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
     let mut rewritten: Vec<(usize, Operand)> = Vec::with_capacity(positions.len());
     for (pi, info) in &positions {
         let op = scalarized_arg(&arg_ops, *pi);
@@ -781,7 +1167,10 @@ fn rewrite_call_expr(
         ));
     }
     let ExprKind::Call {
-        args, has_receiver, ..
+        func_id,
+        args,
+        has_receiver,
+        ..
     } = &mut body.exprs[id].kind
     else {
         unreachable!("matched a Call above")
@@ -792,7 +1181,116 @@ fn rewrite_call_expr(
     if receiver_scalarized {
         *has_receiver = false;
     }
+    // The original keeps its shape for whatever this pass cannot see.
+    *func_id = clone;
     true
+}
+
+/// Whether reading the field at the call site keeps the order the callee had.
+///
+/// The callee read `p.f` after every argument was evaluated; hoisting the read
+/// into position `pi` moves it ahead of the arguments to its right, so any
+/// effect among those could have changed the field the callee would have seen.
+/// `consume(&mut c, bump_val(&mut c))` is the shape: `bump_val` writes `c.x`,
+/// which `consume` then reads.
+///
+/// A call this rejects is left alone, and so keeps calling the original — the
+/// reason the rewrite mints a clone rather than reshaping in place.
+fn hoist_order_preserved(
+    body: &Body,
+    args: &[Operand],
+    positions: &IndexMap<usize, SroaInfo>,
+    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+) -> bool {
+    // Only a position that actually reads `place.f` here moves a read earlier.
+    // An argument already holding the field — a caller param this pass
+    // scalarized — is handed over untouched, so nothing is resequenced. That
+    // exemption is also what keeps a clone consistent: its own body forwards
+    // scalarized params, and those calls *must* retarget, the original callee
+    // no longer taking the type the clone now holds.
+    let Some(first) = positions
+        .iter()
+        .filter(|(pi, info)| {
+            scalarized_from(body, scalarized_arg(args, **pi), scalar_param_struct).as_ref()
+                != Some(&info.struct_key)
+        })
+        .map(|(pi, _)| *pi)
+        .min()
+    else {
+        return true;
+    };
+    args.iter()
+        .skip(first + 1)
+        .all(|&op| is_pure_operand(body, op))
+}
+
+/// Whether the argument at a scalarized position is one the field projection
+/// applies to — its type must be the wrapper struct, however it is wrapped.
+///
+/// A clone's own scalarized parameter is the reason to ask. Unwrapping chains:
+/// `Formatter::write(&mut self)` reading only `self.buf` becomes
+/// `write$scalar(buf: &mut String)`, and a later round scalarizes that `String`
+/// in turn. A caller already holding the inner `String` must not have
+/// `Formatter`'s `buf` projected onto it a second time.
+fn arg_rewritable(
+    body: &Body,
+    op: Operand,
+    info: &SroaInfo,
+    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    type_table: &TypeTable,
+) -> bool {
+    // Already the field: a caller param scalarized from the same struct passes
+    // straight through. Matched as an operand, since the promoted form of that
+    // local reads it just as the skeleton one does.
+    if scalarized_from(body, op, scalar_param_struct).as_ref() == Some(&info.struct_key) {
+        return true;
+    }
+    let Some(arg) = op.as_expr() else {
+        // A promoted operand has no node to inspect, so take the value graph's
+        // type for it and require the same proof as any other argument.
+        return op
+            .as_value()
+            .and_then(|v| body.values.type_of(v))
+            .is_some_and(|ty| denotes_struct(ty, &info.struct_key, type_table));
+    };
+    denotes_struct(
+        body.exprs[peel_one_ref(body, arg)].type_id,
+        &info.struct_key,
+        type_table,
+    )
+}
+
+/// The struct a caller's own scalarized parameter came from, when `op` reads one.
+fn scalarized_from(
+    body: &Body,
+    op: Operand,
+    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+) -> Option<(String, ModuleSource)> {
+    scalar_param_struct
+        .iter()
+        .find(|(local, _)| is_local_operand(body, op, **local))
+        .map(|(_, key)| key.clone())
+}
+
+/// The single auto-ref wrapper [`rewrite_arg`] peels, so validation and rewrite
+/// look at the same node.
+fn peel_one_ref(body: &Body, arg: ExprId) -> ExprId {
+    match &body.exprs[arg].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } => inner.as_expr().unwrap_or(arg),
+        _ => arg,
+    }
+}
+
+/// Whether `ty` names the wrapper struct, directly or behind a reference or box.
+fn denotes_struct(ty: TypeId, key: &(String, ModuleSource), type_table: &TypeTable) -> bool {
+    struct_key_of(ty, type_table).as_ref() == Some(key)
+        || reference_param_struct_key(ty, type_table).as_ref() == Some(key)
+        || type_table
+            .box_payload_of(ty)
+            .is_some_and(|p| struct_key_of(p, type_table).as_ref() == Some(key))
 }
 
 /// The argument operand at a scalarized parameter position. The position exists
@@ -821,11 +1319,16 @@ fn rewrite_arg_operand(
     type_table: &TypeTable,
     span: Span,
 ) -> Operand {
+    // The promoted form of Case 2: the local already holds the field, so the
+    // call carries it unchanged.
+    if scalarized_from(body, op, scalar_param_struct).as_ref() == Some(&info.struct_key) {
+        return op;
+    }
     let Some(arg) = op.as_expr() else {
         return Operand::Expr(body.exprs.push(ExprNode {
             kind: ExprKind::FieldAccess {
                 expr: op,
-                field_index: 0,
+                field_index: info.field_index,
                 field_name: info.field_name.clone(),
             },
             type_id: info.inner_type_id,
@@ -855,40 +1358,76 @@ fn rewrite_arg(
         }
     }
 
-    // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap to
-    // its single field. Only a skeleton field is lifted in place; a promoted
-    // constant field falls through to Case 3's `FieldAccess` (`(Wrapper{V}).f`,
-    // folded later) since it has no node to become.
+    // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap
+    // to the field the callee reads. Only a skeleton field is lifted in place; a
+    // promoted constant field falls through to Case 3's `FieldAccess`
+    // (`(Wrapper{V}).f`, folded later) since it has no node to become.
+    //
+    // The other fields are dropped with the literal, so each must be something
+    // whose evaluation nothing observes — a constant, or a local read. That is
+    // the ordinary case for a record built to carry options at a call.
     if let ExprKind::StructLiteral {
         struct_type,
         fields,
         ..
     } = &body.exprs[arg].kind
         && struct_key_of(*struct_type, type_table).as_ref() == Some(&info.struct_key)
-        && fields.len() == 1
-        && let Some(fe) = fields[0].value.as_expr()
+        && let Some(used) = fields.iter().find(|f| f.field_index == info.field_index)
+        && let Some(fe) = used.value.as_expr()
+        && fields
+            .iter()
+            .all(|f| f.field_index == info.field_index || discardable_field(body, f.value))
     {
         become_expr(body, arg, fe);
         return;
     }
 
-    // Case 2: Local(x) whose own param was SROA'd from the same struct.
-    if let ExprKind::Local { index, .. } = &body.exprs[arg].kind
-        && scalar_param_struct.get(index) == Some(&info.struct_key)
+    // Case 2: a local whose own param was SROA'd from the same struct.
+    if scalarized_from(body, Operand::Expr(arg), scalar_param_struct).as_ref()
+        == Some(&info.struct_key)
     {
-        body.exprs[arg].type_id = info.inner_type_id;
+        body.exprs[arg].type_id = info.scalar_type_id;
         return;
     }
 
-    // Case 3: general — extract the field via FieldAccess.
+    // Case 3: general — extract the field via FieldAccess, re-borrowed when the
+    // callee writes through it. The `&mut` peeled above was the whole struct's;
+    // this one is the field's.
     let moved = body.take_expr(arg);
     let orig = body.exprs.push(moved);
-    body.exprs[arg].kind = ExprKind::FieldAccess {
-        expr: orig.into(),
-        field_index: 0,
-        field_name: info.field_name.clone(),
+    let span = body.exprs[arg].span;
+    let field = ExprNode {
+        kind: ExprKind::FieldAccess {
+            expr: orig.into(),
+            field_index: info.field_index,
+            field_name: info.field_name.clone(),
+        },
+        type_id: info.inner_type_id,
+        span,
     };
-    body.exprs[arg].type_id = info.inner_type_id;
+    body.exprs[arg] = field;
+    if let Some(op) = info.form.borrow_op() {
+        let moved_field = body.take_expr(arg);
+        let inner = body.exprs.push(moved_field);
+        body.exprs[arg] = ExprNode {
+            kind: ExprKind::Unary {
+                op,
+                expr: inner.into(),
+            },
+            type_id: info.scalar_type_id,
+            span,
+        };
+    }
+}
+
+/// Whether dropping this field initializer with its literal is unobservable.
+fn discardable_field(body: &Body, value: Operand) -> bool {
+    value.as_expr().is_none_or(|e| {
+        matches!(
+            &body.exprs[e].kind,
+            ExprKind::Local { .. } | ExprKind::PackedArray(_) | ExprKind::GlobalVarGet { .. }
+        )
+    })
 }
 
 // -----------------------------------------------------------------------

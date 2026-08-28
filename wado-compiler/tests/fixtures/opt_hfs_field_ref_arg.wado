@@ -20,17 +20,27 @@ fn field_len(b: &mut Buf) -> i32 {
     return b.s.len();
 }
 
+// Reads two fields, so `sroa_param` cannot scalarize the receiver to one of
+// them. Without a caller like this the whole `Buf` decomposes and there is no
+// field left to snapshot — the fixture would pass while testing nothing.
+#[inline(never)]
+fn both(b: &mut Buf) -> i32 {
+    return b.s.len() + b.n;
+}
+
 export fn run() {
-    let mut b = Buf { s: "z", n: 0 };
+    // Opaque so the whole struct does not const-fold away before HFS runs.
+    let mut b = Buf { s: builtin::black_box("z"), n: builtin::black_box(0) };
     let mut total = 0;
     for let mut i = 0; i < 2; i += 1 {
         swap_out(&mut b.s);
         total += field_len(&mut b);
+        total += both(&mut b);
         total += b.s.len();
         total += b.s.len();
         b.s = "z";
     }
-    assert total == 60, `expected 60, got {total}`;
+    assert total == 80, `expected 80, got {total}`;
     assert b.s == "z", `expected z, got {b.s}`;
 }
 

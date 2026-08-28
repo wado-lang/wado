@@ -101,6 +101,14 @@ pub fn param_spec_name(original: &str, ordinal: usize) -> String {
     format!("{original}$spec{ordinal}")
 }
 
+/// The name of `sroa_param`'s scalarized clone of `original`. The clone takes a
+/// field where the original took the struct around it; the original is left
+/// standing for whatever still needs that shape.
+#[must_use]
+pub fn sroa_param_name(original: &str) -> String {
+    format!("{original}$scalar")
+}
+
 /// The name of the synthesized `Case::<V, P>::extract` helper for a variant
 /// and one of its payload types, both identified by their structural mangles
 /// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites
@@ -206,6 +214,7 @@ pub fn to_kebab(name: &str) -> String {
 /// [`CLOSURE_CALL_METHOD`], this is purely a compiler-internal
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
+
 
 /// Prefix every compiler-synthesised block label carries.
 ///

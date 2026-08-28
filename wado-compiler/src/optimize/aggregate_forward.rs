@@ -94,7 +94,7 @@ impl Rule for AggregateForwardRule {
         let (Some(source), case_index) = (expr.as_expr(), *case_index) else {
             return false;
         };
-        let Some(payload) = construct_payload(&engine.body, source, case_index) else {
+        let Some(payload) = construct_payload(engine.body, source, case_index) else {
             return false;
         };
         engine.become_expr(id, payload);
@@ -107,18 +107,18 @@ impl Rule for AggregateForwardRule {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         let Some(at) = stmts.windows(2).position(|pair| {
-            binding(&engine.body, pair[0]).is_some_and(|(local, source)| {
-                consumer(&engine.body, pair[1], local, source).is_some()
+            binding(engine.body, pair[0]).is_some_and(|(local, source)| {
+                consumer(engine.body, pair[1], local, source).is_some()
                     && engine.local_reads(local).len() == 1
             })
         }) else {
             return false;
         };
-        let (local, source) = binding(&engine.body, stmts[at]).expect("just matched");
+        let (local, source) = binding(engine.body, stmts[at]).expect("just matched");
         if !engine.local_has_one_version(local) {
             return false;
         }
-        let (read, forwarded) = consumer(&engine.body, stmts[at + 1], local, source)
+        let (read, forwarded) = consumer(engine.body, stmts[at + 1], local, source)
             .expect("just matched");
         engine.become_expr(read, forwarded);
         let mut kept = stmts;
