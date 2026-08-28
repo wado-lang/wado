@@ -153,10 +153,10 @@ fn semantics_resolves_position_to_ast_id() {
 
 /// Verify that calls into stdlib resolve via the same `referenced_symbol`
 /// edge whether or not the stdlib snapshot cache served the stdlib
-/// module.  The semantics pipeline seeds `state.references` from the
-/// snapshot's drained `references` map and the per-compile elaborator
-/// walks the entry module's body to add the user-side use→def edges on
-/// top — both halves are needed for the cross-module jump-to-def to
+/// module.  Seeding clones each snapshot module's bindings into the
+/// `ModuleSemantics` its walk recorded them in, and the per-compile
+/// elaborator walks the entry module's body to add the user-side use→def
+/// edges — both halves are needed for the cross-module jump-to-def to
 /// work.
 #[test]
 fn semantics_resolves_stdlib_call_to_stdlib_def() {
@@ -556,15 +556,15 @@ export fn run() {
     // Every recorded i32 literal in the user module would be a regression
     // (the only literals are the two `1` / `2` args, which must surface as
     // i64 after type-arg inference).
-    let any_i32 = sem.expression_types.iter().any(|(id, &type_id)| {
-        sem.module_of_id(*id) == Some(&entry) && sem.types.type_name(type_id) == "i32"
+    let any_i32 = sem.iter_expression_types().any(|(id, type_id)| {
+        sem.module_of_id(id) == Some(&entry) && sem.types.type_name(type_id) == "i32"
     });
     assert!(
         !any_i32,
         "post-inference recoerce_literal_args must overwrite the pre-inference i32 entry",
     );
-    let saw_i64 = sem.expression_types.iter().any(|(id, &type_id)| {
-        sem.module_of_id(*id) == Some(&entry) && sem.types.type_name(type_id) == "i64"
+    let saw_i64 = sem.iter_expression_types().any(|(id, type_id)| {
+        sem.module_of_id(id) == Some(&entry) && sem.types.type_name(type_id) == "i64"
     });
     assert!(
         saw_i64,

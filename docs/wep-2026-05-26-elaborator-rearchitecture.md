@@ -142,6 +142,15 @@ Every fact map keys by bare `AstId`, which is globally unique
 (`(AstIdSpace, local)`). That is what lets a fact recorded while walking
 foreign AST name its node exactly, whichever module's map it lands in.
 
+A fact has one home, the map the walk wrote it into, and every phase reads it
+there. `Semantics`, keyed by bare `AstId` too, holds no second copy: it routes
+a fact to the module whose walk recorded it. Routing is per fact kind, because
+a node two walks reach splits its kinds across them — a callee's parameter
+default is typed at each call site, while its own module records the edges
+around it. Several walks can also hold one kind for one node, that default's
+type among them; the last module in `AnnotateState::module_semantics` order is
+the one routed to.
+
 ### Signatures — every declaration signature is a decl-pass fact
 
 Rule: after `annotate_decls`, no phase re-resolves a declaration signature
@@ -566,19 +575,6 @@ Closing it: bundle the borrowed inputs behind `ElabEnv`, dissolve
 `AnnotateState` — `tysys` and `module_semantics` land on `Semantics`, the rest
 are driver locals — collapse the per-module construction site, and move the
 recursion stack into `Scope` behind a guard.
-
-### One fact, two homes
-
-`TypeAnnotations` carries 31 fields. Five of them — `local_types`,
-`expression_types`, `method_dispatch`, `coercions`, `desugars` — are
-`mem::take`n out of every `ModuleSemantics` and re-published as flat maps on
-`Semantics`, leaving those five empty behind them. The other 26 stay where the
-walker wrote them, and `effect_check` reads them there. Nothing
-in either type says which half is live, so a consumer that guesses wrong reads
-an empty map instead of failing.
-
-Closing it: one home. Either the flat `Semantics` maps become views over
-`ModuleSemantics`, or the five fields leave `TypeAnnotations` outright.
 
 ### Two more implementations of type-parameter substitution
 
