@@ -46,9 +46,17 @@ fn is_wado_reserved(name: &String) -> bool {
     };
 }
 
-/// Escape an identifier that would collide with a Wado reserved word by appending '_'.
+/// The recognizer handles every generated body reads (`p.expect(...)`,
+/// `lx.set_type(...)`). A binding named after one shadows it with the matched
+/// value, so the next call in the alternative no longer compiles.
+fn is_recognizer_handle(name: &String) -> bool {
+    return *name == "p" || *name == "lx";
+}
+
+/// Escape an identifier that would collide with a Wado reserved word or a
+/// recognizer handle by appending '_'.
 pub fn escape_ident(name: &String) -> String {
-    if is_wado_reserved(name) {
+    if is_wado_reserved(name) || is_recognizer_handle(name) {
         return `${*name}_`;
     }
     return *name;

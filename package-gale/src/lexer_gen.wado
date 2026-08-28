@@ -441,14 +441,19 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
     w.end();
     w.blank();
 
+    // The type / channel latches are seeded with what the tournament decided, so
+    // an action reading `$type` sees the token's current type as ANTLR's would,
+    // and one that writes neither leaves the outcome unchanged.
     let mut fr = FnSpec::new(&"reset_actions");
     fr.set_receiver(&"&mut self");
+    fr.add_param(&"kind", &"i32");
+    fr.add_param(&"channel", &"i32");
     if uses_modes {
         fr.add_param(&"depth", &"i32");
     }
     fr.emit_begin(w);
-    w.line(&"self.act_type = -1;");
-    w.line(&"self.act_channel = -1;");
+    w.line(&"self.act_type = kind;");
+    w.line(&"self.act_channel = channel;");
     w.line(&"self.act_skip = false;");
     w.line(&"self.act_more = false;");
     if uses_modes {
@@ -475,8 +480,11 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
 }
 
 /// The mode commands. Each is a single latch the commit applies once per token,
-/// in a fixed push-pop-set order — hence the guard. No current-mode read is
-/// offered: `pop_mode` cannot restore a stack the `Lexer` has no copy of.
+/// in a fixed push-pop-set order — hence the guard, which sees every command
+/// issued before it. A `$mode` assignment writes the set latch without passing
+/// one, so the commit repeats the invariant over the latches themselves. No
+/// current-mode read is offered: `pop_mode` cannot restore a stack the `Lexer`
+/// has no copy of.
 fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
     let mut fp = FnSpec::new(&"push_mode", vis);
     fp.set_receiver(&"&mut self");
@@ -1104,9 +1112,9 @@ fn apply_fn_name(rule_name: &String) -> String {
 fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, use_modes: bool, has_set_mode_rules: bool) {
     w.begin(&"if best_act >= 0");
     if use_modes {
-        w.line(&"lexer.reset_actions(mode_stack.len());");
+        w.line(&"lexer.reset_actions(best_kind, best_channel, mode_stack.len());");
     } else {
-        w.line(&"lexer.reset_actions();");
+        w.line(&"lexer.reset_actions(best_kind, best_channel);");
     }
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
         let call = `${apply_fn_name(&act_rule_names[i])}(&mut lexer, start, best_end);`;
@@ -1120,13 +1128,21 @@ fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, us
     w.end();
     // Fold the latched effects into the tournament outcome. `best_channel` and
     // `best_more` exist because `has_actions` forced their machinery on;
-    // `best_act_skip` feeds the `is_skip` decision below. An untouched
-    // `act_type` / `act_channel` (<0) leaves the tournament value in place.
-    w.line(&"if lexer.act_type >= 0 { best_kind = lexer.act_type; }");
-    w.line(&"if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }");
+    // `best_act_skip` feeds the `is_skip` decision below. The type / channel
+    // latches were seeded with these values, so an action that wrote neither
+    // hands them straight back.
+    w.line(&"best_kind = lexer.act_type;");
+    w.line(&"best_channel = lexer.act_channel;");
     w.line(&"if lexer.act_more { best_more = true; }");
     w.line(&"if lexer.act_skip { best_act_skip = true; }");
     if use_modes {
+        // The commit applies the latches in a fixed push-pop-set order, so two
+        // of them would silently reorder. The command methods guard what they
+        // can see; a `$mode` assignment writes the set latch without passing
+        // one, so the invariant is repeated here over the latches themselves.
+        w.line(
+            &"assert (if lexer.act_push_mode >= 0 { 1 } else { 0 }) + (if lexer.act_pop_mode { 1 } else { 0 }) + (if lexer.act_set_mode >= 0 { 1 } else { 0 }) <= 1, \"a lexer action may issue at most one mode command per token\";",
+        );
         w.line(&"if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }");
         w.line(&"if lexer.act_pop_mode { best_pop_mode = true; }");
         if has_set_mode_rules {

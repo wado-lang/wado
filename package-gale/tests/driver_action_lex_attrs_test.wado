@@ -1,0 +1,39 @@
+//! Stage C: the lexer `$`-attribute surface in a `language = Wado` body.
+//! `$type = X` retypes the token the tournament is committing, and `$text`,
+//! `$index` and `$pos` read the match window it is committing over.
+
+use la from "./grammars/wado_lex_attrs.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_attrs" },
+    };
+
+test "$type retypes the winning token" {
+    let one = la::parse_s(&"a aa");
+    assert one.ok(), "clean parse";
+    assert one.output == "ab", `only the two-char match is retyped, got '${one.output}'`;
+}
+
+test "$type reads the type the tournament settled on" {
+    // The latch is seeded with the winning rule's kind, so the read answers what
+    // ANTLR's would rather than "no action has written this yet".
+    let out = la::parse_s(&"r");
+    assert out.ok(), "clean parse";
+    assert out.output == "b", `the action saw TK_R and retyped, got '${out.output}'`;
+}
+
+test "$text reads the matched slice" {
+    let out = la::parse_s(&"d dd");
+    assert out.ok(), "clean parse";
+    assert out.output == "db", `only 'dd' matches the text test, got '${out.output}'`;
+}
+
+test "$pos is the cursor's column, not its index" {
+    // Both matches are two chars long, so only the column tells them apart.
+    let at_start = la::parse_s(&"pp");
+    assert at_start.ok(), "clean parse";
+    assert at_start.output == "b", `column 2 retypes, got '${at_start.output}'`;
+
+    let indented = la::parse_s(&" pp");
+    assert indented.ok(), "clean parse";
+    assert indented.output == "p", `column 3 does not, got '${indented.output}'`;
+}

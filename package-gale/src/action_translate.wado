@@ -339,18 +339,26 @@ fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result
     };
 }
 
+/// What a lexer body may reach. The commit latches (`$type`, `$channel`,
+/// `$mode`) belong to an action: a predicate is evaluated for losing candidates
+/// too, so it holds `&Lexer` and settles nothing. `$mode` additionally needs a
+/// grammar that declares one — there is no latch to write otherwise.
+pub struct LexerAttrEnv {
+    pub in_action: bool = true,
+    pub uses_modes: bool = false,
+}
+
 /// Translate a lexer predicate / action body (identity translator): resolve
 /// lexer `$`-attributes to expressions over the match fn's `chars` / `start` /
-/// `pos`, leaving the surrounding host text (already Wado) verbatim. Only
-/// `$text` (the matched slice) is emitted today; any other `$`-reference is a
-/// loud error, so codegen never emits an unresolved `$ref`. A `$`-free body
-/// (`pos - start == 4`) passes through unchanged.
-pub fn translate_lexer_predicate(body: &String) -> Result<String, String> {
+/// `pos` and the `lx` commit latches, leaving the surrounding host text (already
+/// Wado) verbatim. An unresolved `$`-reference is a loud error, so codegen never
+/// emits one. A `$`-free body (`pos - start == 4`) passes through unchanged.
+pub fn translate_lexer_body(body: &String, env: &LexerAttrEnv) -> Result<String, String> {
     let raw = find_attr_refs(body);
     let mut refs: List<ResolvedAttr> = [];
     let mut replacements: List<String> = [];
     for let r of &raw {
-        replacements.push(lexer_attr_expr(r)?);
+        replacements.push(lexer_attr_expr(r, env)?);
         refs.push(ResolvedAttr {
             target: AttrTarget::LexerSpecial,
             name: r.name,
@@ -361,15 +369,6 @@ pub fn translate_lexer_predicate(body: &String) -> Result<String, String> {
         });
     }
     return Result::Ok(splice_attrs(body, &refs, &replacements));
-}
-
-/// Translate a lexer `{ ... }` action body (identity translator). Same
-/// resolution as `translate_lexer_predicate` — `$text` maps to the matched
-/// slice over the apply-fn's `chars` / `start` / `pos`, the rest passes through
-/// verbatim (already Wado, calling the `lx` action-context API). A body that
-/// references an unresolved `$`-attribute is a loud error.
-pub fn translate_lexer_action(body: &String) -> Result<String, String> {
-    return translate_lexer_predicate(body);
 }
 
 /// The match-fn expression for the text matched so far (`chars[start..pos]`),
@@ -390,25 +389,69 @@ pub fn lexer_token_start_column_expr() -> String {
     return "char_pos_in_line(chars, start)";
 }
 
-/// The match-fn expression a lexer `$`-attribute becomes. `$text` is the slice
-/// matched so far; other lexer attributes await their own resolution.
-fn lexer_attr_expr(r: &AttrRef) -> Result<String, String> {
-    if r.name == "text" && r.member matches { None } {
+/// The match-fn expression a lexer `$`-attribute becomes. The reads (`$text`,
+/// `$pos`, `$index`) are over the match window and answer in a predicate too;
+/// `$type` / `$channel` / `$mode` are the commit latches ANTLR lets an action
+/// assign, so `$type = X` and `lx.set_type(X)` write the same field.
+fn lexer_attr_expr(r: &AttrRef, env: &LexerAttrEnv) -> Result<String, String> {
+    if r.member matches { Some(_) } {
+        builtin::cold_path();
+        return Result::Err(`$${r.name}: a lexer attribute has no members`);
+    }
+    if r.name == "text" {
         return Result::Ok(lexer_matched_text_expr());
     }
-    builtin::cold_path();
-    return Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
+    if r.name == "pos" {
+        return Result::Ok(lexer_cursor_column_expr());
+    }
+    if r.name == "index" {
+        return Result::Ok("pos");
+    }
+    let latch = lexer_latch_field(&r.name);
+    if latch.is_empty() {
+        builtin::cold_path();
+        return Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
+    }
+    if !env.in_action {
+        builtin::cold_path();
+        return Result::Err(
+            `$${r.name}: a lexer predicate is evaluated for losing candidates too, so it settles nothing about the token`,
+        );
+    }
+    if r.name == "mode" && !env.uses_modes {
+        builtin::cold_path();
+        return Result::Err("$mode: this grammar declares no lexer mode to switch to");
+    }
+    return Result::Ok(`${LEXER_HANDLE}.${latch}`);
+}
+
+/// The `Lexer` latch a settable ANTLR lexer attribute names, empty for a name
+/// that is not one. Assigning the field is exactly what the matching command
+/// method does, so the `$`-form and `lx.set_*` are one write; the commit seeds
+/// the type / channel latches with the tournament's own answer, so a read of
+/// one gives the token's current value as ANTLR's would.
+fn lexer_latch_field(name: &String) -> String {
+    if *name == "type" {
+        return "act_type";
+    }
+    if *name == "channel" {
+        return "act_channel";
+    }
+    if *name == "mode" {
+        return "act_set_mode";
+    }
+    return "";
 }
 
 /// Resolve one whole `$ref` occurrence (delimiters included) in a lexer body,
 /// for a front end that has already isolated the reference (java2wado).
-pub fn resolve_lexer_attr_ref(text: &String) -> Result<String, String> {
+pub fn resolve_lexer_attr_ref(text: &String, env: &LexerAttrEnv) -> Result<String, String> {
     let refs = find_attr_refs(text);
     if refs.len() != 1 {
         builtin::cold_path();
         return Result::Err(`lexer attribute: '${*text}' is not a single $-reference`);
     }
-    return lexer_attr_expr(&refs[0]);
+    return lexer_attr_expr(&refs[0], env);
 }
 
 /// The local a call site binds a rule / label / token result to, matching

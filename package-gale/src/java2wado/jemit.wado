@@ -10,6 +10,7 @@ use {
     lexer_cursor_column_expr,
     lexer_token_start_column_expr,
     resolve_lexer_attr_ref,
+    LexerAttrEnv,
     resolve_attr_ref,
     binding_name,
     rule_binding_for,
@@ -68,6 +69,9 @@ pub struct JEnv {
     /// Whether the recognizer handle here is a shared reference. True only in a
     /// lexer predicate; every other body may write.
     pub read_only: bool = false,
+    /// Whether the grammar declares a lexer mode, which is what gives `$mode` a
+    /// latch to write.
+    pub uses_modes: bool = false,
 }
 
 /// Translate a lexer `{ ... }` action body. The lexer has no enclosing parser
@@ -278,7 +282,7 @@ pub fn emit_expr(
         Str(c) => Result::Ok(`"${*c}"`),
         Attr(text) => {
             if env.lexer {
-                resolve_lexer_attr_ref(text);
+                resolve_lexer_attr_ref(text, &LexerAttrEnv { in_action: !env.read_only, uses_modes: env.uses_modes });
             } else {
                 resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, &env.this_bind);
             }

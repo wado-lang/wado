@@ -23,8 +23,8 @@ use {
 use { map_java_type } from "./java2wado/jemit.wado";
 use {
     translate_wado_action,
-    translate_lexer_action,
-    translate_lexer_predicate,
+    translate_lexer_body,
+    LexerAttrEnv,
     LEXER_HANDLE,
     PARSER_HANDLE,
 } from "./action_translate.wado";
@@ -117,7 +117,9 @@ pub fn stage_lexer_bodies(
     mut_methods: &List<String> = &NO_MUT_METHODS,
 ) -> List<String> {
     let mut errors: List<String> = [];
-    let env = lexer_env(&grammar.name, member_methods, member_fields, mut_methods);
+    // The default mode is always index 0, so a second entry is the first `mode`.
+    let uses_modes = grammar.mode_names.len() > 1;
+    let env = lexer_env(&grammar.name, member_methods, member_fields, mut_methods, uses_modes);
     for let rule of &mut grammar.lexer_rules {
         for let alt of &mut rule.body {
             stage_lexer_alt(alt, lang, &env, &mut errors);
@@ -136,7 +138,10 @@ fn stage_lexer_body(a: &AltAction, lang: &ActionLanguage, env: &JEnv) -> Result<
         } else {
             translate_java_lexer_stmts(&a.source.text, env);
         },
-        Wado => if is_pred { translate_lexer_predicate(&a.source.text) } else { translate_lexer_action(&a.source.text) },
+        Wado => translate_lexer_body(
+            &a.source.text,
+            &LexerAttrEnv { in_action: !is_pred, uses_modes: env.uses_modes },
+        ),
         Other(name) => Result::Err(`no translator for action language '${name}'`),
     };
 }
@@ -187,6 +192,7 @@ fn lexer_env(
     member_methods: &List<String>,
     member_fields: &List<String>,
     mut_methods: &List<String>,
+    uses_modes: bool,
 ) -> JEnv {
     return JEnv {
         this_bind: LEXER_HANDLE,
@@ -195,6 +201,7 @@ fn lexer_env(
         lexer: true,
         fields: *member_fields,
         mut_methods: *mut_methods,
+        uses_modes,
     };
 }
 

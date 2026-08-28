@@ -181,12 +181,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // A wired parser base's bodies are Wado once the rewrite has run, so they
     // execute even under a host language java2wado carves out.
     ctx.set_emit_actions(should_emit_actions(grammar) || ctx.has_parser_superclass());
+    // Ahead of staging: a Java lexer body resolves its bare names and `this.`
+    // calls against the members declared here.
+    let lexer_members = collect_lexer_members(grammar, &mut ctx);
     // Stage the lexer bodies into Wado on exactly the grammars whose lexer
     // bodies `gen_lexer` emits (its `ea`), so the emitters splice ready text:
     // they hold no `GenContext`, so a failure reaching one could only panic.
-    // Before staging: a Java lexer body resolves its bare names and `this.`
-    // calls against the members this block declares.
-    let lexer_members = collect_lexer_members(grammar, &mut ctx);
     if lexer_grammar_executes_actions(grammar) || ctx.has_superclass() {
         // The call rewrite already turned a body under a wired base into Wado,
         // so it stages through the identity translator whatever the grammar

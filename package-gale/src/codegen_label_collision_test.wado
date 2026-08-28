@@ -34,6 +34,23 @@ WS : (' '|'\\n') -> skip ;
     assert out.find("let x = _parse_e(p") matches { Some(_) }, "no labelled binding emitted; the duplicate check would pass vacuously";
 }
 
+test "an element whose name is the recognizer handle does not shadow it" {
+    // `P` snake_cases to `p`, the parser handle every emitted call reads. Binding
+    // it verbatim shadowed the handle with an `i32`, so the next `p.` call in the
+    // alternative no longer compiled.
+    let g4 = "grammar T;
+r : P { p.emit(\"x\") } ;
+P : 'p' ;
+WS : ' ' -> skip ;
+";
+    let mut grammar = match parse_checked(g4) {
+        Ok(g) => g,
+        Err(e) => panic(`parse_checked failed: ${e.message}`),
+    };
+    let out = generate(&mut grammar, &GenerateOptions {}).source;
+    assert !out.contains("let p = p."), `the handle must not be shadowed: ${out}`;
+}
+
 /// Fail if `decl` appears twice before the next `\nfn ` boundary.
 fn assert_declared_once_per_fn(out: &String, decl: &String) {
     let mut pos = 0;

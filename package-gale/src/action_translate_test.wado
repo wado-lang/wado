@@ -1,6 +1,7 @@
 use {
     translate_wado_action,
-    translate_lexer_predicate,
+    translate_lexer_body,
+    LexerAttrEnv,
     rule_value_channel_ready,
     rule_returns_vals,
     rule_is_left_recursive,
@@ -12,6 +13,7 @@ use { parse } from "./g4/parser.wado";
 use { AltBinding } from "./attr_resolve.wado";
 
 global NO_BINDINGS: List<AltBinding> = [];
+global PRED_ATTRS: LexerAttrEnv = LexerAttrEnv { in_action: false };
 
 test "translate rewrites value-channel refs to vals fields" {
     let g = parse("grammar T;
@@ -221,19 +223,24 @@ e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
     assert out == " p.emit(p.rule_string_tree_final()); ", `out: '${out}'`;
 }
 
-test "translate_lexer_predicate maps $text to the matched slice" {
-    let out = translate_lexer_predicate(&" $text == \"enum\" ").unwrap();
+test "a lexer body maps $text to the matched slice" {
+    let out = translate_lexer_body(&" $text == \"enum\" ", &PRED_ATTRS).unwrap();
     assert out == " LexerSlice::new(chars, start, pos).to_string() == \"enum\" ", `out: '${out}'`;
 }
 
-test "translate_lexer_predicate leaves a $-free body verbatim" {
-    let out = translate_lexer_predicate(&" pos - start == 4 ").unwrap();
+test "a lexer body with no $-reference passes through verbatim" {
+    let out = translate_lexer_body(&" pos - start == 4 ", &PRED_ATTRS).unwrap();
     assert out == " pos - start == 4 ", `out: '${out}'`;
 }
 
-test "translate_lexer_predicate rejects an unsupported lexer attribute" {
-    let res = translate_lexer_predicate(&" $type == 1 ");
-    assert res.is_err(), "$type is not yet emitted for lexer predicates";
+test "a lexer predicate cannot reach a commit latch" {
+    // It is evaluated for every candidate rule, losers included, so it settles
+    // nothing about the token that wins. An action assigns the latch directly.
+    let res = translate_lexer_body(&" $type == 1 ", &PRED_ATTRS);
+    assert res.is_err(), "$type answers only in an action";
+
+    let out = translate_lexer_body(&" $type = 1 ", &LexerAttrEnv {}).unwrap();
+    assert out == " lx.act_type = 1 ", `out: '${out}'`;
 }
 
 test "wado_type_default covers the corpus surface" {
