@@ -182,9 +182,9 @@ wado query inlay-hints file.wado                                  # hints, splic
 
 `inlay-hints` takes a file, not a symbol, and prints every line that carries a
 hint with the labels spliced in at the anchors an editor would render them at
-(`let x‹: i32› = add(‹a: ›1, ‹b: ›2);`), in the LSP's default UTF-16 encoding.
-That is how to check anchor placement — against `example/`, say — without
-reading positions off a list.
+(`let x‹: i32› = add(‹a: ›1, ‹b: ›2);`). That is how to check anchor placement —
+against `example/`, say — without reading positions off a list. `--json` prints
+the raw hints instead, positioned in the LSP's default UTF-16 encoding.
 
 Common options:
 

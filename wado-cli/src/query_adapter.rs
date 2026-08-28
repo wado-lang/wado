@@ -909,11 +909,8 @@ fn print_inlay_hints_text(
             .get(hint.position.line as usize)
             .copied()
             .unwrap_or("");
-        let (_, column) = wado_lsp::text::lsp_position_to_line_col(source, hint.position, encoding);
-        let byte = line
-            .char_indices()
-            .nth(column.saturating_sub(1))
-            .map_or(line.len(), |(i, _)| i);
+        let byte =
+            wado_lsp::text::character_to_byte_offset(line, hint.position.character, encoding);
         by_line
             .entry(hint.position.line)
             .or_default()

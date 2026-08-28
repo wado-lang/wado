@@ -296,18 +296,16 @@ fn dot_form_param_names(func: &Function) -> Vec<String> {
 /// `Scale::scaled(&p, 2, 3)`, where the receiver *is* `args[0]`.
 ///
 /// The self param keeps its slot so every later argument still meets its own
-/// name; it is named [`SELF_PARAM`] so the receiver itself goes unlabelled.
+/// name; the parser names it [`SELF_PARAM`], so the receiver goes unlabelled.
 /// Dropping it instead shifts every label one argument to the left.
 fn path_form_param_names(func: &Function) -> Vec<String> {
-    func.params
-        .iter()
-        .map(|p| match p.self_kind {
-            ast::SelfKind::None => p.name.clone(),
-            ast::SelfKind::Value | ast::SelfKind::Ref | ast::SelfKind::MutRef => {
-                SELF_PARAM.to_string()
-            }
-        })
-        .collect()
+    debug_assert!(
+        func.params
+            .iter()
+            .all(|p| (p.self_kind == ast::SelfKind::None) == (p.name != SELF_PARAM)),
+        "a receiver is named `self` and nothing else can be",
+    );
+    func.params.iter().map(|p| p.name.clone()).collect()
 }
 
 impl AstVisitor for HintCollector<'_> {
