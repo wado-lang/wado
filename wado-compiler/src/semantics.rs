@@ -62,6 +62,9 @@ pub struct Semantics {
     /// position in [`AnnotateState::module_semantics`] — the routing every
     /// `AstId`-keyed query below reads through, in place of a second copy.
     /// Keyed by [`FactKind`] too: one node's kinds need not come from one walk.
+    /// Several walks can still hold one kind for one node — a callee's
+    /// parameter default is typed once per call site — and the last module in
+    /// [`AnnotateState::module_semantics`] order is the one routed to.
     pub(crate) fact_home: IndexMap<(AstId, FactKind), u32>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
@@ -1195,7 +1198,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let types = state.tysys.type_table.borrow().clone();
 
     // Route each fact to the module that holds it, rather than copying it out:
-    // where two walks reached a node, each kind goes to the walk that has it.
+    // where two walks reached a node, each kind goes to the walk that has it,
+    // and a kind both hold to the later module.
     let mut fact_home: IndexMap<(AstId, FactKind), u32> = IndexMap::default();
     for (home, sem) in state.module_semantics.values().enumerate() {
         let home = u32::try_from(home).expect("module count fits in u32");

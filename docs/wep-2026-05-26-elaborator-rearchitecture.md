@@ -145,9 +145,11 @@ foreign AST name its node exactly, whichever module's map it lands in.
 A fact has one home, the map the walk wrote it into, and every phase reads it
 there. `Semantics`, keyed by bare `AstId` too, holds no second copy: it routes
 a fact to the module whose walk recorded it. Routing is per fact kind, because
-a node two walks reach has kinds only one of them holds — a callee's parameter
+a node two walks reach splits its kinds across them — a callee's parameter
 default is typed at each call site, while its own module records the edges
-around it.
+around it. Several walks can also hold one kind for one node, that default's
+type among them; the last module in `AnnotateState::module_semantics` order is
+the one routed to.
 
 ### Signatures — every declaration signature is a decl-pass fact
 
