@@ -82,11 +82,34 @@ fn json_escape_free(s: &String) -> bool {
 /// Writes a JSON-escaped string (with surrounding quotes) into buf. Only `"`,
 /// `\`, and controls (< 0x20) are escaped — all ASCII, so a run of multi-byte
 /// UTF-8 copies through unchanged.
+///
+/// The scan runs first so the common escape-free string is a plain append run
+/// the NIR append fusion collapses; the escaping form is out-of-line and
+/// resumes at the offending byte.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
+    let n = s.len();
+    let mut i = 0;
+    while i < n {
+        let b = s.get_byte_unchecked(i);
+        if b >= 0x20 && b != 0x22 && b != 0x5C {
+            i += 1;
+            continue;
+        }
+        write_escaped_string_from(buf, s, i);
+        return;
+    }
+    buf.push('"');
+    buf.push_str(s);
+    buf.push('"');
+}
+
+/// Escaping tail of `write_escaped_string`, entered once the scan reaches
+/// `first`, the index of the first byte JSON must escape.
+fn write_escaped_string_from(buf: &mut String, s: &String, first: i32) {
     buf.push('"');
     let n = s.len();
     let mut run_start = 0;
-    for let mut i = 0; i < n; i += 1 {
+    for let mut i = first; i < n; i += 1 {
         let b = s.get_byte_unchecked(i);
         if b >= 0x20 && b != 0x22 && b != 0x5C {
             continue;
