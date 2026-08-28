@@ -185,3 +185,35 @@ directions, both lost:
 Generalizes: reach for `array.copy` and leave it alone. It is not what your
 profile is pointing at, so neither hand-rolling it nor contorting the algorithm
 to avoid it is worth spending a measurement on.
+
+## Widening `String::grow`'s growth factor (2026-08-28)
+
+`String::grow` doubles, so a serializer reaching a megabyte reallocates ~14
+times from `SERIALIZE_BUFFER_CAPACITY`'s 128 bytes. Widening the factor is worth
+a lot on one benchmark and costs on several others, and no model of *why* has
+survived contact with the numbers. Serialize throughput, best of 3-4 alternating
+on an idle host:
+
+| factor          | canada  | twitter | catalog | cbor-tw ser | fts    | twitter de |
+| --------------- | ------- | ------- | ------- | ----------- | ------ | ---------- |
+| 2 (today)       | 215.1   | 710.5   | 1.27 GB | 1.18 GB     | 19.73  | 161.3      |
+| 4               | **288.8** | 736.1 | 1.31 GB | 1.14 GB     | 19.25  | 154.3      |
+| 16              | 237.3   | 817.9   | 1.31 GB | —           | —      | —          |
+| 2 below 64 KiB, 4 above | 251.1 | 632.3 | — | 1.16 GB | — | — |
+
+Nothing explains the shape. It is not bytes zeroed: at factor 4 canada allocates
+*more* in total (~11.2 MB against ~8.4 MB, since the final capacity can reach
+4x the content) and runs 34% faster. It is not the allocation count either:
+factor 16 makes 5 allocations to factor 4's 9 and is **slower**. And the hybrid
+is worse than both flat factors on twitter while making fewer allocations than
+factor 2 and ending at the same capacity — twitter's response to the factor is
+not even monotonic (+15.8% at 16, +3.6% at 4, -10.5% at the hybrid).
+
+Reverted, all of it. The lead is real and unclaimed: **canada has ~30% sitting
+in buffer growth policy**, and the live-set rule is the obvious suspect — its
+parse tree stays reachable across the whole serialize loop, so every collection
+re-traces 55K `List`s and anything changing collection frequency moves the
+benchmark. Next attempt should instrument collections first, not guess a factor.
+Measure a candidate on cbor-twitter, fts and a deserialize phase too; those are
+where a wider factor takes its cost, and a factor tuned on canada alone looks
+free.
