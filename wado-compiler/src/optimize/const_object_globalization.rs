@@ -59,6 +59,7 @@ enum CandidateKind {
     InlineRef {
         /// The `Unary { op: Ref, .. }` node whose inner operand is hoisted.
         ref_expr: ExprId,
+        sibling_lets: Vec<StmtId>,
     },
     /// A constant aggregate handed to a call *by value* — `append(name,
     /// b"application/json")`. The value-copy planner leaves such an argument
@@ -69,6 +70,7 @@ enum CandidateKind {
     ValueArg {
         /// The argument node whose value is hoisted.
         arg_expr: ExprId,
+        sibling_lets: Vec<StmtId>,
     },
 }
 
@@ -194,14 +196,17 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                     "[NIR] const_object_globalization: LetBinding candidate's `let` \
                      (local {local_index}) went missing between collection and mutation"
                 );
-                inline_sibling_lets(body, local_index, &sibling_lets, &module_source, &name);
+                inline_sibling_lets(body, &sibling_lets, &module_source, &name);
                 debug_assert!(
                     !reads_local(body, local_index),
                     "[NIR] const_object_globalization: local {local_index} is still read \
                      after its `let` became a `GlobalVarSet`"
                 );
             }
-            CandidateKind::InlineRef { ref_expr } => {
+            CandidateKind::InlineRef {
+                ref_expr,
+                sibling_lets,
+            } => {
                 hoist_inline_ref(
                     body,
                     ref_expr,
@@ -210,8 +215,12 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                     ty,
                     guarded.then_some(is_uninitialized),
                 );
+                substitute_sibling_lets(body, &sibling_lets, &module_source, &name);
             }
-            CandidateKind::ValueArg { arg_expr } => {
+            CandidateKind::ValueArg {
+                arg_expr,
+                sibling_lets,
+            } => {
                 hoist_value_arg(
                     body,
                     arg_expr,
@@ -220,6 +229,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                     ty,
                     guarded.then_some(is_uninitialized),
                 );
+                substitute_sibling_lets(body, &sibling_lets, &module_source, &name);
             }
         }
         drop(func);
@@ -304,10 +314,15 @@ fn collect_candidates(
             let inner_ty = body.exprs[inner].type_id;
             if gate.is_reference_type(inner_ty)
                 && !leaked_ref_args.contains(&id)
-                && is_globalizable_const(body, inner, gate, &mut IndexSet::default())
+                && is_globalizable_const(body, inner, gate, &mut siblings.set.clone())
                 && contains_aggregate(body, inner, gate)
+                && let Some(sibling_lets) =
+                    substitutable_sibling_lets(body, Operand::Expr(inner), &siblings)
             {
-                let kind = CandidateKind::InlineRef { ref_expr: id };
+                let kind = CandidateKind::InlineRef {
+                    ref_expr: id,
+                    sibling_lets,
+                };
                 let guarded = needs_lazy_guard(body, inner, gate, kind.prefer_fixed_repr());
                 out.push(Candidate {
                     func_idx,
@@ -320,10 +335,18 @@ fn collect_candidates(
             }
         }
         if let NodeRef::Expr(id) = node {
-            let hoisted = value_arg_candidates(body, id, gate);
+            let hoisted = value_arg_candidates(body, id, gate, &siblings);
             if !hoisted.is_empty() {
                 for &arg in &hoisted {
-                    let kind = CandidateKind::ValueArg { arg_expr: arg };
+                    let Some(sibling_lets) =
+                        substitutable_sibling_lets(body, Operand::Expr(arg), &siblings)
+                    else {
+                        continue;
+                    };
+                    let kind = CandidateKind::ValueArg {
+                        arg_expr: arg,
+                        sibling_lets,
+                    };
                     let guarded = needs_lazy_guard(body, arg, gate, kind.prefer_fixed_repr());
                     out.push(Candidate {
                         func_idx,
@@ -531,7 +554,12 @@ fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
 /// in the callee's own body. That second gate is what makes sharing sound: a
 /// fresh literal is handed over uncopied, so a callee that writes its parameter
 /// would write the shared global.
-fn value_arg_candidates(body: &Body, expr: ExprId, gate: &Gate<'_>) -> Vec<ExprId> {
+fn value_arg_candidates(
+    body: &Body,
+    expr: ExprId,
+    gate: &Gate<'_>,
+    siblings: &SiblingConsts,
+) -> Vec<ExprId> {
     let (func_id, args, first_param) = match &body.exprs[expr].kind {
         ExprKind::Call { func_id, args, .. } => (*func_id, args, 0),
         _ => return Vec::new(),
@@ -553,7 +581,7 @@ fn value_arg_candidates(body: &Body, expr: ExprId, gate: &Gate<'_>) -> Vec<ExprI
         .filter(|&(pos, arg)| {
             let ty = body.exprs[arg].type_id;
             gate.is_reference_type(ty)
-                && is_globalizable_const(body, arg, gate, &mut IndexSet::default())
+                && is_globalizable_const(body, arg, gate, &mut siblings.set.clone())
                 && contains_aggregate(body, arg, gate)
                 && gate.callee_param_readonly(func_id, first_param + pos)
         })
@@ -788,26 +816,7 @@ fn let_stmt_qualifies(
     if buried.contains(&local_index) {
         return None;
     }
-    // A sibling-const read (the flattened builder-temp pair `let mut __b =
-    // <literal>; let xs = *__b`) qualifies only when every read of the sibling
-    // sits inside this initializer: the hoisted `GlobalVarSet` still evaluates
-    // at the binding's flow position, and confinement rules out another alias
-    // mutating the shared object behind the global. One whole-body and one
-    // in-`value` tally (not one per sibling) settle it.
-    let used_siblings = seeded_locals_read(body, value, siblings);
-    if !used_siblings.is_empty() {
-        let body_reads = count_reads_of(body, NodeRef::Block(body.root), &used_siblings);
-        let value_reads = value
-            .as_expr()
-            .map(|e| count_reads_of(body, NodeRef::Expr(e), &used_siblings))
-            .unwrap_or_default();
-        for &l in &used_siblings {
-            if body_reads.get(&l).copied().unwrap_or(0) != value_reads.get(&l).copied().unwrap_or(0)
-            {
-                return None;
-            }
-        }
-    }
+    let (used_siblings, lets) = confined_sibling_lets(body, value, siblings)?;
     let has_aggregate = contains_aggregate_operand(body, value, gate)
         || used_siblings.iter().any(|l| {
             siblings
@@ -818,11 +827,39 @@ fn let_stmt_qualifies(
     if !has_aggregate {
         return None;
     }
-    // Source order: the moved defs must precede the tail in the initializer
-    // block exactly as they did in the function. One already nested inside the
-    // initializer travels with the value, so relisting it would lift it out of
-    // its own scope, ahead of the sibling it reads.
-    let mut lets: Vec<StmtId> = used_siblings
+    Some(lets)
+}
+
+/// The sibling-const bindings `value` reads and the `let`s that define them, in
+/// source order — `None` when a sibling is read from outside `value` too.
+///
+/// A sibling's `let` moves into the hoisted initializer, so every read of it
+/// has to be confined to `value`: the `GlobalVarSet` still evaluates at the
+/// candidate's flow position, and confinement is what rules out another alias
+/// mutating the shared object behind the global. One whole-body and one
+/// in-`value` tally (not one per sibling) settle it. A `let` already nested
+/// inside `value` travels with it, so relisting it would lift it out of its own
+/// scope, ahead of the sibling it reads.
+fn confined_sibling_lets(
+    body: &Body,
+    value: Operand,
+    siblings: &SiblingConsts,
+) -> Option<(IndexSet<u32>, Vec<StmtId>)> {
+    let used = seeded_locals_read(body, value, siblings);
+    if !used.is_empty() {
+        let body_reads = count_reads_of(body, NodeRef::Block(body.root), &used);
+        let value_reads = value
+            .as_expr()
+            .map(|e| count_reads_of(body, NodeRef::Expr(e), &used))
+            .unwrap_or_default();
+        for &l in &used {
+            if body_reads.get(&l).copied().unwrap_or(0) != value_reads.get(&l).copied().unwrap_or(0)
+            {
+                return None;
+            }
+        }
+    }
+    let mut lets: Vec<StmtId> = used
         .iter()
         .filter_map(|l| siblings.let_stmts.get(l).copied())
         .collect();
@@ -831,7 +868,102 @@ fn let_stmt_qualifies(
         lets.retain(|s| !nested.contains(s));
     }
     lets.sort_by_key(|s| s.index());
+    Some((used, lets))
+}
+
+/// Sibling `let`s a hoisted expression can absorb by substitution: each defines
+/// an expression and is read exactly once inside `value`.
+///
+/// Substitution keeps the initializer one closed expression, which is what
+/// `wir_optimize::const_global` promotes to an instantiation-time constant.
+/// Wrapping it in a block instead leaves a runtime assignment, so the hoist
+/// buys nothing. Two reads name one shared object that duplicating the
+/// definition would split in two, so only a single read qualifies.
+fn substitutable_sibling_lets(
+    body: &Body,
+    value: Operand,
+    siblings: &SiblingConsts,
+) -> Option<Vec<StmtId>> {
+    let (used, lets) = confined_sibling_lets(body, value, siblings)?;
+    let reads = value
+        .as_expr()
+        .map(|e| count_reads_of(body, NodeRef::Expr(e), &used))
+        .unwrap_or_default();
+    for &l in &used {
+        if reads.get(&l).copied().unwrap_or(0) != 1
+            || !matches!(siblings.defs.get(&l), Some(Operand::Expr(_)))
+        {
+            return None;
+        }
+    }
     Some(lets)
+}
+
+/// Replace each sibling's single read inside the freshly planted
+/// `GlobalVarSet` with the expression it binds, then drop its `let`.
+fn substitute_sibling_lets(
+    body: &mut Body,
+    sibling_lets: &[StmtId],
+    module_source: &ModuleSource,
+    name: &str,
+) {
+    if sibling_lets.is_empty() {
+        return;
+    }
+    let mut defs: IndexMap<u32, ExprId> = IndexMap::default();
+    for &s in sibling_lets {
+        let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[s].kind
+        else {
+            continue;
+        };
+        let Some(def) = value.as_expr() else { continue };
+        defs.insert(*local_index, def);
+    }
+    let sibling_set: IndexSet<StmtId> = sibling_lets.iter().copied().collect();
+    for bid in body.blocks.keys().collect::<Vec<_>>() {
+        let stmts = &mut body.blocks[bid].stmts;
+        if stmts.iter().any(|s| sibling_set.contains(s)) {
+            stmts.retain(|s| !sibling_set.contains(s));
+        }
+    }
+    let Some(set_expr) = find_global_var_set(body, module_source, name) else {
+        panic!(
+            "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
+             between planting and sibling substitution"
+        );
+    };
+    let mut stack = vec![NodeRef::Expr(set_expr)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+            && let Some(&def) = defs.get(index)
+        {
+            body.exprs[e].kind = body.exprs[def].kind.clone();
+            continue;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+}
+
+fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> Option<ExprId> {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::GlobalVarSet {
+                name: n,
+                module_source: ms,
+                ..
+            } = &body.exprs[e].kind
+            && n == name
+            && ms == module_source
+        {
+            return Some(e);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    None
 }
 
 fn stmts_within_operand(body: &Body, value: Operand) -> IndexSet<StmtId> {
@@ -2245,7 +2377,6 @@ fn rewrite_promoted_reads(
 /// guarantees the moved bindings have no other readers.
 fn inline_sibling_lets(
     body: &mut Body,
-    local_index: u32,
     sibling_lets: &[StmtId],
     module_source: &ModuleSource,
     name: &str,
@@ -2303,8 +2434,8 @@ fn inline_sibling_lets(
         body.for_each_child(node, |c| stack.push(c));
     }
     panic!(
-        "[NIR] const_object_globalization: GlobalVarSet for {name} (local {local_index}) \
-         went missing between planting and sibling inlining"
+        "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
+         between planting and sibling inlining"
     );
 }
 
