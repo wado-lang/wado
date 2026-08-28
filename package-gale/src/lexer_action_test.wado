@@ -351,6 +351,82 @@ B : 'b' ;
     assert unsupported_count(no_modes) == 1, "$mode with no mode to switch to must be reported";
 }
 
+test "$mode reads the mode the token is being matched in" {
+    // The set latch is the pending command (-1 until one is issued), so a read
+    // of it would answer -1 rather than the current mode. It has its own field,
+    // seeded per token from the tokenize loop's `current_mode`.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { if $mode == 0 { $mode = MODE_TAIL } } ;
+mode TAIL;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 0, "reading $mode must not warn";
+    let out = gen_source(src);
+    assert out.contains("lx.mode() == 0"), "the read goes through the current-mode reader";
+    assert out.contains("lx.act_set_mode = MODE_TAIL"), "the assignment still writes the command latch";
+    assert out.contains("lexer.reset_actions(best_kind, best_channel, mode_stack.len(), current_mode);"), "the current mode is seeded per token";
+    assert out.contains("self.act_mode = m;"), "a mode command moves what a later read answers";
+    assert out.contains("assert self.act_mode >= 0,"), "pop_mode's restore target is not on the Lexer, and says so";
+}
+
+test "$mode cannot be read and assigned in one site" {
+    // The read and the write are different fields, so `+=` has no single
+    // expression to become.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $mode += 1 } ;
+mode TAIL;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "a compound assignment to $mode must be reported";
+}
+
+test "a lexer attribute over the match window is not assignable" {
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $text = \"b\" } ;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "$text is a read of the match window";
+}
+
+test "a keyword-shaped rule carrying a body is matched, not reclassified" {
+    // The keyword classifier runs behind a carrier's match and rewrites only
+    // `best_kind`: the replay would dispatch the carrier's actions and never
+    // this rule's, and the carrier's match already settled what the predicate
+    // would have had a say in. So such a rule keeps its own matcher.
+    let with_action = gen_source(&"grammar T;
+options { language = Wado; }
+r : A ID ;
+A : 'A' { lx.set_channel(1) } ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t\\n\\r]+ -> skip ;
+");
+    assert with_action.contains("fn try_A("), "an action-carrying keyword keeps its own matcher";
+    assert with_action.contains("apply_A_actions(&mut lexer, start, best_end);"), "so its actions are dispatched";
+
+    let with_pred = gen_source(&"grammar T;
+options { language = Wado; }
+r : A ID ;
+A : 'A' { start == 0 }? ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t\\n\\r]+ -> skip ;
+");
+    assert with_pred.contains("fn try_A("), "a predicate-carrying keyword keeps its own matcher";
+
+    // The shortcut still applies to the plain shape it was written for.
+    let plain = gen_source(&"grammar T;
+options { language = Wado; }
+r : A ID ;
+A : 'A' ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t\\n\\r]+ -> skip ;
+");
+    assert !plain.contains("fn try_A("), "a bare keyword is still reclassified from its carrier";
+    assert plain.contains("fn classify_keyword("), "by the classifier";
+}
+
 test "a lexer predicate cannot reach the commit latches" {
     // A predicate is evaluated for every candidate rule, losers included, so it
     // settles nothing about the token that wins.
@@ -525,29 +601,41 @@ WS : ' ' -> skip ;
 }
 
 test "an action may issue at most one mode command per token" {
-    let src = gen_source(&"lexer grammar L;
+    let commands_only = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : '[' { this.hit() } ;
 WS : ' ' -> skip ;
 mode Arg;
 C : ']' ;
 ");
-    assert src.contains("assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0,"), "each mode command guards against a second one";
-    // A `$mode` assignment writes the set latch without passing a command, so
+    assert commands_only.contains("assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0,"), "each mode command guards against a second one";
+    // Every command passes that guard, so a grammar whose only mode writes are
+    // commands has the invariant covered — it must not pay for it again per
+    // token.
+    assert !commands_only.contains("<= 1, \"a lexer action may issue at most one mode command per token\""), "no second check where every write passes a command";
+
+    // A `$mode` assignment reaches the set latch without passing one, so there
     // the commit repeats the invariant over the latches themselves.
-    assert src.contains("<= 1, \"a lexer action may issue at most one mode command per token\""), "the commit guards the latches a $mode assignment can reach";
+    let assigns_mode = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $mode = MODE_TAIL } ;
+mode TAIL;
+B : 'b' ;
+");
+    assert assigns_mode.contains("<= 1, \"a lexer action may issue at most one mode command per token\""), "the commit guards the latches a $mode assignment can reach";
 }
 
-test "the lexer exposes no current-mode read" {
-    let src = gen_source(&"lexer grammar L;
+test "the current-mode read is emitted only for a grammar that asks for it" {
+    let unread = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : '[' { this.hit() } ;
 WS : ' ' -> skip ;
 mode Arg;
 C : ']' ;
 ");
-    assert !src.contains("fn mode(&self)"), "no stale current-mode read";
-    assert src.contains("fn mode_depth(&self) -> i32 {"), "the depth a base branches on stays";
+    assert !unread.contains("fn mode(&self)"), "no current-mode read where no body reads one";
+    assert !unread.contains("act_mode ="), "and no field to seed";
+    assert unread.contains("fn mode_depth(&self) -> i32 {"), "the depth a base branches on stays";
 }
 
 test "the emit hook fires once per emitted token, never for a skipped one" {

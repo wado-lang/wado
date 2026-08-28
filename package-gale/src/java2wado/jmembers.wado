@@ -6,7 +6,7 @@ use { ParserRule, Visibility } from "../ir.wado";
 use { JToken } from "./jlexer.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr, JStmt } from "./jparser.wado";
-use { emit_java_stmts, emit_expr, map_java_type, JEnv } from "./jemit.wado";
+use { emit_java_stmts, emit_expr, map_java_type, with_locals, JEnv } from "./jemit.wado";
 use { to_snake_case } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 
@@ -34,31 +34,29 @@ pub struct MemberDecls {
     pub methods: List<MemberMethod>,
 }
 
-/// The snake_cased names of the methods that take `&mut self`.
-pub fn mutating_method_names(members: &MemberDecls) -> List<String> {
-    let mut out: List<String> = [];
+/// What an action / predicate body may resolve a bare name against: the
+/// `@members` methods and fields the grammar declares, plus which of the methods
+/// write through the recognizer. All snake_cased, as the declarations are.
+pub struct MemberNames {
+    pub methods: List<String> = [],
+    pub fields: List<String> = [],
+    /// Only consulted where the handle is a shared reference (a lexer
+    /// predicate); a name scan that has not translated the bodies leaves it
+    /// empty, which is why the scan never feeds a lexer body.
+    pub mutating: List<String> = [],
+}
+
+/// The names translated members declare.
+pub fn member_names(members: &MemberDecls) -> MemberNames {
+    let mut out = MemberNames {};
     for let m of &members.methods {
+        out.methods.push(m.name);
         if m.mutates {
-            out.push(m.name);
+            out.mutating.push(m.name);
         }
     }
-    return out;
-}
-
-/// Every method name a body may call.
-pub fn member_method_names(members: &MemberDecls) -> List<String> {
-    let mut out: List<String> = [];
-    for let m of &members.methods {
-        out.push(m.name);
-    }
-    return out;
-}
-
-/// The field names a body may read.
-pub fn member_field_names(members: &MemberDecls) -> List<String> {
-    let mut out: List<String> = [];
     for let f of &members.fields {
-        out.push(f.name);
+        out.fields.push(f.name);
     }
     return out;
 }
@@ -78,7 +76,15 @@ struct ParsedMethod {
 /// against the block's own method names.
 pub fn translate_java_members(body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
     let tokens = tokenize_java(body)?;
-    let env = JEnv { this_bind: "self", grammar: *grammar_name, methods: scan_method_names(&tokens) };
+    // A method body resolves names against the whole block: its siblings, and
+    // the fields declared after it as much as before it.
+    let scanned = scan_member_names(&tokens);
+    let env = JEnv {
+        this_bind: "self",
+        grammar: *grammar_name,
+        methods: scanned.methods,
+        fields: scanned.fields,
+    };
     let mut fields: List<MemberField> = [];
     let mut parsed: List<ParsedMethod> = [];
     let mut pos = 0;
@@ -103,7 +109,14 @@ pub fn translate_java_members(body: &String, grammar_name: &String) -> Result<Me
         let dummy = ParserRule::new("", Visibility::Default, [], []);
         let no_rules: List<ParserRule> = [];
         let no_bindings: List<AltBinding> = [];
-        let body_wado = emit_java_stmts(&dummy, &no_rules, &m.stmts, false, &no_bindings, &env)?;
+        // The parameters shadow a field of the same name, as Java's scoping does,
+        // and so do the body's own locals.
+        let mut menv = env;
+        for let p of &m.params {
+            menv.locals.push(p.0);
+        }
+        let scoped = with_locals(&menv, &m.stmts);
+        let body_wado = emit_java_stmts(&dummy, &no_rules, &m.stmts, false, &no_bindings, &scoped)?;
         let name = to_snake_case(&m.name);
         let mutates = mut_methods.contains(&name);
         let source = build_method(&name, &m.params, &m.ret_java, &body_wado, mutates)?;
@@ -246,18 +259,18 @@ fn call_method_name(callee: &JExpr) -> String {
     };
 }
 
-/// The snake_cased method names a `@members` block declares, for resolving method
-/// calls in other action bodies. Best-effort: a malformed block yields the names
-/// it can, and the real translation reports the error.
-pub fn java_member_method_names(body: &String) -> List<String> {
+/// The snake_cased names a `@members` block declares, for resolving calls and
+/// bare names in other action bodies. Best-effort: a malformed block yields the
+/// names it can, and the real translation reports the error.
+pub fn java_member_names(body: &String) -> MemberNames {
     return match tokenize_java(body) {
-        Ok(tokens) => scan_method_names(&tokens),
-        Err(_) => [],
+        Ok(tokens) => scan_member_names(&tokens),
+        Err(_) => MemberNames {},
     };
 }
 
-fn scan_method_names(tokens: &List<JToken>) -> List<String> {
-    let mut names: List<String> = [];
+fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
+    let mut out = MemberNames {};
     let mut pos = 0;
     while pos < tokens.len() {
         skip_modifiers(tokens, &mut pos);
@@ -273,7 +286,7 @@ fn scan_method_names(tokens: &List<JToken>) -> List<String> {
         }
         pos += 2;
         if punct_is(tokens, pos, &"(") {
-            names.push(to_snake_case(&name_opt.unwrap()));
+            out.methods.push(to_snake_case(&name_opt.unwrap()));
             pos = skip_parens(tokens, pos);
             if !punct_is(tokens, pos, &"{") {
                 break;
@@ -284,6 +297,7 @@ fn scan_method_names(tokens: &List<JToken>) -> List<String> {
             }
             pos = close.unwrap() + 1;
         } else {
+            out.fields.push(to_snake_case(&name_opt.unwrap()));
             while pos < tokens.len() && !punct_is(tokens, pos, &";") {
                 pos += 1;
             }
@@ -292,7 +306,7 @@ fn scan_method_names(tokens: &List<JToken>) -> List<String> {
             }
         }
     }
-    return names;
+    return out;
 }
 
 fn skip_parens(tokens: &List<JToken>, open: i32) -> i32 {

@@ -2,15 +2,16 @@ use { translate_action, translate_predicate, translate_members, grammar_has_supe
 use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
 use { AltBinding } from "./attr_resolve.wado";
+use { MemberNames } from "./java2wado/jmembers.wado";
 
 global NO_BINDINGS: List<AltBinding> = [];
-global NO_METHODS: List<String> = [];
+global NO_MEMBERS: MemberNames = MemberNames {};
 
 fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
-    return java_pred_m(src, rule_src, vals_in_scope, &NO_METHODS);
+    return java_pred_m(src, rule_src, vals_in_scope, &NO_MEMBERS);
 }
 
-fn java_pred_m(src: &String, rule_src: &String, vals_in_scope: bool, methods: &List<String>) -> String {
+fn java_pred_m(src: &String, rule_src: &String, vals_in_scope: bool, members: &MemberNames) -> String {
     let g = parse(`grammar T;
 ${*rule_src}
 `).unwrap();
@@ -23,7 +24,7 @@ ${*rule_src}
         vals_in_scope,
         &NO_BINDINGS,
         &g.name,
-        methods,
+        members,
     ).unwrap();
 }
 
@@ -40,7 +41,7 @@ ${*rule_src}
         vals_in_scope,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
 }
 
@@ -71,9 +72,25 @@ test "java predicate: token text equals" {
 }
 
 test "java predicate: member method call snake-cases" {
-    let methods: List<String> = ["pred"];
-    let out = java_pred_m(&"this.pred($i == 99)", &"a[i32 i] : ID ;", true, &methods);
+    let members = MemberNames {
+        methods: ["pred"],
+    };
+    let out = java_pred_m(&"this.pred($i == 99)", &"a[i32 i] : ID ;", true, &members);
     assert out == "p.pred(vals.i == 99)", `out: '${out}'`;
+}
+
+test "java action: a bare @members field reads through the recognizer" {
+    // Java reaches a field bare; unqualified it would name nothing in Wado.
+    let members = MemberNames {
+        fields: ["calls"],
+    };
+    let out = java_action_m(&"calls = calls + 1;", &"a : ID ;", false, &members);
+    assert out == "p.calls = p.calls + 1;", `out: '${out}'`;
+
+    // A rule argument is a parameter of the generated fn, so it shadows the
+    // field, as it does in ANTLR's own output.
+    let shadowed = java_action_m(&"calls = calls + 1;", &"a[i32 calls] : ID ;", true, &members);
+    assert shadowed == "calls = calls + 1;", `shadowed: '${shadowed}'`;
 }
 
 test "java: an undeclared recognizer method is a loud error" {
@@ -91,8 +108,10 @@ test "java: an unknown Type constant is a loud error" {
 }
 
 test "java: a declared @members method resolves; an undeclared sibling does not" {
-    let methods: List<String> = ["is_keyword"];
-    let ok = java_pred_m(&"this.isKeyword()", &"a : ID ;", false, &methods);
+    let members = MemberNames {
+        methods: ["is_keyword"],
+    };
+    let ok = java_pred_m(&"this.isKeyword()", &"a : ID ;", false, &members);
     assert ok == "p.is_keyword()", `out: '${ok}'`;
 
     let res = java_pred_res(&"this.isKeyword()", &"a : ID ;", false);
@@ -144,6 +163,35 @@ test "java members: a write one receiver down still counts" {
     assert m.methods[1].mutates, `hidden: '${m.methods[1].source}'`;
 }
 
+test "java members: a method body reads a field of its own block, bare or qualified" {
+    // Java reaches a field either way, and the declaration is snake_cased, so
+    // both spellings have to land on the same struct field.
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int nestLevel = 0;
+          int bare() { return nestLevel + 1; }
+          int qualified() { return this.nestLevel + 1; }",
+        &"T",
+    ).unwrap();
+    assert m.fields[0].name == "nest_level", `field: '${m.fields[0].name}'`;
+    assert m.methods[0].source.contains("return self.nest_level + 1;"), `bare: '${m.methods[0].source}'`;
+    assert m.methods[1].source.contains("return self.nest_level + 1;"), `qualified: '${m.methods[1].source}'`;
+}
+
+test "java members: a local or parameter shadows a field of the same name" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int n = 0;
+          int shadowed(int n) { return n; }
+          int local() { int n = 2; return n; }",
+        &"T",
+    ).unwrap();
+    assert m.methods[0].source.contains("return n;"), `param: '${m.methods[0].source}'`;
+    assert m.methods[1].source.contains("return n;"), `local: '${m.methods[1].source}'`;
+}
+
 test "java members: printing writes the output sink, so its method takes &mut self" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"void say() { System.out.println(\"x\"); }", &"T").unwrap();
@@ -169,7 +217,7 @@ e returns [i32 v] : ID ;
         false,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == "x.v + 1", `out: '${out}'`;
 }
@@ -187,7 +235,7 @@ r : ID ;
         false,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == "`ID ${p.token_text(id)}`", `out: '${out}'`;
 }
@@ -205,12 +253,16 @@ r returns [i32 v] : ID { $v = 1; } ;
         true,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == " vals.v = 1; ", `out: '${out}'`;
 }
 
 fn java_action(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
+    return java_action_m(src, rule_src, vals_in_scope, &NO_MEMBERS);
+}
+
+fn java_action_m(src: &String, rule_src: &String, vals_in_scope: bool, members: &MemberNames) -> String {
     let g = parse(`grammar T;
 ${*rule_src}
 `).unwrap();
@@ -223,7 +275,7 @@ ${*rule_src}
         vals_in_scope,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        members,
     ).unwrap();
 }
 
@@ -240,7 +292,7 @@ ${*rule_src}
         vals_in_scope,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
 }
 
@@ -260,7 +312,7 @@ ${*rule}
         false,
         &NO_BINDINGS,
         &"T",
-        &NO_METHODS,
+        &NO_MEMBERS,
         &"{'a'}",
     );
     assert vocab matches { Ok(code) && code.contains("{'a'}") }, `${vocab:?}`;
@@ -280,7 +332,7 @@ ${*rule}
             false,
             &NO_BINDINGS,
             &"T",
-            &NO_METHODS,
+            &NO_MEMBERS,
             &"{'a'}",
         );
         assert out matches { Err(_) }, `${*body} must not fold: ${out:?}`;
@@ -366,7 +418,7 @@ e returns [i32 v] : e '+' e | INT ;
         true,
         &bindings,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == "vals.v = _lr_acc.v + e.v;", `out: '${out}'`;
 }
@@ -384,7 +436,7 @@ e returns [i32 v] : e '+' e | INT ;
         true,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == "_lr_acc.v > 0", `out: '${out}'`;
 }
@@ -402,7 +454,7 @@ r returns [i32 v] : INT ;
         true,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
     assert res.is_err(), "$ctx child access outside an LR rule must be a loud error";
 }
@@ -479,7 +531,7 @@ A : '!' ;
         false,
         &bindings,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
         true,
     );
     assert mandatory matches { Ok(code) && code == "true" }, `${mandatory:?}`;
@@ -494,7 +546,7 @@ A : '!' ;
         false,
         &bindings,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
     assert mid_alt matches { Err(_) }, `a mid-alternative position must not fold: ${mid_alt:?}`;
 
@@ -506,7 +558,7 @@ A : '!' ;
         false,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
     assert optional matches { Err(_) }, `an unbound token must not fold: ${optional:?}`;
 }

@@ -36,13 +36,14 @@ use {
     translate_java_lexer_stmts,
     JEnv,
 } from "./java2wado/jemit.wado";
-use { translate_java_members, java_member_method_names, MemberDecls } from "./java2wado/jmembers.wado";
+use { translate_java_members, java_member_names, MemberDecls, MemberNames } from "./java2wado/jmembers.wado";
 use { translate_wado_members } from "./wado_members.wado";
 use { AltBinding } from "./attr_resolve.wado";
 
 /// Translate an action body to Wado: `Wado` routes to the identity translator,
 /// `Java` to java2wado, any other language is a loud error. `grammar_name` and
-/// `member_methods` let the Java front end resolve method calls / token constants.
+/// `members` let the Java front end resolve method calls, field reads and token
+/// constants.
 pub fn translate_action(
     lang: &ActionLanguage,
     rule: &ParserRule,
@@ -51,7 +52,7 @@ pub fn translate_action(
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     grammar_name: &String,
-    member_methods: &List<String>,
+    members: &MemberNames,
     expected: &String = &NO_EXPECTED,
     at_alt_end: bool = false,
 ) -> Result<String, String> {
@@ -61,7 +62,9 @@ pub fn translate_action(
             let env = JEnv {
                 this_bind: PARSER_HANDLE,
                 grammar: *grammar_name,
-                methods: *member_methods,
+                methods: members.methods,
+                fields: members.fields,
+                locals: arg_names(rule),
                 expected: *expected,
                 at_alt_end,
             };
@@ -75,9 +78,16 @@ pub fn translate_action(
 /// one there is reported rather than given a set that is not ANTLR's.
 global NO_EXPECTED: String = "";
 
-/// No member method writes through the recognizer — the default where a caller
-/// declares none.
-global NO_MUT_METHODS: List<String> = [];
+/// A rule's argument names, which are parameters of the generated parse fn and
+/// so are in scope bare — shadowing a `@members` field of the same name, as they
+/// do in ANTLR's own output.
+fn arg_names(rule: &ParserRule) -> List<String> {
+    let mut out: List<String> = [];
+    for let a of &rule.args {
+        out.push(a.name);
+    }
+    return out;
+}
 
 /// Translate a semantic-predicate body (`{ cond }?`) to a Wado boolean
 /// expression, dispatching on the action language as `translate_action` does.
@@ -89,7 +99,7 @@ pub fn translate_predicate(
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     grammar_name: &String,
-    member_methods: &List<String>,
+    members: &MemberNames,
     at_alt_end: bool = false,
 ) -> Result<String, String> {
     return match lang {
@@ -98,7 +108,9 @@ pub fn translate_predicate(
             let env = JEnv {
                 this_bind: PARSER_HANDLE,
                 grammar: *grammar_name,
-                methods: *member_methods,
+                methods: members.methods,
+                fields: members.fields,
+                locals: arg_names(rule),
                 at_alt_end,
             };
             translate_java_expr(rule, rules, body, vals_in_scope, bindings, &env);
@@ -110,17 +122,11 @@ pub fn translate_predicate(
 /// Stage every lexer action / predicate body in place into its Wado form, so
 /// the `lexer_gen` emitters splice ready text. A body that will not translate
 /// is dropped here and reported, never left to panic from inside an emitter.
-pub fn stage_lexer_bodies(
-    grammar: &mut Grammar,
-    lang: &ActionLanguage,
-    member_methods: &List<String>,
-    member_fields: &List<String>,
-    mut_methods: &List<String> = &NO_MUT_METHODS,
-) -> List<String> {
+pub fn stage_lexer_bodies(grammar: &mut Grammar, lang: &ActionLanguage, members: &MemberNames) -> List<String> {
     let mut errors: List<String> = [];
     // The default mode is always index 0, so a second entry is the first `mode`.
     let uses_modes = grammar.mode_names.len() > 1;
-    let env = lexer_env(&grammar.name, member_methods, member_fields, mut_methods, uses_modes);
+    let env = lexer_env(&grammar.name, members, uses_modes);
     for let rule of &mut grammar.lexer_rules {
         for let alt of &mut rule.body {
             stage_lexer_alt(alt, lang, &env, &mut errors);
@@ -188,20 +194,14 @@ fn stage_lexer_elem(elem: &LexerElement, lang: &ActionLanguage, env: &JEnv, erro
     };
 }
 
-fn lexer_env(
-    grammar_name: &String,
-    member_methods: &List<String>,
-    member_fields: &List<String>,
-    mut_methods: &List<String>,
-    uses_modes: bool,
-) -> JEnv {
+fn lexer_env(grammar_name: &String, members: &MemberNames, uses_modes: bool) -> JEnv {
     return JEnv {
         this_bind: LEXER_HANDLE,
         grammar: *grammar_name,
-        methods: *member_methods,
+        methods: members.methods,
         lexer: true,
-        fields: *member_fields,
-        mut_methods: *mut_methods,
+        fields: members.fields,
+        mut_methods: members.mutating,
         uses_modes,
     };
 }
@@ -214,20 +214,26 @@ pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &St
     };
 }
 
-/// The snake_cased method names the grammar's `@members` blocks declare, so
-/// action / predicate bodies can resolve `this.m()` and bare `m()` calls against
-/// real methods rather than snake_casing anything.
-pub fn collect_member_method_names(grammar: &Grammar) -> List<String> {
-    let mut names: List<String> = [];
+/// The snake_cased names the grammar's `@members` blocks declare, so action /
+/// predicate bodies can resolve `this.m()` and bare `m()` calls, and bare field
+/// reads, against real declarations rather than snake_casing anything. Scanned
+/// rather than translated: the parser's members are translated later, and a
+/// body's own diagnostic is the better place for a malformed block to surface.
+pub fn collect_member_names(grammar: &Grammar) -> MemberNames {
+    let mut out = MemberNames {};
     for let act of &grammar.named_actions {
         if !is_parser_members(act, &grammar.kind) {
             continue;
         }
-        for let n of &java_member_method_names(&act.body.text) {
-            names.push(*n);
+        let scanned = java_member_names(&act.body.text);
+        for let n of &scanned.methods {
+            out.methods.push(*n);
+        }
+        for let n of &scanned.fields {
+            out.fields.push(*n);
         }
     }
-    return names;
+    return out;
 }
 
 /// Whether the grammar declares `options { superClass = ... }`. Its actions call

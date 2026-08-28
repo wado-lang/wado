@@ -20,6 +20,7 @@ use {
 } from "./gen_util.wado";
 use { Diagnostic, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
 use { AltBinding } from "./attr_resolve.wado";
+use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
 use { TreeMap } from "core:collections";
 
@@ -208,11 +209,11 @@ pub struct GenContext {
     /// action / predicate splice sites route to the right translator front
     /// end (identity for Wado, java2wado for Java). Set once at codegen entry.
     action_language: ActionLanguage,
-    /// The grammar name and its `@members` method names, so the java2wado front
-    /// end resolves `T.CONST` token constants and `this.m()` / `m()` calls
-    /// against real declarations. Set once at codegen entry.
+    /// The grammar name and its `@members` declarations, so the java2wado front
+    /// end resolves `T.CONST` token constants, `this.m()` / `m()` calls and bare
+    /// field reads against real declarations. Set once at codegen entry.
     grammar_name: String,
-    action_member_methods: List<String>,
+    action_members: MemberNames,
     /// The lexer's `superClass` base effect-interface name, or `""` when none.
     /// See `action.md`, "SuperClass — an effect interface".
     superclass_name: String,
@@ -302,7 +303,7 @@ impl GenContext {
             emit_actions: false,
             action_language: ActionLanguage::Wado,
             grammar_name: "",
-            action_member_methods: [],
+            action_members: MemberNames {},
             superclass_name: "",
             superclass_ops: [],
             parser_superclass_name: "",
@@ -602,17 +603,17 @@ impl GenContext {
         return self.action_language;
     }
 
-    pub fn set_action_grammar(&mut self, name: &String, member_methods: List<String>) {
+    pub fn set_action_grammar(&mut self, name: &String, members: MemberNames) {
         self.grammar_name = *name;
-        self.action_member_methods = member_methods;
+        self.action_members = members;
     }
 
     pub fn grammar_name(&self) -> &String with stores[self] {
         return &self.grammar_name;
     }
 
-    pub fn action_member_methods(&self) -> &List<String> with stores[self] {
-        return &self.action_member_methods;
+    pub fn action_members(&self) -> &MemberNames with stores[self] {
+        return &self.action_members;
     }
 
     pub fn set_superclass(&mut self, name: &String, ops: List<SuperOp>) {

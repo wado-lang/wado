@@ -107,7 +107,7 @@ use {
     alt_vals_arg,
     ambiguous_group_predicate_gated,
     call_arg_suffix,
-    collect_parser_members,
+    collect_members,
     current_rule_emits_vals,
     emit_arg_stores,
     emit_atn_disabled_seed,
@@ -194,7 +194,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // it has a value struct at all.
     install_rule_captures(grammar, lowered, ctx);
 
-    let members = collect_parser_members(grammar, ctx);
+    let members = collect_members(grammar, ctx, /*lexer=*/ false);
     if ctx.has_parser_superclass() {
         gen_parser_super_interface(w, ctx.parser_superclass_name(), ctx.parser_superclass_ops());
     }

@@ -44,6 +44,13 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
+use {
+    ModeAttrUse,
+    body_mode_attr_use,
+    LEXER_MODE_FIELD,
+    LEXER_MODE_READER,
+    LEXER_SET_MODE_FIELD,
+} from "./action_translate.wado";
 use { TreeMap, TreeSet } from "core:collections";
 
 pub struct LitToken {
@@ -315,6 +322,7 @@ pub fn gen_lexer(
     has_members: bool,
     sc_name: &String,
     sc_ops: &List<SuperOp>,
+    mode_use: &ModeAttrUse,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
@@ -329,7 +337,7 @@ pub fn gen_lexer(
     }
     // A base's action op drives the lexer from the user's own module.
     let sc_action = sc_ops.iter_ref().any(|o| !o.is_predicate);
-    gen_lexer_struct(w, members, has_actions, uses_modes, sc_action);
+    gen_lexer_struct(w, members, has_actions, uses_modes, sc_action, mode_use);
     if has_actions {
         if uses_modes {
             gen_mode_constants(w, &grammar.mode_names);
@@ -359,11 +367,19 @@ pub fn gen_lexer(
         &act_rule_names,
         has_members,
         sc_name,
+        mode_use,
     );
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
-fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool, uses_modes: bool, sc_action: bool) {
+fn gen_lexer_struct(
+    w: &mut CodeWriter,
+    members: &MemberDecls,
+    has_actions: bool,
+    uses_modes: bool,
+    sc_action: bool,
+    mode_use: &ModeAttrUse,
+) {
     let mut s = StructSpec::new(&"Lexer", if sc_action { Vis::Pub } else { Vis::Private });
     s.add_field(&"chars", &"List<char>");
     s.add_field(&"pos", &"i32");
@@ -379,9 +395,14 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
         if uses_modes {
             s.add_field_default(&"act_push_mode", &"i32", &"-1");
             s.add_field_default(&"act_pop_mode", &"bool", &"false");
-            s.add_field_default(&"act_set_mode", &"i32", &"-1");
+            s.add_field_default(&LEXER_SET_MODE_FIELD, &"i32", &"-1");
             // ANTLR's `_modeStack.size()`, which a base branches on.
             s.add_field_default(&"act_mode_depth", &"i32", &"0");
+            if mode_use.reads {
+                // ANTLR's `_mode`: the mode the token is being matched in,
+                // seeded per token. Only a body that reads `$mode` needs it.
+                s.add_field_default(&LEXER_MODE_FIELD, &"i32", &"0");
+            }
         }
     }
     s.emit(w);
@@ -416,7 +437,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
     w.end();
 
     if has_actions {
-        gen_lexer_action_methods(w, uses_modes, sc_action);
+        gen_lexer_action_methods(w, uses_modes, sc_action, mode_use);
     }
 
     for let m of &members.methods {
@@ -428,7 +449,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
     w.blank();
 }
 
-fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: bool) {
+fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: bool, mode_use: &ModeAttrUse) {
     let vis = if sc_action { Vis::Pub } else { Vis::Private };
     w.blank();
     // Deliberately outside `reset_actions`: the sink is the whole run's output,
@@ -450,6 +471,9 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
     fr.add_param(&"channel", &"i32");
     if uses_modes {
         fr.add_param(&"depth", &"i32");
+        if mode_use.reads {
+            fr.add_param(&"mode", &"i32");
+        }
     }
     fr.emit_begin(w);
     w.line(&"self.act_type = kind;");
@@ -459,8 +483,11 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
     if uses_modes {
         w.line(&"self.act_push_mode = -1;");
         w.line(&"self.act_pop_mode = false;");
-        w.line(&"self.act_set_mode = -1;");
+        w.line(&`self.${LEXER_SET_MODE_FIELD} = -1;`);
         w.line(&"self.act_mode_depth = depth;");
+        if mode_use.reads {
+            w.line(&`self.${LEXER_MODE_FIELD} = mode;`);
+        }
     }
     w.end();
     w.blank();
@@ -475,17 +502,21 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
 
     if uses_modes {
         w.blank();
-        gen_lexer_mode_commands(w, vis);
+        gen_lexer_mode_commands(w, vis, mode_use);
     }
 }
 
 /// The mode commands. Each is a single latch the commit applies once per token,
 /// in a fixed push-pop-set order — hence the guard, which sees every command
 /// issued before it. A `$mode` assignment writes the set latch without passing
-/// one, so the commit repeats the invariant over the latches themselves. No
-/// current-mode read is offered: `pop_mode` cannot restore a stack the `Lexer`
-/// has no copy of.
-fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
+/// one, so where a grammar has that spelling the commit repeats the invariant
+/// over the latches themselves.
+///
+/// A command also moves the current mode `$mode` reads, as ANTLR's `mode(X)` /
+/// `pushMode(X)` do — except `pop_mode`, whose restored mode lives on the
+/// tokenize loop's stack and not on the `Lexer`. It clears the field instead, so
+/// a read after it fails loudly rather than answering the mode just left.
+fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, mode_use: &ModeAttrUse) {
     let mut fp = FnSpec::new(&"push_mode", vis);
     fp.set_receiver(&"&mut self");
     fp.add_param(&"m", &"i32");
@@ -493,6 +524,7 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
     gen_one_mode_command_assert(w);
     w.line(&"self.act_push_mode = m;");
     w.line(&"self.act_mode_depth += 1;");
+    gen_current_mode_write(w, mode_use, &"m");
     w.end();
     w.blank();
 
@@ -502,6 +534,7 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
     gen_one_mode_command_assert(w);
     w.line(&"self.act_pop_mode = true;");
     w.line(&"self.act_mode_depth -= 1;");
+    gen_current_mode_write(w, mode_use, &"-1");
     w.end();
     w.blank();
 
@@ -510,11 +543,37 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
     fs.add_param(&"m", &"i32");
     fs.emit_begin(w);
     gen_one_mode_command_assert(w);
-    w.line(&"self.act_set_mode = m;");
+    w.line(&`self.${LEXER_SET_MODE_FIELD} = m;`);
+    gen_current_mode_write(w, mode_use, &"m");
     w.end();
     w.blank();
 
+    if mode_use.reads {
+        gen_current_mode_reader(w, vis);
+        w.blank();
+    }
     lexer_reader(w, &"mode_depth", &"act_mode_depth", vis);
+}
+
+fn gen_current_mode_write(w: &mut CodeWriter, mode_use: &ModeAttrUse, value: &String) {
+    if mode_use.reads {
+        w.line(&`self.${LEXER_MODE_FIELD} = ${*value};`);
+    }
+}
+
+/// What `$mode` reads: the mode this token is being matched in, moved by any
+/// command the action has already issued. The assert covers the one mode the
+/// `Lexer` cannot name — `pop_mode`'s restore target.
+fn gen_current_mode_reader(w: &mut CodeWriter, vis: Vis) {
+    let mut f = FnSpec::new(&LEXER_MODE_READER, vis);
+    f.set_receiver(&"&self");
+    f.set_return_type(&"i32");
+    f.emit_begin(w);
+    w.line(
+        &`assert self.${LEXER_MODE_FIELD} >= 0, "\$mode after pop_mode reads a mode only the mode stack holds";`,
+    );
+    w.line(&`return self.${LEXER_MODE_FIELD};`);
+    w.end();
 }
 
 fn gen_one_mode_command_assert(w: &mut CodeWriter) {
@@ -912,6 +971,41 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
     }
 }
 
+/// Which of `$mode`'s two fields the grammar's lexer bodies name. Read from the
+/// `.g4` bodies, so it has to run before staging translates them into Wado.
+pub fn lexer_mode_attr_use(grammar: &Grammar) -> ModeAttrUse {
+    let mut out = ModeAttrUse {};
+    for let rule of &grammar.lexer_rules {
+        for let alt of &rule.body {
+            alt_mode_attr_use(alt, &mut out);
+        }
+    }
+    return out;
+}
+
+fn alt_mode_attr_use(alt: &LexerAlternative, out: &mut ModeAttrUse) {
+    for let a of &alt.actions {
+        body_mode_attr_use(&a.source.text, out);
+    }
+    for let e of &alt.elements {
+        element_mode_attr_use(e, out);
+    }
+}
+
+fn element_mode_attr_use(elem: &LexerElement, out: &mut ModeAttrUse) {
+    match *elem {
+        Group(alts) => {
+            for let alt of &alts {
+                alt_mode_attr_use(alt, out);
+            }
+        },
+        Repeat(rep) => element_mode_attr_use(&rep.element, out),
+        Not(n) => element_mode_attr_use(&n.element, out),
+        _ => {
+        },
+    }
+}
+
 /// Whether codegen runs `{ ... }` action bodies for this grammar's lexer at
 /// all. A `language = Java` lexer qualifies because codegen stages its bodies
 /// into Wado before emit (`stage_lexer_bodies`), which carves out a
@@ -1109,10 +1203,17 @@ fn apply_fn_name(rule_name: &String) -> String {
 /// reset the `Lexer`'s effect latches, run its `apply_<rule>_actions`, then fold
 /// the latched effects into the tournament outcome. Only reached with
 /// `best_act >= 0`, i.e. the winner runs actions.
-fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, use_modes: bool, has_set_mode_rules: bool) {
+fn gen_lexer_action_replay(
+    w: &mut CodeWriter,
+    act_rule_names: &List<String>,
+    use_modes: bool,
+    has_set_mode_rules: bool,
+    mode_use: &ModeAttrUse,
+) {
     w.begin(&"if best_act >= 0");
     if use_modes {
-        w.line(&"lexer.reset_actions(best_kind, best_channel, mode_stack.len());");
+        let mode_seed = if mode_use.reads { ", current_mode" } else { "" };
+        w.line(&`lexer.reset_actions(best_kind, best_channel, mode_stack.len()${mode_seed});`);
     } else {
         w.line(&"lexer.reset_actions(best_kind, best_channel);");
     }
@@ -1137,12 +1238,16 @@ fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, us
     w.line(&"if lexer.act_skip { best_act_skip = true; }");
     if use_modes {
         // The commit applies the latches in a fixed push-pop-set order, so two
-        // of them would silently reorder. The command methods guard what they
-        // can see; a `$mode` assignment writes the set latch without passing
-        // one, so the invariant is repeated here over the latches themselves.
-        w.line(
-            &"assert (if lexer.act_push_mode >= 0 { 1 } else { 0 }) + (if lexer.act_pop_mode { 1 } else { 0 }) + (if lexer.act_set_mode >= 0 { 1 } else { 0 }) <= 1, \"a lexer action may issue at most one mode command per token\";",
-        );
+        // of them would silently reorder. Every command method guards what it
+        // can see, which covers the invariant on its own; only a `$mode`
+        // assignment reaches the set latch without passing one, so the check is
+        // repeated here over the latches themselves exactly where that spelling
+        // exists.
+        if mode_use.writes {
+            w.line(
+                &"assert (if lexer.act_push_mode >= 0 { 1 } else { 0 }) + (if lexer.act_pop_mode { 1 } else { 0 }) + (if lexer.act_set_mode >= 0 { 1 } else { 0 }) <= 1, \"a lexer action may issue at most one mode command per token\";",
+            );
+        }
         w.line(&"if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }");
         w.line(&"if lexer.act_pop_mode { best_pop_mode = true; }");
         if has_set_mode_rules {
@@ -2905,6 +3010,17 @@ fn try_extract_keyword_char(elem: &LexerElement, all_rules: &List<LexerRule>, ru
 
 /// Analyzes a lexer rule to determine if it's a fixed keyword pattern.
 /// Returns KeywordInfo if it matches a sequence of case-insensitive (or literal) chars.
+/// Whether the rule carries any `{ ... }` action or `{ ... }?` predicate, the
+/// fragments it inlines included.
+fn keyword_rule_carries_body(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+    if rule.body.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules)) {
+        return true;
+    }
+    let mut preds: List<i32> = [];
+    collect_lexer_predicate_ids(rule, all_rules, &mut preds);
+    return !preds.is_empty();
+}
+
 fn try_extract_keyword_info(
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
@@ -2924,6 +3040,13 @@ fn try_extract_keyword_info(
         || rule.set_mode >= 0
         || rule.push_mode >= 0
         || rule.pop_mode {
+        return null;
+    }
+    // An action or a predicate is the same problem in the same place: the
+    // classifier runs behind a carrier's match, so the winner replay dispatches
+    // the carrier's actions and never this rule's, and the carrier's match
+    // already settled what a predicate here would have had a say in.
+    if keyword_rule_carries_body(rule, all_rules) {
         return null;
     }
     let alt = &rule.body[0];
@@ -4151,6 +4274,7 @@ fn gen_tokenize_fn(
     act_rule_names: &List<String>,
     has_members: bool,
     sc_name: &String,
+    mode_use: &ModeAttrUse,
 ) {
     let has_actions = !act_rule_names.is_empty();
     let use_modes = has_modes(mode_names);
@@ -4304,7 +4428,7 @@ fn gen_tokenize_fn(
     // reclassification so an explicit `set_type` wins, and before the
     // skip/more/channel commit so its effects (`best_kind`) feed them.
     if has_actions {
-        gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules);
+        gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules, mode_use);
     }
 
     // `more` rules accumulate text into the next emitted token. `tok_start`

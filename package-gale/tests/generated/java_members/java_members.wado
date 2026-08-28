@@ -2,6 +2,7 @@
 
 // Grammar metadata from source .g4 prequels:
 //   @parser::members
+//   @parser::members
 
 pub struct Span {
     pub start: i32,
@@ -1535,6 +1536,7 @@ impl Parser {
 
 impl Parser {
     fn bump(&mut self) { self.calls += 1; }
+    fn bump_twice(&mut self) { self.bump(); self.bump(); }
 }
 
 fn scan_r(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -1547,7 +1549,7 @@ fn scan_r(tokens: &Array<i32>, pos: i32) -> i32 {
 fn _parse_r__inner(p: &mut Parser) -> () {
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     if !p.speculating {
-        p.bump(); p.emit(`${p.calls}\n`);
+        p.bump_twice(); p.emit(`${p.calls}\n`);
     }
     return;
 }
