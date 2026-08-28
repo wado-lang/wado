@@ -11,7 +11,7 @@ use crate::compiler_host::{CompilerHost, LogLevel};
 use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::Elaborator;
 use crate::elaborator::orchestration::AnnotateState;
-use crate::elaborator::sem::FactKind;
+use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::IndexMap;
 use crate::loader;
 use crate::logger::Logger;
@@ -68,6 +68,12 @@ pub struct Semantics {
     /// callee's parameter default, resolved in the caller's frame). Keyed by
     /// [`FactKind`] as well as node, because one node's kinds need not come
     /// from one walk; where two walks do record the same kind, the last wins.
+    ///
+    /// The value is a position in [`AnnotateState::module_semantics`], which
+    /// the body walk reorders (`swap_remove` + `insert`); it is minted after
+    /// the last such move and `state` is immutable from then on. [`Self::fact_at`]
+    /// asserts the routed module really holds the fact, so a stale index fails
+    /// rather than answering `None`.
     ///
     /// Empty when resolve did not run or bailed before recording any fact.
     pub(crate) fact_home: IndexMap<(AstId, FactKind), u32>,
@@ -265,36 +271,34 @@ impl Semantics {
         self.ast_indices.get(module)?.ast_id_at(line, column)
     }
 
-    /// The module holding the `kind` fact for `id`. `None` when no walk
-    /// recorded one. See [`Self::fact_home`].
-    fn facts_of(
-        &self,
-        id: AstId,
-        kind: FactKind,
-    ) -> Option<&crate::elaborator::sem::ModuleSemantics> {
-        let home = *self.fact_home.get(&(id, kind))? as usize;
+    /// The `fact` recorded for `id`, read from the module [`Self::fact_home`]
+    /// routes it to. `None` when no walk recorded one.
+    fn fact_at<V>(&self, fact: Fact<V>, id: AstId) -> Option<&V> {
+        let home = *self.fact_home.get(&(id, fact.kind))? as usize;
         let (_source, sem) = self.state.as_ref()?.module_semantics.get_index(home)?;
-        Some(sem)
+        let found = (fact.map)(sem).get(&id);
+        debug_assert!(
+            found.is_some(),
+            "fact_home routed {id:?}/{:?} to a module that does not hold it",
+            fact.kind
+        );
+        found
     }
 
-    /// Every entry of one fact map that [`Self::facts_of`] would answer with —
+    /// Every entry of one fact map that [`Self::fact_at`] would answer with —
     /// the iteration side of the same routing, so what an `iter_*` yields is
     /// exactly what a point lookup returns. An entry a later walk shadowed is
     /// left out; the module it lands in is the whole of what makes it live.
-    fn iter_live<'s, V: 's>(
-        &'s self,
-        kind: FactKind,
-        map: impl Fn(&'s crate::elaborator::sem::ModuleSemantics) -> &'s IndexMap<AstId, V> + 's,
-    ) -> impl Iterator<Item = (AstId, &'s V)> + 's {
+    fn iter_live<V>(&self, fact: Fact<V>) -> impl Iterator<Item = (AstId, &V)> {
         self.state
             .as_ref()
             .into_iter()
             .flat_map(|state| state.module_semantics.values().enumerate())
             .flat_map(move |(home, sem)| {
                 let home = u32::try_from(home).expect("module count fits in u32");
-                map(sem)
+                (fact.map)(sem)
                     .iter()
-                    .filter(move |(id, _)| self.fact_home.get(&(**id, kind)) == Some(&home))
+                    .filter(move |(id, _)| self.fact_home.get(&(**id, fact.kind)) == Some(&home))
                     .map(|(id, value)| (*id, value))
             })
     }
@@ -306,10 +310,7 @@ impl Semantics {
     pub fn symbol_at(&self, id: AstId) -> Option<&Symbol> {
         self.symbols
             .get(&id)
-            .or_else(|| self.facts_of(id, FactKind::LocalSymbol)?
-                    .bindings
-                    .local_symbols
-                    .get(&id))
+            .or_else(|| self.fact_at(ModuleSemantics::LOCAL_SYMBOLS, id))
     }
 
     /// Resolve a use-site `AstId` (typically an [`IdentExpr`](crate::ast::IdentExpr) id) to the
@@ -318,11 +319,7 @@ impl Semantics {
     /// fall back to name-based lookup via the symbol table.
     #[must_use]
     pub fn referenced_symbol(&self, id: AstId) -> Option<AstId> {
-        self.facts_of(id, FactKind::Reference)?
-            .bindings
-            .references
-            .get(&id)
-            .copied()
+        self.fact_at(ModuleSemantics::REFERENCES, id).copied()
     }
 
     /// Iterate every declared symbol with its canonical key, across all
@@ -335,7 +332,7 @@ impl Semantics {
         self.symbols
             .iter()
             .map(|(id, s)| (*id, s))
-            .chain(self.iter_live(FactKind::LocalSymbol, |sem| &sem.bindings.local_symbols))
+            .chain(self.iter_live(ModuleSemantics::LOCAL_SYMBOLS))
     }
 
     /// Iterate every recorded use-site `(use_key, def_key)` edge.
@@ -345,7 +342,7 @@ impl Semantics {
     /// item-level definitions (functions, types, globals) and imported items
     /// are all recorded here.
     pub fn iter_references(&self) -> impl Iterator<Item = (AstId, AstId)> {
-        self.iter_live(FactKind::Reference, |sem| &sem.bindings.references)
+        self.iter_live(ModuleSemantics::REFERENCES)
             .map(|(use_id, def_id)| (use_id, *def_id))
     }
 
@@ -391,11 +388,7 @@ impl Semantics {
     /// reached.
     #[must_use]
     pub fn local_type(&self, id: AstId) -> Option<TypeId> {
-        self.facts_of(id, FactKind::LocalType)?
-            .types
-            .local_types
-            .get(&id)
-            .copied()
+        self.fact_at(ModuleSemantics::LOCAL_TYPES, id).copied()
     }
 
     /// Resolved [`TypeId`] for the expression at `key`, recorded by the
@@ -406,17 +399,13 @@ impl Semantics {
     /// id or a body the elaborator bailed on.
     #[must_use]
     pub fn expression_type(&self, id: AstId) -> Option<TypeId> {
-        self.facts_of(id, FactKind::ExpressionType)?
-            .types
-            .expression_types
-            .get(&id)
-            .copied()
+        self.fact_at(ModuleSemantics::EXPRESSION_TYPES, id).copied()
     }
 
     /// Iterate every expression the body walk typed, as `(AstId, TypeId)`.
     /// Pair with [`Self::module_of_id`] to filter by module.
     pub fn iter_expression_types(&self) -> impl Iterator<Item = (AstId, TypeId)> + '_ {
-        self.iter_live(FactKind::ExpressionType, |sem| &sem.types.expression_types)
+        self.iter_live(ModuleSemantics::EXPRESSION_TYPES)
             .map(|(id, ty)| (id, *ty))
     }
 
@@ -432,10 +421,7 @@ impl Semantics {
         &self,
         id: AstId,
     ) -> Option<&crate::elaborator::sem::types::MethodDispatch> {
-        self.facts_of(id, FactKind::MethodDispatch)?
-            .types
-            .method_dispatch
-            .get(&id)
+        self.fact_at(ModuleSemantics::METHOD_DISPATCH, id)
     }
 
     /// Stable public view onto the recorded method-dispatch decision:
@@ -480,7 +466,7 @@ impl Semantics {
     /// [`Self::method_dispatch_view`] for the stable public view onto
     /// each entry.
     pub fn iter_method_dispatch(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.iter_live(FactKind::MethodDispatch, |sem| &sem.types.method_dispatch)
+        self.iter_live(ModuleSemantics::METHOD_DISPATCH)
             .map(|(id, _)| id)
     }
 
@@ -492,7 +478,7 @@ impl Semantics {
     #[must_use]
     pub fn coercion_view(&self, id: AstId) -> Option<(String, TypeId)> {
         use crate::elaborator::sem::types::CoercionKind;
-        let choice = self.facts_of(id, FactKind::Coercion)?.types.coercions.get(&id)?;
+        let choice = self.fact_at(ModuleSemantics::COERCIONS, id)?;
         let kind = match choice.kind {
             CoercionKind::NumericLiteral => "numeric_literal",
             CoercionKind::NullToOption => "null_to_option",
@@ -509,7 +495,7 @@ impl Semantics {
     /// expression's `(module, AstId)`. Pair with [`Self::coercion_view`]
     /// for the stable public view onto each entry.
     pub fn iter_coercions(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.iter_live(FactKind::Coercion, |sem| &sem.types.coercions).map(|(id, _)| id)
+        self.iter_live(ModuleSemantics::COERCIONS).map(|(id, _)| id)
     }
 
     /// WEP 2026-05-26: stable public view onto the recorded
@@ -524,7 +510,7 @@ impl Semantics {
     #[must_use]
     pub fn desugar_view(&self, id: AstId) -> Option<String> {
         use crate::elaborator::sem::types::DesugarKind;
-        let kind = self.facts_of(id, FactKind::Desugar)?.types.desugars.get(&id)?;
+        let kind = self.fact_at(ModuleSemantics::DESUGARS, id)?;
         let name = match kind {
             DesugarKind::Assert => "assert",
             DesugarKind::Matches => "matches",
@@ -549,7 +535,7 @@ impl Semantics {
     /// node's `(module, AstId)`. Pair with [`Self::desugar_view`] for the
     /// stable public view onto each entry.
     pub fn iter_desugars(&self) -> impl Iterator<Item = AstId> + '_ {
-        self.iter_live(FactKind::Desugar, |sem| &sem.types.desugars).map(|(id, _)| id)
+        self.iter_live(ModuleSemantics::DESUGARS).map(|(id, _)| id)
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -1337,11 +1323,7 @@ mod tests {
             Some("entry.wado"),
         ));
         let entry = sem.entry_module_source.clone();
-        let module_sem = &sem
-            .state
-            .as_ref()
-            .expect("annotate state")
-            .module_semantics[&entry];
+        let module_sem = &sem.state.as_ref().expect("annotate state").module_semantics[&entry];
 
         assert!(!module_sem.types.expression_types.is_empty());
         assert!(!module_sem.types.local_types.is_empty());
@@ -1391,7 +1373,10 @@ mod tests {
         }
         let mut seen_uses: crate::hashmap::IndexSet<AstId> = crate::hashmap::IndexSet::default();
         for (use_id, def_id) in sem.iter_references() {
-            assert!(seen_uses.insert(use_id), "iteration yielded {use_id:?} twice");
+            assert!(
+                seen_uses.insert(use_id),
+                "iteration yielded {use_id:?} twice"
+            );
             assert_eq!(sem.referenced_symbol(use_id), Some(def_id));
         }
 

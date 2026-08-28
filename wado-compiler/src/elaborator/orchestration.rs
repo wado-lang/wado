@@ -1388,13 +1388,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         if let Some(snap_state) = snapshot_state {
             for (ms, snap_sem) in &snap_state.module_semantics {
-                if let Some(sem) = module_semantics.get_mut(ms) {
-                    sem.types = snap_sem.types.clone();
-                    sem.bindings = snap_sem.bindings.clone();
-                    // A snapshot module runs no decl pass this compile;
-                    // its digests must come from the snapshot.
-                    sem.decls.clone_digests_from(&snap_sem.decls);
-                }
+                let Some(sem) = module_semantics.get_mut(ms) else {
+                    debug_assert!(
+                        snap_sem.routed_facts().next().is_none(),
+                        "a snapshot module carrying facts must be in the current compile's loaded set: {ms}"
+                    );
+                    continue;
+                };
+                sem.types = snap_sem.types.clone();
+                sem.bindings = snap_sem.bindings.clone();
+                // A snapshot module runs no decl pass this compile;
+                // its digests must come from the snapshot.
+                sem.decls.clone_digests_from(&snap_sem.decls);
             }
         }
 
