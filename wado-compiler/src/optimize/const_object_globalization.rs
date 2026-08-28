@@ -1133,7 +1133,11 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
         {
             true
         }
-        ExprKind::StructLiteral { .. }
+        // A packed `Array<u8>` allocates and fills a GC array exactly as an
+        // `ArrayLiteral` does — it is the repr a `String` / `List<u8>` literal
+        // leaves behind once its aggregate is scalarized away.
+        ExprKind::PackedArray(_)
+        | ExprKind::StructLiteral { .. }
         | ExprKind::TupleLiteral { .. }
         | ExprKind::ArrayLiteral { .. }
         | ExprKind::VariantConstruct { .. } => true,
@@ -1525,10 +1529,14 @@ impl Gate<'_> {
         ) {
             return false;
         }
-        f.body.as_ref().is_some_and(|body| {
-            is_readonly_body(body, param.local_index, self)
-                && !param_storage_escapes(body, param.local_index, self)
-        })
+        let Some(body) = f.body.as_ref() else {
+            // A builtin has no body to walk; its read-only parameters are
+            // stated on the reference itself.
+            return crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
+                .reads_param_only(param_pos);
+        };
+        is_readonly_body(body, param.local_index, self)
+            && !param_storage_escapes(body, param.local_index, self)
     }
 }
 

@@ -1,15 +1,19 @@
-//! Two composed string-append rewrites over the shared peephole session:
+//! Three composed string-append rewrites over the shared peephole session:
 //! [`ShortPushStrRule`] expands `buf.push_str("short_constant")` (≤8 ASCII bytes)
-//! into per-byte `buf.push(ch)` calls, and [`ConstAsciiPushRule`] retargets each
-//! constant-ASCII `push` to `push_ascii_unchecked`. Must run *before* `inline`,
-//! which replaces the call node the literal-recogniser matches.
+//! into per-byte `buf.push(ch)` calls, [`ConstAsciiPushRule`] retargets each
+//! constant-ASCII `push` to `push_ascii_unchecked`, and [`AppendFuseRule`]
+//! collapses the run of adjacent appends they leave behind into one reservation.
+//! Must run *before* `inline`, which replaces the call node the
+//! literal-recogniser matches.
 
 use crate::compiler_item::CompilerItem;
-use crate::nir::NirUnaryOp;
+use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueKind;
 use crate::tir::TypeTable;
+use crate::token::Span;
 
 /// Maximum byte length of the literal that triggers the rewrite.
 /// Matches the threshold of the former WIR pass; the per-byte
@@ -35,6 +39,18 @@ pub(super) struct Ctx {
     /// `push`. Independent of the two above: absent (`None`) it only disables
     /// [`ConstAsciiPushRule`], leaving [`ShortPushStrRule`] intact.
     push_ascii_id: Option<crate::nir::FuncId>,
+    /// The four `String` primitives [`AppendFuseRule`] writes a fused run in
+    /// terms of. All four or none: a missing one only disables that rule.
+    fused: Option<FusedIds>,
+}
+
+/// The `String` primitives a fused append run is written with.
+#[derive(Clone, Copy)]
+pub(super) struct FusedIds {
+    len: FuncId,
+    reserve_uninit: FuncId,
+    set_byte: FuncId,
+    write_str_at: FuncId,
 }
 
 impl Ctx {
@@ -42,6 +58,10 @@ impl Ctx {
         let mut push_str_id: Option<crate::nir::FuncId> = None;
         let mut push_char_id: Option<crate::nir::FuncId> = None;
         let mut push_ascii_id: Option<crate::nir::FuncId> = None;
+        let mut len_id: Option<FuncId> = None;
+        let mut reserve_id: Option<FuncId> = None;
+        let mut set_byte_id: Option<FuncId> = None;
+        let mut write_str_id: Option<FuncId> = None;
         for func_rc in &project.functions {
             let f = func_rc.borrow();
             match f.compiler_item {
@@ -54,13 +74,34 @@ impl Ctx {
                 Some(CompilerItem::StringPushAscii) => {
                     push_ascii_id = Some(f.id.expect("func_id assigned at lower"));
                 }
+                Some(CompilerItem::StringLen) => {
+                    len_id = Some(f.id.expect("func_id assigned at lower"));
+                }
+                Some(CompilerItem::StringReserveUninit) => {
+                    reserve_id = Some(f.id.expect("func_id assigned at lower"));
+                }
+                Some(CompilerItem::StringSetByteUnchecked) => {
+                    set_byte_id = Some(f.id.expect("func_id assigned at lower"));
+                }
+                Some(CompilerItem::StringWriteStrAt) => {
+                    write_str_id = Some(f.id.expect("func_id assigned at lower"));
+                }
                 Some(_) | None => {}
             }
         }
+        let fused = (|| {
+            Some(FusedIds {
+                len: len_id?,
+                reserve_uninit: reserve_id?,
+                set_byte: set_byte_id?,
+                write_str_at: write_str_id?,
+            })
+        })();
         Some(Self {
             push_str_id: push_str_id?,
             push_char_id: push_char_id?,
             push_ascii_id,
+            fused,
         })
     }
 }
@@ -266,6 +307,439 @@ fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
         } => inner
             .as_expr()
             .is_some_and(|e| is_duplicable_receiver(body, e)),
+        _ => false,
+    }
+}
+
+/// Cap on the pieces one fused run absorbs. What follows the cap simply opens
+/// the next run, so this bounds the offset expression each write carries rather
+/// than the fusion's reach.
+const MAX_FUSED_PIECES: usize = 16;
+
+/// One append in a fused run.
+enum Piece {
+    /// A constant ASCII byte, from `push_ascii_unchecked`.
+    Byte(u8),
+    /// A `push_str` argument, with its length when the argument is a literal.
+    Str { arg: ExprId, const_len: Option<i32> },
+}
+
+/// A term of a running byte offset: the constants collapse into one summand,
+/// each dynamic length keeps the local it was bound to.
+enum LenTerm {
+    Const(i32),
+    Local(u32),
+}
+
+/// Collapse a run of adjacent appends on one buffer into a single reservation:
+/// `buf.push('"'); buf.push_str(s)` becomes one `internal_reserve_uninit`
+/// followed by raw writes. Each `push`/`push_str` otherwise pays its own
+/// capacity check, and a run of them re-checks a capacity the first call
+/// already established.
+///
+/// A source may be the buffer itself (`buf.push_str(&buf)`), so its length is
+/// read at the start of its own group and the reservation covers only what
+/// follows it — hoisting that read over an earlier write in the same run would
+/// measure a buffer the run itself grew.
+pub(super) struct AppendFuseRule {
+    push_str_id: FuncId,
+    push_ascii_id: FuncId,
+    ids: FusedIds,
+}
+
+impl AppendFuseRule {
+    /// `None` unless every primitive the fused form is written with resolved.
+    pub(super) fn new(ctx: &Ctx) -> Option<Self> {
+        Some(Self {
+            push_str_id: ctx.push_str_id,
+            push_ascii_id: ctx.push_ascii_id?,
+            ids: ctx.fused?,
+        })
+    }
+
+    /// The append `stmt` performs, with the buffer it appends to.
+    fn piece_of(&self, body: &Body, stmt: StmtId) -> Option<(ExprId, Piece)> {
+        let StmtKind::Expr(Operand::Expr(expr_id)) = body.stmts[stmt].kind else {
+            return None;
+        };
+        let (receiver, func_id, args) = body.exprs[expr_id].kind.as_method_call()?;
+        let recv = receiver.as_expr()?;
+        if !is_duplicable_receiver(body, recv) {
+            return None;
+        }
+        let [arg] = args else {
+            return None;
+        };
+        if func_id == self.push_ascii_id {
+            let byte = u8::try_from(body.operand_const_int(arg.expr)?).ok()?;
+            return Some((recv, Piece::Byte(byte)));
+        }
+        if func_id != self.push_str_id {
+            return None;
+        }
+        let arg = arg.expr.as_expr()?;
+        // A literal argument keeps its byte length, so it does not open a group
+        // — and fusing it leaves the literal's `repr` as the bare packed array
+        // `const_object_globalization` hoists into a module global.
+        let const_len = const_str_len(body, arg);
+        if const_len.is_none() && !is_duplicable_receiver(body, arg) {
+            return None;
+        }
+        Some((recv, Piece::Str { arg, const_len }))
+    }
+
+    /// Build the fused statements for `run`, all appending to `recv`.
+    fn emit(&self, engine: &mut Engine, recv: ExprId, run: Vec<Piece>, span: Span) -> Vec<StmtId> {
+        let mut stmts = Vec::with_capacity(run.len() + 2);
+        let mut terms: Vec<LenTerm> = Vec::with_capacity(run.len());
+        for piece in &run {
+            terms.push(match piece {
+                Piece::Byte(_) => LenTerm::Const(1),
+                Piece::Str {
+                    const_len: Some(n), ..
+                } => LenTerm::Const(*n),
+                Piece::Str { arg, .. } => {
+                    LenTerm::Local(self.bind_len(engine, *arg, span, &mut stmts))
+                }
+            });
+        }
+
+        let total = self.sum_expr(engine, &terms, span);
+        let at = engine.alloc_local(
+            format!("__fuse_at_{}", engine.locals().len()),
+            TypeTable::I32,
+            /* is_mut */ false,
+        );
+        let reserve = self.call(
+            engine,
+            self.ids.reserve_uninit,
+            recv,
+            true,
+            vec![total],
+            TypeTable::I32,
+            span,
+        );
+        stmts.push(let_stmt(engine, at, TypeTable::I32, reserve, span));
+
+        for (i, piece) in run.iter().enumerate() {
+            let offset = self.offset_expr(engine, at, &terms[..i], span);
+            match piece {
+                Piece::Byte(byte) => {
+                    let value = engine.const_operand(
+                        ValueKind::Int(u64::from(*byte), TypeTable::U8),
+                        TypeTable::U8,
+                    );
+                    let call = self.call(
+                        engine,
+                        self.ids.set_byte,
+                        recv,
+                        true,
+                        vec![offset, value],
+                        TypeTable::UNIT,
+                        span,
+                    );
+                    stmts.push(engine.alloc_stmt(StmtKind::Expr(call), span));
+                }
+                Piece::Str { arg, .. } => {
+                    let len = self.term_operand(engine, &terms[i], span);
+                    let source = Operand::Expr(engine.clone_expr(*arg));
+                    let call = self.call(
+                        engine,
+                        self.ids.write_str_at,
+                        recv,
+                        true,
+                        vec![offset, source, len],
+                        TypeTable::UNIT,
+                        span,
+                    );
+                    stmts.push(engine.alloc_stmt(StmtKind::Expr(call), span));
+                }
+            }
+        }
+        stmts
+    }
+
+    /// Bind `arg.len()` to a fresh local, read before the reservation runs.
+    fn bind_len(
+        &self,
+        engine: &mut Engine,
+        arg: ExprId,
+        span: Span,
+        stmts: &mut Vec<StmtId>,
+    ) -> u32 {
+        let local = engine.alloc_local(
+            format!("__fuse_len_{}", engine.locals().len()),
+            TypeTable::I32,
+            /* is_mut */ false,
+        );
+        let source = engine.clone_expr(arg);
+        let call = engine.alloc_expr(
+            ExprKind::method_call(self.ids.len, Operand::Expr(source), false, vec![]),
+            TypeTable::I32,
+            span,
+        );
+        stmts.push(let_stmt(
+            engine,
+            local,
+            TypeTable::I32,
+            Operand::Expr(call),
+            span,
+        ));
+        local
+    }
+
+    /// `Σ terms`, with the constant terms collapsed into one summand. A zero
+    /// constant is dropped rather than added, so an offset built only from
+    /// run-time lengths reads as those lengths.
+    fn sum_expr(&self, engine: &mut Engine, terms: &[LenTerm], span: Span) -> Operand {
+        let constant: i32 = terms
+            .iter()
+            .filter_map(|t| match t {
+                LenTerm::Const(n) => Some(*n),
+                LenTerm::Local(_) => None,
+            })
+            .sum();
+        let locals: Vec<u32> = terms
+            .iter()
+            .filter_map(|t| match t {
+                LenTerm::Local(local) => Some(*local),
+                LenTerm::Const(_) => None,
+            })
+            .collect();
+        let mut acc = (constant != 0 || locals.is_empty()).then(|| {
+            engine.const_operand(
+                ValueKind::Int(i64::from(constant) as u64, TypeTable::I32),
+                TypeTable::I32,
+            )
+        });
+        for local in locals {
+            let rhs = local_operand(engine, local, span);
+            acc = Some(match acc {
+                Some(left) => Operand::Expr(engine.alloc_expr(
+                    ExprKind::Binary {
+                        left,
+                        op: NirBinaryOp::Add,
+                        right: rhs,
+                    },
+                    TypeTable::I32,
+                    span,
+                )),
+                None => rhs,
+            });
+        }
+        acc.expect("a constant summand stands in for an empty term list")
+    }
+
+    /// The write offset after `before` — the reservation's start plus the
+    /// lengths of the pieces already written.
+    fn offset_expr(&self, engine: &mut Engine, at: u32, before: &[LenTerm], span: Span) -> Operand {
+        let start = local_operand(engine, at, span);
+        if before.is_empty() {
+            return start;
+        }
+        let rest = self.sum_expr(engine, before, span);
+        Operand::Expr(engine.alloc_expr(
+            ExprKind::Binary {
+                left: start,
+                op: NirBinaryOp::Add,
+                right: rest,
+            },
+            TypeTable::I32,
+            span,
+        ))
+    }
+
+    /// One length term as an operand.
+    fn term_operand(&self, engine: &mut Engine, term: &LenTerm, span: Span) -> Operand {
+        match term {
+            LenTerm::Const(n) => engine.const_operand(
+                ValueKind::Int(i64::from(*n) as u64, TypeTable::I32),
+                TypeTable::I32,
+            ),
+            LenTerm::Local(local) => local_operand(engine, *local, span),
+        }
+    }
+
+    /// A method call on a fresh clone of `recv`.
+    fn call(
+        &self,
+        engine: &mut Engine,
+        func_id: FuncId,
+        recv: ExprId,
+        receiver_is_mut: bool,
+        args: Vec<Operand>,
+        type_id: crate::tir::TypeId,
+        span: Span,
+    ) -> Operand {
+        let receiver = engine.clone_expr(recv);
+        let args = args
+            .into_iter()
+            .map(|expr| ArenaCallArg {
+                expr,
+                is_mut: false,
+            })
+            .collect();
+        Operand::Expr(engine.alloc_expr(
+            ExprKind::method_call(func_id, Operand::Expr(receiver), receiver_is_mut, args),
+            type_id,
+            span,
+        ))
+    }
+}
+
+impl Rule for AppendFuseRule {
+    fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
+        let stmts = engine.body.blocks[id].stmts.clone();
+        let mut out: Vec<StmtId> = Vec::with_capacity(stmts.len());
+        let mut changed = false;
+        let mut i = 0;
+        while i < stmts.len() {
+            let Some((recv, piece)) = self.piece_of(&*engine.body, stmts[i]) else {
+                out.push(stmts[i]);
+                i += 1;
+                continue;
+            };
+            let mut run = vec![(stmts[i], piece)];
+            let mut j = i + 1;
+            while run.len() < MAX_FUSED_PIECES && j < stmts.len() {
+                match self.piece_of(&*engine.body, stmts[j]) {
+                    Some((next_recv, next)) if same_place(&*engine.body, recv, next_recv) => {
+                        run.push((stmts[j], next));
+                        j += 1;
+                    }
+                    Some(_) | None => break,
+                }
+            }
+            for group in groups(run) {
+                if group.len() < 2 {
+                    out.extend(group.into_iter().map(|(stmt, _)| stmt));
+                    continue;
+                }
+                let span = engine.body.stmts[group[0].0].span;
+                let group = group.into_iter().map(|(_, piece)| piece).collect();
+                out.extend(self.emit(engine, recv, group, span));
+                changed = true;
+            }
+            i = j;
+        }
+        if changed {
+            engine.set_block_stmts(id, out);
+        }
+        changed
+    }
+}
+
+/// Split a run into groups one reservation each can cover. A piece whose
+/// length is only known at run time opens a group, so its length is read
+/// before any of that group's writes and after every earlier one.
+fn groups(run: Vec<(StmtId, Piece)>) -> Vec<Vec<(StmtId, Piece)>> {
+    let mut out: Vec<Vec<(StmtId, Piece)>> = Vec::new();
+    for item in run {
+        let opens = matches!(
+            item.1,
+            Piece::Str {
+                const_len: None,
+                ..
+            }
+        );
+        match out.last_mut() {
+            Some(group) if !opens => group.push(item),
+            Some(_) | None => out.push(vec![item]),
+        }
+    }
+    out
+}
+
+/// A `Let` binding `local` to `value`.
+fn let_stmt(
+    engine: &mut Engine,
+    local: u32,
+    type_id: crate::tir::TypeId,
+    value: Operand,
+    span: Span,
+) -> StmtId {
+    let name = engine.locals()[local as usize].name.clone();
+    engine.alloc_stmt(
+        StmtKind::Let {
+            name,
+            local_index: local,
+            is_mut: false,
+            is_reactive: false,
+            type_id,
+            value,
+            skip_value_copy: true,
+        },
+        span,
+    )
+}
+
+fn local_operand(engine: &mut Engine, local: u32, span: Span) -> Operand {
+    let name = engine.locals()[local as usize].name.clone();
+    Operand::Expr(engine.alloc_expr(ExprKind::Local { index: local, name }, TypeTable::I32, span))
+}
+
+/// The byte length of a `&"literal"` argument, or `None` when the argument is
+/// not a string literal.
+fn const_str_len(body: &Body, arg: ExprId) -> Option<i32> {
+    let ExprKind::Unary {
+        op: NirUnaryOp::Ref,
+        expr: inner,
+    } = &body.exprs[arg].kind
+    else {
+        return None;
+    };
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[inner.as_expr()?].kind else {
+        return None;
+    };
+    let repr = fields
+        .iter()
+        .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
+        .map(|f| f.value)?;
+    let ExprKind::PackedArray(bytes) = &body.exprs[repr.as_expr()?].kind else {
+        return None;
+    };
+    i32::try_from(bytes.len()).ok()
+}
+
+/// Whether two duplicable receiver expressions name the same place.
+fn same_place(body: &Body, a: ExprId, b: ExprId) -> bool {
+    match (&body.exprs[a].kind, &body.exprs[b].kind) {
+        (ExprKind::Local { index: x, .. }, ExprKind::Local { index: y, .. }) => x == y,
+        (
+            ExprKind::GlobalVarGet {
+                module_source: ms_a,
+                name: na,
+            },
+            ExprKind::GlobalVarGet {
+                module_source: ms_b,
+                name: nb,
+            },
+        ) => ms_a == ms_b && na == nb,
+        (
+            ExprKind::FieldAccess {
+                expr: ia,
+                field_index: fa,
+                ..
+            },
+            ExprKind::FieldAccess {
+                expr: ib,
+                field_index: fb,
+                ..
+            },
+        ) => {
+            fa == fb
+                && match (ia.as_expr(), ib.as_expr()) {
+                    (Some(x), Some(y)) => same_place(body, x, y),
+                    (Some(_) | None, _) => false,
+                }
+        }
+        (ExprKind::Unary { op: oa, expr: ia }, ExprKind::Unary { op: ob, expr: ib }) => {
+            oa == ob
+                && match (ia.as_expr(), ib.as_expr()) {
+                    (Some(x), Some(y)) => same_place(body, x, y),
+                    (Some(_) | None, _) => false,
+                }
+        }
         _ => false,
     }
 }

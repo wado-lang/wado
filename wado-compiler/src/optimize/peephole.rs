@@ -18,7 +18,7 @@ use super::gate::{FunctionGate, GatedPass};
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
-use super::string_push::{ConstAsciiPushRule, ShortPushStrRule, resolve_ctx};
+use super::string_push::{AppendFuseRule, ConstAsciiPushRule, ShortPushStrRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
 
 /// Run the unified peephole rule set over every function body. Returns whether
@@ -39,6 +39,9 @@ pub(super) fn run_peephole(
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_ctx = resolve_ctx(project);
     let const_ascii_push_rule = push_ctx.as_ref().and_then(ConstAsciiPushRule::new);
+    // Ordered after the two rules above within one session: the run it fuses is
+    // what their per-byte expansion produces.
+    let append_fuse_rule = push_ctx.as_ref().and_then(AppendFuseRule::new);
     let push_rule = push_ctx.map(ShortPushStrRule::new);
     // Environment-free constant folding shares the session. It needs the
     // program-wide CTFE callee map and the type table; the per-function `env`
@@ -143,6 +146,9 @@ pub(super) fn run_peephole(
         }
         if let Some(const_ascii_push_rule) = const_ascii_push_rule.as_ref() {
             rules.push(const_ascii_push_rule);
+        }
+        if let Some(append_fuse_rule) = append_fuse_rule.as_ref() {
+            rules.push(append_fuse_rule);
         }
         let mut engine = Engine::new(body, &mut buffers, locals);
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm

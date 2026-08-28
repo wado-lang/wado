@@ -1,0 +1,74 @@
+// Regression test: the NIR `string_push` append fusion collapses a run of
+// adjacent appends on one buffer into a single `internal_reserve_uninit`, so a
+// run pays one capacity check instead of one per piece.
+//
+// `dynamic` is the shape the JSON writers emit — a constant frame around a
+// run-time string. Its length must be read *after* the pieces before it in the
+// run and *before* the reservation that covers it, because the source may be
+// the buffer itself: `self_append` appends `s` to `s`, where hoisting the
+// length read over the earlier `push` would copy one byte too few. The fusion
+// therefore opens a new group at each run-time length, and only the pieces
+// after it share that group's reservation.
+//
+// `framed` covers the literal too long for the per-byte expansion to reach: its
+// length is a constant, so it shares the leading `<`'s reservation, and the
+// packed array it leaves behind is what `const_object_globalization` hoists —
+// the loop copies out of a module global instead of rebuilding the literal.
+
+use { println, Stdout } from "core:cli";
+
+fn constant(buf: &mut String) {
+    buf.push('[');
+    buf.push_str(&"true");
+    buf.push(']');
+}
+
+fn dynamic(buf: &mut String, name: &String) {
+    buf.push('"');
+    buf.push_str(name);
+    buf.push_str(&"\":");
+}
+
+fn framed(buf: &mut String) {
+    buf.push('<');
+    buf.push_str(&"a literal too long for the per-byte expansion to reach");
+    buf.push('>');
+}
+
+fn self_append(s: &mut String) {
+    s.push('<');
+    s.push_str(s);
+    s.push('>');
+}
+
+export fn run() with Stdout {
+    let mut buf = String::with_capacity(128);
+    constant(&mut buf);
+    dynamic(&mut buf, &"key");
+    for let mut i = 0; i < 2; i += 1 {
+        framed(&mut buf);
+    }
+    println(buf);
+
+    let mut s = "ab";
+    self_append(&mut s);
+    println(s);
+}
+
+__DATA__
+{
+    "stdout": "[true]\"key\":<a literal too long for the per-byte expansion to reach><a literal too long for the per-byte expansion to reach>\nab<ab<>\n",
+    "wir_expect:O2": [
+        "new_used = buf.used + 6;",
+        "builtin::array_set_u8(buf.repr, start + 5, 93);",
+        "__fuse_len_2 = name.used;",
+        "new_used_21 = buf.used + (2 + __fuse_len_2);",
+        "builtin::array_copy<u8>(buf.repr, start_22, name.repr, 0, __fuse_len_2);",
+        "builtin::array_copy<u8>(buf_0.repr, start_9 + 1, global:opt_string_append_fuse.wado::__const_obj_1, 0, 54);",
+        "builtin::array_set_u8(buf_0.repr, start_9 + 55, 62);"
+    ],
+    "wir_not_expect:O2": [
+        "String::push_str\"(buf,",
+        "String::push\"(buf,"
+    ]
+}

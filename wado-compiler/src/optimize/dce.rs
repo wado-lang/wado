@@ -294,6 +294,7 @@ fn extend_reachable_for_optimizer_passes(
 
     let mut push_str: Option<(FunctionId, crate::nir::FuncId)> = None;
     let mut push_char_id: Option<FunctionId> = None;
+    let mut fused: Vec<FunctionId> = Vec::new();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         match func.compiler_item {
@@ -306,6 +307,14 @@ fn extend_reachable_for_optimizer_passes(
             Some(CompilerItem::StringPushChar) => {
                 push_char_id = Some(function_id_for(&func));
             }
+            Some(
+                CompilerItem::StringLen
+                | CompilerItem::StringReserveUninit
+                | CompilerItem::StringSetByteUnchecked
+                | CompilerItem::StringWriteStrAt,
+            ) => {
+                fused.push(function_id_for(&func));
+            }
             _ => {}
         }
     }
@@ -314,12 +323,27 @@ fn extend_reachable_for_optimizer_passes(
     // calls, so the target must survive the pre-loop DCE. Gating on a surviving
     // candidate makes the edge self-limiting. The `$value_copy$` half is not
     // gated: WIR build names those helpers after the final DCE.
-    if let (Some((str_id, str_func_id)), Some(char_id)) = (push_str, push_char_id)
+    if let (Some((str_id, str_func_id)), Some(char_id)) = (push_str.clone(), push_char_id.clone())
         && reachable.contains(&str_id)
         && !reachable.contains(&char_id)
         && has_short_push_str_candidate(project, str_func_id)
     {
         reachable.extend(compute_reachable(call_graph, &char_id));
+    }
+
+    // `nir/string_push`'s append fusion writes a run of appends in terms of the
+    // four `String` primitives above, so they must survive the pre-loop DCE
+    // wherever an append is reachable at all. Ungated beyond that: the fusion
+    // reads a run out of a block rather than a single recognisable call, and a
+    // later DCE drops the four again when no run fused.
+    if push_str
+        .map(|(id, _)| reachable.contains(&id))
+        .unwrap_or(false)
+        || push_char_id.is_some_and(|id| reachable.contains(&id))
+    {
+        for id in fused {
+            reachable.extend(compute_reachable(call_graph, &id));
+        }
     }
 
     // An `array_clone::<T>` site reaches its helper through the element type
