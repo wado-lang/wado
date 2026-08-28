@@ -1,14 +1,21 @@
 # Performance Dead Ends
 
 Optimizations that were measured and did **not** pay off. Read before starting
-performance work; add an entry whenever an A/B comes back flat.
+performance work; add an entry whenever one lands here.
 
-Wall-clock A/B is the verdict. Profile shares only rank candidates — two
-profiles have different sample counts, so a shifted percentage proves nothing.
+An entry lands here when a change clears none of the three bars in the skill's
+§5: the benchmark did not move, the WIR A/B diff shows no fewer instructions, and
+it does not even win the qualitative-tie case on wasm size. A change that clears
+one of them is kept, and belongs in its commit instead. Note what is _not_ a bar:
+code quantity. Neither wasm bytes nor dump lines correlate with speed, so only a
+WIR diff establishes "fewer instructions". Profile shares only rank
+candidates — two profiles have different sample counts, so a shifted percentage
+proves nothing.
 
 ```sh
 wado run -O2 --profile guest,prof.json,1 benchmark/json_catalog/json_catalog.wado
-for i in 1 2 3; do mise run json-catalog; done   # before and after
+wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff the hot function
+for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
 ## i64 divisions in integer formatting (2026-08-16)
@@ -91,7 +98,7 @@ gale-gen, best of four alternating pairs, **182.6 KB/s without it vs 168.0**.
 
 Pricing the two elisions against each other needs the share analysis keyed on
 liveness, a standing item in
-[WEP: Ownership Analysis](../docs/wep-2026-05-21-resource-ownership.md).
+[WEP: Ownership Analysis](../../../docs/wep-2026-05-21-resource-ownership.md).
 
 ## Raising the `-O2` inline budget (2026-08-27)
 
@@ -108,3 +115,67 @@ So the budget is not a dial with a better setting — a serializer's hot loop is
 exactly what growing it damages. What the sweep says instead is that the
 threshold is doing two jobs, admitting a callee and pricing a loop body, and a
 gale-gen-shaped win needs the second priced apart from the first.
+
+## A jump table in place of a compare cascade (gale, 2026-07/08)
+
+Two independent rewrites, both reverted. `_kind_set_*` — a
+`k matches { TK_… | … }` over the large SQLite keyword set, ~3% of the profile —
+already lowers to a Wasm `br_table`, and its self-time was **unchanged** from the
+compare cascade it replaced. `classify_keyword`'s per-length first-char dispatch,
+rewritten from an `eq_ignore_ascii_case` else-if chain to a fold-once
+`to_ascii_lowercase()` feeding a `match`, measured a consistent slight **loss**
+(sqlite-parse 3.309 → 3.357 ms/iter, best of 3).
+
+Cranelift lowers a short compare chain competitively and the chain predicts well,
+while the jump table adds an indirect branch. Both frames were
+call-frequency-bound, not dispatch-bound.
+
+Generalizes: a hot `match`-vs-cascade frame is telling you how often it is
+called. Cut the calls.
+
+## Index loops in place of `for x of &List<i32>` (gale, 2026-07)
+
+Iterating by reference boxes every element (WasmGC has no interior references),
+so rewriting `follow_yields`'s membership scan and `classify`'s `rule_stack` scan
+as index loops removes every box. It measured **within noise** — one of three
+paired rounds.
+
+The boxes die before the next collection, so the copying collector never traces
+them. Same shape as a compiler pass that removed thousands of per-token
+`Box<i32>` allocations for −0.7 ms/iter under `--collector null` and nothing at
+all under `copying`.
+
+Generalizes: an allocation you can prove short-lived is not a cost. Price a
+de-allocation idea against the live set, not the allocation count.
+
+## Pre-sizing a `String` past its one growth (gale, 2026-07)
+
+`highlight_html`'s output grows once past its `source.len() * 5` reserve (HTML is
+~6× source for keyword-dense SQL), and `String::grow` was 9% of the **dev**
+profile. Bumping the reserve to `* 7` removes the growth; a release A/B
+(best of 5) was **identical**, 3.90 vs 3.91 MB/s.
+
+`String::grow` is allocation and zero-fill, which the dev host inflates ~4–5×;
+its release share is ~1–2%, under the benchmark's noise. Contrast the CST column
+pre-size, worth a clear ~6% because `sqlite_parse` is build-only and the arrays
+are the work.
+
+Generalizes: this is the dev-vs-release rule with a number on it. A grow-removal
+sized from a dev profile is sized wrong.
+
+## Copying a short string with a byte loop (2026-08-28)
+
+A dynamic-length `array.copy` lowers to a `memory_copy` libcall — a wasm/host
+transition and an indirect call — and wasmtime only expands the copy inline when
+the length is a compile-time constant (`INLINE_COPY_MAX_BYTES`, 128). Every
+short `String::push_str` therefore pays the full call to move a dozen bytes, so
+a length-gated byte loop looked free.
+
+It is not close. json-twitter serialize, best of 3: **677 → 479 MB/s** with the
+loop taken up to 32 bytes. A GC array has no unchecked accessor, so the loop
+pays a bounds check on both the `array.get` and the `array.set` of every byte;
+the libcall's fixed cost is smaller than that from about two bytes on.
+
+Generalizes: on WasmGC, per-element beats bulk only when the bulk form is doing
+real work the element form skips. `array.copy` is not one of those — reach for
+the builtin and let the reservation, not the copy, be what you fuse.
