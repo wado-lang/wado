@@ -1,5 +1,5 @@
 ---
-description: "Cut the branch down to what the code cannot say: reuse what exists, remove duplication, dead code, and wasted work, turn invariants into asserts, and delete the comments the code already speaks."
+description: "Cut the branch down to what the code cannot say: reuse what exists, remove duplication, dead code, and wasted work, turn invariants into asserts, and delete the comments the code already speaks. Run it after answering review feedback too — a fix written to satisfy a reviewer is the least distilled code on the branch."
 argument-hint: "[extra instructions]"
 ---
 
@@ -23,6 +23,11 @@ This is the scope on every run. Distilling again means the whole branch again,
 never the diff since the last distill: an earlier pass is not a clean bill, and
 what the code between the two commits made stale is spread across everything the
 branch touched.
+
+Answering review feedback is one of the times to run it. Such a fix is written
+to satisfy a reviewer rather than to fit the code, so it arrives with the
+reviewer's framing in its comments, an explanation of the bug beside the fix,
+and often a helper the codebase already had.
 
 ## Rules
 
