@@ -4113,7 +4113,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 ```
 
-The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every input they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Subsequent compiles skip the generator when its content-addressed cache key matches `wado.lock`.
+The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every input they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Cache state is recorded per invocation in `<output_dir>/<primary>.kiln.json`, beside the generated outputs; a subsequent compile skips the generator when its content-addressed cache key matches the one recorded there. `wado.lock` stays dependency-pin-only.
 
 In hosts that cannot execute generators (today's wasm32-bundled LSP / browser playground), Kiln falls back to consume-only mode: the compiler reads cached generated `.wado` files from disk and emits a stale-cache warning if hashes do not match. Projects that want a full LSP experience in such hosts commit `build/kiln/` and `wado.lock` to their repository.
 
