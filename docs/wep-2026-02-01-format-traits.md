@@ -106,9 +106,11 @@ pub trait UpperExp  { fn fmt_upper_exp(&self, f: &mut Formatter); }
 internal trait Inspect { fn inspect(&self, f: &mut Formatter); }
 ```
 
-`Inspect` is `internal`: it is the compiler's dispatch target, not a name to
-write in a bound. A type may still write an `impl Inspect` to override the
-derived one.
+`Inspect` is `internal` — it is the compiler's dispatch target for `?`, and the
+stdlib's own impls are what a program normally reaches. A `T: Inspect` bound is
+accepted and always holds, since the trait is total over every type, and a type
+may write an `impl Inspect` to override the derived one. See
+[WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ### Resolution
 

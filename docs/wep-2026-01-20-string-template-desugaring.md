@@ -180,7 +180,11 @@ Desugars to:
 __tmpl: {
     let __strings = CookedStrings::from(["Value: ", ""]);
     let mut __formatted = "";
-    pi.fmt(&mut Formatter { precision: 2, ..., buf: &mut __formatted });
+    pi.fmt(&mut Formatter {
+        fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false,
+        zero_pad: false, width: -1, precision: 2, indent: 0,
+        buf: &mut __formatted,
+    });
     let __values = [__formatted];
     fmt(__strings, __values)
 }

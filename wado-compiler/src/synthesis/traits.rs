@@ -2900,7 +2900,7 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     /// Gates `generate_enum_trait_impls` / `generate_struct_eq_ord_impls` /
     /// `generate_variant_eq_impls` — an impl is emitted only for a pair
     /// recorded here, not for every declared type. Default / Inspect /
-    /// Display and their `Alt` siblings stay unconditional.
+    /// Display stay unconditional.
     pub(crate) requested: &'req SynthRequests,
     /// Module currently being synthesised. Auto-derived impls live in this
     /// module by convention.

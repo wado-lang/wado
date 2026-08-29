@@ -30,7 +30,7 @@ Wado follows Rust's mini-language. Two of Rust's omissions are kept:
 
 ### Grammar
 
-```
+```text
 interpolation := '${' expression [ ':' spec ] '}'
 spec          := [[fill] align] ['+'] ['#'] ['0'] [width] ['.' precision] [type]
 align         := '<' | '^' | '>'
