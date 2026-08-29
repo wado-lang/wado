@@ -125,21 +125,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_by
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(48)
 
-<<<<<<< HEAD
-type "functype//core:prelude/traits.wado/inspect_generic_struct_payload.wado/Pair<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "inspect_generic_struct_payload.wado//Pair<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(49)
-||||||| ac12c6d6a7
-type "functype//core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(49)
-=======
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(49)
->>>>>>> origin/main
 
-<<<<<<< HEAD
-type "functype//core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(50)
-||||||| ac12c6d6a7
-type "functype//core:prelude/traits.wado/inspect_generic_struct_payload.wado/Pair<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "inspect_generic_struct_payload.wado//Pair<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(50)
-=======
 type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(50)
->>>>>>> origin/main
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(51)
 
@@ -547,20 +535,20 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<i
     let s_53: ref "core:prelude/string.wado//String";
     let self_62: ref "core:prelude/string.wado//String";
     let self_64: ref "core:prelude/string.wado//String";
-    let new_used_80: i32;
-    let start_81: i32;
+    let new_used: i32;
+    let start: i32;
     s_10 = global:core:prelude/traits.wado::__const_obj_44;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_10);
     self_13 = f.buf;
-    new_used_80 = self_13.used + 2;
-    if @unlikely(new_used_80 > builtin::array_len(self_13.repr)) {
+    new_used = self_13.used + 2;
+    if @unlikely(new_used > builtin::array_len(self_13.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_13, new_used_80);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_13, new_used);
     }
-    start_81 = self_13.used;
-    self_13.used = new_used_80;
-    builtin::array_set_u8(self_13.repr, start_81, 32);
-    builtin::array_set_u8(self_13.repr, start_81 + 1, 123);
+    start = self_13.used;
+    self_13.used = new_used;
+    builtin::array_set_u8(self_13.repr, start, 32);
+    builtin::array_set_u8(self_13.repr, start + 1, 123);
     f.indent = f.indent + 1;
     self_16 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(self_16, 10);
@@ -1447,25 +1435,6 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     }
 }
 
-<<<<<<< HEAD
-||||||| ac12c6d6a7
-fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base, upper, prefix) {
-    let bits_per_digit: i32;
-    let mask: i32;
-    let digit_count: i32;
-    let offset: i32;
-    bits_per_digit = (if base == 2 -> i32 {
-        1;
-    } else {
-        select i32(base == 8, 3, 4);
-    });
-    mask = base - 1;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, prefix, digit_count);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, mask, upper);
-}
-
-=======
 fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base, upper, alt_prefix) {
     let bits_per_digit: i32;
     let mask: i32;
@@ -1482,7 +1451,6 @@ fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base
     "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, mask, upper);
 }
 
->>>>>>> origin/main
 fn "core:prelude/traits.wado/inspect_generic_struct_payload.wado/Pair<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(self, f) {
     let s_9: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
@@ -1520,22 +1488,6 @@ fn "core:prelude/traits.wado/inspect_generic_struct_payload.wado/Pair<core:prelu
     "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(self.r, f);
     s_37 = global:core:prelude/traits.wado::__const_obj_39;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f, s_37);
-}
-
-fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base, upper, prefix) {
-    let bits_per_digit: i32;
-    let mask: i32;
-    let digit_count: i32;
-    let offset: i32;
-    bits_per_digit = (if base == 2 -> i32 {
-        1;
-    } else {
-        select i32(base == 8, 3, 4);
-    });
-    mask = base - 1;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, prefix, digit_count);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, mask, upper);
 }
 
 export fn "inspect_generic_struct_payload.wado/__cm_export____test_0_a_variant_with_a_generic_struct_payload_inspects" as "__test_0_a_variant_with_a_generic_struct_payload_inspects"
