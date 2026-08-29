@@ -1687,6 +1687,15 @@ let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation (
 let i: u32 = 0x1_0000_0000;       // compile error: 33-bit value does not fit in u32
 ```
 
+A literal that nothing coerces falls back to `i32`, and the same range check applies there. `-NUM` is checked as one literal, so it reaches the signed minimum.
+
+```wado
+let j = 2147483647;               // OK: max i32
+let k = 4294967296;               // compile error: literal out of range for `i32`: 4294967296
+let l = -2147483648;              // OK: min i32
+let m = -2147483649;              // compile error: literal out of range for `i32`: -2147483649
+```
+
 Type conversion (via `as`):
 
 ```wado
@@ -3918,7 +3927,7 @@ A specifier names a package only — no interface segment; interfaces and member
 
 ### Module Path Validation
 
-Relative paths in Wado follow the gitignore / shell convention: a path that refers to a file relative to the current file must begin with `./` (next to me) or `../` (up one). A bare path (`foo/bar`, `utils.wado`) is never relative-to-here — it is read as a namespace/coordinate or handed to the host, and is rejected wherever only a relative file path is valid. This rule is uniform across every path literal: module imports (`use ... from`), `#include_str` / `#include_bytes`, and Kiln schema paths (`from`, `generator.inputs`, `generator.output_dir`).
+Relative paths in Wado follow the gitignore / shell convention: a path that refers to a file relative to the current file must begin with `./` (next to me) or `../` (up one). A bare path (`foo/bar`, `utils.wado`) is never relative-to-here — it is read as a namespace/coordinate or handed to the host, and is rejected wherever only a relative file path is valid. This rule is uniform across every path literal: module imports (`use ... from`), `#include_str` / `#include_bytes`, and Kiln input paths (`from`, `generator.inputs`, `generator.output_dir`).
 
 Module paths are validated before loading to provide clear error messages:
 
@@ -4047,11 +4056,11 @@ An inline `with` source and a `wado.toml` entry for the same specifier are mutua
 
 Explicit type annotations prevent ambiguity and make dependencies clear, aligning with Wado's design philosophy of explicit imports.
 
-### Schema Imports (Kiln)
+### Generated Imports (Kiln)
 
 See [WEP: Kiln](./wep-2026-04-12-kiln.md) and [WEP: Gale](./wep-2026-03-02-gale.md).
 
-A `use` clause whose source is a non-`.wado`, non-`.wasm` schema file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`) is processed by Kiln — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
+A `use` clause whose source is neither a `.wado` module nor a Wasm asset (`.wasm` / `.wat`) is processed by Kiln — a code-generation pipeline that lowers the input to ordinary Wado source which the compiler then handles like any user-authored module. `.g4`, `.proto`, `.graphql`, `.wit`, and a Wado dialect's own extension all take this path. The `with { generator: { ... } }` clause specifies which generator to invoke:
 
 ```wado
 // Gale generates a parser from an ANTLR4 grammar
@@ -4076,7 +4085,7 @@ use { RustParser } from "./Rust.g4" with {
 | ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `module`     | yes      | Generator module — either a `<namespace>:<name>[@<version>]` reference resolved against `[build-dependencies]`, or a relative `./` path. |
 | `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. Omit when every field has a default.                   |
-| `inputs`     | no       | Supplementary schema paths the generator cannot discover from the primary alone (e.g. a sibling lexer grammar).                          |
+| `inputs`     | no       | Supplementary input paths the generator cannot discover from the primary alone (e.g. a sibling lexer grammar).                           |
 | `output_dir` | no       | Override for the per-invocation generated-source directory (default `build/kiln/<synthesized-id>/`).                                     |
 
 #### Manifest
@@ -4088,7 +4097,7 @@ Generators are declared in `[build-dependencies]` of `wado.toml` (a build-only g
 gale = { registry = "wado", package = "gale", version = "0.1" }
 ```
 
-A bare `use { ... } from "./schema.g4"` against a non-`.wado` schema with no `with` clause is a hard error (`Code::KilnMissingWith`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
+A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`Code::KilnMissingWith`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
 
 #### Authoring a generator
 
@@ -4106,7 +4115,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 ```
 
-The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every schema they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Subsequent compiles skip the generator when its content-addressed cache key matches `wado.lock`.
+The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every input they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Cache state is recorded per invocation in `<output_dir>/<primary>.kiln.json`, beside the generated outputs; a subsequent compile skips the generator when its content-addressed cache key matches the one recorded there. `wado.lock` stays dependency-pin-only.
 
 In hosts that cannot execute generators (today's wasm32-bundled LSP / browser playground), Kiln falls back to consume-only mode: the compiler reads cached generated `.wado` files from disk and emits a stale-cache warning if hashes do not match. Projects that want a full LSP experience in such hosts commit `build/kiln/` and `wado.lock` to their repository.
 

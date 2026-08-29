@@ -9370,6 +9370,10 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self: &mut String,
     return start;
 }
 
+fn "core:prelude/string.wado/String::internal_write_str_at"(self: &mut String, offset: i32, s: &String, n: i32) {
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, offset, &s.repr as &Array<u8>, 0, n);
+}
+
 pub fn "core:prelude/string.wado/String::append_byte_filled"(self: &mut String, byte: u8, n: i32) {
     if (n <= 0) {
         return;
@@ -11146,6 +11150,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self: &mut Formatter
     }
 }
 
+<<<<<<< HEAD
 fn "core:prelude/format.wado/Formatter::count_chars_from"(self: &Formatter, start_pos: i32) -> i32 {
     let end: i32 = self.buf."core:prelude/string.wado/String::len"();
     let mut count: i32 = 0;
@@ -11217,24 +11222,43 @@ fn "core:prelude/format.wado/Formatter::write_fill_at"(self: &mut Formatter, at:
 
 pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Formatter, is_negative: bool, alt_prefix: String, digit_count: i32) -> i32 {
     let mut sign: String = String { repr: packed"", used: 0 };
+||||||| dfe845d35
+pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Formatter, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
+    let mut sign: String = String { repr: packed"", used: 0 };
+=======
+fn "core:prelude/format.wado/Formatter::write_sign"(self: &mut Formatter, is_negative: bool) {
+>>>>>>> origin/main
     if is_negative {
-        sign = String { repr: packed"-", used: 1 };
+        self.buf."core:prelude/string.wado/String::push"('-');
     } else {
         if self.sign_plus {
-            sign = String { repr: packed"+", used: 1 };
+            self.buf."core:prelude/string.wado/String::push"('+');
         }
     }
+<<<<<<< HEAD
     let sign_len: i32 = sign."core:prelude/string.wado/String::len"();
     let prefix_len: i32 = if self.alternate {
         alt_prefix."core:prelude/string.wado/String::len"();
     } else {
         0;
     };
+||||||| dfe845d35
+    let sign_len: i32 = sign."core:prelude/string.wado/String::len"();
+    let prefix_len: i32 = prefix."core:prelude/string.wado/String::len"();
+=======
+}
+
+pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Formatter, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
+    let sign_len: i32 = if (is_negative || self.sign_plus) {
+        1;
+    } else {
+        0;
+    };
+    let prefix_len: i32 = prefix."core:prelude/string.wado/String::len"();
+>>>>>>> origin/main
     let content_len: i32 = ((sign_len + prefix_len) + digit_count);
     if ((self.width <= 0) || (content_len >= self.width)) {
-        if (sign_len > 0) {
-            self.buf."core:prelude/string.wado/String::push_str"(&sign);
-        }
+        self."core:prelude/format.wado/Formatter::write_sign"(is_negative);
         if (prefix_len > 0) {
             self.buf."core:prelude/string.wado/String::push_str"(&alt_prefix);
         }
@@ -11242,9 +11266,7 @@ pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Format
     }
     let padding: i32 = (self.width - content_len);
     if self.zero_pad {
-        if (sign_len > 0) {
-            self.buf."core:prelude/string.wado/String::push_str"(&sign);
-        }
+        self."core:prelude/format.wado/Formatter::write_sign"(is_negative);
         if (prefix_len > 0) {
             self.buf."core:prelude/string.wado/String::push_str"(&alt_prefix);
         }
@@ -11256,9 +11278,7 @@ pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Format
         Left => true,
         _ => false,
     } {
-        if (sign_len > 0) {
-            self.buf."core:prelude/string.wado/String::push_str"(&sign);
-        }
+        self."core:prelude/format.wado/Formatter::write_sign"(is_negative);
         if (prefix_len > 0) {
             self.buf."core:prelude/string.wado/String::push_str"(&alt_prefix);
         }
@@ -11273,9 +11293,7 @@ pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Format
             let left_pad: i32 = (padding / 2);
             let right_pad: i32 = (padding - left_pad);
             self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, left_pad);
-            if (sign_len > 0) {
-                self.buf."core:prelude/string.wado/String::push_str"(&sign);
-            }
+            self."core:prelude/format.wado/Formatter::write_sign"(is_negative);
             if (prefix_len > 0) {
                 self.buf."core:prelude/string.wado/String::push_str"(&alt_prefix);
             }
@@ -11284,9 +11302,7 @@ pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Format
             return offset;
         } else {
             self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
-            if (sign_len > 0) {
-                self.buf."core:prelude/string.wado/String::push_str"(&sign);
-            }
+            self."core:prelude/format.wado/Formatter::write_sign"(is_negative);
             if (prefix_len > 0) {
                 self.buf."core:prelude/string.wado/String::push_str"(&alt_prefix);
             }

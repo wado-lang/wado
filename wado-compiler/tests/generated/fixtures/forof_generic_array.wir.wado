@@ -54,9 +54,9 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(20)
 
-type "functype//forof_generic_array.wado/forof_generic_array.wado/Container<i32>::process" = fn(ref "core:prelude//List<i32>");  // TypeId(21)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(21)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(22)
+type "functype//forof_generic_array.wado/forof_generic_array.wado/Container<i32>::process$scalar" = fn(ref "core:prelude//List<i32>");  // TypeId(22)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
@@ -91,7 +91,7 @@ fn "forof_generic_array.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:forof_generic_array.wado::__modules_initialized = 1;
     };
-    "forof_generic_array.wado/forof_generic_array.wado/Container<i32>::process"(elements = array.new_fixed<i32>(1, 2, 3); struct.new "core:prelude//List<i32>" { repr: elements, used: 3 });
+    "forof_generic_array.wado/forof_generic_array.wado/Container<i32>::process$scalar"(elements = array.new_fixed<i32>(1, 2, 3); struct.new "core:prelude//List<i32>" { repr: elements, used: 3 });
     rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "forof_generic_array.wado/__cm_binding__Stdout_write_via_stream"(rx_8);
@@ -115,8 +115,8 @@ fn "forof_generic_array.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len_3: i32;
     let new_repr: ref Array<u8>;
+    let self_5: i32;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
@@ -129,12 +129,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let repr_29: ref Array<u8>;
     let len_35: i32;
     let ptr_36: i32;
-    len_3 = message.used;
+    self_5 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len_3 + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
-        builtin::array_set_u8(new_repr, len_3, 10);
-        len_18 = local.tee end_15(len_3 + 1) - 0;
+        new_repr = builtin::array_new<u8>(self_5 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_5);
+        builtin::array_set_u8(new_repr, self_5, 10);
+        len_18 = local.tee end_15(self_5 + 1) - 0;
         ptr_19 = "mem/realloc"(0, 0, 1, len_18);
         "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
         ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
@@ -143,7 +143,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_29 = message.repr;
-        len_35 = len_3 - 0;
+        len_35 = self_5 - 0;
         ptr_36 = "mem/realloc"(0, 0, 1, len_35);
         "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
         ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
@@ -203,23 +203,6 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "forof_generic_array.wado/forof_generic_array.wado/Container<i32>::process"(self) {
-    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<i32>";
-    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: self.repr, index: 0, end: self.used };
-    b6: block {
-        l7: loop {
-            let __match_3_mv_0: i32;
-            let __match_3_mv_1: i32;
-            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_1);
-            if __match_3_mv_0 == 0 {
-            } else {
-                break b6;
-            }
-            continue l7;
-        };
-    };
-}
-
 fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
     let _av_2: i32;
@@ -230,6 +213,23 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:pre
     item = builtin::array_get_value<i32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
+}
+
+fn "forof_generic_array.wado/forof_generic_array.wado/Container<i32>::process$scalar"(self) {
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<i32>";
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: self.repr, index: 0, end: self.used };
+    b7: block {
+        l8: loop {
+            let __match_3_mv_0: i32;
+            let __match_3_mv_1: i32;
+            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_3_mv_0 == 0 {
+            } else {
+                break b7;
+            }
+            continue l8;
+        };
+    };
 }
 
 export fn "forof_generic_array.wado/__cm_export__run" as "run"

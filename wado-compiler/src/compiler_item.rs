@@ -444,6 +444,18 @@ pub enum CompilerItem {
     /// `const_ascii_push` rewrite retargets constant-ASCII `push` calls to,
     /// skipping `encode_char`'s width dispatch.
     StringPushAscii,
+    /// `String::len` — the byte length the NIR `append_fuse` rewrite reads
+    /// before a fused reservation advances it.
+    StringLen,
+    /// `String::internal_reserve_uninit` — the single capacity check the NIR
+    /// `append_fuse` rewrite emits for a whole run of appends.
+    StringReserveUninit,
+    /// `String::set_byte_unchecked` — the raw byte write `append_fuse` emits
+    /// into space `internal_reserve_uninit` already claimed.
+    StringSetByteUnchecked,
+    /// `String::internal_write_str_at` — the raw string write `append_fuse`
+    /// emits into space `internal_reserve_uninit` already claimed.
+    StringWriteStrAt,
     /// `String::get_byte_unchecked` — the unchecked byte read helper
     /// used by synthesised deserializers (`serde_synth`). Routed
     /// through this item so renames in the stdlib do not silently
@@ -720,6 +732,10 @@ impl CompilerItem {
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringPushAscii,
+        Self::StringLen,
+        Self::StringReserveUninit,
+        Self::StringSetByteUnchecked,
+        Self::StringWriteStrAt,
         Self::StringGetByteUnchecked,
         Self::ByteSliceGetUnchecked,
         Self::ByteSliceLen,
@@ -926,6 +942,10 @@ impl CompilerItem {
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
+            Self::StringLen => "string_len",
+            Self::StringReserveUninit => "string_reserve_uninit",
+            Self::StringSetByteUnchecked => "string_set_byte_unchecked",
+            Self::StringWriteStrAt => "string_write_str_at",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
             Self::ByteSliceGetUnchecked => "byte_slice_get_unchecked",
             Self::ByteSliceLen => "byte_slice_len",
@@ -1080,6 +1100,10 @@ impl CompilerItem {
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
+            | Self::StringLen
+            | Self::StringReserveUninit
+            | Self::StringSetByteUnchecked
+            | Self::StringWriteStrAt
             | Self::StringGetByteUnchecked
             | Self::ByteSliceGetUnchecked
             | Self::ByteSliceLen
@@ -1326,6 +1350,10 @@ impl CompilerItem {
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
+            | Self::StringLen
+            | Self::StringReserveUninit
+            | Self::StringSetByteUnchecked
+            | Self::StringWriteStrAt
             | Self::StringGetByteUnchecked
             | Self::ByteSliceGetUnchecked
             | Self::ByteSliceLen

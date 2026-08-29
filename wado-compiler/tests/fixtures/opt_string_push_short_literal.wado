@@ -19,7 +19,8 @@
 // We exercise three short-literal cases (1–3 ASCII bytes) and verify in
 // the WIR that:
 //   * each source byte is written directly with `array_set_u8` (the
-//     inlined `push_ascii` fast path); and
+//     inlined `push_ascii` fast path), all six sharing the one reservation
+//     the append fusion leaves for the whole adjacent run; and
 //   * no `push_str`, char-`push`, or `encode_char` call survives — the
 //     specialization avoids the temporary `String` alloc and the UTF-8
 //     width dispatch for every short-literal site.
@@ -38,7 +39,7 @@ __DATA__
 {
     "stdout": "0..inf\n",
     "wir_expect:O2": [
-        "buf.used = new_used_",
+        "buf.used = new_used;",
         "array_set_u8(buf.repr,",
         ", 48)",
         ", 46)",

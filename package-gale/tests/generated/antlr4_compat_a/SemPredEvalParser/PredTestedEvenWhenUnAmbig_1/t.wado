@@ -1240,7 +1240,7 @@ struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     output: String,
-    enumKeyword: bool = true,
+    enum_keyword: bool = true,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -1565,7 +1565,7 @@ fn _parse_primary__inner(p: &mut Parser) -> () {
         }
         return;
     }
-    if kind == TK_LIT_ENUM && (!(p.enumKeyword)) {
+    if kind == TK_LIT_ENUM && (!(p.enum_keyword)) {
         let lit_enum = p.expect(TK_LIT_ENUM, &EMPTY_SYNC);
         if !p.speculating {
             p.emit(`enum\n`);

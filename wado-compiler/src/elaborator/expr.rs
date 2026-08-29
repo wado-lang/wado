@@ -37,6 +37,35 @@ enum FuncRefInference {
     NotApplicable,
 }
 
+/// The literal's source text when it denotes an integer — the shape whose type
+/// is settled by defaulting to `i32` rather than by a coercion.
+pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
+    match &lit.value {
+        Literal::Number(repr) if !util::is_float_only_literal(repr) => Some(repr.as_str()),
+        _ => None,
+    }
+}
+
+/// An integer literal standing as an operand, bare or negated — the shape
+/// reify re-types to a cast's target width.
+fn int_literal_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str)> {
+    let lit = match expr {
+        Expr::Literal(lit) => lit,
+        Expr::Unary(unary) => negated_literal(unary)?,
+        _ => return None,
+    };
+    int_literal_repr(lit).map(|repr| (lit, repr))
+}
+
+/// The literal `-NUM` negates, which both range checks read as one literal so
+/// the boundary is the signed minimum.
+pub(super) fn negated_literal(unary: &ast::UnaryExpr) -> Option<&ast::LiteralExpr> {
+    match (&unary.op, &unary.expr) {
+        (ast::UnaryOp::Neg, Expr::Literal(lit)) => Some(lit),
+        _ => None,
+    }
+}
+
 /// How a subscript is being used, which decides the indexing trait it selects:
 /// `&mut xs[i]` reaches the element through `IndexRefMut` so the mutability rides
 /// on the signature, while every other position reads it shared.
@@ -294,7 +323,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Main expression dispatch
         match expr {
-            Expr::Literal(lit) => self.resolve_literal(lit),
+            Expr::Literal(lit) => self.resolve_literal(lit, expected_type),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx, expected_type),
             Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
             Expr::Unary(unary) => self.resolve_unary(unary, ctx, expected_type),
@@ -414,11 +443,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a type without registering new types
-    /// This is used for lookups where we need immutable access. It only handles
-    /// primitive types and newtypes. For generic types, use `resolve_type` instead.
-    /// Resolve a method call
-    pub(super) fn resolve_literal(&mut self, lit: &ast::LiteralExpr) -> TypeId {
+    /// Range-check an integer literal against the `i32` it defaults to, the
+    /// boundary chosen by `negated` — `-NUM` is one literal, so `-2147483648`
+    /// fits where the bare `2147483648` does not.
+    ///
+    /// Only the defaulted case. An expectation still pending here is one no
+    /// coercion took — a type parameter awaiting inference — and it re-coerces
+    /// the literal afterwards, checking the range against the type it lands on.
+    pub(super) fn check_default_int_literal(&mut self, repr: &str, negated: bool, span: Span) {
+        let Some(value) = self.check_int_literal_parses(repr, span) else {
+            return;
+        };
+        let message = {
+            let table = self.tysys.type_table.borrow();
+            if negated {
+                util::check_int_range_negative(value, TypeTable::I32, &table, repr)
+            } else {
+                util::check_int_range_positive(value, TypeTable::I32, &table, repr)
+            }
+        };
+        if let Some(message) = message {
+            let _ = self.emit(TypeError::InvalidLiteral { message, span });
+        }
+    }
+
+    /// Parse an integer literal, reporting a malformed or wider-than-`u128`
+    /// one. Always this walk's job: nothing downstream reports it, and reify
+    /// reads such a literal as `0`.
+    pub(super) fn check_int_literal_parses(&mut self, repr: &str, span: Span) -> Option<u128> {
+        match util::parse_u128_literal(repr) {
+            Ok(value) => Some(value),
+            Err(message) => {
+                let _ = self.emit(TypeError::InvalidLiteral { message, span });
+                None
+            }
+        }
+    }
+
+    pub(super) fn resolve_literal(
+        &mut self,
+        lit: &ast::LiteralExpr,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
         // Reify rebuilds every literal node from the AST; the
         // body walk only needs the literal's type and its parse / unescape
         // diagnostics. The returned value is a placeholder, so this projects
@@ -436,12 +502,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     TypeTable::F64
                 } else {
-                    // Can be integer (default to i32)
-                    if let Err(message) = util::parse_u128_literal(repr) {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
+                    if expected_type.is_none() {
+                        self.check_default_int_literal(repr, false, lit.span);
+                    } else {
+                        self.check_int_literal_parses(repr, lit.span);
                     }
                     TypeTable::I32
                 }
@@ -3286,8 +3350,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Normal cast
-        let source_type = self.resolve_expr(&cast.expr, ctx, None);
+        // Reify re-types a literal operand to the target's width — what makes
+        // `as` the way to write a bit pattern (`0xFF as i8`) and how a literal
+        // reaches a target wider than `i32` (`65 as i128`). It never lands on
+        // `i32`, so the defaulted range check must not judge it.
+        let source_type = match int_literal_operand(&cast.expr) {
+            Some((lit, repr)) => {
+                self.check_int_literal_parses(repr, lit.span);
+                self.record_expression_type(cast.expr.id(), TypeTable::I32);
+                self.record_expression_type(lit.id, TypeTable::I32);
+                TypeTable::I32
+            }
+            None => self.resolve_expr(&cast.expr, ctx, None),
+        };
 
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;

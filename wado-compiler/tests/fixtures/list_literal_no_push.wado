@@ -12,8 +12,11 @@ pub struct Widget {
     pub id: i32,
 }
 
+// `black_box` keeps the id off the constant-folding path. Without it the
+// optimizer folds the whole construction away and the `not_expect` patterns
+// below hold vacuously — the same trap the naming note above describes.
 export fn run() with Stdout {
-    let w = Widget { id: 7 };
+    let w = Widget { id: builtin::black_box(7) };
     let widgets: List<Widget> = [w];
     println(`${widgets[0].id}`);
 }

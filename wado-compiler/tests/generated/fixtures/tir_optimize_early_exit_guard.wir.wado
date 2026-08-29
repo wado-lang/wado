@@ -97,8 +97,8 @@ fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     let packed_24: i64;
     let rx_25: i32;
     let tx_26: i32;
-    let c_36: char;
-    let c_42: char;
+    let __sroa_self_value_44: char;
+    let __sroa_self_value_53: char;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:tir_optimize_early_exit_guard.wado::__modules_initialized);
         cold_path;
@@ -108,16 +108,16 @@ fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     elements = array.new_fixed<char>(97, 98, 99);
     a = struct.new "core:prelude//List<char>" { repr: elements, used: 3 };
     __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    c_36 = "tir_optimize_early_exit_guard.wado/safe_get"(a, 1);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_1, c_36);
+    __sroa_self_value_53 = "tir_optimize_early_exit_guard.wado/safe_get"(a, 1);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_1, __sroa_self_value_53);
     rx_14 = builtin::i32_wrap_i64(local.tee packed_13("wasi/stream-new"()));
     tx_15 = builtin::i32_wrap_i64(packed_13 >> 32_i64);
     handle_9 = "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_14);
     "core:cli/write_to_stream"(tx_15, __local_1, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_9);
     __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    c_42 = "tir_optimize_early_exit_guard.wado/safe_get"(a, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_3, c_42);
+    __sroa_self_value_44 = "tir_optimize_early_exit_guard.wado/safe_get"(a, 10);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_3, __sroa_self_value_44);
     rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
     tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
     handle_20 = "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
@@ -141,8 +141,8 @@ fn "tir_optimize_early_exit_guard.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len_3: i32;
     let new_repr: ref Array<u8>;
+    let self_5: i32;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
@@ -155,12 +155,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let repr_29: ref Array<u8>;
     let len_35: i32;
     let ptr_36: i32;
-    len_3 = message.used;
+    self_5 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len_3 + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
-        builtin::array_set_u8(new_repr, len_3, 10);
-        len_18 = local.tee end_15(len_3 + 1) - 0;
+        new_repr = builtin::array_new<u8>(self_5 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_5);
+        builtin::array_set_u8(new_repr, self_5, 10);
+        len_18 = local.tee end_15(self_5 + 1) - 0;
         ptr_19 = "mem/realloc"(0, 0, 1, len_18);
         "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
         ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
@@ -169,7 +169,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_29 = message.repr;
-        len_35 = len_3 - 0;
+        len_35 = self_5 - 0;
         ptr_36 = "mem/realloc"(0, 0, 1, len_35);
         "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
         ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));

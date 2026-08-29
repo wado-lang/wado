@@ -16,7 +16,7 @@ use crate::compiler_item::SeqField;
 use crate::const_eval::{Value, prim_of};
 use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
-use crate::nir::NirUnaryOp;
+use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -334,11 +334,7 @@ fn build_global_env(
                 interp.with_callees(callees);
                 interp.with_ctfe_builtins(ctfe_builtins);
                 interp.with_globals(&env);
-                let body = declared.body();
-                match declared.expr() {
-                    Operand::Expr(e) => interp.reduce_to_lattice(body, e),
-                    op @ Operand::Value(_) => interp.operand_to_lattice(body, op),
-                }
+                operand_lattice(&interp, declared.body(), declared.expr())
             }
         };
         if !matches!(lattice, Lattice::Unevaluated) {
@@ -769,13 +765,19 @@ impl ConstFoldVisitor<'_> {
                 // entry and post-loop. Struct-field heap effects across the
                 // loop are the engine `ValueGraph`'s concern, not niri's.
                 let lb = *lb;
-                let writes = collect_loop_write_effects(engine.body, lb);
+                let writes = collect_write_effects(engine.body, NodeRef::Block(lb));
                 self.apply_loop_invalidations(&writes);
-                self.visit_block(engine, lb)
+                let changed = self.visit_block(engine, lb);
+                self.apply_loop_invalidations(&writes);
+                changed
             }
             StmtKind::LabeledBlock { block, .. } => {
                 let block = *block;
-                self.visit_block(engine, block)
+                let writes = collect_write_effects(engine.body, NodeRef::Stmt(s));
+                self.apply_loop_invalidations(&writes);
+                let changed = self.visit_block(engine, block);
+                self.apply_loop_invalidations(&writes);
+                changed
             }
             StmtKind::If {
                 condition,
@@ -785,11 +787,13 @@ impl ConstFoldVisitor<'_> {
                 let condition = *condition;
                 let then_block = *then_block;
                 let else_block = *else_block;
+                let writes = collect_write_effects(engine.body, NodeRef::Stmt(s));
                 let mut changed = self.visit_operand(engine, condition);
-                changed |= self.visit_block(engine, then_block);
+                changed |= self.visit_alternative_block(engine, &writes, then_block);
                 if let Some(eb) = else_block {
-                    changed |= self.visit_block(engine, eb);
+                    changed |= self.visit_alternative_block(engine, &writes, eb);
                 }
+                self.apply_loop_invalidations(&writes);
                 changed
             }
             _ => unreachable!("non-control-flow stmt reached control-flow arm"),
@@ -820,38 +824,52 @@ impl ConstFoldVisitor<'_> {
         // reaching-def across arms is the engine `ValueGraph`'s concern.
         match expr_shape(engine.body, e) {
             ExprShape::If(condition, then_branch, else_branch) => {
+                let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
                 let mut changed = self.visit_operand(engine, condition);
-                changed |= self.visit_block(engine, then_branch);
+                changed |= self.visit_alternative_block(engine, &writes, then_branch);
                 if let Some(eb) = else_branch {
-                    changed |= self.visit_block(engine, eb);
+                    changed |= self.visit_alternative_block(engine, &writes, eb);
                 }
+                self.apply_loop_invalidations(&writes);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Match(scrutinee, arms) => {
+                let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
+                    self.apply_loop_invalidations(&writes);
                     // Under a constant scrutinee the arm's guard and body reduce
                     // under the bindings its pattern makes.
                     let binds = self
                         .interpreter
                         .arm_bindings(engine.body, scrutinee, arm.pattern);
                     let scope = self.interpreter.enter_arm(&binds);
-                    if let Some(g) = arm.guard {
+                    // A guard that declares locals is not just a test: this
+                    // lowering puts a nested pattern's sub-bindings in it
+                    // (`… && { let x = p.end.x; true }`) and the arm body reads
+                    // them. Folding it to its constant would take the bindings
+                    // with it.
+                    if let Some(g) = arm.guard
+                        && !crate::niri::guard_declares_locals(engine.body, g)
+                    {
                         changed |= self.visit_operand(engine, g);
                     }
                     changed |= self.visit_operand(engine, arm.body);
                     self.interpreter.leave_arm(scope);
                 }
+                self.apply_loop_invalidations(&writes);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Switch(scrutinee, arms, default) => {
+                let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
-                    changed |= self.visit_block(engine, *arm);
+                    changed |= self.visit_alternative_block(engine, &writes, *arm);
                 }
-                changed |= self.visit_block(engine, default);
+                changed |= self.visit_alternative_block(engine, &writes, default);
+                self.apply_loop_invalidations(&writes);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
@@ -860,14 +878,37 @@ impl ConstFoldVisitor<'_> {
                 changed |= self.reduce_local(engine, e);
                 changed
             }
+            // A `break L` inside means the statements after it did not run on
+            // that path, so what the last one left is not what every path leaves.
             ExprShape::Labeled(block, _label) => {
+                let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
+                self.apply_loop_invalidations(&writes);
                 let mut changed = self.visit_block(engine, block);
+                self.apply_loop_invalidations(&writes);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::None => {
-                // Bottom-up walk for the remaining expressions.
+                // Bottom-up walk for the remaining expressions. `a && b` /
+                // `a || b` run their right operand only when the left does not
+                // already decide the result, so it is a conditional position
+                // like a branch arm — the shape an assert's capture writes sit
+                // in, which must not be recorded on a path that skips them.
+                let writes = matches!(
+                    &engine.body.exprs[e].kind,
+                    ExprKind::Binary {
+                        op: NirBinaryOp::And | NirBinaryOp::Or,
+                        ..
+                    }
+                )
+                .then(|| collect_write_effects(engine.body, NodeRef::Expr(e)));
+                if let Some(writes) = &writes {
+                    self.apply_loop_invalidations(writes);
+                }
                 let mut changed = self.walk_children(engine, NodeRef::Expr(e));
+                if let Some(writes) = &writes {
+                    self.apply_loop_invalidations(writes);
+                }
                 changed |= self.project_struct_literal(engine, e);
                 changed |= self.reduce_local(engine, e);
                 changed
@@ -986,7 +1027,12 @@ impl ConstFoldVisitor<'_> {
         // a field / deref / index store drops what the frame knows about the
         // storage written, which a borrow reaches under another name.
         match &engine.body.exprs[target].kind {
-            ExprKind::Local { index, .. } => self.interpreter.invalidate_local(*index),
+            ExprKind::Local { index, .. } => {
+                let index = *index;
+                let lat = operand_lattice(&self.interpreter, engine.body, value);
+                self.interpreter.invalidate_local(index);
+                self.interpreter.bind_local(index, scalar_only(lat));
+            }
             _ => self
                 .interpreter
                 .invalidate_place(engine.body, target.into()),
@@ -1027,22 +1073,15 @@ impl ConstFoldVisitor<'_> {
             }
             _ => return,
         };
-        let lat = if is_mut {
-            // `let mut x = …` — any later `x = …` would invalidate the
-            // binding anyway. The interpreter doesn't track
-            // flow-sensitive values for mutable locals, so be
-            // conservative up front.
-            Lattice::NonConst
-        } else {
-            match value {
-                Operand::Expr(e) => self.interpreter.reduce_to_lattice(body, e),
-                Operand::Value(_) => self.interpreter.operand_to_lattice(body, value),
-            }
-        };
-        // Drop any prior knowledge keyed by this index (rare — a fresh
-        // `let` typically introduces a unique index, but defensive).
-        // This also clears stale field entries from a same-index reuse
-        // before we record new ones below.
+        let lat = operand_lattice(&self.interpreter, body, value);
+        // A mutable binding carries its value forward only while that value is a
+        // scalar. An aggregate is mutated in place — through an element `&mut`,
+        // an iterator, a captured reference — none of which reassigns the local
+        // or borrows it by name, so no write summary here would drop the stale
+        // constant.
+        let lat = if is_mut { scalar_only(lat) } else { lat };
+        // A same-index reuse would otherwise keep the earlier `let`'s constant
+        // and its field entries.
         self.interpreter.invalidate_local(local_index);
         self.interpreter
             .record_ref_root(local_index, Self::borrowed_root(body, value));
@@ -1119,6 +1158,18 @@ impl ConstFoldVisitor<'_> {
         }
     }
 
+    /// Walk one alternative of a branch, from the environment its siblings see:
+    /// only one runs, so neither may fold against what another assigned.
+    fn visit_alternative_block(
+        &mut self,
+        engine: &mut Engine,
+        writes: &LoopWriteEffects,
+        block: BlockId,
+    ) -> bool {
+        self.apply_loop_invalidations(writes);
+        self.visit_block(engine, block)
+    }
+
     /// Apply a [`LoopWriteEffects`] summary to the interpreter,
     /// dropping every local the body could reassign or mutably borrow to
     /// `NonConst`, so the pre-body and post-body local env is a sound
@@ -1132,6 +1183,24 @@ impl ConstFoldVisitor<'_> {
             // reference the callee can store and mutate; drop the local.
             self.interpreter.invalidate_local(*idx);
         }
+    }
+}
+
+/// What an operand denotes: an expression is reduced first, a promoted value
+/// read straight from the pool, which already holds it folded.
+fn operand_lattice(interp: &Interpreter<'_>, body: &Body, op: Operand) -> Lattice {
+    match op {
+        Operand::Expr(e) => interp.reduce_to_lattice(body, e),
+        Operand::Value(_) => interp.operand_to_lattice(body, op),
+    }
+}
+
+/// A lattice a mutable local may carry between writes: a scalar constant, or
+/// nothing. See [`ConstFoldVisitor::update_env_from_stmt`].
+fn scalar_only(lat: Lattice) -> Lattice {
+    match &lat {
+        Lattice::Const(v) if v.is_scalar() => lat,
+        _ => Lattice::NonConst,
     }
 }
 
@@ -1151,9 +1220,9 @@ struct LoopWriteEffects {
 
 /// Walk a loop body and collect every write effect that must be
 /// invalidated before and after the walk. See [`LoopWriteEffects`].
-fn collect_loop_write_effects(body: &Body, block: BlockId) -> LoopWriteEffects {
+fn collect_write_effects(body: &Body, node: NodeRef) -> LoopWriteEffects {
     let mut effects = LoopWriteEffects::default();
-    collect_loop_writes(body, NodeRef::Block(block), &mut effects);
+    collect_loop_writes(body, node, &mut effects);
     effects
 }
 

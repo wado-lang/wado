@@ -1,5 +1,5 @@
 ---
-description: "Cut the branch down to what the code cannot say: reuse what exists, remove duplication, dead code, and wasted work, turn invariants into asserts, and delete the comments the code already speaks."
+description: "Cut the branch down to what the code cannot say: reuse what exists, remove duplication, dead code, and wasted work, turn invariants into asserts, and delete the comments the code already speaks. Run it after answering review feedback too — a fix written to satisfy a reviewer is the least distilled code on the branch."
 argument-hint: "[extra instructions]"
 ---
 
@@ -18,6 +18,16 @@ Every file those report, whatever its type, plus any doc it made stale. Whatever
 you notice on the way in is in scope too, pre-existing or not. Generated files
 are the one exclusion — `.gitattributes` marks them. A WEP keeps the sections
 `docs/AGENTS.md` requires.
+
+This is the scope on every run. Distilling again means the whole branch again,
+never the diff since the last distill: an earlier pass is not a clean bill, and
+what the code between the two commits made stale is spread across everything the
+branch touched.
+
+Answering review feedback is one of the times to run it. Such a fix is written
+to satisfy a reviewer rather than to fit the code, so it arrives with the
+reviewer's framing in its comments, an explanation of the bug beside the fix,
+and often a helper the codebase already had.
 
 ## Rules
 
@@ -51,7 +61,7 @@ are the one exclusion — `.gitattributes` marks them. A WEP keeps the sections
 
 ## Cycle
 
-Three passes over the diff; surviving one is no exemption. Stop when a pass
+Three passes over that scope; surviving one is no exemption. Stop when a pass
 finds nothing to cut.
 
 ## Finish

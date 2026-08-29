@@ -5,6 +5,9 @@
 // must be left on the general `push`/`encode_char` path — retargeting it would
 // write a raw code point where a UTF-8 sequence belongs.
 //
+// The two ASCII pushes are adjacent, so the append fusion gives them one
+// shared reservation; the non-ASCII `push` ends the run.
+//
 // This guards the direct-push path specifically: `opt_string_push_short_literal`
 // only exercises pushes derived from `push_str`, so a regression in how char
 // literals reach the rule (e.g. no longer born as `Operand::Value`) would slip
@@ -24,7 +27,7 @@ __DATA__
 {
     "stdout": "aZ€\n",
     "wir_expect:O2": [
-        "buf.used = new_used_",
+        "buf.used = new_used;",
         "array_set_u8(buf.repr,",
         ", 97)",
         ", 90)",

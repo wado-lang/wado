@@ -4,6 +4,7 @@
 //! `docs/optimizer.md` is the reader-facing inventory, and WEP 2026-06-05 covers
 //! the two-tier NIR, the rewrite engine, and the gate.
 
+mod aggregate_forward;
 mod alias;
 mod arena_query;
 mod clone_forward;

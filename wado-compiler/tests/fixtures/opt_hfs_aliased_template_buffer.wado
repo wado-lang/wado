@@ -1,0 +1,78 @@
+use { println, Stdout } from "core:cli";
+
+pub type LitName = String;
+pub type StrLit = String;
+
+pub fn lit_name(text: String) -> LitName {
+    return text as LitName;
+}
+
+pub fn str_lit(value: String) -> StrLit {
+    return value as StrLit;
+}
+
+fn write_literal_char(f: &mut Formatter, c: char, quote: char) {
+    if c == quote || c == '\\' {
+        f.write_char('\\');
+        f.write_char(c);
+    } else if c == '\n' {
+        f.write_str(&"\\n");
+    } else {
+        let code = c as i32;
+        if code < 0x20 || code == 0x7f {
+            f.write_str(&"\\u{");
+            f.write_str(&`${code:x}`);
+            f.write_char('}');
+        } else {
+            f.write_char(c);
+        }
+    }
+}
+
+impl Display for LitName {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_char('\'');
+        for let c of self.chars() {
+            write_literal_char(f, c, '\'');
+        }
+        f.write_char('\'');
+    }
+}
+
+impl Display for StrLit {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_char('"');
+        for let c of self.chars() {
+            write_literal_char(f, c, '"');
+        }
+        f.write_char('"');
+    }
+}
+
+struct Lit {
+    const_name: String,
+    text: String,
+}
+
+#[inline(never)]
+fn gen(lits: &List<Lit>) -> String {
+    let mut out = "";
+    for let lit of lits {
+        out.push_str(&`${lit.const_name} => ${str_lit(`${lit_name(lit.text)}`)},`);
+        out.push('\n');
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    let lits: List<Lit> = [
+        Lit { const_name: "TK_LIT_PLUS", text: "+" },
+        Lit { const_name: "TK_LIT_AND", text: "and" },
+    ];
+    println(gen(&lits));
+}
+
+__DATA__
+{
+    "stdout": "TK_LIT_PLUS => \"'+'\",\nTK_LIT_AND => \"'and'\",\n\n"
+}

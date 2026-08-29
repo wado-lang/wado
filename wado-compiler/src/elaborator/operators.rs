@@ -12,6 +12,12 @@ use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 
+/// `-<integer literal>`, with the source text its range is judged against.
+fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &str)> {
+    let lit = super::expr::negated_literal(unary)?;
+    super::expr::int_literal_repr(lit).map(|repr| (lit, repr))
+}
+
 /// The right-hand side of an assignment passed to
 /// [`Elaborator::assign_to_target`]. Either an AST expression (the
 /// regular [`Elaborator::resolve_assign`] path) or an already-resolved
@@ -1062,7 +1068,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (UnaryOp::Ref, ast::Expr::Index(index)) => {
                 self.resolve_index_access(index, ctx, super::expr::IndexAccess::Shared)
             }
-            _ => self.resolve_expr(&unary.expr, ctx, inner_expected),
+            _ => match negated_int_literal(unary) {
+                // Not resolved on its own: reading `NUM` alone would judge it
+                // against the *positive* `i32` boundary.
+                Some((lit, repr)) => {
+                    if expected_type.is_none() {
+                        self.check_default_int_literal(repr, true, unary.span);
+                    } else {
+                        self.check_int_literal_parses(repr, lit.span);
+                    }
+                    self.record_expression_type(lit.id, TypeTable::I32);
+                    TypeTable::I32
+                }
+                None => self.resolve_expr(&unary.expr, ctx, inner_expected),
+            },
         };
 
         if unary.op == UnaryOp::MutRef

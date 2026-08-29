@@ -1,0 +1,56 @@
+// Two scalarized positions at one call, reached from a caller that is itself
+// scalarized. `mid`'s `b` is forwarded into `sink`'s first position, while `t`
+// still needs its field projected out — and `bump(c)` after it is impure, so
+// the projection cannot move ahead of it.
+//
+// A call in that shape has nowhere to go: the clone takes the field `b` no
+// longer wraps, the original takes the wrapper. The forwarding candidate is
+// what has to be refused, before either function is cloned.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    s: String,
+}
+
+struct Tag {
+    n: i32,
+}
+
+struct Counter {
+    v: i32,
+}
+
+#[inline(never)]
+fn bump(c: &mut Counter) -> i32 {
+    c.v = c.v + 1;
+    return c.v;
+}
+
+#[inline(never)]
+fn sink(b: &mut Buf, t: &Tag, n: i32) {
+    b.s.push_str(&`${t.n}`);
+    b.s.push_str(&`${n}`);
+    b.s.push_str(&"|");
+    b.s.push_str(&`${t.n}`);
+}
+
+#[inline(never)]
+fn mid(b: &mut Buf, c: &mut Counter) {
+    let t = Tag { n: 7 };
+    sink(b, &t, bump(c));
+    sink(b, &t, bump(c));
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { s: "" };
+    let mut c = Counter { v: 0 };
+    mid(&mut b, &mut c);
+    mid(&mut b, &mut c);
+    println(`${b.s}`);
+}
+
+__DATA__
+{
+    "stdout": "71|772|773|774|7\n"
+}
