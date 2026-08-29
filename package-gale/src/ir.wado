@@ -113,27 +113,23 @@ pub variant GrammarKind {
     Parser,
 }
 
-/// Whether a named action is the parser's `@members` block: `@parser::members`,
-/// or a bare `@members` outside a `lexer grammar`.
 pub fn is_parser_members(act: &NamedAction, kind: &GrammarKind) -> bool {
-    if act.name != "members" {
-        return false;
-    }
-    return match &act.scope {
-        Some(s) => *s == "parser",
-        None => !kind matches { Lexer },
-    };
+    return is_members(act, &"parser", !kind matches { Lexer });
 }
 
-/// Whether a named action is the lexer's `@members` block: `@lexer::members`,
-/// or a bare `@members` in a `lexer grammar`.
 pub fn is_lexer_members(act: &NamedAction, kind: &GrammarKind) -> bool {
+    return is_members(act, &"lexer", kind matches { Lexer });
+}
+
+/// Whether a named action is a `@members` block for one recognizer: scoped to it
+/// explicitly, or bare in a grammar whose kind names it.
+fn is_members(act: &NamedAction, scope: &String, bare_is_mine: bool) -> bool {
     if act.name != "members" {
         return false;
     }
     return match &act.scope {
-        Some(s) => *s == "lexer",
-        None => kind matches { Lexer },
+        Some(s) => *s == *scope,
+        None => bare_is_mine,
     };
 }
 

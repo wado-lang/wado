@@ -72,9 +72,7 @@ fn str_count(haystack: &String, needle: &String) -> i32 {
 }
 
 /// One strategy: the sentence the dump prints for it, and the local the emitter
-/// mints when it takes it. Each local is named once per decision, so counting
-/// them in the generated source is the emitter's own answer to the question the
-/// dump answers by walking.
+/// mints when it takes it. Each local is named once per decision.
 struct StrategyMarker {
     reported: String,
     emitted: String,
@@ -101,16 +99,14 @@ global STRATEGY_MARKERS: List<StrategyMarker> = [
     },
 ];
 
-/// The dump shares every strategy decision with `lexer_gen` but not the walk
-/// that reaches them: it visits the rule bodies itself. A walk that visited a
-/// different set of constructs would report a decision the emitter never took —
-/// and report it silently, since nothing the emitter produces is compared
-/// against it. This is that comparison, over shapes that force each strategy.
+/// The dump and `gen_lexer` descend one `lexer_rule_plan`, so neither can reach
+/// a node the other does not. What this compares is that the two consumers agree
+/// about each node they reach: a plan node the dump reports is one the emitter
+/// emitted code for, over shapes that force each strategy.
 ///
 /// Action-free by construction: a rule that runs actions has its body emitted
-/// twice, once to match and once to replay, so the emitted locals would count
-/// double against a walk that visits the body once. The strategies are decided
-/// the same way either way.
+/// twice, once to match and once to replay, so its locals would count double
+/// against a report that names each decision once.
 test "every strategy the dump reports is one the emitter emitted" {
     for let src of &[
         "grammar T;\nr : A ;\nA : ('a' | 'ab') ;\nB : . ;", "grammar T;\nr : A ;\nA : 'a' (~'b')+ 'c' ;\nB : . ;",

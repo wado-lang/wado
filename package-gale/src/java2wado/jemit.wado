@@ -83,13 +83,8 @@ pub struct JEnv {
     pub in_members: bool = false,
 }
 
-/// The ANTLR recognizer API this translator answers for. One variant per
-/// special, so the two questions every one of them has to answer — which
-/// recognizer carries it, and whether reading it needs the enclosing match —
-/// are asked of the variant rather than remembered at the site that emits it.
-/// A special added here does not compile until `api_host` and `api_needs_frame`
-/// have an arm for it; the emit sites reached it without either, which is how a
-/// body came to name a method the generated recognizer does not have.
+/// The ANTLR recognizer API this translator answers for. A variant added here
+/// does not compile until `api_host` and `api_needs_frame` answer for it.
 enum ApiCall {
     /// `getText()`: the lexer's matched slice, the parser's rule span.
     Text,
@@ -126,9 +121,7 @@ fn api_host(call: ApiCall) -> ApiHost {
 }
 
 /// Whether the call reads the enclosing match — the lexer's `chars` / `start` /
-/// `pos`, or the parser's rule-start token. A `@members` method is a method on
-/// the recognizer struct and stands outside every match, so those locals name
-/// nothing there.
+/// `pos`, or the parser's rule-start token. A `@members` method has neither.
 fn api_needs_frame(call: ApiCall) -> bool {
     return match call {
         Text | CharPos | TokenStartCharPos => true,
@@ -150,8 +143,7 @@ fn api_name(call: ApiCall) -> String {
 }
 
 /// The expression a recognizer-API call emits, or a loud error where the body
-/// cannot reach it. Every special goes through here, so neither question can be
-/// answered at one spelling and forgotten at another.
+/// cannot reach it. Every spelling of every special goes through here.
 fn api_expr(env: &JEnv, call: ApiCall, expr: String) -> Result<String, String> {
     let wrong_host = match api_host(call) {
         Parser => env.lexer,
@@ -674,12 +666,8 @@ fn emit_member_call(
     return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${*args_w})`);
 }
 
-/// What a name in a recognizer body denotes. Java spells the same declaration
-/// several ways — bare, through `this.`, as a call — and each spelling used to
-/// decide for itself what it had found, so a rule about a name (which receiver
-/// it emits under, whether it must be declared, whether the site may write
-/// through it) held at some spellings and not others. Every spelling resolves
-/// here instead, so each rule is stated once.
+/// What a name at a *name* position denotes — Java's variable namespace, which
+/// holds no methods. A call position asks `method_declared` instead.
 enum NameTarget {
     /// A local the body declares, or a method parameter. Shadows the rest, as
     /// Java's own scoping does.
@@ -689,45 +677,32 @@ enum NameTarget {
     /// there and a write through either spelling is visible to both.
     RuleArg,
     Field,
-    Method,
-    /// Nothing the recognizer declares.
+    /// Nothing the recognizer declares as a variable.
     Unknown,
 }
 
-/// Which of Java's two namespaces a site resolves in. They are separate, so
-/// `int depth = 0; int depth() { ... }` is legal and each spelling picks the one
-/// its position names: `depth` the field, `depth()` the method. Resolving both
-/// in one order refused every call whose name a variable also had.
-enum NameSpace {
-    /// A name position: a local or parameter, a rule argument, a field.
-    Variable,
-    /// A call position: a `@members` method, whatever variables share the name.
-    Method,
-}
-
-fn resolve_name(env: &JEnv, name: &String, space: NameSpace) -> NameTarget {
-    let snake = to_snake_case(name);
-    if space matches { Method } {
-        return if env.methods.contains(&snake) { NameTarget::Method } else { NameTarget::Unknown };
-    }
+fn resolve_name(env: &JEnv, name: &String) -> NameTarget {
     if env.locals.contains(name) {
         return NameTarget::Local;
     }
     if env.args.contains(name) {
         return NameTarget::RuleArg;
     }
-    if env.fields.contains(&snake) {
+    if env.fields.contains(&to_snake_case(name)) {
         return NameTarget::Field;
     }
     return NameTarget::Unknown;
 }
 
-/// The access a name emits, or a loud error. `nestLevel` and `this.nestLevel`
-/// are one field, so both come through here and both go through `to_snake_case`.
-/// What a lexer body has left over is an ANTLR recognizer field Gale does not
-/// model (`_tokenStartCharPositionInLine`, `_input`, ...) — an error, because
-/// passing it through verbatim emits Wado that references nothing. A parser body
-/// keeps it: the surrounding host text there is the rule's own scope.
+/// Whether a `@members` method declares `name`. Java's namespaces are separate
+/// — `int depth = 0; int depth() {}` is legal — so a variable never hides one.
+fn method_declared(env: &JEnv, name: &String) -> bool {
+    return env.methods.contains(&to_snake_case(name));
+}
+
+/// The access a name emits, or a loud error. What a lexer body has left over is
+/// an ANTLR field Gale does not model (`_input`, ...), which emitted verbatim
+/// would reference nothing; a parser body keeps it as the rule's own scope.
 fn name_expr(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -739,13 +714,11 @@ fn name_expr(
     if *name == "_tokenStartCharPositionInLine" {
         return api_expr(env, ApiCall::TokenStartCharPos, lexer_token_start_column_expr());
     }
-    return match resolve_name(env, name, NameSpace::Variable) {
+    return match resolve_name(env, name) {
         Local => Result::Ok(*name),
         RuleArg => resolve_attr_ref(rule, rules, &`$${*name}`, vals_in_scope, bindings, &env.this_bind),
         Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
-        // A bare method name with no call, or a name nothing declares: neither
-        // is an access this translator can emit.
-        Method | Unknown => if env.lexer {
+        Unknown => if env.lexer {
             builtin::cold_path();
             Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
         } else {
@@ -767,17 +740,14 @@ fn this_field_expr(env: &JEnv, name: &String) -> Result<String, String> {
 }
 
 /// Refuse a member call this body cannot make. Both spellings — `this.m()` and
-/// the bare `m()` — reach the same method, so both come through here: a lexer
-/// predicate holds `&Lexer`, the tournament having no business mutating through
-/// a losing candidate, and a `&mut self` member is unreachable from one.
-/// A call site asks this rather than `resolve_name`: Java keeps methods in their
-/// own namespace, so a field, a local or a rule argument sharing the name hides
-/// a member method at a name position and never at a call one.
+/// the bare `m()` — reach the same method, so both come through here.
 fn check_member_call_reachable(env: &JEnv, meth: &String) -> Result<(), String> {
-    if !resolve_name(env, meth, NameSpace::Method) matches { Method } {
+    if !method_declared(env, meth) {
         builtin::cold_path();
         return Result::Err(unknown_method_err(meth));
     }
+    // A lexer predicate holds `&Lexer`: the tournament has no business mutating
+    // through a losing candidate.
     if env.read_only && env.mut_methods.contains(&to_snake_case(meth)) {
         builtin::cold_path();
         return Result::Err(

@@ -21,9 +21,7 @@ pub struct MemberField {
 /// takes `&mut self`, and the ready-to-splice `fn ... { ... }` source.
 pub struct MemberMethod {
     pub name: String,
-    /// A lexer predicate holds `&Lexer` — the tournament must not mutate through
-    /// a losing candidate — so a call to a mutating method from one is refused
-    /// rather than emitted as Wado the compiler would reject.
+    /// Takes `&mut self`, so a body holding a shared handle cannot call it.
     pub mutates: bool,
     pub source: String,
 }

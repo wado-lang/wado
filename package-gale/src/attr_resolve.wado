@@ -47,11 +47,9 @@ pub struct ResolvedAttr {
     pub end: i32,
 }
 
-/// One binding an alternative actually made: the post-dedup local a `$ref`
-/// resolves to, plus what it was bound from. Built by `collect_alt_bindings`
-/// after dedup, so a name collision (`e_2`) and a same-named label over two
-/// different rules both resolve to the real local rather than the first
-/// declaration in the rule-wide environment.
+/// One binding an alternative made: the post-dedup local a `$ref` resolves to,
+/// plus what it was bound from. Built after dedup, so `e_2` and a same-named
+/// label over two rules both reach the real local.
 pub struct AltBinding {
     pub is_token: bool,
     /// Pre-dedup base name — the label, or the element's own name.

@@ -343,13 +343,10 @@ fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
     }
 }
 
-/// Translate one recognizer's `@members` blocks (`@parser::members` and bare
-/// `@members`, or `@lexer::members`) to struct fields + methods. ANTLR
-/// concatenates a recognizer's blocks, and Gale translates them as one body: a
-/// method in the second block calls one declared in the first, and which methods
-/// write through the recognizer is a fixed point over all of them. Only when
-/// actions are emittable; an untranslatable block is a loud diagnostic, not a
-/// silent drop.
+/// Translate one recognizer's `@members` blocks to struct fields + methods.
+/// ANTLR concatenates a recognizer's blocks and so does this, as one body: a
+/// method in the second calls one declared in the first, and which methods
+/// mutate is a fixed point over all of them.
 pub fn collect_members(grammar: &Grammar, ctx: &mut GenContext, lexer: bool) -> MemberDecls {
     let empty = MemberDecls { fields: [], methods: [] };
     // Members are a translator product, so a wired base — which turns
@@ -379,9 +376,9 @@ pub fn collect_members(grammar: &Grammar, ctx: &mut GenContext, lexer: bool) -> 
     };
 }
 
-/// Emit `@members` method declarations as a separate `impl Parser` block. Each
-/// method source is a ready-to-splice `fn ... { ... }` from `translate_members`.
-pub fn gen_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
+/// Emit the parser's `@members` methods as their own `impl Parser` block. The
+/// lexer's go on `impl Lexer` in `gen_lexer`.
+pub fn gen_parser_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
     if members.methods.is_empty() {
         return;
     }

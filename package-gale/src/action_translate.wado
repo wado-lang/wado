@@ -332,10 +332,8 @@ fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result
     };
 }
 
-/// What a lexer body may reach. The commit latches (`$type`, `$channel`,
-/// `$mode`) belong to an action: a predicate is evaluated for losing candidates
-/// too, so it holds `&Lexer` and settles nothing. `$mode` additionally needs a
-/// grammar that declares one — there is no latch to write otherwise.
+/// What a lexer body may reach: the commit latches belong to an action, and
+/// `$mode` needs a grammar that declares one.
 pub struct LexerAttrEnv {
     pub in_action: bool = true,
     pub uses_modes: bool = false,
@@ -384,8 +382,7 @@ pub fn lexer_token_start_column_expr() -> String {
 }
 
 /// How a `$`-reference is used at its site. `$mode`'s read and its write land on
-/// different `Lexer` fields — the current mode is not the pending command — so
-/// which one a site means has to be decided before the expression is built.
+/// different `Lexer` fields, so the site decides before the expression is built.
 pub enum AttrUse {
     Read,
     Write,
@@ -393,76 +390,76 @@ pub enum AttrUse {
     ReadWrite,
 }
 
-/// The match-fn expression a lexer `$`-attribute becomes. The reads (`$text`,
-/// `$pos`, `$index`) are over the match window and answer in a predicate too;
-/// `$type` / `$channel` / `$mode` are the commit latches ANTLR lets an action
-/// assign, so `$type = X` and `lx.set_type(X)` write the same field.
+/// What a lexer `$`-attribute name denotes. Total over the names, so an
+/// unsupported one is a case here rather than a sentinel a caller must test for.
+variant LexerAttr {
+    /// A read over the match window, which answers in a predicate too — it is
+    /// the cursor, not the outcome.
+    Window(String),
+    /// A commit latch an action may assign: `$type = X` and `lx.set_type(X)`
+    /// write one field, seeded from the tournament so a read answers as ANTLR's.
+    Latch,
+    Unsupported,
+}
+
+fn lexer_attr(name: &String) -> LexerAttr {
+    return match *name {
+        "text" => LexerAttr::Window(lexer_matched_text_expr()),
+        "pos" => LexerAttr::Window(lexer_cursor_column_expr()),
+        "index" => LexerAttr::Window("pos"),
+        "type" | "channel" | "mode" => LexerAttr::Latch,
+        _ => LexerAttr::Unsupported,
+    };
+}
+
+/// The match-fn expression a lexer `$`-attribute becomes.
 fn lexer_attr_expr(r: &AttrRef, env: &LexerAttrEnv, use_: AttrUse) -> Result<String, String> {
     if r.member matches { Some(_) } {
         builtin::cold_path();
         return Result::Err(`$${r.name}: a lexer attribute has no members`);
     }
-    let window = lexer_window_expr(&r.name);
-    if !window.is_empty() {
-        if !use_ matches { Read } {
+    return match lexer_attr(&r.name) {
+        Window(expr) => if use_ matches { Read } {
+            Result::Ok(expr);
+        } else {
             builtin::cold_path();
-            return Result::Err(`$${r.name}: this lexer attribute is a read of the match window, not a settable one`);
-        }
-        return Result::Ok(window);
-    }
-    if !is_lexer_latch(&r.name) {
-        builtin::cold_path();
-        return Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
-    }
+            Result::Err(`$${r.name}: this lexer attribute is a read of the match window, not a settable one`);
+        },
+        Latch => lexer_latch_expr(r, env, use_),
+        Unsupported => {
+            builtin::cold_path();
+            Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
+        },
+    };
+}
+
+/// A commit latch's expression. Only an action reaches one: a predicate is
+/// evaluated for losing candidates too, so it settles nothing.
+fn lexer_latch_expr(r: &AttrRef, env: &LexerAttrEnv, use_: AttrUse) -> Result<String, String> {
     if !env.in_action {
         builtin::cold_path();
         return Result::Err(
             `$${r.name}: a lexer predicate is evaluated for losing candidates too, so the commit latches neither answer nor settle anything there`,
         );
     }
-    if r.name == "mode" {
-        if !env.uses_modes {
-            builtin::cold_path();
-            return Result::Err("$mode: this grammar declares no lexer mode to switch to");
-        }
-        return match use_ {
-            Read => Result::Ok(`${LEXER_HANDLE}.${LEXER_MODE_READER}()`),
-            Write => Result::Ok(`${LEXER_HANDLE}.${LEXER_SET_MODE_FIELD}`),
-            // The current mode and the pending switch are separate fields, so
-            // one site cannot be both. `$mode = <mode>` is the ANTLR spelling.
-            ReadWrite => Result::Err("$mode: read it and assign it in separate statements"),
-        };
+    if r.name != "mode" {
+        return Result::Ok(`${LEXER_HANDLE}.act_${r.name}`);
     }
-    return Result::Ok(`${LEXER_HANDLE}.act_${r.name}`);
-}
-
-/// The match-window read a lexer attribute names, empty for a name that is not
-/// one. These answer in a predicate too — they are the cursor, not the outcome.
-fn lexer_window_expr(name: &String) -> String {
-    if *name == "text" {
-        return lexer_matched_text_expr();
+    if !env.uses_modes {
+        builtin::cold_path();
+        return Result::Err("$mode: this grammar declares no lexer mode to switch to");
     }
-    if *name == "pos" {
-        return lexer_cursor_column_expr();
-    }
-    if *name == "index" {
-        return "pos";
-    }
-    return "";
-}
-
-/// Whether the name is a commit latch ANTLR lets an action assign. Assigning the
-/// field is exactly what the matching command method does, so the `$`-form and
-/// `lx.set_*` are one write; the commit seeds the type / channel latches with
-/// the tournament's own answer, so a read of one gives the token's current value
-/// as ANTLR's would.
-fn is_lexer_latch(name: &String) -> bool {
-    return *name matches { "type" | "channel" | "mode" };
+    return match use_ {
+        Read => Result::Ok(`${LEXER_HANDLE}.${LEXER_MODE_READER}()`),
+        Write => Result::Ok(`${LEXER_HANDLE}.${LEXER_SET_MODE_FIELD}`),
+        // The current mode and the pending switch are separate fields, so one
+        // site cannot be both. `$mode = <mode>` is the ANTLR spelling.
+        ReadWrite => Result::Err("$mode: read it and assign it in separate statements"),
+    };
 }
 
 /// The `Lexer` field holding the mode the token is being matched in, seeded per
-/// token from the tokenize loop. Separate from the pending-switch latch: that
-/// one is a command the commit applies, and `-1` until an action issues it.
+/// token from the tokenize loop. Not the pending-switch latch below.
 pub global LEXER_MODE_FIELD: String = "act_mode";
 
 /// The method a `$mode` read goes through, rather than the field: it asserts the
@@ -488,19 +485,15 @@ pub fn resolve_lexer_attr_ref(
     return lexer_attr_expr(&refs[0], env, use_);
 }
 
-/// Which of `$mode`'s two fields a grammar's lexer bodies actually name. Both
-/// gate an emit site: a read needs the current mode seeded onto the `Lexer` per
-/// token, and an assignment is the one mode write that reaches the commit
-/// without passing a command method, so only then does the commit have to repeat
-/// their invariant. Read off the bodies before staging translates them away.
+/// Which of `$mode`'s two fields a grammar's lexer bodies name — each gates an
+/// emit site. Read off the bodies before staging translates them away.
 pub struct ModeAttrUse {
     pub reads: bool = false,
     pub writes: bool = false,
 }
 
-/// Accumulate one body's `$mode` uses. Language-independent: `$`-references are
-/// ANTLR semantics, and an assignment is spelled `$mode = X` in every host
-/// language java2wado admits.
+/// Accumulate one body's `$mode` uses. Language-independent: a `$`-reference is
+/// ANTLR syntax, spelled the same in every host language java2wado admits.
 pub fn body_mode_attr_use(body: &String, out: &mut ModeAttrUse) {
     let refs = find_attr_refs(body);
     if refs.is_empty() {
@@ -522,10 +515,9 @@ pub fn body_mode_attr_use(body: &String, out: &mut ModeAttrUse) {
     }
 }
 
-/// How the site around a reference uses it, read off the text that follows: a
-/// bare `=` assigns, a compound one does both. The identity translator has no
-/// host syntax tree, and this is the whole of what it needs — `$x` is a leaf, so
-/// nothing but the operator right after it can make the site a write.
+/// How the site uses a reference, read off the text that follows: a bare `=`
+/// assigns, a compound one does both. `$x` is a leaf, so nothing but the
+/// operator right after it can make the site a write.
 fn attr_ref_use(chars: &List<char>, r: &AttrRef) -> AttrUse {
     let mut j = r.end;
     while j < chars.len() && chars[j].is_ascii_whitespace() {

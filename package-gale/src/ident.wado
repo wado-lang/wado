@@ -46,15 +46,8 @@ fn is_wado_reserved(name: &String) -> bool {
     };
 }
 
-/// The names a generated recognizer function binds that a `.g4` identifier can
-/// also reach: the parse fn's parameters and the locals its body opens. They are
-/// declared here, and the emitters spell them from here, so the set below is the
-/// set in the generated code rather than a second list kept beside it.
-///
-/// A name added from here on should be underscore-led instead, as
-/// `_rule_start_tok` and `_lr_acc` are: ANTLR's `NameStartChar` admits no
-/// underscore, so such a name is unreachable from a grammar by construction and
-/// needs no declaration at all.
+/// The recognizer handle in emitted context-API calls (`p.token_text(...)`):
+/// `p` in a parse / predicate body, `self` in a `@members` method body.
 pub global PARSER_HANDLE: String = "p";
 
 /// The lexer handle in emitted lexer-action calls (`lx.emit(...)`): the
@@ -73,22 +66,21 @@ pub global DISPATCH_KIND_LOCAL: String = "kind";
 /// The caller-FOLLOW mask parameter, threaded when `emit_follow` is on.
 pub global FOLLOW_PARAM: String = "follow";
 
-/// Whether a name is one of them. A binding named after one shadows it with the
-/// matched value, so the rest of the alternative reads a token where it meant
-/// the parser, the value channel, or the lookahead.
-fn is_generated_local(name: &String) -> bool {
-    return *name == PARSER_HANDLE
-        || *name == LEXER_HANDLE
-        || *name == VALS_LOCAL
-        || *name == MIN_PREC_LOCAL
-        || *name == DISPATCH_KIND_LOCAL
-        || *name == FOLLOW_PARAM;
-}
+/// The generated names a `.g4` identifier can also reach; a binding named after
+/// one would shadow it with the matched value. The emitters spell them from the
+/// globals above, so this is the set in the generated code.
+///
+/// Add underscore-led names from here on, as `_rule_start_tok` and `_lr_acc`
+/// are: ANTLR's `NameStartChar` admits no underscore, so such a name is
+/// unreachable from a grammar and needs no entry.
+global GENERATED_LOCALS: List<String> = [
+    PARSER_HANDLE, LEXER_HANDLE, VALS_LOCAL, MIN_PREC_LOCAL, DISPATCH_KIND_LOCAL, FOLLOW_PARAM,
+];
 
 /// Escape an identifier that would collide with a Wado reserved word or a
 /// generated local by appending '_'.
 pub fn escape_ident(name: &String) -> String {
-    if is_wado_reserved(name) || is_generated_local(name) {
+    if is_wado_reserved(name) || GENERATED_LOCALS.contains(name) {
         return `${*name}_`;
     }
     return *name;
