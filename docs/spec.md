@@ -1687,6 +1687,15 @@ let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation (
 let i: u32 = 0x1_0000_0000;       // compile error: 33-bit value does not fit in u32
 ```
 
+A literal that nothing coerces falls back to `i32`, and the same range check applies there. `-NUM` is checked as one literal, so it reaches the signed minimum.
+
+```wado
+let j = 2147483647;               // OK: max i32
+let k = 4294967296;               // compile error: literal out of range for `i32`: 4294967296
+let l = -2147483648;              // OK: min i32
+let m = -2147483649;              // compile error: literal out of range for `i32`: -2147483649
+```
+
 Type conversion (via `as`):
 
 ```wado

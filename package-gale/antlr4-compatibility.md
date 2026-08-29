@@ -390,7 +390,9 @@ requires a cross-language translator (Java / Python / TypeScript /
 Rust / … → Wado) for the in-band action source, plus wiring for
 `superClass`, `tokenVocab`, and other host-side hooks. Sketch and
 rationale live in
-[`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md).
+[`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md); the
+implementation design and what is left of it are in
+[`action.md`](./action.md) and [`TODO.md`](./TODO.md).
 
 Stage C is sequenced after Stage A and Stage B because the descriptor
 corpus is the cheapest way to discover which constructs a translator

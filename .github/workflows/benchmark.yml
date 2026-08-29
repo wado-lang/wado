@@ -107,15 +107,19 @@ jobs:
 
       # ── PRs: compare against baseline, comment + fail on regression ───────
 
+      # Only `-O2` is compared — the level a program ships at. Every level is
+      # recorded above, so `-O1` and `-O3` keep their history on the pages.
+      #
       # `sieve` is flaky on CI runners, so it gets a looser threshold (warn at
       # 2x, fail at 3x). github-action-benchmark applies a single threshold per
       # invocation, so the runtime suite is compared in two steps reading the
       # same data dir: everything but sieve at 1.5x/2x, sieve alone at 2x/3x.
-      - name: Split out the flaky sieve benchmark
+      - name: Select the compared benchmarks
         if: github.event_name == 'pull_request'
         run: |
-          jq '[.[] | select(.name | startswith("sieve ("))]' runtime-benchmark.json > sieve-benchmark.json
-          jq '[.[] | select(.name | startswith("sieve (") | not)]' runtime-benchmark.json > runtime-benchmark-main.json
+          jq '[.[] | select(.name | endswith("(-O2)"))]' runtime-benchmark.json > runtime-o2.json
+          jq '[.[] | select(.name | startswith("sieve ("))]' runtime-o2.json > sieve-benchmark.json
+          jq '[.[] | select(.name | startswith("sieve (") | not)]' runtime-o2.json > runtime-benchmark-main.json
 
       - name: Compare runtime benchmarks (excluding sieve)
         if: github.event_name == 'pull_request'

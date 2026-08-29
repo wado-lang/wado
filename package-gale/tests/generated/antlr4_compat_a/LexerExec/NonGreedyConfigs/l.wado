@@ -1110,9 +1110,9 @@ impl Lexer {
         self.act_output.push_str(&s);
     }
 
-    fn reset_actions(&mut self) {
-        self.act_type = -1;
-        self.act_channel = -1;
+    fn reset_actions(&mut self, kind: i32, channel: i32) {
+        self.act_type = kind;
+        self.act_channel = channel;
         self.act_skip = false;
         self.act_more = false;
     }
@@ -1136,7 +1136,69 @@ impl Lexer {
 
 fn apply_I_actions(lx: &mut Lexer, start: i32, end: i32) {
     let chars = &lx.chars;
-    let pos = end;
+    let mut pos = start;
+    loop {
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            let alts_saved_2 = pos;
+            let mut alts_ok_2 = false;
+            alts_2_0: {
+                pos = alts_saved_2;
+                if pos >= chars.len() || chars[pos] != 'a' { break alts_2_0; }
+                pos += 1;
+                alts_ok_2 = true;
+            }
+            if !alts_ok_2 {
+                alts_2_1: {
+                    pos = alts_saved_2;
+                    if pos >= chars.len() || chars[pos] != 'a' { break alts_2_1; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 'b' { break alts_2_1; }
+                    pos += 1;
+                    alts_ok_2 = true;
+                }
+            }
+            if !alts_ok_2 { break ng_0; }
+            ng_exit_0 = true;
+        }
+        pos = ng_saved_0;
+        if ng_exit_0 {
+            break;
+        }
+        if pos >= chars.len() { return; }
+        pos += 1;
+        if pos > end { return; }
+    }
+    let sel_saved_3 = pos;
+    let mut sel_alt_3 = -1;
+    sel_3_0: {
+        pos = sel_saved_3;
+        if pos >= chars.len() || chars[pos] != 'a' { break sel_3_0; }
+        pos += 1;
+        sel_alt_3 = 0;
+    }
+    if sel_alt_3 < 0 {
+        sel_3_1: {
+            pos = sel_saved_3;
+            if pos >= chars.len() || chars[pos] != 'a' { break sel_3_1; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != 'b' { break sel_3_1; }
+            pos += 1;
+            sel_alt_3 = 1;
+        }
+    }
+    if sel_alt_3 < 0 { return; }
+    pos = sel_saved_3;
+    if sel_alt_3 == 0 {
+        if pos >= chars.len() || chars[pos] != 'a' { return; }
+        pos += 1;
+    } else if sel_alt_3 == 1 {
+        if pos >= chars.len() || chars[pos] != 'a' { return; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'b' { return; }
+        pos += 1;
+    }
     lx.emit(`${LexerSlice::new(chars, start, pos).to_string()}\n`);
 }
 
@@ -1151,34 +1213,34 @@ fn apply_J_actions(lx: &mut Lexer, start: i32, end: i32) {
 fn try_I(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     loop {
-        let ng_saved_0 = pos;
-        let mut ng_exit_0 = false;
-        ng_0: {
-            let alts_saved_1 = pos;
-            let mut alts_ok_1 = false;
-            alts_1_0: {
-                pos = alts_saved_1;
-                if pos >= chars.len() || chars[pos] != 'a' { break alts_1_0; }
+        let ng_saved_4 = pos;
+        let mut ng_exit_4 = false;
+        ng_4: {
+            let alts_saved_5 = pos;
+            let mut alts_ok_5 = false;
+            alts_5_0: {
+                pos = alts_saved_5;
+                if pos >= chars.len() || chars[pos] != 'a' { break alts_5_0; }
                 pos += 1;
-                alts_ok_1 = true;
+                alts_ok_5 = true;
             }
-            if !alts_ok_1 {
-                alts_1_1: {
-                    pos = alts_saved_1;
-                    if pos >= chars.len() || chars[pos] != 'a' { break alts_1_1; }
+            if !alts_ok_5 {
+                alts_5_1: {
+                    pos = alts_saved_5;
+                    if pos >= chars.len() || chars[pos] != 'a' { break alts_5_1; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != 'b' { break alts_1_1; }
+                    if pos >= chars.len() || chars[pos] != 'b' { break alts_5_1; }
                     pos += 1;
-                    alts_ok_1 = true;
+                    alts_ok_5 = true;
                 }
             }
-            if !alts_ok_1 { break ng_0; }
-            ng_exit_0 = true;
+            if !alts_ok_5 { break ng_4; }
+            ng_exit_4 = true;
         }
-        if ng_exit_0 {
+        if ng_exit_4 {
             break;
         }
-        pos = ng_saved_0;
+        pos = ng_saved_4;
         if pos >= chars.len() { return -1; }
         pos += 1;
     }
@@ -1187,23 +1249,23 @@ fn try_I(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_2 = pos;
-    let mut alts_ok_2 = false;
-    alts_2_0: {
-        pos = alts_saved_2;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
+    let alts_saved_6 = pos;
+    let mut alts_ok_6 = false;
+    alts_6_0: {
+        pos = alts_saved_6;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_6_0; }
         pos += 1;
-        alts_ok_2 = true;
+        alts_ok_6 = true;
     }
-    if !alts_ok_2 {
-        alts_2_1: {
-            pos = alts_saved_2;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
+    if !alts_ok_6 {
+        alts_6_1: {
+            pos = alts_saved_6;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_6_1; }
             pos += 1;
-            alts_ok_2 = true;
+            alts_ok_6 = true;
         }
     }
-    if !alts_ok_2 { return -1; }
+    if !alts_ok_6 { return -1; }
     return pos;
 }
 
@@ -1248,14 +1310,14 @@ pub fn tokenize(input: &String) -> TokenStream {
             lexer.pos = start + 1;
         } else {
             if best_act >= 0 {
-                lexer.reset_actions();
+                lexer.reset_actions(best_kind, best_channel);
                 if best_act == 0 {
                     apply_I_actions(&mut lexer, start, best_end);
                 } else if best_act == 1 {
                     apply_J_actions(&mut lexer, start, best_end);
                 }
-                if lexer.act_type >= 0 { best_kind = lexer.act_type; }
-                if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }
+                best_kind = lexer.act_type;
+                best_channel = lexer.act_channel;
                 if lexer.act_more { best_more = true; }
                 if lexer.act_skip { best_act_skip = true; }
             }

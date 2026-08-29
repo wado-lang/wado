@@ -1,0 +1,22 @@
+// A nested pattern lowers its sub-bindings into the arm's guard
+// (`… && { let x = line.end.x; true }`), and the arm body reads them. Folding a
+// constant scrutinee must not take the guard — and its bindings — with it.
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32, y: i32 }
+struct Line { start: Point, end: Point }
+
+export fn run() with Stdout {
+    let line = Line {
+        start: Point { x: 0, y: 0 },
+        end: Point { x: 10, y: 20 },
+    };
+    let d = match line {
+        { start: { x: 0, y: 0 }, end: { x, y } } => `to (${x},${y})`,
+        _ => `other`,
+    };
+    println(d);
+}
+
+__DATA__
+{"stdout": "to (10,20)\n"}

@@ -157,20 +157,16 @@ pub(super) fn build_alias_info(
 pub(super) fn alias_classes(body: &Body, type_table: &TypeTable) -> AliasGroups {
     let mut edges = Vec::new();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        collect_shared_storage_edges(body, node, type_table, &mut edges);
+        collect_alias_edges_node(body, node, type_table, &mut edges);
     });
     alias_groups_from_edges(edges)
 }
 
-/// A `let dst = src` / `dst = src` copy of a name that *is* the storage, by the
-/// same [`type_creates_alias`] the value graph seeds its own edges from.
-fn collect_shared_storage_edges(
-    body: &Body,
-    node: NodeRef,
-    type_table: &TypeTable,
-    edges: &mut Vec<(u32, u32)>,
-) {
-    let copy = match node {
+/// The local `node` binds and the value it binds to it: `let dst = value` or
+/// `dst = value`. The one reader of the copy shape every alias collector asks
+/// about, so they cannot drift apart over which statements count.
+pub(super) fn copy_edge(body: &Body, node: NodeRef) -> Option<(u32, Operand)> {
+    match node {
         NodeRef::Stmt(s) => match &body.stmts[s].kind {
             StmtKind::Let {
                 local_index, value, ..
@@ -185,8 +181,20 @@ fn collect_shared_storage_edges(
             _ => None,
         },
         NodeRef::Block(_) | NodeRef::Pat(_) => None,
+    }
+}
+
+/// A copy of a name that *is* the storage, by the same [`type_creates_alias`]
+/// the value graph seeds its own edges from.
+fn collect_alias_edges_node(
+    body: &Body,
+    node: NodeRef,
+    type_table: &TypeTable,
+    edges: &mut Vec<(u32, u32)>,
+) {
+    let Some((dst, value)) = copy_edge(body, node) else {
+        return;
     };
-    let Some((dst, value)) = copy else { return };
     let Some(ve) = value.as_expr() else { return };
     let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind else {
         return;
@@ -1125,40 +1133,6 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Unknown
         | ResolvedType::Error => false,
         ResolvedType::InferVar(var) => panic!("{var} reached alias analysis"),
-    }
-}
-
-/// Record one alias-group edge if `node` is a reference-typed Local→Local
-/// `let dst = src` or `dst = src`.
-fn collect_alias_edges_node(
-    body: &Body,
-    node: NodeRef,
-    type_table: &TypeTable,
-    edges: &mut Vec<(u32, u32)>,
-) {
-    match node {
-        NodeRef::Stmt(s) => {
-            if let StmtKind::Let {
-                local_index, value, ..
-            } = &body.stmts[s].kind
-                && let Some(ve) = value.as_expr()
-                && let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind
-                && type_creates_alias(body.exprs[ve].type_id, type_table)
-            {
-                edges.push((*local_index, *src));
-            }
-        }
-        NodeRef::Expr(e) => {
-            if let ExprKind::Assign { target, value } = &body.exprs[e].kind
-                && let ExprKind::Local { index: dst, .. } = &body.exprs[*target].kind
-                && let Some(ve) = value.as_expr()
-                && let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind
-                && type_creates_alias(body.exprs[ve].type_id, type_table)
-            {
-                edges.push((*dst, *src));
-            }
-        }
-        NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
 }
 

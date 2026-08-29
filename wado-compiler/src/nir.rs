@@ -85,6 +85,22 @@ impl FunctionRef {
         }
     }
 
+    /// Whether this builtin only reads the argument at `pos` and lets none of
+    /// its storage escape. A builtin has no body for a read-only walk to
+    /// inspect, so the answer is stated here; a builtin absent from the match
+    /// is treated as writing every argument.
+    pub fn reads_param_only(&self, pos: usize) -> bool {
+        let name = self
+            .builtin_name()
+            .or_else(|| self.monomorphized_builtin_name());
+        match name.as_deref() {
+            // `array_copy(dst, dst_start, src, src_start, len)` — the source is
+            // read element-wise and no handle into it survives the call.
+            Some("builtin::array_copy") => pos == 2,
+            _ => false,
+        }
+    }
+
     /// How this builtin reaches an array element, or `None` when it is not an
     /// element accessor. All three hand back a handle into the array argument;
     /// only `array_get_ref_mut` names a write.

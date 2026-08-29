@@ -34,6 +34,48 @@ WS : (' '|'\\n') -> skip ;
     assert out.find("let x = _parse_e(p") matches { Some(_) }, "no labelled binding emitted; the duplicate check would pass vacuously";
 }
 
+test "an element whose name is the recognizer handle does not shadow it" {
+    // `P` snake_cases to `p`, the parser handle every emitted call reads. Binding
+    // it verbatim shadowed the handle with an `i32`, so the next `p.` call in the
+    // alternative no longer compiled.
+    let g4 = "grammar T;
+r : P { p.emit(\"x\") } ;
+P : 'p' ;
+WS : ' ' -> skip ;
+";
+    let mut grammar = match parse_checked(g4) {
+        Ok(g) => g,
+        Err(e) => panic(`parse_checked failed: ${e.message}`),
+    };
+    let out = generate(&mut grammar, &GenerateOptions {}).source;
+    // Without this, the negative assertion also passes on output binding nothing.
+    assert out.contains("let p_ = p.expect(TK_P"), `the escaped binding must be emitted: ${out}`;
+    assert !out.contains("let p = p."), `the handle must not be shadowed: ${out}`;
+}
+
+test "an element named after any generated parse-fn local does not shadow it" {
+    // The handle is one of a set: the parse fn's parameters and the locals its
+    // body opens. `KIND` is the multi-alt dispatch's lookahead, which lands in
+    // the very function the binding does — the shape the handle collision had.
+    let g4 = "grammar T;
+r : KIND VALS { p.emit($KIND.text) } | VALS ;
+KIND : 'k' ;
+VALS : 'v' ;
+WS : ' ' -> skip ;
+";
+    let mut grammar = match parse_checked(g4) {
+        Ok(g) => g,
+        Err(e) => panic(`parse_checked failed: ${e.message}`),
+    };
+    let out = generate(&mut grammar, &GenerateOptions {}).source;
+    assert out.contains("let kind = p.peek_kind();"), "the dispatch still reads the lookahead";
+    // Without these, the negative assertions also pass on output binding neither.
+    assert out.contains("let kind_ = p.expect(TK_KIND"), `the escaped binding must be emitted: ${out}`;
+    assert out.contains("let vals_ = p.expect(TK_VALS"), `the escaped binding must be emitted: ${out}`;
+    assert !out.contains("let kind = p.expect("), `the lookahead must not be shadowed: ${out}`;
+    assert !out.contains("let vals = p.expect("), `the value channel must not be shadowed: ${out}`;
+}
+
 /// Fail if `decl` appears twice before the next `\nfn ` boundary.
 fn assert_declared_once_per_fn(out: &String, decl: &String) {
     let mut pos = 0;

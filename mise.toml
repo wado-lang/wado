@@ -241,24 +241,28 @@ AST round-trip, and no comment drop. The corpus is not reformatted in place \
 """
 run = "cargo test -p wado-compiler --test format"
 
+# Disjoint file sets, so the three run concurrently — except that the other two
+# build the workspace `cargo fmt` is rewriting, so they wait for it. `wait_for`
+# orders them without pulling it in, leaving each runnable on its own.
 [tasks.format]
-description = "Format Rust and Markdown files"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-cargo fmt --all
-cargo run -p wado-dev-tools --quiet -- format-md
-"""
+description = "Format Rust, Markdown, and Wado files"
+depends = ["format-rust", "format-md", "format-wado"]
 
-[tasks.format-wado]
-description = "Format all Wado source files"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
+[tasks.format-rust]
+description = "Format Rust files"
+run = "cargo fmt --all"
+
+[tasks.format-md]
+description = "Format Markdown files"
+wait_for = ["format-rust"]
+run = "cargo run -p wado-dev-tools --quiet -- format-md"
+
 # Exclusions come from each package's wado.toml [format] (wado-compiler excludes
 # `tests/**`); generated/, build/, submodules and gitignored paths are automatic.
-cargo run --bin wado -- format -w .
-"""
+[tasks.format-wado]
+description = "Format Wado files"
+wait_for = ["format-rust"]
+run = "cargo run --bin wado -- format -w ."
 
 [tasks.clippy]
 description = "Run clippy checks"

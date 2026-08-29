@@ -63,30 +63,30 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:result_match_payload.wado::__modules_initialized: bool = 0;
 
 fn "result_match_payload.wado/run"() with Stdout {
-    let handle_143: i32;
-    let packed_145: i64;
-    let rx_146: i32;
-    let tx_147: i32;
-    let handle_280: i32;
-    let packed_282: i64;
-    let rx_283: i32;
-    let tx_284: i32;
+    let handle_85: i32;
+    let packed_87: i64;
+    let rx_88: i32;
+    let tx_89: i32;
+    let handle_160: i32;
+    let packed_162: i64;
+    let rx_163: i32;
+    let tx_164: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:result_match_payload.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:result_match_payload.wado::__modules_initialized = 1;
     };
-    rx_146 = builtin::i32_wrap_i64(local.tee packed_145("wasi/stream-new"()));
-    tx_147 = builtin::i32_wrap_i64(packed_145 >> 32_i64);
-    handle_143 = "result_match_payload.wado/__cm_binding__Stdout_write_via_stream"(rx_146);
-    "core:cli/write_to_stream"(tx_147, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok: success"), used: 11 }, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_143);
-    rx_283 = builtin::i32_wrap_i64(local.tee packed_282("wasi/stream-new"()));
-    tx_284 = builtin::i32_wrap_i64(packed_282 >> 32_i64);
-    handle_280 = "result_match_payload.wado/__cm_binding__Stdout_write_via_stream"(rx_283);
-    "core:cli/write_to_stream"(tx_284, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("err: failure"), used: 12 }, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_280);
+    rx_88 = builtin::i32_wrap_i64(local.tee packed_87("wasi/stream-new"()));
+    tx_89 = builtin::i32_wrap_i64(packed_87 >> 32_i64);
+    handle_85 = "result_match_payload.wado/__cm_binding__Stdout_write_via_stream"(rx_88);
+    "core:cli/write_to_stream"(tx_89, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok: success"), used: 11 }, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_85);
+    rx_163 = builtin::i32_wrap_i64(local.tee packed_162("wasi/stream-new"()));
+    tx_164 = builtin::i32_wrap_i64(packed_162 >> 32_i64);
+    handle_160 = "result_match_payload.wado/__cm_binding__Stdout_write_via_stream"(rx_163);
+    "core:cli/write_to_stream"(tx_164, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("err: failure"), used: 12 }, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_160);
 }
 
 fn "result_match_payload.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -105,8 +105,8 @@ fn "result_match_payload.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len_3: i32;
     let new_repr: ref Array<u8>;
+    let self_5: i32;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
@@ -119,12 +119,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let repr_29: ref Array<u8>;
     let len_35: i32;
     let ptr_36: i32;
-    len_3 = message.used;
+    self_5 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len_3 + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
-        builtin::array_set_u8(new_repr, len_3, 10);
-        len_18 = local.tee end_15(len_3 + 1) - 0;
+        new_repr = builtin::array_new<u8>(self_5 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_5);
+        builtin::array_set_u8(new_repr, self_5, 10);
+        len_18 = local.tee end_15(self_5 + 1) - 0;
         ptr_19 = "mem/realloc"(0, 0, 1, len_18);
         "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
         ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
@@ -133,7 +133,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_29 = message.repr;
-        len_35 = len_3 - 0;
+        len_35 = self_5 - 0;
         ptr_36 = "mem/realloc"(0, 0, 1, len_35);
         "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
         ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));

@@ -25,13 +25,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//effect_propagation_signature_nested.wado/unwrap" = fn(i32);  // TypeId(10)
+type "functype//effect_propagation_signature_nested.wado/run" = fn();  // TypeId(10)
 
-type "functype//effect_propagation_signature_nested.wado/run" = fn();  // TypeId(11)
+type "functype//effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//effect_propagation_signature_nested.wado/__cm_export__run" = fn();  // TypeId(12)
 
-type "functype//effect_propagation_signature_nested.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//effect_propagation_signature_nested.wado/unwrap$scalar" = fn(i32);  // TypeId(13)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(14)
 
@@ -47,9 +47,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -62,20 +62,10 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 global mut global:effect_propagation_signature_nested.wado::__modules_initialized: bool = 0;
-
-fn "effect_propagation_signature_nested.wado/unwrap"(h) {
-    let packed: i64;
-    let rx_5: i32;
-    let tx_6: i32;
-    rx_5 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    "wasi/stream-drop-writable"(local.tee tx_6(builtin::i32_wrap_i64(packed >> 32_i64)));
-    "wasi/stream-drop-readable"(rx_5);
-    "wasi/stream-drop-readable"(h);
-}
 
 fn "effect_propagation_signature_nested.wado/run"() with Stdout {
     let packed_3: i64;
@@ -93,7 +83,7 @@ fn "effect_propagation_signature_nested.wado/run"() with Stdout {
     };
     rx_4 = builtin::i32_wrap_i64(local.tee packed_3("wasi/stream-new"()));
     "wasi/stream-drop-writable"(local.tee tx_5(builtin::i32_wrap_i64(packed_3 >> 32_i64)));
-    "effect_propagation_signature_nested.wado/unwrap"(rx_4);
+    "effect_propagation_signature_nested.wado/unwrap$scalar"(rx_4);
     rx_12 = builtin::i32_wrap_i64(local.tee packed_11("wasi/stream-new"()));
     tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
     handle = "effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream"(rx_12);
@@ -116,9 +106,19 @@ fn "effect_propagation_signature_nested.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
+fn "effect_propagation_signature_nested.wado/unwrap$scalar"(h) {
+    let packed: i64;
+    let rx_5: i32;
+    let tx_6: i32;
+    rx_5 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    "wasi/stream-drop-writable"(local.tee tx_6(builtin::i32_wrap_i64(packed >> 32_i64)));
+    "wasi/stream-drop-readable"(rx_5);
+    "wasi/stream-drop-readable"(h);
+}
+
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len_3: i32;
     let new_repr: ref Array<u8>;
+    let self_5: i32;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
@@ -131,12 +131,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let repr_29: ref Array<u8>;
     let len_35: i32;
     let ptr_36: i32;
-    len_3 = message.used;
+    self_5 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len_3 + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
-        builtin::array_set_u8(new_repr, len_3, 10);
-        len_18 = local.tee end_15(len_3 + 1) - 0;
+        new_repr = builtin::array_new<u8>(self_5 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_5);
+        builtin::array_set_u8(new_repr, self_5, 10);
+        len_18 = local.tee end_15(self_5 + 1) - 0;
         ptr_19 = "mem/realloc"(0, 0, 1, len_18);
         "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
         ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
@@ -145,7 +145,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_29 = message.repr;
-        len_35 = len_3 - 0;
+        len_35 = self_5 - 0;
         ptr_36 = "mem/realloc"(0, 0, 1, len_35);
         "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
         ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));

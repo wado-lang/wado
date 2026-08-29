@@ -41,13 +41,11 @@ type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -74,6 +72,7 @@ fn "trait_unit_return.wado/__cm_export__run"() {
     let packed: i64;
     let rx_10: i32;
     let tx_11: i32;
+    let start: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:trait_unit_return.wado::__modules_initialized);
         cold_path;
@@ -87,8 +86,14 @@ fn "trait_unit_return.wado/__cm_export__run"() {
         global:trait_unit_return.wado::__modules_initialized = 1;
     };
     __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__r, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Message: "), used: 9 });
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__r, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, World!"), used: 13 });
+    if @unlikely(22 > builtin::array_len(__r.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__r, 22);
+    }
+    start = __r.used;
+    __r.used = 22;
+    builtin::array_copy<u8>(__r.repr, start, array.new_data<u8>("Message: "), 0, 9);
+    builtin::array_copy<u8>(__r.repr, start + 9, array.new_data<u8>("Hello, World!"), 0, 13);
     rx_10 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "trait_unit_return.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
@@ -98,8 +103,8 @@ fn "trait_unit_return.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len_3: i32;
     let new_repr: ref Array<u8>;
+    let self_5: i32;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
@@ -112,12 +117,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let repr_29: ref Array<u8>;
     let len_35: i32;
     let ptr_36: i32;
-    len_3 = message.used;
+    self_5 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len_3 + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
-        builtin::array_set_u8(new_repr, len_3, 10);
-        len_18 = local.tee end_15(len_3 + 1) - 0;
+        new_repr = builtin::array_new<u8>(self_5 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_5);
+        builtin::array_set_u8(new_repr, self_5, 10);
+        len_18 = local.tee end_15(self_5 + 1) - 0;
         ptr_19 = "mem/realloc"(0, 0, 1, len_18);
         "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
         ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
@@ -126,7 +131,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_29 = message.repr;
-        len_35 = len_3 - 0;
+        len_35 = self_5 - 0;
         ptr_36 = "mem/realloc"(0, 0, 1, len_35);
         "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
         ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
@@ -140,12 +145,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b1: block {
-        l2: loop {
-            break_if b1 i >= len;
+    b2: block {
+        l3: loop {
+            break_if b2 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l2;
+            continue l3;
         };
     };
 }
@@ -169,16 +174,16 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 offset >= count;
+    b4: block {
+        l5: loop {
+            break_if b4 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b3 select i32((result >> 4) == 0, 1, (result & 15) != 0);
-            continue l4;
+            break_if b4 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l5;
         };
     };
 }
@@ -201,24 +206,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, other) {
-    let other_len: i32;
-    let new_used: i32;
-    let start_8: i32;
-    other_len = other.used;
-    if other_len == 0 {
-        return;
-    }
-    new_used = self.used + other_len;
-    if @unlikely(new_used > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
-    }
-    start_8 = self.used;
-    self.used = new_used;
-    builtin::array_copy<u8>(self.repr, start_8, other.repr, 0, other_len);
 }
 
 export fn "trait_unit_return.wado/__cm_export__run" as "run"

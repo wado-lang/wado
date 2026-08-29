@@ -65,62 +65,33 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:licm_reloadable_hoist.wado::__modules_initialized: bool = 0;
 
 fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
-    let n_2: i32;
     let i: i32;
     let b: u8;
-    let new_used_15: i32;
-    let start_16: i32;
-    let new_used_29: i32;
-    let start_30: i32;
-    let new_used_43: i32;
-    let start_44: i32;
-    let _licm_repr_52: ref Array<u8>;
-    let __hfs_used_53: i32;
-    n_2 = s.used;
+    let self_6: i32;
+    let new_used: i32;
+    let start: i32;
+    let _licm_repr_34: ref Array<u8>;
+    self_6 = s.used;
     i = 0;
-    _licm_repr_52 = s.repr;
-    __hfs_used_53 = buf.used;
+    _licm_repr_34 = s.repr;
     b0: block {
         l1: loop {
-            break_if b0 i >= n_2;
-            b = builtin::array_get_value<u8>(_licm_repr_52, i);
+            break_if b0 i >= self_6;
+            b = builtin::array_get_value<u8>(_licm_repr_34, i);
             if b == 34 {
-                new_used_15 = __hfs_used_53 + 1;
-                if @unlikely(new_used_15 > builtin::array_len(buf.repr)) {
+                new_used = buf.used + 3;
+                if @unlikely(new_used > builtin::array_len(buf.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_15);
-                    _licm_repr_52 = s.repr;
-                } else {
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
+                    _licm_repr_34 = s.repr;
                 }
-                start_16 = local.tee __hfs_used_53(buf.used);
-                __hfs_used_53 = new_used_15;
-                builtin::array_set_u8(buf.repr, start_16, 91);
-                new_used_29 = __hfs_used_53 + 1;
-                if @unlikely(new_used_29 > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    buf.used = __hfs_used_53;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_29);
-                    _licm_repr_52 = s.repr;
-                    __hfs_used_53 = buf.used;
-                }
-                start_30 = __hfs_used_53;
-                __hfs_used_53 = new_used_29;
-                builtin::array_set_u8(buf.repr, start_30, 81);
-                new_used_43 = __hfs_used_53 + 1;
-                if @unlikely(new_used_43 > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    buf.used = __hfs_used_53;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_43);
-                    _licm_repr_52 = s.repr;
-                    __hfs_used_53 = buf.used;
-                }
-                start_44 = __hfs_used_53;
-                __hfs_used_53 = new_used_43;
-                builtin::array_set_u8(buf.repr, start_44, 93);
-            } else {
+                start = buf.used;
+                buf.used = new_used;
+                builtin::array_set_u8(buf.repr, start, 91);
+                builtin::array_set_u8(buf.repr, start + 1, 81);
+                builtin::array_set_u8(buf.repr, start + 2, 93);
             }
             i = i + 1;
-            buf.used = __hfs_used_53;
             continue l1;
         };
     };
@@ -159,8 +130,8 @@ fn "licm_reloadable_hoist.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len_3: i32;
     let new_repr: ref Array<u8>;
+    let self_5: i32;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
@@ -173,12 +144,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let repr_29: ref Array<u8>;
     let len_35: i32;
     let ptr_36: i32;
-    len_3 = message.used;
+    self_5 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len_3 + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
-        builtin::array_set_u8(new_repr, len_3, 10);
-        len_18 = local.tee end_15(len_3 + 1) - 0;
+        new_repr = builtin::array_new<u8>(self_5 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_5);
+        builtin::array_set_u8(new_repr, self_5, 10);
+        len_18 = local.tee end_15(self_5 + 1) - 0;
         ptr_19 = "mem/realloc"(0, 0, 1, len_18);
         "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
         ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
@@ -187,7 +158,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_29 = message.repr;
-        len_35 = len_3 - 0;
+        len_35 = self_5 - 0;
         ptr_36 = "mem/realloc"(0, 0, 1, len_35);
         "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
         ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
@@ -201,12 +172,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 i >= len;
+    b5: block {
+        l6: loop {
+            break_if b5 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l8;
+            continue l6;
         };
     };
 }
@@ -230,16 +201,16 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 offset >= count;
+    b7: block {
+        l8: loop {
+            break_if b7 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b9 select i32((result >> 4) == 0, 1, (result & 15) != 0);
-            continue l10;
+            break_if b7 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l8;
         };
     };
 }

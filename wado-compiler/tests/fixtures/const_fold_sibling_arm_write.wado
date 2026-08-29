@@ -1,0 +1,28 @@
+// A branch's arms are alternatives: only one runs, so neither may fold
+// against what the other assigned. The walk visits `then` before `else`, so
+// `col = 0` there would otherwise still be bound when `col += 1` reduces —
+// turning the increment into the constant 1 and pinning the count.
+//
+// Invalidating a construct's write set around it does not reach between its
+// arms; the drop has to happen at the start of each one.
+
+fn count(n: i32) -> i32 {
+    let mut col = 0;
+    for let mut i = 0; i < n; i += 1 {
+        if i == 2 {
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    return col;
+}
+
+test "a branch arm does not fold against its sibling's assignment" {
+    assert count(builtin::black_box(6)) == 3;
+}
+
+__DATA__
+{
+    "test": {}
+}

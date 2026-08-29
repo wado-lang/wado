@@ -35,7 +35,7 @@ mise run on-task-started   # install project tools
 ```sh
 mise run test        # test Rust crates
 mise run test-wado   # test Wado modules
-mise run format      # format Rust files and Markdown files
+mise run format      # format Rust, Markdown, and Wado files
 
 mise run benchmark-all     # runs all benchmarks and reports the results
 mise run report-wasm-size  # measures the size of the generated Wasm files and reports the results
@@ -43,7 +43,9 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-- `sed`, `awk`, `python`, `python3` and `nohup` are denied in `.claude/` — edit with the editing tools, script in Node.js. For a rename too wide to do one call at a time, agree on the approach first.
+- `sed`, `awk`, `python`, `python3` and `nohup` are denied in `.claude/`.
+- **Every edit goes through the editing tools. Editing a file by script is forbidden** — Node.js included, however wide the change and however mechanical it looks. A wide rename is many editing-tool calls, not one script. This is not a matter to agree an exception for: there is none. Node.js is for scripts that are not edits (measuring, extracting, generating data to read).
+- The reason is that the editing tools fail where a script silently succeeds: they refuse a match that is not unique instead of replacing every occurrence, they refuse a file the session has not read, and the harness tracks what they wrote. A script bypasses all three, and the first sign of trouble is a file that changed under you.
 - Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, each in its own invocation. Chaining one behind a slow step (`{ mise run format; mise run test; }`) puts both under one timeout, and the kill takes the job with it.
 - Redirect a job's output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards what you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
 - Have the job record its own completion — `cmd > run.log 2>&1; echo "exit=$?" >> run.log` — and wait on `grep -q "^exit=" run.log`. Nothing else tells you it finished: `pgrep` matches the watcher's own command line, a wrapper's exit code is its last command (`grep -c failures` exits 1 on a clean run), and a log left by a timeout-killed command reads like a run still in progress.
@@ -147,7 +149,7 @@ Behaviour that no `--help` will remind you of:
 - A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world. `--world test` exports the entry module's `test` blocks and drops everything else; `serve` and `test` pick their world automatically.
 - The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP (long-running), `debug` for the test world (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on the test world picking `debug`.
 - `wado run` reaches only the directories granted to it: the current one, or exactly the `--dir` grants once any is given. Paths open relative to a grant, so an absolute path never opens.
-- `mise run format-wado` skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. Naming a file or a directory _inside_ an excluded tree bypasses the exclusion, so never `wado format -w` a fixture path directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
+- The Wado formatter skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. Naming a file or a directory _inside_ an excluded tree bypasses the exclusion, so never `wado format -w` a fixture path directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
 
 ## Dependencies
 
