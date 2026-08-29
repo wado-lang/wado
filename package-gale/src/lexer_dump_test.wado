@@ -14,6 +14,7 @@ use {
     unwrap_labeled_transparent_groups,
 } from "./ir.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
 use { parse } from "./g4/parser.wado";
 
 /// Run the front-end the way `cmd_dump` does, then render the lexer report.
@@ -68,6 +69,63 @@ fn str_count(haystack: &String, needle: &String) -> i32 {
         }
     }
     return count;
+}
+
+/// One strategy: the sentence the dump prints for it, and the local the emitter
+/// mints when it takes it. Each local is named once per decision, so counting
+/// them in the generated source is the emitter's own answer to the question the
+/// dump answers by walking.
+struct StrategyMarker {
+    reported: String,
+    emitted: String,
+}
+
+global STRATEGY_MARKERS: List<StrategyMarker> = [
+    StrategyMarker {
+        reported: "maximal munch: every arm scanned",
+        emitted: "let mut alts_best_",
+    },
+    // Not `la_saved_`: the lookahead-aware repeat saves the cursor under that
+    // name too, so it names two strategies rather than one.
+    StrategyMarker {
+        reported: "arm scoring: each arm scored",
+        emitted: "let mut la_win_",
+    },
+    StrategyMarker {
+        reported: "lookahead-aware: the inner can eat",
+        emitted: "let mut accept_",
+    },
+    StrategyMarker {
+        reported: "non-greedy: min-match loop",
+        emitted: "let ng_saved_",
+    },
+];
+
+/// The dump shares every strategy decision with `lexer_gen` but not the walk
+/// that reaches them: it visits the rule bodies itself. A walk that visited a
+/// different set of constructs would report a decision the emitter never took —
+/// and report it silently, since nothing the emitter produces is compared
+/// against it. This is that comparison, over shapes that force each strategy.
+///
+/// Action-free by construction: a rule that runs actions has its body emitted
+/// twice, once to match and once to replay, so the emitted locals would count
+/// double against a walk that visits the body once. The strategies are decided
+/// the same way either way.
+test "every strategy the dump reports is one the emitter emitted" {
+    for let src of &[
+        "grammar T;\nr : A ;\nA : ('a' | 'ab') ;\nB : . ;", "grammar T;\nr : A ;\nA : 'a' (~'b')+ 'c' ;\nB : . ;",
+        "grammar T;\nr : A ;\nA : 'a' .*? 'c' ;\nB : . ;", "grammar T;\nr : A ;\nA : ('a' | 'ab') 'c' ;\nB : . ;",
+        "grammar T;\nr : A B ;\nA : 'a' (~'b')+ 'c' | ('x' | 'xy') 'z' ;\nB : 'q' .*? 'r' ;\nC : . ;",
+    ] {
+        let report = lexer_dump(src);
+        let mut g = parse(*src).unwrap();
+        let code = generate(&mut g, &GenerateOptions {}).source;
+        for let m of &STRATEGY_MARKERS {
+            let reported = str_count(&report, &m.reported);
+            let emitted = str_count(&code, &m.emitted);
+            assert reported == emitted, `'${m.reported}': the dump reports ${reported}, the emitter emitted ${emitted} — for ${*src}`;
+        }
+    }
 }
 
 test "lexer dump names the grammar and summarizes strategies" {
