@@ -144,6 +144,11 @@ template synthesiser writes as a literal, so `optimize::param_spec` clones the
 callee on it and constant folding drops the arm not taken. Below `-O2` no such
 clone happens and both arms remain.
 
+Where the two forms differ by more than a constant, the alternate body is
+outlined into its own function that the branch calls — as `write_seq_inspect`
+calls `write_seq_inspect_alt` — so the plain path stays the size it was and
+DCE drops the alternate one when nothing asks for `#`.
+
 ### Debug formatting
 
 `:?` and `:#?` both resolve to `Inspect`, which derives from the type's shape
@@ -156,8 +161,9 @@ through one blanket impl per reflection kind in `core:prelude/traits`:
 | `ReflectEnum`    | `Type::Case`                                      |
 | `ReflectFlags`   | set bits joined by `\|`, else `Type::none()`      |
 
-Each branches on `alternate` where the two forms differ, so a struct, variant,
-enum or flags type needs no synthesised impl of its own. What reflection does
+Each branches on `alternate` where the two forms differ, calling out to the
+outlined alternate body, so a struct, variant, enum or flags type needs no
+synthesised impl of its own. What reflection does
 not cover — newtypes, resources, and the `fn(..)` dispatch stubs — the compiler
 still emits per type. See
 [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) and

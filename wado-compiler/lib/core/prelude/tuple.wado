@@ -8,18 +8,24 @@
 use { Formatter } from "core:prelude/format.wado";
 use { Ordering } from "core:prelude/traits.wado";
 
+/// The alternate (`#`) rendering the tuple `Inspect` hands off to: one element
+/// per indented line.
+fn inspect_tuple_alternate<..T: Inspect>(t: &[..T], f: &mut Formatter) {
+    f.open_brace("[");
+    for let v of *t {
+        f.write_newline_indent();
+        v.inspect(f);
+        f.write_str(&",");
+    }
+    f.close_brace("]");
+}
+
 /// Inspect for tuples: `[1, "hello", true]`, or one indented element per line
 /// under the alternate (`#`) form.
 impl<..T: Inspect> Inspect for [..T] {
     fn inspect(&self, f: &mut Formatter) {
         if f.alternate {
-            f.open_brace("[");
-            for let v of *self {
-                f.write_newline_indent();
-                v.inspect(f);
-                f.write_str(&",");
-            }
-            f.close_brace("]");
+            inspect_tuple_alternate(self, f);
             return;
         }
         f.write_str(&"[");
@@ -60,17 +66,23 @@ impl<..T: Ord> Ord for [..T] {
     }
 }
 
+/// The alternate (`#`) rendering the tuple `Display` hands off to: one element
+/// per indented line.
+fn display_tuple_alternate<..T: Display>(t: &[..T], f: &mut Formatter) {
+    f.open_brace("[");
+    for let v of *t {
+        f.write_newline_indent();
+        v.fmt(f);
+        f.write_str(&",");
+    }
+    f.close_brace("]");
+}
+
 /// Display for tuples: same as Inspect (tuples have no user-facing format).
 impl<..T: Display> Display for [..T] {
     fn fmt(&self, f: &mut Formatter) {
         if f.alternate {
-            f.open_brace("[");
-            for let v of *self {
-                f.write_newline_indent();
-                v.fmt(f);
-                f.write_str(&",");
-            }
-            f.close_brace("]");
+            display_tuple_alternate(self, f);
             return;
         }
         f.write_str(&"[");

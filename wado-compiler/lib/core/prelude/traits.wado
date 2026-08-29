@@ -719,42 +719,47 @@ internal trait Inspect {
 /// Struct debug formatting derived over `ReflectStruct` (WEP 2026-06-13): walk
 /// the field members, writing `Name { field: value, ... }`. Secret fields are
 /// elided and reported with a trailing `, ..`.
+/// The alternate (`#`) rendering the struct `Inspect` hands off to:
+/// `Name {\n  field: value,\n}`, one field per indented line.
+fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(v: &S, f: &mut Formatter) {
+    let mut wrote_field = false;
+    let mut has_secret = false;
+    for let field of ReflectStruct::<S>::members() {
+        if field.is_secret() {
+            has_secret = true;
+        } else {
+            if !wrote_field {
+                f.write_str(&ReflectStruct::<S>::type_name());
+                f.open_brace(" {");
+                wrote_field = true;
+            }
+            f.write_newline_indent();
+            f.write_str(&field.name());
+            f.write_str(&": ");
+            field.get(v).inspect(f);
+            f.write_str(&",");
+        }
+    }
+    if wrote_field {
+        if has_secret {
+            f.write_newline_indent();
+            f.write_str(&"..");
+        }
+        f.close_brace("}");
+        return;
+    }
+    f.write_str(&ReflectStruct::<S>::type_name());
+    if has_secret {
+        f.write_str(&" { .. }");
+        return;
+    }
+    f.write_str(&" {}");
+}
+
 impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
     fn inspect(&self, f: &mut Formatter) {
         if f.alternate {
-            // `Name {\n  field: value,\n}` — one field per indented line.
-            let mut wrote_field = false;
-            let mut has_secret = false;
-            for let field of ReflectStruct::<S>::members() {
-                if field.is_secret() {
-                    has_secret = true;
-                } else {
-                    if !wrote_field {
-                        f.write_str(&ReflectStruct::<S>::type_name());
-                        f.open_brace(" {");
-                        wrote_field = true;
-                    }
-                    f.write_newline_indent();
-                    f.write_str(&field.name());
-                    f.write_str(&": ");
-                    field.get(self).inspect(f);
-                    f.write_str(&",");
-                }
-            }
-            if wrote_field {
-                if has_secret {
-                    f.write_newline_indent();
-                    f.write_str(&"..");
-                }
-                f.close_brace("}");
-            } else {
-                f.write_str(&ReflectStruct::<S>::type_name());
-                if has_secret {
-                    f.write_str(&" { .. }");
-                } else {
-                    f.write_str(&" {}");
-                }
-            }
+            inspect_struct_alternate(self, f);
             return;
         }
         f.write_str(&ReflectStruct::<S>::type_name());
