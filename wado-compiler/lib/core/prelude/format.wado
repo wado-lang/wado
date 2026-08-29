@@ -298,36 +298,12 @@ impl Formatter {
     /// uninitialised bytes and returns their byte-offset inside `buf`.
     /// The caller **must** fill exactly `digit_count` bytes (backwards) via
     /// `buf.internal_raw_bytes()` at the returned offset.
-<<<<<<< HEAD
     /// `alt_prefix` is the radix marker (`0x`, `0b`, `0o`) the alternate form
     /// asks for; a plain spec drops it without the caller having to hand over an
     /// empty string, which would leave a value copy behind.
     pub fn prepare_int_write(&mut self, is_negative: bool, alt_prefix: String, digit_count: i32) -> i32 {
-        let mut sign = "";
-        if is_negative {
-            sign = "-";
-        } else if self.sign_plus {
-            sign = "+";
-        }
-
-        let sign_len = sign.len();
-        let prefix_len = if self.alternate { alt_prefix.len() } else { 0 };
-||||||| dfe845d35
-    pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
-        let mut sign = "";
-        if is_negative {
-            sign = "-";
-        } else if self.sign_plus {
-            sign = "+";
-        }
-
-        let sign_len = sign.len();
-        let prefix_len = prefix.len();
-=======
-    pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
         let sign_len = if is_negative || self.sign_plus { 1 } else { 0 };
-        let prefix_len = prefix.len();
->>>>>>> origin/main
+        let prefix_len = if self.alternate { alt_prefix.len() } else { 0 };
         let content_len = sign_len + prefix_len + digit_count;
 
         if self.width <= 0 || content_len >= self.width {

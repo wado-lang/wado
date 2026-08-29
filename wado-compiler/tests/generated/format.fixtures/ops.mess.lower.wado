@@ -4262,7 +4262,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 133 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 132 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: self.high != 0\n", used: 27 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"self.high: ", used: 11 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4315,7 +4315,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 169 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 168 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: a >> (mant_bits - 1) as u64 == 1\n", used: 45 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"a: ", used: 3 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4483,7 +4483,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self: &u128, f: &mut F
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 340 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 339 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: pos == offset\n", used: 26 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"pos: ", used: 5 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4562,7 +4562,7 @@ fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, bas
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                     let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                    Box<i32> { value: 395 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                    Box<i32> { value: 394 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: pos == offset\n", used: 26 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"pos: ", used: 5 });
                     __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -8920,10 +8920,6 @@ pub fn "core:prelude/string.wado/String::len"(self: &String) -> i32 {
     return self.used;
 }
 
-pub fn "core:prelude/string.wado/String::is_empty"(self: &String) -> bool {
-    return (self.used == 0);
-}
-
 pub fn "core:prelude/string.wado/String::get_byte_unchecked"(self: &String, index: i32) -> u8 {
     return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
@@ -10937,7 +10933,11 @@ pub fn "wasi:cli/types.wado/ErrorCode^core:prelude/traits.wado/Display::fmt"(sel
     };
 }
 
-fn leading_sign_byte_len(first: u8) -> i32 {
+fn leading_sign_byte_len(s: &String, at: i32, len: i32) -> i32 {
+    if (len == 0) {
+        return 0;
+    }
+    let first: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"(at);
     if ((first == 45) || (first == 43)) {
         return 1;
     }
@@ -10988,11 +10988,7 @@ pub fn "core:prelude/format.wado/Formatter::pad"(self: &mut Formatter, content: 
     }
     let padding: i32 = (self.width - content_len);
     if self.zero_pad {
-        let sign_len: i32 = if content."core:prelude/string.wado/String::is_empty"() {
-            0;
-        } else {
-            "core::prelude/format.wado::leading_sign_byte_len"(content."core:prelude/string.wado/String::get_byte_unchecked"(0));
-        };
+        let sign_len: i32 = "core::prelude/format.wado::leading_sign_byte_len"(&content, 0, content."core:prelude/string.wado/String::len"());
         self.buf."core:prelude/string.wado/String::push_str_range_unchecked"(&content, 0, sign_len);
         self."core:prelude/format.wado/Formatter::write_char_n"('0', padding);
         self.buf."core:prelude/string.wado/String::push_str_range_unchecked"(&content, sign_len, content."core:prelude/string.wado/String::len"());
@@ -11041,11 +11037,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self: &mut Formatter
     }
     let padding: i32 = (self.width - content_len);
     if self.zero_pad {
-        let sign_len: i32 = if (content_bytes > 0) {
-            "core::prelude/format.wado::leading_sign_byte_len"(self.buf."core:prelude/string.wado/String::get_byte_unchecked"(start_pos));
-        } else {
-            0;
-        };
+        let sign_len: i32 = "core::prelude/format.wado::leading_sign_byte_len"(self.buf, start_pos, content_bytes);
         let at: i32 = (start_pos + sign_len);
         self."core:prelude/format.wado/Formatter::shift_right"(at, (content_bytes - sign_len), padding);
         self."core:prelude/format.wado/Formatter::write_fill_at"(at, padding, '0');
@@ -11075,7 +11067,6 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self: &mut Formatter
     }
 }
 
-<<<<<<< HEAD
 fn "core:prelude/format.wado/Formatter::count_chars_from"(self: &Formatter, start_pos: i32) -> i32 {
     let end: i32 = self.buf."core:prelude/string.wado/String::len"();
     let mut count: i32 = 0;
@@ -11145,14 +11136,7 @@ fn "core:prelude/format.wado/Formatter::write_fill_at"(self: &mut Formatter, at:
     }
 }
 
-pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Formatter, is_negative: bool, alt_prefix: String, digit_count: i32) -> i32 {
-    let mut sign: String = String { repr: packed"", used: 0 };
-||||||| dfe845d35
-pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Formatter, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
-    let mut sign: String = String { repr: packed"", used: 0 };
-=======
 fn "core:prelude/format.wado/Formatter::write_sign"(self: &mut Formatter, is_negative: bool) {
->>>>>>> origin/main
     if is_negative {
         self.buf."core:prelude/string.wado/String::push"('-');
     } else {
@@ -11160,27 +11144,19 @@ fn "core:prelude/format.wado/Formatter::write_sign"(self: &mut Formatter, is_neg
             self.buf."core:prelude/string.wado/String::push"('+');
         }
     }
-<<<<<<< HEAD
-    let sign_len: i32 = sign."core:prelude/string.wado/String::len"();
-    let prefix_len: i32 = if self.alternate {
-        alt_prefix."core:prelude/string.wado/String::len"();
-    } else {
-        0;
-    };
-||||||| dfe845d35
-    let sign_len: i32 = sign."core:prelude/string.wado/String::len"();
-    let prefix_len: i32 = prefix."core:prelude/string.wado/String::len"();
-=======
 }
 
-pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Formatter, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
+pub fn "core:prelude/format.wado/Formatter::prepare_int_write"(self: &mut Formatter, is_negative: bool, alt_prefix: String, digit_count: i32) -> i32 {
     let sign_len: i32 = if (is_negative || self.sign_plus) {
         1;
     } else {
         0;
     };
-    let prefix_len: i32 = prefix."core:prelude/string.wado/String::len"();
->>>>>>> origin/main
+    let prefix_len: i32 = if self.alternate {
+        alt_prefix."core:prelude/string.wado/String::len"();
+    } else {
+        0;
+    };
     let content_len: i32 = ((sign_len + prefix_len) + digit_count);
     if ((self.width <= 0) || (content_len >= self.width)) {
         self."core:prelude/format.wado/Formatter::write_sign"(is_negative);
@@ -11512,6 +11488,41 @@ fn inspect_wire_override(v: Box<core:prelude/types.wado/Option<core:prelude/stri
             f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"Option::None", used: 12 });
         },
     };
+}
+
+fn struct_open(f: &mut Formatter, name: String) {
+    if f.alternate {
+        f."core:prelude/format.wado/Formatter::open_brace"(name."core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(&String { repr: packed" {", used: 2 }));
+        return;
+    }
+    f."core:prelude/format.wado/Formatter::write_str"(&name);
+    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" { ", used: 3 });
+}
+
+fn struct_field(f: &mut Formatter, name: String, first: bool) {
+    if f.alternate {
+        f."core:prelude/format.wado/Formatter::write_newline_indent"();
+    } else {
+        if !first {
+            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ", used: 2 });
+        }
+    }
+    f."core:prelude/format.wado/Formatter::write_str"(&name);
+    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed": ", used: 2 });
+}
+
+fn struct_field_end(f: &mut Formatter) {
+    if f.alternate {
+        f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed",", used: 1 });
+    }
+}
+
+fn struct_close(f: &mut Formatter) {
+    if f.alternate {
+        f."core:prelude/format.wado/Formatter::close_brace"(String { repr: packed"}", used: 1 });
+        return;
+    }
+    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" }", used: 2 });
 }
 
 pub fn "core:prelude/traits.wado/ConvertError^core:prelude/traits.wado/ReflectStruct::type_name"() -> String {
