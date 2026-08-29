@@ -922,13 +922,11 @@ fn substitute_sibling_lets(
         defs.insert(*local_index, def);
     }
     detach_stmts(body, sibling_lets);
-    let Some(set_expr) = find_global_var_set(body, module_source, name) else {
-        panic!(
-            "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
-             between planting and sibling substitution"
-        );
-    };
-    let mut stack = vec![NodeRef::Expr(set_expr)];
+    let mut stack = vec![NodeRef::Expr(find_global_var_set(
+        body,
+        module_source,
+        name,
+    ))];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
             && let ExprKind::Local { index, .. } = &body.exprs[e].kind
@@ -951,7 +949,9 @@ fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
     }
 }
 
-fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> Option<ExprId> {
+/// The `GlobalVarSet` a hoist just planted, which every sibling rewrite folds
+/// its moved definitions into.
+fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> ExprId {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
@@ -963,11 +963,14 @@ fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) ->
             && n == name
             && ms == module_source
         {
-            return Some(e);
+            return e;
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-    None
+    panic!(
+        "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
+         between planting and the sibling rewrite"
+    );
 }
 
 fn stmts_within_operand(body: &Body, value: Operand) -> IndexSet<StmtId> {
@@ -2389,13 +2392,7 @@ fn inline_sibling_lets(
         return;
     }
     detach_stmts(body, sibling_lets);
-    // Find the freshly planted `GlobalVarSet` and wrap its value.
-    let Some(e) = find_global_var_set(body, module_source, name) else {
-        panic!(
-            "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
-             between planting and sibling inlining"
-        );
-    };
+    let e = find_global_var_set(body, module_source, name);
     let ExprKind::GlobalVarSet { value, .. } = &body.exprs[e].kind else {
         unreachable!("find_global_var_set matched a GlobalVarSet")
     };

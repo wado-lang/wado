@@ -1227,9 +1227,8 @@ fn rewrite_call_expr(
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ArgPlan {
     /// Already the field: a caller parameter this pass scalarized from the same
-    /// struct, handed over untouched. The call *has to* retarget — the original
-    /// no longer takes the type this argument holds — so a plan that forwards
-    /// can never be declined.
+    /// struct, handed over untouched. The call has to retarget, the original no
+    /// longer taking the type this argument holds.
     Forwarded,
     /// Project `place.f` at the call site.
     Projected,
@@ -1237,18 +1236,14 @@ enum ArgPlan {
     Blocked,
 }
 
-/// One verdict per scalarized position, decided together.
+/// One verdict per scalarized position, decided together so the parts cannot
+/// disagree over whether the call retargets.
 ///
-/// Splitting this across independent predicates is what lets them disagree:
-/// each answers for its own concern and vetoes the whole call, and a veto
-/// stranded a [`ArgPlan::Forwarded`] argument on a signature that cannot take
-/// it. The caller asserts that no declined plan forwards.
-///
-/// A projection reads `place.f` where the callee read it after every argument
-/// was evaluated, so it moves ahead of the arguments to its right and any
-/// effect among those could change what the callee would have seen —
-/// `consume(&mut c, bump_val(&mut c))` is the shape. Forwarding reads nothing
-/// new, so it resequences nothing.
+/// A projection reads `place.f` where the callee read it after every argument,
+/// so it moves ahead of the arguments to its right and an effect among those
+/// could change what the callee would have seen —
+/// `consume(&mut c, bump_val(&mut c))` is the shape. Forwarding resequences
+/// nothing, having no read to move.
 fn plan_call_site(
     body: &Body,
     args: &[Operand],
