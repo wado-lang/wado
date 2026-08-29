@@ -12,15 +12,9 @@ use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 
-/// `-<integer literal>`, the shape both the coercion path and the defaulting
-/// path treat as a single literal so the boundary is the signed minimum.
+/// `-<integer literal>`, with the source text its range is judged against.
 fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &str)> {
-    if unary.op != UnaryOp::Neg {
-        return None;
-    }
-    let ast::Expr::Literal(lit) = &unary.expr else {
-        return None;
-    };
+    let lit = super::expr::negated_literal(unary)?;
     super::expr::int_literal_repr(lit).map(|repr| (lit, repr))
 }
 
@@ -1075,12 +1069,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_index_access(index, ctx, super::expr::IndexAccess::Shared)
             }
             _ => match negated_int_literal(unary) {
-                // The operand must not be resolved on its own: `-NUM` is one
-                // literal, and reading `NUM` alone judges it against the
-                // *positive* `i32` boundary. Only the defaulted case is decided
-                // here — an expectation that reached this far is one no
-                // coercion took (a type parameter awaiting inference), and it
-                // range-checks the literal once it settles.
+                // Not resolved on its own: reading `NUM` alone would judge it
+                // against the *positive* `i32` boundary.
                 Some((lit, repr)) => {
                     if expected_type.is_none() {
                         self.check_default_int_literal(repr, true, unary.span);

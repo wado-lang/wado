@@ -51,13 +51,19 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 fn int_literal_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str)> {
     let lit = match expr {
         Expr::Literal(lit) => lit,
-        Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => match &unary.expr {
-            Expr::Literal(lit) => lit,
-            _ => return None,
-        },
+        Expr::Unary(unary) => negated_literal(unary)?,
         _ => return None,
     };
     int_literal_repr(lit).map(|repr| (lit, repr))
+}
+
+/// The literal `-NUM` negates, which both range checks read as one literal so
+/// the boundary is the signed minimum.
+pub(super) fn negated_literal(unary: &ast::UnaryExpr) -> Option<&ast::LiteralExpr> {
+    match (&unary.op, &unary.expr) {
+        (ast::UnaryOp::Neg, Expr::Literal(lit)) => Some(lit),
+        _ => None,
+    }
 }
 
 /// How a subscript is being used, which decides the indexing trait it selects:
@@ -437,10 +443,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Range-check an integer literal against the `i32` it defaults to — the
-    /// last place its range is judged, since no coercion looks at it again.
-    /// `negated` selects the boundary: `-NUM` is one literal, so `-2147483648`
+    /// Range-check an integer literal against the `i32` it defaults to, the
+    /// boundary chosen by `negated` — `-NUM` is one literal, so `-2147483648`
     /// fits where the bare `2147483648` does not.
+    ///
+    /// Only the defaulted case. An expectation still pending here is one no
+    /// coercion took — a type parameter awaiting inference — and it re-coerces
+    /// the literal afterwards, checking the range against the type it lands on.
     pub(super) fn check_default_int_literal(&mut self, repr: &str, negated: bool, span: Span) {
         let Some(value) = self.check_int_literal_parses(repr, span) else {
             return;
@@ -493,11 +502,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     TypeTable::F64
                 } else {
-                    // Can be integer (default to i32). An expectation that is
-                    // still pending — a type parameter awaiting inference —
-                    // re-coerces the literal afterwards and checks the range
-                    // against the type it lands on, so only the defaulted case
-                    // is decided here.
                     if expected_type.is_none() {
                         self.check_default_int_literal(repr, false, lit.span);
                     } else {
@@ -3346,12 +3350,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Normal cast. An integer literal operand — bare or negated — is
-        // re-typed to the target's width rather than left at the `i32`
-        // default: that is what makes `as` the documented way to write a bit
-        // pattern (`0xFF as i8`) and how a 128-bit literal reaches a wide
-        // target. It never lands on `i32`, so the defaulted range check must
-        // not judge it either.
+        // Reify re-types a literal operand to the target's width — what makes
+        // `as` the way to write a bit pattern (`0xFF as i8`) and how a literal
+        // reaches a target wider than `i32` (`65 as i128`). It never lands on
+        // `i32`, so the defaulted range check must not judge it.
         let source_type = match int_literal_operand(&cast.expr) {
             Some((lit, repr)) => {
                 self.check_int_literal_parses(repr, lit.span);
