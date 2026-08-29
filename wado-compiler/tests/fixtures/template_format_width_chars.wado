@@ -1,0 +1,37 @@
+// `width` counts characters, and the fill character is written whole.
+//
+// Regression: width compared against the byte length, so a CJK value was never
+// padded, and the padding fast path truncated the fill to its first byte —
+// `${3.5:€>8}` wrote raw 0xac bytes into a String. The `0` flag also padded
+// ahead of the sign, rendering `-3.5` as `0000-3.5`.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Width counts characters: "あい" is two characters, six bytes.
+    assert `${"あい":>6}` == "    あい";
+    assert `${"あい":^7}` == "  あい   ";
+
+    // A multi-byte fill survives every padding path.
+    assert `${3.5:あ>8}` == "あああああ3.5";
+    assert `${42:€>8}` == "€€€€€€42";
+    assert `${12345:あ>8}` == "あああ12345";
+    assert `${'z':あ<6}` == "zあああああ";
+    assert `${true:あ^7}` == "あtrueああ";
+    assert `${"ab":あ>8}` == "ああああああab";
+    assert `${1200.0:あ>6e}` == "あ1.2e3";
+    assert `${42:あ>#8x}` == "ああああ0x2a";
+
+    // Zero padding goes after the sign, so the value reads as one figure.
+    assert `${-3.5:08}` == "-00003.5";
+    assert `${3.5:+08}` == "+00003.5";
+    assert `${-3.5:08.3}` == "-003.500";
+    assert `${-1200.0:012e}` == "-0000001.2e3";
+    assert `${-42:08}` == "-0000042";
+    // The `0` flag wins over an explicit fill and alignment.
+    assert `${-42:*<08}` == "-0000042";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

@@ -8,7 +8,6 @@ use { Formatter } from "core:prelude/format.wado";
 use { String } from "core:prelude/string.wado";
 use { List } from "core:prelude/list.wado";
 
-
 /// Result of a comparison between two values.
 #[compiler_item("ordering")]
 pub enum Ordering {
@@ -411,151 +410,116 @@ internal fn inspect_wire_override(v: &Option<String>, f: &mut Formatter) {
     }
 }
 
-impl<T, F> Inspect for StructField<T, F> {
-    fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&"StructField { index: ");
-        self.index.inspect(f);
-        f.write_str(&", field_name: ");
-        self.field_name.inspect(f);
-        f.write_str(&", wire_override: ");
-        inspect_wire_override(&self.wire_override, f);
-        f.write_str(&", has_default: ");
-        self.has_default.inspect(f);
-        f.write_str(&", is_secret: ");
-        self.is_secret.inspect(f);
-        f.write_str(&" }");
+/// Opens `Name { `, or `Name {` and an indent under the alternate form.
+internal fn struct_open(f: &mut Formatter, name: String) {
+    if f.alternate {
+        f.open_brace(name + " {");
+        return;
+    }
+    f.write_str(&name);
+    f.write_str(&" { ");
+}
+
+/// Writes the separator before a field, then its `name: ` label.
+internal fn struct_field(f: &mut Formatter, name: String, first: bool) {
+    if f.alternate {
+        f.write_newline_indent();
+    } else if !first {
+        f.write_str(&", ");
+    }
+    f.write_str(&name);
+    f.write_str(&": ");
+}
+
+/// Closes the field a `struct_field` label opened.
+internal fn struct_field_end(f: &mut Formatter) {
+    if f.alternate {
+        f.write_str(&",");
     }
 }
 
-impl<T, F> InspectAlt for StructField<T, F> {
-    fn inspect_alt(&self, f: &mut Formatter) {
-        f.open_brace("StructField {");
-        f.write_newline_indent();
-        f.write_str(&"index: ");
-        self.index.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"field_name: ");
-        self.field_name.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"wire_override: ");
-        inspect_wire_override(&self.wire_override, f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"has_default: ");
-        self.has_default.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"is_secret: ");
-        self.is_secret.inspect_alt(f);
-        f.write_str(&",");
+/// Closes what `struct_open` opened.
+internal fn struct_close(f: &mut Formatter) {
+    if f.alternate {
         f.close_brace("}");
+        return;
+    }
+    f.write_str(&" }");
+}
+
+impl<T, F> Inspect for StructField<T, F> {
+    fn inspect(&self, f: &mut Formatter) {
+        struct_open(f, "StructField");
+        struct_field(f, "index", true);
+        self.index.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "field_name", false);
+        self.field_name.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "wire_override", false);
+        inspect_wire_override(&self.wire_override, f);
+        struct_field_end(f);
+        struct_field(f, "has_default", false);
+        self.has_default.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "is_secret", false);
+        self.is_secret.inspect(f);
+        struct_field_end(f);
+        struct_close(f);
     }
 }
 
 impl<T, P> Inspect for VariantCase<T, P> {
     fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&"VariantCase { index: ");
+        struct_open(f, "VariantCase");
+        struct_field(f, "index", true);
         self.index.inspect(f);
-        f.write_str(&", case_name: ");
+        struct_field_end(f);
+        struct_field(f, "case_name", false);
         self.case_name.inspect(f);
-        f.write_str(&", wire_override: ");
+        struct_field_end(f);
+        struct_field(f, "wire_override", false);
         inspect_wire_override(&self.wire_override, f);
-        f.write_str(&", is_unit: ");
+        struct_field_end(f);
+        struct_field(f, "is_unit", false);
         self.is_unit.inspect(f);
-        f.write_str(&" }");
-    }
-}
-
-impl<T, P> InspectAlt for VariantCase<T, P> {
-    fn inspect_alt(&self, f: &mut Formatter) {
-        f.open_brace("VariantCase {");
-        f.write_newline_indent();
-        f.write_str(&"index: ");
-        self.index.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"case_name: ");
-        self.case_name.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"wire_override: ");
-        inspect_wire_override(&self.wire_override, f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"is_unit: ");
-        self.is_unit.inspect_alt(f);
-        f.write_str(&",");
-        f.close_brace("}");
+        struct_field_end(f);
+        struct_close(f);
     }
 }
 
 impl<T: Inspect> Inspect for EnumCase<T> {
     fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&"EnumCase { discriminant: ");
+        struct_open(f, "EnumCase");
+        struct_field(f, "discriminant", true);
         self.discriminant.inspect(f);
-        f.write_str(&", value: ");
+        struct_field_end(f);
+        struct_field(f, "value", false);
         self.value.inspect(f);
-        f.write_str(&", case_name: ");
+        struct_field_end(f);
+        struct_field(f, "case_name", false);
         self.case_name.inspect(f);
-        f.write_str(&", wire_override: ");
+        struct_field_end(f);
+        struct_field(f, "wire_override", false);
         inspect_wire_override(&self.wire_override, f);
-        f.write_str(&" }");
-    }
-}
-
-impl<T: InspectAlt> InspectAlt for EnumCase<T> {
-    fn inspect_alt(&self, f: &mut Formatter) {
-        f.open_brace("EnumCase {");
-        f.write_newline_indent();
-        f.write_str(&"discriminant: ");
-        self.discriminant.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"value: ");
-        self.value.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"case_name: ");
-        self.case_name.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"wire_override: ");
-        inspect_wire_override(&self.wire_override, f);
-        f.write_str(&",");
-        f.close_brace("}");
+        struct_field_end(f);
+        struct_close(f);
     }
 }
 
 impl<T: Inspect> Inspect for FlagsBit<T> {
     fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&"FlagsBit { bit: ");
+        struct_open(f, "FlagsBit");
+        struct_field(f, "bit", true);
         self.bit.inspect(f);
-        f.write_str(&", value: ");
+        struct_field_end(f);
+        struct_field(f, "value", false);
         self.value.inspect(f);
-        f.write_str(&", member_name: ");
+        struct_field_end(f);
+        struct_field(f, "member_name", false);
         self.member_name.inspect(f);
-        f.write_str(&" }");
-    }
-}
-
-impl<T: InspectAlt> InspectAlt for FlagsBit<T> {
-    fn inspect_alt(&self, f: &mut Formatter) {
-        f.open_brace("FlagsBit {");
-        f.write_newline_indent();
-        f.write_str(&"bit: ");
-        self.bit.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"value: ");
-        self.value.inspect_alt(f);
-        f.write_str(&",");
-        f.write_newline_indent();
-        f.write_str(&"member_name: ");
-        self.member_name.inspect_alt(f);
-        f.write_str(&",");
-        f.close_brace("}");
+        struct_field_end(f);
+        struct_close(f);
     }
 }
 
@@ -755,8 +719,49 @@ internal trait Inspect {
 /// Struct debug formatting derived over `ReflectStruct` (WEP 2026-06-13): walk
 /// the field members, writing `Name { field: value, ... }`. Secret fields are
 /// elided and reported with a trailing `, ..`.
+/// The alternate (`#`) rendering the struct `Inspect` hands off to:
+/// `Name {\n  field: value,\n}`, one field per indented line.
+fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(v: &S, f: &mut Formatter) {
+    let mut wrote_field = false;
+    let mut has_secret = false;
+    for let field of ReflectStruct::<S>::members() {
+        if field.is_secret() {
+            has_secret = true;
+        } else {
+            if !wrote_field {
+                f.write_str(&ReflectStruct::<S>::type_name());
+                f.open_brace(" {");
+                wrote_field = true;
+            }
+            f.write_newline_indent();
+            f.write_str(&field.name());
+            f.write_str(&": ");
+            field.get(v).inspect(f);
+            f.write_str(&",");
+        }
+    }
+    if wrote_field {
+        if has_secret {
+            f.write_newline_indent();
+            f.write_str(&"..");
+        }
+        f.close_brace("}");
+        return;
+    }
+    f.write_str(&ReflectStruct::<S>::type_name());
+    if has_secret {
+        f.write_str(&" { .. }");
+        return;
+    }
+    f.write_str(&" {}");
+}
+
 impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
     fn inspect(&self, f: &mut Formatter) {
+        if f.alternate {
+            inspect_struct_alternate(self, f);
+            return;
+        }
         f.write_str(&ReflectStruct::<S>::type_name());
         let mut wrote_field = false;
         let mut has_secret = false;
@@ -812,9 +817,19 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
                 f.write_str(&"::");
                 f.write_str(&case.name());
                 if !case.is_unit() {
-                    f.write_str(&"(");
-                    case.extract(self).inspect(f);
-                    f.write_str(&")");
+                    // Alternate puts the payload on its own indented line;
+                    // a unit case is the bare name either way.
+                    if f.alternate {
+                        f.open_brace("(");
+                        f.write_newline_indent();
+                        case.extract(self).inspect(f);
+                        f.write_str(&",");
+                        f.close_brace(")");
+                    } else {
+                        f.write_str(&"(");
+                        case.extract(self).inspect(f);
+                        f.write_str(&")");
+                    }
                 }
             }
         }
@@ -892,52 +907,6 @@ pub trait UpperExp {
     fn fmt_upper_exp(&self, f: &mut Formatter);
 }
 
-/// Trait for alternate (pretty-print) inspect formatting.
-/// Used with the `${x:#?}` format specifier.
-/// Produces multi-line indented output for composite types.
-/// Primitive types delegate to `Inspect::inspect`.
-#[compiler_item("inspect_alt")]
-internal trait InspectAlt {
-    fn inspect_alt(&self, f: &mut Formatter);
-}
-
-/// Trait for alternate display formatting.
-/// Used with the `${x:#}` format specifier.
-/// If not explicitly implemented, auto-generated to delegate to `Display::fmt`
-/// (which in turn falls back to `Inspect`). Pretty-printing lives on the
-/// inspect side via `InspectAlt`.
-#[compiler_item("display_alt")]
-internal trait DisplayAlt {
-    fn fmt_alt(&self, f: &mut Formatter);
-}
-
-/// Trait for alternate binary formatting (with `0b` prefix).
-/// Used with the `${x:#b}` format specifier.
-#[compiler_item("binary_alt")]
-internal trait BinaryAlt {
-    fn fmt_binary_alt(&self, f: &mut Formatter);
-}
-
-/// Trait for alternate octal formatting (with `0o` prefix).
-/// Used with the `${x:#o}` format specifier.
-#[compiler_item("octal_alt")]
-internal trait OctalAlt {
-    fn fmt_octal_alt(&self, f: &mut Formatter);
-}
-
-/// Trait for alternate lowercase hex formatting (with `0x` prefix).
-/// Used with the `${x:#x}` format specifier.
-#[compiler_item("lower_hex_alt")]
-internal trait LowerHexAlt {
-    fn fmt_lower_hex_alt(&self, f: &mut Formatter);
-}
-
-/// Trait for alternate uppercase hex formatting (with `0X` prefix).
-/// Used with the `${x:#X}` format specifier.
-#[compiler_item("upper_hex_alt")]
-internal trait UpperHexAlt {
-    fn fmt_upper_hex_alt(&self, f: &mut Formatter);
-}
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 #[compiler_item("iterator")]
@@ -1433,7 +1402,6 @@ impl ConvertError {
         return ConvertError { message };
     }
 }
-
 
 /// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 /// bound. Implemented for every `Add<Output = Self>`.

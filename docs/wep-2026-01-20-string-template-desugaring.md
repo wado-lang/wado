@@ -1,7 +1,5 @@
 # WEP: String Template Desugaring
 
-> Interpolation was originally `{foo}`; it migrated to `${foo}` on 2026-07-18 to drop the brace-escaping cost against JSON-like content.
-
 ## Context
 
 String templates (`` `Hello, ${name}!` ``) are currently lowered in the elaborator to chained `+` (Add::add) calls. This approach has limitations:
@@ -47,18 +45,21 @@ Untagged templates are special-cased by the compiler for efficiency. No `CookedS
 `Hello, ${name}! You are ${age}.`
 ```
 
-The compiler directly emits an efficient sequence using a mutable string and labeled block expression. All interpolations go through `Formatter` + `Display::fmt` (see [Format Traits](./wep-2026-02-01-format-traits.md)) for predictable behavior, regardless of whether a format specifier is present. `Formatter` wraps `&mut String` and writes directly into the output buffer with no intermediate allocations.
+The compiler directly emits an efficient sequence using a mutable string and labeled block expression. Every interpolation goes through a `Formatter` (see [Format Traits](./wep-2026-02-01-format-traits.md)), specifier or not. `Formatter` wraps `&mut String` and writes into the output buffer with no intermediate allocation.
 
 ```wado
 __tmpl: {
     let mut __r = "Hello, ";
-    name.fmt(&mut Formatter::new(&mut __r, FormatSpec::default()));
+    name.fmt(&mut Formatter::new(&mut __r));
     __r.push_str("! You are ");
-    age.fmt(&mut Formatter::new(&mut __r, FormatSpec::default()));
+    age.fmt(&mut Formatter::new(&mut __r));
     __r.push_str(".");
     __r
 }
 ```
+
+One `Formatter` local serves the whole block; the snippets spell out a fresh
+one per interpolation for readability.
 
 ### Tagged Template Desugaring
 
@@ -102,7 +103,7 @@ impl String {
     fn raw<Values>(strings: RawStrings, values: Values) -> String {
         let mut result = strings[0];
         for let [i, v] of values.enumerate() {
-            v.fmt(&mut Formatter::new(&mut result, FormatSpec::default()));
+            v.fmt(&mut Formatter::new(&mut result));
             result.push_str(strings[i + 1]);
         }
         return result;
@@ -141,7 +142,10 @@ Compile error if interpolation is present.
 
 ### Format Specifiers
 
-All interpolations use the `Formatter` infrastructure (see [Format Traits](./wep-2026-02-01-format-traits.md)). When a format specifier is present, it becomes a custom `FormatSpec`; otherwise `FormatSpec::default()` is used. This ensures consistent behavior regardless of whether a specifier is present.
+A specifier selects the trait method to call (`fmt`, `fmt_lower_hex`, …) and
+the `Formatter` to call it with. The compiler emits `Formatter::new` when the
+specifier sets no field beyond the type — width, precision, fill, alignment,
+`+`, `#` and `0` are what make it a field-by-field literal instead:
 
 ```wado
 `Pi is ${pi:.2}`
@@ -152,10 +156,17 @@ Desugars to:
 ```wado
 __tmpl: {
     let mut __r = "Pi is ";
-    pi.fmt(&mut Formatter::new(&mut __r, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
+    pi.fmt(&mut Formatter {
+        fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false,
+        zero_pad: false, width: -1, precision: 2, indent: 0, buf: &mut __r,
+    });
     __r
 }
 ```
+
+The literal writes every field, sentinels included, rather than deriving from
+`Formatter::new`. See [Format Traits](./wep-2026-02-01-format-traits.md) for
+the field list.
 
 For tagged templates, format-specifier interpolations are pre-formatted and passed as strings in the values tuple:
 
@@ -169,7 +180,11 @@ Desugars to:
 __tmpl: {
     let __strings = CookedStrings::from(["Value: ", ""]);
     let mut __formatted = "";
-    pi.fmt(&mut Formatter::new(&mut __formatted, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
+    pi.fmt(&mut Formatter {
+        fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false,
+        zero_pad: false, width: -1, precision: 2, indent: 0,
+        buf: &mut __formatted,
+    });
     let __values = [__formatted];
     fmt(__strings, __values)
 }

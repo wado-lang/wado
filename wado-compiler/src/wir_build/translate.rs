@@ -281,45 +281,30 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             &live_param_sources,
         );
 
-        // Register the inspect / inspect_alt wrappers only when the
-        // functor's signature is inspectable. These forward to the
-        // per-functor `__Closure_N^Inspect / InspectAlt` impls
-        // synthesised in lower (Phase 2). When DCE pruned the
-        // per-functor impl or the `Formatter` struct isn't registered,
-        // the wrapper body falls back to `Unreachable` — the slot
-        // stays populated so the canonical struct schema is consistent.
-        let (inspect_wrapper_id, inspect_alt_wrapper_id) = if is_inspectable {
+        // Register the inspect wrapper only when the functor's signature is
+        // inspectable. It forwards to the per-functor `__Closure_N^Inspect`
+        // impl synthesised in lower (Phase 2). When DCE pruned that impl or
+        // the `Formatter` struct isn't registered, the wrapper body falls back
+        // to `Unreachable` — the slot stays populated so the canonical struct
+        // schema is consistent.
+        let inspect_wrapper_id = if is_inspectable {
             let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
-            let (inspect_trait, inspect_alt_trait) = {
+            let inspect_trait = {
                 let tt = ctx.package.type_table.borrow();
-                (
-                    tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Inspect),
-                    tt.compiler_trait_fq(crate::compiler_item::CompilerItem::InspectAlt),
-                )
+                tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Inspect)
             };
-            let inspect = register_inspect_wrapper(
+            Some(register_inspect_wrapper(
                 ctx,
                 module_source,
                 functor_name,
                 &inspect_trait,
                 "inspect",
                 global_id,
-                callback_fn_type_id.clone(),
-                functor_struct_type_id.clone(),
-            );
-            let inspect_alt = register_inspect_wrapper(
-                ctx,
-                module_source,
-                functor_name,
-                &inspect_alt_trait,
-                "inspect_alt",
-                global_id,
                 callback_fn_type_id,
                 functor_struct_type_id,
-            );
-            (Some(inspect), Some(inspect_alt))
+            ))
         } else {
-            (None, None)
+            None
         };
 
         ctx.closure_wrapper_funcs.insert(
@@ -327,7 +312,6 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             crate::wir_build::context::ClosureWrapperFuncs {
                 call: call_wrapper_id,
                 inspect: inspect_wrapper_id,
-                inspect_alt: inspect_alt_wrapper_id,
             },
         );
     }
@@ -446,7 +430,7 @@ fn register_call_wrapper(
     ctx.register_function(func, None)
 }
 
-/// Build an inspect / `inspect_alt` wrapper for a functor. Its external
+/// Build the inspect wrapper for a functor. Its external
 /// signature is fixed at `(env, formatter)` by the canonical callback type, so
 /// the function-table slot stays stable across DAE shrinkage on the impl: only
 /// surviving params are forwarded. A DCE'd impl leaves an `Unreachable` body,
@@ -630,12 +614,10 @@ fn register_inspect_wrapper(
 #[allow(clippy::needless_pass_by_value)] // signature mirrors the param-name plumbing in translate_function_bodies
 fn build_fn_canonical_dispatch_body(
     ctx: &mut WirContext<'_>,
-    trait_kind: crate::nir::FnDispatchTrait,
     self_param_name: String,
     formatter_param_name: String,
     self_box_type_id: Option<TypeId>,
 ) -> Option<Vec<WirInstr>> {
-    use crate::nir::FnDispatchTrait;
     use crate::wir::{WirAbstractHeapType, WirType};
 
     // No inspectable canonical struct was ever registered → the stub is
@@ -646,11 +628,6 @@ fn build_fn_canonical_dispatch_body(
         heap_type: WirAbstractHeapType::Struct,
         nullable: true,
     };
-    let field_name = match trait_kind {
-        FnDispatchTrait::Inspect => "inspect",
-        FnDispatchTrait::InspectAlt => "inspect_alt",
-    };
-
     // When the boxing pass rewrote `&fn(...)` to `Box<fn(...)>`, the
     // self parameter holds a wrapper struct whose `.value` field carries
     // the actual closure ref. Unwrap before refcasting.
@@ -704,7 +681,7 @@ fn build_fn_canonical_dispatch_body(
             type_id: callback_fn_type_id.clone(),
             func_ref: Box::new(WirInstr::StructGet {
                 type_id: base_type_id.clone(),
-                field_name: field_name.to_string(),
+                field_name: super::context::CANONICAL_INSPECT_SLOT.to_string(),
                 expr: Box::new(WirInstr::LocalGet {
                     name: typed_self.clone(),
                     result_ty: WirType::Ref {
@@ -851,12 +828,12 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         let tir_func = pending_body.tir_func.borrow();
         let type_table = pending_body.type_table.borrow();
 
-        // A `fn(..)^Inspect[Alt]` dispatch stub carries an empty TIR
+        // A `fn(..)^Inspect` dispatch stub carries an empty TIR
         // placeholder body; substitute the real one — a vtable indirect call
         // through `CanonicalClosure_K` — rather than translating it. Skipping
         // string-matching post-pass keeps name-format knowledge
         // confined to `name.rs` and `synthesis::traits`.
-        if let Some((trait_kind, _arity, _return_type)) = tir_func.fn_canonical_dispatch() {
+        if tir_func.fn_canonical_dispatch().is_some() {
             let self_param_name = tir_func
                 .params
                 .first()
@@ -880,7 +857,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             let _ = type_table;
             let body = build_fn_canonical_dispatch_body(
                 ctx,
-                trait_kind,
                 self_param_name,
                 formatter_param_name,
                 self_box_type_id,

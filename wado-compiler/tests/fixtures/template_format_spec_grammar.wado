@@ -18,6 +18,12 @@ export fn run() with Stdout {
     assert `${n:b}` == "101010";
     assert `${n:o}` == "52";
     assert `${n:X}` == "2A";
+    // `#` prefixes the radix, `0x` for both hex cases as Rust does.
+    assert `${n:#X}` == "0x2A";
+    // `#` alone sets the alternate flag on the same `Display`.
+    assert `${n:#}` == "42";
+    assert `${3.5:#}` == "3.5";
+    assert `${"s":#}` == "s";
 
     // `f` is fixed-point: it renders through Display, which honours precision.
     let pi = 3.14159;

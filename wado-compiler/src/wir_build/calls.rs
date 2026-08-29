@@ -1289,22 +1289,16 @@ impl FunctionTranslator<'_, '_> {
 
         // Build `CanonicalClosure_K`, field order matching
         // `WirContext::get_or_create_canonical_closure_type`: the inspectable
-        // layout `{ env, inspect, inspect_alt, func }`, whose prefix is the
-        // shared `$canonical_inspectable_base`, or the slim `{ env, func }` a
-        // build that never inspects a closure stays on.
+        // layout `{ env, inspect, func }`, whose prefix is the shared
+        // `$canonical_inspectable_base`, or the slim `{ env, func }` a build
+        // that never inspects a closure stays on.
         let mut fields = vec![functor_instr];
         if is_inspectable {
             let inspect_id = wrappers
                 .inspect
                 .expect("inspectable canonical closure missing inspect wrapper");
-            let inspect_alt_id = wrappers
-                .inspect_alt
-                .expect("inspectable canonical closure missing inspect_alt wrapper");
             fields.push(WirInstr::RefFunc {
                 func_id: inspect_id,
-            });
-            fields.push(WirInstr::RefFunc {
-                func_id: inspect_alt_id,
             });
         }
         fields.push(WirInstr::RefFunc {

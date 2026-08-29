@@ -24,6 +24,9 @@ use crate::wir::{
 /// defined functions have already been registered with their `WirFuncId`.
 pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 
+/// The `$canonical_inspectable_base` vtable slot a `fn(..)^Inspect` stub reads.
+pub const CANONICAL_INSPECT_SLOT: &str = "inspect";
+
 /// A declared type that has no WIR registration yet.
 ///
 /// Expected during `register_types`, where the caller takes `placeholder` and
@@ -135,7 +138,7 @@ pub struct WirContext<'a> {
     /// Value: (`canonical_fn_type_id`, `canonical_closure_struct_type_id`,
     ///         `is_inspectable`)
     /// `is_inspectable` is the per-`(N, Ret)` gate that decides whether
-    /// the canonical struct carries the inspect / `inspect_alt` vtable
+    /// the canonical struct carries the inspect vtable
     /// slots. See `inspectable_fn_dispatch`.
     pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId, bool)>,
     /// Map from closure `(module_source, functor_id)` to the per-functor
@@ -144,9 +147,9 @@ pub struct WirContext<'a> {
     pub closure_wrapper_funcs: IndexMap<(ModuleSource, u32), ClosureWrapperFuncs>,
     /// Counter for canonical closure type naming.
     pub canonical_closure_counter: u32,
-    /// The `(arity, return_type)` signatures whose `Fn^Inspect` / `^InspectAlt`
+    /// The `(arity, return_type)` signatures whose `Fn^Inspect`
     /// dispatch stub survived DCE, scanned once at WIR build start. Gates whether
-    /// a `CanonicalClosure_K` carries the `inspect` / `inspect_alt` vtable slots:
+    /// a `CanonicalClosure_K` carries the `inspect` vtable slot:
     /// a signature absent here keeps the slim `{ env, func }` shape, so a build
     /// that never inspects closures pays nothing.
     pub inspectable_fn_dispatch: IndexSet<(usize, TypeId)>,
@@ -196,7 +199,7 @@ pub struct PendingFunctionBody {
     pub type_table: Rc<RefCell<TypeTable>>,
 }
 
-/// The `(arity, ret)` call shapes whose `^Inspect` / `^InspectAlt` impl is
+/// The `(arity, ret)` call shapes whose `^Inspect` impl is
 /// still reachable: `synthesize_traits` emits a dispatch stub per module tagged
 /// `FunctionKind::FnCanonicalDispatch`, and the ones DCE leaves behind drive the
 /// per-signature schema gate that keeps an uninspected canonical closure slim.
@@ -212,7 +215,7 @@ fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, Typ
         if func.is_dead {
             continue;
         }
-        if let Some((_, arity, return_type)) = func.fn_canonical_dispatch() {
+        if let Some((arity, return_type)) = func.fn_canonical_dispatch() {
             set.insert((arity, return_type));
         }
     }
@@ -221,7 +224,7 @@ fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, Typ
 
 /// Per-functor wrapper functions for the `CanonicalClosure_K` vtable slots,
 /// populated by `register_closure_wrappers` and read by
-/// `translate_closure_to_canonical`. `inspect` / `inspect_alt` are `None` where
+/// `translate_closure_to_canonical`. `inspect` is `None` where
 /// [`WirContext::inspectable_fn_dispatch`] calls the signature unreachable, and
 /// the struct then takes the slim `{ env, func }` schema.
 #[derive(Clone, Debug)]
@@ -233,10 +236,6 @@ pub struct ClosureWrapperFuncs {
     /// args and forwards to `__Closure_N^Inspect::inspect`. `None`
     /// when the functor's `(N, Ret)` is not inspectable.
     pub inspect: Option<WirFuncId>,
-    /// `__closure_inspect_alt_wrapper_N(env, formatter)` — refcasts
-    /// both args and forwards to `__Closure_N^InspectAlt::inspect_alt`.
-    /// `None` when the functor's `(N, Ret)` is not inspectable.
-    pub inspect_alt: Option<WirFuncId>,
 }
 
 impl<'a> WirContext<'a> {
@@ -247,7 +246,7 @@ impl<'a> WirContext<'a> {
         // the context keeps no separate copy.
 
         // The per-`(arity, ret)` inspectable gate. DCE has already run, so the
-        // surviving `fn(..)^Inspect[Alt]` stubs name exactly the shapes needing
+        // surviving `fn(..)^Inspect` stubs name exactly the shapes needing
         // vtable slots. A program that inspects no closure leaves this empty —
         // slim `{ env, func }`.
         let inspectable_fn_dispatch = compute_inspectable_fn_dispatch(package);
@@ -449,7 +448,7 @@ impl<'a> WirContext<'a> {
     /// Get or create the `(fn_type_id, closure_struct_type_id)` pair for a
     /// signature — the vtable shape trait dispatch needs on a `fn(..)` held
     /// behind a parameter, field or global. An inspectable struct is laid out
-    /// `{ env, inspect, inspect_alt, func }`, the first three being the GC subtype
+    /// `{ env, inspect, func }`, the first two being the GC subtype
     /// prefix shared with `$canonical_inspectable_base`; others keep `{ env, func }`.
     pub fn get_or_create_canonical_closure_type(
         &mut self,
@@ -491,15 +490,7 @@ impl<'a> WirContext<'a> {
         let supertype = if is_inspectable {
             let callback_fn_type_id = self.get_or_create_canonical_callback_fn_type();
             fields.push(WirField {
-                name: "inspect".to_string(),
-                ty: WirType::Ref {
-                    type_id: callback_fn_type_id.clone(),
-                    nullable: false,
-                },
-                mutable: false,
-            });
-            fields.push(WirField {
-                name: "inspect_alt".to_string(),
+                name: CANONICAL_INSPECT_SLOT.to_string(),
                 ty: WirType::Ref {
                     type_id: callback_fn_type_id,
                     nullable: false,
@@ -541,11 +532,11 @@ impl<'a> WirContext<'a> {
     }
 
     /// Lazily create (or fetch) the shared inspectable closure supertype
-    /// `$canonical_inspectable_base = (struct env inspect inspect_alt)`.
+    /// `$canonical_inspectable_base = (struct env inspect)`.
     ///
     /// Every inspectable `CanonicalClosure_K` declares this as its supertype,
     /// whatever its signature, so a `fn(..)^Inspect` stub `ref.cast`s here and
-    /// reads `inspect` / `inspect_alt` off the base layout.
+    /// reads `inspect` off the base layout.
     pub fn get_or_create_canonical_inspectable_base(&mut self) -> WirTypeId {
         if let Some(id) = &self.canonical_inspectable_base_type_id {
             return id.clone();
@@ -563,15 +554,7 @@ impl<'a> WirContext<'a> {
                 mutable: false,
             },
             WirField {
-                name: "inspect".to_string(),
-                ty: WirType::Ref {
-                    type_id: callback_fn_type_id.clone(),
-                    nullable: false,
-                },
-                mutable: false,
-            },
-            WirField {
-                name: "inspect_alt".to_string(),
+                name: CANONICAL_INSPECT_SLOT.to_string(),
                 ty: WirType::Ref {
                     type_id: callback_fn_type_id,
                     nullable: false,
@@ -595,7 +578,7 @@ impl<'a> WirContext<'a> {
         id
     }
 
-    /// Func type for the inspect / `inspect_alt` vtable slots:
+    /// Func type for the inspect vtable slot:
     /// `(env: ref null struct, formatter: ref null struct) -> ()`.
     ///
     /// Both args use abstract `(ref null struct)` so a single fn type

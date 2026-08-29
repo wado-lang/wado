@@ -9,9 +9,11 @@ export fn run() with Stdout {
     let mut f = Formatter::new(&mut buf);
     u.fmt(&mut f);
     assert buf == "()";
+    // `#` is a `Formatter` field, so the alternate form runs the same `Display`.
     let mut buf2 = String::with_capacity(8);
     let mut f2 = Formatter::new(&mut buf2);
-    u.fmt_alt(&mut f2);
+    f2.alternate = true;
+    u.fmt(&mut f2);
     assert buf2 == "()";
     println("ok");
 }

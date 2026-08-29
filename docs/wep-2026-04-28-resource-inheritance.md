@@ -434,9 +434,9 @@ Cross-type comparison falls out of subtyping. `el == html_input` is well-typed w
 
 `Ord` is **not** auto-derived. Resources have no natural ordering and the host has no obligation to define one.
 
-#### `Inspect`, `InspectAlt`, and `Display` delegate to the host
+#### `Inspect` and `Display` delegate to the host
 
-For resources, the auto-derived implementations of `Inspect` (`${x:?}`), `InspectAlt` (`${x:#?}`), and `Display` (`${x}`) call host-imported formatters:
+For resources, the auto-derived implementations of `Inspect` (`${x:?}` / `${x:#?}`) and `Display` (`${x}`) call host-imported formatters:
 
 ```wit
 inspect:     func(r: extern-handle) -> string
@@ -532,7 +532,7 @@ Same-named methods on unrelated Wado types (e.g., a hypothetical `mouse-event.bu
 
 #### Built-in predicates and formatters
 
-`downcast`, `Eq`, `Inspect`, `InspectAlt`, and `Display` lower to flat CM imports over `extern-handle`:
+`downcast`, `Eq`, `Inspect`, and `Display` lower to flat CM imports over `extern-handle`:
 
 ```wit
 interface lang {

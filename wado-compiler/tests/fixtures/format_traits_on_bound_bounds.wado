@@ -1,10 +1,9 @@
 // Test: which `T: <format>` bounds hold under the Display-derivation policy.
-// - `Inspect` / `InspectAlt` are total: any type satisfies them (`{v:?}` /
-//   `{v:#?}` always work).
+// - `Inspect` is total: any type satisfies it (`{v:?}` / `{v:#?}` always work,
+//   the second being the same trait with the alternate flag set).
 // - `Display` is NOT total: only plain enums (bare case name) and primitives
 //   satisfy it. A struct/variant needs a manual `impl Display` (see
 //   display_no_autoderive_pushdisplay.wado for the rejection).
-// - `DisplayAlt` delegates to `Display`, so it holds wherever `Display` does.
 struct P {
     x: i32,
     y: i32,
@@ -28,11 +27,11 @@ fn show_display<T: Display>(v: &T) -> String {
     return `${v}`;
 }
 
-fn show_inspect_alt<T: InspectAlt>(v: &T) -> String {
+fn show_inspect_alternate<T: Inspect>(v: &T) -> String {
     return `${v:#?}`;
 }
 
-fn show_display_alt<T: DisplayAlt>(v: &T) -> String {
+fn show_display_alternate<T: Display>(v: &T) -> String {
     return `${v:#}`;
 }
 
@@ -48,12 +47,12 @@ test "Display bound holds for enums (bare) and primitives" {
     assert show_display(&42) == "42";
 }
 
-test "alt bounds" {
+test "the alternate form needs no bound of its own" {
     let p = P { x: 5, y: 6 };
-    // `InspectAlt` is total and pretty-prints any type.
-    assert show_inspect_alt(&p) == "P {\n  x: 5,\n  y: 6,\n}";
-    // `DisplayAlt` tracks `Display`: an enum's alternate display is its bare name.
-    assert show_display_alt(&Color::Red) == "Red";
+    // The same `Inspect` bound pretty-prints under `#`.
+    assert show_inspect_alternate(&p) == "P {\n  x: 5,\n  y: 6,\n}";
+    // `#` on a `Display` runs the same impl: an enum still shows its bare name.
+    assert show_display_alternate(&Color::Red) == "Red";
 }
 
 __DATA__
