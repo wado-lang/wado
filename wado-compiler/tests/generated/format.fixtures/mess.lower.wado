@@ -4763,30 +4763,36 @@ pub fn "core:prelude/int128.wado/u128::div_rem"(self: &u128, divisor: &u128) -> 
     if ((divisor.low == 0) && (divisor.high == 0)) {
         core::rt::panic(String { repr: packed"u128 division by zero", used: 21 });
     }
-    if (*self."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&*divisor) == Ordering::Less) {
-        return ["core::prelude/int128.wado::core:prelude/int128.wado/u128::zero"(), "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(*self)];
-    }
-    if *self."core:prelude/int128.wado/u128^core:prelude/traits.wado/Eq::eq"(&*divisor) {
-        return ["core::prelude/int128.wado::core:prelude/int128.wado/u128::one"(), "core::prelude/int128.wado::core:prelude/int128.wado/u128::zero"()];
-    }
     let mut quotient: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::zero"();
     let mut remainder: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::zero"();
-    let one: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::one"();
-    let mut i: i32 = 127;
-    loop {
-        if !(i >= 0) {
-            break;
+    if ((self.high == 0) && (divisor.high == 0)) {
+        quotient = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"((self.low / divisor.low));
+        remainder = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"((self.low % divisor.low));
+    } else {
+        if (*self."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&*divisor) == Ordering::Less) {
+            remainder = "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(*self);
+        } else {
+            if *self."core:prelude/int128.wado/u128^core:prelude/traits.wado/Eq::eq"(&*divisor) {
+                quotient = "core::prelude/int128.wado::core:prelude/int128.wado/u128::one"();
+            } else {
+                let one: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::one"();
+                let mut i: i32 = 127;
+                loop {
+                    if !(i >= 0) {
+                        break;
+                    }
+                    remainder = "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/Shl::shl"(1));
+                    if self."core:prelude/int128.wado/u128::get_bit"(i) {
+                        remainder = remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/BitOr::bitor"(&one);
+                    }
+                    if (remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&*divisor) != Ordering::Less) {
+                        remainder = remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/Sub::sub"(&*divisor);
+                        quotient = quotient."core:prelude/int128.wado/u128::set_bit"(i);
+                    }
+                    i = (i - 1);
+                }
+            }
         }
-        remainder = "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/Shl::shl"(1));
-        let bit: bool = self."core:prelude/int128.wado/u128::get_bit"(i);
-        if bit {
-            remainder = remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/BitOr::bitor"(&one);
-        }
-        if (remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&*divisor) != Ordering::Less) {
-            remainder = remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/Sub::sub"(&*divisor);
-            quotient = quotient."core:prelude/int128.wado/u128::set_bit"(i);
-        }
-        i = (i - 1);
     }
     return [quotient, remainder];
 }
@@ -4872,7 +4878,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self: &u128, f: &mut F
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 339 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 328 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: pos == offset\n", used: 26 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"pos: ", used: 5 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4951,7 +4957,7 @@ fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, bas
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                     let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                    Box<i32> { value: 394 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                    Box<i32> { value: 383 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: pos == offset\n", used: 26 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"pos: ", used: 5 });
                     __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
