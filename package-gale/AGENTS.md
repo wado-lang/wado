@@ -4,7 +4,6 @@ Dev-cycle essentials for working on Gale, a Wado-native ANTLR4-compatible parser
 
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility contract, prediction / codegen design, soundness invariants, descriptor pipeline, and triage.
 - [`resilient-parser.md`](./resilient-parser.md) — error-resilient parsing and the flat CST.
-- [`grammar-import.md`](./grammar-import.md) — `import S;` resolution and composite-grammar composition.
 - [`perf.md`](./perf.md) — performance notes: budget, levers, and measured perf dead-ends.
 - [`TODO.md`](./TODO.md) — open work.
 - [`README.md`](./README.md) and [WEP: Gale](../docs/wep-2026-03-02-gale.md) — overall design context.
