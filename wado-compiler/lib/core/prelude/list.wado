@@ -17,14 +17,12 @@ use {
     FromIterator,
     From,
     Display,
-    DisplayAlt,
     Inspect,
-    InspectAlt,
 } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
+use { write_seq_inspect } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use {
     AsSlice,
@@ -582,18 +580,5 @@ impl<T: Inspect> Display for List<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         // Display never applies the default cap; raw precision caps only if >= 0.
         write_seq_inspect(&self.repr, 0, self.used, f, false, f.precision);
-    }
-}
-
-impl<T: InspectAlt> InspectAlt for List<T> {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(&self.repr, 0, self.used, f, true, f.resolved_seq_limit());
-    }
-}
-
-impl<T: InspectAlt> DisplayAlt for List<T> {
-    pub fn fmt_alt(&self, f: &mut Formatter) {
-        // DisplayAlt never applies the default sequence cap (see Display).
-        write_seq_inspect_alt(&self.repr, 0, self.used, f, false, f.precision);
     }
 }

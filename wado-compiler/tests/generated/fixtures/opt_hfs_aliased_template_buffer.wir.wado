@@ -214,7 +214,7 @@ fn "opt_hfs_aliased_template_buffer.wado/write_literal_char$scalar"(f, c, quote)
         s_13 = global:opt_hfs_aliased_template_buffer.wado::__const_obj_2;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f, s_13);
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-        "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(builtin::i64_extend_i32_u(c), __local_4, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
+        "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(builtin::i64_extend_i32_u(c), __local_4, 16, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 });
         __fuse_len_24 = __local_4.used;
         new_used = f.used + (1 + __fuse_len_24);
         if @unlikely(new_used > builtin::array_len(f.repr)) {
@@ -573,7 +573,7 @@ fn "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/Li
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f, 39);
 }
 
-fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base, upper, prefix) {
+fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base, upper, alt_prefix) {
     let bits_per_digit: i32;
     let mask: i32;
     let digit_count: i32;
@@ -585,17 +585,15 @@ fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base
     });
     mask = base - 1;
     digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, prefix, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, alt_prefix, digit_count);
     "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, mask, upper);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, prefix, digit_count) {
-    let self_13: i32;
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
     let new_used_21: i32;
     let start_22: i32;
     let new_used_46: i32;
     let start_47: i32;
-    self_13 = prefix.used;
     if is_negative {
         new_used_21 = self.used + 1;
         if @unlikely(new_used_21 > builtin::array_len(self.repr)) {
@@ -606,9 +604,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self.used = new_used_21;
         builtin::array_set_u8(self.repr, start_22, 45);
     } else {
-    }
-    if self_13 > 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, prefix);
     }
     return new_used_46 = self.used + digit_count, if @unlikely(new_used_46 > builtin::array_len(self.repr)) {
         cold_path;

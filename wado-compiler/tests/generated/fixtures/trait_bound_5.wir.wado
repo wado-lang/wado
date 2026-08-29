@@ -353,13 +353,11 @@ fn "trait_bound_5.wado/trait_bound_5.wado/Wrapper<i32>^trait_bound_5.wado/Descri
     }, start_65 = __local_1_0.used, __local_1_0.used = new_used_64, builtin::array_set_u8(__local_1_0.repr, start_65, 41), __local_1_0;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, prefix, digit_count) {
-    let self_13: i32;
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
     let new_used_21: i32;
     let start_22: i32;
     let new_used_46: i32;
     let start_47: i32;
-    self_13 = prefix.used;
     if is_negative {
         new_used_21 = self.used + 1;
         if @unlikely(new_used_21 > builtin::array_len(self.repr)) {
@@ -370,9 +368,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self.used = new_used_21;
         builtin::array_set_u8(self.repr, start_22, 45);
     } else {
-    }
-    if self_13 > 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, prefix);
     }
     return new_used_46 = self.used + digit_count, if @unlikely(new_used_46 > builtin::array_len(self.repr)) {
         cold_path;
@@ -395,12 +390,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b25: block {
-            l26: loop {
-                break_if b25 t <= 0_i64;
+        b24: block {
+            l25: loop {
+                break_if b24 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l26;
+                continue l25;
             };
         };
         break __inline_count_digits_i64_0: n;

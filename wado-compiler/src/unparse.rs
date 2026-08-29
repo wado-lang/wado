@@ -5133,7 +5133,7 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 
 /// Unparse a TIR closure as `|name: Type, …| body`, or `|…| captures[…] body`
 /// when it captures. `lower::plan::closure` bakes the result into
-/// `__Closure_N^InspectAlt::inspect_alt`. The `captures[…]` clause has no
+/// `__Closure_N^Inspect::inspect` under the alternate flag. The `captures[…]` clause has no
 /// surface syntax — closures capture implicitly — but is shown deliberately, so
 /// only a non-capturing closure round-trips through the parser.
 pub fn unparse_tir_closure_source(

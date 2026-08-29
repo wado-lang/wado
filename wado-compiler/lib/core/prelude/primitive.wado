@@ -19,17 +19,11 @@ use {
     Ord,
     Default,
     Display,
-    DisplayAlt,
     Inspect,
-    InspectAlt,
     Binary,
-    BinaryAlt,
     Octal,
-    OctalAlt,
     LowerHex,
-    LowerHexAlt,
     UpperHex,
-    UpperHexAlt,
     LowerExp,
     UpperExp,
     FromStr,
@@ -171,6 +165,88 @@ fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, abs_val: i64, digit_co
     }
 }
 
+/// Count decimal digits of a u64 value.
+fn count_digits_u64(val: u64) -> i32 {
+    if val == 0 {
+        return 1;
+    }
+    let mut n: i32 = 0;
+    for let mut t = val; t > 0; t = t / 10 {
+        n += 1;
+    }
+    return n;
+}
+
+/// Drop the last `drop` decimal digits of `val`, rounding half to even — the
+/// rounding `{:.Ne}` applies to an integer mantissa.
+fn round_off_digits_u64(val: u64, drop: i32) -> u64 {
+    let mut divisor: u64 = 1;
+    for let mut i = 0; i < drop; i += 1 {
+        divisor = divisor * 10;
+    }
+    let quotient = val / divisor;
+    let remainder = val - quotient * divisor;
+    let half = divisor / 2;
+    if remainder > half || remainder == half && quotient % 2 == 1 {
+        return quotient + 1;
+    }
+    return quotient;
+}
+
+/// Write `abs_value` in exponential notation: a mantissa of `precision + 1`
+/// digits, or — with no precision — its digits with trailing zeros stripped,
+/// then `e`/`E` and the decimal exponent. Matches Rust's integer `{:e}`.
+fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bool) {
+    let precision = f.precision;
+    let mut value = abs_value;
+    let mut exponent = count_digits_u64(value) - 1;
+    if precision >= 0 {
+        let total = precision + 1;
+        let drop = exponent + 1 - total;
+        if drop > 0 {
+            value = round_off_digits_u64(value, drop);
+            if count_digits_u64(value) > total {
+                // The rounding carried: 999 became 1000, one decade up.
+                value = value / 10;
+                exponent += 1;
+            }
+        }
+    } else {
+        while value >= 10 && value % 10 == 0 {
+            value = value / 10;
+        }
+    }
+
+    let digits = value.to_string();
+    let fraction_len = digits.len() - 1;
+    let mark = f.mark();
+    if is_negative {
+        f.write_char('-');
+    } else if f.sign_plus {
+        f.write_char('+');
+    }
+    f.write_char(digits.char_at_byte_unchecked(0));
+    if precision > 0 || precision < 0 && fraction_len > 0 {
+        f.write_char('.');
+        f.buf.push_str_range_unchecked(&digits, 1, digits.len());
+        for let mut i = fraction_len; i < precision; i += 1 {
+            f.write_char('0');
+        }
+    }
+    f.write_char(if upper { 'E' } else { 'e' });
+    f.write_str(&exponent.to_string());
+    f.apply_padding(mark);
+}
+
+/// The magnitude of a signed value, `MIN` included — `-MIN` does not fit the
+/// signed type, so it is stepped through `MIN + 1`.
+fn abs_to_u64(val: i64) -> u64 {
+    if val >= 0 {
+        return val as u64;
+    }
+    return -(val + 1) as u64 + 1;
+}
+
 /// Count digits of a u64 value (as raw i64 bits) in the given power-of-2 base.
 /// `bits_per_digit` is log2(base): 1 for binary, 3 for octal, 4 for hex.
 fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
@@ -240,7 +316,6 @@ fn write_u64_base_digits(
         }
     }
 }
-
 
 internal type i8;
 internal type i16;
@@ -1122,7 +1197,9 @@ impl u64 {
         }
     }
 
-    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
+    /// `alt_prefix` is written only when the spec asked for the alternate form
+    /// (`${x:#x}`); `prepare_int_write` drops it for a plain `${x:x}`.
+    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool, alt_prefix: String) {
         let val_i64 = *self as i64;
         let bits_per_digit = if base == 2 {
             1;
@@ -1133,7 +1210,7 @@ impl u64 {
         };
         let mask = base - 1;
         let digit_count = count_digits_u64_base(val_i64, bits_per_digit);
-        let offset = f.prepare_int_write(false, prefix, digit_count);
+        let offset = f.prepare_int_write(false, alt_prefix, digit_count);
         write_u64_base_digits(
             f.buf.internal_raw_bytes_mut(),
             offset,
@@ -1913,12 +1990,6 @@ impl Display for () {
     }
 }
 
-impl DisplayAlt for () {
-    pub fn fmt_alt(&self, f: &mut Formatter) {
-        f.write_str(&"()");
-    }
-}
-
 impl Display for bool {
     pub fn fmt(&self, f: &mut Formatter) {
         self.fmt_into(f);
@@ -2036,12 +2107,6 @@ impl Inspect for v128 {
     }
 }
 
-impl InspectAlt for v128 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-
 impl Inspect for bool {
     pub fn inspect(&self, f: &mut Formatter) {
         self.fmt_into(f);
@@ -2134,72 +2199,6 @@ impl Inspect for f64 {
     }
 }
 
-impl InspectAlt for () {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for bool {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for char {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for i8 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for u8 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for i16 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for u16 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for i32 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for u32 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for i64 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for u64 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for f32 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-impl InspectAlt for f64 {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-
 impl LowerExp for f32 {
     pub fn fmt_lower_exp(&self, f: &mut Formatter) {
         self.fmt_exp(f.precision, 0, f);
@@ -2224,364 +2223,291 @@ impl UpperExp for f64 {
     }
 }
 
+impl LowerExp for i8 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), false);
+    }
+}
+
+impl UpperExp for i8 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), true);
+    }
+}
+
+impl LowerExp for u8 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, false);
+    }
+}
+
+impl UpperExp for u8 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, true);
+    }
+}
+
+impl LowerExp for i16 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), false);
+    }
+}
+
+impl UpperExp for i16 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), true);
+    }
+}
+
+impl LowerExp for u16 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, false);
+    }
+}
+
+impl UpperExp for u16 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, true);
+    }
+}
+
+impl LowerExp for i32 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), false);
+    }
+}
+
+impl UpperExp for i32 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), true);
+    }
+}
+
+impl LowerExp for u32 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, false);
+    }
+}
+
+impl UpperExp for u32 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, true);
+    }
+}
+
+impl LowerExp for i64 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, abs_to_u64(*self), false);
+    }
+}
+
+impl UpperExp for i64 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, abs_to_u64(*self), true);
+    }
+}
+
+impl LowerExp for u64 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self, false);
+    }
+}
+
+impl UpperExp for u64 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self, true);
+    }
+}
 
 impl Binary for i8 {
     pub fn fmt_binary(&self, f: &mut Formatter) {
-        (*self as u8 as u64).fmt_base(f, 2, false, "");
+        (*self as u8 as u64).fmt_base(f, 2, false, "0b");
     }
 }
 
 impl Binary for u8 {
     pub fn fmt_binary(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 2, false, "");
+        (*self as u64).fmt_base(f, 2, false, "0b");
     }
 }
 
 impl Binary for i16 {
     pub fn fmt_binary(&self, f: &mut Formatter) {
-        (*self as u16 as u64).fmt_base(f, 2, false, "");
+        (*self as u16 as u64).fmt_base(f, 2, false, "0b");
     }
 }
 
 impl Binary for u16 {
     pub fn fmt_binary(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 2, false, "");
+        (*self as u64).fmt_base(f, 2, false, "0b");
     }
 }
 
 impl Binary for i32 {
     pub fn fmt_binary(&self, f: &mut Formatter) {
-        (*self as u32 as u64).fmt_base(f, 2, false, "");
+        (*self as u32 as u64).fmt_base(f, 2, false, "0b");
     }
 }
 
 impl Binary for u32 {
     pub fn fmt_binary(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 2, false, "");
+        (*self as u64).fmt_base(f, 2, false, "0b");
     }
 }
 
 impl Binary for i64 {
     pub fn fmt_binary(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 2, false, "");
+        (*self as u64).fmt_base(f, 2, false, "0b");
     }
 }
 
-
 impl Octal for i8 {
     pub fn fmt_octal(&self, f: &mut Formatter) {
-        (*self as u8 as u64).fmt_base(f, 8, false, "");
+        (*self as u8 as u64).fmt_base(f, 8, false, "0o");
     }
 }
 
 impl Octal for u8 {
     pub fn fmt_octal(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 8, false, "");
+        (*self as u64).fmt_base(f, 8, false, "0o");
     }
 }
 
 impl Octal for i16 {
     pub fn fmt_octal(&self, f: &mut Formatter) {
-        (*self as u16 as u64).fmt_base(f, 8, false, "");
+        (*self as u16 as u64).fmt_base(f, 8, false, "0o");
     }
 }
 
 impl Octal for u16 {
     pub fn fmt_octal(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 8, false, "");
+        (*self as u64).fmt_base(f, 8, false, "0o");
     }
 }
 
 impl Octal for i32 {
     pub fn fmt_octal(&self, f: &mut Formatter) {
-        (*self as u32 as u64).fmt_base(f, 8, false, "");
+        (*self as u32 as u64).fmt_base(f, 8, false, "0o");
     }
 }
 
 impl Octal for u32 {
     pub fn fmt_octal(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 8, false, "");
+        (*self as u64).fmt_base(f, 8, false, "0o");
     }
 }
 
 impl Octal for i64 {
     pub fn fmt_octal(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 8, false, "");
+        (*self as u64).fmt_base(f, 8, false, "0o");
     }
 }
 
-
 impl LowerHex for i8 {
     pub fn fmt_lower_hex(&self, f: &mut Formatter) {
-        (*self as u8 as u64).fmt_base(f, 16, false, "");
+        (*self as u8 as u64).fmt_base(f, 16, false, "0x");
     }
 }
 
 impl LowerHex for u8 {
     pub fn fmt_lower_hex(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, false, "");
+        (*self as u64).fmt_base(f, 16, false, "0x");
     }
 }
 
 impl LowerHex for i16 {
     pub fn fmt_lower_hex(&self, f: &mut Formatter) {
-        (*self as u16 as u64).fmt_base(f, 16, false, "");
+        (*self as u16 as u64).fmt_base(f, 16, false, "0x");
     }
 }
 
 impl LowerHex for u16 {
     pub fn fmt_lower_hex(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, false, "");
+        (*self as u64).fmt_base(f, 16, false, "0x");
     }
 }
 
 impl LowerHex for i32 {
     pub fn fmt_lower_hex(&self, f: &mut Formatter) {
-        (*self as u32 as u64).fmt_base(f, 16, false, "");
+        (*self as u32 as u64).fmt_base(f, 16, false, "0x");
     }
 }
 
 impl LowerHex for u32 {
     pub fn fmt_lower_hex(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, false, "");
+        (*self as u64).fmt_base(f, 16, false, "0x");
     }
 }
 
 impl LowerHex for i64 {
     pub fn fmt_lower_hex(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, false, "");
+        (*self as u64).fmt_base(f, 16, false, "0x");
     }
 }
 
-
 impl UpperHex for i8 {
     pub fn fmt_upper_hex(&self, f: &mut Formatter) {
-        (*self as u8 as u64).fmt_base(f, 16, true, "");
+        (*self as u8 as u64).fmt_base(f, 16, true, "0x");
     }
 }
 
 impl UpperHex for u8 {
     pub fn fmt_upper_hex(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, true, "");
+        (*self as u64).fmt_base(f, 16, true, "0x");
     }
 }
 
 impl UpperHex for i16 {
     pub fn fmt_upper_hex(&self, f: &mut Formatter) {
-        (*self as u16 as u64).fmt_base(f, 16, true, "");
+        (*self as u16 as u64).fmt_base(f, 16, true, "0x");
     }
 }
 
 impl UpperHex for u16 {
     pub fn fmt_upper_hex(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, true, "");
+        (*self as u64).fmt_base(f, 16, true, "0x");
     }
 }
 
 impl UpperHex for i32 {
     pub fn fmt_upper_hex(&self, f: &mut Formatter) {
-        (*self as u32 as u64).fmt_base(f, 16, true, "");
+        (*self as u32 as u64).fmt_base(f, 16, true, "0x");
     }
 }
 
 impl UpperHex for u32 {
     pub fn fmt_upper_hex(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, true, "");
+        (*self as u64).fmt_base(f, 16, true, "0x");
     }
 }
 
 impl UpperHex for i64 {
     pub fn fmt_upper_hex(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, true, "");
+        (*self as u64).fmt_base(f, 16, true, "0x");
     }
 }
 
-
 impl Binary for u64 {
     pub fn fmt_binary(&self, f: &mut Formatter) {
-        self.fmt_base(f, 2, false, "");
+        self.fmt_base(f, 2, false, "0b");
     }
 }
 
 impl Octal for u64 {
     pub fn fmt_octal(&self, f: &mut Formatter) {
-        self.fmt_base(f, 8, false, "");
+        self.fmt_base(f, 8, false, "0o");
     }
 }
 
 impl LowerHex for u64 {
     pub fn fmt_lower_hex(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, false, "");
+        self.fmt_base(f, 16, false, "0x");
     }
 }
 
 impl UpperHex for u64 {
     pub fn fmt_upper_hex(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, true, "");
-    }
-}
-
-impl BinaryAlt for i8 {
-    pub fn fmt_binary_alt(&self, f: &mut Formatter) {
-        (*self as u8 as u64).fmt_base(f, 2, false, "0b");
-    }
-}
-impl BinaryAlt for u8 {
-    pub fn fmt_binary_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 2, false, "0b");
-    }
-}
-impl BinaryAlt for i16 {
-    pub fn fmt_binary_alt(&self, f: &mut Formatter) {
-        (*self as u16 as u64).fmt_base(f, 2, false, "0b");
-    }
-}
-impl BinaryAlt for u16 {
-    pub fn fmt_binary_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 2, false, "0b");
-    }
-}
-impl BinaryAlt for i32 {
-    pub fn fmt_binary_alt(&self, f: &mut Formatter) {
-        (*self as u32 as u64).fmt_base(f, 2, false, "0b");
-    }
-}
-impl BinaryAlt for u32 {
-    pub fn fmt_binary_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 2, false, "0b");
-    }
-}
-impl BinaryAlt for i64 {
-    pub fn fmt_binary_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 2, false, "0b");
-    }
-}
-impl BinaryAlt for u64 {
-    pub fn fmt_binary_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 2, false, "0b");
-    }
-}
-
-impl OctalAlt for i8 {
-    pub fn fmt_octal_alt(&self, f: &mut Formatter) {
-        (*self as u8 as u64).fmt_base(f, 8, false, "0o");
-    }
-}
-impl OctalAlt for u8 {
-    pub fn fmt_octal_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 8, false, "0o");
-    }
-}
-impl OctalAlt for i16 {
-    pub fn fmt_octal_alt(&self, f: &mut Formatter) {
-        (*self as u16 as u64).fmt_base(f, 8, false, "0o");
-    }
-}
-impl OctalAlt for u16 {
-    pub fn fmt_octal_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 8, false, "0o");
-    }
-}
-impl OctalAlt for i32 {
-    pub fn fmt_octal_alt(&self, f: &mut Formatter) {
-        (*self as u32 as u64).fmt_base(f, 8, false, "0o");
-    }
-}
-impl OctalAlt for u32 {
-    pub fn fmt_octal_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 8, false, "0o");
-    }
-}
-impl OctalAlt for i64 {
-    pub fn fmt_octal_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 8, false, "0o");
-    }
-}
-impl OctalAlt for u64 {
-    pub fn fmt_octal_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 8, false, "0o");
-    }
-}
-
-impl LowerHexAlt for i8 {
-    pub fn fmt_lower_hex_alt(&self, f: &mut Formatter) {
-        (*self as u8 as u64).fmt_base(f, 16, false, "0x");
-    }
-}
-impl LowerHexAlt for u8 {
-    pub fn fmt_lower_hex_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, false, "0x");
-    }
-}
-impl LowerHexAlt for i16 {
-    pub fn fmt_lower_hex_alt(&self, f: &mut Formatter) {
-        (*self as u16 as u64).fmt_base(f, 16, false, "0x");
-    }
-}
-impl LowerHexAlt for u16 {
-    pub fn fmt_lower_hex_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, false, "0x");
-    }
-}
-impl LowerHexAlt for i32 {
-    pub fn fmt_lower_hex_alt(&self, f: &mut Formatter) {
-        (*self as u32 as u64).fmt_base(f, 16, false, "0x");
-    }
-}
-impl LowerHexAlt for u32 {
-    pub fn fmt_lower_hex_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, false, "0x");
-    }
-}
-impl LowerHexAlt for i64 {
-    pub fn fmt_lower_hex_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, false, "0x");
-    }
-}
-impl LowerHexAlt for u64 {
-    pub fn fmt_lower_hex_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, false, "0x");
-    }
-}
-
-impl UpperHexAlt for i8 {
-    pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        (*self as u8 as u64).fmt_base(f, 16, true, "0X");
-    }
-}
-impl UpperHexAlt for u8 {
-    pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, true, "0X");
-    }
-}
-impl UpperHexAlt for i16 {
-    pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        (*self as u16 as u64).fmt_base(f, 16, true, "0X");
-    }
-}
-impl UpperHexAlt for u16 {
-    pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, true, "0X");
-    }
-}
-impl UpperHexAlt for i32 {
-    pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        (*self as u32 as u64).fmt_base(f, 16, true, "0X");
-    }
-}
-impl UpperHexAlt for u32 {
-    pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, true, "0X");
-    }
-}
-impl UpperHexAlt for i64 {
-    pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        (*self as u64).fmt_base(f, 16, true, "0X");
-    }
-}
-impl UpperHexAlt for u64 {
-    pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, true, "0X");
+        self.fmt_base(f, 16, true, "0x");
     }
 }
 

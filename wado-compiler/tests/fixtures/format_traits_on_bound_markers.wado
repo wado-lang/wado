@@ -1,14 +1,13 @@
-// Test: `impl Inspect for T;` / `impl InspectAlt for T;` markers are accepted as
-// conformance checks (WEP: Trait Derivation Policy). `Display` is never derived,
-// so a struct is formatted via a manual `impl Display`; `impl DisplayAlt for T;`
-// then derives the alternate form by delegating to that `Display`.
+// Test: an `impl Inspect for T;` marker is accepted as a conformance check
+// (WEP: Trait Derivation Policy). `Display` is never derived, so a struct is
+// formatted via a manual `impl Display`, which `${x:#}` reaches too — the `#`
+// flag is a `Formatter` field, not a trait of its own.
 struct Point {
     x: i32,
     y: i32,
 }
 
 impl Inspect for Point;
-impl InspectAlt for Point;
 
 test "inspect markers validate and debug formatting works" {
     let p = Point { x: 1, y: 2 };
@@ -24,8 +23,6 @@ impl Display for Custom {
         f.write_str(&"custom!");
     }
 }
-
-impl DisplayAlt for Custom;
 
 test "manual Display drives {x} and {x:#}; Inspect drives {x:?}" {
     let c = Custom { v: 1 };

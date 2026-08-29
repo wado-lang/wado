@@ -24,7 +24,7 @@ This WEP settles two questions raised while reviewing that design:
 1. Does struct walking need a new language primitive, in particular for nested
    structs?
 2. How does field redaction interact with reflection? Today `#[secret]` affects
-   only `Inspect`/`InspectAlt` and `wado doc`; serde serializes secret fields
+   only `Inspect` and `wado doc`; serde serializes secret fields
    normally, so a redacted credential still leaks through `json::to_string`.
    Once any package can walk any struct via `ReflectStruct`, this hole widens.
 
@@ -144,7 +144,7 @@ This preserves the pack arity and the index correspondence with `members()`.
 Each channel's behavior follows mechanically from which traits `Secret<T>`
 implements:
 
-- `Inspect` / `InspectAlt`: unchanged — secret fields are omitted and a
+- `Inspect`: unchanged — secret fields are omitted and a
   trailing `..` marks their presence. `assert` power-assert output goes through
   `Inspect`, so it is covered.
 - `Serialize`: secret fields are skipped. For round-trip honesty a secret field

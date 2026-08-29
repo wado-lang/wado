@@ -1557,7 +1557,7 @@ impl TypeError {
                 (
                     Code::TypeMismatch,
                     format!(
-                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, `Inspect`, `InspectAlt`, and `DisplayAlt`.{hint}"
+                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`.{hint}"
                     ),
                     *span,
                 )

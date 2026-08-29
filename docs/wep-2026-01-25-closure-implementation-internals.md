@@ -66,23 +66,21 @@ The canonical struct takes one of two shapes, chosen per `(arity, return type)` 
 ;; Inspectable
 (type $canonical_inspectable_base (struct
   (field $env         (ref null struct))
-  (field $inspect     (ref $canonical_callback_fn))
-  (field $inspect_alt (ref $canonical_callback_fn))))
+  (field $inspect     (ref $canonical_callback_fn))))
 
 (type $CanonicalClosure_K (sub $canonical_inspectable_base (struct
   (field $env         (ref null struct))
   (field $inspect     (ref $canonical_callback_fn))
-  (field $inspect_alt (ref $canonical_callback_fn))
   (field $func        (ref $canonical_fn_K)))))
 ```
 
 The subtype keeps the base's prefix and adds `func` last. `$canonical_callback_fn` is uniform across signatures; `$canonical_fn_K` is typed per `K`.
 
-`$canonical_inspectable_base` is one type for the whole program — its three fields are signature-independent — so every inspectable closure casts to it whatever its shape. The `^Inspect` / `^InspectAlt` dispatch stubs are not shared: a stub is named after the type it dispatches for, so `fn(i32) -> i32` and `fn(String) -> i32` get their own even though both cast to that one base.
+`$canonical_inspectable_base` is one type for the whole program — its two fields are signature-independent — so every inspectable closure casts to it whatever its shape. The `^Inspect` dispatch stubs are not shared: a stub is named after the type it dispatches for, so `fn(i32) -> i32` and `fn(String) -> i32` get their own even though both cast to that one base.
 
 A stub is synthesized as a bodyless `FunctionKind::FnCanonicalDispatch` and WIR build supplies its body, a `call_ref` through the vtable slot. Bodyless functions are skipped by the inliner and the other body walkers, so the placeholder costs nothing during optimization.
 
-Per-literal wrappers cast the canonical `env` back to `__Closure_N` and forward to `__call`, `^Inspect`, or `^InspectAlt`. The specialised path never touches the vtable: lowering rewrites an `Inspect[Alt]` call on a known-local closure receiver into a direct call, and DCE removes the impls when nothing calls them.
+Per-literal wrappers cast the canonical `env` back to `__Closure_N` and forward to `__call` or `^Inspect`. The specialised path never touches the vtable: lowering rewrites an `Inspect` call on a known-local closure receiver into a direct call, and DCE removes the impls when nothing calls them.
 
 ### Closures cannot cross the Component Model boundary
 

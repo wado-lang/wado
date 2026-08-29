@@ -28,12 +28,12 @@ test "String -> i32 :? via its own dispatch stub" {
     assert fmt_def_s(g) == "|String| -> i32";
 }
 
-test "i32 -> i32 :#? via its own inspect_alt slot" {
+test "i32 -> i32 :#? through its own functor impl" {
     let g = |x: i32| x + 1;
     assert fmt_alt_i(g) == "|x: i32| (x + 1)";
 }
 
-test "String -> i32 :#? via its own inspect_alt slot" {
+test "String -> i32 :#? through its own functor impl" {
     let g = |s: String| s.len();
     assert fmt_alt_s(g) == "|s: String| s.String::len()";
 }

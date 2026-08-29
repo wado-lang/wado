@@ -5,13 +5,36 @@
 // These implementations use compile-time tuple enumeration (for let v of *self)
 // which is expanded at monomorphization time.
 
-
 use { Formatter } from "core:prelude/format.wado";
 use { Ordering } from "core:prelude/traits.wado";
 
-/// Inspect for tuples: `[1, "hello", true]`
+/// The alternate (`#`) rendering the tuple `Inspect` hands off to: one element
+/// per indented line.
+fn inspect_tuple_alternate<..T: Inspect>(t: &[..T], f: &mut Formatter) {
+    // An empty tuple has no element to indent, so it writes the two characters
+    // rather than a brace it immediately closes. `len()` is a compile-time
+    // constant, so the arm not taken folds away.
+    if t.len() == 0 {
+        f.write_str(&"[]");
+        return;
+    }
+    f.open_brace("[");
+    for let v of *t {
+        f.write_newline_indent();
+        v.inspect(f);
+        f.write_str(&",");
+    }
+    f.close_brace("]");
+}
+
+/// Inspect for tuples: `[1, "hello", true]`, or one indented element per line
+/// under the alternate (`#`) form.
 impl<..T: Inspect> Inspect for [..T] {
     fn inspect(&self, f: &mut Formatter) {
+        if f.alternate {
+            inspect_tuple_alternate(self, f);
+            return;
+        }
         f.write_str(&"[");
         let mut first = true;
         for let v of *self {
@@ -22,26 +45,6 @@ impl<..T: Inspect> Inspect for [..T] {
             v.inspect(f);
         }
         f.write_str(&"]");
-    }
-}
-
-/// InspectAlt (pretty-print) for tuples:
-/// ```
-/// [
-///   1,
-///   "hello",
-///   true,
-/// ]
-/// ```
-impl<..T: InspectAlt> InspectAlt for [..T] {
-    fn inspect_alt(&self, f: &mut Formatter) {
-        f.open_brace("[");
-        for let v of *self {
-            f.write_newline_indent();
-            v.inspect_alt(f);
-            f.write_str(&",");
-        }
-        f.close_brace("]");
     }
 }
 
@@ -70,9 +73,29 @@ impl<..T: Ord> Ord for [..T] {
     }
 }
 
+/// The alternate (`#`) rendering the tuple `Display` hands off to: one element
+/// per indented line.
+fn display_tuple_alternate<..T: Display>(t: &[..T], f: &mut Formatter) {
+    if t.len() == 0 {
+        f.write_str(&"[]");
+        return;
+    }
+    f.open_brace("[");
+    for let v of *t {
+        f.write_newline_indent();
+        v.fmt(f);
+        f.write_str(&",");
+    }
+    f.close_brace("]");
+}
+
 /// Display for tuples: same as Inspect (tuples have no user-facing format).
 impl<..T: Display> Display for [..T] {
     fn fmt(&self, f: &mut Formatter) {
+        if f.alternate {
+            display_tuple_alternate(self, f);
+            return;
+        }
         f.write_str(&"[");
         let mut first = true;
         for let v of *self {
@@ -83,18 +106,5 @@ impl<..T: Display> Display for [..T] {
             v.fmt(f);
         }
         f.write_str(&"]");
-    }
-}
-
-/// DisplayAlt for tuples: same as InspectAlt.
-impl<..T: DisplayAlt> DisplayAlt for [..T] {
-    fn fmt_alt(&self, f: &mut Formatter) {
-        f.open_brace("[");
-        for let v of *self {
-            f.write_newline_indent();
-            v.fmt_alt(f);
-            f.write_str(&",");
-        }
-        f.close_brace("]");
     }
 }

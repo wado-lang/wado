@@ -7,6 +7,7 @@ fn fmt_with(value: &i32, sign_plus: bool, zero_pad: bool, width: i32, align: Ali
         fill,
         align,
         sign_plus,
+        alternate: false,
         zero_pad,
         width,
         precision: -1,
@@ -23,6 +24,7 @@ fn fmt_int(value: &i32, fill: char, align: Alignment, sign_plus: bool, zero_pad:
         fill,
         align,
         sign_plus,
+        alternate: false,
         zero_pad,
         width,
         precision: -1,
@@ -61,6 +63,7 @@ fn test_format_padding() with Stdout {
         fill: ' ',
         align: Alignment::Left,
         sign_plus: false,
+        alternate: false,
         zero_pad: false,
         width: 8,
         precision: -1,
@@ -108,7 +111,7 @@ fn test_template_specifiers() with Stdout {
     assert `${hex_val:x}` == "ff";
     assert `${hex_val:X}` == "FF";
     assert `${hex_val:#x}` == "0xff";
-    assert `${hex_val:#X}` == "0XFF";
+    assert `${hex_val:#X}` == "0xFF";
     assert `${hex_val:#010x}` == "0x000000ff";
     let u32_max: u32 = 4294967295;
     assert `${u32_max:x}` == "ffffffff";
@@ -138,7 +141,7 @@ fn test_template_specifiers() with Stdout {
     assert `${u128_val:x}` == "100";
     assert `${u128_val:b}` == "100000000";
     assert `${u128_val:o}` == "400";
-    assert `${u128_val:#X}` == "0X100";
+    assert `${u128_val:#X}` == "0x100";
     assert `${i:+010}` == "+000000042";
     assert `${i:#010x}` == "0x0000002a";
     assert `${i:<10x}` == "2a        ";

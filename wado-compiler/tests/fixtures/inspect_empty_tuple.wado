@@ -1,0 +1,20 @@
+// An empty tuple renders `[]` in both `Inspect` forms. The alternate one has
+// no element to indent, so it writes the same two characters rather than
+// opening a brace it immediately closes.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let empty = [];
+    assert `${empty:?}` == "[]";
+    assert `${empty:#?}` == "[]";
+
+    // A non-empty tuple still indents one element per line.
+    let pair = [1, "a"];
+    assert `${pair:?}` == "[1, \"a\"]";
+    assert `${pair:#?}` == "[\n  1,\n  \"a\",\n]";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

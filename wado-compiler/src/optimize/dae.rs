@@ -60,9 +60,8 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
 }
 
 /// Closure-functor methods whose `is_closure_call` pin is lifted:
-/// `__Closure_N::__call` and the
-/// `^Inspect` / `^InspectAlt` impls. Each is reached only through a synthesised
-/// function-table wrapper, and `register_closure_wrappers` /
+/// `__Closure_N::__call` and its `^Inspect` impl. Each is reached only through
+/// a synthesised function-table wrapper, and `register_closure_wrappers` /
 /// `register_inspect_wrapper` adapt that wrapper to the shrunken signature.
 fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     let mut keys: IndexSet<FnKey> = IndexSet::default();
@@ -77,15 +76,14 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
             keys.insert(id);
         }
     }
-    // Sweep for synthesised `__Closure_N^{Inspect,InspectAlt}` impls, which have
-    // no field on `ClosureFunctor` to key off. The trait is matched against the
+    // Sweep for synthesised `__Closure_N^Inspect` impls, which have no field on
+    // `ClosureFunctor` to key off. The trait is matched against the
     // compiler-item registry — the same source `generate_functor_format_methods`
-    // stamps into `trait_name` — so a stdlib rename flows through and no user
-    // trait named `Inspect` can shadow it.
+    // stamps into `trait_name` — so a stdlib rename flows through. The match is
+    // on the simple name: `base_name` drops the declaring module.
     let type_table = project.type_table.borrow();
     let items = type_table.compiler_items();
     let inspect_name = items.trait_name(CompilerItem::Inspect);
-    let inspect_alt_name = items.trait_name(CompilerItem::InspectAlt);
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(mi) = &func.method_info else {
@@ -94,7 +92,7 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
         let Some(trait_name) = mi.trait_name.as_ref() else {
             continue;
         };
-        if trait_name.base_name() != inspect_name && trait_name.base_name() != inspect_alt_name {
+        if trait_name.base_name() != inspect_name {
             continue;
         }
         if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name().clone())) {

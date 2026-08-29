@@ -164,7 +164,7 @@ fn "dict_mini.wado/run"() with Stdout {
     let rx_246: i32;
     let tx_247: i32;
     let content_258: ref "core:prelude/string.wado//String";
-    let content_282: ref "core:prelude/string.wado//String";
+    let content_300: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:dict_mini.wado::__modules_initialized);
         cold_path;
@@ -283,12 +283,12 @@ fn "dict_mini.wado/run"() with Stdout {
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:dict_mini.wado::__const_obj_3);
     self_154 = "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::has$scalar"(__sroa_dict_entries, global:dict_mini.wado::__const_obj_2);
     __inline_core_prelude_format_wado_Formatter__pad_spec0_scalar_1: block {
-        content_282 = (if self_154 -> ref "core:prelude/string.wado//String" {
+        content_300 = (if self_154 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, content_282);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, content_300);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_scalar_1;
     };
     rx_157 = builtin::i32_wrap_i64(local.tee packed_156("wasi/stream-new"()));
@@ -606,13 +606,11 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     return 0;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, prefix, digit_count) {
-    let self_13: i32;
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
     let new_used_21: i32;
     let start_22: i32;
     let new_used_46: i32;
     let start_47: i32;
-    self_13 = prefix.used;
     if is_negative {
         new_used_21 = self.used + 1;
         if @unlikely(new_used_21 > builtin::array_len(self.repr)) {
@@ -623,9 +621,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self.used = new_used_21;
         builtin::array_set_u8(self.repr, start_22, 45);
     } else {
-    }
-    if self_13 > 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, prefix);
     }
     return new_used_46 = self.used + digit_count, if @unlikely(new_used_46 > builtin::array_len(self.repr)) {
         cold_path;
@@ -648,12 +643,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b44: block {
-            l45: loop {
-                break_if b44 t <= 0_i64;
+        b43: block {
+            l44: loop {
+                break_if b43 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l45;
+                continue l44;
             };
         };
         break __inline_count_digits_i64_0: n;

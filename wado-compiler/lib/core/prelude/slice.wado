@@ -15,14 +15,12 @@ use {
     Ord,
     Ordering,
     Display,
-    DisplayAlt,
     Inspect,
-    InspectAlt,
 } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { List } from "core:prelude/list.wado";
-use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
+use { write_seq_inspect } from "core:prelude/array.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
@@ -283,18 +281,6 @@ impl<T: Inspect> Inspect for Slice<T> {
 impl<T: Inspect> Display for Slice<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         write_seq_inspect(self.repr, self.start, self.end, f, false, f.precision);
-    }
-}
-
-impl<T: InspectAlt> InspectAlt for Slice<T> {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(self.repr, self.start, self.end, f, true, f.resolved_seq_limit());
-    }
-}
-
-impl<T: InspectAlt> DisplayAlt for Slice<T> {
-    pub fn fmt_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(self.repr, self.start, self.end, f, false, f.precision);
     }
 }
 

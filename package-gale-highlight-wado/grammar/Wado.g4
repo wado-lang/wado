@@ -660,9 +660,13 @@ formatSpec
     : ':' formatSpecAtom*
     ;
 
+// The fill is any character the interpolation scanner does not read as
+// structure, so this lists the punctuation the lexer already tokenizes,
+// minus the quotes, braces and `/`. NON_ASCII covers a multi-byte fill.
 formatSpecAtom
-    : IDENTIFIER | INTEGER | FLOAT
+    : IDENTIFIER | INTEGER | FLOAT | NON_ASCII
     | '.' | '<' | '>' | '^' | '+' | '-' | '#' | '?' | '_' | '*'
+    | '!' | '%' | '&' | '(' | ')' | ',' | ';' | '=' | '[' | ']' | '|' | '~' | '$'
     ;
 
 FLOAT
@@ -728,6 +732,14 @@ BLOCK_COMMENT
 
 WS
     : [ \t\r\n]+ -> skip
+    ;
+
+// A format specifier's fill character when it is not ASCII: `${x:あ>8}`.
+// Every other token is ASCII-only and a bare non-ASCII character is legal
+// nowhere else, so this steals nothing: a string, char literal or comment
+// containing one matches its own rule from an ASCII delimiter.
+NON_ASCII
+    : ~[\u0000-\u007F]
     ;
 
 mode TEMPLATE;

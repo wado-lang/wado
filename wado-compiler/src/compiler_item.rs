@@ -56,6 +56,7 @@ pub enum FormatterField {
     Fill,
     Align,
     SignPlus,
+    Alternate,
     ZeroPad,
     /// [`Self::NO_WIDTH`] when the spec sets none.
     Width,
@@ -67,10 +68,11 @@ pub enum FormatterField {
 
 impl FormatterField {
     /// Declaration order, which is also the struct's field indexing.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Fill,
         Self::Align,
         Self::SignPlus,
+        Self::Alternate,
         Self::ZeroPad,
         Self::Width,
         Self::Precision,
@@ -97,6 +99,7 @@ impl FormatterField {
             Self::Fill => "fill",
             Self::Align => "align",
             Self::SignPlus => "sign_plus",
+            Self::Alternate => "alternate",
             Self::ZeroPad => "zero_pad",
             Self::Width => "width",
             Self::Precision => "precision",
@@ -295,28 +298,16 @@ pub enum CompilerItem {
     /// `core:prelude/traits::Display` — anchor for `${x}` template-string
     /// dispatch and the auto-derive Display→Inspect fallback.
     Display,
-    /// `core:prelude/traits::DisplayAlt` — `${x:#}` dispatch.
-    DisplayAlt,
     /// `core:prelude/traits::Inspect` — `${x:?}` dispatch.
     Inspect,
-    /// `core:prelude/traits::InspectAlt` — `${x:#?}` dispatch.
-    InspectAlt,
     /// `core:prelude/traits::Binary` — `${x:b}` dispatch.
     Binary,
-    /// `core:prelude/traits::BinaryAlt` — `${x:#b}` dispatch.
-    BinaryAlt,
     /// `core:prelude/traits::Octal` — `${x:o}` dispatch.
     Octal,
-    /// `core:prelude/traits::OctalAlt` — `${x:#o}` dispatch.
-    OctalAlt,
     /// `core:prelude/traits::LowerHex` — `${x:x}` dispatch.
     LowerHex,
-    /// `core:prelude/traits::LowerHexAlt` — `${x:#x}` dispatch.
-    LowerHexAlt,
     /// `core:prelude/traits::UpperHex` — `${x:X}` dispatch.
     UpperHex,
-    /// `core:prelude/traits::UpperHexAlt` — `${x:#X}` dispatch.
-    UpperHexAlt,
     /// `core:prelude/traits::LowerExp` — `${x:e}` dispatch.
     LowerExp,
     /// `core:prelude/traits::UpperExp` — `${x:E}` dispatch.
@@ -686,17 +677,11 @@ impl CompilerItem {
         Self::IntoIterator,
         Self::LiteralSpread,
         Self::Display,
-        Self::DisplayAlt,
         Self::Inspect,
-        Self::InspectAlt,
         Self::Binary,
-        Self::BinaryAlt,
         Self::Octal,
-        Self::OctalAlt,
         Self::LowerHex,
-        Self::LowerHexAlt,
         Self::UpperHex,
-        Self::UpperHexAlt,
         Self::LowerExp,
         Self::UpperExp,
         Self::Formatter,
@@ -886,17 +871,11 @@ impl CompilerItem {
             Self::IntoIterator => "into_iterator",
             Self::LiteralSpread => "literal_spread",
             Self::Display => "display",
-            Self::DisplayAlt => "display_alt",
             Self::Inspect => "inspect",
-            Self::InspectAlt => "inspect_alt",
             Self::Binary => "binary",
-            Self::BinaryAlt => "binary_alt",
             Self::Octal => "octal",
-            Self::OctalAlt => "octal_alt",
             Self::LowerHex => "lower_hex",
-            Self::LowerHexAlt => "lower_hex_alt",
             Self::UpperHex => "upper_hex",
-            Self::UpperHexAlt => "upper_hex_alt",
             Self::LowerExp => "lower_exp",
             Self::UpperExp => "upper_exp",
             Self::Formatter => "formatter",
@@ -1161,17 +1140,11 @@ impl CompilerItem {
             | Self::AlignmentCenter
             | Self::AlignmentRight
             | Self::Display
-            | Self::DisplayAlt
             | Self::Inspect
-            | Self::InspectAlt
             | Self::Binary
-            | Self::BinaryAlt
             | Self::Octal
-            | Self::OctalAlt
             | Self::LowerHex
-            | Self::LowerHexAlt
             | Self::UpperHex
-            | Self::UpperHexAlt
             | Self::LowerExp
             | Self::UpperExp
             | Self::Iterator
@@ -1241,17 +1214,11 @@ impl CompilerItem {
             // Picked from a `${x:spec}` format specifier, which only
             // `synthesis::template` reads.
             Self::Display
-                | Self::DisplayAlt
                 | Self::Inspect
-                | Self::InspectAlt
                 | Self::Binary
-                | Self::BinaryAlt
                 | Self::Octal
-                | Self::OctalAlt
                 | Self::LowerHex
-                | Self::LowerHexAlt
                 | Self::UpperHex
-                | Self::UpperHexAlt
                 | Self::LowerExp
                 | Self::UpperExp
                 // Implemented by `VariantCase`, `EnumCase`, `FlagsBit` and
@@ -1336,17 +1303,11 @@ impl CompilerItem {
             | Self::Iterator
             | Self::IntoIterator
             | Self::Display
-            | Self::DisplayAlt
             | Self::Inspect
-            | Self::InspectAlt
             | Self::Binary
-            | Self::BinaryAlt
             | Self::Octal
-            | Self::OctalAlt
             | Self::LowerHex
-            | Self::LowerHexAlt
             | Self::UpperHex
-            | Self::UpperHexAlt
             | Self::LowerExp
             | Self::Add
             | Self::Sub

@@ -3,7 +3,6 @@
 //! insertion order. `map[key] = value` overwrites; `try_insert` /
 //! `get_or_insert` insert only when the key is absent.
 
-
 use {
     Serialize,
     Deserialize,
@@ -718,8 +717,34 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
     }
 }
 
+impl<K: Ord + Inspect, V: Inspect> TreeMap<K, V> {
+    /// The alternate (`#`) rendering `inspect` hands off to: one entry per
+    /// indented line.
+    fn inspect_alternate(&self, f: &mut Formatter) {
+        if self.is_empty() {
+            f.write_str(&"{}");
+            return;
+        }
+        f.open_brace("{");
+        for let entry of self.entries {
+            if !entry.deleted {
+                f.write_newline_indent();
+                entry.key.inspect(f);
+                f.write_str(&": ");
+                entry.value.inspect(f);
+                f.write_char(',');
+            }
+        }
+        f.close_brace("}");
+    }
+}
+
 impl<K: Ord + Inspect, V: Inspect> Inspect for TreeMap<K, V> {
     pub fn inspect(&self, f: &mut Formatter) {
+        if f.alternate {
+            self.inspect_alternate(f);
+            return;
+        }
         f.write_char('{');
         let mut first = true;
         for let entry of self.entries {
@@ -737,19 +762,19 @@ impl<K: Ord + Inspect, V: Inspect> Inspect for TreeMap<K, V> {
     }
 }
 
-impl<K: Ord + InspectAlt, V: InspectAlt> InspectAlt for TreeMap<K, V> {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        if self.is_empty() {
+impl<T: Inspect + Ord> TreeSet<T> {
+    /// The alternate (`#`) rendering `inspect` hands off to: one element per
+    /// indented line.
+    fn inspect_alternate(&self, f: &mut Formatter) {
+        if self.inner.is_empty() {
             f.write_str(&"{}");
             return;
         }
         f.open_brace("{");
-        for let entry of self.entries {
+        for let entry of self.inner.entries {
             if !entry.deleted {
                 f.write_newline_indent();
-                entry.key.inspect_alt(f);
-                f.write_str(&": ");
-                entry.value.inspect_alt(f);
+                entry.key.inspect(f);
                 f.write_char(',');
             }
         }
@@ -759,6 +784,10 @@ impl<K: Ord + InspectAlt, V: InspectAlt> InspectAlt for TreeMap<K, V> {
 
 impl<T: Inspect + Ord> Inspect for TreeSet<T> {
     pub fn inspect(&self, f: &mut Formatter) {
+        if f.alternate {
+            self.inspect_alternate(f);
+            return;
+        }
         f.write_char('{');
         let mut first = true;
         for let entry of self.inner.entries {
@@ -771,24 +800,6 @@ impl<T: Inspect + Ord> Inspect for TreeSet<T> {
             }
         }
         f.write_char('}');
-    }
-}
-
-impl<T: InspectAlt + Ord> InspectAlt for TreeSet<T> {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        if self.inner.is_empty() {
-            f.write_str(&"{}");
-            return;
-        }
-        f.open_brace("{");
-        for let entry of self.inner.entries {
-            if !entry.deleted {
-                f.write_newline_indent();
-                entry.key.inspect_alt(f);
-                f.write_char(',');
-            }
-        }
-        f.close_brace("}");
     }
 }
 

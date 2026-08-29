@@ -5456,15 +5456,6 @@ pub enum ReturnAbi {
     },
 }
 
-/// Which dispatch-stub trait method a `FunctionKind::FnCanonicalDispatch`
-/// implements, so WIR build can pick the vtable slot without re-parsing
-/// mangled names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FnDispatchTrait {
-    Inspect,
-    InspectAlt,
-}
-
 /// Semantic category of a `TirFunction`. Carries the type operand so the
 /// optimizer can reason about the call without re-deriving it from the
 /// signature.
@@ -5477,16 +5468,12 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
-    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub (or its
-    /// `^InspectAlt` twin). The TIR body is `unreachable()` — enough for the
-    /// function to be registered and the call resolvable — and WIR build
-    /// supplies the real one, a `call_ref` through `CanonicalClosure_K`'s vtable
-    /// slot. `(arity, return_type)` are structured so nobody parses the mangle.
-    FnCanonicalDispatch {
-        trait_kind: FnDispatchTrait,
-        arity: usize,
-        return_type: TypeId,
-    },
+    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. The TIR body is
+    /// `unreachable()` — enough to register the function and resolve calls to
+    /// it — and WIR build supplies the real one, a `call_ref` through
+    /// `CanonicalClosure_K`'s vtable slot. `(arity, return_type)` are
+    /// structured so nobody parses the mangle.
+    FnCanonicalDispatch { arity: usize, return_type: TypeId },
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.
@@ -5544,16 +5531,12 @@ impl TirFunction {
         }
     }
 
-    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect` / `^InspectAlt`
-    /// stub, which WIR build turns into the indirect-call body.
+    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect` stub, which WIR
+    /// build turns into the indirect-call body.
     #[inline]
-    pub fn fn_canonical_dispatch(&self) -> Option<(FnDispatchTrait, usize, TypeId)> {
+    pub fn fn_canonical_dispatch(&self) -> Option<(usize, TypeId)> {
         match self.kind {
-            FunctionKind::FnCanonicalDispatch {
-                trait_kind,
-                arity,
-                return_type,
-            } => Some((trait_kind, arity, return_type)),
+            FunctionKind::FnCanonicalDispatch { arity, return_type } => Some((arity, return_type)),
             _ => None,
         }
     }
