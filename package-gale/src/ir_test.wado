@@ -21,6 +21,8 @@ use {
     merge_grammars,
     assign_action_ids,
     alias_parser_literals,
+    is_lexer_members,
+    is_parser_members,
 } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 
@@ -80,6 +82,28 @@ test "merge_grammars keeps a name that IS the suffix (no empty base)" {
     let lexer = parse("lexer grammar Lexer;\nA : 'a' ;").unwrap();
     let merged = merge_grammars([parser, lexer]);
     assert merged.name == "Parser", `name=${merged.name}`;
+}
+
+test "merge_grammars keeps each split's bare @members with the recognizer that declared it" {
+    // The merged grammar is `Combined`, so a bare `@members` carries no kind of
+    // its own past the merge — and would arrive owned by the parser, taking the
+    // lexer's members away and giving the parser ones it cannot compile.
+    let lexer = parse("lexer grammar FooLexer;\n@members { depth: i32 = 0; }\nA : 'a' ;").unwrap();
+    let parser = parse("parser grammar FooParser;\n@members { tag: String = \"\"; }\nr : A ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+
+    let mut lexer_members = 0;
+    let mut parser_members = 0;
+    for let act of &merged.named_actions {
+        if is_lexer_members(act, &merged.kind) {
+            lexer_members += 1;
+        }
+        if is_parser_members(act, &merged.kind) {
+            parser_members += 1;
+        }
+    }
+    assert lexer_members == 1, `lexer @members: ${lexer_members}`;
+    assert parser_members == 1, `parser @members: ${parser_members}`;
 }
 
 test "merge_grammars tolerates a numeric channel id with no channels block" {
