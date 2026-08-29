@@ -81,7 +81,7 @@ struct OptConfig {
     /// Maximum statement count for inlining
     inline_threshold: usize,
     /// Whether exhausting `iterations` is a defect rather than a budget — true
-    /// only for `-O3`'s own cap, the one sized so the loop converges under it.
+    /// for the caps `-O2` and `-O3` size so the loop converges under them.
     cap_is_defect: bool,
 }
 
@@ -166,7 +166,10 @@ pub fn optimize(
         }
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
-                iterations: opt_iterations.unwrap_or(10),
+                // 15 clears the corpus with room: every source but one settles
+                // by 8, and the Gale-generated TypeScript parser needs 13 —
+                // `dae` peels one level of its call graph per round.
+                iterations: opt_iterations.unwrap_or(15),
                 // Threshold 13 is the sweet spot for -O2/-Os: on
                 // syntax-highlight (Gale-generated SQLite highlighter)
                 // throughput is ~30% better than 14 because at 14 a
@@ -174,7 +177,7 @@ pub fn optimize(
                 // and the resulting code regresses (13.5ms/iter -> 18ms).
                 // Sizes at 13 and 14 differ by only ~4KB.
                 inline_threshold: inline_threshold.unwrap_or(13),
-                cap_is_defect: false,
+                cap_is_defect: opt_iterations.is_none(),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
