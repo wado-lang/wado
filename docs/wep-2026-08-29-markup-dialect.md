@@ -47,7 +47,7 @@ own one file.
 | Wado-hosted   | Wado at the top level, markup in expression position | JSX, XHP/Hack, ReScript, Scala 2 XML literals, E4X      |
 | Markup-hosted | Markup at the top level, Wado in holes               | PHP, ERB, Razor, Elixir HEEx, Jinja, Go `html/template` |
 | Sectioned     | One file, sections, neither nested in the other      | Vue SFC, Svelte, Astro                                  |
-| Paired        | Two files, the module boundary as the interface      | Angular templates, Razor Pages, Go `.tmpl`              |
+| Paired        | A markup-only file, its logic in a sibling module    | Angular templates, Razor Pages, Go `.tmpl`              |
 | Builder       | No markup surface; a typed builder API               | Flutter, SwiftUI, lucid/blaze, kotlinx.html             |
 
 Two lessons the record carries. Languages with a macro system never touched
@@ -90,7 +90,7 @@ unedited, and whether someone who does not write Wado can own the file.
 
 ### Findings
 
-Three facts about this repository bear on the criteria. None of them settles the
+Four facts about this repository bear on the criteria. None of them settles the
 axis.
 
 Lexer modes are proven on the real grammar. `Wado.g4` already lexes a nested
@@ -118,13 +118,15 @@ carrying it from output spans back to input spans serves every position equally.
 templ, Svelte and Vue all ship one. It is Kiln infrastructure rather than
 language surface, so it costs a dialect none of its independence.
 
-### No order of work
-
-This WEP fixes no order. The dependency graph decides it: an `Element` type and
-a component model must exist before any surface has something to lower to, a
-source map changes which positions are measurable at all, and grammar import
-decides whether a dialect copies `Wado.g4` or imports it. Builder may well come
-first, being what every other position lowers to.
+Paired binding is not reachable the way its prior art practises it. Angular and
+Razor Pages bind a template to a companion class by name: the template names the
+class's members and the compiler resolves them. A Kiln generator receives files
+by value and has no access to the compiler's types, so it could reproduce that
+only by parsing the sibling `.wado` itself and redoing name resolution the
+compiler already does. What stays reachable is a template file declaring its own
+typed parameters, compiling to a module whose exported render function is the
+whole interface — nearer a function than a pairing, and separated from
+Markup-hosted only by whether the file may also declare Wado items of its own.
 
 ### Deliberate omissions
 
@@ -178,6 +180,10 @@ Each question is answered with an artefact, not an opinion.
 - Whether one surface serves both consumers. The blog is Markup-hosted- and
   Paired-shaped, the playground is Wado-hosted-shaped, and the prior art
   suggests the answer is no.
+- Whether Paired is a position of its own. Stripped of name binding to a
+  companion type, what is left is a template module with typed parameters, which
+  may be Markup-hosted under another name. The axis carries both until a dialect
+  is written against each and the difference either shows up or does not.
 
 ## Consequences
 
