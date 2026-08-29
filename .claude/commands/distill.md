@@ -19,6 +19,11 @@ you notice on the way in is in scope too, pre-existing or not. Generated files
 are the one exclusion — `.gitattributes` marks them. A WEP keeps the sections
 `docs/AGENTS.md` requires.
 
+This is the scope on every run. Distilling again means the whole branch again,
+never the diff since the last distill: an earlier pass is not a clean bill, and
+what the code between the two commits made stale is spread across everything the
+branch touched.
+
 ## Rules
 
 ### Code
@@ -51,7 +56,7 @@ are the one exclusion — `.gitattributes` marks them. A WEP keeps the sections
 
 ## Cycle
 
-Three passes over the diff; surviving one is no exemption. Stop when a pass
+Three passes over that scope; surviving one is no exemption. Stop when a pass
 finds nothing to cut.
 
 ## Finish
