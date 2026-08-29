@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788042770870,
+  "lastUpdate": 1788047219149,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51889,6 +51889,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bd210936b41de335929a939fe75728a22f994dc1"
         },
         "date": 1788042770328,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6071,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17398,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 256714,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8ba3bf0817e2224037889be1b3096f9e81ca6fc",
+          "message": "Merge pull request #1918 from wado-lang/perf/gale-o3-optimizer-fixpoint\n\nperf(optimizer): converge the -O3 fixed-point loop",
+          "timestamp": "2026-08-30T08:33:21+09:00",
+          "tree_id": "56f68a06b093eac06cc05b6f08017cf4d352216d",
+          "url": "https://github.com/wado-lang/wado/commit/d8ba3bf0817e2224037889be1b3096f9e81ca6fc"
+        },
+        "date": 1788047218518,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
