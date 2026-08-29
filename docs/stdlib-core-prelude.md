@@ -2688,7 +2688,7 @@ Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
 Write raw bytes from linear memory, applying width/alignment padding.
 Used only for values produced by bundled Wasm functions (e.g., f64_to_buffer).
 
-#### `pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32`
+#### `pub fn prepare_int_write(&mut self, is_negative: bool, alt_prefix: String, digit_count: i32) -> i32`
 
 Prepare the output buffer for integer digits.
 
@@ -2696,6 +2696,9 @@ Writes sign, prefix, and any padding/fill, then reserves `digit_count`
 uninitialised bytes and returns their byte-offset inside `buf`.
 The caller **must** fill exactly `digit_count` bytes (backwards) via
 `buf.internal_raw_bytes()` at the returned offset.
+`alt_prefix` is the radix marker (`0x`, `0b`, `0o`) the alternate form
+asks for; a plain spec drops it without the caller having to hand over an
+empty string, which would leave a value copy behind.
 
 #### `pub fn write_indent(&mut self)`
 

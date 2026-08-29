@@ -975,14 +975,3 @@ pub fn i16x8_relaxed_q15mulr_s(a: v128, b: v128) -> v128;
 pub fn i16x8_relaxed_dot_i8x16_i7x16_s(a: v128, b: v128) -> v128;
 /// Relaxed dot product of i8x16 and i7x16 with i32x4 accumulate.
 pub fn i32x4_relaxed_dot_i8x16_i7x16_add_s(a: v128, b: v128, c: v128) -> v128;
-
-/// Writes inspect (debug) output for a value into a Formatter.
-/// This is a synthesis marker replaced by the inspect synthesis phase with type-specific code.
-/// Used for `:?` format specifier in template strings: `${value:?}`.
-pub fn inspect<T>(value: T, fmt: &mut Formatter);
-
-/// Writes display output for a value into a Formatter.
-/// This is a synthesis marker replaced by the inspect synthesis phase: if the concrete type
-/// has a Display impl, calls Type@Display::fmt; otherwise falls back to inspect output.
-/// Used for `${value}` format specifier on generic type parameters.
-pub fn display<T>(value: T, fmt: &mut Formatter);

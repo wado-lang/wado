@@ -275,10 +275,16 @@ let greeting = `Hello, ${name}!`;         // "Hello, Alice!"
 let s = `${5.0}`;                         // "5"
 let s = `${3.14}`;                        // "3.14"
 
-// Format specifiers via Display (see docs/wep-2026-01-17-template-format-specifiers.md)
-let formatted = `${3.14159:0.2f}`;        // "3.14"
-let hex = `${255:x}`;                     // "ff"
-let hex_alt = `${255:#x}`;                // "0xff" (LowerHex, alternate flag)
+// Format specifiers (see docs/wep-2026-01-17-template-format-specifiers.md)
+// ${expr:[[fill]align][sign][#][0][width][.precision]type}
+let formatted = `${3.14159:.2}`;          // "3.14"   precision = decimal places
+let hex = `${255:x}`;                     // "ff"     b / o / x / X on integers
+let hex_alt = `${255:#x}`;                // "0xff"   # adds the radix prefix
+let sci = `${1200:e}`;                    // "1.2e3"  e / E on integers and floats
+let padded = `${42:*>5}`;                 // "***42"  width counts characters
+let signed = `${42:+}`;                   // "+42"
+let zeroed = `${-42:08}`;                 // "-0000042" zeros go after the sign
+let capped = `${"hello world":.5}`;       // "hello"  precision = max characters
 
 // Inspect (:?) — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
 println(`${point:?}`);                    // "Point { x: 10, y: 20 }"
