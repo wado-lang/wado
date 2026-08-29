@@ -168,16 +168,15 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     ctx.set_trace(options.trace);
     ctx.set_fragment_entries(options.fragment_entries);
     ctx.set_action_language(&grammar.action_language);
-    ctx.set_action_grammar(&grammar.name);
+    ctx.set_grammar_name(&grammar.name);
     wire_superclasses(grammar, &mut ctx);
     // A wired parser base's bodies are Wado once the rewrite has run, so they
     // execute even under a host language java2wado carves out.
     ctx.set_emit_actions(should_emit_actions(grammar) || ctx.has_parser_superclass());
     // Ahead of staging: a body resolves its bare names and `this.` calls against
-    // the members declared here. Both recognizers' are translated before any
-    // body reads them, so the names a body can resolve are exactly the ones that
-    // reach the struct — a block the translation refuses declares nothing, and
-    // the refusal is the diagnostic rather than an unknown field in the output.
+    // these, so what it can resolve is exactly what reaches the struct — a block
+    // the translation refuses declares nothing, and the refusal is the
+    // diagnostic rather than an unknown field in the output.
     let lexer_members = collect_members(grammar, &mut ctx, /*lexer=*/ true);
     let parser_members = collect_members(grammar, &mut ctx, /*lexer=*/ false);
     ctx.set_action_members(member_names(&parser_members));

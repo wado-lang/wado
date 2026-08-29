@@ -1,11 +1,5 @@
-//! `gale dump --lexer` rendering — per lexer rule, the matcher that covers its
-//! text and the emit strategy of every decision inside it.
-//!
-//! Nothing here decides anything. `lexer_rule_route` says which matcher covers
-//! a rule, and `lexer_rule_plan` — the tree `gen_lexer` itself emits from —
-//! says which strategy every decision below it took and where. This module
-//! renders that plan, so the report cannot name a strategy the emit did not
-//! choose, nor reach a construct the emit did not.
+//! `gale dump --lexer` rendering: per lexer rule, `lexer_rule_route` and the
+//! `lexer_rule_plan` tree `gen_lexer` emits from, read out.
 //!
 //! Not reported: a repeat directly under another repeat or a `~`. No sequence
 //! surrounds such a position, so there is no strategy to pick.
@@ -192,22 +186,17 @@ fn route_emits_body(route: &LexerRuleRoute) -> bool {
 }
 
 // ==========================================================================
-// The walk — mirrors gen_lexer_alt_seq / gen_lexer_alts / gen_lexer_elem
+// The walk — the plan gen_lexer emits from, rendered
 // ==========================================================================
 
-/// Render the rule's body from the plan the emitter takes its decisions from.
-/// Nothing here decides anything: every branch below reads the plan, so this
-/// report cannot describe a strategy the emit did not choose, nor reach a
-/// construct the emit did not.
 fn walk_rule_body(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
     let plan = lexer_rule_plan(rule, &ctx.rules, &ctx.grammar_opts);
-    render_body(o, ctx, &rule.body, &plan.body, /*top=*/ true);
+    render_body(o, ctx, &rule.body, &plan, /*top=*/ true);
 }
 
-/// `top` is the rule's own body alternation. It is reported even out of tail
-/// position — that a rule's alternation cannot take maximal munch is a thing
-/// someone asks this dump for — while a nested one there stays quiet, its
-/// enclosing construct having already reported the decision.
+/// `top` is the rule's own body alternation, reported even out of tail position
+/// — that it cannot take maximal munch is a thing someone asks this dump for.
+/// A nested one there stays quiet: its enclosing construct reported the decision.
 fn render_body(o: &mut DumpOut, ctx: &DumpCtx, alts: &List<LexerAlternative>, plan: &LexerBodyPlan, top: bool) {
     match plan {
         Single(seq) => render_seq(o, ctx, &alts[0], seq),
@@ -229,11 +218,10 @@ fn render_body(o: &mut DumpOut, ctx: &DumpCtx, alts: &List<LexerAlternative>, pl
 
 fn render_seq(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, plan: &LexerSeqPlan) {
     for let mut i = 0; i < plan.steps.len(); i += 1 {
-        let elem = &alt.elements[i];
         match &plan.steps[i] {
             Repeat(rp) => render_repeat(o, ctx, alt, i, rp),
             Group(gp) => render_group(o, ctx, alt, i, gp),
-            Elem(ep) => render_elem(o, ctx, elem, ep),
+            Elem(ep) => render_elem(o, ctx, &alt.elements[i], ep),
         }
     }
 }
@@ -250,10 +238,9 @@ fn render_group(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i
         } else {
             o.group_first_match += 1;
         }
-        let suffix = LexerAlternative { elements: lexer_alt_suffix(alt, index) };
         decision_line(
             o,
-            &`alternation ${alts_text(g_alts, 0)}${suffix_text(&suffix)} — ${group_emit_label(plan.emit)}`,
+            &`alternation ${alts_text(g_alts, 0)}${suffix_text(alt, index)} — ${group_emit_label(plan.emit)}`,
         );
     }
     match &plan.shape {
@@ -269,6 +256,9 @@ fn render_group(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i
 }
 
 fn render_repeat(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i32, plan: &LexerRepeatPlan) {
+    let Repeat(rep) = &alt.elements[index] else {
+        panic("a repeat step plans something other than a repeat");
+    };
     match plan.emit {
         NonGreedy => {
             o.repeat_non_greedy += 1;
@@ -280,14 +270,10 @@ fn render_repeat(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: 
             o.repeat_plain += 1;
         },
     }
-    let suffix = LexerAlternative { elements: lexer_alt_suffix(alt, index) };
     decision_line(
         o,
-        &`repeat ${elem_text(&alt.elements[index], 0)}${suffix_text(&suffix)} — ${repeat_emit_label(plan.emit)}`,
+        &`repeat ${elem_text(&alt.elements[index], 0)}${suffix_text(alt, index)} — ${repeat_emit_label(plan.emit)}`,
     );
-    let Repeat(rep) = &alt.elements[index] else {
-        panic("a repeat step plans something other than a repeat");
-    };
     render_elem(o, ctx, &rep.element, &plan.inner);
     if let Some(cut) = &plan.rest {
         render_seq(o, ctx, &cut.alt, &cut.plan);
@@ -296,33 +282,17 @@ fn render_repeat(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: 
 
 /// The ` then <suffix>` a decision line carries, so the reason it gives can be
 /// read against the thing it is about. Empty when nothing follows.
-fn suffix_text(suffix: &LexerAlternative) -> String {
+fn suffix_text(alt: &LexerAlternative, index: i32) -> String {
+    let suffix = LexerAlternative { elements: lexer_alt_suffix(alt, index) };
     if suffix.elements.is_empty() {
         return "";
     }
-    return ` then ${alt_text(suffix, 0)}`;
+    return ` then ${alt_text(&suffix, 0)}`;
 }
 
 fn render_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, plan: &LexerElemPlan) {
     match plan {
-        Body(body) => {
-            let Group(alts) = elem else {
-                // The only other element planned as a body is a rule reference
-                // whose fragment the emit inlines here.
-                let RuleRef(name) = elem else {
-                    panic("a body plan against neither a group nor a rule reference");
-                };
-                let Some(frag) = find_fragment(&ctx.rules, name) else {
-                    panic("a body plan against a rule reference with no fragment");
-                };
-                let saved = o.scope;
-                o.scope = `${o.scope}${name} › `;
-                render_body(o, ctx, &frag.body, body, /*top=*/ false);
-                o.scope = saved;
-                return;
-            };
-            render_body(o, ctx, alts, body, /*top=*/ false);
-        },
+        Body(body) => render_elem_body(o, ctx, elem, body),
         PlainRepeat(nested) => {
             let Repeat(rep) = elem else {
                 panic("a repeat plan against something other than a repeat");
@@ -338,6 +308,25 @@ fn render_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, plan: &Lexer
         Leaf => {
         },
     }
+}
+
+/// A group's own alternatives, or the fragment inlined at a rule reference —
+/// which the report prefixes with that reference, as the emit nests it there.
+fn render_elem_body(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, body: &LexerBodyPlan) {
+    if let Group(alts) = elem {
+        render_body(o, ctx, alts, body, /*top=*/ false);
+        return;
+    }
+    let RuleRef(name) = elem else {
+        panic("a body plan against neither a group nor a rule reference");
+    };
+    let Some(frag) = find_fragment(&ctx.rules, name) else {
+        panic("a body plan against a rule reference with no fragment");
+    };
+    let saved = o.scope;
+    o.scope = `${o.scope}${name} › `;
+    render_body(o, ctx, &frag.body, body, /*top=*/ false);
+    o.scope = saved;
 }
 
 fn decision_line(o: &mut DumpOut, text: &String) {

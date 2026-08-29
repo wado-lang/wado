@@ -40,8 +40,7 @@ pub struct MemberDecls {
 pub struct MemberNames {
     pub methods: List<String> = [],
     pub fields: List<String> = [],
-    /// Only consulted where the handle is a shared reference (a lexer
-    /// predicate).
+    /// Only consulted where the handle is a shared reference (a lexer predicate).
     pub mutating: List<String> = [],
 }
 
@@ -272,10 +271,8 @@ fn name_is_this(e: &JExpr) -> bool {
 }
 
 /// The names a block declares, for resolving a method body's calls against its
-/// siblings. Only ever read inside `translate_java_members`, over the very
-/// tokens it goes on to translate: what an action body outside the block may
-/// resolve is `member_names` over the translated result, so a block the
-/// translation refuses declares nothing anywhere.
+/// siblings. What a body *outside* the block may resolve is `member_names` over
+/// the translated result, so a refused block declares nothing anywhere.
 fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
     let mut out = MemberNames {};
     let mut pos = 0;

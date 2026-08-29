@@ -1008,7 +1008,7 @@ fn gen_lexer_match_fn(
     // gen_lexer_alt_seq places the alt's predicates; a false one returns -1 so
     // the tokenizer tries the next rule.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
-    gen_lexer_body(w, &rule.body, &plan.body, all_rules, &"return -1", ci, ea, hm, false);
+    gen_lexer_body(w, &rule.body, &plan, all_rules, &"return -1", ci, ea, hm, false);
     w.line(&"return pos;");
     w.end();
     w.blank();
@@ -1247,8 +1247,8 @@ fn gen_lexer_apply_replay_body(
     // `ea` here only re-selects the arm the match took; a single-alt body has
     // nothing to select, so it never re-evaluates a predicate.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
-    let ea = plan.body matches { Alts(_) };
-    gen_lexer_body(w, &rule.body, &plan.body, all_rules, &"return", ci, ea, has_members, true);
+    let ea = plan matches { Alts(_) };
+    gen_lexer_body(w, &rule.body, &plan, all_rules, &"return", ci, ea, has_members, true);
 }
 
 /// Emit a staged lexer-action body as a statement, normalizing the trailing
@@ -1938,24 +1938,12 @@ fn lexer_alt_has_predicate_after(alt: &LexerAlternative, after: i32) -> bool {
 // The emit plan — decided once, consumed by the emitter and by the dump
 // ==========================================================================
 
-/// The strategies the emitter takes over one rule body, as a tree over the
-/// shape that body has.
-///
-/// Deciding and emitting happened together, so anything else that needed to
-/// know what the emitter would do had to walk the body again and re-take the
-/// same decisions. `gale dump --lexer` did exactly that, and a walk that
-/// reached a different set of constructs would have reported strategies the
-/// emit never took, silently. The walk lives here now: `lexer_rule_plan` takes
-/// the decisions once, and both the emitter and the dump descend the result.
-pub struct LexerRulePlan {
-    pub body: LexerBodyPlan,
-}
-
-/// A body of alternatives: a rule's own, a group's, or an inlined fragment's.
-/// One alternative is not an alternation — the emit goes straight to the
-/// sequence and takes no strategy — so the two cases are distinct here rather
-/// than a single-arm strategy nobody consults.
+/// A body of alternatives — a rule's own, a group's, or an inlined fragment's —
+/// and every strategy the emit takes below it. `gen_lexer` and the dump both
+/// descend this, so neither re-derives a decision nor reaches a construct the
+/// other does not.
 pub variant LexerBodyPlan {
+    /// One alternative is not an alternation: no strategy to take.
     Single(LexerSeqPlan),
     Alts(LexerAltsPlan),
 }
@@ -1985,28 +1973,22 @@ pub struct LexerGroupPlan {
 }
 
 pub variant LexerGroupShape {
-    /// Each arm scored on how far arm-plus-suffix reaches. The suffix is only
-    /// peeked, so it stays a step of the enclosing sequence: the emit lowers it
-    /// twice from the one plan rather than planning it twice.
+    /// Scored arms. The suffix is only peeked, so it stays a step of the
+    /// enclosing sequence rather than being planned a second time here.
     Scored(List<LexerSeqPlan>),
-    /// The group is emitted as the element it is, and what follows it stays
-    /// with the sequence.
     FirstMatch(LexerBodyPlan),
 }
 
 pub struct LexerRepeatPlan {
     pub emit: LexerRepeatEmit,
     pub inner: LexerElemPlan,
-    /// The rest of the alternative, re-based onto the repeat, for a non-greedy
-    /// loop — the one emit that lowers what follows outside the enclosing
-    /// sequence's own tail position. `null` for every other emit, which lowers
-    /// the sequence's remaining steps as they were planned.
+    /// A non-greedy loop's exit try, the one emit that lowers what follows
+    /// outside the sequence's own tail position. `null` for every other.
     pub rest: Option<LexerCutPlan> = null,
 }
 
-/// The alternative a non-greedy repeat's exit try lowers, with its plan. Carried
-/// together so neither consumer cuts it again: the cut is a decision like any
-/// other, and one made twice is one that can differ.
+/// An alternative cut out of the sequence, with its plan. Carried together so
+/// neither consumer cuts it again.
 pub struct LexerCutPlan {
     pub alt: LexerAlternative,
     pub plan: LexerSeqPlan,
@@ -2015,18 +1997,15 @@ pub struct LexerCutPlan {
 pub variant LexerElemPlan {
     /// A group, or a non-recursive fragment inlined at this reference.
     Body(LexerBodyPlan),
-    /// A repeat reached as an element rather than as a step of an alternative
-    /// — inside `~`, or as another repeat's inner. It takes no suffix
-    /// decision: there is no alternative around it to strand.
+    /// A repeat inside a `~` or another repeat: no alternative around it to
+    /// strand, so no suffix decision.
     PlainRepeat(LexerNestedPlan),
     Not(LexerNestedPlan),
-    /// A literal, a char class or range, `.`, `EOF`, or a rule the emit calls
-    /// by name rather than inlining.
+    /// A literal, a char class or range, `.`, `EOF`, or a rule reached by call.
     Leaf,
 }
 
-/// An element that wraps exactly one other, held in a struct because a variant
-/// cannot carry itself directly.
+/// A variant cannot carry itself directly.
 pub struct LexerNestedPlan {
     pub inner: LexerElemPlan,
 }
@@ -2038,20 +2017,16 @@ pub fn lexer_rule_plan(
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
-) -> LexerRulePlan {
+) -> LexerBodyPlan {
     let ci = resolve_ci(grammar_opts, &rule.options);
     let tail = !lexer_rule_is_called(rule, all_rules);
-    return LexerRulePlan { body: plan_body(&rule.body, all_rules, ci, tail) };
+    return plan_body(&rule.body, all_rules, ci, tail);
 }
 
 fn plan_body(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool, tail: bool) -> LexerBodyPlan {
     if alts.len() == 1 {
         return LexerBodyPlan::Single(plan_seq(&alts[0], all_rules, ci, tail));
     }
-    return LexerBodyPlan::Alts(plan_alts(alts, all_rules, ci, tail));
-}
-
-fn plan_alts(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool, tail: bool) -> LexerAltsPlan {
     let emit = lexer_alts_emit(alts, all_rules, tail);
     // Maximal munch scans every arm to its end, so each arm inherits the tail
     // position; first-match does not.
@@ -2060,7 +2035,7 @@ fn plan_alts(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: boo
     for let alt of alts {
         arms.push(plan_seq(alt, all_rules, ci, arm_tail));
     }
-    return LexerAltsPlan { emit, arms };
+    return LexerBodyPlan::Alts(LexerAltsPlan { emit, arms });
 }
 
 fn plan_seq(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool, tail: bool) -> LexerSeqPlan {
@@ -2068,14 +2043,15 @@ fn plan_seq(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool, tail:
     let mut steps: List<LexerStepPlan> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
+        let elem_tail = last_is_tail && i == alt.elements.len() - 1;
         if let Repeat(rep) = elem {
             let emit = lexer_repeat_emit(alt, i, all_rules, ci);
             // Every emit runs the inner as its own loop body, so nothing of the
             // alternative follows it there.
             let inner = plan_elem(&rep.element, all_rules, ci, false);
             // The exit try runs the rest of the alternative — its re-based
-            // predicates included — before each extra iteration, and outside the
-            // sequence's tail position, so it is the one cut planned apart.
+            // predicates included — outside the sequence's tail position, so it
+            // is the one cut planned apart.
             if emit matches { NonGreedy } {
                 let rest = lexer_alt_rest(alt, i);
                 let plan = plan_seq(&rest, all_rules, ci, false);
@@ -2093,7 +2069,6 @@ fn plan_seq(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool, tail:
         }
         if let Group(g_alts) = elem {
             let emit = lexer_group_emit(alt, i, all_rules, ci);
-            let elem_tail = last_is_tail && i == alt.elements.len() - 1;
             let shape = if emit matches { ArmScoring } {
                 // Each arm is scanned match-only, outside tail position.
                 let mut arms: List<LexerSeqPlan> = [];
@@ -2107,9 +2082,7 @@ fn plan_seq(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool, tail:
             steps.push(LexerStepPlan::Group(LexerGroupPlan { emit, shape }));
             continue;
         }
-        steps.push(LexerStepPlan::Elem(
-            plan_elem(elem, all_rules, ci, last_is_tail && i == alt.elements.len() - 1),
-        ));
+        steps.push(LexerStepPlan::Elem(plan_elem(elem, all_rules, ci, elem_tail)));
     }
     return LexerSeqPlan { steps };
 }
@@ -2137,10 +2110,8 @@ fn plan_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool, tail: b
 }
 
 /// Emit `alt` from element `from` on, taking every strategy from `plan`. `from`
-/// is what lets an emit re-lower the tail of a sequence — a scored alternation
-/// peeks what follows it, a lookahead-aware repeat peeks and then commits it —
-/// against the very steps the sequence itself would emit, rather than a second
-/// plan of the same elements.
+/// lets an emit re-lower the tail of a sequence — a scored alternation peeks it,
+/// a lookahead-aware repeat peeks then commits it — from those same steps.
 fn gen_lexer_alt_seq(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
@@ -2155,10 +2126,9 @@ fn gen_lexer_alt_seq(
 ) {
     assert !replay || !ea, "the replay pass never re-evaluates a predicate the selection pass already answered";
     for let mut i = from; i < plan.steps.len(); i += 1 {
-        // Every `before_index == i` predicate (alt-initial and mid-alt); the
-        // trailing one is emitted post-loop. Emitting here rather than in the
-        // caller lets a single-alt inlined group / fragment gate its boundary
-        // predicates. A predicate after a suffix-consuming repeat is placed there.
+        // Every `before_index == i` predicate; the trailing one is post-loop.
+        // Placed here rather than in the caller so a single-alt inlined group or
+        // fragment gates its boundary predicates.
         gen_lexer_rule_predicates(w, &alt.actions, i, ea, fail_action);
         if replay {
             gen_lexer_alt_actions_at(w, &alt.actions, i);
@@ -2181,9 +2151,6 @@ fn gen_lexer_alt_seq(
                     panic("a group step plans something other than a group");
                 };
                 match &gp.shape {
-                    // An alternation with something after it cannot be decided by
-                    // which arm matches first — unless no two arms can match at
-                    // the same position, where first-match already is the answer.
                     Scored(arms) => gen_lexer_alts_lookahead_aware(
                         w,
                         g_alts,
