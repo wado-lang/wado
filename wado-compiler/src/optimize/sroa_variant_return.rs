@@ -17,6 +17,7 @@ use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
+use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 
 /// Widest result tuple the scalarized return may use, counting the tag. Matches
@@ -469,22 +470,21 @@ fn handled_call_sites(
         .collect()
 }
 
-/// Calls to a scalarized callee that the rewrite left typed as the tuple where
-/// their consumer still expects the variant. A call in drop position has no
-/// consumer to mistype, so reboxing it only builds a value the passes after
-/// this one delete — which is a rewrite each fixed-point iteration undoes.
+/// Calls to a scalarized callee left typed as the tuple where their consumer
+/// expects the variant. One in drop position has no consumer, so nothing to fix.
 fn straggler_calls(
     body: &Body,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
     handled: &IndexSet<ExprId>,
 ) -> Vec<ExprId> {
+    let discarded = arena_query::discarded_exprs(body);
     let mut out = Vec::new();
     collect_straggler_calls(
         body,
         NodeRef::Block(body.root),
         scalarized,
         handled,
-        &super::arena_query::discarded_exprs(body),
+        &discarded,
         &mut out,
     );
     out
@@ -695,9 +695,9 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
         // over every fixture in the suite.
         let handled = handled_call_sites(body, &scalarized, func.return_type);
         let stragglers = straggler_calls(body, &scalarized, &handled);
-        // `collect_straggler_calls` descends from the root, so it never sees
-        // the nodes a rewrite orphaned — the arena is not compacted, and
-        // reporting those would flag code that no longer runs.
+        // `straggler_calls` descends from the root, so it never sees the nodes a
+        // rewrite orphaned — the arena is not compacted, and reporting those
+        // would flag code that no longer runs.
         assert!(
             stragglers.is_empty(),
             "variant-return SROA left {} unreboxed call(s) to a scalarized \

@@ -34,9 +34,8 @@ export fn run() {
 }
 "#;
 
-/// Folding reduces the parse to a call whose `Result` nobody reads, and a
-/// scalarized callee's result in drop position is what `sroa_variant_return`
-/// used to rebox every round for the passes after it to delete again.
+/// Folding leaves the parse a call in drop position, whose scalarized
+/// `Result` nothing reads.
 const DISCARDED_RESULT_SOURCE: &str = r#"
 use { println, Stdout } from "core:cli";
 
@@ -76,9 +75,8 @@ fn inspect_chain_source(fields: usize) -> String {
     )
 }
 
-/// `depth` functions each forwarding a parameter only the next one reads, which
-/// no one reads at the bottom. Dropping it there kills its caller's copy, and so
-/// on up — the shape a Gale-generated parser's `follow` argument has.
+/// `depth` functions forwarding a parameter no one reads — the shape a
+/// Gale-generated parser's `follow` argument has.
 fn forwarding_chain_source(depth: usize) -> String {
     let mut fns = String::new();
     fns.push_str(
@@ -165,35 +163,35 @@ fn exhausted_cap_is_reported_with_the_passes_still_changing() {
     );
 }
 
-/// A decided branch runs exactly one arm, so folding must carry the env through
-/// it — otherwise the iteration count scales with the chain's length.
-#[test]
-fn inspect_chain_folds_in_one_iteration_per_struct_not_per_field() {
-    let four_log = debug_log_of(&inspect_chain_source(4), OptLevel::O3, None);
-    let sixteen_log = debug_log_of(&inspect_chain_source(16), OptLevel::O3, None);
-    // Without this, both runs reaching the cap would compare equal and pass.
-    assert_eq!(cap_report(&four_log), None);
-    assert_eq!(cap_report(&sixteen_log), None);
-    let (four, sixteen) = (iterations_of(&four_log), iterations_of(&sixteen_log));
-    assert!(
-        sixteen <= four,
-        "iteration count tracks the field count ({four} for 4 fields, {sixteen} for 16)"
-    );
+/// Lengthening a chain must not lengthen the loop: a pass that takes one link
+/// of it per iteration is what puts the count on the program's size.
+fn assert_iterations_hold(
+    source: impl Fn(usize) -> String,
+    level: OptLevel,
+    iterations: Option<u32>,
+    (small, large): (usize, usize),
+) {
+    let small_log = debug_log_of(&source(small), level, iterations);
+    let large_log = debug_log_of(&source(large), level, iterations);
+    // Both runs reaching the cap would compare equal and pass.
+    assert_eq!(cap_report(&small_log), None);
+    assert_eq!(cap_report(&large_log), None);
+    let (a, b) = (iterations_of(&small_log), iterations_of(&large_log));
+    assert!(b <= a, "{a} iterations at {small}, {b} at {large}");
 }
 
-/// Dropping a dead parameter kills the argument its callers pass, so the pass
-/// has its own fixed point to reach. Taking one link of the chain per outer
-/// iteration instead makes the iteration count scale with the call graph's
-/// depth, which is what an unusually deep generated parser runs the cap out on.
+/// A decided branch runs exactly one arm, so folding must carry the env through
+/// it rather than dropping what that arm writes.
 #[test]
-fn forwarding_chain_folds_in_one_iteration_per_program_not_per_link() {
-    // Explicit iterations: the point is the count, and reaching the level's own
-    // cap would trip the convergence assert before this test could read it.
-    let short = debug_log_of(&forwarding_chain_source(5), OptLevel::O2, Some(60));
-    let long = debug_log_of(&forwarding_chain_source(20), OptLevel::O2, Some(60));
-    let (short, long) = (iterations_of(&short), iterations_of(&long));
-    assert!(
-        long <= short,
-        "iteration count tracks the chain's depth ({short} for 5 links, {long} for 20)"
-    );
+fn inspect_chain_folds_per_struct_not_per_field() {
+    assert_iterations_hold(inspect_chain_source, OptLevel::O3, None, (4, 16));
+}
+
+/// Dropping a dead parameter kills the argument its callers pass, so `dae` has a
+/// fixed point of its own to reach.
+#[test]
+fn forwarding_chain_folds_per_program_not_per_link() {
+    // Explicit iterations: a regression would otherwise reach the level's cap
+    // and trip the convergence assert before this test could read the count.
+    assert_iterations_hold(forwarding_chain_source, OptLevel::O2, Some(60), (5, 20));
 }

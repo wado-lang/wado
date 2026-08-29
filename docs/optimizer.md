@@ -69,7 +69,7 @@ Scalar and dataflow:
 
 - `copy_prop` — propagate trivial copies (`let x = y`) and drop the binding. A value-type copy propagates however many times each side is read when neither binding is ever written, since the sharing is then unobservable.
 - `param_spec` — interprocedural constant propagation over struct fields: clone a callee on the constant fields of a by-reference struct its caller passes, substituting those reads.
-- `dae` — drop parameters never read by the callee, and the pure argument at every call site.
+- `dae` — drop parameters never read by the callee, and the pure argument at every call site. Run to its own fixed point, since dropping one parameter can leave a caller's dead; the outer loop's iteration count would otherwise track the depth of a forwarding chain.
 - `drve` — make a function void-returning when its result is dropped at every call site.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop a binding that is never read (keeping its value if impure).

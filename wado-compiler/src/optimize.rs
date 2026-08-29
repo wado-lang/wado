@@ -166,9 +166,7 @@ pub fn optimize(
         }
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
-                // 15 clears the corpus with room: every source but one settles
-                // by 8, and the Gale-generated TypeScript parser needs 13 —
-                // `dae` peels one level of its call graph per round.
+                // Every source in the tree settles by 8, so 15 is slack.
                 iterations: opt_iterations.unwrap_or(15),
                 // Threshold 13 is the sweet spot for -O2/-Os: on
                 // syntax-highlight (Gale-generated SQLite highlighter)
@@ -187,10 +185,9 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
-            // The iteration cap is slack, not a budget, which is what
-            // `cap_is_defect` asserts: the heaviest source in the tree — the
-            // Gale-generated SQLite parser in `benchmark/sqlite_parse` —
-            // converges in 6. Threshold 32 sits just under a size cliff at 33 on
+            // The heaviest source in the tree — the Gale-generated SQLite parser
+            // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack.
+            // Threshold 32 sits just under a size cliff at 33 on
             // syntax-highlight (859KB → 1049KB), for no speed gain.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),

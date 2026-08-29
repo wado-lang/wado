@@ -30,9 +30,8 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
     out
 }
 
-/// Every expression a statement evaluates and throws away. A block's last
-/// statement is excluded: it may be the block's value, and reading a discarded
-/// result where one is consumed is the unsound direction.
+/// Every expression a statement evaluates and throws away. A block's tail is
+/// excluded — it may be the block's value, and a wrong answer there is unsound.
 pub(super) fn discarded_exprs(body: &Body) -> IndexSet<ExprId> {
     let mut out = IndexSet::default();
     for block in body.blocks.values() {
