@@ -962,10 +962,9 @@ fn scan_inspect_signatures_block(
                 return_type,
                 ..
             } = type_table.get(recv_type)
+                && trait_name == inspect_name
             {
-                if trait_name == inspect_name {
-                    sigs.insert((params.len(), *return_type));
-                }
+                sigs.insert((params.len(), *return_type));
             }
         }
         body.for_each_child(node, |c| stack.push(c));
