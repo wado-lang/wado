@@ -732,30 +732,26 @@ fn collect_alias_node(
     type_table: &TypeTable,
     out: &mut FnAliases,
 ) {
+    // The name a copy binds to. Its source is marked below, from every binding
+    // shape — a store into `x.f` publishes the object with no local to pair.
+    if let Some((dst, value)) = super::alias::copy_edge(body, node)
+        && let Some(ve) = value.as_expr()
+    {
+        mark_gc_alias_pair(body, Some(dst), ve, type_table, &mut out.locals);
+    }
     match node {
-        NodeRef::Stmt(s) => match &body.stmts[s].kind {
-            StmtKind::Let {
-                local_index, value, ..
-            } => {
-                if let Some(ve) = value.as_expr() {
-                    mark_gc_alias_pair(body, Some(*local_index), ve, type_table, &mut out.locals);
-                }
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } =
+                &body.stmts[s].kind
+                && let Some(ve) = value.as_expr()
+            {
+                mark_gc_alias_pair(body, None, ve, type_table, &mut out.locals);
             }
-            StmtKind::LetDestructure { value, .. } => {
+        }
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Assign { value, .. } => {
                 if let Some(ve) = value.as_expr() {
                     mark_gc_alias_pair(body, None, ve, type_table, &mut out.locals);
-                }
-            }
-            _ => {}
-        },
-        NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Assign { target, value } => {
-                if let Some(ve) = value.as_expr() {
-                    let dst = match &body.exprs[*target].kind {
-                        ExprKind::Local { index, .. } => Some(*index),
-                        _ => None,
-                    };
-                    mark_gc_alias_pair(body, dst, ve, type_table, &mut out.locals);
                 }
             }
             ExprKind::Unary {
