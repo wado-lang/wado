@@ -29,7 +29,7 @@ use {
     translate_java_lexer_stmts,
     JEnv,
 } from "./java2wado/jemit.wado";
-use { translate_java_members, java_member_names, MemberDecls, MemberNames } from "./java2wado/jmembers.wado";
+use { translate_java_members, MemberDecls, MemberNames } from "./java2wado/jmembers.wado";
 use { translate_wado_members } from "./wado_members.wado";
 use { grammar_has_superclass } from "./superclass.wado";
 use { AltBinding } from "./attr_resolve.wado";
@@ -214,28 +214,6 @@ pub fn translate_members(
         Wado => translate_wado_members(body),
         Other(name) => Result::Err(`unsupported action language '${*name}' for @members`),
     };
-}
-
-/// The snake_cased names the grammar's `@members` blocks declare, so action /
-/// predicate bodies can resolve `this.m()` and bare `m()` calls, and bare field
-/// reads, against real declarations rather than snake_casing anything. Scanned
-/// rather than translated: the parser's members are translated later, and a
-/// body's own diagnostic is the better place for a malformed block to surface.
-pub fn collect_member_names(grammar: &Grammar) -> MemberNames {
-    let mut out = MemberNames {};
-    for let act of &grammar.named_actions {
-        if !is_parser_members(act, &grammar.kind) {
-            continue;
-        }
-        let scanned = java_member_names(&act.body.text);
-        for let n of &scanned.methods {
-            out.methods.push(*n);
-        }
-        for let n of &scanned.fields {
-            out.fields.push(*n);
-        }
-    }
-    return out;
 }
 
 /// Whether java2wado can emit the grammar's non-superClass action bodies:

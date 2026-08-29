@@ -41,8 +41,7 @@ pub struct MemberNames {
     pub methods: List<String> = [],
     pub fields: List<String> = [],
     /// Only consulted where the handle is a shared reference (a lexer
-    /// predicate); a name scan that has not translated the bodies leaves it
-    /// empty, which is why the scan never feeds a lexer body.
+    /// predicate).
     pub mutating: List<String> = [],
 }
 
@@ -272,16 +271,11 @@ fn name_is_this(e: &JExpr) -> bool {
     };
 }
 
-/// The snake_cased names a `@members` block declares, for resolving calls and
-/// bare names in other action bodies. Best-effort: a malformed block yields the
-/// names it can, and the real translation reports the error.
-pub fn java_member_names(body: &String) -> MemberNames {
-    return match tokenize_java(body) {
-        Ok(tokens) => scan_member_names(&tokens),
-        Err(_) => MemberNames {},
-    };
-}
-
+/// The names a block declares, for resolving a method body's calls against its
+/// siblings. Only ever read inside `translate_java_members`, over the very
+/// tokens it goes on to translate: what an action body outside the block may
+/// resolve is `member_names` over the translated result, so a block the
+/// translation refuses declares nothing anywhere.
 fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
     let mut out = MemberNames {};
     let mut pos = 0;

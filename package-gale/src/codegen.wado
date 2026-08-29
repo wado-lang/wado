@@ -37,7 +37,6 @@ use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wa
 use {
     action_language_is_emittable,
     should_emit_actions,
-    collect_member_names,
     stage_lexer_bodies,
     translate_attr_types,
 } from "./java2wado.wado";
@@ -169,14 +168,19 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     ctx.set_trace(options.trace);
     ctx.set_fragment_entries(options.fragment_entries);
     ctx.set_action_language(&grammar.action_language);
-    ctx.set_action_grammar(&grammar.name, collect_member_names(grammar));
+    ctx.set_action_grammar(&grammar.name);
     wire_superclasses(grammar, &mut ctx);
     // A wired parser base's bodies are Wado once the rewrite has run, so they
     // execute even under a host language java2wado carves out.
     ctx.set_emit_actions(should_emit_actions(grammar) || ctx.has_parser_superclass());
-    // Ahead of staging: a Java lexer body resolves its bare names and `this.`
-    // calls against the members declared here.
+    // Ahead of staging: a body resolves its bare names and `this.` calls against
+    // the members declared here. Both recognizers' are translated before any
+    // body reads them, so the names a body can resolve are exactly the ones that
+    // reach the struct — a block the translation refuses declares nothing, and
+    // the refusal is the diagnostic rather than an unknown field in the output.
     let lexer_members = collect_members(grammar, &mut ctx, /*lexer=*/ true);
+    let parser_members = collect_members(grammar, &mut ctx, /*lexer=*/ false);
+    ctx.set_action_members(member_names(&parser_members));
     // Read off the `.g4` bodies, which staging is about to translate away.
     let mode_use = lexer_mode_attr_use(grammar);
     // Stage the lexer bodies into Wado on exactly the grammars whose lexer
@@ -275,7 +279,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     );
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_alt_enums(&mut w, grammar);
-    gen_parser(&mut w, grammar, &lowered, &mut ctx);
+    gen_parser(&mut w, grammar, &lowered, &parser_members, &mut ctx);
     warn_unhandled_lexer_actions(grammar, &mut ctx);
     warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens, ctx.emit_actions());

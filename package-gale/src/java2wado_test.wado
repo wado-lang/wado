@@ -4,9 +4,29 @@ use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
+use { DiagnosticKind } from "./gir.wado";
 
 global NO_BINDINGS: List<AltBinding> = [];
 global NO_MEMBERS: MemberNames = MemberNames {};
+global GEN_OPTS: GenerateOptions = GenerateOptions {};
+
+struct GenOutcome {
+    source: String,
+    unsupported: i32,
+}
+
+fn gen_source(src: &String) -> GenOutcome {
+    let mut g = parse(*src).unwrap();
+    let out = generate(&mut g, &GEN_OPTS);
+    let mut unsupported = 0;
+    for let d of &out.diagnostics {
+        if d.kind matches { UnsupportedAction } {
+            unsupported += 1;
+        }
+    }
+    return GenOutcome { source: out.source, unsupported };
+}
 
 fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
     return java_pred_m(src, rule_src, vals_in_scope, &NO_MEMBERS);
@@ -158,6 +178,37 @@ test "java: a call resolves in Java's method namespace, not against the variable
 test "java predicate: negated equals is parenthesized" {
     let out = java_pred(&"!getText().equals(\"+\")", &"a : ID ;", false);
     assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '${out}'`;
+}
+
+test "java members: a refused block declares nothing an action can then resolve" {
+    // ANTLR concatenates a recognizer's `@members` blocks, so one malformed
+    // block refuses them all. What an action may resolve is read off the
+    // translated result, so the refusal is the only diagnostic — never a call
+    // to a member the struct never got.
+    let src = gen_source(&"grammar T;
+options { language = Java; }
+@members { int good() { return 1; } }
+@members { int ; }
+a : ID { good(); } ;
+ID : [a-z]+ ;
+");
+    assert !src.source.contains("p.good()"), "a member from a refused block must not be called";
+    assert !src.source.contains("fn good"), "a member from a refused block must not be declared";
+    assert src.unsupported >= 1, `diagnostics: ${src.unsupported}`;
+}
+
+test "java members: a well-formed block still resolves across its siblings" {
+    let src = gen_source(&"grammar T;
+options { language = Java; }
+@members { int good() { return helper(); } }
+@members { int helper() { return 1; } }
+a : ID { good(); } ;
+ID : [a-z]+ ;
+");
+    assert src.source.contains("fn good"), "a method declared in one block is emitted";
+    assert src.source.contains("fn helper"), "a method declared in a sibling block is emitted";
+    assert src.source.contains("p.good()"), "an action resolves a member the struct got";
+    assert src.unsupported == 0, `diagnostics: ${src.unsupported}`;
 }
 
 test "java members: method name is snake_cased at definition to match calls" {

@@ -108,7 +108,6 @@ use {
     alt_vals_arg,
     ambiguous_group_predicate_gated,
     call_arg_suffix,
-    collect_members,
     current_rule_emits_vals,
     emit_arg_stores,
     emit_atn_disabled_seed,
@@ -141,6 +140,7 @@ use {
     gen_trace_helpers,
 } from "./parser_runtime_gen.wado";
 use { gen_parser_super_interface } from "./superclass.wado";
+use { MemberDecls } from "./java2wado/jmembers.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use {
     EMPTY_SYNC,
@@ -177,7 +177,13 @@ fn follow_arg_sep(emit_follow: bool, arg: &FollowArg) -> String {
     return "";
 }
 
-pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+pub fn gen_parser(
+    w: &mut CodeWriter,
+    grammar: &Grammar,
+    lowered: &LoweredGrammar,
+    members: &MemberDecls,
+    ctx: &mut GenContext,
+) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
     // by name and order. emit still consumes surface IR for the body
     // of each rule (Phase 4 migrates those entry points); the
@@ -195,7 +201,6 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // it has a value struct at all.
     install_rule_captures(grammar, lowered, ctx);
 
-    let members = collect_members(grammar, ctx, /*lexer=*/ false);
     if ctx.has_parser_superclass() {
         gen_parser_super_interface(w, ctx.parser_superclass_name(), ctx.parser_superclass_ops());
     }
@@ -205,10 +210,10 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         ctx.needs_atn(),
         ctx.emit_actions(),
         !ctx.fragment_entries().is_empty(),
-        &members,
+        members,
         ctx.parser_superclass_name(),
     );
-    gen_member_methods(w, &members);
+    gen_member_methods(w, members);
     if ctx.emit_actions() {
         gen_vals_structs(w, grammar, ctx);
     }
