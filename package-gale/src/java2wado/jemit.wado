@@ -694,19 +694,30 @@ enum NameTarget {
     Unknown,
 }
 
-fn resolve_name(env: &JEnv, name: &String) -> NameTarget {
+/// Which of Java's two namespaces a site resolves in. They are separate, so
+/// `int depth = 0; int depth() { ... }` is legal and each spelling picks the one
+/// its position names: `depth` the field, `depth()` the method. Resolving both
+/// in one order refused every call whose name a variable also had.
+enum NameSpace {
+    /// A name position: a local or parameter, a rule argument, a field.
+    Variable,
+    /// A call position: a `@members` method, whatever variables share the name.
+    Method,
+}
+
+fn resolve_name(env: &JEnv, name: &String, space: NameSpace) -> NameTarget {
+    let snake = to_snake_case(name);
+    if space matches { Method } {
+        return if env.methods.contains(&snake) { NameTarget::Method } else { NameTarget::Unknown };
+    }
     if env.locals.contains(name) {
         return NameTarget::Local;
     }
     if env.args.contains(name) {
         return NameTarget::RuleArg;
     }
-    let snake = to_snake_case(name);
     if env.fields.contains(&snake) {
         return NameTarget::Field;
-    }
-    if env.methods.contains(&snake) {
-        return NameTarget::Method;
     }
     return NameTarget::Unknown;
 }
@@ -728,7 +739,7 @@ fn name_expr(
     if *name == "_tokenStartCharPositionInLine" {
         return api_expr(env, ApiCall::TokenStartCharPos, lexer_token_start_column_expr());
     }
-    return match resolve_name(env, name) {
+    return match resolve_name(env, name, NameSpace::Variable) {
         Local => Result::Ok(*name),
         RuleArg => resolve_attr_ref(rule, rules, &`$${*name}`, vals_in_scope, bindings, &env.this_bind),
         Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
@@ -759,8 +770,11 @@ fn this_field_expr(env: &JEnv, name: &String) -> Result<String, String> {
 /// the bare `m()` — reach the same method, so both come through here: a lexer
 /// predicate holds `&Lexer`, the tournament having no business mutating through
 /// a losing candidate, and a `&mut self` member is unreachable from one.
+/// A call site asks this rather than `resolve_name`: Java keeps methods in their
+/// own namespace, so a field, a local or a rule argument sharing the name hides
+/// a member method at a name position and never at a call one.
 fn check_member_call_reachable(env: &JEnv, meth: &String) -> Result<(), String> {
-    if !resolve_name(env, meth) matches { Method } {
+    if !resolve_name(env, meth, NameSpace::Method) matches { Method } {
         builtin::cold_path();
         return Result::Err(unknown_method_err(meth));
     }

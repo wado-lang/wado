@@ -137,6 +137,24 @@ test "java: a declared @members method resolves; an undeclared sibling does not"
     assert res.is_err(), "an undeclared method must be a loud error even qualified by this";
 }
 
+test "java: a call resolves in Java's method namespace, not against the variables" {
+    // Java declares methods and variables in separate namespaces, so a field of
+    // the same name hides the method at a name position and never at a call one.
+    let members = MemberNames {
+        methods: ["depth"],
+        fields: ["depth"],
+    };
+    let bare = java_action_m(&"depth();", &"a : ID ;", false, &members);
+    assert bare == "p.depth();", `bare: '${bare}'`;
+
+    let qualified = java_action_m(&"this.depth();", &"a : ID ;", false, &members);
+    assert qualified == "p.depth();", `qualified: '${qualified}'`;
+
+    // A rule argument shares the name too, and shadows only the read.
+    let arg = java_action_m(&"depth(); depth = 1;", &"a[i32 depth] : ID ;", true, &members);
+    assert arg == "p.depth(); vals.depth = 1;", `arg: '${arg}'`;
+}
+
 test "java predicate: negated equals is parenthesized" {
     let out = java_pred(&"!getText().equals(\"+\")", &"a : ID ;", false);
     assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '${out}'`;

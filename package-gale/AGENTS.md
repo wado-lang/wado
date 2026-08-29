@@ -81,6 +81,8 @@ wado test package-gale/**/*.wado               # all package tests
 wado test package-gale/src/codegen_test.wado   # one file
 ```
 
+Use the recursive glob, and check the file count it reports. The descriptor corpus is nested one directory deeper (`tests/antlr4-compat/stage_{a,b,b_oracle,c}/<Category>/`), so a flat `tests/antlr4-compat/*.wado` runs about a third of the suite and says nothing about the rest — including the corpus that exists to catch compatibility regressions. It stays green either way, and the fixtures it did not reach keep whatever the generator emitted last time it was run: a stale committed corpus is what that looks like from the outside.
+
 Test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus:
 
 1. g4 parse tests (`src/g4/integration_test.wado`) — real `.g4` files parse into `Grammar` IR.
