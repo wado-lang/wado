@@ -516,6 +516,16 @@ test "u128 div_rem dividend less than divisor" {
     assert result[1] == a;
 }
 
+test "u128 div_rem dividend above i64::MAX" {
+    // Both operands fit in 64 bits, so this takes the native-division path;
+    // a signed division would give a negative quotient here.
+    let a = u128::from_u64(u64::MAX);
+    let b = u128::from_u64(3);
+    let result = a.div_rem(&b);
+    assert result[0] == u128::from_u64(6148914691236517205);
+    assert result[1] == u128::zero();
+}
+
 test "u128 div_rem equal values" {
     let a: u128 = 42;
     let result = a.div_rem(&a);
