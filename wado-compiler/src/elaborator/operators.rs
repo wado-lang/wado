@@ -12,9 +12,6 @@ use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 
-<<<<<<< HEAD
-use super::util::placeholder;
-
 /// `-<integer literal>`, the shape both the coercion path and the defaulting
 /// path treat as a single literal so the boundary is the signed minimum.
 fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &str)> {
@@ -27,11 +24,6 @@ fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &st
     super::expr::int_literal_repr(lit).map(|repr| (lit, repr))
 }
 
-||||||| 542c4926ea
-use super::util::placeholder;
-
-=======
->>>>>>> origin/main
 /// The right-hand side of an assignment passed to
 /// [`Elaborator::assign_to_target`]. Either an AST expression (the
 /// regular [`Elaborator::resolve_assign`] path) or an already-resolved

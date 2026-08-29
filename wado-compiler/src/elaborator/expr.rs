@@ -37,9 +37,6 @@ enum FuncRefInference {
     NotApplicable,
 }
 
-<<<<<<< HEAD
-use super::util::placeholder;
-
 /// The literal's source text when it denotes an integer — the shape whose type
 /// is settled by defaulting to `i32` rather than by a coercion.
 pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
@@ -63,11 +60,6 @@ fn int_literal_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str)> {
     int_literal_repr(lit).map(|repr| (lit, repr))
 }
 
-||||||| 542c4926ea
-use super::util::placeholder;
-
-=======
->>>>>>> origin/main
 /// How a subscript is being used, which decides the indexing trait it selects:
 /// `&mut xs[i]` reaches the element through `IndexRefMut` so the mutability rides
 /// on the signature, while every other position reads it shared.
