@@ -21,9 +21,26 @@ use crate::nir::FuncId;
 /// it, and a call site is matched by the stamped `func_id` on its call node.
 pub(super) type FnKey = FuncId;
 
+/// Run to this pass's own fixed point: dropping a parameter deletes the
+/// argument its callers pass, which can leave one of *their* parameters dead.
 pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    // Keyed by struct and method name, which no signature shrink moves, so this
+    // is read once rather than per round.
     let closure_call_keys = collect_closure_call_keys(project);
+    let mut changed = false;
+    while eliminate_dead_arguments_round(project, gate, &closure_call_keys) {
+        changed = true;
+    }
+    changed
+}
 
+/// One find / validate / apply sweep, reporting whether it rewrote anything.
+/// `mark_changed` leaves the next round's dirty set at the links this one freed.
+fn eliminate_dead_arguments_round(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    closure_call_keys: &IndexSet<FnKey>,
+) -> bool {
     // Phase 1: identify candidate (function, dead positions) pairs.
     let mut candidates: IndexMap<FnKey, Vec<bool>> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::Dae, project.functions.len()) {
@@ -53,10 +70,15 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     // scans all functions, but reports exactly the ones it touched so the gated
     // passes re-examine only those and their call-graph neighbours.
     let touched = apply_dae(project, &confirmed);
+    let rewrote = !touched.is_empty();
+    debug_assert!(
+        rewrote,
+        "a confirmed candidate rewrote nothing, so the loop above would not end"
+    );
     for idx in touched {
         gate.mark_changed(FuncId::new(idx));
     }
-    true
+    rewrote
 }
 
 /// Closure-functor methods whose `is_closure_call` pin is lifted:

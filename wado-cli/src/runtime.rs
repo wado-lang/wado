@@ -432,13 +432,14 @@ pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
     Ok(Engine::new(&config)?)
 }
 
-/// Create a wasmtime Engine for test execution with epoch interruption enabled.
+/// Create a wasmtime Engine for test execution with epoch interruption enabled,
+/// under the profiling mode `wado test --profile` selected.
 ///
 /// # Errors
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
-pub fn create_test_engine(opt_level: OptLevel) -> Result<Engine> {
-    let mut config = create_config(opt_level, &ProfileMode::None, DEFAULT_COLLECTOR);
+pub fn create_test_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engine> {
+    let mut config = create_config(opt_level, profile, DEFAULT_COLLECTOR);
     config.epoch_interruption(true);
     Ok(Engine::new(&config)?)
 }

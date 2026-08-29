@@ -84,21 +84,45 @@ function threadFuncKeys(thread: any): Key[] {
   return keys;
 }
 
+/**
+ * Run a symbolicator and return its stdout lines. `maxBuffer` is unbounded
+ * because the default 1 MiB truncates silently, dropping every address past
+ * the cut back to a raw `[lib]+0x…` frame.
+ */
+function runSymbolicator(
+  cmd: string, args: string[], input?: string,
+): string[] {
+  let proc;
+  try {
+    proc = spawnSync(cmd, args, {
+      input, encoding: "utf8", timeout: 180_000, maxBuffer: Infinity,
+    });
+  } catch (e) {
+    console.error(`${cmd} failed: ${e}`);
+    return [];
+  }
+  // A symbolicator that ran and failed reports through `status` / `signal`,
+  // leaving `error` unset; parsing its stdout anyway would bury the failure
+  // under the raw-address fallback every unresolved frame takes.
+  const failure = proc.error ?? (proc.signal
+    ? `killed by ${proc.signal}`
+    : proc.status ? `exit ${proc.status}` : null);
+  if (failure) {
+    console.error(`${cmd} failed: ${failure}`);
+    return [];
+  }
+  const lines = (proc.stdout ?? "").split("\n");
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+
 function symbolicateAtos(
   path: string, base: number, rvas: number[], libName: string, arch: string,
 ): Map<number, string> {
   const addrs = rvas.map((r) => hex(base + r));
-  let lines: string[] = [];
-  try {
-    const proc = spawnSync(
-      "atos", ["-o", path, "-arch", arch, "-l", hex(base), ...addrs],
-      { encoding: "utf8", timeout: 180_000 },
-    );
-    lines = (proc.stdout ?? "").split("\n");
-    if (lines.length && lines[lines.length - 1] === "") lines.pop();
-  } catch {
-    lines = [];
-  }
+  const lines = runSymbolicator(
+    "atos", ["-o", path, "-arch", arch, "-l", hex(base), ...addrs],
+  );
   while (lines.length < rvas.length) lines.push("");
   const out = new Map<number, string>();
   for (let i = 0; i < rvas.length; i++) {
@@ -125,17 +149,9 @@ function symbolicateAddr2line(
   path: string, rvas: number[], libName: string,
 ): Map<number, string> {
   const addrs = rvas.map((r) => hex(r));
-  let lines: string[] = [];
-  try {
-    const proc = spawnSync(
-      "addr2line", ["-fC", "-e", path],
-      { input: addrs.join("\n") + "\n", encoding: "utf8", timeout: 180_000 },
-    );
-    lines = (proc.stdout ?? "").split("\n");
-    if (lines.length && lines[lines.length - 1] === "") lines.pop();
-  } catch {
-    lines = [];
-  }
+  const lines = runSymbolicator(
+    "addr2line", ["-fC", "-e", path], addrs.join("\n") + "\n",
+  );
   const out = new Map<number, string>();
   for (let idx = 0; idx < rvas.length; idx++) {
     const r = rvas[idx];
@@ -177,6 +193,12 @@ function symbolicate(
     }
     const meta = libs[lib];
     const path = meta.path ?? meta.name;
+    // `[vdso]` and friends name a mapping, not a file: there is nothing for a
+    // symbolicator to open, and asking would report a failure on every run.
+    if (path.startsWith("[")) {
+      for (const r of rvas) out.set(kk(lib, r), `[${meta.name}]+${hex(r)}`);
+      continue;
+    }
     let sym: Map<number, string>;
     if (symbolicator === "atos") {
       const base = meta.name === binary ? mainBase : 0;

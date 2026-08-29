@@ -126,7 +126,12 @@ see Target World above).
 wado test                           # discover and run every .wado test in the project
 wado test file.wado                 # run tests in one file
 wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
+wado test --profile guest file.wado # guest profile over that file's tests
 ```
+
+`--profile` takes one file, runs it serially, and leaves a test that hangs
+unbounded — it samples on the epoch deadline the per-test timeout is counted in.
+See the `wado-performance` skill for reading the profile it writes.
 
 A failure or resolved `#[TODO]` prints its own one-line notice immediately,
 otherwise a digest (`N/Total files · tests, failed, todo, skip · ETA`) prints

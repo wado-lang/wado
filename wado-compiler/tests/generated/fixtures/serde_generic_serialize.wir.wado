@@ -165,11 +165,11 @@ type "functype//core:base64/__initialize_module" = fn();  // TypeId(55)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(56)
 
-type "functype//core:json/core/json/to_string<serde_generic_serialize.wado/Pair<i32,core:prelude/string.wado/String>>$spec0" = fn(ref "serde_generic_serialize.wado//Pair<i32,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(57)
+type "functype//core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<i32>>$spec0" = fn(ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(57)
 
-type "functype//core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$spec0$scalar" = fn(ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(58)
+type "functype//core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$spec0" = fn(ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(58)
 
-type "functype//core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<i32>>$spec0$scalar" = fn(ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(59)
+type "functype//core:json/core/json/to_string<serde_generic_serialize.wado/Pair<i32,core:prelude/string.wado/String>>$spec0" = fn(ref "serde_generic_serialize.wado//Pair<i32,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(59)
 
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
@@ -313,7 +313,7 @@ fn "serde_generic_serialize.wado/__test_0_bound_only_generic_struct_serialize__n
     let r_mv_0: i32;
     let r_mv_1: ref null "core:prelude/string.wado//String";
     let r_mv_2: ref null "core:serde//SerializeError";
-    multivalue_bind [r_mv_0, r_mv_1, r_mv_2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<i32>>$spec0$scalar"(struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [r_mv_0, r_mv_1, r_mv_2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<i32>>$spec0"(struct.new "core:prelude/types.wado//Option<char>" { 1 });
     if @likely(r_mv_0 == 0) {
         s = ref.as_non_null(r_mv_1);
         __cond = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(s, global:serde_generic_serialize.wado::__const_obj_24);
@@ -352,7 +352,7 @@ fn "serde_generic_serialize.wado/__test_1_two_instantiations_of_the_same_generic
     let rb_mv_0: i32;
     let rb_mv_1: ref null "core:prelude/string.wado//String";
     let rb_mv_2: ref null "core:serde//SerializeError";
-    multivalue_bind [rb_mv_0, rb_mv_1, rb_mv_2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$spec0$scalar"(struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [rb_mv_0, rb_mv_1, rb_mv_2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$spec0"(struct.new "core:prelude/types.wado//Option<char>" { 1 });
     if @likely(ra_mv_0 == 0) {
         sa = ref.as_non_null(ra_mv_1);
         __cond_6 = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(sa, global:serde_generic_serialize.wado::__const_obj_36);
@@ -1116,13 +1116,13 @@ fn "core:base64/__initialize_module"() {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:json/core/json/to_string<serde_generic_serialize.wado/Pair<i32,core:prelude/string.wado/String>>$spec0"(value, trailing_char) {
+fn "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<i32>>$spec0"(trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    __match_7 = "core:serde/serde_generic_serialize.wado/Pair<i32,core:prelude/string.wado/String>^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(value, buf);
+    __match_7 = "core:serde/serde_generic_serialize.wado/Wrapper<i32>^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
         __qm_e = ref.as_non_null(__match_7);
@@ -1137,7 +1137,7 @@ fn "core:json/core/json/to_string<serde_generic_serialize.wado/Pair<i32,core:pre
     return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = buf.repr; let __array_clone_len_3: i32; __array_clone_len_3 = buf.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: buf.used }, ref.null none;
 }
 
-fn "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$spec0$scalar"(trailing_char) {
+fn "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$spec0"(trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
@@ -1158,13 +1158,13 @@ fn "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$sp
     return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = buf.repr; let __array_clone_len_3: i32; __array_clone_len_3 = buf.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: buf.used }, ref.null none;
 }
 
-fn "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<i32>>$spec0$scalar"(trailing_char) {
+fn "core:json/core/json/to_string<serde_generic_serialize.wado/Pair<i32,core:prelude/string.wado/String>>$spec0"(value, trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    __match_7 = "core:serde/serde_generic_serialize.wado/Wrapper<i32>^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(buf);
+    __match_7 = "core:serde/serde_generic_serialize.wado/Pair<i32,core:prelude/string.wado/String>^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
         __qm_e = ref.as_non_null(__match_7);

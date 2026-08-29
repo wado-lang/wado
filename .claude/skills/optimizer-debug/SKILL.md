@@ -107,6 +107,22 @@ The cost when the target is disabled is one `OnceLock` get + a linear
 scan of the configured target list — fine for any rate that makes
 sense in a compiler pass.
 
+## Workflow for a fixed-point loop that never converges
+
+`--log-level debug` ends the NIR loop with either "converged after N
+iteration(s)" or "hit the N-iteration cap without converging", the latter
+naming the passes still reporting changes. From there:
+
+1. `WADO_TRACE=opt_loop` lists, per iteration, every pass that reported a
+   change. The tail of that list is the culprit set.
+2. `WADO_TRACE=const_fold` names each function `const_fold` changed, so a
+   pass that keeps reporting a change points at the body it keeps rewriting.
+3. `WADO_DUMP_PASS_BEFORE`/`_AFTER=<pass>` around a late round, diffed, says
+   which of three it is: nothing rewritten at all (the pass reports a change it
+   did not make), a rewrite a later pass deletes (two passes fighting), or real
+   work that tapers (the pass takes one step per round where its own fixed
+   point is one sweep away).
+
 ## Workflow for a "WIR pipeline generated invalid core Wasm module" ICE
 
 The codegen-time validator catches type mismatches the optimizer

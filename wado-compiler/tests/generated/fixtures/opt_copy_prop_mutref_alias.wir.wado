@@ -165,7 +165,7 @@ global global:core:prelude/traits.wado::__const_obj_26: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_56: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_57: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 105, 103), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_58: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 };
-global global:core:prelude/primitive.wado::__const_obj_98: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::__const_obj_91: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_copy_prop_mutref_alias.wado/make"(v) {
     return struct.new "opt_copy_prop_mutref_alias.wado//Big" { a: v, b: v, c: v, d: v, e: v, f: v, g: v, h: v, i: v, j: v, k: v, l: v, m: v, n: v, o: v, p: v };
@@ -603,20 +603,20 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<o
     let s_389: ref "core:prelude/string.wado//String";
     let self_398: ref "core:prelude/string.wado//String";
     let self_400: ref "core:prelude/string.wado//String";
-    let new_used_426: i32;
-    let start_427: i32;
+    let new_used: i32;
+    let start: i32;
     s_24 = global:core:prelude/traits.wado::__const_obj_57;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_24);
     self_27 = f.buf;
-    new_used_426 = self_27.used + 2;
-    if @unlikely(new_used_426 > builtin::array_len(self_27.repr)) {
+    new_used = self_27.used + 2;
+    if @unlikely(new_used > builtin::array_len(self_27.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_27, new_used_426);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_27, new_used);
     }
-    start_427 = self_27.used;
-    self_27.used = new_used_426;
-    builtin::array_set_u8(self_27.repr, start_427, 32);
-    builtin::array_set_u8(self_27.repr, start_427 + 1, 123);
+    start = self_27.used;
+    self_27.used = new_used;
+    builtin::array_set_u8(self_27.repr, start, 32);
+    builtin::array_set_u8(self_27.repr, start + 1, 123);
     f.indent = f.indent + 1;
     self_30 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(self_30, 10);
@@ -1469,7 +1469,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         };
         break __inline_count_digits_i64_0: n;
     };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_98, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_91, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, abs_val, digit_count);
 }
 

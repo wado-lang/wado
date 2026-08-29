@@ -16,6 +16,7 @@ the hot function → keep or revert (§5 says which evidence decides).
 
 ```sh
 wado run --profile guest,profile.json,1 prog.wado   # interval 1 short runs, 0 exhaustive
+wado test --profile guest,profile.json,1 file.wado  # same, over one file's test blocks
 node .claude/skills/wado-performance/scripts/analyze_guest_profile.ts profile.json [--top N]
 ```
 

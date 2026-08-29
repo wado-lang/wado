@@ -71,11 +71,14 @@ pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut Functio
     if clones.is_empty() {
         return false;
     }
-    rewrite_call_sites(project, &candidates, &clones, &mut touched);
+    // A clone reused rather than minted, with every call site already on it, is
+    // a run that changed nothing and must not hold the fixpoint open.
+    let rewrote_global = rewrite_call_sites(project, &candidates, &clones, &mut touched);
+    let changed = rewrote_global || !touched.is_empty();
     for idx in touched {
         gate.mark_changed(FuncId::new(idx));
     }
-    true
+    changed
 }
 
 /// Intern each candidate's scalar parameter type, now that the fixpoint has
@@ -1103,12 +1106,14 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) 
 // Phase 3b: call-site rewrite (arena)
 // -----------------------------------------------------------------------
 
+/// Retarget every call at a scalarized position to the clone. Callers land in
+/// `touched`; the return reports the globals, which have no slot there.
 fn rewrite_call_sites(
     project: &mut NirPackage,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
     clones: &IndexMap<FnKey, FnKey>,
     touched: &mut IndexSet<usize>,
-) {
+) -> bool {
     let mut sroa_positions: IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)> =
         IndexMap::default();
     for ((key, pi), info) in candidates {
@@ -1148,11 +1153,12 @@ fn rewrite_call_sites(
         }
     }
     let empty = IndexMap::default();
+    let mut rewrote_global = false;
     for global in &mut project.globals {
         let body = global.init.slot_expr_mut().body_mut();
         let root = body.root;
         let type_table = type_table_rc.borrow();
-        rewrite_calls_node(
+        rewrote_global |= rewrite_calls_node(
             body,
             NodeRef::Block(root),
             &sroa_positions,
@@ -1160,6 +1166,7 @@ fn rewrite_call_sites(
             &type_table,
         );
     }
+    rewrote_global
 }
 
 /// Post-order: rewrite children first, then the call at this node.

@@ -2782,9 +2782,8 @@ Used by the compiler to lower `u128 as f32` casts.
 
 #### `pub fn div_rem(&self, divisor: &u128) -> [u128, u128]`
 
-Divide self by divisor, returning (quotient, remainder)
-Uses binary long division algorithm (shift-subtract)
-Panics if divisor is zero
+Divide self by divisor, returning (quotient, remainder). One native
+division when both fit in 64 bits, binary long division otherwise.
 
 #### `pub fn get_bit(&self, i: i32) -> bool`
 
