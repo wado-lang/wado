@@ -163,17 +163,17 @@ fn collect_and_validate(
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
+        let func = project.functions[fid.index()].borrow();
+        let Some(key) = func.id else { continue };
         // This pass's own output. A clone is already scalarized in every
         // position found for it, and unwrapping it again chains `$scalar$scalar`
         // names whose depth depends on how many fixpoint iterations ran.
-        if project.sroa_param_clones.contains(&fid) {
+        if project.sroa_param_clones.contains(&key) {
             continue;
         }
-        let func = project.functions[fid.index()].borrow();
         if !is_eligible(&func) {
             continue;
         }
-        let Some(key) = func.id else { continue };
         let is_trait_method = func.is_trait_method();
         for (pi, param) in func.params.iter().enumerate() {
             // A trait method's `self` stays put: its shape is the vtable slot's.
@@ -778,7 +778,7 @@ fn check_expr(
             args.iter()
                 .enumerate()
                 .fold(FieldUse::Unresolved, |acc, (i, &a)| {
-                    acc.meet(check_call_arg(body, key, i, a, idx, candidates))
+                    acc.meet(check_call_arg(body, key, i, &args, a, idx, candidates))
                 })
         }
         ExprKind::Assign { target, value } => {
@@ -794,6 +794,13 @@ fn check_expr(
             body.for_each_child(NodeRef::Expr(id), |c| {
                 use_ = use_.meet(check_node(body, c, idx, candidates));
             });
+            // `for_each_child` has no node to hand back for a promoted operand,
+            // yet a read of the parameter inside one is still a use.
+            body.for_each_operand(NodeRef::Expr(id), |op| {
+                if op.as_expr().is_none() {
+                    use_ = use_.meet(check_operand(body, op, idx, candidates));
+                }
+            });
             use_
         }
     }
@@ -803,11 +810,15 @@ fn check_call_arg(
     body: &Body,
     callee: FnKey,
     pos: usize,
+    args: &[Operand],
     arg: Operand,
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> FieldUse {
     if is_local_operand(body, arg, idx) {
+        if forwarding_traps_call(body, callee, pos, args, candidates) {
+            return FieldUse::Invalid;
+        }
         // Passed on whole: this use reads whatever the callee's position reads,
         // which the fixpoint may not have settled yet.
         return match candidates.get(&(callee, pos)) {
@@ -821,6 +832,26 @@ fn check_call_arg(
         return FieldUse::Unresolved;
     };
     check_expr(body, arg, idx, candidates)
+}
+
+/// Whether scalarizing this parameter would strand the call: a sibling position
+/// needs a projection, and an impure argument after it blocks the reorder
+/// [`plan_call_site`] would need. The call could then go nowhere — the clone
+/// takes the wrapper this argument no longer holds, the original the field.
+fn forwarding_traps_call(
+    body: &Body,
+    callee: FnKey,
+    pos: usize,
+    args: &[Operand],
+    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+) -> bool {
+    let Some(first) = (0..args.len()).find(|p| *p != pos && candidates.contains_key(&(callee, *p)))
+    else {
+        return false;
+    };
+    !args[first + 1..]
+        .iter()
+        .all(|&op| is_pure_operand(body, op))
 }
 
 /// [`check_expr`] for an operand. Reaching the candidate local here means it was
@@ -939,7 +970,7 @@ fn mint_scalarized_clones(
         minted.push(Rc::new(RefCell::new(clone)));
     }
     for f in minted {
-        let id = FuncId::new(project.functions.len());
+        let id = f.borrow().id.expect("a minted clone is stamped with an id");
         touched.insert(project.functions.len());
         project.sroa_param_clones.insert(id);
         project.functions.push(f);
@@ -1387,15 +1418,7 @@ fn rewrite_arg_operand(
         return op;
     }
     let Some(arg) = op.as_expr() else {
-        return Operand::Expr(body.exprs.push(ExprNode {
-            kind: ExprKind::FieldAccess {
-                expr: op,
-                field_index: info.field_index,
-                field_name: info.field_name.clone(),
-            },
-            type_id: info.inner_type_id,
-            span,
-        }));
+        return Operand::Expr(project_field(body, op, info, span));
     };
     rewrite_arg(body, arg, info, scalar_param_struct, type_table);
     op
@@ -1452,34 +1475,38 @@ fn rewrite_arg(
         return;
     }
 
-    // Case 3: general — extract the field via FieldAccess, re-borrowed when the
-    // callee writes through it. The `&mut` peeled above was the whole struct's;
-    // this one is the field's.
+    // Case 3: general — hand over the projection. The `&mut` peeled above was
+    // the whole struct's; the one `project_field` adds is the field's.
     let moved = body.take_expr(arg);
     let orig = body.exprs.push(moved);
     let span = body.exprs[arg].span;
-    let field = ExprNode {
+    let projected = project_field(body, orig.into(), info, span);
+    become_expr(body, arg, projected);
+}
+
+/// The field a call site hands over in place of the wrapper: `source.f`,
+/// re-borrowed when the scalar parameter takes it by reference.
+fn project_field(body: &mut Body, source: Operand, info: &SroaInfo, span: Span) -> ExprId {
+    let field = body.exprs.push(ExprNode {
         kind: ExprKind::FieldAccess {
-            expr: orig.into(),
+            expr: source,
             field_index: info.field_index,
             field_name: info.field_name.clone(),
         },
         type_id: info.inner_type_id,
         span,
+    });
+    let Some(op) = info.form.borrow_op() else {
+        return field;
     };
-    body.exprs[arg] = field;
-    if let Some(op) = info.form.borrow_op() {
-        let moved_field = body.take_expr(arg);
-        let inner = body.exprs.push(moved_field);
-        body.exprs[arg] = ExprNode {
-            kind: ExprKind::Unary {
-                op,
-                expr: inner.into(),
-            },
-            type_id: info.scalar_type_id,
-            span,
-        };
-    }
+    body.exprs.push(ExprNode {
+        kind: ExprKind::Unary {
+            op,
+            expr: field.into(),
+        },
+        type_id: info.scalar_type_id,
+        span,
+    })
 }
 
 /// Whether dropping this field initializer with its literal is unobservable.
