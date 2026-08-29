@@ -281,7 +281,7 @@ Defaults: any single-grammar parser descriptor whose `[output]` would
 auto-skip from Stage B becomes a Stage B′ candidate automatically,
 unless it sits in `[stage_b_oracle_skip]`. Composite descriptors
 (slave grammars) remain out of scope until the importer learns to
-resolve them (see "Descriptor importer — infrastructure gaps" in
+resolve them (see "Composite (slave-grammar) descriptors" in
 [`TODO.md`](./TODO.md)). Lexer descriptors stay on Stage A token-
 equivalence — there is no parse tree to compare.
 

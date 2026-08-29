@@ -27,12 +27,12 @@ consumer and its proof, not its purpose.
 [Kiln](./wep-2026-04-12-kiln.md) already provides most of the plumbing:
 sandboxed, deterministic, content-addressed compile-time components invoked by
 the compiler and cached by content. But Kiln is deliberately narrowed to
-"IDL → Wado source", and data provisioning differs on all three axes that
-narrowing fixes:
+"a file named at a `use` site → Wado source", and data provisioning differs on
+all three axes that narrowing fixes:
 
 - The output is a binary asset wired into a prebuilt component, not `.wado`
   source that the frontend then parses.
-- The trigger is which exported symbols a program actually reaches, not a schema
+- The trigger is which exported symbols a program actually reaches, not an input
   file named at a `use` site.
 - The invocation is once per (module, program) after reachability is known, not
   once per declaration site.
