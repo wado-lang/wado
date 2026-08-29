@@ -200,10 +200,9 @@ fn synthesize_inspect_for_type(T, expr, f_ref) -> Vec<TirStmt>:
 
         Closure { params, return_type } →
             // Dispatched via the canonical closure vtable (see "Closure Inspect via
-            // Runtime Dispatch" below). The per-literal __Closure_N^Inspect /
-            // __Closure_N^InspectAlt impls write the signature / source string.
-            self.vtable.inspect    (env, f) // {x:?}
-            self.vtable.inspect_alt(env, f) // {x:#?}
+            // Runtime Dispatch" below). The per-literal __Closure_N^Inspect impl
+            // writes the signature, or the source when `f.alternate` is set.
+            self.vtable.inspect(env, f) // {x:?} and {x:#?}
 ```
 
 #### Elaborator Changes
@@ -230,7 +229,7 @@ The `FunctionRef::Builtin("inspect")` variant acts as the marker. The `synthesiz
 
 #### Closure Inspect via Runtime Dispatch
 
-`Inspect` / `InspectAlt` on a closure value must produce per-literal output (for `:#?`, the closure's own source) regardless of how the value reaches the call site — directly through a local, or indirectly through a function parameter, struct field, or global. Indirect dispatch rules out a pure compile-time substitution: the per-literal information must travel with the value.
+`Inspect` on a closure value must produce per-literal output (for `:#?`, the closure's own source) regardless of how the value reaches the call site — directly through a local, or indirectly through a function parameter, struct field, or global. Indirect dispatch rules out a pure compile-time substitution: the per-literal information must travel with the value.
 
 Wado closures lower to two complementary representations (see WEP: Closure Implementation):
 
@@ -242,13 +241,11 @@ The canonical struct carries the runtime vtable for inspectable signatures. To m
 ```wat
 (type $canonical_inspectable_base (struct
   (field $env         (ref null struct))
-  (field $inspect     (ref $canonical_callback_fn))
-  (field $inspect_alt (ref $canonical_callback_fn))))
+  (field $inspect     (ref $canonical_callback_fn))))
 
 (type $CanonicalClosure_K (sub $canonical_inspectable_base (struct
   (field $env         (ref null struct))
   (field $inspect     (ref $canonical_callback_fn))
-  (field $inspect_alt (ref $canonical_callback_fn))
   (field $func        (ref $canonical_fn_K)))))
 ```
 
@@ -259,29 +256,28 @@ Per-literal artifacts (synthesised at lower time):
 1. `__Closure_N` struct (existing) — holds captures.
 2. `__call` method (existing) — closure body.
 3. `__Closure_N^Inspect::inspect(&self, &mut Formatter)` — writes the signature, e.g. `|i32, i32| -> i32`.
-4. `__Closure_N^InspectAlt::inspect_alt(&self, &mut Formatter)` — writes the TIR-unparsed source, e.g. `|x: i32| (x + 1)` for non-capturing closures or `|x: i32| (x + n)` for capturing closures (captured bindings appear as free variables in the body; their values may be rendered alongside if a future inspect mode supports it).
+   Under `f.alternate` the same impl writes the TIR-unparsed source instead, e.g. `|x: i32| (x + 1)` for non-capturing closures or `|x: i32| (x + n)` for capturing ones (captured bindings appear as free variables in the body; their values may be rendered alongside if a future inspect mode supports it).
 
 Per-literal canonical-path wrappers (registered in WIR build for inspectable signatures only):
 
 1. `__closure_wrapper_N` — casts env, calls `__call`.
 2. `__closure_inspect_wrapper_N` — casts env, calls `__Closure_N^Inspect::inspect`.
-3. `__closure_inspect_alt_wrapper_N` — casts env, calls `__Closure_N^InspectAlt::inspect_alt`.
 
 Dispatch stubs (one pair per inspectable `(N, Ret)`):
 
-- `fn(..)^Inspect::inspect(&self, &mut Formatter)`: cast `self` to `$canonical_inspectable_base`, load `inspect`, `call_ref` with `(env, f)`. Same shape for `InspectAlt`.
+- `fn(..)^Inspect::inspect(&self, &mut Formatter)`: cast `self` to `$canonical_inspectable_base`, load `inspect`, `call_ref` with `(env, f)`.
 - The stub is emitted as `FunctionKind::FnCanonicalDispatch` with a bodyless TIR placeholder; WIR build installs the instructions directly. Bodyless functions bypass the inliner and other TIR-body walkers, so no `inline(never)` workaround is needed.
 
-The specialised path takes a redirect at lowering: `fn(..)^Inspect[Alt]` calls on a known-local closure receiver rewrite to direct calls on `__Closure_N^Inspect[Alt]`. The dispatch stub and canonical vtable are bypassed entirely; standard DCE then removes the per-literal impls when no inspect call site survives.
+The specialised path takes a redirect at lowering: `fn(..)^Inspect` calls on a known-local closure receiver rewrite to direct calls on `__Closure_N^Inspect`. The dispatch stub and canonical vtable are bypassed entirely; standard DCE then removes the per-literal impls when no inspect call site survives.
 
 #### Zero Overhead When Unused
 
 Two whole-program gates keep programs that don't inspect closures from paying for the runtime-dispatch machinery:
 
-1. Schema gate (per `(N, Ret)`): only call shapes with a reachable `fn(..)^Inspect` or `^InspectAlt` dispatch stub get the inspectable canonical layout. Other signatures use the slim `(struct env func)` shape with no shared supertype, no inspect/inspect\_alt fields, and no per-literal wrappers.
-2. Per-functor gate (per `(N, Ret)`, per trait method): a pre-DCE scan classifies each `(arity, return_type)` as "inspected", "inspect-alt-ed", or both. The TIR DCE roots `__Closure_N^Inspect` from `ClosureToCanonical` only when the signature is "inspected", and `^InspectAlt` only when it is "inspect-alt-ed". A program that uses only `:?` drops every `__Closure_N^InspectAlt` impl and its per-literal source-string constant; the symmetric case applies to a `:#?`-only program.
+1. Schema gate (per `(N, Ret)`): only call shapes with a reachable `fn(..)^Inspect` dispatch stub get the inspectable canonical layout. Other signatures use the slim `(struct env func)` shape with no shared supertype, no inspect field, and no per-literal wrappers.
+2. Per-functor gate (per `(N, Ret)`): a pre-DCE scan collects the `(arity, return_type)` signatures an `Inspect` call actually reaches. The TIR DCE roots `__Closure_N^Inspect` from `ClosureToCanonical` only for those, so a program that never prints a closure of that shape drops the impl and its per-literal strings.
 
-The schema gate is a lowering decision rather than a DCE decision — `ref.func` initialisers baked into the canonical struct's `inspect` / `inspect_alt` fields would otherwise keep the wrappers reachable and defeat post-emission DCE.
+The schema gate is a lowering decision rather than a DCE decision — `ref.func` initialisers baked into the canonical struct's `inspect` field would otherwise keep the wrappers reachable and defeat post-emission DCE.
 
 #### Bare Function References
 
@@ -314,8 +310,8 @@ A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N` wh
    - **Mitigation**: The synthesis is mechanical and type-driven, similar to CM binding synthesis
 3. **String escaping**: Inspect of strings requires escape logic (quotes, backslashes, newlines)
    - **Mitigation**: Implement as a stdlib helper `internal::write_escaped_string(&String, &mut Formatter)`
-4. **Closure ABI carries vtable slots when inspectable**: For each `(N, Ret)` whose `Fn^Inspect` / `Fn^InspectAlt` is referenced anywhere in the program, the canonical closure struct grows from the slim `{ env, func }` to the inspectable `{ env, inspect, inspect_alt, func }` (env-and-vtable prefix shared with the `$canonical_inspectable_base` supertype, typed `func` slot last), costing two extra refs per canonical closure value. Each affected literal also emits two small wrapper functions and one source-string constant.
-   - **Mitigation**: A whole-program usage scan keeps the slim schema for `(N, Ret)` signatures whose `Fn^Inspect` / `Fn^InspectAlt` is unreachable, so production builds that don't print closures pay nothing.
+4. **Closure ABI carries a vtable slot when inspectable**: For each `(N, Ret)` whose `Fn^Inspect` is referenced anywhere in the program, the canonical closure struct grows from the slim `{ env, func }` to the inspectable `{ env, inspect, func }` (env-and-vtable prefix shared with the `$canonical_inspectable_base` supertype, typed `func` slot last), costing one extra ref per canonical closure value. Each affected literal also emits one small wrapper function and its signature / source strings.
+   - **Mitigation**: A whole-program usage scan keeps the slim schema for `(N, Ret)` signatures whose `Fn^Inspect` is unreachable, so production builds that don't print closures pay nothing.
 
 ### Future Extensions
 
@@ -323,7 +319,7 @@ A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N` wh
 
 ### Implemented Extensions
 
-1. **Pretty-print (`${:#?}`)**: Indented multi-line output via `InspectAlt` trait and `Formatter` indent tracking. Uses `open_brace`/`close_brace`/`write_newline_indent` on the `Formatter`. Example:
+1. **Pretty-print (`${:#?}`)**: Indented multi-line output — the same `Inspect` under `Formatter.alternate`, with indent tracking. Uses `open_brace`/`close_brace`/`write_newline_indent` on the `Formatter`. Example:
 
 ```wado
 let arr: List<i32> = [1, 2, 3];
@@ -335,7 +331,7 @@ println(`${arr:#?}`);
 // ]
 ```
 
-2. **Custom inspect**: Types can override inspect behavior by implementing `Inspect` and/or `InspectAlt` traits. `TreeMap`, `TreeSet`, and `Value` (json\_value) provide custom implementations for cleaner output.
+2. **Custom inspect**: Types can override inspect behavior by implementing `Inspect`, branching on `f.alternate` where the two forms differ. `TreeMap`, `TreeSet`, and `Value` (json\_value) provide custom implementations for cleaner output.
 
 ## Implementation Status
 
@@ -369,10 +365,10 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | Closure (`#` alternate)    | Done    | TIR unparsed source; works for indirect calls (param/field/global)                                                                                                  |
 | Display fallback           | Removed | `${expr}` no longer falls back to inspect (2026-07-15); a missing `Display` is a compile error. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) |
 | Nested structs/arrays      | Done    | Recursive inspect for composite fields                                                                                                                              |
-| `TreeMap<K, V>`            | Done    | Custom `Inspect`/`InspectAlt`: `{key: value, ...}` format                                                                                                           |
-| `TreeSet<T>`               | Done    | Custom `Inspect`/`InspectAlt`: `{elem, ...}` format                                                                                                                 |
-| `Value` (json\_value)      | Done    | Custom `Inspect`/`InspectAlt`: JSON-like format                                                                                                                     |
-| Pretty-print (`:#?`)       | Done    | `InspectAlt` trait with `Formatter` indent tracking                                                                                                                 |
+| `TreeMap<K, V>`            | Done    | Custom `Inspect`: `{key: value, ...}` format                                                                                                                        |
+| `TreeSet<T>`               | Done    | Custom `Inspect`: `{elem, ...}` format                                                                                                                              |
+| `Value` (json\_value)      | Done    | Custom `Inspect`: JSON-like format                                                                                                                                  |
+| Pretty-print (`:#?`)       | Done    | `Formatter.alternate` with indent tracking                                                                                                                          |
 | `never` (`!`)              | Done    | `impl Inspect for !` with an unreachable body — uninhabited, so no value ever reaches it; makes `Inspect` total (e.g. `Result<T, !>::unwrap`)                       |
 | `List<List<T>>`            | Done    | Recursive inspect (nested-array codegen bug resolved)                                                                                                               |
 

@@ -8,7 +8,7 @@ field blocks `Eq` / `Ord` / serde, a field without a default blocks `Default`
 — so a `T: Trait` obligation there is real, and gating avoids code-size waste
 on types that never use the trait.
 
-The _debug_ format traits (`Inspect` / `InspectAlt`) are _total_ `on_bound`:
+The _debug_ format trait `Inspect` is _total_ `on_bound`:
 every type is structurally debug-formattable, so a `T: Inspect` obligation
 always holds (for a type parameter or any concrete type), and `impl Inspect
 for T;` is a conformance check that always validates. Because they are total
@@ -17,7 +17,7 @@ stays eager (a body for every type kind) — gating it would demand a discovery
 mechanism for `${v:?}` over an unbounded type param (whose concrete reference
 only materializes at monomorphize) with no offsetting code-size benefit.
 
-The _display_ traits (`Display` / `DisplayAlt`) are **not** total (revised
+`Display` is **not** total (revised
 2026-07-15). `Display` is never auto-derived for a struct, variant, or generic
 container — a type has a human-facing string representation only if someone
 wrote `impl Display`, so `${x}` on such a type is a compile error (use `${x:?}`
@@ -26,8 +26,8 @@ are types with an _unambiguous canonical string form_, which auto-derive it:
 a plain `enum` displays its **bare case name** (`Red`, distinct from `Inspect`'s
 type-qualified `Color::Red`), and a newtype **inherits its base type's
 `Display`** transparently (a `Meters = f64` renders `3.14`, no `as Name` tag).
-`DisplayAlt` (`${x:#}`) tracks `Display`: it auto-derives a fallback delegating
-to `Display` only where a `Display` impl exists. A policy declaration for
+`${x:#}` runs that same `Display` with `Formatter.alternate` set — no separate
+trait, so it holds exactly where `Display` does. A policy declaration for
 user-defined traits is open. See Open Questions.
 
 ## Context
@@ -35,7 +35,7 @@ user-defined traits is open. See Open Questions.
 Wado derives type-directed traits under two inconsistent policies — the rule
 for _when_ a derived impl exists for a type `T`:
 
-- Automatic: `Inspect` / `InspectAlt` / `Eq` / `Ord` / `Default` synthesize
+- Automatic: `Inspect` / `Eq` / `Ord` / `Default` synthesize
   unconditionally for every eligible type, whether or not the program uses
   them.
 - Explicit: `Serialize` / `Deserialize` exist only if the user writes the
@@ -71,18 +71,17 @@ instantiated for a given `T`.
 | Policy              | A `T: Trait` obligation is satisfied by …                                   | Generation                                        | Examples                                           |
 | ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
 | `on_bound` (demand) | structural synthesis, on demand when a reference requires it                | on demand                                         | `Eq`, `Ord`, `Default`, `Serialize`, `Deserialize` |
-| `on_bound` (total)  | always — the trait is total over all types                                  | eager                                             | `Inspect`, `InspectAlt`                            |
-| `display`           | a real `impl Display`, a plain `enum` (bare case name), or a `Display` base | enum: eager body; newtype: inherited at call site | `Display`, `DisplayAlt`                            |
+| `on_bound` (total)  | always — the trait is total over all types                                  | eager                                             | `Inspect`                                          |
+| `display`           | a real `impl Display`, a plain `enum` (bare case name), or a `Display` base | enum: eager body; newtype: inherited at call site | `Display`                                          |
 | `explicit`          | only a written `impl Trait for T;` (or full manual impl)                    | on demand                                         | default for user traits                            |
 
 There is no longer an `automatic` policy: its members split by totality.
 `Default` joined the demand `on_bound` traits (`Eq` / `Ord` / serde) — it is
 not total (a field without a default blocks it), so gating its generation
 saves code on structs never defaulted. The debug format traits stayed eager
-but gained `on_bound` obligation semantics (see below). `DisplayAlt`
-synthesizes a fallback that delegates to `Display`.
+but gained `on_bound` obligation semantics (see below).
 
-The debug format traits `Inspect` / `InspectAlt` are _total_: every type is
+The debug format trait `Inspect` is _total_: every type is
 structurally debug-formattable (an `Inspect` body is generated for every type
 kind — struct, enum, variant, flags, newtype, tuple, closure, opaque
 resource). Totality is a type-system fact — a `T: Inspect` obligation always
@@ -94,7 +93,7 @@ would need a discovery mechanism for `${v:?}` over an unbounded type param —
 whose concrete `T^Inspect` reference only materializes at monomorphize, after
 synthesis — for no code-size gain.
 
-`Display` / `DisplayAlt` are the `display` policy — deliberately **not** total
+`Display` is the `display` policy — deliberately **not** total
 (revised 2026-07-15). A human-facing string representation is not something the
 compiler can invent structurally the way it can a debug dump: for a struct
 there is no canonical field layout, delimiter, or ordering to pick, so `Display`
@@ -110,11 +109,11 @@ compiler derives it eagerly:
   f64` renders `3.14`, no `as Name` tag). This is call-site inheritance, not a
   synthesized body: the format call peels the newtype to its base
   (`peel_transparent_newtype`), covering every transparent format trait. Only
-  `Inspect` / `InspectAlt` are overridden per newtype (for the `as Name` tag).
+  `Inspect` is overridden per newtype (for the `as Name` tag).
 
-`DisplayAlt` derives a fallback delegating to `Display` only where a `Display`
-impl exists (manual, enum-synthesized, or newtype-inherited), so the alternate
-display of a `Display`-less type is likewise a compile error. The demand
+`${x:#}` needs the same `Display` (manual, enum-synthesized, or
+newtype-inherited), so the alternate display of a `Display`-less type is
+likewise a compile error. The demand
 `on_bound` traits are _not_ total (a `fn`-typed field, a field without a
 default, blocks them), so a `T: Trait` there is a real obligation and gating
 its generation removes genuine waste.
@@ -126,10 +125,9 @@ its generation removes genuine waste.
   `T` is ineligible (a bound is merely unsatisfied elsewhere). For the
   structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) that hard
   error fires when any field/case is ineligible (`Default` additionally
-  requires every field to carry a default expression). An `Inspect` /
-  `InspectAlt` / `DisplayAlt` marker always validates — every nominal type is
-  debug-formattable, and `DisplayAlt` falls back to whatever `Display` the type
-  has — so it serves as an intent/documentation annotation. A `Display` marker
+  requires every field to carry a default expression). An `Inspect` marker
+  always validates — every nominal type is debug-formattable — so it serves as
+  an intent/documentation annotation. A `Display` marker
   (`impl Display for T;`) is **rejected**: `Display` is not derivable for an
   arbitrary type, so a bare marker cannot conjure a body (write a real
   `impl Display { fn fmt … }`, or rely on the enum / newtype auto-derivation).
@@ -212,21 +210,20 @@ discovery gap.
 
 An explicit marker feeds the demand request set: it validates structurally at
 its own span (hard error if ineligible) and records the request like a bound.
-An `Inspect` / `InspectAlt` / `DisplayAlt` marker validates but records nothing
+An `Inspect` marker validates but records nothing
 meaningful (generation is already eager). This is scoped to compiler-synthesized
 bodies; a hand-written `impl Trait for T { … }` is ordinary source, type-checked
 because it exists and left to ordinary dead-code elimination.
 
 ### Policy assignment
 
-- `Inspect` / `InspectAlt` are total `on_bound`: a `T: Inspect` bound always
+- `Inspect` is total `on_bound`: a `T: Inspect` bound always
   holds, an `impl Inspect for T;` marker always validates, generation is eager.
-- `Display` / `DisplayAlt` are the `display` policy: not total. `Display` is
+- `Display` is the `display` policy: not total. It is
   auto-derived only for a plain `enum` (bare case name) or a newtype over a
   `Display` base (transparent inheritance); every other type needs a manual
   `impl Display`. `${x}` / `T: Display` on a non-`Display` type is a compile
-  error. `DisplayAlt` derives a `Display`-delegating fallback wherever `Display`
-  exists. A `Display` marker is rejected.
+  error. A `Display` marker is rejected.
 - `Default` moved from `automatic` to demand `on_bound`: a body is generated
   only for a `(type, Default)` pair some reference actually needs.
 - `Eq` / `Ord` / `Serialize` / `Deserialize` were already `on_bound`; no
@@ -258,7 +255,7 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
 - Removes compile-time and code-size waste on unused impls — `Eq` / `Ord` for
   types never compared, and now `Default` for types never defaulted (`Default`
   is not total, so its waste is real).
-- `T: Inspect` (and `InspectAlt`) bounds now hold for every type, which the old
+- `T: Inspect` bounds now hold for every type, which the old
   automatic policy rejected at bound-check for plain aggregates, and
   `impl Inspect for T;` markers are accepted.
 - `Display` regains meaning: `T: Display` now certifies a real string

@@ -22,7 +22,7 @@ type L = Local;
 test "newtype over a cross-module enum inherits its bare-name Display" {
     let c = DepColor::Green as C;
     assert `${c}` == "Green";
-    // `{c:#}` (DisplayAlt) inherits the enum's DisplayAlt (enums have one).
+    // `{c:#}` runs the inherited `Display` with the alternate flag set.
     assert `${c:#}` == "Green";
     // Inspect keeps the `as Name` tag; Display is transparent.
     assert `${c:?}` == "DepColor::Green as C";
@@ -31,8 +31,8 @@ test "newtype over a cross-module enum inherits its bare-name Display" {
 test "newtype chain inherits the base primitive Display" {
     let a = (3.14 as Meters) as A;
     assert `${a}` == "3.14";
-    // `{a:#}` would inherit `f64`'s (absent) DisplayAlt — a compile error, like
-    // `{3.14:#}` — so it is intentionally not asserted here.
+    // `{a:#}` runs `f64`'s inherited `Display`, which ignores the flag.
+    assert `${a:#}` == "3.14";
 }
 
 test "newtype over a same-module enum inherits Display" {

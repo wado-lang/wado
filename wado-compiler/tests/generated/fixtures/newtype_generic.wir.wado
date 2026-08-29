@@ -15,6 +15,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
+    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
@@ -210,7 +211,7 @@ fn "newtype_generic.wado/run"() with Stdout {
     start_80 = __local_3.used;
     __local_3.used = new_used_79;
     builtin::array_set_u8(__local_3.repr, start_80, 32);
-    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(3, __local_4_4);
     rx_95 = builtin::i32_wrap_i64(local.tee packed_94("wasi/stream-new"()));
     tx_96 = builtin::i32_wrap_i64(packed_94 >> 32_i64);
@@ -274,7 +275,7 @@ fn "newtype_generic.wado/run"() with Stdout {
     start_194 = __local_5_5.used;
     __local_5_5.used = new_used_193;
     builtin::array_set_u8(__local_5_5.repr, start_194, 32);
-    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 };
+    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_211(builtin::array_get_value<i32>(global:newtype_generic.wado::__const_obj_11.repr, 0)), __local_6);
     rx_214 = builtin::i32_wrap_i64(local.tee packed_213("wasi/stream-new"()));
     tx_215 = builtin::i32_wrap_i64(packed_213 >> 32_i64);
@@ -286,7 +287,7 @@ fn "newtype_generic.wado/run"() with Stdout {
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(arr2, 30);
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:newtype_generic.wado::__const_obj_2);
-    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
+    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(arr2.used, __local_8);
     rx_231 = builtin::i32_wrap_i64(local.tee packed_230("wasi/stream-new"()));
     tx_232 = builtin::i32_wrap_i64(packed_230 >> 32_i64);
@@ -342,7 +343,7 @@ fn "newtype_generic.wado/run"() with Stdout {
     start_317 = __local_9.used;
     __local_9.used = new_used_316;
     builtin::array_set_u8(__local_9.repr, start_317, 32);
-    __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
+    __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(2, __local_10);
     rx_332 = builtin::i32_wrap_i64(local.tee packed_331("wasi/stream-new"()));
     tx_333 = builtin::i32_wrap_i64(packed_331 >> 32_i64);
@@ -562,10 +563,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, prefix, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, alt_prefix, digit_count) {
     let sign: ref "core:prelude/string.wado//String";
-    let sign_len: i32;
-    let prefix_len: i32;
     let self_16: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
@@ -574,13 +573,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else {
     }
-    sign_len = sign.used;
-    prefix_len = prefix.used;
-    if sign_len > 0 {
+    if sign.used > 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
-    }
-    if prefix_len > 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
     }
     return self_16 = self.buf, new_used_18 = self_16.used + digit_count, if @unlikely(new_used_18 > builtin::array_len(self_16.repr)) {
         cold_path;

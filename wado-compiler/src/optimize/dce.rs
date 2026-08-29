@@ -26,7 +26,7 @@ type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 /// Effect usage: function ID -> set of (`interface_name`, `operation_name`) pairs
 type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 
-/// A pending `__Closure_N` `inspect/inspect_alt` edge collected during the call-graph
+/// A pending `__Closure_N` `inspect` edge collected during the call-graph
 /// walk. The edge is only added to the graph once the inspectable signature set
 /// (computed from the reachable-without-inspect-roots set) is known. Storing them
 /// out-of-band lets us build the call graph in a single AST walk instead of twice.
@@ -226,20 +226,15 @@ fn compute_function_reachability(
     let inspectable =
         collect_inspectable_signatures_from_reachable(project, descriptors, &reachable_v1);
     let items = project.type_table.borrow();
-    let inspect_traits = (
-        items
-            .compiler_items()
-            .trait_fq(crate::compiler_item::CompilerItem::Inspect),
-        items
-            .compiler_items()
-            .trait_fq(crate::compiler_item::CompilerItem::InspectAlt),
-    );
+    let inspect_trait = items
+        .compiler_items()
+        .trait_fq(crate::compiler_item::CompilerItem::Inspect);
     drop(items);
     apply_inspect_edges(
         &mut graph.call_graph,
         &graph.pending_inspects,
         &inspectable,
-        &inspect_traits,
+        &inspect_trait,
     );
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
@@ -727,7 +722,7 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
 /// Each entry collects every `__Closure_N` observed in that caller's body
 /// alongside its `(arity, return_type)` signature. After the
 /// inspectable-signature set is computed, `apply_inspect_edges` walks this
-/// map and adds the matching `inspect/inspect_alt` edges to the call graph.
+/// map and adds the matching `inspect` edges to the call graph.
 type PendingInspectsByCaller = IndexMap<FunctionId, Vec<PendingInspectEdge>>;
 
 /// `FunctionId` → position in `project.functions`. `function_id_for` is
@@ -837,7 +832,7 @@ fn apply_inspect_edges(
     call_graph: &mut CallGraph,
     pending: &PendingInspectsByCaller,
     sigs: &InspectableSignatures,
-    (inspect, inspect_alt): &(crate::name::FqTraitName, crate::name::FqTraitName),
+    inspect: &crate::name::FqTraitName,
 ) {
     for (caller, edges) in pending {
         let Some(callees) = call_graph.get_mut(caller) else {
@@ -852,27 +847,16 @@ fn apply_inspect_edges(
                     "inspect".to_string(),
                 )));
             }
-            if sigs.inspect_alt.contains(&edge.key) {
-                callees.insert(FunctionId::Method(MethodName::new(
-                    edge.closure_module.clone(),
-                    edge.struct_name.clone(),
-                    Some(inspect_alt.clone()),
-                    "inspect_alt".to_string(),
-                )));
-            }
         }
     }
 }
 
-/// Every `(arity, return_type)` signature receiving a `fn(..)^Inspect` or
-/// `^InspectAlt` call. Gates the per-functor root marking from
-/// `ClosureToCanonical`: with no real caller those impls cannot be invoked
-/// indirectly. The two methods are tracked separately, so formatting closures
-/// only with `:?` keeps no `__Closure_N^InspectAlt` impl alive.
+/// Every `(arity, return_type)` signature receiving a `fn(..)^Inspect` call.
+/// Gates the per-functor root marking from `ClosureToCanonical`: with no real
+/// caller those impls cannot be invoked indirectly.
 #[derive(Default)]
 struct InspectableSignatures {
     inspect: IndexSet<(usize, TypeId)>,
-    inspect_alt: IndexSet<(usize, TypeId)>,
 }
 
 /// Compute the inspectable `(arity, return_type)` set from the bodies
@@ -957,14 +941,8 @@ fn scan_inspect_signatures_block(
             } = type_table.get(recv_type)
             {
                 let key = (params.len(), *return_type);
-                match trait_name {
-                    "Inspect" => {
-                        sigs.inspect.insert(key);
-                    }
-                    "InspectAlt" => {
-                        sigs.inspect_alt.insert(key);
-                    }
-                    _ => {}
+                if trait_name == "Inspect" {
+                    sigs.inspect.insert(key);
                 }
             }
         }
@@ -1394,10 +1372,10 @@ impl<'a> DceWalker<'a> {
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             )));
 
-        // Per-functor `__Closure_N^Inspect` / `^InspectAlt` impls only
+        // Per-functor `__Closure_N^Inspect` impls only
         // need to stay alive when their matching `fn(..)^Inspect[Alt]`
         // dispatch stub is reachable — tracked independently per trait so a
-        // program using only `:?` doesn't keep `^InspectAlt` (and its
+        // program that never prints a closure of that shape doesn't keep it (nor its
         // per-literal source-string constant) alive. The gating set isn't
         // known yet (it's derived from the first reachable-set computation),
         // so record a pending edge here for `apply_inspect_edges` to

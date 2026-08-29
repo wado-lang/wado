@@ -15,9 +15,7 @@ use {
     Ord,
     Ordering,
     Display,
-    DisplayAlt,
     Inspect,
-    InspectAlt,
 } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
@@ -286,17 +284,7 @@ impl<T: Inspect> Display for Slice<T> {
     }
 }
 
-impl<T: InspectAlt> InspectAlt for Slice<T> {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(self.repr, self.start, self.end, f, true, f.resolved_seq_limit());
-    }
-}
 
-impl<T: InspectAlt> DisplayAlt for Slice<T> {
-    pub fn fmt_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(self.repr, self.start, self.end, f, false, f.precision);
-    }
-}
 
 impl<T> IntoIterator for Slice<T> {
     type Item = T;

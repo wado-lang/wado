@@ -19,6 +19,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
+    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
@@ -39,13 +40,11 @@ type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  
 struct canonical//CanonicalInspectableBase {  // TypeId(9)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    inspect_alt: ref "functype/$canonical_callback_fn",
 }
 
 struct canonical//CanonicalClosure_0 {  // TypeId(10)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    inspect_alt: ref "functype/$canonical_callback_fn",
     func: ref "functype/$canonical_closure_fn_0",
 }
 
@@ -89,25 +88,19 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(30)
 
-type "functype//global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/InspectAlt::inspect_alt" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(31)
+type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_0::__call" = fn(ref "global_closure_format.wado//__Closure_0", i32) -> i32;  // TypeId(31)
 
-type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_0::__call" = fn(ref "global_closure_format.wado//__Closure_0", i32) -> i32;  // TypeId(32)
+type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_0^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
-type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_0^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(33)
+type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_1::__call" = fn(i32) -> i32;  // TypeId(33)
 
-type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_0^core:prelude/traits.wado/InspectAlt::inspect_alt" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_1^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_1::__call" = fn(i32) -> i32;  // TypeId(35)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
-type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_1^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(36)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
 
-type "functype//global_closure_format.wado/global_closure_format.wado/__Closure_1^core:prelude/traits.wado/InspectAlt::inspect_alt" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(37)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -122,8 +115,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:global_closure_format.wado::ADD100: ref null struct = struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_closure_format.wado//__Closure_1" {  }, inspect: ref.func "closure/global_closure_format.wado/__closure_inspect_wrapper_1", inspect_alt: ref.func "closure/global_closure_format.wado/__closure_inspect_alt_wrapper_1", func: ref.func "closure/global_closure_format.wado/__closure_wrapper_1" };
-global global:global_closure_format.wado::ADD_N: ref null struct = struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_closure_format.wado//__Closure_0" { __capture_0: 42 }, inspect: ref.func "closure/global_closure_format.wado/__closure_inspect_wrapper_0", inspect_alt: ref.func "closure/global_closure_format.wado/__closure_inspect_alt_wrapper_0", func: ref.func "closure/global_closure_format.wado/__closure_wrapper_0" };
+global global:global_closure_format.wado::ADD100: ref null struct = struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_closure_format.wado//__Closure_1" {  }, inspect: ref.func "closure/global_closure_format.wado/__closure_inspect_wrapper_1", func: ref.func "closure/global_closure_format.wado/__closure_wrapper_1" };
+global global:global_closure_format.wado::ADD_N: ref null struct = struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_closure_format.wado//__Closure_0" { __capture_0: 42 }, inspect: ref.func "closure/global_closure_format.wado/__closure_inspect_wrapper_0", func: ref.func "closure/global_closure_format.wado/__closure_wrapper_0" };
 global mut global:global_closure_format.wado::__modules_initialized: bool = 0;
 
 fn "global_closure_format.wado/run"() with Stdout {
@@ -140,17 +133,17 @@ fn "global_closure_format.wado/run"() with Stdout {
     let rx_16: i32;
     let tx_17: i32;
     let handle_22: i32;
-    let packed_26: i64;
-    let rx_27: i32;
-    let tx_28: i32;
-    let handle_33: i32;
-    let packed_37: i64;
-    let rx_38: i32;
-    let tx_39: i32;
-    let handle_44: i32;
-    let packed_48: i64;
-    let rx_49: i32;
-    let tx_50: i32;
+    let packed_25: i64;
+    let rx_26: i32;
+    let tx_27: i32;
+    let handle_32: i32;
+    let packed_36: i64;
+    let rx_37: i32;
+    let tx_38: i32;
+    let handle_43: i32;
+    let packed_46: i64;
+    let rx_47: i32;
+    let tx_48: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:global_closure_format.wado::__modules_initialized);
         cold_path;
@@ -159,7 +152,7 @@ fn "global_closure_format.wado/run"() with Stdout {
         global:global_closure_format.wado::__modules_initialized = 1;
     };
     __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 };
+    __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 };
     "global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: global:global_closure_format.wado::ADD100 }, __local_1);
     rx_16 = builtin::i32_wrap_i64(local.tee packed_15("wasi/stream-new"()));
     tx_17 = builtin::i32_wrap_i64(packed_15 >> 32_i64);
@@ -167,29 +160,29 @@ fn "global_closure_format.wado/run"() with Stdout {
     "core:cli/write_to_stream"(tx_17, __local_0, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_11);
     __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
-    "global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/InspectAlt::inspect_alt"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: global:global_closure_format.wado::ADD100 }, __local_3);
-    rx_27 = builtin::i32_wrap_i64(local.tee packed_26("wasi/stream-new"()));
-    tx_28 = builtin::i32_wrap_i64(packed_26 >> 32_i64);
-    handle_22 = "global_closure_format.wado/__cm_binding__Stdout_write_via_stream"(rx_27);
-    "core:cli/write_to_stream"(tx_28, __local_2, 1);
+    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
+    "global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: global:global_closure_format.wado::ADD100 }, __local_3);
+    rx_26 = builtin::i32_wrap_i64(local.tee packed_25("wasi/stream-new"()));
+    tx_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
+    handle_22 = "global_closure_format.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
+    "core:cli/write_to_stream"(tx_27, __local_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_22);
     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
+    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
     "global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: global:global_closure_format.wado::ADD_N }, __local_5);
-    rx_38 = builtin::i32_wrap_i64(local.tee packed_37("wasi/stream-new"()));
-    tx_39 = builtin::i32_wrap_i64(packed_37 >> 32_i64);
-    handle_33 = "global_closure_format.wado/__cm_binding__Stdout_write_via_stream"(rx_38);
-    "core:cli/write_to_stream"(tx_39, __local_4_4, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_33);
+    rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
+    tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
+    handle_32 = "global_closure_format.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
+    "core:cli/write_to_stream"(tx_38, __local_4_4, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_32);
     __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-    "global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/InspectAlt::inspect_alt"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: global:global_closure_format.wado::ADD_N }, __local_7);
-    rx_49 = builtin::i32_wrap_i64(local.tee packed_48("wasi/stream-new"()));
-    tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
-    handle_44 = "global_closure_format.wado/__cm_binding__Stdout_write_via_stream"(rx_49);
-    "core:cli/write_to_stream"(tx_50, __local_6, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_44);
+    __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
+    "global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: global:global_closure_format.wado::ADD_N }, __local_7);
+    rx_47 = builtin::i32_wrap_i64(local.tee packed_46("wasi/stream-new"()));
+    tx_48 = builtin::i32_wrap_i64(packed_46 >> 32_i64);
+    handle_43 = "global_closure_format.wado/__cm_binding__Stdout_write_via_stream"(rx_47);
+    "core:cli/write_to_stream"(tx_48, __local_6, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_43);
 }
 
 fn "global_closure_format.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -341,26 +334,20 @@ fn "global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::in
     call_ref "functype/$canonical_callback_fn"(__typed_self.inspect, __typed_self.env, f);
 }
 
-fn "global_closure_format.wado/fn(i32)->i32^core:prelude/traits.wado/InspectAlt::inspect_alt"(self, f) {
-    let __typed_self: ref "canonical//CanonicalInspectableBase";
-    __typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"(__typed_self.inspect_alt, __typed_self.env, f);
-}
-
 fn "global_closure_format.wado/global_closure_format.wado/__Closure_0::__call"(self, z) {
     return z + self.__capture_0;
 }
 
 fn "global_closure_format.wado/global_closure_format.wado/__Closure_0^core:prelude/traits.wado/Inspect::inspect"(f) {
-    let s: ref "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s);
-}
-
-fn "global_closure_format.wado/global_closure_format.wado/__Closure_0^core:prelude/traits.wado/InspectAlt::inspect_alt"(f) {
-    let s: ref "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|z: i32| captures[n] (z + n)"), used: 28 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s);
+    let s_2: ref "core:prelude/string.wado//String";
+    let s_4: ref "core:prelude/string.wado//String";
+    if f.alternate {
+        s_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|z: i32| captures[n] (z + n)"), used: 28 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_2);
+    } else {
+        s_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_4);
+    }
 }
 
 fn "global_closure_format.wado/global_closure_format.wado/__Closure_1::__call"(z) {
@@ -368,15 +355,15 @@ fn "global_closure_format.wado/global_closure_format.wado/__Closure_1::__call"(z
 }
 
 fn "global_closure_format.wado/global_closure_format.wado/__Closure_1^core:prelude/traits.wado/Inspect::inspect"(f) {
-    let s: ref "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s);
-}
-
-fn "global_closure_format.wado/global_closure_format.wado/__Closure_1^core:prelude/traits.wado/InspectAlt::inspect_alt"(f) {
-    let s: ref "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|z: i32| (z + 100)"), used: 18 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s);
+    let s_2: ref "core:prelude/string.wado//String";
+    let s_4: ref "core:prelude/string.wado//String";
+    if f.alternate {
+        s_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|z: i32| (z + 100)"), used: 18 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_2);
+    } else {
+        s_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_4);
+    }
 }
 
 fn "closure/global_closure_format.wado/__closure_wrapper_0"(__env, __p0) {
@@ -391,12 +378,6 @@ fn "closure/global_closure_format.wado/__closure_inspect_wrapper_0"(__env, __for
     "global_closure_format.wado/global_closure_format.wado/__Closure_0^core:prelude/traits.wado/Inspect::inspect"(__typed_formatter);
 }
 
-fn "closure/global_closure_format.wado/__closure_inspect_alt_wrapper_0"(__env, __formatter) {
-    let __typed_formatter: ref "core:prelude/format.wado//Formatter";
-    __typed_formatter = ref.cast "core:prelude/format.wado//Formatter"(__formatter);
-    "global_closure_format.wado/global_closure_format.wado/__Closure_0^core:prelude/traits.wado/InspectAlt::inspect_alt"(__typed_formatter);
-}
-
 fn "closure/global_closure_format.wado/__closure_wrapper_1"(__env, __p0) {
     return "global_closure_format.wado/global_closure_format.wado/__Closure_1::__call"(__p0);
 }
@@ -405,12 +386,6 @@ fn "closure/global_closure_format.wado/__closure_inspect_wrapper_1"(__env, __for
     let __typed_formatter: ref "core:prelude/format.wado//Formatter";
     __typed_formatter = ref.cast "core:prelude/format.wado//Formatter"(__formatter);
     "global_closure_format.wado/global_closure_format.wado/__Closure_1^core:prelude/traits.wado/Inspect::inspect"(__typed_formatter);
-}
-
-fn "closure/global_closure_format.wado/__closure_inspect_alt_wrapper_1"(__env, __formatter) {
-    let __typed_formatter: ref "core:prelude/format.wado//Formatter";
-    __typed_formatter = ref.cast "core:prelude/format.wado//Formatter"(__formatter);
-    "global_closure_format.wado/global_closure_format.wado/__Closure_1^core:prelude/traits.wado/InspectAlt::inspect_alt"(__typed_formatter);
 }
 
 export fn "global_closure_format.wado/__cm_export__run" as "run"

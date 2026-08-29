@@ -15,6 +15,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
+    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
@@ -148,7 +149,7 @@ fn "labeled_block_self_break_field_write.wado/run"() with Stdout {
     };
     t = "labeled_block_self_break_field_write.wado/opaque_bool"(3);
     __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 };
+    __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_20(__sroa___sroa_o_inner_f_128 = 1; if t {
         __inline_check_0__lbl: block {
             if t {
@@ -165,7 +166,7 @@ fn "labeled_block_self_break_field_write.wado/run"() with Stdout {
     "core:cli/write_to_stream"(tx_24, __local_1, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_14);
     __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_35(d_113 = t == 0; __sroa___sroa_o_inner_f_127 = 1; if t {
         __inline_check_1__lbl: block {
             if d_113 {
@@ -182,7 +183,7 @@ fn "labeled_block_self_break_field_write.wado/run"() with Stdout {
     "core:cli/write_to_stream"(tx_39, __local_3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_29);
     __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
+    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_50(c_118 = t == 0; __sroa___sroa_o_inner_f_126 = 1; if c_118 {
         __inline_check_2__lbl: block {
             if t {
@@ -199,7 +200,7 @@ fn "labeled_block_self_break_field_write.wado/run"() with Stdout {
     "core:cli/write_to_stream"(tx_54, __local_5, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_44);
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
+    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_68(__sroa___sroa_o_inner_f_125 = 1; if t {
         __sroa___sroa_o_inner_f_125 = 9;
     }; 10 + __sroa___sroa_o_inner_f_125), __local_8);
@@ -209,7 +210,7 @@ fn "labeled_block_self_break_field_write.wado/run"() with Stdout {
     "core:cli/write_to_stream"(tx_72, __local_7, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_59);
     __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
+    __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_86(c_83 = t == 0; __sroa___sroa_o_inner_f_124 = 1; if c_83 {
         __sroa___sroa_o_inner_f_124 = 9;
     }; 10 + __sroa___sroa_o_inner_f_124), __local_10);
@@ -409,10 +410,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, prefix, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, alt_prefix, digit_count) {
     let sign: ref "core:prelude/string.wado//String";
-    let sign_len: i32;
-    let prefix_len: i32;
     let self_16: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
@@ -421,13 +420,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else {
     }
-    sign_len = sign.used;
-    prefix_len = prefix.used;
-    if sign_len > 0 {
+    if sign.used > 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
-    }
-    if prefix_len > 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
     }
     return self_16 = self.buf, new_used_18 = self_16.used + digit_count, if @unlikely(new_used_18 > builtin::array_len(self_16.repr)) {
         cold_path;

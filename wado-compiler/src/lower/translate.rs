@@ -2602,7 +2602,6 @@ fn convert_return_abi(abi: &tir::ReturnAbi) -> nir::ReturnAbi {
 fn convert_fn_dispatch_trait(kind: tir::FnDispatchTrait) -> nir::FnDispatchTrait {
     match kind {
         tir::FnDispatchTrait::Inspect => nir::FnDispatchTrait::Inspect,
-        tir::FnDispatchTrait::InspectAlt => nir::FnDispatchTrait::InspectAlt,
     }
 }
 

@@ -98,8 +98,7 @@ form from
 obligation holds on arrival, and the redundant `Eq` in `impl<T: Eq + Ord>` comes
 out.
 
-The format-trait pairs (`InspectAlt: Inspect`, `DisplayAlt: Display`, and the
-rest of the `*Alt` family), a shared face over the `Reflect*` traits, and the
+A shared face over the `Reflect*` traits, and the
 stdlib `Fn: FnMut` that
 [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md)
 leaves open are follow-ups.

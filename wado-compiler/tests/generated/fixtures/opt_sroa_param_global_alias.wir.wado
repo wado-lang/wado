@@ -15,6 +15,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
+    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
@@ -171,18 +172,18 @@ fn "opt_sroa_param_global_alias.wado/run"() with Stdout {
     global:opt_sroa_param_global_alias.wado::G.value = 1;
     a = "opt_sroa_param_global_alias.wado/f"(global:opt_sroa_param_global_alias.wado::G);
     if @unlikely(a != 101) {
-        "core:rt/panic"(__local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4, global:opt_sroa_param_global_alias.wado::__const_obj_3); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(a, __local_5); __local_4_4);
+        "core:rt/panic"(__local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4, global:opt_sroa_param_global_alias.wado::__const_obj_3); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(a, __local_5); __local_4_4);
         unreachable;
     }
     global:opt_sroa_param_global_alias.wado::G.value = 1;
     b = "opt_sroa_param_global_alias.wado/h"(global:opt_sroa_param_global_alias.wado::G);
     if @unlikely(b != 1001) {
-        "core:rt/panic"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:opt_sroa_param_global_alias.wado::__const_obj_2); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(b, __local_7); __local_6);
+        "core:rt/panic"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:opt_sroa_param_global_alias.wado::__const_obj_2); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(b, __local_7); __local_6);
         unreachable;
     }
     c = "opt_sroa_param_global_alias.wado/k"(42);
     if @unlikely(c != 42) {
-        "core:rt/panic"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(47), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, global:opt_sroa_param_global_alias.wado::__const_obj_1); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(c, __local_9); __local_8);
+        "core:rt/panic"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(47), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, global:opt_sroa_param_global_alias.wado::__const_obj_1); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(c, __local_9); __local_8);
         unreachable;
     }
     __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
@@ -209,7 +210,7 @@ fn "opt_sroa_param_global_alias.wado/run"() with Stdout {
     start_70 = __local_10.used;
     __local_10.used = new_used_69;
     builtin::array_set_u8(__local_10.repr, start_70, 32);
-    __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 };
+    __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_81(global:opt_sroa_param_global_alias.wado::COUNTER), __local_11);
     rx_84 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_85 = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -469,10 +470,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, prefix, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, alt_prefix, digit_count) {
     let sign: ref "core:prelude/string.wado//String";
-    let sign_len: i32;
-    let prefix_len: i32;
     let self_16: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
@@ -481,13 +480,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else {
     }
-    sign_len = sign.used;
-    prefix_len = prefix.used;
-    if sign_len > 0 {
+    if sign.used > 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
-    }
-    if prefix_len > 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
     }
     return self_16 = self.buf, new_used_18 = self_16.used + digit_count, if @unlikely(new_used_18 > builtin::array_len(self_16.repr)) {
         cold_path;

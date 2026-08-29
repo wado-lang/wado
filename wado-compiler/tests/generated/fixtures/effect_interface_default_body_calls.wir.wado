@@ -15,6 +15,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
+    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
@@ -224,7 +225,7 @@ fn "effect_interface_default_body_calls.wado/$effect_default$Calc$value"(n) {
     start_109 = __local_1.used;
     __local_1.used = new_used_108;
     builtin::array_set_u8(__local_1.repr, start_109, 58);
-    __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 };
+    __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(n, __local_2);
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(global:effect_interface_default_body_calls.wado::TRACE, __local_1);
     return n * 2;
@@ -332,7 +333,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout {
         global:effect_interface_default_body_calls.wado::__modules_initialized = 1;
     };
     __local_3_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3_3 };
+    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_28(__inline___effect_dispatch__Calc__value_5: block -> i32 {
         __local_1_25 = global:effect_interface_default_body_calls.wado::__effect_Calc;
         if ref.is_null(__local_1_25) == 0 {
@@ -356,7 +357,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout {
     "core:cli/write_to_stream"(tx_32, __local_3_3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_18);
     __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
+    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_47(__inline___effect_dispatch__Calc__twice_13: block -> i32 {
         __local_1_44 = global:effect_interface_default_body_calls.wado::__effect_Calc;
         if ref.is_null(__local_1_44) == 0 {
@@ -384,7 +385,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout {
     __d_Calc = struct.new "effect_interface_default_body_calls.wado//__Dispatch_Calc" { outer: __save_Calc, op_value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body_calls.wado//__Closure_0" { __capture_0: f_0 }, func: ref.func "closure/effect_interface_default_body_calls.wado/__closure_wrapper_0" }, op_twice: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body_calls.wado//__Closure_1" {  }, func: ref.func "closure/effect_interface_default_body_calls.wado/__closure_wrapper_1" } };
     global:effect_interface_default_body_calls.wado::__effect_Calc = __d_Calc;
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
+    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_66(__inline___effect_dispatch__Calc__value_21: block -> i32 {
         __local_1_63 = global:effect_interface_default_body_calls.wado::__effect_Calc;
         if ref.is_null(__local_1_63) == 0 {
@@ -408,7 +409,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout {
     "core:cli/write_to_stream"(tx_70, __local_7, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_56);
     __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
+    __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_85(__inline___effect_dispatch__Calc__twice_29: block -> i32 {
         __local_1_82 = global:effect_interface_default_body_calls.wado::__effect_Calc;
         if ref.is_null(__local_1_82) == 0 {
@@ -702,7 +703,7 @@ fn "effect_interface_default_body_calls.wado/effect_interface_default_body_calls
     start_110 = __local_2.used;
     __local_2.used = new_used_109;
     builtin::array_set_u8(__local_2.repr, start_110, 58);
-    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
+    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(n, __local_3);
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(global:effect_interface_default_body_calls.wado::TRACE, __local_2);
     return self.answer;
@@ -839,10 +840,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, prefix, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, alt_prefix, digit_count) {
     let sign: ref "core:prelude/string.wado//String";
-    let sign_len: i32;
-    let prefix_len: i32;
     let self_16: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
@@ -851,13 +850,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else {
     }
-    sign_len = sign.used;
-    prefix_len = prefix.used;
-    if sign_len > 0 {
+    if sign.used > 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
-    }
-    if prefix_len > 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
     }
     return self_16 = self.buf, new_used_18 = self_16.used + digit_count, if @unlikely(new_used_18 > builtin::array_len(self_16.repr)) {
         cold_path;

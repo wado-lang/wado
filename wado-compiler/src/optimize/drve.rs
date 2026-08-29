@@ -94,7 +94,7 @@ fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
     // `func_id`, and `apply_drve` retypes all of them — so voiding a
     // uniformly-dropped return is sound, exactly as `sroa_param` relaxed the
     // same pin. Only closure `__call` functors stay pinned (their function-table
-    // wrapper snapshots the return type); closure `^Inspect` / `^InspectAlt`
+    // wrapper snapshots the return type); closure `^Inspect`
     // impls return unit and are already excluded by the heap-return check above.
     if func.is_closure_call() {
         return false;

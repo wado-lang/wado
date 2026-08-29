@@ -312,6 +312,57 @@ impl Visitor for ValueVisitor {
 
 impl Inspect for Value {
     pub fn inspect(&self, f: &mut Formatter) {
+        if f.alternate {
+            match self {
+                Null => f.write_str(&"null"),
+                Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
+                Int(n) => (*n).inspect(f),
+                UInt(n) => (*n).inspect(f),
+                Int128(n) => (*n).inspect(f),
+                UInt128(n) => (*n).inspect(f),
+                Float(n) => (*n).inspect(f),
+                String(s) => (*s).inspect(f),
+                Bytes(b) => {
+                    f.write_str(&"0x");
+                    f.write_str(&b.to_hex());
+                },
+                List(arr) => {
+                    if arr.is_empty() {
+                        f.write_str(&"[]");
+                        return;
+                    }
+                    f.open_brace("[");
+                    for let mut i = 0; i < arr.len(); i += 1 {
+                        f.write_newline_indent();
+                        arr[i].inspect(f);
+                        f.write_char(',');
+                    }
+                    f.close_brace("]");
+                },
+                Object(map) => {
+                    if map.is_empty() {
+                        f.write_str(&"{}");
+                        return;
+                    }
+                    f.open_brace("{");
+                    for let [k, v] of map.entries() {
+                        f.write_newline_indent();
+                        k.inspect(f);
+                        f.write_str(&": ");
+                        v.inspect(f);
+                        f.write_char(',');
+                    }
+                    f.close_brace("}");
+                },
+                Undefined => f.write_str(&"undefined"),
+                Unknown(b) => {
+                    f.write_str(&"unknown(0x");
+                    f.write_str(&b.to_hex());
+                    f.write_char(')');
+                },
+            }
+            return;
+        }
         match self {
             Null => f.write_str(&"null"),
             Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
@@ -348,59 +399,6 @@ impl Inspect for Value {
                     v.inspect(f);
                 }
                 f.write_char('}');
-            },
-            Undefined => f.write_str(&"undefined"),
-            Unknown(b) => {
-                f.write_str(&"unknown(0x");
-                f.write_str(&b.to_hex());
-                f.write_char(')');
-            },
-        }
-    }
-}
-
-impl InspectAlt for Value {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        match self {
-            Null => f.write_str(&"null"),
-            Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
-            Int(n) => (*n).inspect_alt(f),
-            UInt(n) => (*n).inspect_alt(f),
-            Int128(n) => (*n).inspect_alt(f),
-            UInt128(n) => (*n).inspect_alt(f),
-            Float(n) => (*n).inspect_alt(f),
-            String(s) => (*s).inspect_alt(f),
-            Bytes(b) => {
-                f.write_str(&"0x");
-                f.write_str(&b.to_hex());
-            },
-            List(arr) => {
-                if arr.is_empty() {
-                    f.write_str(&"[]");
-                    return;
-                }
-                f.open_brace("[");
-                for let mut i = 0; i < arr.len(); i += 1 {
-                    f.write_newline_indent();
-                    arr[i].inspect_alt(f);
-                    f.write_char(',');
-                }
-                f.close_brace("]");
-            },
-            Object(map) => {
-                if map.is_empty() {
-                    f.write_str(&"{}");
-                    return;
-                }
-                f.open_brace("{");
-                for let [k, v] of map.entries() {
-                    f.write_newline_indent();
-                    k.inspect_alt(f);
-                    f.write_str(&": ");
-                    v.inspect_alt(f);
-                    f.write_char(',');
-                }
-                f.close_brace("}");
             },
             Undefined => f.write_str(&"undefined"),
             Unknown(b) => {

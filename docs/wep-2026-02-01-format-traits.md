@@ -42,13 +42,12 @@ struct Formatter {
     zero_pad: bool,
     width: i32,        // NO_WIDTH (-1) = not specified
     precision: i32,    // PRECISION_DEFAULT (-2) = not specified
-    indent: i32,       // pretty-print depth, used by InspectAlt
+    indent: i32,       // pretty-print depth, used by the alternate Inspect
     buf: &mut String,
 }
 ```
 
-The fields are read directly; there are no accessors. `#` needs no field — it
-selects the `Alt` trait at compile time (see below).
+The fields are read directly; there are no accessors.
 
 `Formatter`'s methods split into writing, padding, and pretty-printing:
 
@@ -129,21 +128,17 @@ pub trait UpperExp {
 
 ### Debug Formatting
 
-The `:?` specifier resolves to the `Inspect` trait. The `:#?` specifier resolves to the `InspectAlt` trait for pretty-printed (indented multi-line) output. The compiler synthesises both for any type a bound reaches, derived from the type's shape over `ReflectStruct` / `ReflectVariant` / `ReflectEnum`; types can provide custom implementations to override. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+Both `:?` and `:#?` resolve to `Inspect`; the `#` sets `alternate`, and the implementation branches on it for the pretty-printed (indented multi-line) form. A type's `Inspect` comes from its shape over `ReflectStruct` / `ReflectVariant` / `ReflectEnum`, through a blanket impl in `core:prelude/traits` — one impl per reflection kind, each branching on `alternate` — so no per-type synthesis is needed; a type can write its own `impl` to override. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ```wado
 internal trait Inspect {
     fn inspect(&self, f: &mut Formatter);
 }
-
-internal trait InspectAlt {
-    fn inspect_alt(&self, f: &mut Formatter);
-}
 ```
 
-`Inspect`, `InspectAlt` and every `Alt` trait are `internal`: they are the
-compiler's dispatch targets, not an API to name in a bound. A type can still
-write its own `impl` to override the synthesised one.
+`Inspect` is `internal`: it is the compiler's dispatch target, not an API to
+name in a bound. A type can still write its own `impl` to override the derived
+one.
 
 ### Display Derivation
 
@@ -153,27 +148,31 @@ its bare case name (`Red`, vs `Inspect`'s `Color::Red`), and a newtype inherits
 its base type's `Display` transparently (`Meters = f64` renders `3.14`). Any
 other type — a struct, variant, or generic container — needs a hand-written
 `impl Display`; `${x}` on a type without one is a compile error (use `${x:?}`).
-`DisplayAlt` (`${x:#}`) follows `Display`. See
+`${x:#}` runs the same `Display` with `alternate` set, which an implementation
+is free to ignore — most do. See
 [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
-### Alternate (Alt) Trait Variants
+### The Alternate Flag
 
-Each format trait has an alternate variant activated by the `#` flag. For Inspect, `InspectAlt` produces pretty-printed output. For numeric traits, Alt variants add prefixes (`0x`, `0b`, `0o`).
+`#` sets `Formatter.alternate`; it selects no trait of its own. Each
+implementation decides what the flag means, and one that has no alternate form
+ignores it:
 
-| Base Trait | Alt Trait     | Syntax   | Effect                        |
-| ---------- | ------------- | -------- | ----------------------------- |
-| `Display`  | `DisplayAlt`  | `${:#}`  | Delegates to `Display`        |
-| `Inspect`  | `InspectAlt`  | `${:#?}` | Pretty-print with indentation |
-| `Binary`   | `BinaryAlt`   | `${:#b}` | Add `0b` prefix               |
-| `Octal`    | `OctalAlt`    | `${:#o}` | Add `0o` prefix               |
-| `LowerHex` | `LowerHexAlt` | `${:#x}` | Add `0x` prefix               |
-| `UpperHex` | `UpperHexAlt` | `${:#X}` | Add `0x` prefix, `A-F` digits |
+| Trait                   | Syntax   | Effect of `alternate`                  |
+| ----------------------- | -------- | -------------------------------------- |
+| `Display`               | `${:#}`  | Implementation-defined; most ignore it |
+| `Inspect`               | `${:#?}` | Pretty-print with indentation          |
+| `Binary`                | `${:#b}` | Add `0b` prefix                        |
+| `Octal`                 | `${:#o}` | Add `0o` prefix                        |
+| `LowerHex`              | `${:#x}` | Add `0x` prefix                        |
+| `UpperHex`              | `${:#X}` | Add `0x` prefix, `A-F` digits          |
+| `LowerExp` / `UpperExp` | `${:#e}` | None                                   |
 
-`LowerExp` / `UpperExp` have no `Alt` half: `${x:#e}` resolves to the plain
-trait, and `#` has no effect there.
-
-Each `Alt` method carries the trait's name too: `fmt_alt`, `inspect_alt`,
-`fmt_binary_alt`, `fmt_octal_alt`, `fmt_lower_hex_alt`, `fmt_upper_hex_alt`.
+A radix prefix costs nothing to carry: it is already an argument of the shared
+`fmt_base`, which passes it on only when the flag is set. The template
+synthesiser writes the flag as a literal into the `Formatter`, so
+`optimize::param_spec` clones the callee on it and constant folding drops the
+arm not taken — the same code a separate trait produced.
 
 ### Format Resolution
 
@@ -181,8 +180,8 @@ Each `Alt` method carries the trait's name too: `fmt_alt`, `inspect_alt`,
 | --------- | ------------------------------------------------------ |
 | (none)    | `Display::fmt` (compile error if `T` has no `Display`) |
 | `?`       | `Inspect::inspect`                                     |
-| `#`       | `DisplayAlt::fmt_alt`                                  |
-| `#?`      | `InspectAlt::inspect_alt`                              |
+| `#`       | `Display::fmt` with `alternate`                        |
+| `#?`      | `Inspect::inspect` with `alternate`                    |
 | `b`       | `Binary::fmt_binary`                                   |
 | `o`       | `Octal::fmt_octal`                                     |
 | `x`       | `LowerHex::fmt_lower_hex`                              |
@@ -200,10 +199,9 @@ Each `Alt` method carries the trait's name too: `fmt_alt`, `inspect_alt`,
 | `bool`, `char` | `Display`                                                                    |
 | `String`       | `Display`                                                                    |
 
-Each also implements the `Alt` half of every trait it has, `DisplayAlt`
-included — the `DisplayAlt` fallback the compiler synthesises walks a module's
-declared types, which no primitive is, so a primitive without the `impl` would
-fail `${x:#}`. `Inspect` / `InspectAlt` are implemented for every primitive too.
+`Inspect` is implemented for every primitive too. Nothing needs a second impl
+for `#`: the numeric traits read the flag inside the shared `fmt_base`, and the
+rest ignore it.
 
 ### Zero Padding
 
@@ -229,15 +227,12 @@ ${-42:*<08} → "-0000042"
 
 1. **Infrastructure complexity**: Requires `Formatter` and `Alignment` types
 2. **Implementation effort**: All primitive formatting needs trait implementations
+3. **Alternate costs a branch when it cannot be folded**: at `-O0` / `-O1` both
+   arms stay in the one function, where separate traits would have let DCE drop
+   the unused half
 
 ### Known gaps
 
-- [ ] The `Alt` traits double the trait surface — `core:prelude/primitive.wado`
-      alone carries 47 `Alt` implementations — and each new one is a hole until
-      written (`${x:#}` on a primitive was a compile error until `DisplayAlt`
-      was implemented for each). An `alternate: bool` on `Formatter` would
-      collapse the pairs into one trait per specifier; the branch it costs is
-      on a field the template synthesiser sets from a compile-time constant.
 - [ ] Dynamic width/precision (`${value:${width}.${precision}}`) — see
       [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md).
 

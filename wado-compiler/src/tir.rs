@@ -5462,7 +5462,6 @@ pub enum ReturnAbi {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FnDispatchTrait {
     Inspect,
-    InspectAlt,
 }
 
 /// Semantic category of a `TirFunction`. Carries the type operand so the
@@ -5477,8 +5476,8 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
-    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub (or its
-    /// `^InspectAlt` twin). The TIR body is `unreachable()` — enough for the
+    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. The TIR body is
+    /// `unreachable()` — enough for the
     /// function to be registered and the call resolvable — and WIR build
     /// supplies the real one, a `call_ref` through `CanonicalClosure_K`'s vtable
     /// slot. `(arity, return_type)` are structured so nobody parses the mangle.
@@ -5544,7 +5543,7 @@ impl TirFunction {
         }
     }
 
-    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect` / `^InspectAlt`
+    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect`
     /// stub, which WIR build turns into the indirect-call body.
     #[inline]
     pub fn fn_canonical_dispatch(&self) -> Option<(FnDispatchTrait, usize, TypeId)> {

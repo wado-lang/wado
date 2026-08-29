@@ -52,18 +52,18 @@ Where `spec` follows Rust's format specification mini-language.
 
 ### Supported Format Types
 
-| Specifier | Trait      | Description           | Example               |
-| --------- | ---------- | --------------------- | --------------------- |
-| (none)    | Display    | Default display       | `${x}` → `"42"`       |
-| `?`       | Inspect    | Debug representation  | `${x:?}` → `"42"`     |
-| `#?`      | InspectAlt | Pretty-print debug    | `${x:#?}` (indented)  |
-| `b`       | Binary     | Binary integers       | `${x:b}` → `"101010"` |
-| `o`       | Octal      | Octal integers        | `${x:o}` → `"52"`     |
-| `x`       | LowerHex   | Lowercase hex         | `${x:x}` → `"2a"`     |
-| `X`       | UpperHex   | Uppercase hex         | `${x:X}` → `"2A"`     |
-| `e`       | LowerExp   | Lowercase exponential | `${x:e}` → `"4.2e1"`  |
-| `E`       | UpperExp   | Uppercase exponential | `${x:E}` → `"4.2E1"`  |
-| `f`       | Display    | Fixed-point           | `${x:.2f}` → `"3.14"` |
+| Specifier | Trait    | Description           | Example               |
+| --------- | -------- | --------------------- | --------------------- |
+| (none)    | Display  | Default display       | `${x}` → `"42"`       |
+| `?`       | Inspect  | Debug representation  | `${x:?}` → `"42"`     |
+| `#?`      | Inspect  | Pretty-print debug    | `${x:#?}` (indented)  |
+| `b`       | Binary   | Binary integers       | `${x:b}` → `"101010"` |
+| `o`       | Octal    | Octal integers        | `${x:o}` → `"52"`     |
+| `x`       | LowerHex | Lowercase hex         | `${x:x}` → `"2a"`     |
+| `X`       | UpperHex | Uppercase hex         | `${x:X}` → `"2A"`     |
+| `e`       | LowerExp | Lowercase exponential | `${x:e}` → `"4.2e1"`  |
+| `E`       | UpperExp | Uppercase exponential | `${x:E}` → `"4.2E1"`  |
+| `f`       | Display  | Fixed-point           | `${x:.2f}` → `"3.14"` |
 
 **Notes**:
 
@@ -164,7 +164,7 @@ behaves the same way.
 
 ##### Default Inspect cap and the precision sentinels
 
-`Inspect` / `InspectAlt` (`:?` / `:#?`) of a `String` or `List` apply a default
+`Inspect` (`:?` / `:#?`) of a `String` or `List` applies a default
 length cap of `DEFAULT_SEQ_LIMIT` (256 items) even when no precision is given, so
 debug output — including power-assert operand dumps — stays readable. `Display`
 never applies the default cap: a plain `${s}` renders the full value.
@@ -198,8 +198,8 @@ alignment.
 
 #### Alternate Form
 
-The `#` flag selects the `Alt` half of the format trait pair (see
-[WEP: Format Traits](./wep-2026-02-01-format-traits.md)):
+The `#` flag sets `Formatter.alternate`; each implementation decides what it
+means (see [WEP: Format Traits](./wep-2026-02-01-format-traits.md)):
 
 | Type     | Effect                | Example    | Output       |
 | -------- | --------------------- | ---------- | ------------ |
@@ -207,10 +207,15 @@ The `#` flag selects the `Alt` half of the format trait pair (see
 | `b`      | Add `0b` prefix       | `${42:#b}` | `"0b101010"` |
 | `o`      | Add `0o` prefix       | `${42:#o}` | `"0o52"`     |
 | `?`      | Pretty-print (indent) | `${p:#?}`  | multi-line   |
-| (none)   | `DisplayAlt`          | `${42:#}`  | `"42"`       |
+| (none)   | Up to the `Display`   | `${42:#}`  | `"42"`       |
 | `e`, `E` | No alternate form     | `${42:#e}` | `"4.2e1"`    |
 
 `${x:#X}` prefixes `0x`, not `0X`, as Rust does.
+
+A hand-written `impl Display` can read `f.alternate` and render differently —
+`core:temporal`'s `Instant` prints whole seconds plainly and milliseconds under
+`#`. One that does not read it renders the same either way, which is what every
+primitive does.
 
 ### Complete Examples
 
@@ -271,7 +276,7 @@ Resolution order for `${expr:spec}`:
 **Key differences from Rust**:
 
 1. **Arbitrary expressions**: Wado allows any expression in `${expr}`, while Rust only allows simple value expressions (no method calls, operators, etc. without parentheses)
-2. **Inspect for every type**: `${x:?}` needs no derive — `Inspect` / `InspectAlt` are synthesised from the type's shape. `Display` is not: only primitives, `String`, plain enums and newtypes have one, so `${x}` on a struct or variant needs a hand-written `impl Display`. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)
+2. **Inspect for every type**: `${x:?}` needs no derive — `Inspect` is derived from the type's shape, and renders the indented form when `#` is set. `Display` is not: only primitives, `String`, plain enums and newtypes have one, so `${x}` on a struct or variant needs a hand-written `impl Display`. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)
 3. **Other format specifiers**: Format specifiers like `${:x}` still require the type to support that trait (or be a primitive)
 4. **No `:p` specifier**: Wado excludes `:p` since it has no pointer types
 

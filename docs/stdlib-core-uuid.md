@@ -87,10 +87,6 @@ The canonical hyphenated lowercase string form.
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
 
-#### `impl InspectAlt for Uuid`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
 #### `impl Serialize for Uuid`
 
 ##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`

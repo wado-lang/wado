@@ -36,8 +36,6 @@ pub(super) enum OnBoundTrait {
     Ref,
     RefMut,
     Inspect,
-    InspectAlt,
-    DisplayAlt,
 }
 
 impl OnBoundTrait {
@@ -58,8 +56,6 @@ impl OnBoundTrait {
             Self::Ref => CompilerItem::Ref,
             Self::RefMut => CompilerItem::RefMut,
             Self::Inspect => CompilerItem::Inspect,
-            Self::InspectAlt => CompilerItem::InspectAlt,
-            Self::DisplayAlt => CompilerItem::DisplayAlt,
         }
     }
 
@@ -79,8 +75,6 @@ impl OnBoundTrait {
             CompilerItem::Ref => Self::Ref,
             CompilerItem::RefMut => Self::RefMut,
             CompilerItem::Inspect => Self::Inspect,
-            CompilerItem::InspectAlt => Self::InspectAlt,
-            CompilerItem::DisplayAlt => Self::DisplayAlt,
             _ => return None,
         };
         Some(found)
@@ -90,13 +84,11 @@ impl OnBoundTrait {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
 
-    /// Traits total over every type: the bound always holds and the body is
-    /// generated eagerly. `DisplayAlt` is included so its bound holds before its
-    /// fallback is synthesized (generation is separately gated on a `Display`
-    /// existing). `Display` is excluded — a `T: Display` bound is checked against
-    /// a real impl.
+    /// `Inspect` is total over every type: the bound always holds and the body
+    /// is generated eagerly. `Display` is not — a `T: Display` bound is checked
+    /// against a real impl.
     pub(super) fn is_format(self) -> bool {
-        matches!(self, Self::Inspect | Self::InspectAlt | Self::DisplayAlt)
+        matches!(self, Self::Inspect)
     }
 
     pub(super) fn is_field_recursive(self) -> bool {
@@ -792,10 +784,6 @@ impl TypeSystem {
                 of(CompilerItem::RefMut, OnBoundTrait::RefMut)
             } else if trait_name == items.trait_name(CompilerItem::Inspect) {
                 of(CompilerItem::Inspect, OnBoundTrait::Inspect)
-            } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
-                of(CompilerItem::InspectAlt, OnBoundTrait::InspectAlt)
-            } else if trait_name == items.trait_name(CompilerItem::DisplayAlt) {
-                of(CompilerItem::DisplayAlt, OnBoundTrait::DisplayAlt)
             } else {
                 None
             }
@@ -1617,9 +1605,7 @@ impl TypeSystem {
             | OnBoundTrait::Default
             | OnBoundTrait::Ref
             | OnBoundTrait::RefMut
-            | OnBoundTrait::Inspect
-            | OnBoundTrait::InspectAlt
-            | OnBoundTrait::DisplayAlt => None,
+            | OnBoundTrait::Inspect => None,
         };
         let Some(module_source) = subject else {
             return false;

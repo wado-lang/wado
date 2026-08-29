@@ -3694,7 +3694,7 @@ Wado provides a format-agnostic serialization framework via `core:serde` and a J
 
 ### Compiler-Synthesized `impl`
 
-The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body. Supported traits: `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and the debug/alternate format traits (`Inspect`, `InspectAlt`, `DisplayAlt`). For the structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) the marker is also a conformance check — a compile error at its own span if `Type` is ineligible. An `Inspect` / `InspectAlt` / `DisplayAlt` marker always validates. A `Display` marker (`impl Display for Type;`) is rejected — `Display` is not derivable for an arbitrary type; write a real `impl Display { fn fmt … }`, or rely on the automatic enum / newtype `Display`.
+The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body. Supported traits: `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`. For the structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) the marker is also a conformance check — a compile error at its own span if `Type` is ineligible. An `Inspect` marker always validates. A `Display` marker (`impl Display for Type;`) is rejected — `Display` is not derivable for an arbitrary type; write a real `impl Display { fn fmt … }`, or rely on the automatic enum / newtype `Display`.
 
 ```wado
 use { Serialize, Deserialize } from "core:serde";
@@ -3756,9 +3756,9 @@ impl Eq for Handler;
 
 ### Format Traits
 
-`${x:?}` / `${x:#?}` (`Inspect` / `InspectAlt`) work for every type — no bound needed.
+`${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type — no bound needed.
 
-`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one; a struct, variant, or generic container needs a hand-written `impl Display`, otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `${x:#}` (`DisplayAlt`) follows `Display`.
+`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one; a struct, variant, or generic container needs a hand-written `impl Display`, otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `${x:#}` runs the same `Display` with `Formatter.alternate` set; an impl that ignores the flag renders identically.
 
 ```wado
 fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type

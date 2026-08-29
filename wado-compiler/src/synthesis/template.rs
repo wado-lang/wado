@@ -71,8 +71,8 @@ impl FormatStdlibNames {
             name: items.trait_fq(item),
             method: items.trait_method_name(item).to_string(),
         };
-        // `e` / `E` have no separate alternate form, so both entries name the
-        // same trait and the lookup stays total.
+        // `#` is a `Formatter` field, not a trait choice, so both entries of a
+        // kind name the same trait; the pair keeps the lookup total.
         let traits = vec![
             (
                 FormatKind::Display,
@@ -82,18 +82,14 @@ impl FormatStdlibNames {
             (
                 FormatKind::Display,
                 true,
-                format_trait(CompilerItem::DisplayAlt),
+                format_trait(CompilerItem::Display),
             ),
             (
                 FormatKind::Fixed,
                 false,
                 format_trait(CompilerItem::Display),
             ),
-            (
-                FormatKind::Fixed,
-                true,
-                format_trait(CompilerItem::DisplayAlt),
-            ),
+            (FormatKind::Fixed, true, format_trait(CompilerItem::Display)),
             (
                 FormatKind::Inspect,
                 false,
@@ -102,24 +98,16 @@ impl FormatStdlibNames {
             (
                 FormatKind::Inspect,
                 true,
-                format_trait(CompilerItem::InspectAlt),
+                format_trait(CompilerItem::Inspect),
             ),
             (
                 FormatKind::Binary,
                 false,
                 format_trait(CompilerItem::Binary),
             ),
-            (
-                FormatKind::Binary,
-                true,
-                format_trait(CompilerItem::BinaryAlt),
-            ),
+            (FormatKind::Binary, true, format_trait(CompilerItem::Binary)),
             (FormatKind::Octal, false, format_trait(CompilerItem::Octal)),
-            (
-                FormatKind::Octal,
-                true,
-                format_trait(CompilerItem::OctalAlt),
-            ),
+            (FormatKind::Octal, true, format_trait(CompilerItem::Octal)),
             (
                 FormatKind::LowerHex,
                 false,
@@ -128,7 +116,7 @@ impl FormatStdlibNames {
             (
                 FormatKind::LowerHex,
                 true,
-                format_trait(CompilerItem::LowerHexAlt),
+                format_trait(CompilerItem::LowerHex),
             ),
             (
                 FormatKind::UpperHex,
@@ -138,7 +126,7 @@ impl FormatStdlibNames {
             (
                 FormatKind::UpperHex,
                 true,
-                format_trait(CompilerItem::UpperHexAlt),
+                format_trait(CompilerItem::UpperHex),
             ),
             (
                 FormatKind::LowerExp,
@@ -675,6 +663,11 @@ fn build_formatter_expr(
                 ),
                 FormatterField::SignPlus => TirExpr::new(
                     TirExprKind::BoolLiteral(spec.sign_plus),
+                    TypeTable::BOOL,
+                    span,
+                ),
+                FormatterField::Alternate => TirExpr::new(
+                    TirExprKind::BoolLiteral(spec.alternate),
                     TypeTable::BOOL,
                     span,
                 ),

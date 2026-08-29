@@ -1,7 +1,6 @@
 // Newtype formatting: a newtype inherits its base type's `Display`, rendering
-// transparently like the base value, while `Inspect`/`InspectAlt` add the
-// ` as Name` debug annotation. `DisplayAlt` reaches the base display by chaining
-// `DisplayAlt → Display`. A newtype over a non-`Display` base (a plain struct)
+// transparently like the base value, while `Inspect` adds the ` as Name` debug
+// annotation in either form. A newtype over a non-`Display` base (a plain struct)
 // is not displayable — only `Inspect` (`{x:?}`) applies.
 
 type Meters = f64;
@@ -31,11 +30,11 @@ test "display drops the inspect cast" {
 
 test "newtype inherits the base's alternate formats" {
     let m: Meters = 100.5;
-    // `{m:#?}` is `InspectAlt` — a newtype overrides it with the ` as Name` tag.
+    // The alternate inspect keeps the ` as Name` tag a newtype adds.
     assert `${m:#?}` == "100.5 as Meters";
-    // `{m:#}` is `DisplayAlt`, which the newtype *inherits* from `f64` — and
-    // `f64` has no `DisplayAlt` (like `{3.14:#}`), so this would be a compile
-    // error, consistent with the base type. Inheritance, not a bespoke shim.
+    // `{m:#}` runs the inherited `Display` with the alternate flag set, which
+    // `f64` ignores — same as `{3.14:#}`.
+    assert `${m:#}` == "100.5";
 }
 
 test "newtype over a non-Display struct: only Inspect applies" {

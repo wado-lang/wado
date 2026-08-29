@@ -281,45 +281,30 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             &live_param_sources,
         );
 
-        // Register the inspect / inspect_alt wrappers only when the
-        // functor's signature is inspectable. These forward to the
-        // per-functor `__Closure_N^Inspect / InspectAlt` impls
-        // synthesised in lower (Phase 2). When DCE pruned the
-        // per-functor impl or the `Formatter` struct isn't registered,
-        // the wrapper body falls back to `Unreachable` — the slot
-        // stays populated so the canonical struct schema is consistent.
-        let (inspect_wrapper_id, inspect_alt_wrapper_id) = if is_inspectable {
+        // Register the inspect wrapper only when the functor's signature is
+        // inspectable. It forwards to the per-functor `__Closure_N^Inspect`
+        // impl synthesised in lower (Phase 2). When DCE pruned that impl or
+        // the `Formatter` struct isn't registered, the wrapper body falls back
+        // to `Unreachable` — the slot stays populated so the canonical struct
+        // schema is consistent.
+        let inspect_wrapper_id = if is_inspectable {
             let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
-            let (inspect_trait, inspect_alt_trait) = {
+            let inspect_trait = {
                 let tt = ctx.package.type_table.borrow();
-                (
-                    tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Inspect),
-                    tt.compiler_trait_fq(crate::compiler_item::CompilerItem::InspectAlt),
-                )
+                tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Inspect)
             };
-            let inspect = register_inspect_wrapper(
+            Some(register_inspect_wrapper(
                 ctx,
                 module_source,
                 functor_name,
                 &inspect_trait,
                 "inspect",
                 global_id,
-                callback_fn_type_id.clone(),
-                functor_struct_type_id.clone(),
-            );
-            let inspect_alt = register_inspect_wrapper(
-                ctx,
-                module_source,
-                functor_name,
-                &inspect_alt_trait,
-                "inspect_alt",
-                global_id,
                 callback_fn_type_id,
                 functor_struct_type_id,
-            );
-            (Some(inspect), Some(inspect_alt))
+            ))
         } else {
-            (None, None)
+            None
         };
 
         ctx.closure_wrapper_funcs.insert(
@@ -327,7 +312,6 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             crate::wir_build::context::ClosureWrapperFuncs {
                 call: call_wrapper_id,
                 inspect: inspect_wrapper_id,
-                inspect_alt: inspect_alt_wrapper_id,
             },
         );
     }
@@ -648,7 +632,6 @@ fn build_fn_canonical_dispatch_body(
     };
     let field_name = match trait_kind {
         FnDispatchTrait::Inspect => "inspect",
-        FnDispatchTrait::InspectAlt => "inspect_alt",
     };
 
     // When the boxing pass rewrote `&fn(...)` to `Box<fn(...)>`, the

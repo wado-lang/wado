@@ -1040,17 +1040,9 @@ An owned, fixed-length byte buffer.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for bool`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for bool`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for bool`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for bool`
 
@@ -1160,17 +1152,9 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for char`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for char`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for char`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for char`
 
@@ -1216,17 +1200,9 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for i8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for i8`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i8`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for i8`
 
@@ -1251,22 +1227,6 @@ Encodes this character as UTF-8, returning the bytes.
 #### `impl UpperHex for i8`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i8`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i8`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i8`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i8`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i8`
 
@@ -1366,17 +1326,9 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for u8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for u8`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u8`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for u8`
 
@@ -1401,22 +1353,6 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl UpperHex for u8`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u8`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u8`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u8`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u8`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u8`
 
@@ -1470,17 +1406,9 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for i16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for i16`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i16`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for i16`
 
@@ -1505,22 +1433,6 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl UpperHex for i16`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i16`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i16`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i16`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i16`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i16`
 
@@ -1582,17 +1494,9 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for u16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for u16`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u16`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for u16`
 
@@ -1617,22 +1521,6 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl UpperHex for u16`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u16`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u16`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u16`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u16`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u16`
 
@@ -1698,17 +1586,9 @@ Counts the number of set bits (population count).
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for i32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for i32`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i32`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for i32`
 
@@ -1733,22 +1613,6 @@ Counts the number of set bits (population count).
 #### `impl UpperHex for i32`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i32`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i32`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i32`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i32`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i32`
 
@@ -1818,17 +1682,9 @@ Counts the number of set bits (population count).
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for u32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for u32`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u32`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for u32`
 
@@ -1853,22 +1709,6 @@ Counts the number of set bits (population count).
 #### `impl UpperHex for u32`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u32`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u32`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u32`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u32`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u32`
 
@@ -1946,17 +1786,9 @@ Counts the number of set bits (population count).
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for i64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for i64`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i64`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for i64`
 
@@ -1981,22 +1813,6 @@ Counts the number of set bits (population count).
 #### `impl UpperHex for i64`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i64`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i64`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i64`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i64`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i64`
 
@@ -2078,17 +1894,9 @@ Counts the number of set bits (population count).
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for u64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for u64`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u64`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for u64`
 
@@ -2113,22 +1921,6 @@ Counts the number of set bits (population count).
 #### `impl UpperHex for u64`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u64`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u64`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u64`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u64`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u64`
 
@@ -2376,17 +2168,9 @@ Creates an f32 from its bit representation.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for f32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for f32`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for f32`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for f32`
 
@@ -2640,17 +2424,9 @@ Creates an f64 from its bit representation.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for f64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl Inspect for f64`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for f64`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerExp for f64`
 
@@ -2839,6 +2615,11 @@ Text alignment mode
 
 Whether to always show `+` sign for positive numbers
 
+#### `alternate: bool`
+
+Whether the spec asked for the alternate form (`#` flag): a radix
+prefix, or the indented multi-line `Inspect`.
+
 #### `zero_pad: bool`
 
 Whether to use zero-padding (`0` flag)
@@ -2854,7 +2635,7 @@ elements). Negative values are the sentinels below.
 
 #### `indent: i32`
 
-Current indentation level for pretty-printing (used by InspectAlt)
+Current indentation level for the alternate (`#`) `Inspect`
 
 #### `buf: &mut String`
 
@@ -3026,10 +2807,6 @@ Convert u128 to String (for template string interpolation)
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for u128`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl LowerExp for u128`
 
 ##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
@@ -3041,10 +2818,6 @@ Convert u128 to String (for template string interpolation)
 #### `impl Inspect for u128`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u128`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl Binary for u128`
 
@@ -3061,22 +2834,6 @@ Convert u128 to String (for template string interpolation)
 #### `impl UpperHex for u128`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u128`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u128`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u128`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u128`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u128`
 
@@ -3254,10 +3011,6 @@ Convert i128 to String (for template string interpolation)
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for i128`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl LowerExp for i128`
 
 ##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
@@ -3269,10 +3022,6 @@ Convert i128 to String (for template string interpolation)
 #### `impl Inspect for i128`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i128`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl Binary for i128`
 
@@ -3289,22 +3038,6 @@ Convert i128 to String (for template string interpolation)
 #### `impl UpperHex for i128`
 
 ##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i128`
-
-##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i128`
-
-##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i128`
-
-##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i128`
-
-##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i128`
 
@@ -3567,14 +3300,6 @@ shorter. Panics if `size` is not positive.
 #### `impl Display for Slice<T>`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for Slice<T>`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl DisplayAlt for Slice<T>`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 #### `impl IntoIterator for Slice<T>`
 
@@ -4353,14 +4078,6 @@ Joins elements into a string with the given separator.
 #### `impl Display for List<T>`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for List<T>`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl DisplayAlt for List<T>`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ### `pub struct RangeExclusive<T: Ord>`
 

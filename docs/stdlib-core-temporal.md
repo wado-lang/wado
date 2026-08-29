@@ -200,10 +200,6 @@ Interpret this instant in `time_zone`, the zoned view of the same moment
 
 ##### `fn fmt(&self, f: &mut Formatter)`
 
-#### `impl DisplayAlt for Instant`
-
-##### `fn fmt_alt(&self, f: &mut Formatter)`
-
 #### `impl FromStr for Instant`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<Instant, DeserializeError>`
@@ -441,10 +437,6 @@ zone name.
 #### `impl Display for ZonedDateTime`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
-
-#### `impl DisplayAlt for ZonedDateTime`
-
-##### `fn fmt_alt(&self, f: &mut Formatter)`
 
 #### `impl FromStr for ZonedDateTime`
 

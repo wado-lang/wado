@@ -23,6 +23,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
+    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
@@ -39,13 +40,11 @@ type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  
 struct canonical//CanonicalInspectableBase {  // TypeId(9)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    inspect_alt: ref "functype/$canonical_callback_fn",
 }
 
 struct canonical//CanonicalClosure_0 {  // TypeId(10)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    inspect_alt: ref "functype/$canonical_callback_fn",
     func: ref "functype/$canonical_closure_fn_0",
 }
 
@@ -150,7 +149,7 @@ fn "assert_closure_operand.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:assert_closure_operand.wado::__modules_initialized = 1;
     };
-    __v0 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "assert_closure_operand.wado//__Closure_0" {  }, inspect: ref.func "closure/assert_closure_operand.wado/__closure_inspect_wrapper_0", inspect_alt: ref.func "closure/assert_closure_operand.wado/__closure_inspect_alt_wrapper_0", func: ref.func "closure/assert_closure_operand.wado/__closure_wrapper_0" };
+    __v0 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "assert_closure_operand.wado//__Closure_0" {  }, inspect: ref.func "closure/assert_closure_operand.wado/__closure_inspect_wrapper_0", func: ref.func "closure/assert_closure_operand.wado/__closure_wrapper_0" };
     __v2 = block -> i32 {
         let __indirect_call_1: ref "canonical//CanonicalClosure_0";
         __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(__v0);
@@ -435,10 +434,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, alt_prefix, digit_count) {
     let sign: ref "core:prelude/string.wado//String";
     let sign_len: i32;
     let prefix_len: i32;
@@ -484,7 +483,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
-    prefix_len = prefix.used;
+    prefix_len = (if self.alternate -> i32 {
+        alt_prefix.used;
+    } else {
+        0;
+    });
     content_len = (sign_len + prefix_len) + digit_count;
     _av_66 = self.width;
     if select i32(_av_66 <= 0, 1, content_len >= _av_66) {
@@ -492,7 +495,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, alt_prefix);
         }
         return self_16 = self.buf, new_used_18 = self_16.used + digit_count, if @unlikely(new_used_18 > builtin::array_len(self_16.repr)) {
             cold_path;
@@ -505,16 +508,16 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, alt_prefix);
         }
         i_24 = 0;
         _licm_buf_61 = self.buf;
-        b33: block {
-            l34: loop {
-                break_if b33 i_24 >= padding;
+        b34: block {
+            l35: loop {
+                break_if b34 i_24 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(_licm_buf_61, 48);
                 i_24 = i_24 + 1;
-                continue l34;
+                continue l35;
             };
         };
         return self_25 = self.buf, new_used_27 = self_25.used + digit_count, if @unlikely(new_used_27 > builtin::array_len(self_25.repr)) {
@@ -528,7 +531,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, alt_prefix);
         }
         self_30 = self.buf;
         new_used_32 = self_30.used + digit_count;
@@ -541,12 +544,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_36 = self.fill;
         i_38 = 0;
         _licm_buf_62 = self.buf;
-        b40: block {
-            l41: loop {
-                break_if b40 i_38 >= padding;
+        b41: block {
+            l42: loop {
+                break_if b41 i_38 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_62, c_36);
                 i_38 = i_38 + 1;
-                continue l41;
+                continue l42;
             };
         };
         return start_33;
@@ -556,19 +559,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_40 = self.fill;
         i_42 = 0;
         _licm_buf_63 = self.buf;
-        b43: block {
-            l44: loop {
-                break_if b43 i_42 >= left_pad;
+        b44: block {
+            l45: loop {
+                break_if b44 i_42 >= left_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_63, c_40);
                 i_42 = i_42 + 1;
-                continue l44;
+                continue l45;
             };
         };
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, alt_prefix);
         }
         self_43 = self.buf;
         new_used_45 = self_43.used + digit_count;
@@ -581,12 +584,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_49 = self.fill;
         i_51 = 0;
         _licm_buf_64 = self.buf;
-        b48: block {
-            l49: loop {
-                break_if b48 i_51 >= right_pad;
+        b49: block {
+            l50: loop {
+                break_if b49 i_51 >= right_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_64, c_49);
                 i_51 = i_51 + 1;
-                continue l49;
+                continue l50;
             };
         };
         return start_46;
@@ -594,19 +597,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_53 = self.fill;
         i_55 = 0;
         _licm_buf_65 = self.buf;
-        b50: block {
-            l51: loop {
-                break_if b50 i_55 >= padding;
+        b51: block {
+            l52: loop {
+                break_if b51 i_55 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_65, c_53);
                 i_55 = i_55 + 1;
-                continue l51;
+                continue l52;
             };
         };
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, alt_prefix);
         }
         return self_56 = self.buf, new_used_58 = self_56.used + digit_count, if @unlikely(new_used_58 > builtin::array_len(self_56.repr)) {
             cold_path;
@@ -620,9 +623,17 @@ fn "assert_closure_operand.wado/assert_closure_operand.wado/__Closure_0::__call"
 }
 
 fn "assert_closure_operand.wado/assert_closure_operand.wado/__Closure_0^core:prelude/traits.wado/Inspect::inspect"(f) {
-    let s: ref "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s);
+    let s_2: ref "core:prelude/string.wado//String";
+    let s_4: ref "core:prelude/string.wado//String";
+    if f.alternate {
+        s_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|x: i32| {
+    return (x * 2);
+}"), used: 32 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_2);
+    } else {
+        s_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_4);
+    }
 }
 
 fn "closure/assert_closure_operand.wado/__closure_wrapper_0"(__env, __p0) {
@@ -633,10 +644,6 @@ fn "closure/assert_closure_operand.wado/__closure_inspect_wrapper_0"(__env, __fo
     let __typed_formatter: ref "core:prelude/format.wado//Formatter";
     __typed_formatter = ref.cast "core:prelude/format.wado//Formatter"(__formatter);
     "assert_closure_operand.wado/assert_closure_operand.wado/__Closure_0^core:prelude/traits.wado/Inspect::inspect"(__typed_formatter);
-}
-
-fn "closure/assert_closure_operand.wado/__closure_inspect_alt_wrapper_0"(__env, __formatter) {
-    unreachable;
 }
 
 export fn "assert_closure_operand.wado/__cm_export__run" as "run"

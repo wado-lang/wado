@@ -8,7 +8,7 @@
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
 
-use { Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
+use { Display, Inspect } from "core:prelude/traits.wado";
 use { String, StrCharIter } from "core:prelude/string.wado";
 use { Option } from "core:prelude/types.wado";
 use { unreachable } from "core:rt";
@@ -50,6 +50,9 @@ pub struct Formatter {
     pub align: Alignment,
     /// Whether to always show `+` sign for positive numbers
     pub sign_plus: bool,
+    /// Whether the spec asked for the alternate form (`#` flag): a radix
+    /// prefix, or the indented multi-line `Inspect`.
+    pub alternate: bool,
     /// Whether to use zero-padding (`0` flag)
     pub zero_pad: bool,
     /// Minimum field width in characters; `NO_WIDTH` for none
@@ -57,7 +60,7 @@ pub struct Formatter {
     /// Decimal places for floats; max rendered length for sequences (chars /
     /// elements). Negative values are the sentinels below.
     pub precision: i32,
-    /// Current indentation level for pretty-printing (used by InspectAlt)
+    /// Current indentation level for the alternate (`#`) `Inspect`
     pub indent: i32,
     /// Reference to the output buffer
     pub buf: &mut String,
@@ -94,6 +97,7 @@ impl Formatter {
             fill: ' ',
             align: Alignment::Right,
             sign_plus: false,
+            alternate: false,
             zero_pad: false,
             width: Formatter::NO_WIDTH,
             precision: Formatter::PRECISION_DEFAULT,
@@ -289,7 +293,10 @@ impl Formatter {
     /// uninitialised bytes and returns their byte-offset inside `buf`.
     /// The caller **must** fill exactly `digit_count` bytes (backwards) via
     /// `buf.internal_raw_bytes()` at the returned offset.
-    pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
+    /// `alt_prefix` is the radix marker (`0x`, `0b`, `0o`) the alternate form
+    /// asks for; a plain spec drops it without the caller having to hand over an
+    /// empty string, which would leave a value copy behind.
+    pub fn prepare_int_write(&mut self, is_negative: bool, alt_prefix: String, digit_count: i32) -> i32 {
         let mut sign = "";
         if is_negative {
             sign = "-";
@@ -298,7 +305,7 @@ impl Formatter {
         }
 
         let sign_len = sign.len();
-        let prefix_len = prefix.len();
+        let prefix_len = if self.alternate { alt_prefix.len() } else { 0 };
         let content_len = sign_len + prefix_len + digit_count;
 
         if self.width <= 0 || content_len >= self.width {
@@ -307,7 +314,7 @@ impl Formatter {
                 self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(&prefix);
+                self.buf.push_str(&alt_prefix);
             }
             return self.buf.internal_reserve_uninit(digit_count);
         }
@@ -320,7 +327,7 @@ impl Formatter {
                 self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(&prefix);
+                self.buf.push_str(&alt_prefix);
             }
             self.write_char_n('0', padding);
             return self.buf.internal_reserve_uninit(digit_count);
@@ -333,7 +340,7 @@ impl Formatter {
                 self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(&prefix);
+                self.buf.push_str(&alt_prefix);
             }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, padding);
@@ -347,7 +354,7 @@ impl Formatter {
                 self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(&prefix);
+                self.buf.push_str(&alt_prefix);
             }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, right_pad);
@@ -359,7 +366,7 @@ impl Formatter {
                 self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(&prefix);
+                self.buf.push_str(&alt_prefix);
             }
             return self.buf.internal_reserve_uninit(digit_count);
         }
@@ -404,12 +411,6 @@ impl Display for String {
         } else {
             f.pad(*self);
         }
-    }
-}
-
-impl DisplayAlt for String {
-    pub fn fmt_alt(&self, f: &mut Formatter) {
-        self.fmt(f);
     }
 }
 
@@ -507,30 +508,4 @@ impl<T: Inspect> Inspect for &mut T {
     }
 }
 
-impl InspectAlt for ! {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        unreachable();
-    }
-}
 
-impl InspectAlt for String {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-
-impl<T: InspectAlt> InspectAlt for &T {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        f.write_str(&"&");
-        let inner: &T = *self;
-        (*inner).inspect_alt(f);
-    }
-}
-
-impl<T: InspectAlt> InspectAlt for &mut T {
-    pub fn inspect_alt(&mut self, f: &mut Formatter) {
-        f.write_str(&"&mut ");
-        let inner: &mut T = *self;
-        (*inner).inspect_alt(f);
-    }
-}

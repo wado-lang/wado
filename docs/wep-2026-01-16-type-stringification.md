@@ -164,7 +164,7 @@ This ensures template strings always produce output without requiring explicit t
 
 ### Implemented Extensions
 
-1. **Pretty-print specifier**: `${x:#?}` for indented multi-line output via `InspectAlt` trait
+1. **Pretty-print specifier**: `${x:#?}` for indented multi-line output — the same `Inspect`, with `Formatter.alternate` set
 
 ### Future Extensions
 

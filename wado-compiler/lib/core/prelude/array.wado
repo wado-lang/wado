@@ -17,9 +17,7 @@ use {
     IndexRefMut,
     IntoIterator,
     Display,
-    DisplayAlt,
     Inspect,
-    InspectAlt,
 } from "core:prelude/traits.wado";
 use {
     AsSlice,
@@ -235,6 +233,10 @@ internal fn write_seq_inspect<T: Inspect>(
     marker: bool,
     limit: i32,
 ) {
+    if f.alternate {
+        write_seq_inspect_alt(repr, start, end, f, marker, limit);
+        return;
+    }
     f.write_char('[');
     let mut shown = 0;
     let mut truncated = false;
@@ -259,9 +261,11 @@ internal fn write_seq_inspect<T: Inspect>(
     f.write_char(']');
 }
 
-/// Pretty-printed counterpart of [`write_seq_inspect`]: each element on its own
-/// indented line; `marker` appends a `...` line when elements are dropped.
-internal fn write_seq_inspect_alt<T: InspectAlt>(
+/// The alternate (`#`) rendering `write_seq_inspect` hands off to: each element
+/// on its own indented line; `marker` appends a `...` line when elements are
+/// dropped. Separate from its caller so neither shape carries the other s
+/// branches.
+internal fn write_seq_inspect_alt<T: Inspect>(
     repr: &Array<T>,
     start: i32,
     end: i32,
@@ -282,7 +286,7 @@ internal fn write_seq_inspect_alt<T: InspectAlt>(
             break;
         }
         f.write_newline_indent();
-        repr[i].inspect_alt(f);
+        repr[i].inspect(f);
         f.write_char(',');
         shown += 1;
     }
@@ -306,15 +310,4 @@ impl<T: Inspect> Display for Array<T> {
     }
 }
 
-impl<T: InspectAlt> InspectAlt for Array<T> {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(self, 0, builtin::array_len(self), f, true, f.resolved_seq_limit());
-    }
-}
 
-impl<T: InspectAlt> DisplayAlt for Array<T> {
-    pub fn fmt_alt(&self, f: &mut Formatter) {
-        // DisplayAlt never applies the default sequence cap (see Display).
-        write_seq_inspect_alt(self, 0, builtin::array_len(self), f, false, f.precision);
-    }
-}

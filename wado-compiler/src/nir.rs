@@ -444,7 +444,6 @@ pub enum ReturnAbi {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FnDispatchTrait {
     Inspect,
-    InspectAlt,
 }
 
 /// Semantic category of a `NirFunction`. Carries the type operand so the
@@ -573,7 +572,7 @@ impl NirFunction {
         }
     }
 
-    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect` / `^InspectAlt`
+    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect`
     /// stub, which WIR build turns into the indirect-call body.
     #[inline]
     pub fn fn_canonical_dispatch(&self) -> Option<(FnDispatchTrait, usize, TypeId)> {

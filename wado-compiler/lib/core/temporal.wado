@@ -118,36 +118,32 @@ pub struct ZonedDateTime {
 impl Eq for ZonedDateTime;
 impl Ord for ZonedDateTime;
 
-// Display / DisplayAlt — ISO 8601 / RFC 3339 stringification.
+// Display — ISO 8601 / RFC 3339 stringification.
 //
 // The format specifier's precision selects how many sub-second digits to print
 // (truncated, not rounded). With no precision given, `Display` (`${x}`) prints
-// whole seconds and `DisplayAlt` (`${x:#}`) prints milliseconds. `Inspect`
+// whole seconds and the alternate form (`${x:#}`) prints milliseconds. `Inspect`
 // (`${x:?}`) is left as the auto-derived structural form.
 
 impl Display for Instant {
     fn fmt(&self, f: &mut Formatter) {
+        if f.alternate {
+            let digits = resolve_fraction_digits(f, 3);
+            f.pad(render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z"));
+            return;
+        }
         let digits = resolve_fraction_digits(f, 0);
-        f.pad(render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z"));
-    }
-}
-
-impl DisplayAlt for Instant {
-    fn fmt_alt(&self, f: &mut Formatter) {
-        let digits = resolve_fraction_digits(f, 3);
         f.pad(render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z"));
     }
 }
 
 impl Display for ZonedDateTime {
     fn fmt(&self, f: &mut Formatter) {
+        if f.alternate {
+            format_zoned(self, f, 3);
+            return;
+        }
         format_zoned(self, f, 0);
-    }
-}
-
-impl DisplayAlt for ZonedDateTime {
-    fn fmt_alt(&self, f: &mut Formatter) {
-        format_zoned(self, f, 3);
     }
 }
 
@@ -245,7 +241,7 @@ fn format_fraction(nanoseconds: u32, digits: i32) -> String {
     return `.${padding}${value_str}`;
 }
 
-/// Render a `ZonedDateTime` for `Display`/`DisplayAlt`. Only fixed UTC offsets
+/// Render a `ZonedDateTime` for `Display`. Only fixed UTC offsets
 /// are supported; an IANA zone name traps, because resolving its offset needs
 /// a time-zone database this module does not bundle.
 fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {

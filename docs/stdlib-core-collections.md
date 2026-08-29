@@ -127,10 +127,6 @@ Removes all key-value pairs from the map.
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
 
-#### `impl InspectAlt for TreeMap<K, V>`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
 #### `impl Default for TreeMap<K, V>`
 
 ##### `pub fn default() -> TreeMap<K, V>`
@@ -200,10 +196,6 @@ The elements, in insertion order.
 #### `impl Inspect for TreeSet<T>`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for TreeSet<T>`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 #### `impl Default for TreeSet<T>`
 

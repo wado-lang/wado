@@ -17,9 +17,7 @@ use {
     FromIterator,
     From,
     Display,
-    DisplayAlt,
     Inspect,
-    InspectAlt,
 } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { String } from "core:prelude/string.wado";
@@ -585,15 +583,4 @@ impl<T: Inspect> Display for List<T> {
     }
 }
 
-impl<T: InspectAlt> InspectAlt for List<T> {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(&self.repr, 0, self.used, f, true, f.resolved_seq_limit());
-    }
-}
 
-impl<T: InspectAlt> DisplayAlt for List<T> {
-    pub fn fmt_alt(&self, f: &mut Formatter) {
-        // DisplayAlt never applies the default sequence cap (see Display).
-        write_seq_inspect_alt(&self.repr, 0, self.used, f, false, f.precision);
-    }
-}

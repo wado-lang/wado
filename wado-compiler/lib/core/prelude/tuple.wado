@@ -12,6 +12,16 @@ use { Ordering } from "core:prelude/traits.wado";
 /// Inspect for tuples: `[1, "hello", true]`
 impl<..T: Inspect> Inspect for [..T] {
     fn inspect(&self, f: &mut Formatter) {
+        if f.alternate {
+            f.open_brace("[");
+            for let v of *self {
+                f.write_newline_indent();
+                v.inspect(f);
+                f.write_str(&",");
+            }
+            f.close_brace("]");
+            return;
+        }
         f.write_str(&"[");
         let mut first = true;
         for let v of *self {
@@ -25,7 +35,7 @@ impl<..T: Inspect> Inspect for [..T] {
     }
 }
 
-/// InspectAlt (pretty-print) for tuples:
+/// Alternate (`#`) inspect for tuples — pretty-printed:
 /// ```
 /// [
 ///   1,
@@ -33,18 +43,6 @@ impl<..T: Inspect> Inspect for [..T] {
 ///   true,
 /// ]
 /// ```
-impl<..T: InspectAlt> InspectAlt for [..T] {
-    fn inspect_alt(&self, f: &mut Formatter) {
-        f.open_brace("[");
-        for let v of *self {
-            f.write_newline_indent();
-            v.inspect_alt(f);
-            f.write_str(&",");
-        }
-        f.close_brace("]");
-    }
-}
-
 /// Eq for tuples: element-wise equality.
 impl<..T: Eq> Eq for [..T] {
     fn eq(&self, other: &Self) -> bool {
@@ -73,6 +71,16 @@ impl<..T: Ord> Ord for [..T] {
 /// Display for tuples: same as Inspect (tuples have no user-facing format).
 impl<..T: Display> Display for [..T] {
     fn fmt(&self, f: &mut Formatter) {
+        if f.alternate {
+            f.open_brace("[");
+            for let v of *self {
+                f.write_newline_indent();
+                v.fmt(f);
+                f.write_str(&",");
+            }
+            f.close_brace("]");
+            return;
+        }
         f.write_str(&"[");
         let mut first = true;
         for let v of *self {
@@ -86,15 +94,4 @@ impl<..T: Display> Display for [..T] {
     }
 }
 
-/// DisplayAlt for tuples: same as InspectAlt.
-impl<..T: DisplayAlt> DisplayAlt for [..T] {
-    fn fmt_alt(&self, f: &mut Formatter) {
-        f.open_brace("[");
-        for let v of *self {
-            f.write_newline_indent();
-            v.fmt_alt(f);
-            f.write_str(&",");
-        }
-        f.close_brace("]");
-    }
-}
+/// Display for tuples; the alternate form pretty-prints, as inspect does.

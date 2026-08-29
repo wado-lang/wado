@@ -132,6 +132,7 @@ impl TemplateFormatSpec {
         self.fill.is_some()
             || self.align.is_some()
             || self.sign_plus
+            || self.alternate
             || self.zero_pad
             || self.width.is_some()
             || self.precision.is_some()

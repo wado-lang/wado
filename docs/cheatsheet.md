@@ -278,11 +278,11 @@ let s = `${3.14}`;                        // "3.14"
 // Format specifiers via Display (see docs/wep-2026-01-17-template-format-specifiers.md)
 let formatted = `${3.14159:0.2f}`;        // "3.14"
 let hex = `${255:x}`;                     // "ff"
-let hex_alt = `${255:#x}`;                // "0xff" (LowerHexAlt)
+let hex_alt = `${255:#x}`;                // "0xff" (LowerHex, alternate flag)
 
 // Inspect (:?) — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
 println(`${point:?}`);                    // "Point { x: 10, y: 20 }"
-println(`${point:#?}`);                   // pretty-print with indentation (InspectAlt)
+println(`${point:#?}`);                   // pretty-print with indentation (Inspect, alternate)
 // `${point}` (Display) needs an `impl Display for Point`; use `${point:?}` for debug.
 
 // String methods (mostly Rust compatible)
@@ -933,7 +933,6 @@ trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: 
 
 // For string template interpolation
 pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers
-pub trait DisplayAlt { fn fmt_alt(&self, f: &mut Formatter); }  // for # (alt) flag
 
 // For parsing a value from a string. `from_str_range` is the required
 // fundamental operation; `from_str` is defaulted to call it with the full
@@ -996,7 +995,7 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
-`${x:?}` / `${x:#?}` (`Inspect` / `InspectAlt`) work for every type. `${x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `${x}` is a compile error and `${x:?}` gives the debug form. `${x:#}` (`DisplayAlt`) follows `Display`.
+`${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type. `${x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `${x}` is a compile error and `${x:?}` gives the debug form. `${x:#}` runs the same `Display` with `Formatter.alternate` set.
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
