@@ -80,6 +80,11 @@ struct OptConfig {
     iterations: u32,
     /// Maximum statement count for inlining
     inline_threshold: usize,
+    /// Whether exhausting `iterations` is a defect rather than a budget. True
+    /// only for `-O3`'s own cap, which is sized so the loop converges under it;
+    /// `-O1` and `-O2` spend a deliberately smaller number of rounds, and
+    /// `--optimize-iterations` is the caller asking for a truncated run.
+    cap_is_defect: bool,
 }
 
 /// Optimization level. Every level runs DCE and the post-loop rewrites the Wasm
@@ -158,6 +163,7 @@ pub fn optimize(
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(2),
                 inline_threshold: inline_threshold.unwrap_or(4),
+                cap_is_defect: false,
             };
             // Early DCE: remove unreachable functions/types before optimization
             // to reduce the working set for subsequent passes
@@ -176,6 +182,7 @@ pub fn optimize(
                 // and the resulting code regresses (13.5ms/iter -> 18ms).
                 // Sizes at 13 and 14 differ by only ~4KB.
                 inline_threshold: inline_threshold.unwrap_or(13),
+                cap_is_defect: false,
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
@@ -193,6 +200,7 @@ pub fn optimize(
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),
                 inline_threshold: inline_threshold.unwrap_or(32),
+                cap_is_defect: opt_iterations.is_none(),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
@@ -631,11 +639,16 @@ fn run_optimization_passes(
         }
     }
     if !converged {
-        profiler.debug(&format!(
+        let report = format!(
             "NIR optimizer hit the {}-iteration cap without converging; still changing: [{}]",
             config.iterations,
             iter_changed.join(", ")
-        ));
+        );
+        profiler.debug(&report);
+        // Reaching `-O3`'s own cap means a pass reported a change it did not
+        // make, or is taking one step per round where one walk should reach its
+        // fixpoint. Either is a defect, and a release build pays it silently.
+        debug_assert!(!config.cap_is_defect, "{report}");
     }
     // Hot Field Scalarization runs once after the main loop converges.
     // Running inside the loop would cause the write-back/re-read stmts it

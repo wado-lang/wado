@@ -22,7 +22,7 @@ All levels run DCE on functions, types, and globals.
 
 The inline budget counts emitted Wasm instructions on the callee's hot path, not NIR nodes — see [`inline`](#nir-passes) for the weights.
 
-The fixed-point loop exits early on convergence, so a pass must report a change only when it made one, never when it merely found work to look at; a `gate_only!` pass reports to the dirty-set gate alone and never extends the loop. A run that reaches the cap instead logs it at debug level, naming the passes still reporting changes — that line is a defect report, not a tuning knob. The backend-required rewrites (`select_lowering`, `multi_value_return`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
+The fixed-point loop exits early on convergence, so a pass must report a change only when it made one, never when it merely found work to look at; a `gate_only!` pass reports to the dirty-set gate alone and never extends the loop. A run that reaches the cap instead logs it at debug level, naming the passes still reporting changes — that line is a defect report, not a tuning knob, and at `-O3` it is a `debug_assert`. `-O1` and `-O2` spend a deliberately smaller number of rounds, so their caps are budgets and say nothing; `--optimize-iterations` is likewise the caller asking for a truncated run. The backend-required rewrites (`select_lowering`, `multi_value_return`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
 
 ## Architecture
 
