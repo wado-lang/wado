@@ -1,7 +1,6 @@
-use { Alternative, Element, RepeatKind, Visibility } from "./ir.wado";
+use { Alternative, Element, Visibility } from "./ir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { unwrap_label } from "./lr_util.wado";
-use { TreeSet } from "core:collections";
 pub use { escape_ident, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
 /// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
@@ -462,12 +461,6 @@ pub fn single_token_first(elem: &Element) -> String {
         Literal(l) => literal_const_name(&l.text),
         _ => panic("single_token_first: unexpected element"),
     };
-}
-
-pub fn str_set_insert_all(set: &mut TreeSet<String>, arr: &List<String>) {
-    for let item of arr {
-        set.insert(*item);
-    }
 }
 
 /// Build unique case names for labeled alternatives.

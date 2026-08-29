@@ -1110,9 +1110,9 @@ impl Lexer {
         self.act_output.push_str(&s);
     }
 
-    fn reset_actions(&mut self) {
-        self.act_type = -1;
-        self.act_channel = -1;
+    fn reset_actions(&mut self, kind: i32, channel: i32) {
+        self.act_type = kind;
+        self.act_channel = channel;
         self.act_skip = false;
         self.act_more = false;
     }
@@ -1137,6 +1137,7 @@ impl Lexer {
 fn apply_WORD1_actions(lx: &mut Lexer, start: i32, end: i32) {
     let chars = &lx.chars;
     let mut pos = start;
+    if !(char_pos_in_line(chars, pos) < 2) { return; }
     if pos >= chars.len() { return; }
     if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { return; }
     pos += 1;
@@ -1144,6 +1145,7 @@ fn apply_WORD1_actions(lx: &mut Lexer, start: i32, end: i32) {
     loop {
         let rep_saved_0 = pos;
         rep_0: {
+            if !(char_pos_in_line(chars, pos) < 2) { break rep_0; }
             if pos >= chars.len() { break rep_0; }
             if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { break rep_0; }
             pos += 1;
@@ -1159,6 +1161,7 @@ fn apply_WORD1_actions(lx: &mut Lexer, start: i32, end: i32) {
 fn apply_WORD2_actions(lx: &mut Lexer, start: i32, end: i32) {
     let chars = &lx.chars;
     let mut pos = start;
+    if !(char_pos_in_line(chars, pos) >= 2) { return; }
     if pos >= chars.len() { return; }
     if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { return; }
     pos += 1;
@@ -1166,6 +1169,7 @@ fn apply_WORD2_actions(lx: &mut Lexer, start: i32, end: i32) {
     loop {
         let rep_saved_2 = pos;
         rep_2: {
+            if !(char_pos_in_line(chars, pos) >= 2) { break rep_2; }
             if pos >= chars.len() { break rep_2; }
             if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' })) { break rep_2; }
             pos += 1;
@@ -1277,14 +1281,14 @@ pub fn tokenize(input: &String) -> TokenStream {
             lexer.pos = start + 1;
         } else {
             if best_act >= 0 {
-                lexer.reset_actions();
+                lexer.reset_actions(best_kind, best_channel);
                 if best_act == 0 {
                     apply_WORD1_actions(&mut lexer, start, best_end);
                 } else if best_act == 1 {
                     apply_WORD2_actions(&mut lexer, start, best_end);
                 }
-                if lexer.act_type >= 0 { best_kind = lexer.act_type; }
-                if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }
+                best_kind = lexer.act_type;
+                best_channel = lexer.act_channel;
                 if lexer.act_more { best_more = true; }
                 if lexer.act_skip { best_act_skip = true; }
             }

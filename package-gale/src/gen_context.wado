@@ -1,24 +1,10 @@
-use {
-    ParserRule,
-    Alternative,
-    Element,
-    RepeatElement,
-    LabelElement,
-    RepeatKind,
-    ActionLanguage,
-    compute_scan_cyclic,
-} from "./ir.wado";
+use { ParserRule, Alternative, Element, RepeatElement, ActionLanguage, compute_scan_cyclic } from "./ir.wado";
 use { SuperOp } from "./superclass.wado";
 use { LitToken } from "./lexer_gen.wado";
-use {
-    literal_const_name,
-    is_single_alt_group,
-    is_general_group,
-    single_alt_group_type_name,
-    count_general_groups,
-    dedup_append_arr,
-} from "./gen_util.wado";
+use { literal_const_name, is_single_alt_group, single_alt_group_type_name, dedup_append_arr } from "./gen_util.wado";
 use { Diagnostic, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
+use { AltBinding } from "./attr_resolve.wado";
+use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
 use { TreeMap } from "core:collections";
 
@@ -207,11 +193,11 @@ pub struct GenContext {
     /// action / predicate splice sites route to the right translator front
     /// end (identity for Wado, java2wado for Java). Set once at codegen entry.
     action_language: ActionLanguage,
-    /// The grammar name and its `@members` method names, so the java2wado front
-    /// end resolves `T.CONST` token constants and `this.m()` / `m()` calls
-    /// against real declarations. Set once at codegen entry.
+    /// The grammar name and its `@members` declarations, so the java2wado front
+    /// end resolves `T.CONST` token constants, `this.m()` / `m()` calls and bare
+    /// field reads against real declarations. Set once at codegen entry.
     grammar_name: String,
-    action_member_methods: List<String>,
+    action_members: MemberNames,
     /// The lexer's `superClass` base effect-interface name, or `""` when none.
     /// See `action.md`, "SuperClass — an effect interface".
     superclass_name: String,
@@ -252,11 +238,11 @@ pub struct GenContext {
     /// Per rule, the labeled rule calls whose capture an action reads. Their
     /// value-struct fields are what `$x.text` / `$x.ctx` resolve to.
     rule_captures: TreeMap<String, RuleCaptures>,
-    /// Actual post-dedup bindings for the alternative currently being emitted:
-    /// `[is_token, base, field]`. The action translator maps a `$ref` to its
-    /// real local (`e_2`) instead of re-deriving `binding_name`, which diverges
-    /// when a token / rule field-name collision deduped the reference.
-    alt_bindings: List<[bool, String, String]>,
+    /// Actual post-dedup bindings for the alternative currently being emitted.
+    /// The action translator maps a `$ref` to its real local (`e_2`) instead of
+    /// re-deriving `binding_name`, which diverges when a token / rule field-name
+    /// collision deduped the reference.
+    alt_bindings: List<AltBinding>,
 }
 
 impl GenContext {
@@ -301,7 +287,7 @@ impl GenContext {
             emit_actions: false,
             action_language: ActionLanguage::Wado,
             grammar_name: "",
-            action_member_methods: [],
+            action_members: MemberNames {},
             superclass_name: "",
             superclass_ops: [],
             parser_superclass_name: "",
@@ -601,17 +587,22 @@ impl GenContext {
         return self.action_language;
     }
 
-    pub fn set_action_grammar(&mut self, name: &String, member_methods: List<String>) {
+    pub fn set_grammar_name(&mut self, name: &String) {
         self.grammar_name = *name;
-        self.action_member_methods = member_methods;
+    }
+
+    /// Read off the translated `@parser::members`, so a body can only resolve a
+    /// name to a member that reaches the struct.
+    pub fn set_action_members(&mut self, members: MemberNames) {
+        self.action_members = members;
     }
 
     pub fn grammar_name(&self) -> &String with stores[self] {
         return &self.grammar_name;
     }
 
-    pub fn action_member_methods(&self) -> &List<String> with stores[self] {
-        return &self.action_member_methods;
+    pub fn action_members(&self) -> &MemberNames with stores[self] {
+        return &self.action_members;
     }
 
     pub fn set_superclass(&mut self, name: &String, ops: List<SuperOp>) {
@@ -690,11 +681,11 @@ impl GenContext {
 
     /// Set the actual bindings for the alternative whose actions are about to be
     /// emitted, so the translator resolves `$ref` to its real (post-dedup) local.
-    pub fn set_alt_bindings(&mut self, bindings: List<[bool, String, String]>) {
+    pub fn set_alt_bindings(&mut self, bindings: List<AltBinding>) {
         self.alt_bindings = bindings;
     }
 
-    pub fn alt_bindings(&self) -> &List<[bool, String, String]> with stores[self] {
+    pub fn alt_bindings(&self) -> &List<AltBinding> with stores[self] {
         return &self.alt_bindings;
     }
 

@@ -10,6 +10,8 @@ use {
     lexer_cursor_column_expr,
     lexer_token_start_column_expr,
     resolve_lexer_attr_ref,
+    LexerAttrEnv,
+    AttrUse,
     resolve_attr_ref,
     binding_name,
     rule_binding_for,
@@ -19,9 +21,10 @@ use {
     RULE_START_TOK_LOCAL,
     LR_ACC_LOCAL,
 } from "../action_translate.wado";
-use { to_snake_case } from "../ident.wado";
+use { to_snake_case, escape_ident } from "../ident.wado";
+use { AltBinding } from "../attr_resolve.wado";
 use { str_lit } from "../wadopoet.wado";
-use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
+use { JExpr, JMember, JCall, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 
@@ -45,10 +48,9 @@ pub struct JEnv {
     /// span, and a `$`-attribute resolves against the match fn's cursor.
     /// Defaulted so the parser-side construction sites are unchanged.
     pub lexer: bool = false,
-    /// The snake_cased `@members` field names a bare name may resolve to. Only
-    /// consulted in lexer mode, where a bare name is either a member field or
-    /// an ANTLR recognizer field Gale does not model — and the latter must be a
-    /// loud error, not verbatim text that fails to compile downstream.
+    /// The snake_cased `@members` field names a bare name may resolve to. A
+    /// field is reachable bare in Java, so a body that reads one has to emit the
+    /// same access `this.<x>` does — unqualified, it names nothing.
     pub fields: List<String> = [],
     /// Whether this body can write to the recognizer's output sink. False in a
     /// lexer predicate: it is evaluated for every candidate rule during the
@@ -60,6 +62,106 @@ pub struct JEnv {
     /// statement can read them. Collected up front because the emitter walks
     /// statements without carrying a scope.
     pub locals: List<String> = [],
+    /// The enclosing rule's argument names, in their surface spelling. Java
+    /// reaches an argument bare; Gale stores it in the value channel, so the
+    /// bare name resolves to `$name` rather than to the generated parameter.
+    pub args: List<String> = [],
+    /// The `@members` methods taking `&mut self`. A lexer predicate holds
+    /// `&Lexer` — the tournament must not mutate through a losing candidate —
+    /// so a call to one from there is refused, not emitted.
+    pub mut_methods: List<String> = [],
+    /// Whether the recognizer handle here is a shared reference. True only in a
+    /// lexer predicate; every other body may write.
+    pub read_only: bool = false,
+    /// Whether the grammar declares a lexer mode, which is what gives `$mode` a
+    /// latch to write.
+    pub uses_modes: bool = false,
+    /// True inside a `@members` method body. A member is a method on the
+    /// recognizer struct, so it reaches the fields and the sibling methods but
+    /// stands outside any one match: the cursor locals and the rule's start
+    /// token belong to the generated functions, not to the struct.
+    pub in_members: bool = false,
+}
+
+/// The ANTLR recognizer API this translator answers for. A variant added here
+/// does not compile until `api_host` and `api_needs_frame` answer for it.
+enum ApiCall {
+    /// `getText()`: the lexer's matched slice, the parser's rule span.
+    Text,
+    /// `getCharPositionInLine()`.
+    CharPos,
+    /// `_tokenStartCharPositionInLine`.
+    TokenStartCharPos,
+    /// `getRuleInvocationStack()`.
+    RuleStack,
+    /// `_input.getText()`.
+    InputText,
+    /// `<token>.getText()`.
+    TokenText,
+    /// `_input.LA(k)`.
+    La,
+    /// `_input.LT(k)`.
+    Lt,
+}
+
+/// Which recognizer carries the call. The generated `Lexer` has characters and
+/// a cursor; the `Parser` has tokens and rules; neither carries the other's.
+enum ApiHost {
+    Parser,
+    Lexer,
+    Either,
+}
+
+fn api_host(call: ApiCall) -> ApiHost {
+    return match call {
+        Text => ApiHost::Either,
+        CharPos | TokenStartCharPos => ApiHost::Lexer,
+        RuleStack | InputText | TokenText | La | Lt => ApiHost::Parser,
+    };
+}
+
+/// Whether the call reads the enclosing match — the lexer's `chars` / `start` /
+/// `pos`, or the parser's rule-start token. A `@members` method has neither.
+fn api_needs_frame(call: ApiCall) -> bool {
+    return match call {
+        Text | CharPos | TokenStartCharPos => true,
+        RuleStack | InputText | TokenText | La | Lt => false,
+    };
+}
+
+fn api_name(call: ApiCall) -> String {
+    return match call {
+        Text => "getText()",
+        CharPos => "getCharPositionInLine()",
+        TokenStartCharPos => "_tokenStartCharPositionInLine",
+        RuleStack => "getRuleInvocationStack()",
+        InputText => "_input.getText()",
+        TokenText => "<token>.getText()",
+        La => "_input.LA()",
+        Lt => "_input.LT()",
+    };
+}
+
+/// The expression a recognizer-API call emits, or a loud error where the body
+/// cannot reach it. Every spelling of every special goes through here.
+fn api_expr(env: &JEnv, call: ApiCall, expr: String) -> Result<String, String> {
+    let wrong_host = match api_host(call) {
+        Parser => env.lexer,
+        Lexer => !env.lexer,
+        Either => false,
+    };
+    if wrong_host {
+        builtin::cold_path();
+        let carried = if env.lexer { "the parser's token stream" } else { "the lexer's match cursor" };
+        return Result::Err(`java2wado: '${api_name(call)}' reads ${carried}, which this body has no access to`);
+    }
+    if api_needs_frame(call) && env.in_members {
+        builtin::cold_path();
+        return Result::Err(
+            `java2wado: @members: '${api_name(call)}' reads the match window, which a member method stands outside of`,
+        );
+    }
+    return Result::Ok(expr);
 }
 
 /// Translate a lexer `{ ... }` action body. The lexer has no enclosing parser
@@ -69,17 +171,16 @@ pub struct JEnv {
 pub fn translate_java_lexer_stmts(body: &String, env: &JEnv) -> Result<String, String> {
     let rule = lexer_body_rule();
     let rules: List<ParserRule> = [];
-    let bindings: List<[bool, String, String]> = [];
+    let bindings: List<AltBinding> = [];
     let tokens = tokenize_java(body)?;
     let stmts = parse_java_stmts(&tokens)?;
-    let mut scoped = *env;
-    scoped.locals = declared_local_names(&stmts);
-    return emit_java_stmts(&rule, &rules, &stmts, false, &bindings, &scoped);
+    return emit_java_stmts(&rule, &rules, &stmts, false, &bindings, &with_locals(env, &stmts));
 }
 
 /// The names a statement list declares as locals. `emit_local` emits them as
-/// real Wado locals, so a later statement naming one is resolvable.
-fn declared_local_names(stmts: &List<JStmt>) -> List<String> {
+/// real Wado locals, so a later statement naming one is resolvable — and names
+/// the enclosing recognizer's own field, which the local shadows.
+pub fn declared_local_names(stmts: &List<JStmt>) -> List<String> {
     let mut out: List<String> = [];
     for let st of stmts {
         if let Local(l) = st {
@@ -93,9 +194,10 @@ fn declared_local_names(stmts: &List<JStmt>) -> List<String> {
 pub fn translate_java_lexer_expr(body: &String, env: &JEnv) -> Result<String, String> {
     let mut env = *env;
     env.sink = false;
+    env.read_only = true;
     let rule = lexer_body_rule();
     let rules: List<ParserRule> = [];
-    let bindings: List<[bool, String, String]> = [];
+    let bindings: List<AltBinding> = [];
     let tokens = tokenize_java(body)?;
     let expr = parse_java_expr(&tokens)?;
     return emit_expr(&rule, &rules, &expr, false, &bindings, &env);
@@ -112,7 +214,7 @@ pub fn translate_java_expr(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let tokens = tokenize_java(body)?;
@@ -125,12 +227,23 @@ pub fn translate_java_stmts(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let tokens = tokenize_java(body)?;
     let stmts = parse_java_stmts(&tokens)?;
-    return emit_java_stmts(rule, rules, &stmts, vals_in_scope, bindings, env);
+    return emit_java_stmts(rule, rules, &stmts, vals_in_scope, bindings, &with_locals(env, &stmts));
+}
+
+/// `env` plus the locals a statement list declares. Appended, not assigned: the
+/// caller may already have seeded a scope the body's own declarations join
+/// (a rule's arguments, a member method's parameters).
+pub fn with_locals(env: &JEnv, stmts: &List<JStmt>) -> JEnv {
+    let mut scoped = *env;
+    for let n of &declared_local_names(stmts) {
+        scoped.locals.push(*n);
+    }
+    return scoped;
 }
 
 /// Space-joined statements (each already carries its `;`).
@@ -139,7 +252,7 @@ pub fn emit_java_stmts(
     rules: &List<ParserRule>,
     stmts: &List<JStmt>,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("");
@@ -157,7 +270,7 @@ fn emit_stmt(
     rules: &List<ParserRule>,
     s: &JStmt,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     return match s {
@@ -167,7 +280,7 @@ fn emit_stmt(
         },
         Local(l) => emit_local(rule, rules, l, vals_in_scope, bindings, env),
         Assign(a) => {
-            let target = emit_expr(rule, rules, &a.target, vals_in_scope, bindings, env)?;
+            let target = emit_assign_target(rule, rules, a, vals_in_scope, bindings, env)?;
             let value = emit_expr(rule, rules, &a.value, vals_in_scope, bindings, env)?;
             Result::Ok(`${target} ${a.op} ${value};`);
         },
@@ -190,12 +303,34 @@ fn emit_stmt(
     };
 }
 
+fn lexer_attr_env(env: &JEnv) -> LexerAttrEnv {
+    return LexerAttrEnv { in_action: !env.read_only, uses_modes: env.uses_modes };
+}
+
+/// An assignment's left-hand side. A `$`-attribute there is a write, and
+/// `$mode`'s write is a different field from its read, so the site's own syntax
+/// decides which — `emit_expr` alone would have to guess.
+fn emit_assign_target(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    a: &JAssign,
+    vals_in_scope: bool,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> Result<String, String> {
+    if let Attr(text) = &a.target && env.lexer && !env.in_members {
+        let use_ = if a.op == "=" { AttrUse::Write } else { AttrUse::ReadWrite };
+        return resolve_lexer_attr_ref(text, &lexer_attr_env(env), use_);
+    }
+    return emit_expr(rule, rules, &a.target, vals_in_scope, bindings, env);
+}
+
 fn emit_local(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     l: &JLocal,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let ty = match map_java_type(&l.ty) {
@@ -210,7 +345,7 @@ fn emit_local(
             return Result::Err(`java2wado: local '${l.name}' needs an initializer`);
         },
     };
-    return Result::Ok(`let mut ${l.name}: ${ty} = ${init};`);
+    return Result::Ok(`let mut ${escape_ident(&l.name)}: ${ty} = ${init};`);
 }
 
 /// Emit `System.out.print`/`println` as `<this>.emit(<template>)`, rendering the
@@ -220,7 +355,7 @@ fn emit_print(
     rules: &List<ParserRule>,
     args: &List<JExpr>,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
     newline: bool,
 ) -> Result<String, String> {
@@ -260,7 +395,7 @@ pub fn emit_expr(
     rules: &List<ParserRule>,
     e: &JExpr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     return match e {
@@ -268,8 +403,13 @@ pub fn emit_expr(
         Bool(b) => Result::Ok(if *b { String::from("true") } else { String::from("false") }),
         Str(c) => Result::Ok(`"${*c}"`),
         Attr(text) => {
-            if env.lexer {
-                resolve_lexer_attr_ref(text);
+            if env.in_members {
+                builtin::cold_path();
+                Result::Err(
+                    `java2wado: @members: '${*text}' is an attribute of a match, which a member method stands outside of`,
+                );
+            } else if env.lexer {
+                resolve_lexer_attr_ref(text, &lexer_attr_env(env));
             } else {
                 resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, &env.this_bind);
             }
@@ -277,10 +417,8 @@ pub fn emit_expr(
         Name(n) => {
             if *n == "this" {
                 Result::Ok(env.this_bind);
-            } else if env.lexer {
-                lexer_name_expr(env, n);
             } else {
-                Result::Ok(*n);
+                name_expr(rule, rules, n, vals_in_scope, bindings, env);
             }
         },
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, env),
@@ -313,11 +451,11 @@ fn emit_member(
     rules: &List<ParserRule>,
     m: &JMember,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     if name_is(&m.recv, &"this") {
-        return Result::Ok(`${env.this_bind}.${m.name}`);
+        return this_field_expr(env, &m.name);
     }
     if is_upper_ident(&m.name) && is_name(&m.recv) {
         if recv_is_grammar_class(env, &m.recv) {
@@ -334,7 +472,7 @@ fn emit_call(
     rules: &List<ParserRule>,
     c: &JCall,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     if let Member(m) = &c.callee {
@@ -370,32 +508,37 @@ fn emit_call(
     let args_w = emit_args(rule, rules, &c.args, vals_in_scope, bindings, env)?;
     return match &c.callee {
         Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, env),
-        Name(n) => {
-            if *n == "getText" {
-                if env.lexer {
-                    Result::Ok(lexer_matched_text_expr());
-                } else {
-                    Result::Ok(`${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`);
-                }
-            } else if env.lexer && *n == "getCharPositionInLine" {
-                Result::Ok(lexer_cursor_column_expr());
-            } else if !env.lexer && *n == "getRuleInvocationStack" {
-                Result::Ok(`${env.this_bind}.rule_stack()`);
-            } else if method_declared(env, n) {
-                Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
-            } else {
-                Result::Err(unknown_method_err(n));
-            }
-        },
+        Name(n) => emit_recognizer_call(env, n, &args_w),
         _ => Result::Err("java2wado: unsupported call target"),
     };
+}
+
+/// A call on the recognizer itself, written bare (`m()`) or through `this.` —
+/// one resolution for both spellings, so a rule about a call (which API it
+/// belongs to, whether the body may reach it) holds however it is written.
+fn emit_recognizer_call(env: &JEnv, name: &String, args_w: &String) -> Result<String, String> {
+    if *name == "getText" {
+        return api_expr(env, ApiCall::Text, if env.lexer {
+            lexer_matched_text_expr();
+        } else {
+            `${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`;
+        });
+    }
+    if *name == "getCharPositionInLine" {
+        return api_expr(env, ApiCall::CharPos, lexer_cursor_column_expr());
+    }
+    if *name == "getRuleInvocationStack" {
+        return api_expr(env, ApiCall::RuleStack, `${env.this_bind}.rule_stack()`);
+    }
+    check_member_call_reachable(env, name)?;
+    return Result::Ok(`${env.this_bind}.${to_snake_case(name)}(${*args_w})`);
 }
 
 /// `((XContext)$ctx).TOK() != null` asks whether the alternative has matched
 /// that token *by this point* — a constant only past the last element, where a
 /// token the alternative binds has certainly matched. Before then the answer
 /// depends on the action's position, which is not folded.
-fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<[bool, String, String]>, env: &JEnv) -> Option<String> {
+fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<AltBinding>, env: &JEnv) -> Option<String> {
     if !env.at_alt_end {
         return null;
     }
@@ -425,8 +568,8 @@ fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<[bool, String, String]>
 }
 
 /// Whether the current alternative binds a token named `name`.
-fn token_is_bound(bindings: &List<[bool, String, String]>, name: &String) -> bool {
-    return bindings.iter_ref().any(|b: &[bool, String, String]| b.0 && b.1 == binding_name(name));
+fn token_is_bound(bindings: &List<AltBinding>, name: &String) -> bool {
+    return bindings.iter_ref().any(|b: &AltBinding| b.is_token && b.base == binding_name(name));
 }
 
 /// Whether `e` reduces (through parens and casts) to the `$ctx` special — the
@@ -447,7 +590,7 @@ fn emit_ctx_child(
     rule: &ParserRule,
     m: &JMember,
     args: &List<JExpr>,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
 ) -> Result<String, String> {
     if !rule_is_left_recursive(rule) {
         return Result::Err("java2wado: `$ctx` child access is only supported in a left-recursive rule");
@@ -477,7 +620,7 @@ fn emit_member_call(
     raw_args: &List<JExpr>,
     args_w: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let meth = m.name;
@@ -492,18 +635,23 @@ fn emit_member_call(
         let newline = meth == "println";
         return emit_print(rule, rules, raw_args, vals_in_scope, bindings, env, newline);
     }
+    // `this.m()` is the bare `m()` under another spelling, recognizer API
+    // included: `this.getText()` in a lexer is the matched slice, not a token's.
+    if name_is(&m.recv, &"this") {
+        return emit_recognizer_call(env, &meth, args_w);
+    }
     if meth == "getText" {
         if name_is(&m.recv, &"_input") {
-            return Result::Ok(`${env.this_bind}.input_text()`);
+            return api_expr(env, ApiCall::InputText, `${env.this_bind}.input_text()`);
         }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-        return Result::Ok(`${env.this_bind}.token_text(${r})`);
+        return api_expr(env, ApiCall::TokenText, `${env.this_bind}.token_text(${r})`);
     }
     if meth == "LA" && name_is(&m.recv, &"_input") {
-        return Result::Ok(`${env.this_bind}.la(${*args_w})`);
+        return api_expr(env, ApiCall::La, `${env.this_bind}.la(${*args_w})`);
     }
     if meth == "LT" && name_is(&m.recv, &"_input") {
-        return Result::Ok(`${env.this_bind}.lt(${*args_w})`);
+        return api_expr(env, ApiCall::Lt, `${env.this_bind}.lt(${*args_w})`);
     }
     if meth == "equals" {
         if raw_args.is_empty() {
@@ -513,45 +661,100 @@ fn emit_member_call(
         let a = emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, env)?;
         return Result::Ok(`(${r} == ${a})`);
     }
-    if !method_declared(env, &meth) {
-        return Result::Err(unknown_method_err(&meth));
-    }
-    let recv_w = if name_is(&m.recv, &"this") {
-        env.this_bind;
-    } else {
-        emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-    };
+    check_member_call_reachable(env, &meth)?;
+    let recv_w = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
     return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${*args_w})`);
 }
 
-/// A bare name in a lexer body: a declared `@members` field reads through the
-/// lexer handle. Anything else is an ANTLR recognizer field Gale does not model
-/// (`_tokenStartCharPositionInLine`, `_input`, ...) — a loud error, because
-/// passing it through verbatim emits Wado that references nothing.
-fn lexer_name_expr(env: &JEnv, name: &String) -> Result<String, String> {
-    if *name == "_tokenStartCharPositionInLine" {
-        return Result::Ok(lexer_token_start_column_expr());
-    }
-    for let l of &env.locals {
-        if *l == *name {
-            return Result::Ok(*name);
-        }
-    }
-    let snake = to_snake_case(name);
-    for let f of &env.fields {
-        if *f == snake {
-            return Result::Ok(`${env.this_bind}.${snake}`);
-        }
-    }
-    builtin::cold_path();
-    return Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
+/// What a name at a *name* position denotes — Java's variable namespace, which
+/// holds no methods. A call position asks `method_declared` instead.
+enum NameTarget {
+    /// A local the body declares, or a method parameter. Shadows the rest, as
+    /// Java's own scoping does.
+    Local,
+    /// A rule argument. It is `$name` under another spelling — the generated
+    /// parameter is stored into the value channel at entry — so it resolves
+    /// there and a write through either spelling is visible to both.
+    RuleArg,
+    Field,
+    /// Nothing the recognizer declares as a variable.
+    Unknown,
 }
 
-/// Whether `name` resolves to a declared `@members` method (compared
-/// snake_cased, matching the call-site rewrite and the method definition).
+fn resolve_name(env: &JEnv, name: &String) -> NameTarget {
+    if env.locals.contains(name) {
+        return NameTarget::Local;
+    }
+    if env.args.contains(name) {
+        return NameTarget::RuleArg;
+    }
+    if env.fields.contains(&to_snake_case(name)) {
+        return NameTarget::Field;
+    }
+    return NameTarget::Unknown;
+}
+
+/// Whether a `@members` method declares `name`. Java's namespaces are separate
+/// — `int depth = 0; int depth() {}` is legal — so a variable never hides one.
 fn method_declared(env: &JEnv, name: &String) -> bool {
+    return env.methods.contains(&to_snake_case(name));
+}
+
+/// The access a name emits, or a loud error. What a lexer body has left over is
+/// an ANTLR field Gale does not model (`_input`, ...), which emitted verbatim
+/// would reference nothing; a parser body keeps it as the rule's own scope.
+fn name_expr(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    name: &String,
+    vals_in_scope: bool,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> Result<String, String> {
+    if *name == "_tokenStartCharPositionInLine" {
+        return api_expr(env, ApiCall::TokenStartCharPos, lexer_token_start_column_expr());
+    }
+    return match resolve_name(env, name) {
+        Local => Result::Ok(escape_ident(name)),
+        RuleArg => resolve_attr_ref(rule, rules, &`$${*name}`, vals_in_scope, bindings, &env.this_bind),
+        Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
+        Unknown => if env.lexer {
+            builtin::cold_path();
+            Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
+        } else {
+            Result::Ok(*name);
+        },
+    };
+}
+
+/// The access `this.<name>` emits. `this.` reaches a field and nothing else in
+/// Java — never a local, never an argument — so the resolution that admits those
+/// is not the one this site may take.
+fn this_field_expr(env: &JEnv, name: &String) -> Result<String, String> {
     let snake = to_snake_case(name);
-    return env.methods.iter_ref().any(|m| *m == snake);
+    if env.fields.contains(&snake) || !env.lexer {
+        return Result::Ok(`${env.this_bind}.${snake}`);
+    }
+    builtin::cold_path();
+    return Result::Err(`java2wado: unsupported lexer name 'this.${*name}': not a @members field`);
+}
+
+/// Refuse a member call this body cannot make. Both spellings — `this.m()` and
+/// the bare `m()` — reach the same method, so both come through here.
+fn check_member_call_reachable(env: &JEnv, meth: &String) -> Result<(), String> {
+    if !method_declared(env, meth) {
+        builtin::cold_path();
+        return Result::Err(unknown_method_err(meth));
+    }
+    // A lexer predicate holds `&Lexer`: the tournament has no business mutating
+    // through a losing candidate.
+    if env.read_only && env.mut_methods.contains(&to_snake_case(meth)) {
+        builtin::cold_path();
+        return Result::Err(
+            `java2wado: @members method '${*meth}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
+        );
+    }
+    return Result::Ok(());
 }
 
 fn unknown_method_err(name: &String) -> String {
@@ -579,7 +782,7 @@ fn emit_args(
     rules: &List<ParserRule>,
     args: &List<JExpr>,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("");
@@ -648,7 +851,7 @@ fn emit_template(
     rules: &List<ParserRule>,
     e: &JExpr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("`");
@@ -662,7 +865,7 @@ fn append_parts(
     rules: &List<ParserRule>,
     e: &JExpr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
     out: &mut String,
 ) -> Result<(), String> {
@@ -696,7 +899,7 @@ fn append_interp(
     rules: &List<ParserRule>,
     e: &JExpr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     env: &JEnv,
     out: &mut String,
 ) -> Result<(), String> {

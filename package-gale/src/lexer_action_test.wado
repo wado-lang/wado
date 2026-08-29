@@ -9,7 +9,7 @@
 
 use { parse } from "./g4/parser.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
-use { Diagnostic, DiagnosticKind } from "./gir.wado";
+use { Diagnostic } from "./gir.wado";
 
 global OPTS: GenerateOptions = GenerateOptions {};
 
@@ -64,7 +64,7 @@ B : 'b' ;
     assert src.contains("fn set_channel"), "set_channel API method emitted";
     assert src.contains("fn more"), "more API method emitted";
     assert src.contains("best_act_skip"), "skip folds through best_act_skip";
-    assert src.contains("if lexer.act_channel >= 0"), "channel folds into best_channel";
+    assert src.contains("best_channel = lexer.act_channel;"), "channel folds into best_channel";
     assert src.contains("if lexer.act_more"), "more folds into best_more";
 }
 
@@ -131,18 +131,125 @@ WS : ' ' -> skip ;
     assert !src.contains("best_act"), "predicates need no best_act";
 }
 
-test "a language=Java lexer grammar emits no @lexer::members fields" {
-    // A Java member method takes `&mut self`, but a lexer predicate runs inside
-    // `try_<rule>(lx: &Lexer, ...)`. Emitting the members would let a body reach
-    // one and produce a call the compiler rejects, so Java lexer bodies see no
-    // members and a reference is reported and dropped.
+test "a Wado lexer body naming `this` is still reported, members or not" {
+    // The identity translator analyses no host text, so `this` has nothing to
+    // receive it whatever the grammar declares. Only java2wado resolves one.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+@members { count: i32 = 0 }
+A : 'a' { this.count += 1 } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) > 0, "a Wado body naming `this` must be reported";
+    assert !gen_source(src).contains("this.count"), "the untranslatable body must not be emitted";
+}
+
+test "a language=Java lexer grammar carries its @lexer::members" {
     let src = &"lexer grammar L;
 @members { int nest = 0; }
 A : 'a' { nest = nest + 1; } ;
 WS : ' ' -> skip ;
 ";
-    assert !gen_source(src).contains("nest: i32"), "Java lexer members must not be emitted";
-    assert unsupported_count(src) == 1, "a body reaching a Java lexer member must be reported";
+    assert gen_source(src).contains("nest: i32"), "a Java lexer member field lands on the Lexer";
+    assert unsupported_count(src) == 0, "a body reaching a Java lexer member must not warn";
+}
+
+test "a Java lexer member method takes the receiver its body needs" {
+    // A predicate runs inside `try_<rule>(lx: &Lexer, ...)`, so only a `&self`
+    // method is reachable from one. The receiver follows the body: `deep` reads,
+    // `push` writes.
+    let src = gen_source(&"lexer grammar L;
+@members {
+    int depth = 0;
+    boolean deep() { return this.depth > 1; }
+    void push() { this.depth = this.depth + 1; }
+}
+A : 'a' { this.push(); } ;
+B : 'b' { this.deep() }? ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("fn deep(&self) -> bool"), "a reading member method takes &self";
+    assert src.contains("fn push(&mut self)"), "a writing member method takes &mut self";
+    assert src.contains("if !(lx.deep()) { return -1; }"), "the predicate calls the member through the lexer handle";
+}
+
+test "a lexer predicate calling a writing member method is refused" {
+    // The tournament evaluates a predicate for every candidate rule, losers
+    // included, so it holds `&Lexer` and a `&mut self` call cannot be emitted.
+    // Both spellings reach the same method, so both are refused.
+    let qualified = &"lexer grammar L;
+@members {
+    int depth = 0;
+    boolean bump() { this.depth = this.depth + 1; return true; }
+}
+A : 'a' { this.bump() }? ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(qualified) == 1, "a mutating `this.m()` from a lexer predicate must be reported";
+    assert !gen_source(qualified).contains("lx.bump()"), "the refused call must not be emitted";
+
+    let bare = &"lexer grammar L;
+@members {
+    int depth = 0;
+    boolean bump() { this.depth = this.depth + 1; return true; }
+}
+A : 'a' { bump() }? ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(bare) == 1, "a mutating bare `m()` from a lexer predicate must be reported";
+    assert !gen_source(bare).contains("lx.bump()"), "the refused call must not be emitted";
+}
+
+test "a superClass grammar's `this` is not excused by its @lexer::members" {
+    // `@lexer::members` gives `this` a receiver only where java2wado resolves it,
+    // and a `superClass` grammar is carved out of the Java emit — its bodies
+    // stage through the identity translator, which resolves nothing. Here the
+    // base is refused too (one method used as both a predicate and an action),
+    // so nothing is wired and every `this.` would be emitted verbatim.
+    let src = &"lexer grammar L;
+options { superClass = B; }
+@members { int n = 0; }
+A : { this.m() }? 'a' { this.m() } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) > 0, "an unwired `this` must be reported, members or not";
+    let out = gen_source(src);
+    assert !out.contains("this.m()"), "the untranslatable body must not be emitted verbatim";
+    assert !out.contains("fn apply_A_actions"), "and the rule must not run actions at all";
+}
+
+test "a camelCase Java member field reads the same by either spelling" {
+    // The declaration is snake_cased like a method name, so `this.nestLevel` and
+    // the bare `nestLevel` resolve to the one field the struct carries.
+    let src = &"lexer grammar L;
+@members { int nestLevel = 0; }
+A : 'a' { nestLevel = this.nestLevel + 1; } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "both spellings must resolve";
+    let out = gen_source(src);
+    assert out.contains("nest_level: i32"), "the field is declared snake_cased";
+    assert out.contains("lx.nest_level = lx.nest_level + 1;"), `both reads agree: ${out}`;
+}
+
+test "an undeclared Java lexer field is reported by either spelling" {
+    // A lexer body reaches only what `@members` declares. Emitting `lx.<name>`
+    // for a name the block never declared would put a field on the `Lexer` that
+    // does not exist, so `this.<x>` is refused exactly as the bare `x` is.
+    let qualified = &"lexer grammar L;
+@members { int depth = 0; }
+A : 'a' { this.missing = 1; } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(qualified) == 1, "an undeclared `this.<field>` must be reported";
+    assert !gen_source(qualified).contains("lx.missing"), "the refused read must not be emitted";
+
+    let bare = &"lexer grammar L;
+@members { int depth = 0; }
+A : 'a' { missing = 1; } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(bare) == 1, "an undeclared bare field must be reported";
 }
 
 test "a lexer predicate that prints is reported, not wired to the sink" {
@@ -248,6 +355,231 @@ WS : ' ' -> skip ;
     assert out.contains("lx.set_type(TK_B);"), "the action is emitted inside the replayed loop";
 }
 
+test "the lexer $-attributes resolve to the match window and the commit latches" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a'+ { if $text == \"aa\" { $type = TK_B } } ;
+C : 'c' { $channel = 1 } ;
+D : 'd' { if $index - start == 1 && $pos > 0 { $channel = 2 } } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("LexerSlice::new(chars, start, pos).to_string() == \"aa\""), "$text is the matched slice";
+    assert src.contains("lx.act_type = TK_B"), "$type writes the type latch";
+    assert src.contains("lx.act_channel = 1"), "$channel writes the channel latch";
+    assert src.contains("pos - start == 1"), "$index is the match cursor";
+    assert src.contains("char_pos_in_line(chars, pos) > 0"), "$pos is the cursor's column";
+}
+
+test "$mode writes the mode latch, and needs a grammar that has one" {
+    let with_modes = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $mode = MODE_TAIL } ;
+mode TAIL;
+B : 'b' ;
+";
+    assert unsupported_count(with_modes) == 0, "$mode in a mode grammar must not warn";
+    assert gen_source(with_modes).contains("lx.act_set_mode = MODE_TAIL"), "$mode writes the mode latch";
+
+    let no_modes = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $mode = 1 } ;
+B : 'b' ;
+";
+    assert unsupported_count(no_modes) == 1, "$mode with no mode to switch to must be reported";
+}
+
+test "$mode reads the mode the token is being matched in" {
+    // The set latch is the pending command (-1 until one is issued), so a read
+    // of it would answer -1 rather than the current mode. It has its own field,
+    // seeded per token from the tokenize loop's `current_mode`.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { if $mode == 0 { $mode = MODE_TAIL } } ;
+mode TAIL;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 0, "reading $mode must not warn";
+    let out = gen_source(src);
+    assert out.contains("lx.mode() == 0"), "the read goes through the current-mode reader";
+    assert out.contains("lx.act_set_mode = MODE_TAIL"), "the assignment still writes the command latch";
+    assert out.contains("lexer.reset_actions(best_kind, best_channel, mode_stack.len(), current_mode);"), "the current mode is seeded per token";
+    assert out.contains("self.act_mode = m;"), "a mode command moves what a later read answers";
+    assert out.contains("assert self.act_mode >= 0,"), "pop_mode's restore target is not on the Lexer, and says so";
+}
+
+test "a $mode read only a predicate asks for turns nothing on" {
+    // The predicate is refused (a latch answers nothing during the tournament),
+    // so the read never reaches the field — which must therefore not be emitted.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $mode == 0 }? ;
+mode TAIL;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "a latch read from a lexer predicate must be reported";
+    let out = gen_source(src);
+    assert !out.contains("fn mode(&self)"), "no current-mode reader for a read that is refused";
+    assert !out.contains("act_mode ="), "and no field to seed";
+}
+
+test "$mode cannot be read and assigned in one site" {
+    // The read and the write are different fields, so `+=` has no single
+    // expression to become.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $mode += 1 } ;
+mode TAIL;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "a compound assignment to $mode must be reported";
+}
+
+test "a lexer attribute over the match window is not assignable" {
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $text = \"b\" } ;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "$text is a read of the match window";
+}
+
+test "a keyword-shaped rule carrying a body is matched, not reclassified" {
+    // The keyword classifier runs behind a carrier's match and rewrites only
+    // `best_kind`: the replay would dispatch the carrier's actions and never
+    // this rule's, and the carrier's match already settled what the predicate
+    // would have had a say in. So such a rule keeps its own matcher.
+    let with_action = gen_source(&"grammar T;
+options { language = Wado; }
+r : A ID ;
+A : 'A' { lx.set_channel(1) } ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t\\n\\r]+ -> skip ;
+");
+    assert with_action.contains("fn try_A("), "an action-carrying keyword keeps its own matcher";
+    assert with_action.contains("apply_A_actions(&mut lexer, start, best_end);"), "so its actions are dispatched";
+
+    let with_pred = gen_source(&"grammar T;
+options { language = Wado; }
+r : A ID ;
+A : 'A' { start == 0 }? ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t\\n\\r]+ -> skip ;
+");
+    assert with_pred.contains("fn try_A("), "a predicate-carrying keyword keeps its own matcher";
+
+    // The shortcut still applies to the plain shape it was written for.
+    let plain = gen_source(&"grammar T;
+options { language = Wado; }
+r : A ID ;
+A : 'A' ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t\\n\\r]+ -> skip ;
+");
+    assert !plain.contains("fn try_A("), "a bare keyword is still reclassified from its carrier";
+    assert plain.contains("fn classify_keyword("), "by the classifier";
+}
+
+test "a fixed-text rule carrying a body is not folded into the shared literal matcher" {
+    // `K : 'k' 'w'` is two elements, so it aliases no parser literal and `'kw'`
+    // mints its own token — leaving the rule a literal duplicate. The shared
+    // matcher records no `best_act`, so folding it away would collect the action
+    // as running and then never run it, with no diagnostic either way.
+    let src = gen_source(&"grammar T;
+options { language = Wado; }
+r : 'kw' ID ;
+K : 'k' 'w' { lx.set_channel(1) } ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("fn try_K("), "a body-carrying literal duplicate keeps its own matcher";
+    assert src.contains("apply_K_actions(&mut lexer, start, best_end);"), "so its action is dispatched";
+}
+
+test "a lexer predicate cannot reach the commit latches" {
+    // A predicate is evaluated for every candidate rule, losers included, so it
+    // settles nothing about the token that wins.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a'+ { $type == 1 }? ;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 1, "a latch read from a lexer predicate must be reported";
+}
+
+test "a lexer action under a lookahead-aware repeat runs once per accepted iteration" {
+    // `~'b'` can eat the `'c'` the suffix needs, so the loop scans forward and
+    // rewinds to the last position the suffix could start at. The replay
+    // re-walks exactly the iterations that scan kept, not the ones it tried.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' (~'b' { lx.set_type(TK_B) })+ 'c' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "an action under a lookahead-aware repeat no longer warns";
+    let out = gen_source(src);
+    assert out.contains("lx.set_type(TK_B);"), "the action is emitted";
+    assert out.contains("while pos < accept_"), "the replay stops at the accept the scan settled on";
+}
+
+test "a replay's decision probe evaluates the predicates the match evaluated" {
+    // The non-greedy exit try decides which iteration ends the loop. Emitting it
+    // without the predicate the match saw would exit earlier, running the
+    // alternative's actions at a cursor the match never stopped at.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' .*? { pos > start + 2 }? 'c' { lx.set_type(TK_B) } ;
+B : 'b' ;
+";
+    assert unsupported_count(src) == 0, "a predicate after a non-greedy repeat must not warn";
+    let out = gen_source(src);
+    // Twice: once in `try_A`, once in the replay's exit try.
+    assert count_occurrences(&out, &"pos > start + 2") == 2, `the replay probe keeps the predicate: ${out}`;
+}
+
+/// How many times `needle` appears in `haystack`.
+fn count_occurrences(haystack: &String, needle: &String) -> i32 {
+    assert !needle.is_empty(), "count_occurrences needs a needle to advance past";
+    let mut n = 0;
+    let mut pos = 0;
+    loop {
+        let rest = haystack.substr_bytes(pos, haystack.len());
+        let found = rest.find(*needle);
+        if found matches { None } {
+            return n;
+        }
+        n += 1;
+        pos += found.unwrap() + needle.len();
+    }
+}
+
+test "a lexer action under a non-greedy repeat runs once per iteration" {
+    // The exit probe stays match-only on the replay path, so the rest's actions
+    // run once — from the iteration that ended the loop.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' (~'b' { lx.set_type(TK_B) })*? 'c' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "an action under a non-greedy repeat no longer warns";
+    assert gen_source(src).contains("lx.set_type(TK_B);"), "the action is emitted";
+}
+
+test "an action after a restructured repeat keeps its place in the alt" {
+    // The lookahead-aware emit consumes the suffix itself, so an action written
+    // between the repeat and the alt's end travels with the suffix or is lost.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : 'a' ~('b')+ { lx.set_type(TK_B) } 'c' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "a mid-alt action after a restructured repeat must not warn";
+    assert gen_source(src).contains("lx.set_type(TK_B);"), "the action is emitted";
+}
+
 test "a multi-alt lexer rule runs each alt's top-level action (no warn)" {
     let src = gen_source(&"lexer grammar L;
 options { language = Wado; }
@@ -265,16 +597,19 @@ WS : ' ' -> skip ;
 ") == 0, "multi-alt top-level actions must not warn";
 }
 
-test "a rule the replay cannot follow keeps the winning_alt helper" {
-    // A lookahead-aware repeat rewrites the sequence the replay would walk, so
-    // alt selection falls back to the helper and the actions run flat.
+test "a multi-alt rule around a restructured repeat replays instead of running flat" {
+    // The lookahead-aware repeat used to force the whole rule onto the flat
+    // emit — every alt's actions at the end of the match, the arm picked by a
+    // `winning_alt_` helper. The replay now walks this shape, so the helper is
+    // gone and each alt runs its own actions in place.
     let src = gen_source(&"lexer grammar L;
 options { language = Wado; }
 A : 'a' ~('b')+ 'c' { lx.set_type(TK_X) } | 'd' { lx.set_type(TK_Y) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ");
-    assert src.contains("fn winning_alt_A"), "non-replayable multi-alt rule gets a winning_alt helper";
+    assert !src.contains("fn winning_alt_A"), "the replay selects the arm itself";
+    assert src.contains("sel_alt_"), "the replay selects the winning arm match-only first";
 }
 
 test "an action inside an inlined fragment runs, and is not warned as unhandled" {
@@ -318,7 +653,7 @@ mode Arg;
 C : ']' ;
 ");
     assert src.contains("fn mode_depth(&self) -> i32 {"), "the base can read the mode-stack depth";
-    assert src.contains("lexer.reset_actions(mode_stack.len());"), "the depth is seeded per token";
+    assert src.contains("lexer.reset_actions(best_kind, best_channel, mode_stack.len());"), "the depth is seeded per token";
     assert src.contains("self.act_mode_depth += 1;"), "push_mode keeps the depth the base reads consistent";
     assert src.contains("self.act_mode_depth -= 1;"), "pop_mode keeps the depth the base reads consistent";
 }
@@ -336,26 +671,41 @@ WS : ' ' -> skip ;
 }
 
 test "an action may issue at most one mode command per token" {
-    let src = gen_source(&"lexer grammar L;
+    let commands_only = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : '[' { this.hit() } ;
 WS : ' ' -> skip ;
 mode Arg;
 C : ']' ;
 ");
-    assert src.contains("assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0,"), "each mode command guards against a second one";
+    assert commands_only.contains("assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0,"), "each mode command guards against a second one";
+    // Every command passes that guard, so a grammar whose only mode writes are
+    // commands has the invariant covered — it must not pay for it again per
+    // token.
+    assert !commands_only.contains("<= 1, \"a lexer action may issue at most one mode command per token\""), "no second check where every write passes a command";
+
+    // A `$mode` assignment reaches the set latch without passing one, so there
+    // the commit repeats the invariant over the latches themselves.
+    let assigns_mode = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { $mode = MODE_TAIL } ;
+mode TAIL;
+B : 'b' ;
+");
+    assert assigns_mode.contains("<= 1, \"a lexer action may issue at most one mode command per token\""), "the commit guards the latches a $mode assignment can reach";
 }
 
-test "the lexer exposes no current-mode read" {
-    let src = gen_source(&"lexer grammar L;
+test "the current-mode read is emitted only for a grammar that asks for it" {
+    let unread = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : '[' { this.hit() } ;
 WS : ' ' -> skip ;
 mode Arg;
 C : ']' ;
 ");
-    assert !src.contains("fn mode(&self)"), "no stale current-mode read";
-    assert src.contains("fn mode_depth(&self) -> i32 {"), "the depth a base branches on stays";
+    assert !unread.contains("fn mode(&self)"), "no current-mode read where no body reads one";
+    assert !unread.contains("act_mode ="), "and no field to seed";
+    assert unread.contains("fn mode_depth(&self) -> i32 {"), "the depth a base branches on stays";
 }
 
 test "the emit hook fires once per emitted token, never for a skipped one" {
@@ -413,7 +763,7 @@ A : 'a' { this.hit() } ;
 WS : ' ' -> skip ;
 ");
     assert !src.contains("fn mode_depth(&self)"), "no modes, no mode-state reads";
-    assert src.contains("lexer.reset_actions();"), "a modeless reset takes no mode state";
+    assert src.contains("lexer.reset_actions(best_kind, best_channel);"), "a modeless reset takes no mode state";
 }
 
 test "a superClass grammar's host-code action body is reported, not emitted" {

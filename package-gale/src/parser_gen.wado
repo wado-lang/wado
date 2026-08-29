@@ -37,6 +37,7 @@ use {
     follow_sep,
     elements_match,
 } from "./gen_util.wado";
+use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, str_lit } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
@@ -74,7 +75,6 @@ use {
     OptionalShapeLookaheadStrategy,
     GroupOp,
     GroupShape,
-    SimpleCstShape,
     TokenOnlyShape,
     GeneralShape,
     ListLabelOp,
@@ -107,7 +107,6 @@ use {
     alt_vals_arg,
     ambiguous_group_predicate_gated,
     call_arg_suffix,
-    collect_parser_members,
     current_rule_emits_vals,
     emit_arg_stores,
     emit_atn_disabled_seed,
@@ -115,7 +114,7 @@ use {
     emit_span_capture,
     gen_action_body,
     gen_alt_actions_at,
-    gen_member_methods,
+    gen_parser_member_methods,
     gen_predicate_fns,
     gen_predicate_gated_dispatch,
     install_rule_captures,
@@ -140,6 +139,8 @@ use {
     gen_trace_helpers,
 } from "./parser_runtime_gen.wado";
 use { gen_parser_super_interface } from "./superclass.wado";
+use { MemberDecls } from "./java2wado/jmembers.wado";
+use { AltBinding } from "./attr_resolve.wado";
 use {
     EMPTY_SYNC,
     build_lookahead_condition,
@@ -160,7 +161,7 @@ use { rebind_op_field, non_greedy_static_undecided, peel_repeat_body_label } fro
 /// `follow_yields` in `runtime/follow.wado`.
 fn add_follow_param(f: &mut FnSpec) {
     f.add_param_spec(ParamSpec {
-        name: "follow",
+        name: FOLLOW_PARAM,
         type_str: "&List<List<i32>>",
         default_value: Option::Some("&EMPTY_FOLLOW"),
     });
@@ -175,7 +176,13 @@ fn follow_arg_sep(emit_follow: bool, arg: &FollowArg) -> String {
     return "";
 }
 
-pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+pub fn gen_parser(
+    w: &mut CodeWriter,
+    grammar: &Grammar,
+    lowered: &LoweredGrammar,
+    members: &MemberDecls,
+    ctx: &mut GenContext,
+) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
     // by name and order. emit still consumes surface IR for the body
     // of each rule (Phase 4 migrates those entry points); the
@@ -193,7 +200,6 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // it has a value struct at all.
     install_rule_captures(grammar, lowered, ctx);
 
-    let members = collect_parser_members(grammar, ctx);
     if ctx.has_parser_superclass() {
         gen_parser_super_interface(w, ctx.parser_superclass_name(), ctx.parser_superclass_ops());
     }
@@ -203,10 +209,10 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         ctx.needs_atn(),
         ctx.emit_actions(),
         !ctx.fragment_entries().is_empty(),
-        &members,
+        members,
         ctx.parser_superclass_name(),
     );
-    gen_member_methods(w, &members);
+    gen_parser_member_methods(w, members);
     if ctx.emit_actions() {
         gen_vals_structs(w, grammar, ctx);
     }
@@ -2134,7 +2140,7 @@ fn gen_rule_entry_wrapper(
     let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&"p", &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, &"&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
     // just `_parse_X(p, follow)` and let `min_prec` default — uniform for
     // LR and non-LR targets. Omitted entirely when the grammar has no
@@ -2247,7 +2253,7 @@ fn gen_parse_fn_simple_named(
 
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&"p", &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
@@ -2300,13 +2306,13 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&"p", &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
     f.set_return_type(&rule_result_type());
     f.emit_begin(w);
-    w.line(&"let kind = p.peek_kind();");
+    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     let mut firsts: List<String> = [];
     for let alt of &rule.alternatives {
@@ -2323,7 +2329,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
         let mut first = true;
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let single: List<String> = [single_token_first(&rule.alternatives[i].elements[0])];
-            let cond = ctx.kind_check_str(&single, &"kind");
+            let cond = ctx.kind_check_str(&single, &DISPATCH_KIND_LOCAL);
             if first {
                 w.begin(&`if ${cond}`);
                 first = false;
@@ -2331,7 +2337,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
                 w.else_begin(&`else if ${cond}`);
             }
             w.line(&`p.b.set_alt(${i});`);
-            w.line(&"let _ = p.expect(kind, &EMPTY_SYNC);");
+            w.line(&`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
             w.line(&"return;");
         }
         w.end();
@@ -2341,10 +2347,10 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
         return;
     }
 
-    let check = ctx.kind_check_str(&firsts, &"kind");
+    let check = ctx.kind_check_str(&firsts, &DISPATCH_KIND_LOCAL);
     w.begin(&`if ${check}`);
     // The token is appended by `expect`; no struct to build.
-    w.line(&"let _ = p.expect(kind, &EMPTY_SYNC);");
+    w.line(&`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
     w.line(&"return;");
     w.end();
     gen_error_fallback(w, rule, &type_name, ctx);
@@ -2441,7 +2447,7 @@ fn gen_parse_fn_named(
 
                     let mut f = FnSpec::new(&helper_name);
                     add_parser_super_effect(&mut f, ctx);
-                    f.add_param(&"p", &"&mut Parser");
+                    f.add_param(&PARSER_HANDLE, &"&mut Parser");
                     if ctx.emit_follow() {
                         add_follow_param(&mut f);
                     }
@@ -2490,7 +2496,7 @@ fn gen_parse_fn_named(
         let atom_name = `${*fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
         add_parser_super_effect(&mut f, ctx);
-        f.add_param(&"p", &"&mut Parser");
+        f.add_param(&PARSER_HANDLE, &"&mut Parser");
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
@@ -2562,7 +2568,7 @@ fn gen_parse_fn_named(
     } else {
         let mut f = FnSpec::new(fn_name);
         add_parser_super_effect(&mut f, ctx);
-        f.add_param(&"p", &"&mut Parser");
+        f.add_param(&PARSER_HANDLE, &"&mut Parser");
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
@@ -2673,7 +2679,7 @@ fn gen_multi_alt_body(
     }
     let depth = find_needed_depth(&all_pos_sets);
 
-    w.line(&"let kind = p.peek_kind();");
+    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt_index = non_lr_indices[i];
@@ -2751,26 +2757,30 @@ fn peel_scalar_label(elem: &Element) -> &Element with stores[elem] {
     return cur;
 }
 
-/// Collect the actual post-dedup bindings of an alt's ops (`[is_token, base,
-/// field]`), so the action translator resolves a `$ref` to its real local even
-/// when a token / rule field-name collision deduped it (`e_2`). Top-level leaf
-/// ops only; a `Repeat` / group inner binds in its own block, so a ref to one
-/// falls back to `binding_name` and is reported where it does not resolve.
-fn collect_alt_bindings(ops: &List<Op>) -> List<[bool, String, String]> {
-    let mut out: List<[bool, String, String]> = [];
+/// Collect the actual post-dedup bindings of an alt's ops, so the action
+/// translator resolves a `$ref` to its real local even when a token / rule
+/// field-name collision deduped it (`e_2`), and to the rule this alternative
+/// called when the same label names a different one elsewhere (`x=a | x=b`).
+/// Top-level leaf ops only; a `Repeat` / group inner binds in its own block, so
+/// a ref to one falls back to `binding_name` and is reported where it does not
+/// resolve.
+fn collect_alt_bindings(ops: &List<Op>) -> List<AltBinding> {
+    let mut out: List<AltBinding> = [];
     for let op of ops {
         collect_op_binding(op, &mut out);
     }
     return out;
 }
 
-fn collect_op_binding(op: &Op, out: &mut List<[bool, String, String]>) {
+fn collect_op_binding(op: &Op, out: &mut List<AltBinding>) {
     match *op {
-        Token(t) => out.push([true, t.dedup_base, t.field]),
-        Literal(l) => out.push([true, l.dedup_base, l.field]),
-        Excluded(e) => out.push([true, e.dedup_base, e.field]),
-        Wildcard(wop) => out.push([true, wop.dedup_base, wop.field]),
-        RuleCall(rc) => out.push([false, rc.dedup_base, rc.field]),
+        Token(t) => out.push(AltBinding { is_token: true, base: t.dedup_base, field: t.field }),
+        Literal(l) => out.push(AltBinding { is_token: true, base: l.dedup_base, field: l.field }),
+        Excluded(e) => out.push(AltBinding { is_token: true, base: e.dedup_base, field: e.field }),
+        Wildcard(wop) => out.push(AltBinding { is_token: true, base: wop.dedup_base, field: wop.field }),
+        RuleCall(rc) => out.push(
+            AltBinding { is_token: false, base: rc.dedup_base, field: rc.field, ref_name: rc.target_name },
+        ),
         // A repeat's body binds inside the loop / `if` it is emitted in, out of
         // scope here — and `A?` may not bind at all, unlike `A`.
         Repeat(_) => {
@@ -3205,7 +3215,7 @@ fn gen_lr_fn(
     let rk = rule_kind_const(&rule.name);
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&"p", &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
@@ -4596,11 +4606,7 @@ fn close_call_capture(w: &mut CodeWriter, span_field: &Option<String>) {
 /// Scope an inlined group alternative's label bindings to its own ops while its
 /// actions are emitted, and hand back the enclosing body's bindings to restore.
 /// A no-op (and byte-identical) for an alternative carrying no action.
-fn enter_group_alt_bindings(
-    ops: &List<Op>,
-    actions: &List<AltAction>,
-    ctx: &mut GenContext,
-) -> List<[bool, String, String]> {
+fn enter_group_alt_bindings(ops: &List<Op>, actions: &List<AltAction>, ctx: &mut GenContext) -> List<AltBinding> {
     let outer = *ctx.alt_bindings();
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(collect_alt_bindings(ops));
@@ -4608,7 +4614,7 @@ fn enter_group_alt_bindings(
     return outer;
 }
 
-fn leave_group_alt_bindings(outer: &List<[bool, String, String]>, actions: &List<AltAction>, ctx: &mut GenContext) {
+fn leave_group_alt_bindings(outer: &List<AltBinding>, actions: &List<AltAction>, ctx: &mut GenContext) {
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(*outer);
     }
@@ -6788,9 +6794,9 @@ fn gen_prediction_code_inner(
             // been consumed, so a `Consume` prefix re-reads.
             let check_var = if d.depth == 0 {
                 if skip == 0 {
-                    String::from("kind");
+                    DISPATCH_KIND_LOCAL;
                 } else {
-                    String::from("p.peek_kind()");
+                    `${PARSER_HANDLE}.peek_kind()`;
                 }
             } else {
                 `p.peek_at(${d.depth})`;
@@ -6903,7 +6909,7 @@ fn gen_multi_alt_body_alt(
     non_lr_indices: &List<i32>,
     fn_name: &String,
 ) {
-    w.line(&"let kind = p.peek_kind();");
+    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
@@ -6913,7 +6919,7 @@ fn gen_multi_alt_body_alt(
         } else {
             String::new();
         };
-        let cond = ctx.kind_check_str(&union_first, &"kind");
+        let cond = ctx.kind_check_str(&union_first, &DISPATCH_KIND_LOCAL);
         w.begin(&`if ${cond}${gate}`);
 
         if group.len() == 1 {

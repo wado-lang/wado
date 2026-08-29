@@ -60,7 +60,13 @@ wado run package-gale dump path/to/Grammar.g4
 wado run package-gale dump --lexer path/to/Grammar.g4
 ```
 
-Each strategy is the value `lexer_gen` branches on, so it cannot drift from the emit. The traversal reaching it is mirrored, not shared — add a `lexer_dump_test.wado` case when you change tail propagation, suffix cutting, or fragment inlining.
+Which matcher covers a rule is `lexer_rule_route`, and the emit reads it rather than re-deciding: both "does this rule get its own `try_`" and "does the dispatch call it" are derived from that one answer, so a shortcut added to the route is one every emit site already knows about. Asking the shortcuts separately is what let a rule keep its actions past the keyword classifier and still lose them to the shared literal matcher.
+
+The emit _decisions_ below the route — plain vs lookahead-aware repeat, first-match vs arm scoring, maximal munch, suffix cutting, fragment inlining — are `lexer_rule_plan`: one tree per rule that `gen_lexer` emits from and the dump renders. Neither decides for itself, so neither can reach a construct the other does not, and tail position is a property of the plan rather than a parameter each function re-derives. A new strategy is a new plan node with two consumers; adding a branch to only one does not compile.
+
+The plan never holds a second copy of the same elements. A scored alternation only peeks what follows it, so that suffix stays a step of the enclosing sequence and `gen_lexer_alt_seq` re-emits those steps from a `from` index; planning it apart would let the peek and the commit choose differently. Only a non-greedy repeat's exit try is cut out, since it alone lowers what follows outside the sequence's tail position.
+
+`lexer_dump_test.wado` counts the strategies the dump reports against the locals the emitter mints for them (`alts_best_`, `la_win_`, `accept_`, `ng_saved_`), over shapes that force each one. The grammars are action-free on purpose: an action-carrying rule emits its body twice.
 
 For a grammar outside the repo, `wado run --dir <dir> package-gale dump Grammar.g4` — see `--dir` in the root [`AGENTS.md`](../AGENTS.md).
 
@@ -75,9 +81,11 @@ or `options: { trace: true }` in a Kiln `with { generator: ... }` block.
 ## Running tests
 
 ```sh
-wado test package-gale/**/*.wado               # all package tests
+wado test package-gale                         # the whole package
 wado test package-gale/src/codegen_test.wado   # one file
 ```
+
+Pass the package directory and let the CLI discover the files. A hand-written glob is the thing that goes wrong: the descriptor corpus sits one directory deeper (`tests/antlr4-compat/stage_{a,b,b_oracle,c}/<Category>/`), so a flat `tests/antlr4-compat/*.wado` reaches about a third of the suite, passes, and says nothing about the rest — including the corpus that exists to catch compatibility regressions. The fixtures it never reaches also keep whatever the generator emitted the last time something did run them, so the committed corpus drifts behind the generator with every green run.
 
 Test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus:
 

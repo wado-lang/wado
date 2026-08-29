@@ -1,0 +1,18 @@
+//! Stage C: one label name bound to a different rule in each alternative.
+//! Per-alternative resolution picks the binding the enclosing alternative made,
+//! so `$x.n` reads `a`'s value channel and `$x.m` reads `b`'s.
+
+use lc from "./grammars/wado_label_cross_rule.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_label_cross_rule" },
+    };
+
+test "a same-named label reads the rule its own alternative called" {
+    let first = lc::parse(&"a");
+    assert first.ok(), "clean parse";
+    assert first.output == "1", `alt 0 reads a.n, got '${first.output}'`;
+
+    let second = lc::parse(&"b");
+    assert second.ok(), "clean parse";
+    assert second.output == "2", `alt 1 reads b.m, got '${second.output}'`;
+}

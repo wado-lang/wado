@@ -17,6 +17,14 @@ test "push_mode / pop_mode from actions switch the lexer mode" {
     assert r.output == "w<n>w", `output: '${r.output}'`;
 }
 
+test "$mode reads the mode the token is matched in, and assigns the switch" {
+    // The guard only holds if the read answers the current mode; the assignment
+    // is what puts the lexer in INNER, where the digits lex as `N`.
+    let r = m::parse(&"m12");
+    assert r.ok(), `clean parse of 'm12': ${r.diagnostics.len()} diagnostics`;
+    assert r.output == "mn", `output: '${r.output}'`;
+}
+
 test "a mode grammar with no mode switch round-trips in the default mode" {
     let r = m::parse(&"ab cd");
     assert r.ok(), "two default-mode words";
