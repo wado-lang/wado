@@ -375,17 +375,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_by
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(149)
 
-type "functype//core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar" = fn(u8, u8) -> bool;  // TypeId(150)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(150)
 
-type "functype//core:prelude/primitive.wado/char::hex_digit_value$scalar" = fn(char) -> i32;  // TypeId(151)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(151)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(152)
+type "functype//core:prelude/primitive.wado/char::hex_digit_value$scalar" = fn(char) -> i32;  // TypeId(152)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(153)
 
-type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar" = fn("core:prelude/intparse.wado//enum:IntErrorKind") -> "core:prelude/intparse.wado//enum:IntErrorKind";  // TypeId(154)
+type "functype//core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar" = fn(u8, u8) -> bool;  // TypeId(154)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(155)
+type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar" = fn("core:prelude/intparse.wado//enum:IntErrorKind") -> "core:prelude/intparse.wado//enum:IntErrorKind";  // TypeId(155)
 
 type "functype//core:json/core:json/JsonDeserializer::whitespace_end$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> i32;  // TypeId(156)
 
@@ -3975,22 +3975,75 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
-fn "core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar"(self, other) {
-    return (self | (((self - 65) <u 26) * 32)) == (other | (((other - 65) <u 26) * 32));
-}
-
-fn "core:prelude/primitive.wado/char::hex_digit_value$scalar"(self) {
-    if (self - 48) <u 10 {
-        return self - 48;
+fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar"(self, f) {
+    let offset_3: i32;
+    let digit_count: i32;
+    let temp: i64;
+    let rem_adjusted_8: i64;
+    let signed_quot_9: i64;
+    let carry_10: i64;
+    let offset_11: i32;
+    let repr: ref Array<u8>;
+    let pos: i32;
+    let digit: i32;
+    let rem_adjusted_16: i64;
+    let signed_quot_17: i64;
+    let carry_18: i64;
+    if self == 0_i64 {
+        offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/primitive.wado::__const_obj_131, 1);
+        builtin::array_set_u8(f.buf.repr, offset_3, 48);
+        return;
     }
-    if select i32(self >=u 97, self <=u 102, 0) {
-        return (self - 97) + 10;
-    }
-    if select i32(self >=u 65, self <=u 70, 0) {
-        return (self - 65) + 10;
-    }
-    "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("char::hex_digit_value: not a hex digit"), used: 38 });
-    unreachable;
+    digit_count = 0;
+    temp = self;
+    b462: block {
+        l463: loop {
+            break_if b462 temp == 0_i64;
+            digit_count = digit_count + 1;
+            if temp >= 0_i64 {
+                temp = temp / 10_i64;
+            } else {
+                rem_adjusted_8 = (temp % 10_i64) + 6_i64;
+                signed_quot_9 = temp / 10_i64;
+                carry_10 = 0_i64;
+                if rem_adjusted_8 < 0_i64 {
+                    carry_10 = -1_i64;
+                }
+                temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
+            }
+            continue l463;
+        };
+    };
+    offset_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/primitive.wado::__const_obj_131, digit_count);
+    repr = f.buf.repr;
+    pos = offset_11 + digit_count;
+    temp = self;
+    b466: block {
+        l467: loop {
+            break_if b466 temp == 0_i64;
+            pos = pos - 1;
+            digit = 0;
+            if temp >= 0_i64 {
+                digit = builtin::i32_wrap_i64(temp % 10_i64);
+                temp = temp / 10_i64;
+            } else {
+                rem_adjusted_16 = (temp % 10_i64) + 6_i64;
+                if rem_adjusted_16 >= 0_i64 {
+                    digit = builtin::i32_wrap_i64(rem_adjusted_16);
+                } else {
+                    digit = builtin::i32_wrap_i64(rem_adjusted_16 + 10_i64);
+                }
+                signed_quot_17 = temp / 10_i64;
+                carry_18 = 0_i64;
+                if rem_adjusted_16 < 0_i64 {
+                    carry_18 = -1_i64;
+                }
+                temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
+            }
+            builtin::array_set_u8(repr, pos, (48 + digit) & 255);
+            continue l467;
+        };
+    };
 }
 
 fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
@@ -4016,12 +4069,12 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
             }
             n_17 = 0;
             t_18 = abs_val;
-            b466: block {
-                l467: loop {
-                    break_if b466 t_18 <= 0_i64;
+            b473: block {
+                l474: loop {
+                    break_if b473 t_18 <= 0_i64;
                     n_17 = n_17 + 1;
                     t_18 = t_18 / 10_i64;
-                    continue l467;
+                    continue l474;
                 };
             };
             break __inline_count_digits_i64_2: n_17;
@@ -4029,6 +4082,20 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
         offset_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_131, digit_count_10);
         "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset_11, abs_val, digit_count_10);
     }
+}
+
+fn "core:prelude/primitive.wado/char::hex_digit_value$scalar"(self) {
+    if (self - 48) <u 10 {
+        return self - 48;
+    }
+    if select i32(self >=u 97, self <=u 102, 0) {
+        return (self - 97) + 10;
+    }
+    if select i32(self >=u 65, self <=u 70, 0) {
+        return (self - 65) + 10;
+    }
+    "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("char::hex_digit_value: not a hex digit"), used: 38 });
+    unreachable;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
@@ -4046,12 +4113,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b469: block {
-            l470: loop {
-                break_if b469 t <= 0_i64;
+        b479: block {
+            l480: loop {
+                break_if b479 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l470;
+                continue l480;
             };
         };
         break __inline_count_digits_i64_0: n;
@@ -4060,79 +4127,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar"(self) {
-    return self;
+fn "core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar"(self, other) {
+    return (self | (((self - 65) <u 26) * 32)) == (other | (((other - 65) <u 26) * 32));
 }
 
-fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar"(self, f) {
-    let offset_3: i32;
-    let digit_count: i32;
-    let temp: i64;
-    let rem_adjusted_8: i64;
-    let signed_quot_9: i64;
-    let carry_10: i64;
-    let offset_11: i32;
-    let repr: ref Array<u8>;
-    let pos: i32;
-    let digit: i32;
-    let rem_adjusted_16: i64;
-    let signed_quot_17: i64;
-    let carry_18: i64;
-    if self == 0_i64 {
-        offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/primitive.wado::__const_obj_131, 1);
-        builtin::array_set_u8(f.buf.repr, offset_3, 48);
-        return;
-    }
-    digit_count = 0;
-    temp = self;
-    b472: block {
-        l473: loop {
-            break_if b472 temp == 0_i64;
-            digit_count = digit_count + 1;
-            if temp >= 0_i64 {
-                temp = temp / 10_i64;
-            } else {
-                rem_adjusted_8 = (temp % 10_i64) + 6_i64;
-                signed_quot_9 = temp / 10_i64;
-                carry_10 = 0_i64;
-                if rem_adjusted_8 < 0_i64 {
-                    carry_10 = -1_i64;
-                }
-                temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
-            }
-            continue l473;
-        };
-    };
-    offset_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/primitive.wado::__const_obj_131, digit_count);
-    repr = f.buf.repr;
-    pos = offset_11 + digit_count;
-    temp = self;
-    b476: block {
-        l477: loop {
-            break_if b476 temp == 0_i64;
-            pos = pos - 1;
-            digit = 0;
-            if temp >= 0_i64 {
-                digit = builtin::i32_wrap_i64(temp % 10_i64);
-                temp = temp / 10_i64;
-            } else {
-                rem_adjusted_16 = (temp % 10_i64) + 6_i64;
-                if rem_adjusted_16 >= 0_i64 {
-                    digit = builtin::i32_wrap_i64(rem_adjusted_16);
-                } else {
-                    digit = builtin::i32_wrap_i64(rem_adjusted_16 + 10_i64);
-                }
-                signed_quot_17 = temp / 10_i64;
-                carry_18 = 0_i64;
-                if rem_adjusted_16 < 0_i64 {
-                    carry_18 = -1_i64;
-                }
-                temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
-            }
-            builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l477;
-        };
-    };
+fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar"(self) {
+    return self;
 }
 
 fn "core:json/core:json/JsonDeserializer::whitespace_end$scalar"(self, from) {
