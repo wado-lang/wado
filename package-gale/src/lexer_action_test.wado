@@ -480,6 +480,22 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert plain.contains("fn classify_keyword("), "by the classifier";
 }
 
+test "a fixed-text rule carrying a body is not folded into the shared literal matcher" {
+    // `K : 'k' 'w'` is two elements, so it aliases no parser literal and `'kw'`
+    // mints its own token — leaving the rule a literal duplicate. The shared
+    // matcher records no `best_act`, so folding it away would collect the action
+    // as running and then never run it, with no diagnostic either way.
+    let src = gen_source(&"grammar T;
+options { language = Wado; }
+r : 'kw' ID ;
+K : 'k' 'w' { lx.set_channel(1) } ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("fn try_K("), "a body-carrying literal duplicate keeps its own matcher";
+    assert src.contains("apply_K_actions(&mut lexer, start, best_end);"), "so its action is dispatched";
+}
+
 test "a lexer predicate cannot reach the commit latches" {
     // A predicate is evaluated for every candidate rule, losers included, so it
     // settles nothing about the token that wins.

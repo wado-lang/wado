@@ -46,17 +46,30 @@ fn is_wado_reserved(name: &String) -> bool {
     };
 }
 
-/// The recognizer handles every generated body reads (`p.expect(...)`,
-/// `lx.set_type(...)`). A binding named after one shadows it with the matched
-/// value, so the next call in the alternative no longer compiles.
-fn is_recognizer_handle(name: &String) -> bool {
-    return *name == "p" || *name == "lx";
+/// Every name a generated parse function binds that a `.g4` identifier can also
+/// reach. A binding named after one shadows it with the matched value, so the
+/// rest of the alternative reads a token where it meant the parser, the value
+/// channel, or the lookahead.
+///
+/// The list is the parse fn's own surface, read off the emitters rather than
+/// collected as each collision turned up: its parameters — the recognizer
+/// handle `p`, the caller-FOLLOW mask `follow`, an LR rule's precedence
+/// `min_prec` — and the locals its body opens, the value channel `vals` and the
+/// multi-alt dispatch's `kind`. `lx` is the lexer's handle, held to the same
+/// rule so the two recognizers answer alike.
+///
+/// A name added to a parse fn from here on should be underscore-led, as
+/// `_rule_start_tok` and `_lr_acc` are: ANTLR's `NameStartChar` admits no
+/// underscore, so such a name is unreachable from a grammar by construction and
+/// needs no entry at all.
+fn is_generated_local(name: &String) -> bool {
+    return *name matches { "p" | "lx" | "vals" | "min_prec" | "kind" | "follow" };
 }
 
 /// Escape an identifier that would collide with a Wado reserved word or a
-/// recognizer handle by appending '_'.
+/// generated local by appending '_'.
 pub fn escape_ident(name: &String) -> String {
-    if is_wado_reserved(name) || is_recognizer_handle(name) {
+    if is_wado_reserved(name) || is_generated_local(name) {
         return `${*name}_`;
     }
     return *name;

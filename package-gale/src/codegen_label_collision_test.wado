@@ -51,6 +51,26 @@ WS : ' ' -> skip ;
     assert !out.contains("let p = p."), `the handle must not be shadowed: ${out}`;
 }
 
+test "an element named after any generated parse-fn local does not shadow it" {
+    // The handle is one of a set: the parse fn's parameters and the locals its
+    // body opens. `KIND` is the multi-alt dispatch's lookahead, which lands in
+    // the very function the binding does — the shape the handle collision had.
+    let g4 = "grammar T;
+r : KIND VALS { p.emit($KIND.text) } | VALS ;
+KIND : 'k' ;
+VALS : 'v' ;
+WS : ' ' -> skip ;
+";
+    let mut grammar = match parse_checked(g4) {
+        Ok(g) => g,
+        Err(e) => panic(`parse_checked failed: ${e.message}`),
+    };
+    let out = generate(&mut grammar, &GenerateOptions {}).source;
+    assert out.contains("let kind = p.peek_kind();"), "the dispatch still reads the lookahead";
+    assert !out.contains("let kind = p.expect("), `the lookahead must not be shadowed: ${out}`;
+    assert !out.contains("let vals = p.expect("), `the value channel must not be shadowed: ${out}`;
+}
+
 /// Fail if `decl` appears twice before the next `\nfn ` boundary.
 fn assert_declared_once_per_fn(out: &String, decl: &String) {
     let mut pos = 0;

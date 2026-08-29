@@ -337,7 +337,7 @@ pub fn gen_lexer(
     }
     // A base's action op drives the lexer from the user's own module.
     let sc_action = sc_ops.iter_ref().any(|o| !o.is_predicate);
-    gen_lexer_struct(w, members, has_actions, uses_modes, sc_action, mode_use);
+    gen_lexer_struct(w, members, has_actions, has_members, uses_modes, sc_action, mode_use);
     if has_actions {
         if uses_modes {
             gen_mode_constants(w, &grammar.mode_names);
@@ -376,6 +376,7 @@ fn gen_lexer_struct(
     w: &mut CodeWriter,
     members: &MemberDecls,
     has_actions: bool,
+    has_members: bool,
     uses_modes: bool,
     sc_action: bool,
     mode_use: &ModeAttrUse,
@@ -386,8 +387,13 @@ fn gen_lexer_struct(
     for let mf of &members.fields {
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
-    if has_actions {
+    // A `@members` method that prints writes the same sink an action does, so a
+    // members-only grammar carries it too — without it the method would call an
+    // `emit` the `Lexer` does not have.
+    if has_actions || has_members {
         s.add_field_default(&"act_output", &"String", &"\"\"");
+    }
+    if has_actions {
         s.add_field_default(&"act_type", &"i32", &"-1");
         s.add_field_default(&"act_channel", &"i32", &"-1");
         s.add_field_default(&"act_skip", &"bool", &"false");
@@ -438,6 +444,8 @@ fn gen_lexer_struct(
 
     if has_actions {
         gen_lexer_action_methods(w, uses_modes, sc_action, mode_use);
+    } else if has_members {
+        gen_lexer_emit_fn(w, if sc_action { Vis::Pub } else { Vis::Private });
     }
 
     for let m of &members.methods {
@@ -449,17 +457,21 @@ fn gen_lexer_struct(
     w.blank();
 }
 
-fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: bool, mode_use: &ModeAttrUse) {
-    let vis = if sc_action { Vis::Pub } else { Vis::Private };
+/// The output sink every translated `print` writes. Deliberately outside
+/// `reset_actions`: the sink is the whole run's output, not one token's.
+fn gen_lexer_emit_fn(w: &mut CodeWriter, vis: Vis) {
     w.blank();
-    // Deliberately outside `reset_actions`: the sink is the whole run's output,
-    // not one token's.
     let mut fe = FnSpec::new(&"emit", vis);
     fe.set_receiver(&"&mut self");
     fe.add_param(&"s", &"String");
     fe.emit_begin(w);
     w.line(&"self.act_output.push_str(&s);");
     w.end();
+}
+
+fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: bool, mode_use: &ModeAttrUse) {
+    let vis = if sc_action { Vis::Pub } else { Vis::Private };
+    gen_lexer_emit_fn(w, vis);
     w.blank();
 
     // The type / channel latches are seeded with what the tournament decided, so
@@ -697,7 +709,7 @@ pub fn lexer_rule_route(
             return LexerRuleRoute::Keyword(LexerKeywordRoute { carrier: kw.carrier, also_matcher: called });
         }
     }
-    if let Some(const_name) = literal_duplicate_const(rule, lit_tokens, grammar_opts, grammar_ci) {
+    if let Some(const_name) = literal_duplicate_const(rule, lexer_rules, lit_tokens, grammar_opts, grammar_ci) {
         return LexerRuleRoute::SharedLiteral(LexerLiteralRoute { const_name, also_matcher: called });
     }
     return LexerRuleRoute::Matcher;
@@ -1043,9 +1055,9 @@ pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
 /// single-alt and multi-alt rules run their
 /// alternatives' top-level `{ ... }` actions (a multi-alt rule re-matches to
 /// find the winning alternative in `apply_<rule>_actions`). Fragments and
-/// actions nested inside an element still warn. A rule carrying a body never
-/// folds into the keyword classifier (`keyword_rule_carries_body`), so it keeps
-/// the `try_` fn that sets `best_act`.
+/// actions nested inside an element still warn. A rule carrying a body folds
+/// into neither dispatch shortcut (`lexer_rule_carries_body`), so it keeps the
+/// `try_` fn that sets `best_act`.
 pub fn lexer_rule_executes_actions(grammar_executes: bool, rule: &LexerRule) -> bool {
     return grammar_executes && !rule.is_fragment && !rule.is_virtual;
 }
@@ -3018,8 +3030,11 @@ fn try_extract_keyword_char(elem: &LexerElement, all_rules: &List<LexerRule>, ru
 }
 
 /// Whether the rule carries any `{ ... }` action or `{ ... }?` predicate, the
-/// fragments it inlines included.
-fn keyword_rule_carries_body(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+/// fragments it inlines included. Both shortcuts that drop a rule's own `try_`
+/// fn — the keyword classifier and the shared literal matcher — ask this: the
+/// dispatch entry they stand in for is what records `best_act`, so a rule folded
+/// into either would have its actions collected as running and then never run.
+fn lexer_rule_carries_body(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     if rule.body.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules)) {
         return true;
     }
@@ -3055,7 +3070,7 @@ fn try_extract_keyword_info(
     // classifier runs behind a carrier's match, so the winner replay dispatches
     // the carrier's actions and never this rule's, and the carrier's match
     // already settled what a predicate here would have had a say in.
-    if keyword_rule_carries_body(rule, all_rules) {
+    if lexer_rule_carries_body(rule, all_rules) {
         return null;
     }
     let alt = &rule.body[0];
@@ -3303,11 +3318,17 @@ fn try_extract_fixed_text(rule: &LexerRule) -> Option<String> {
 /// `try_*` function instead of being deduped against the shared literal.
 fn literal_duplicate_const(
     rule: &LexerRule,
+    all_rules: &List<LexerRule>,
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
 ) -> Option<String> {
     if rule.mode != 0 {
+        return null;
+    }
+    // The shared matcher has no `best_act` entry to record, so a rule folded
+    // into it would never run its own body (`lexer_rule_carries_body`).
+    if lexer_rule_carries_body(rule, all_rules) {
         return null;
     }
     let rule_ci = resolve_ci(grammar_opts, &rule.options);
@@ -3328,11 +3349,12 @@ fn literal_duplicate_const(
 /// Whether the shared literal matcher already covers this rule's text.
 fn is_literal_duplicate(
     rule: &LexerRule,
+    all_rules: &List<LexerRule>,
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
 ) -> bool {
-    return literal_duplicate_const(rule, lit_tokens, grammar_opts, grammar_ci) matches { Some(_) };
+    return literal_duplicate_const(rule, all_rules, lit_tokens, grammar_opts, grammar_ci) matches { Some(_) };
 }
 
 /// Sentinel for the keyword-length min-finding loop below: larger than
@@ -4183,7 +4205,7 @@ fn build_mode_try_calls(
             && !rule.is_virtual
             && rule.mode == mode
             && !is_keyword_rule_name(&rule.name, keywords)
-            && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
+            && !is_literal_duplicate(rule, lexer_rules, lit_tokens, grammar_opts, grammar_ci) {
             let mut call = build_rule_try_call(
                 rule,
                 lexer_rules,
@@ -4550,7 +4572,7 @@ fn gen_tokenize_fn(
     // follows (the stream ends here), so this stays inline rather than
     // using `emit_token_commit`.
     w.line(&"ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
-    if has_actions {
+    if has_actions || has_members {
         w.line(&"ts.output = lexer.act_output;");
     }
     w.line(&"return ts;");

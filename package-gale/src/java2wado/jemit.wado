@@ -460,24 +460,30 @@ fn emit_call(
     let args_w = emit_args(rule, rules, &c.args, vals_in_scope, bindings, env)?;
     return match &c.callee {
         Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, env),
-        Name(n) => {
-            if *n == "getText" {
-                match_window_expr(env, n, if env.lexer {
-                    lexer_matched_text_expr();
-                } else {
-                    `${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`;
-                });
-            } else if env.lexer && *n == "getCharPositionInLine" {
-                match_window_expr(env, n, lexer_cursor_column_expr());
-            } else if *n == "getRuleInvocationStack" {
-                parser_api_expr(env, n, `${env.this_bind}.rule_stack()`);
-            } else {
-                check_member_call_reachable(env, n)?;
-                Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
-            }
-        },
+        Name(n) => emit_recognizer_call(env, n, &args_w),
         _ => Result::Err("java2wado: unsupported call target"),
     };
+}
+
+/// A call on the recognizer itself, written bare (`m()`) or through `this.` —
+/// one resolution for both spellings, so a rule about a call (which API it
+/// belongs to, whether the body may reach it) holds however it is written.
+fn emit_recognizer_call(env: &JEnv, name: &String, args_w: &String) -> Result<String, String> {
+    if *name == "getText" {
+        return match_window_expr(env, name, if env.lexer {
+            lexer_matched_text_expr();
+        } else {
+            `${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`;
+        });
+    }
+    if env.lexer && *name == "getCharPositionInLine" {
+        return match_window_expr(env, name, lexer_cursor_column_expr());
+    }
+    if *name == "getRuleInvocationStack" {
+        return parser_api_expr(env, name, `${env.this_bind}.rule_stack()`);
+    }
+    check_member_call_reachable(env, name)?;
+    return Result::Ok(`${env.this_bind}.${to_snake_case(name)}(${*args_w})`);
 }
 
 /// `((XContext)$ctx).TOK() != null` asks whether the alternative has matched
@@ -581,6 +587,11 @@ fn emit_member_call(
         let newline = meth == "println";
         return emit_print(rule, rules, raw_args, vals_in_scope, bindings, env, newline);
     }
+    // `this.m()` is the bare `m()` under another spelling, recognizer API
+    // included: `this.getText()` in a lexer is the matched slice, not a token's.
+    if name_is(&m.recv, &"this") {
+        return emit_recognizer_call(env, &meth, args_w);
+    }
     if meth == "getText" {
         if name_is(&m.recv, &"_input") {
             return parser_api_expr(env, &"_input.getText()", `${env.this_bind}.input_text()`);
@@ -603,11 +614,7 @@ fn emit_member_call(
         return Result::Ok(`(${r} == ${a})`);
     }
     check_member_call_reachable(env, &meth)?;
-    let recv_w = if name_is(&m.recv, &"this") {
-        env.this_bind;
-    } else {
-        emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-    };
+    let recv_w = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
     return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${*args_w})`);
 }
 

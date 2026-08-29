@@ -580,6 +580,27 @@ A : 'a' { ${*body} }? ;
     assert ok == "p.la(1) == 0", `out: '${ok}'`;
 }
 
+test "a recognizer call resolves the same bare and through `this`" {
+    // `getText()` and `this.getText()` are one call in Java. In a lexer both are
+    // the matched slice; taking the `this.` spelling for a receiver made it a
+    // token read the lexer has no stream for, and the body was dropped.
+    let lang = ActionLanguage::Java;
+    for let body of &["getText()", "this.getText()"] {
+        let mut g = parse(`lexer grammar L;
+A : 'a' { System.out.println(${*body}); } ;
+`).unwrap();
+        let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
+        assert msgs.is_empty(), `must resolve '${*body}': ${msgs.len()} diagnostics`;
+        let staged = g.lexer_rules[0].body[0].actions[0].source.text;
+        assert staged.contains("LexerSlice::new(chars, start, pos).to_string()"), `staged: '${staged}'`;
+    }
+
+    // And in a parser body both are the rule's own consumed span.
+    let bare = java_action(&"System.out.println(getText());", &"a : ID ;", false);
+    let qualified = java_action(&"System.out.println(this.getText());", &"a : ID ;", false);
+    assert bare == qualified, `bare '${bare}' vs qualified '${qualified}'`;
+}
+
 test "grammar_has_superclass keys the Phase 4 carve-out" {
     let with_super = parse("grammar T;
 options { superClass = TBase; }
