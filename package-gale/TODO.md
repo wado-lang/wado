@@ -72,7 +72,7 @@ Remaining:
 
 Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the presence of imported slave grammars. Independent blockers:
 
-- **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files. Kiln already supports multi-input; lift the short-circuit once resolution lands. Actionable on its own, ahead of Stage C — and next, because it blocks a consumer outside the corpus: a Wado dialect grammar has to vendor a copy of `Wado.g4` and drift from it until `import Wado;` resolves, where `mise run check-grammar` holds only the original to the compiler's parser ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)).
+- **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files. Designed in [`grammar-import.md`](./grammar-import.md); Kiln already supports multi-input, so lift the short-circuit once resolution lands. Actionable on its own, ahead of Stage C — and next, because it blocks a consumer outside the corpus: a Wado dialect grammar has to vendor a copy of `Wado.g4` and drift from it until `import Wado;` resolves, where `mise run check-grammar` holds only the original to the compiler's parser ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)).
 - **Host-side output (Stage C).** Every composite descriptor's expected output is a host-side artefact — action prints, token dumps, or empty — so none survive the Stage B output normalizer. Re-evaluate once Stage C lands.
 
 ## LL prediction — parked gaps

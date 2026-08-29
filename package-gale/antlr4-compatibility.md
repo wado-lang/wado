@@ -281,9 +281,9 @@ Defaults: any single-grammar parser descriptor whose `[output]` would
 auto-skip from Stage B becomes a Stage B′ candidate automatically,
 unless it sits in `[stage_b_oracle_skip]`. Composite descriptors
 (slave grammars) remain out of scope until the importer learns to
-resolve them (see "Descriptor importer — infrastructure gaps" in
-[`TODO.md`](./TODO.md)). Lexer descriptors stay on Stage A token-
-equivalence — there is no parse tree to compare.
+resolve them (designed in [`grammar-import.md`](./grammar-import.md)).
+Lexer descriptors stay on Stage A token-equivalence — there is no
+parse tree to compare.
 
 When the oracle fails (parse error, codegen error after stripping,
 TestRig stderr non-empty), the extractor logs a warning to stderr and
@@ -1075,6 +1075,7 @@ diagnostic environment variables (`WADO_TRACE`,
 ## See Also
 
 - [`AGENTS.md`](./AGENTS.md) — dev-cycle essentials: compatibility principle, license hygiene, standing codegen rules, debugging tools, failed approaches.
+- [`grammar-import.md`](./grammar-import.md) — `import S;` resolution and composite-grammar composition.
 - [`TODO.md`](./TODO.md) — open compatibility / performance work.
 - [`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md) — Gale's overall design rationale, including the long-term plan for Stage C (action-body translation).
 - `vendor/antlr4/doc/` — the upstream `antlr4` documentation (vendored as a shallow git submodule). Read this for the canonical semantics of any `.g4` construct.
