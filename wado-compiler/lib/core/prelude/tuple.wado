@@ -11,6 +11,13 @@ use { Ordering } from "core:prelude/traits.wado";
 /// The alternate (`#`) rendering the tuple `Inspect` hands off to: one element
 /// per indented line.
 fn inspect_tuple_alternate<..T: Inspect>(t: &[..T], f: &mut Formatter) {
+    // An empty tuple has no element to indent, so it writes the two characters
+    // rather than a brace it immediately closes. `len()` is a compile-time
+    // constant, so the arm not taken folds away.
+    if t.len() == 0 {
+        f.write_str(&"[]");
+        return;
+    }
     f.open_brace("[");
     for let v of *t {
         f.write_newline_indent();
@@ -69,6 +76,10 @@ impl<..T: Ord> Ord for [..T] {
 /// The alternate (`#`) rendering the tuple `Display` hands off to: one element
 /// per indented line.
 fn display_tuple_alternate<..T: Display>(t: &[..T], f: &mut Formatter) {
+    if t.len() == 0 {
+        f.write_str(&"[]");
+        return;
+    }
     f.open_brace("[");
     for let v of *t {
         f.write_newline_indent();

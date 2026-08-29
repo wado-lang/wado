@@ -79,8 +79,8 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     // Sweep for synthesised `__Closure_N^Inspect` impls, which have no field on
     // `ClosureFunctor` to key off. The trait is matched against the
     // compiler-item registry — the same source `generate_functor_format_methods`
-    // stamps into `trait_name` — so a stdlib rename flows through and no user
-    // trait named `Inspect` can shadow it.
+    // stamps into `trait_name` — so a stdlib rename flows through. The match is
+    // on the simple name: `base_name` drops the declaring module.
     let type_table = project.type_table.borrow();
     let items = type_table.compiler_items();
     let inspect_name = items.trait_name(CompilerItem::Inspect);

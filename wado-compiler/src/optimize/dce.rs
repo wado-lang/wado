@@ -888,8 +888,9 @@ fn collect_inspectable_signatures_from_reachable(
 ) -> InspectableSignatures {
     let mut sigs = InspectableSignatures::default();
     let type_table = &*project.type_table.borrow();
-    // The registry, not a literal: a stdlib rename flows through, and no user
-    // trait named `Inspect` can pass for the compiler item.
+    // The registry, not a literal, so a stdlib rename flows through.
+    // `base_trait_name` drops the declaring module, so this matches on the
+    // simple name alone — as `dae` does for the same impls.
     let inspect_name = type_table
         .compiler_items()
         .trait_name(crate::compiler_item::CompilerItem::Inspect);
