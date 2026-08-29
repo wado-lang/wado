@@ -94,21 +94,26 @@ jobs:
             if: steps.precheck.outputs.should-run == 'true'
             run: mise run doc-stdlib
 
-      # Whole-tree formatters, after the parallel join so they don't race a regenerator.
-      - name: Format Markdown
-        if: steps.precheck.outputs.should-run == 'true'
-        run: ./target/debug/wado-dev-tools format-md
+      # Whole-tree formatters, after the parallel join so they don't race a
+      # regenerator. `mise run format` is the local entry point for all three;
+      # here they stay separate steps so each is timed and fails on its own, and
+      # these two — disjoint trees, neither taking the cargo lock — run together.
+      - parallel:
+          - name: Format Markdown
+            if: steps.precheck.outputs.should-run == 'true'
+            run: ./target/debug/wado-dev-tools format-md
+          - name: Format Wado sources
+            if: steps.precheck.outputs.should-run == 'true'
+            run: ./target/debug/wado format -w .
 
-      - name: Format Wado sources
-        if: steps.precheck.outputs.should-run == 'true'
-        run: ./target/debug/wado format -w .
-
-      # Second compile; runs last to keep the cargo lock uncontended.
+      # The third formatter: a second compile, and rustfmt has to follow
+      # clippy-fix's rewrites, so it runs last and keeps the cargo lock
+      # uncontended.
       - name: Clippy autofix and rustfmt
         if: steps.precheck.outputs.should-run == 'true'
         run: |
           mise run clippy-fix
-          cargo fmt --all
+          mise run format-rust
 
       - name: Determine push capability
         id: cap
@@ -174,6 +179,6 @@ jobs:
           if [ "${{ steps.cap.outputs.can-push }}" = "true" ]; then
             echo "::notice::Tidy produced changes and pushed a 'chore: tidy' commit. Pull the latest before continuing."
           else
-            echo "::error::Tidy produced changes. Fork PRs cannot be auto-pushed; run 'mise run clippy-fix && cargo fmt --all && mise run format-wado && mise run update-golden-fixtures && mise run update-golden-format-fixtures && mise run doc-stdlib && cargo run -p wado-dev-tools -- format-md' locally and push the result."
+            echo "::error::Tidy produced changes. Fork PRs cannot be auto-pushed; run 'mise run clippy-fix && mise run update-golden-fixtures && mise run update-golden-format-fixtures && mise run doc-stdlib && mise run format' locally and push the result."
             exit 1
           fi

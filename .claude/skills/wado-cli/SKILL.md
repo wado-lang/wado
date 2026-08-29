@@ -205,9 +205,9 @@ The `wado format` command formats Wado source code.
 wado format -w file.wado  # rewrite in place
 ```
 
-In the wado repository, `mise run format-wado` formats the whole workspace,
-honouring each package's `[format] exclude`. `wado-compiler` excludes
-`tests/**`, so the e2e fixtures and the golden format fixtures keep the
+In the wado repository, `mise run format` formats the whole workspace — Rust,
+Markdown and Wado — honouring each package's `[format] exclude`. `wado-compiler`
+excludes `tests/**`, so the e2e fixtures and the golden format fixtures keep the
 hand-authored layouts that are part of the test.
 
 **Caution:** the exclusion applies to the directory walk, not to a path you
