@@ -39,16 +39,15 @@ should take, and the first axis to settle is where the top level lives.
 
 ### Prior art
 
-Five positions, distinguished by the nesting direction and by how many grammars
+Four positions, distinguished by the nesting direction and by how many grammars
 own one file.
 
-| Position      | Shape                                                | Examples                                                |
-| ------------- | ---------------------------------------------------- | ------------------------------------------------------- |
-| Wado-hosted   | Wado at the top level, markup in expression position | JSX, XHP/Hack, ReScript, Scala 2 XML literals, E4X      |
-| Markup-hosted | Markup at the top level, Wado in holes               | PHP, ERB, Razor, Elixir HEEx, Jinja, Go `html/template` |
-| Sectioned     | One file, sections, neither nested in the other      | Vue SFC, Svelte, Astro                                  |
-| Paired        | A markup-only file, its logic in a sibling module    | Angular templates, Razor Pages, Go `.tmpl`              |
-| Builder       | No markup surface; a typed builder API               | Flutter, SwiftUI, lucid/blaze, kotlinx.html             |
+| Position      | Shape                                                | Examples                                               |
+| ------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| Wado-hosted   | Wado at the top level, markup in expression position | JSX, XHP/Hack, ReScript, Scala 2 XML literals, E4X     |
+| Markup-hosted | Markup at the top level, Wado in holes               | PHP, ERB, Razor, Elixir HEEx, Jinja, Angular templates |
+| Sectioned     | One file, sections, neither nested in the other      | Vue SFC, Svelte, Astro                                 |
+| Builder       | No markup surface; a typed builder API               | Flutter, SwiftUI, lucid/blaze, kotlinx.html            |
 
 Two lessons the record carries. Languages with a macro system never touched
 their grammar — Rust (`html!`, `view!`, `rsx!`), Elixir (`~H`), OCaml (PPX),
@@ -59,9 +58,8 @@ interpolators. Wado has no macros, which is why the question reaches the grammar
 at all — and Kiln is the answer that keeps it away from the grammar.
 
 The record also refuses to converge on one position. Server-side rendering
-settled on Markup-hosted and Paired (Razor, HEEx, `templ`); client-side UI
-settled on Wado-hosted and Sectioned (JSX, Svelte). Wado has one consumer of
-each shape.
+settled on Markup-hosted (Razor, HEEx, `templ`); client-side UI settled on
+Wado-hosted and Sectioned (JSX, Svelte). Wado has one consumer of each shape.
 
 ## Decision
 
@@ -70,7 +68,7 @@ proposes no change to the Wado language.
 
 ### The axis
 
-The five positions above are the axis. Builder is the control: without it the
+The four positions above are the axis. Builder is the control: without it the
 study can only compare markup surfaces to each other, never establish that one
 is needed. Every candidate is measured against the builder API, not against the
 next candidate.
@@ -82,7 +80,6 @@ next candidate.
 | Wado-hosted   | `Wado.g4` + a markup mode | layout-preserving expansion | no              | the language's own    | playground, signals       |
 | Markup-hosted | needs an HTML parser      | needs a source map          | yes             | a template language's | blog, `wasi:http/service` |
 | Sectioned     | needs an HTML parser      | needs a source map          | yes             | a template language's | either                    |
-| Paired        | needs an HTML parser      | needs a source map          | yes             | a template language's | blog, `wasi:http/service` |
 | Builder       | none                      | exact                       | no              | the language's own    | either                    |
 
 HTML-authorable is one property under two names: whether real HTML pastes in
@@ -102,7 +99,7 @@ restricts modes to a `lexer grammar` — so a dialect grammar keeps the shape
 `Wado.g4` already has.
 
 No HTML parser exists here. Marl escapes HTML and never parses it, by design.
-Markup-hosted, Sectioned and Paired all need one, and tolerant HTML5 parsing —
+Markup-hosted and Sectioned both need one, and tolerant HTML5 parsing —
 implied end tags, raw-text elements, attribute quirks — is a larger artefact
 than the experiment it serves. An XML-strict subset avoids it, and discards the
 one advantage those positions hold over Wado-hosted.
@@ -118,15 +115,15 @@ carrying it from output spans back to input spans serves every position equally.
 templ, Svelte and Vue all ship one. It is Kiln infrastructure rather than
 language surface, so it costs a dialect none of its independence.
 
-Paired binding is not reachable the way its prior art practises it. Angular and
-Razor Pages bind a template to a companion class by name: the template names the
-class's members and the compiler resolves them. A Kiln generator receives files
-by value and has no access to the compiler's types, so it could reproduce that
-only by parsing the sibling `.wado` itself and redoing name resolution the
-compiler already does. What stays reachable is a template file declaring its own
-typed parameters, compiling to a module whose exported render function is the
-whole interface — nearer a function than a pairing, and separated from
-Markup-hosted only by whether the file may also declare Wado items of its own.
+A Markup-hosted file cannot bind to a companion type by name. Angular and Razor
+Pages do exactly that — the template names a companion class's members and the
+compiler resolves them — but a Kiln generator receives files by value with no
+access to the compiler's types, so it could reproduce that only by parsing the
+sibling `.wado` itself and redoing name resolution the compiler already does. A
+Markup-hosted file therefore declares its own typed parameters, and the exported
+render function is its whole interface. Whether it may also declare Wado items
+of its own — imports, helpers, several templates in one file — is the design
+question the position leaves open.
 
 ### Deliberate omissions
 
@@ -151,9 +148,10 @@ Each question is answered with an artefact, not an opinion.
 2. For Wado-hosted: a layout-preserving generator, and the measured cost of that
    discipline — which markup forms cannot expand within their own line count. A
    source map retires this question.
-3. For Markup-hosted, Sectioned and Paired: which HTML subset the parser accepts,
-   and the paste-fidelity bill of that choice, measured by converting the blog's
-   real HTML rather than estimated.
+3. For Markup-hosted and Sectioned: which HTML subset the parser accepts, and the
+   paste-fidelity bill of that choice, measured by converting the blog's real
+   HTML rather than estimated. For Markup-hosted, also how a file takes its data
+   — typed parameters alone, or Wado items of its own alongside them.
 4. For every position: a diff of the generated output against the same component
    written by hand at Builder. This is the readability comparison that decides
    whether any surface is warranted, and Kiln makes it mechanical.
@@ -177,13 +175,9 @@ Each question is answered with an artefact, not an opinion.
 - What the markup lowers to. Every position needs an `Element` type, a component
   model, and event wiring; Builder is that target, and it does not exist. No
   surface can be studied before it.
-- Whether one surface serves both consumers. The blog is Markup-hosted- and
-  Paired-shaped, the playground is Wado-hosted-shaped, and the prior art
-  suggests the answer is no.
-- Whether Paired is a position of its own. Stripped of name binding to a
-  companion type, what is left is a template module with typed parameters, which
-  may be Markup-hosted under another name. The axis carries both until a dialect
-  is written against each and the difference either shows up or does not.
+- Whether one surface serves both consumers. The blog is Markup-hosted-shaped,
+  the playground is Wado-hosted-shaped, and the prior art suggests the answer is
+  no.
 
 ## Consequences
 
