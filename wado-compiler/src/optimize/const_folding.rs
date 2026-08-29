@@ -101,20 +101,12 @@ pub fn fold_constants(
     let mut buffers = EngineBuffers::default();
     let len = project.functions.len();
     gate.run_gated(GatedPass::ConstFold, len, |fid| {
-        let c = fold_function(
-            &project.functions[fid.index()],
-            &mut visitor,
-            &mut buffers,
-            &type_table,
-        );
-        if c {
-            crate::compiler_trace!(
-                "const_fold",
-                "changed {}",
-                project.functions[fid.index()].borrow().name
-            );
+        let func = &project.functions[fid.index()];
+        let changed = fold_function(func, &mut visitor, &mut buffers, &type_table);
+        if changed {
+            crate::compiler_trace!("const_fold", "changed {}", func.borrow().name);
         }
-        c
+        changed
     })
 }
 
@@ -1171,13 +1163,8 @@ impl ConstFoldVisitor<'_> {
         self.visit_block(engine, block)
     }
 
-    /// Walk an `if`, in statement or expression position. Its arms are
-    /// alternatives — unless the env already decides the condition, in which
-    /// case exactly one of them runs and the walk carries the env straight
-    /// through it, keeping what that arm writes. Treating a decided branch as
-    /// an alternative instead costs one fixpoint iteration per link of a chain
-    /// like a derived `Inspect`'s `if wrote_field { ", " } else { " { ";
-    /// wrote_field = true }` — one iteration per field of the struct.
+    /// Walk an `if` in either position. Its arms are alternatives — unless the
+    /// env decides the condition, when one runs and the env flows through it.
     fn visit_branch(
         &mut self,
         engine: &mut Engine,
@@ -1190,7 +1177,8 @@ impl ConstFoldVisitor<'_> {
         if let Lattice::Const(Value::Bool(taken)) =
             operand_lattice(&self.interpreter, engine.body, condition)
         {
-            if let Some(arm) = if taken { Some(then_block) } else { else_block } {
+            let arm = if taken { Some(then_block) } else { else_block };
+            if let Some(arm) = arm {
                 changed |= self.visit_block(engine, arm);
             }
             return changed;

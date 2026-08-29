@@ -117,10 +117,10 @@ naming the passes still reporting changes. From there:
    change. The tail of that list is the culprit set.
 2. `WADO_TRACE=const_fold` names each function `const_fold` changed, so a
    pass that keeps reporting a change points at the body it keeps rewriting.
-3. `WADO_DUMP_PASS_AFTER=<pass>` on consecutive iterations, diffed, shows
-   what one round actually rewrote — a rewrite that undoes an earlier one is
-   an oscillation, and a shrinking-by-one count is a pass making one step per
-   round where it should reach its own fixpoint in a single walk.
+3. `WADO_DUMP_PASS_AFTER=<pass>` on consecutive iterations, diffed, shows what
+   one round rewrote. A rewrite that undoes an earlier one is an oscillation;
+   a count that shrinks by one is a pass taking one step per round where a
+   single walk should reach its fixpoint.
 
 ## Workflow for a "WIR pipeline generated invalid core Wasm module" ICE
 

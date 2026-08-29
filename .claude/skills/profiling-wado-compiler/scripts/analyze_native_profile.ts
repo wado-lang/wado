@@ -86,9 +86,8 @@ function threadFuncKeys(thread: any): Key[] {
 
 /**
  * Run a symbolicator and return its stdout lines. `maxBuffer` is unbounded
- * because a hot profile carries tens of thousands of addresses: the default
- * 1 MiB truncates the output silently, and every address past the cut — any
- * of which may be the hot one — falls back to a raw `[lib]+0x…` frame.
+ * because the default 1 MiB truncates silently, dropping every address past
+ * the cut back to a raw `[lib]+0x…` frame.
  */
 function runSymbolicator(
   cmd: string, args: string[], input?: string,

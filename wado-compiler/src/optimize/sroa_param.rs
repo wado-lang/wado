@@ -71,9 +71,8 @@ pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut Functio
     if clones.is_empty() {
         return false;
     }
-    // A clone this run reused rather than minted, with every call site already
-    // pointing at it, is a run that changed nothing: `touched` stays empty and
-    // the fixpoint must not be held open for it.
+    // A clone reused rather than minted, with every call site already on it, is
+    // a run that changed nothing and must not hold the fixpoint open.
     let rewrote_global = rewrite_call_sites(project, &candidates, &clones, &mut touched);
     let changed = rewrote_global || !touched.is_empty();
     for idx in touched {
@@ -1108,8 +1107,7 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) 
 // -----------------------------------------------------------------------
 
 /// Retarget every call at a scalarized position to the clone. Callers land in
-/// `touched`; the return value reports the global initializers, which have no
-/// `touched` slot of their own.
+/// `touched`; the return reports the globals, which have no slot there.
 fn rewrite_call_sites(
     project: &mut NirPackage,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,

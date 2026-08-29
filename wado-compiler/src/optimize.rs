@@ -80,32 +80,24 @@ struct OptConfig {
     iterations: u32,
     /// Maximum statement count for inlining
     inline_threshold: usize,
-    /// Whether exhausting `iterations` is a defect rather than a budget. True
-    /// only for `-O3`'s own cap, which is sized so the loop converges under it;
-    /// `-O1` and `-O2` spend a deliberately smaller number of rounds, and
-    /// `--optimize-iterations` is the caller asking for a truncated run.
+    /// Whether exhausting `iterations` is a defect rather than a budget — true
+    /// only for `-O3`'s own cap, the one sized so the loop converges under it.
     cap_is_defect: bool,
 }
 
 /// Optimization level. Every level runs DCE and the post-loop rewrites the Wasm
-/// backend depends on; what varies is the fixed-point loop, whose iteration
-/// count and inline threshold go `O0` (skipped entirely), `O1` (2 / 4),
-/// `O2` (10 / 13, the default), `O3` (20 / 32). `Os` is `O2` plus name-section
-/// stripping.
+/// backend depends on; `optimize` below sets each one's loop and inline budget.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization loop. DCE plus the always-on post-optimization
     /// rewrites required by the Wasm backend.
     O0,
     /// Development optimizations. All passes with fast iteration count.
-    /// Iterations: 2, Inline threshold: 4.
     O1,
     /// Production optimizations. All passes including DCE.
-    /// Iterations: 10, Inline threshold: 13.
     #[default]
     O2,
     /// Aggressive production optimizations. All passes including DCE.
-    /// Iterations: 20, Inline threshold: 32.
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
@@ -192,14 +184,11 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
-            // The iteration cap is defensive: a program that has not settled by
-            // here is not converging, and each further round costs a full pass
-            // sequence for what the ones before it already declined to finish.
-            // The heaviest source in the tree — the Gale-generated SQLite parser
-            // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack, not a
-            // budget; `cap_is_defect` below asserts as much.
-            // Threshold 32 sits just under a size cliff at 33 on syntax-highlight
-            // (859KB → 1049KB), for no speed gain.
+            // The iteration cap is slack, not a budget, which is what
+            // `cap_is_defect` asserts: the heaviest source in the tree — the
+            // Gale-generated SQLite parser in `benchmark/sqlite_parse` —
+            // converges in 6. Threshold 32 sits just under a size cliff at 33 on
+            // syntax-highlight (859KB → 1049KB), for no speed gain.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),
                 inline_threshold: inline_threshold.unwrap_or(32),
@@ -460,19 +449,13 @@ pub mod pass_dump {
     }
 }
 
-/// Run optimization passes with a fixed-point iteration strategy.
-///
-/// `config` controls the number of iterations and the inline threshold. More
-/// iterations can find more opportunities but take longer; the loop exits early
-/// once an iteration changes nothing.
-///
-/// Each pass's position is justified in the comment beside its call.
+/// Run the NIR passes to a fixed point, exiting early once an iteration changes
+/// nothing. Each pass's position is justified in the comment beside its call.
 fn run_optimization_passes(
     project: &mut NirPackage,
     config: &OptConfig,
     profiler: &dyn SpanEmitter,
 ) {
-    let threshold = config.inline_threshold;
     // Per-function dirty-set gate. Every loop pass is gate-aware:
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
     // an interprocedural pass scans all functions but reports exactly the ones
@@ -500,18 +483,15 @@ fn run_optimization_passes(
     run_pass("nir/promote_pure_values_early", project, profiler, |p| {
         extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Early)
     });
-    // The passes that reported a change in the iteration just run. Kept across
-    // iterations so the cap report below can name what held the loop open.
+    // What changed in the iteration just run, and so the convergence flag:
+    // empty ends the loop, non-empty after it names what held the loop open.
     let mut iter_changed: Vec<&'static str> = Vec::new();
-    let mut converged = config.iterations == 0;
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
-        let mut changed = false;
         iter_changed.clear();
         macro_rules! record {
             ($name:expr, $c:expr) => {{
                 if $c {
-                    changed = true;
                     iter_changed.push($name);
                 }
             }};
@@ -527,7 +507,7 @@ fn run_optimization_passes(
                 );
             }};
         }
-        // Reports changes to the gate but not the convergence flag — must never
+        // Reports changes to the gate but not to `iter_changed` — must never
         // keep the loop alive on its own.
         macro_rules! gate_only {
             ($name:expr, $pass:expr) => {{
@@ -576,7 +556,7 @@ fn run_optimization_passes(
         record!(
             "nir/inline",
             run_pass("nir/inline", project, profiler, |p| {
-                inline_functions(p, threshold, &mut gate, &mut descriptor_cache)
+                inline_functions(p, config.inline_threshold, &mut gate, &mut descriptor_cache)
             })
         );
         // Peephole engine, post-inline run. `elide_local` runs again over
@@ -632,25 +612,23 @@ fn run_optimization_passes(
             i + 1,
             iter_changed.join(", ")
         );
-        if !changed {
+        if iter_changed.is_empty() {
             profiler.debug(&format!(
                 "NIR optimizer converged after {} iteration(s)",
                 i + 1
             ));
-            converged = true;
             break;
         }
     }
-    if !converged {
+    if !iter_changed.is_empty() {
         let report = format!(
             "NIR optimizer hit the {}-iteration cap without converging; still changing: [{}]",
             config.iterations,
             iter_changed.join(", ")
         );
         profiler.debug(&report);
-        // Reaching `-O3`'s own cap means a pass reported a change it did not
-        // make, or is taking one step per round where one walk should reach its
-        // fixpoint. Either is a defect, and a release build pays it silently.
+        // A pass reported a change it did not make, or is taking one step per
+        // round where one walk reaches its fixpoint. A release build pays it.
         debug_assert!(!config.cap_is_defect, "{report}");
     }
     // Hot Field Scalarization runs once after the main loop converges.
