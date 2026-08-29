@@ -38,7 +38,7 @@ impl geo::Show for Local { ... }    // and on either side of an impl head
 
 ### Generated Imports
 
-Any non-`.wado` file (`.g4`, `.proto`, a Wado dialect, ...) is imported via a generator declared in `[build-dependencies]` of `wado.toml`. See [WEP: Kiln](./wep-2026-04-12-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
+Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported via a generator: `.g4`, `.proto`, a Wado dialect, and so on. Name the generator as a `[build-dependencies]` entry or as a relative path. See [WEP: Kiln](./wep-2026-04-12-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
 
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
