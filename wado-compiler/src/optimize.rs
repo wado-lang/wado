@@ -185,13 +185,13 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
-            // The iteration cap is defensive: since `field_forward` merged into
-            // `const_fold`, a straight-line constant chain folds in one iteration
-            // rather than one statement per round, so even Gale parsers converge
-            // well under 10. Threshold 32 sits just under a size cliff at 33 on
-            // syntax-highlight (859KB → 1049KB), for no speed gain.
+            // The iteration cap is defensive: a program that has not settled by
+            // here is not converging, and each further round costs a full pass
+            // sequence for what the ones before it already declined to finish.
+            // Threshold 32 sits just under a size cliff at 33 on syntax-highlight
+            // (859KB → 1049KB), for no speed gain.
             let config = OptConfig {
-                iterations: opt_iterations.unwrap_or(30),
+                iterations: opt_iterations.unwrap_or(20),
                 inline_threshold: inline_threshold.unwrap_or(32),
             };
             run_dce(&mut project, profiler);
@@ -462,7 +462,6 @@ fn run_optimization_passes(
     profiler: &dyn SpanEmitter,
 ) {
     let threshold = config.inline_threshold;
-    let trace_loop = crate::trace::filter().enabled("opt_loop");
     // Per-function dirty-set gate. Every loop pass is gate-aware:
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
     // an interprocedural pass scans all functions but reports exactly the ones
@@ -490,22 +489,31 @@ fn run_optimization_passes(
     run_pass("nir/promote_pure_values_early", project, profiler, |p| {
         extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Early)
     });
+    // The passes that reported a change in the iteration just run. Kept across
+    // iterations so the cap report below can name what held the loop open.
+    let mut iter_changed: Vec<&'static str> = Vec::new();
+    let mut converged = config.iterations == 0;
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
-        let mut iter_changed: Vec<&'static str> = Vec::new();
+        iter_changed.clear();
+        macro_rules! record {
+            ($name:expr, $c:expr) => {{
+                if $c {
+                    changed = true;
+                    iter_changed.push($name);
+                }
+            }};
+        }
         // A gate-aware pass: receives `&mut gate`, skips functions it has
         // already processed at their current revision, and reports its own
         // per-function changes.
         macro_rules! gated {
             ($name:expr, $pass:expr) => {{
-                let c = run_pass($name, project, profiler, |p| $pass(p, &mut gate));
-                if c {
-                    changed = true;
-                    if trace_loop {
-                        iter_changed.push($name);
-                    }
-                }
+                record!(
+                    $name,
+                    run_pass($name, project, profiler, |p| $pass(p, &mut gate))
+                );
             }};
         }
         // Reports changes to the gate but not the convergence flag — must never
@@ -554,17 +562,12 @@ fn run_optimization_passes(
         // `inline` self-reports the callers it modified to the gate (no
         // `bump_all`); it only mutates caller bodies, so the gated passes need
         // re-examine just those (and their neighbours).
-        {
-            let c = run_pass("nir/inline", project, profiler, |p| {
+        record!(
+            "nir/inline",
+            run_pass("nir/inline", project, profiler, |p| {
                 inline_functions(p, threshold, &mut gate, &mut descriptor_cache)
-            });
-            if c {
-                changed = true;
-                if trace_loop {
-                    iter_changed.push("nir/inline");
-                }
-            }
-        }
+            })
+        );
         // Peephole engine, post-inline run. `elide_local` runs again over
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
         // pre-inline run lowered every reachable `Match` already.
@@ -590,17 +593,12 @@ fn run_optimization_passes(
         // collapse — where the env-free half runs in `nir/peephole`. It absorbs
         // `field_forward`, which used to alternate one statement per round and
         // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
-        {
-            let c = run_pass("nir/const_fold", project, profiler, |p| {
+        record!(
+            "nir/const_fold",
+            run_pass("nir/const_fold", project, profiler, |p| {
                 fold_constants(p, &mut gate, &mut const_fold_cache)
-            });
-            if c {
-                changed = true;
-                if trace_loop {
-                    iter_changed.push("nir/const_fold");
-                }
-            }
-        }
+            })
+        );
         // Trivial-block / dead-statement pruning moved into the pre-inline
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
@@ -608,35 +606,36 @@ fn run_optimization_passes(
         // After `const_fold`, so a caller's config struct literal already holds
         // folded constants; inside the loop, so the next iteration prunes the
         // clone's dead branches and reaches one call deeper.
-        {
-            let c = run_pass("nir/param_spec", project, profiler, |p| {
+        record!(
+            "nir/param_spec",
+            run_pass("nir/param_spec", project, profiler, |p| {
                 param_spec::specialize_const_params(p, &mut param_spec_state, &mut gate)
-            });
-            if c {
-                changed = true;
-                if trace_loop {
-                    iter_changed.push("nir/param_spec");
-                }
-            }
-        }
+            })
+        );
         gated!("nir/licm", apply_licm);
         gated!("nir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("nir/iteration {}", i + 1));
-        if trace_loop {
-            crate::compiler_trace!(
-                "opt_loop",
-                "iter {:>3}: changed_by = [{}]",
-                i + 1,
-                iter_changed.join(", ")
-            );
-        }
+        crate::compiler_trace!(
+            "opt_loop",
+            "iter {:>3}: changed_by = [{}]",
+            i + 1,
+            iter_changed.join(", ")
+        );
         if !changed {
             profiler.debug(&format!(
                 "NIR optimizer converged after {} iteration(s)",
                 i + 1
             ));
+            converged = true;
             break;
         }
+    }
+    if !converged {
+        profiler.debug(&format!(
+            "NIR optimizer hit the {}-iteration cap without converging; still changing: [{}]",
+            config.iterations,
+            iter_changed.join(", ")
+        ));
     }
     // Hot Field Scalarization runs once after the main loop converges.
     // Running inside the loop would cause the write-back/re-read stmts it

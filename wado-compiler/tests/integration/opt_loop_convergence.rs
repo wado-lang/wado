@@ -33,10 +33,11 @@ export fn run() {
 }
 "#;
 
-fn iterations_run(opt_level: OptLevel) -> usize {
+fn debug_log(opt_level: OptLevel, opt_iterations: Option<u32>) -> Vec<(Code, String)> {
     let host = crate::common::InMemoryHost::new();
     let options = CompilerOptions {
         opt_level,
+        opt_iterations,
         log_level: Some(LogLevel::Debug),
         ..Default::default()
     };
@@ -51,12 +52,22 @@ fn iterations_run(opt_level: OptLevel) -> usize {
 
     host.diagnostics()
         .iter()
-        .filter(|d| {
-            d.severity == Severity::Debug
-                && d.code == Code::SpanStart
-                && d.message.starts_with("nir/iteration ")
-        })
+        .filter(|d| d.severity == Severity::Debug)
+        .map(|d| (d.code, d.message.clone()))
+        .collect()
+}
+
+fn iterations_run(opt_level: OptLevel) -> usize {
+    debug_log(opt_level, None)
+        .iter()
+        .filter(|(code, message)| *code == Code::SpanStart && message.starts_with("nir/iteration "))
         .count()
+}
+
+fn cap_report(log: &[(Code, String)]) -> Option<&str> {
+    log.iter()
+        .find(|(_, m)| m.starts_with("NIR optimizer hit the "))
+        .map(|(_, m)| m.as_str())
 }
 
 #[test]
@@ -69,7 +80,27 @@ fn nir_loop_converges_before_the_cap() {
 
     let o3 = iterations_run(OptLevel::O3);
     assert!(
-        o3 < 30,
+        o3 < 20,
         "-O3 ran the full iteration cap ({o3}); the loop did not converge"
+    );
+}
+
+#[test]
+fn converged_run_reports_no_cap() {
+    let log = debug_log(OptLevel::O3, None);
+    assert_eq!(cap_report(&log), None);
+}
+
+/// One iteration is never enough for this source, so the loop exhausts its cap
+/// and must say so — naming the passes that were still reporting changes.
+#[test]
+fn exhausted_cap_is_reported_with_the_passes_still_changing() {
+    let log = debug_log(OptLevel::O3, Some(1));
+    let report = cap_report(&log).expect("the exhausted cap should be reported");
+    assert!(
+        report.starts_with(
+            "NIR optimizer hit the 1-iteration cap without converging; still changing: [nir/"
+        ),
+        "unexpected report: {report}"
     );
 }
