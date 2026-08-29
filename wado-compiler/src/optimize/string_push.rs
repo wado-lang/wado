@@ -691,14 +691,29 @@ fn const_str_len(body: &Body, arg: ExprId) -> Option<i32> {
     let ExprKind::StructLiteral { fields, .. } = &body.exprs[inner.as_expr()?].kind else {
         return None;
     };
-    let repr = fields
-        .iter()
-        .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
-        .map(|f| f.value)?;
+    let field = |which: crate::compiler_item::SeqField| {
+        fields
+            .iter()
+            .find(|f| f.name == which.field_name())
+            .map(|f| f.value)
+    };
+    let repr = field(crate::compiler_item::SeqField::Backing)?;
     let ExprKind::PackedArray(bytes) = &body.exprs[repr.as_expr()?].kind else {
         return None;
     };
-    i32::try_from(bytes.len()).ok()
+    let len = i32::try_from(bytes.len()).ok()?;
+    // The length is the literal's own, not the backing array's: a producer that
+    // over-allocated would make the two differ, and the writes this length
+    // sizes would then run past the text.
+    let used = field(crate::compiler_item::SeqField::Len)
+        .and_then(|op| body.operand_const_int(op))
+        .and_then(|v| i32::try_from(v).ok())
+        .expect("a packed-array literal carries a constant length");
+    assert_eq!(
+        used, len,
+        "[NIR] string_push: literal length disagrees with its backing array"
+    );
+    Some(len)
 }
 
 /// Whether two duplicable receiver expressions name the same place.

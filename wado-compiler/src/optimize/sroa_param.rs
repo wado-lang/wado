@@ -1180,19 +1180,16 @@ fn rewrite_call_expr(
     };
     let span = body.exprs[id].span;
     let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-    // Both checks run before anything is mutated: a call the rewrite cannot make
-    // safely is left calling the original.
-    if !hoist_order_preserved(body, &arg_ops, &positions, scalar_param_struct)
-        || !positions.iter().all(|(pi, info)| {
-            arg_rewritable(
-                body,
-                scalarized_arg(&arg_ops, *pi),
-                info,
-                scalar_param_struct,
-                type_table,
-            )
-        })
-    {
+    // One verdict for the whole call, taken before anything is mutated. Deciding
+    // per argument instead lets the parts disagree: a position that must forward
+    // would be left on the original, which no longer takes its type.
+    let plan = plan_call_site(body, &arg_ops, &positions, scalar_param_struct, type_table);
+    if plan.iter().any(|(_, p)| *p == ArgPlan::Blocked) {
+        assert!(
+            !plan.iter().any(|(_, p)| *p == ArgPlan::Forwarded),
+            "[NIR] sroa_param: a call this rewrite declines still forwards a \
+             scalarized parameter, which the original cannot receive"
+        );
         return false;
     }
     // Scalarizing position 0 replaces a method's receiver with a plain scalar,
@@ -1226,78 +1223,98 @@ fn rewrite_call_expr(
     true
 }
 
-/// Whether reading the field at the call site keeps the order the callee had.
+/// What the rewrite does with one scalarized argument.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ArgPlan {
+    /// Already the field: a caller parameter this pass scalarized from the same
+    /// struct, handed over untouched. The call *has to* retarget — the original
+    /// no longer takes the type this argument holds — so a plan that forwards
+    /// can never be declined.
+    Forwarded,
+    /// Project `place.f` at the call site.
+    Projected,
+    /// Neither applies, so the call keeps the original.
+    Blocked,
+}
+
+/// One verdict per scalarized position, decided together.
 ///
-/// The callee read `p.f` after every argument was evaluated; hoisting the read
-/// into position `pi` moves it ahead of the arguments to its right, so any
-/// effect among those could have changed the field the callee would have seen.
-/// `consume(&mut c, bump_val(&mut c))` is the shape: `bump_val` writes `c.x`,
-/// which `consume` then reads.
+/// Splitting this across independent predicates is what lets them disagree:
+/// each answers for its own concern and vetoes the whole call, and a veto
+/// stranded a [`ArgPlan::Forwarded`] argument on a signature that cannot take
+/// it. The caller asserts that no declined plan forwards.
 ///
-/// A call this rejects is left alone, and so keeps calling the original — the
-/// reason the rewrite mints a clone rather than reshaping in place.
-fn hoist_order_preserved(
+/// A projection reads `place.f` where the callee read it after every argument
+/// was evaluated, so it moves ahead of the arguments to its right and any
+/// effect among those could change what the callee would have seen —
+/// `consume(&mut c, bump_val(&mut c))` is the shape. Forwarding reads nothing
+/// new, so it resequences nothing.
+fn plan_call_site(
     body: &Body,
     args: &[Operand],
     positions: &IndexMap<usize, SroaInfo>,
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
-) -> bool {
-    // Only a position that actually reads `place.f` here moves a read earlier.
-    // An argument already holding the field — a caller param this pass
-    // scalarized — is handed over untouched, so nothing is resequenced. That
-    // exemption is also what keeps a clone consistent: its own body forwards
-    // scalarized params, and those calls *must* retarget, the original callee
-    // no longer taking the type the clone now holds.
-    let Some(first) = positions
+    type_table: &TypeTable,
+) -> Vec<(usize, ArgPlan)> {
+    let mut plan: Vec<(usize, ArgPlan)> = positions
         .iter()
-        .filter(|(pi, info)| {
-            scalarized_from(body, scalarized_arg(args, **pi), scalar_param_struct).as_ref()
-                != Some(&info.struct_key)
+        .map(|(pi, info)| {
+            let op = scalarized_arg(args, *pi);
+            (
+                *pi,
+                classify_arg(body, op, info, scalar_param_struct, type_table),
+            )
         })
+        .collect();
+    let first_projection = plan
+        .iter()
+        .filter(|(_, p)| *p == ArgPlan::Projected)
         .map(|(pi, _)| *pi)
-        .min()
-    else {
-        return true;
-    };
-    args.iter()
-        .skip(first + 1)
-        .all(|&op| is_pure_operand(body, op))
+        .min();
+    if let Some(first) = first_projection
+        && !args
+            .iter()
+            .skip(first + 1)
+            .all(|&op| is_pure_operand(body, op))
+    {
+        for (_, p) in &mut plan {
+            if *p == ArgPlan::Projected {
+                *p = ArgPlan::Blocked;
+            }
+        }
+    }
+    plan
 }
 
-/// Whether the argument at a scalarized position is one the field projection
-/// applies to — its type must be the wrapper struct, however it is wrapped.
+/// Which plan an argument at a scalarized position admits.
 ///
 /// A clone's own scalarized parameter is the reason to ask. Unwrapping chains:
 /// `Formatter::write(&mut self)` reading only `self.buf` becomes
 /// `write$scalar(buf: &mut String)`, and a later round scalarizes that `String`
 /// in turn. A caller already holding the inner `String` must not have
 /// `Formatter`'s `buf` projected onto it a second time.
-fn arg_rewritable(
+fn classify_arg(
     body: &Body,
     op: Operand,
     info: &SroaInfo,
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
-) -> bool {
-    // Already the field: a caller param scalarized from the same struct passes
-    // straight through. Matched as an operand, since the promoted form of that
-    // local reads it just as the skeleton one does.
+) -> ArgPlan {
+    // Matched as an operand, since the promoted form of that local reads it
+    // just as the skeleton one does.
     if scalarized_from(body, op, scalar_param_struct).as_ref() == Some(&info.struct_key) {
-        return true;
+        return ArgPlan::Forwarded;
     }
-    let Some(arg) = op.as_expr() else {
-        // A promoted operand has no node to inspect, so take the value graph's
-        // type for it and require the same proof as any other argument.
-        return op
-            .as_value()
-            .and_then(|v| body.values.type_of(v))
-            .is_some_and(|ty| denotes_struct(ty, &info.struct_key, type_table));
+    // A promoted operand has no node to inspect, so take the value graph's type
+    // for it and require the same proof as any other argument.
+    let arg_ty = match op.as_expr() {
+        Some(arg) => Some(body.exprs[peel_one_ref(body, arg)].type_id),
+        None => op.as_value().and_then(|v| body.values.type_of(v)),
     };
-    denotes_struct(
-        body.exprs[peel_one_ref(body, arg)].type_id,
-        &info.struct_key,
-        type_table,
-    )
+    match arg_ty {
+        Some(ty) if denotes_struct(ty, &info.struct_key, type_table) => ArgPlan::Projected,
+        _ => ArgPlan::Blocked,
+    }
 }
 
 /// The struct a caller's own scalarized parameter came from, when `op` reads one.
