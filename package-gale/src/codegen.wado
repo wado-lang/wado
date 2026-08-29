@@ -41,7 +41,7 @@ use {
     stage_lexer_bodies,
     translate_attr_types,
 } from "./java2wado.wado";
-use { MemberDecls, member_names } from "./java2wado/jmembers.wado";
+use { MemberDecls, member_names, members_present } from "./java2wado/jmembers.wado";
 use {
     lexer_superclass_name,
     parser_superclass_name,
@@ -467,10 +467,6 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
             }
         }
     }
-}
-
-fn members_present(members: &MemberDecls) -> bool {
-    return !members.fields.is_empty() || !members.methods.is_empty();
 }
 
 fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {

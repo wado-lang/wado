@@ -42,7 +42,7 @@ use {
     lexer_action_bodies_are_base_calls,
     super_emit_hook_expr,
 } from "./superclass.wado";
-use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
+use { MemberDecls, MemberField, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
 use {
     ModeAttrUse,
@@ -332,12 +332,11 @@ pub fn gen_lexer(
     let act_rule_names = executed_action_rule_names(grammar);
     let has_actions = !act_rule_names.is_empty();
     let uses_modes = has_modes(&grammar.mode_names);
+    let surface = lexer_surface(grammar, members, sc_ops, mode_use);
     if !sc_name.is_empty() {
         gen_super_interface(w, sc_name, sc_ops);
     }
-    // A base's action op drives the lexer from the user's own module.
-    let sc_action = sc_ops.iter_ref().any(|o| !o.is_predicate);
-    gen_lexer_struct(w, members, has_actions, has_members, uses_modes, sc_action, mode_use);
+    gen_lexer_struct(w, members, &surface);
     if has_actions {
         if uses_modes {
             gen_mode_constants(w, &grammar.mode_names);
@@ -367,49 +366,84 @@ pub fn gen_lexer(
         &act_rule_names,
         has_members,
         sc_name,
-        mode_use,
+        &surface,
     );
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
-fn gen_lexer_struct(
-    w: &mut CodeWriter,
+/// What the generated `Lexer` has to carry, and what turns each part on.
+///
+/// The parts have different producers: an effect is committed only by a rule
+/// that runs actions, while the output sink is written by anything that prints —
+/// an action, or a `@members` method. Spelled as a separate condition at each
+/// emit site, those sets were never compared, and the one that had gained a
+/// producer kept the narrower test: a members-only lexer got a method calling an
+/// `emit` its struct did not carry. They are enumerated here instead, side by
+/// side, where a part whose producers differ from its neighbour's is a
+/// difference someone reads rather than one they have to remember.
+pub struct LexerSurface {
+    /// The commit latches (`act_type`, `act_skip`, …) and `reset_actions`.
+    pub commit_latches: bool = false,
+    /// The output sink: the `act_output` field and the `emit` method.
+    pub sink: bool = false,
+    /// `push_mode` / `pop_mode` / `set_mode` and the latches they write.
+    pub mode_commands: bool = false,
+    /// The current mode a `$mode` read answers with, seeded per token.
+    pub current_mode: bool = false,
+    /// The mode invariant repeated at the commit, for the one write that
+    /// reaches the latch without passing a command method (`$mode = X`).
+    pub mode_write_guard: bool = false,
+    /// A base action op drives the lexer from the user's own module, so what it
+    /// reaches has to be `pub`.
+    pub base_driven: bool = false,
+}
+
+pub fn lexer_surface(
+    grammar: &Grammar,
     members: &MemberDecls,
-    has_actions: bool,
-    has_members: bool,
-    uses_modes: bool,
-    sc_action: bool,
+    sc_ops: &List<SuperOp>,
     mode_use: &ModeAttrUse,
-) {
-    let mut s = StructSpec::new(&"Lexer", if sc_action { Vis::Pub } else { Vis::Private });
+) -> LexerSurface {
+    let runs_actions = !executed_action_rule_names(grammar).is_empty();
+    let modes = runs_actions && has_modes(&grammar.mode_names);
+    return LexerSurface {
+        commit_latches: runs_actions,
+        sink: runs_actions || members_present(members),
+        mode_commands: modes,
+        current_mode: modes && mode_use.reads,
+        mode_write_guard: modes && mode_use.writes,
+        base_driven: sc_ops.iter_ref().any(|o: &SuperOp| !o.is_predicate),
+    };
+}
+
+fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSurface) {
+    let vis = if surface.base_driven { Vis::Pub } else { Vis::Private };
+    let mut s = StructSpec::new(&"Lexer", vis);
     s.add_field(&"chars", &"List<char>");
     s.add_field(&"pos", &"i32");
     for let mf of &members.fields {
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
-    // A `@members` method that prints writes the same sink an action does, so a
-    // members-only grammar carries it too — without it the method would call an
-    // `emit` the `Lexer` does not have.
-    if has_actions || has_members {
+    if surface.sink {
         s.add_field_default(&"act_output", &"String", &"\"\"");
     }
-    if has_actions {
+    if surface.commit_latches {
         s.add_field_default(&"act_type", &"i32", &"-1");
         s.add_field_default(&"act_channel", &"i32", &"-1");
         s.add_field_default(&"act_skip", &"bool", &"false");
         s.add_field_default(&"act_more", &"bool", &"false");
-        if uses_modes {
-            s.add_field_default(&"act_push_mode", &"i32", &"-1");
-            s.add_field_default(&"act_pop_mode", &"bool", &"false");
-            s.add_field_default(&LEXER_SET_MODE_FIELD, &"i32", &"-1");
-            // ANTLR's `_modeStack.size()`, which a base branches on.
-            s.add_field_default(&"act_mode_depth", &"i32", &"0");
-            if mode_use.reads {
-                // ANTLR's `_mode`: the mode the token is being matched in,
-                // seeded per token. Only a body that reads `$mode` needs it.
-                s.add_field_default(&LEXER_MODE_FIELD, &"i32", &"0");
-            }
-        }
+    }
+    if surface.mode_commands {
+        s.add_field_default(&"act_push_mode", &"i32", &"-1");
+        s.add_field_default(&"act_pop_mode", &"bool", &"false");
+        s.add_field_default(&LEXER_SET_MODE_FIELD, &"i32", &"-1");
+        // ANTLR's `_modeStack.size()`, which a base branches on.
+        s.add_field_default(&"act_mode_depth", &"i32", &"0");
+    }
+    if surface.current_mode {
+        // ANTLR's `_mode`: the mode the token is being matched in, seeded per
+        // token. Only a body that reads `$mode` needs it.
+        s.add_field_default(&LEXER_MODE_FIELD, &"i32", &"0");
     }
     s.emit(w);
     w.blank();
@@ -442,10 +476,10 @@ fn gen_lexer_struct(
     w.line(&"return LexerSlice::new(&self.chars, start, end);");
     w.end();
 
-    if has_actions {
-        gen_lexer_action_methods(w, uses_modes, sc_action, mode_use);
-    } else if has_members {
-        gen_lexer_emit_fn(w, if sc_action { Vis::Pub } else { Vis::Private });
+    if surface.commit_latches {
+        gen_lexer_action_methods(w, surface, vis);
+    } else if surface.sink {
+        gen_lexer_emit_fn(w, vis);
     }
 
     for let m of &members.methods {
@@ -469,8 +503,7 @@ fn gen_lexer_emit_fn(w: &mut CodeWriter, vis: Vis) {
     w.end();
 }
 
-fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: bool, mode_use: &ModeAttrUse) {
-    let vis = if sc_action { Vis::Pub } else { Vis::Private };
+fn gen_lexer_action_methods(w: &mut CodeWriter, surface: &LexerSurface, vis: Vis) {
     gen_lexer_emit_fn(w, vis);
     w.blank();
 
@@ -481,9 +514,9 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
     fr.set_receiver(&"&mut self");
     fr.add_param(&"kind", &"i32");
     fr.add_param(&"channel", &"i32");
-    if uses_modes {
+    if surface.mode_commands {
         fr.add_param(&"depth", &"i32");
-        if mode_use.reads {
+        if surface.current_mode {
             fr.add_param(&"mode", &"i32");
         }
     }
@@ -492,12 +525,12 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
     w.line(&"self.act_channel = channel;");
     w.line(&"self.act_skip = false;");
     w.line(&"self.act_more = false;");
-    if uses_modes {
+    if surface.mode_commands {
         w.line(&"self.act_push_mode = -1;");
         w.line(&"self.act_pop_mode = false;");
         w.line(&`self.${LEXER_SET_MODE_FIELD} = -1;`);
         w.line(&"self.act_mode_depth = depth;");
-        if mode_use.reads {
+        if surface.current_mode {
             w.line(&`self.${LEXER_MODE_FIELD} = mode;`);
         }
     }
@@ -512,9 +545,9 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
     w.blank();
     lexer_flag(w, &"more", &"act_more", vis);
 
-    if uses_modes {
+    if surface.mode_commands {
         w.blank();
-        gen_lexer_mode_commands(w, vis, mode_use);
+        gen_lexer_mode_commands(w, vis, surface);
     }
 }
 
@@ -530,7 +563,7 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
 /// mode lives on the tokenize loop's stack and not on the `Lexer`. It clears the
 /// field instead, so a read after it fails loudly rather than answering the mode
 /// just left.
-fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, mode_use: &ModeAttrUse) {
+fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, surface: &LexerSurface) {
     let mut fp = FnSpec::new(&"push_mode", vis);
     fp.set_receiver(&"&mut self");
     fp.add_param(&"m", &"i32");
@@ -538,7 +571,7 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, mode_use: &ModeAttrUse)
     gen_one_mode_command_assert(w);
     w.line(&"self.act_push_mode = m;");
     w.line(&"self.act_mode_depth += 1;");
-    gen_current_mode_write(w, mode_use, &"m");
+    gen_current_mode_write(w, surface, &"m");
     w.end();
     w.blank();
 
@@ -548,7 +581,7 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, mode_use: &ModeAttrUse)
     gen_one_mode_command_assert(w);
     w.line(&"self.act_pop_mode = true;");
     w.line(&"self.act_mode_depth -= 1;");
-    gen_current_mode_write(w, mode_use, &"-1");
+    gen_current_mode_write(w, surface, &"-1");
     w.end();
     w.blank();
 
@@ -561,15 +594,15 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, mode_use: &ModeAttrUse)
     w.end();
     w.blank();
 
-    if mode_use.reads {
+    if surface.current_mode {
         gen_current_mode_reader(w, vis);
         w.blank();
     }
     lexer_reader(w, &"mode_depth", &"act_mode_depth", vis);
 }
 
-fn gen_current_mode_write(w: &mut CodeWriter, mode_use: &ModeAttrUse, value: &String) {
-    if mode_use.reads {
+fn gen_current_mode_write(w: &mut CodeWriter, surface: &LexerSurface, value: &String) {
+    if surface.current_mode {
         w.line(&`self.${LEXER_MODE_FIELD} = ${*value};`);
     }
 }
@@ -1249,11 +1282,11 @@ fn gen_lexer_action_replay(
     act_rule_names: &List<String>,
     use_modes: bool,
     has_set_mode_rules: bool,
-    mode_use: &ModeAttrUse,
+    surface: &LexerSurface,
 ) {
     w.begin(&"if best_act >= 0");
     if use_modes {
-        let mode_seed = if mode_use.reads { ", current_mode" } else { "" };
+        let mode_seed = if surface.current_mode { ", current_mode" } else { "" };
         w.line(&`lexer.reset_actions(best_kind, best_channel, mode_stack.len()${mode_seed});`);
     } else {
         w.line(&"lexer.reset_actions(best_kind, best_channel);");
@@ -1284,7 +1317,7 @@ fn gen_lexer_action_replay(
         // assignment reaches the set latch without passing one, so the check is
         // repeated here over the latches themselves exactly where that spelling
         // exists.
-        if mode_use.writes {
+        if surface.mode_write_guard {
             w.line(
                 &"assert (if lexer.act_push_mode >= 0 { 1 } else { 0 }) + (if lexer.act_pop_mode { 1 } else { 0 }) + (if lexer.act_set_mode >= 0 { 1 } else { 0 }) <= 1, \"a lexer action may issue at most one mode command per token\";",
             );
@@ -4311,7 +4344,7 @@ fn gen_tokenize_fn(
     act_rule_names: &List<String>,
     has_members: bool,
     sc_name: &String,
-    mode_use: &ModeAttrUse,
+    surface: &LexerSurface,
 ) {
     let has_actions = !act_rule_names.is_empty();
     let use_modes = has_modes(mode_names);
@@ -4465,7 +4498,7 @@ fn gen_tokenize_fn(
     // reclassification so an explicit `set_type` wins, and before the
     // skip/more/channel commit so its effects (`best_kind`) feed them.
     if has_actions {
-        gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules, mode_use);
+        gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules, surface);
     }
 
     // `more` rules accumulate text into the next emitted token. `tok_start`
@@ -4578,7 +4611,7 @@ fn gen_tokenize_fn(
     // follows (the stream ends here), so this stays inline rather than
     // using `emit_token_commit`.
     w.line(&"ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
-    if has_actions || has_members {
+    if surface.sink {
         w.line(&"ts.output = lexer.act_output;");
     }
     w.line(&"return ts;");

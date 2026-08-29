@@ -46,6 +46,11 @@ pub struct MemberNames {
     pub mutating: List<String> = [],
 }
 
+/// Whether the block declared anything at all.
+pub fn members_present(members: &MemberDecls) -> bool {
+    return !members.fields.is_empty() || !members.methods.is_empty();
+}
+
 /// The names translated members declare.
 pub fn member_names(members: &MemberDecls) -> MemberNames {
     let mut out = MemberNames {};
