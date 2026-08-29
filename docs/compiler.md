@@ -316,10 +316,10 @@ The compiler-side pieces live in `src/kiln/`:
 
 | Module             | Concern                                                                              |
 | ------------------ | ------------------------------------------------------------------------------------ |
-| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + schema paths)    |
+| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + input paths)     |
 | `inline.rs`        | Collects inline `use … with { generator: … }` invocations (`InvocationIndex`)        |
 | `plan.rs`          | DAG + topological sort of invocations; rejects cycles                                |
-| `cache.rs`         | Cache-key composition over schemas, options, and the generator's identity hash       |
+| `cache.rs`         | Cache-key composition over inputs, options, and the generator's identity hash        |
 | `header.rs`        | Generated-file `#![generated]` header emission and parsing                           |
 | `metadata.rs`      | Persisted per-invocation cache state (`<primary>.kiln.json`)                         |
 | `options.rs`       | Extracts an `OptionsDescriptor` from a generator's `pub struct Options`              |
