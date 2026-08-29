@@ -101,7 +101,16 @@ function runSymbolicator(
     console.error(`${cmd} failed: ${e}`);
     return [];
   }
-  if (proc.error) console.error(`${cmd} failed: ${proc.error}`);
+  // A symbolicator that ran and failed reports through `status` / `signal`,
+  // leaving `error` unset; parsing its stdout anyway would bury the failure
+  // under the raw-address fallback every unresolved frame takes.
+  const failure = proc.error ?? (proc.signal
+    ? `killed by ${proc.signal}`
+    : proc.status ? `exit ${proc.status}` : null);
+  if (failure) {
+    console.error(`${cmd} failed: ${failure}`);
+    return [];
+  }
   const lines = (proc.stdout ?? "").split("\n");
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
   return lines;
@@ -184,6 +193,12 @@ function symbolicate(
     }
     const meta = libs[lib];
     const path = meta.path ?? meta.name;
+    // `[vdso]` and friends name a mapping, not a file: there is nothing for a
+    // symbolicator to open, and asking would report a failure on every run.
+    if (path.startsWith("[")) {
+      for (const r of rvas) out.set(kk(lib, r), `[${meta.name}]+${hex(r)}`);
+      continue;
+    }
     let sym: Map<number, string>;
     if (symbolicator === "atos") {
       const base = meta.name === binary ? mainBase : 0;

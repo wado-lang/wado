@@ -81,7 +81,7 @@ struct OptConfig {
     /// Maximum statement count for inlining
     inline_threshold: usize,
     /// Whether exhausting `iterations` is a defect rather than a budget — true
-    /// for the caps `-O2` and `-O3` size so the loop converges under them.
+    /// for the caps `-O2`/`-Os` and `-O3` size so the loop converges under them.
     cap_is_defect: bool,
 }
 
