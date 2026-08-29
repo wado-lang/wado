@@ -27,11 +27,11 @@ fn show_display<T: Display>(v: &T) -> String {
     return `${v}`;
 }
 
-fn show_inspect_alt<T: Inspect>(v: &T) -> String {
+fn show_inspect_alternate<T: Inspect>(v: &T) -> String {
     return `${v:#?}`;
 }
 
-fn show_display_alt<T: Display>(v: &T) -> String {
+fn show_display_alternate<T: Display>(v: &T) -> String {
     return `${v:#}`;
 }
 
@@ -47,12 +47,12 @@ test "Display bound holds for enums (bare) and primitives" {
     assert show_display(&42) == "42";
 }
 
-test "alt bounds" {
+test "the alternate form needs no bound of its own" {
     let p = P { x: 5, y: 6 };
     // The same `Inspect` bound pretty-prints under `#`.
-    assert show_inspect_alt(&p) == "P {\n  x: 5,\n  y: 6,\n}";
+    assert show_inspect_alternate(&p) == "P {\n  x: 5,\n  y: 6,\n}";
     // `#` on a `Display` runs the same impl: an enum still shows its bare name.
-    assert show_display_alt(&Color::Red) == "Red";
+    assert show_display_alternate(&Color::Red) == "Red";
 }
 
 __DATA__
