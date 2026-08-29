@@ -733,18 +733,29 @@ fn collect_alias_node(
     out: &mut FnAliases,
 ) {
     match node {
-        NodeRef::Stmt(s) => {
-            if let StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } =
-                &body.stmts[s].kind
-                && let Some(ve) = value.as_expr()
-            {
-                mark_whole_gc_ref_copy_source(body, ve, type_table, &mut out.locals);
-            }
-        }
-        NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Assign { value, .. } => {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } => {
                 if let Some(ve) = value.as_expr() {
-                    mark_whole_gc_ref_copy_source(body, ve, type_table, &mut out.locals);
+                    mark_gc_alias_pair(body, Some(*local_index), ve, type_table, &mut out.locals);
+                }
+            }
+            StmtKind::LetDestructure { value, .. } => {
+                if let Some(ve) = value.as_expr() {
+                    mark_gc_alias_pair(body, None, ve, type_table, &mut out.locals);
+                }
+            }
+            _ => {}
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Assign { target, value } => {
+                if let Some(ve) = value.as_expr() {
+                    let dst = match &body.exprs[*target].kind {
+                        ExprKind::Local { index, .. } => Some(*index),
+                        _ => None,
+                    };
+                    mark_gc_alias_pair(body, dst, ve, type_table, &mut out.locals);
                 }
             }
             ExprKind::Unary {
@@ -822,21 +833,38 @@ fn collect_alias_operand(
     }
 }
 
-/// If `value` is a bare `Local` of GC-heap type — a whole-struct copy that
-/// (because the struct is a reference) shares the heap object with its
-/// source — record that source local as aliased. A deep value copy is
-/// wrapped in `copy_value(...)` (an `ExprKind::Call`), not a bare `Local`,
-/// so it does not match here.
-fn mark_whole_gc_ref_copy_source(
+/// Both ends of an aliasing binding. A GC struct is a reference, so `let b = a`
+/// and `let b = &mut a` leave two names for one heap object, and a write through
+/// either bypasses a scalar held under the other. A deep value copy is wrapped
+/// in `copy_value(...)` (an `ExprKind::Call`), so it does not match.
+fn mark_gc_alias_pair(
     body: &Body,
+    dst: Option<u32>,
     value: ExprId,
     type_table: &TypeTable,
     out: &mut IndexSet<u32>,
 ) {
-    if let ExprKind::Local { index, .. } = &body.exprs[value].kind
-        && is_gc_heap_type(body.exprs[value].type_id, type_table)
-    {
-        out.insert(*index);
+    let Some(src) = gc_alias_source(body, value, type_table) else {
+        return;
+    };
+    out.insert(src);
+    out.extend(dst);
+}
+
+/// The local `value` reads as a whole GC object, directly or through one borrow.
+fn gc_alias_source(body: &Body, value: ExprId, type_table: &TypeTable) -> Option<u32> {
+    let place = match &body.exprs[value].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } => inner.as_expr()?,
+        _ => value,
+    };
+    match &body.exprs[place].kind {
+        ExprKind::Local { index, .. } if is_gc_heap_type(body.exprs[place].type_id, type_table) => {
+            Some(*index)
+        }
+        _ => None,
     }
 }
 
