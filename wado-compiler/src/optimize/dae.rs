@@ -21,9 +21,30 @@ use crate::nir::FuncId;
 /// it, and a call site is matched by the stamped `func_id` on its call node.
 pub(super) type FnKey = FuncId;
 
+/// Dropping a parameter deletes the argument its callers pass, which can leave
+/// one of *their* parameters dead — so the pass has a fixed point of its own,
+/// as deep as the forwarding chain. `mark_changed` bumps a function's callers,
+/// making each round's dirty set exactly the links the round before it freed;
+/// reaching that fixed point here is what keeps the *outer* loop's iteration
+/// count off the call graph's depth.
 pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    // Keyed by struct and method name, which no signature shrink moves, so this
+    // is read once rather than per round.
     let closure_call_keys = collect_closure_call_keys(project);
+    let mut changed = false;
+    while eliminate_dead_arguments_round(project, gate, &closure_call_keys) {
+        changed = true;
+    }
+    changed
+}
 
+/// One find / validate / apply sweep. Returns whether it rewrote anything —
+/// every round drops at least one parameter, so the loop above terminates.
+fn eliminate_dead_arguments_round(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    closure_call_keys: &IndexSet<FnKey>,
+) -> bool {
     // Phase 1: identify candidate (function, dead positions) pairs.
     let mut candidates: IndexMap<FnKey, Vec<bool>> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::Dae, project.functions.len()) {
@@ -53,10 +74,11 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     // scans all functions, but reports exactly the ones it touched so the gated
     // passes re-examine only those and their call-graph neighbours.
     let touched = apply_dae(project, &confirmed);
+    let rewrote = !touched.is_empty();
     for idx in touched {
         gate.mark_changed(FuncId::new(idx));
     }
-    true
+    rewrote
 }
 
 /// Closure-functor methods whose `is_closure_call` pin is lifted:

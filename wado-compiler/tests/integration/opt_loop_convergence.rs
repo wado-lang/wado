@@ -76,6 +76,31 @@ fn inspect_chain_source(fields: usize) -> String {
     )
 }
 
+/// `depth` functions each forwarding a parameter only the next one reads, which
+/// no one reads at the bottom. Dropping it there kills its caller's copy, and so
+/// on up — the shape a Gale-generated parser's `follow` argument has.
+fn forwarding_chain_source(depth: usize) -> String {
+    let mut fns = String::new();
+    fns.push_str(
+        "#[inline(\"never\")]\nfn f0(x: i32, follow: i32) -> i32 {\n    return x + 1;\n}\n",
+    );
+    for i in 1..depth {
+        writeln!(
+            fns,
+            "#[inline(\"never\")]\nfn f{i}(x: i32, follow: i32) -> i32 {{\n    \
+             return f{}(x, follow);\n}}",
+            i - 1
+        )
+        .unwrap();
+    }
+    format!(
+        "{fns}\nexport fn run() {{\n\
+         \x20   assert f{}(builtin::black_box(1), builtin::black_box(2)) == 2;\n\
+         }}\n",
+        depth - 1
+    )
+}
+
 fn debug_log_of(
     source: &str,
     opt_level: OptLevel,
@@ -153,5 +178,22 @@ fn inspect_chain_folds_in_one_iteration_per_struct_not_per_field() {
     assert!(
         sixteen <= four,
         "iteration count tracks the field count ({four} for 4 fields, {sixteen} for 16)"
+    );
+}
+
+/// Dropping a dead parameter kills the argument its callers pass, so the pass
+/// has its own fixed point to reach. Taking one link of the chain per outer
+/// iteration instead makes the iteration count scale with the call graph's
+/// depth, which is what an unusually deep generated parser runs the cap out on.
+#[test]
+fn forwarding_chain_folds_in_one_iteration_per_program_not_per_link() {
+    // Explicit iterations: the point is the count, and reaching the level's own
+    // cap would trip the convergence assert before this test could read it.
+    let short = debug_log_of(&forwarding_chain_source(5), OptLevel::O2, Some(60));
+    let long = debug_log_of(&forwarding_chain_source(20), OptLevel::O2, Some(60));
+    let (short, long) = (iterations_of(&short), iterations_of(&long));
+    assert!(
+        long <= short,
+        "iteration count tracks the chain's depth ({short} for 5 links, {long} for 20)"
     );
 }
