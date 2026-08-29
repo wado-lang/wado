@@ -31,8 +31,7 @@ question. [Kiln](./wep-2026-04-12-kiln.md) admits any file as a generator input,
 including a Wado dialect, and a dialect adds nothing to the language: no lexer
 mode in `wado`, no parser rule, nothing for `wado format`, the LSP, or the
 highlighter to learn. A markup surface can therefore be built, published, used
-and abandoned outside this repository, and the language's `<` reservation stays
-unspent while that happens.
+and abandoned outside this repository.
 
 So the open question is not "JSX or not". It is which shape a markup surface
 should take, and the first axis to settle is where the top level lives.
@@ -49,8 +48,7 @@ own one file.
 | Sectioned     | One file, sections, neither nested in the other      | Vue SFC, Svelte, Astro                                 |
 | Builder       | No markup surface; a typed builder API               | Flutter, SwiftUI, lucid/blaze, kotlinx.html            |
 
-Two lessons the record carries. Languages with a macro system never touched
-their grammar — Rust (`html!`, `view!`, `rsx!`), Elixir (`~H`), OCaml (PPX),
+Languages with a macro system never touched their grammar — Rust (`html!`, `view!`, `rsx!`), Elixir (`~H`), OCaml (PPX),
 Haskell (QuasiQuotes) all reached Wado-hosted or Markup-hosted through a macro,
 not through syntax. And of the languages that did put markup in the grammar, two
 removed it: E4X was deleted, and Scala 3 deprecated XML literals in favour of
@@ -70,8 +68,7 @@ proposes no change to the Wado language.
 
 The four positions above are the axis. Builder is the control: without it the
 study can only compare markup surfaces to each other, never establish that one
-is needed. Every candidate is measured against the builder API, not against the
-next candidate.
+is needed.
 
 ### Criteria
 
@@ -87,8 +84,7 @@ unedited, and whether someone who does not write Wado can own the file.
 
 ### Findings
 
-Four facts about this repository bear on the criteria. None of them settles the
-axis.
+Facts about this repository bear on the criteria; none of them settles the axis.
 
 Lexer modes are proven on the real grammar. `Wado.g4` already lexes a nested
 language: a backtick pushes `mode TEMPLATE`, `${` pushes `DEFAULT_MODE` back for
@@ -121,25 +117,19 @@ compiler resolves them — but a Kiln generator receives files by value with no
 access to the compiler's types, so it could reproduce that only by parsing the
 sibling `.wado` itself and redoing name resolution the compiler already does. A
 Markup-hosted file therefore declares its own typed parameters, and the exported
-render function is its whole interface. Whether it may also declare Wado items
-of its own — imports, helpers, several templates in one file — is the design
-question the position leaves open.
+render function is its whole interface.
 
 ### Deliberate omissions
 
-- No change to the Wado grammar is proposed, at any position on the axis. The
-  `<` reservation stays reserved and unspent.
+- The `<` reservation stays reserved and unspent, at every position on the axis.
 - A dialect ships as a Kiln generator in its own repository, following the
   package shape `package-gale-highlight-wado` already demonstrates: a `.g4`
   beside the source, consumed at a `use` site with
   `generator: { module: "lib:gale" }`.
 - Promotion of any surface into the language is out of this WEP. It becomes
-  arguable only against evidence this study produces, and the reservation is
-  what keeps that door open.
+  arguable only against evidence this study produces.
 
 ### What the study must produce
-
-Each question is answered with an artefact, not an opinion.
 
 1. For Wado-hosted: a dialect grammar — `Wado.g4` plus a markup mode — parsing a
    realistic component with Gale's resilient CST intact. The known hazard is `>`:
@@ -153,8 +143,7 @@ Each question is answered with an artefact, not an opinion.
    HTML rather than estimated. For Markup-hosted, also how a file takes its data
    — typed parameters alone, or Wado items of its own alongside them.
 4. For every position: a diff of the generated output against the same component
-   written by hand at Builder. This is the readability comparison that decides
-   whether any surface is warranted, and Kiln makes it mechanical.
+   written by hand at Builder. Kiln makes the comparison mechanical.
 5. A compile-time budget. Gale parses a 13366-byte fixture in ~4.4 ms/iter (build
    only, dev host, guest `-O2`); a dialect file re-parses on every edit because
    its content is part of the cache key.
@@ -162,36 +151,29 @@ Each question is answered with an artefact, not an opinion.
 ## Known gaps
 
 - A source map for Kiln: a generator-supplied correspondence from output spans
-  back to input spans, applied when the compiler renders a diagnostic. It is the
-  general answer to the diagnostics criterion, and it puts every position on
-  equal footing. Recorded as an open question in the Kiln WEP.
+  back to input spans, applied when the compiler renders a diagnostic. Recorded
+  as an open question in the Kiln WEP.
 - Grammar import resolution in Gale. `import S;` parses, but slave grammars are
-  not resolved, so a dialect must copy `Wado.g4` and drift from it. Gale's TODO
-  records this as actionable on its own and notes that Kiln's multi-input
-  plumbing it needs already exists. Until it closes, a dialect vendors the
-  grammar and something has to keep the copy honest — `mise run check-grammar`
-  holds the original to the compiler's parser, and nothing holds a copy to the
-  original.
-- What the markup lowers to. Every position needs an `Element` type, a component
-  model, and event wiring; Builder is that target, and it does not exist. No
-  surface can be studied before it.
-- Whether one surface serves both consumers. The blog is Markup-hosted-shaped,
-  the playground is Wado-hosted-shaped, and the prior art suggests the answer is
-  no.
+  not resolved, so a dialect vendors `Wado.g4` and something has to keep the copy
+  honest: `mise run check-grammar` holds the original to the compiler's parser,
+  and nothing holds a copy to the original. Gale's TODO records the work as
+  actionable on its own, and notes that the Kiln multi-input plumbing it needs
+  already exists.
+- What the markup lowers to. Builder is the target every position needs, and it
+  does not exist. No surface can be studied before it.
+- Whether one surface serves both consumers, or the two shapes need two.
 
 ## Consequences
 
 - The JSX question is answered by construction rather than by argument: whatever
-  the study concludes ships outside the language, so the grammar carries no risk
-  while the answer is found.
-- The `<` reservation keeps its value. It cost `<Type as Trait>::method`, and it
-  stays available for a surface that has earned promotion.
+  the study concludes ships outside the language, so the `<` reservation is still
+  there — bought with `<Type as Trait>::method` — for a surface that earns
+  promotion.
 - A dialect exercises Kiln, Gale and the language at once — the first test of
   whether Kiln's ceiling is "IDL converter" or "the mechanism a dialect needs" —
   and gives Gale a second real-world grammar beyond `Wado.g4` and its corpus.
 - A negative result is a result. If the diff against Builder shows the builder
-  API reads well enough, the language keeps its surface and the reservation
-  stays unspent — reached without a single grammar change.
+  API reads well enough, no surface is built, and nothing was spent finding out.
 
 ## Related WEPs
 
