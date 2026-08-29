@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787917193582,
+  "lastUpdate": 1787992318597,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51777,6 +51777,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 258212,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "847dc411fef2ba9ab55666f84b1a9b27873673d8",
+          "message": "Merge pull request #1916 from wado-lang/perf/string-append-fusion\n\nperf(optimizer): fuse string appends, scalarize a read field, and keep constants global",
+          "timestamp": "2026-08-29T17:17:25+09:00",
+          "tree_id": "5ec4b6f01dd0da59811038391df073eefcca8c4a",
+          "url": "https://github.com/wado-lang/wado/commit/847dc411fef2ba9ab55666f84b1a9b27873673d8"
+        },
+        "date": 1787992317756,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6071,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17398,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 256714,
             "unit": "bytes"
           }
         ]
