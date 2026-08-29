@@ -4584,7 +4584,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 136 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 139 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: self.high != 0\n", used: 27 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"self.high: ", used: 11 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4637,7 +4637,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 172 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 175 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: a >> (mant_bits - 1) as u64 == 1\n", used: 45 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"a: ", used: 3 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4748,6 +4748,13 @@ fn "core:prelude/int128.wado/u128::fmt_into"(self: &u128, f: &mut Formatter) {
     self."core:prelude/int128.wado/u128::fmt_decimal"(f);
 }
 
+pub fn "core:prelude/int128.wado/u128::to_string"(self: &u128) -> String {
+    let mut buf: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(40);
+    let mut f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut buf);
+    self."core:prelude/int128.wado/u128::fmt_into"(&mut f);
+    return buf;
+}
+
 fn "core:prelude/int128.wado/u128::fmt_decimal"(self: &u128, f: &mut Formatter) {
     self."core:prelude/int128.wado/u128::fmt_decimal_magnitude"(f, false);
 }
@@ -4798,7 +4805,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self: &u128, f: &mut F
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 343 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 346 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: pos == offset\n", used: 26 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"pos: ", used: 5 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4877,7 +4884,7 @@ fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, bas
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                     let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                    Box<i32> { value: 396 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                    Box<i32> { value: 399 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: pos == offset\n", used: 26 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"pos: ", used: 5 });
                     __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4902,8 +4909,122 @@ pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/FromStr::from_str
     return "core::prelude/int128.wado::core:prelude/int128.wado/u128^core:prelude/traits.wado/FromStr::from_str_range"(s, 0, s."core:prelude/string.wado/String::len"());
 }
 
+fn count_digits_u128(val: u128) -> i32 {
+    if val."core:prelude/int128.wado/u128^core:prelude/traits.wado/Eq::eq"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(0)) {
+        return 1;
+    }
+    let mut n: i32 = 0;
+    let mut t: u128 = val;
+    loop {
+        if !(t."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(0)) == Ordering::Greater) {
+            break;
+        }
+        __for_0_body: {
+            n = (n + 1);
+        }
+        t = t."core:prelude/int128.wado/u128^core:prelude/traits.wado/Div::div"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(10));
+    }
+    return n;
+}
+
+fn round_off_digits_u128(val: u128, drop: i32) -> u128 {
+    let mut divisor: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < drop) {
+            break;
+        }
+        __for_0_body: {
+            divisor = divisor."core:prelude/int128.wado/u128^core:prelude/traits.wado/Mul::mul"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(10));
+        }
+        i = (i + 1);
+    }
+    let quotient: u128 = val."core:prelude/int128.wado/u128^core:prelude/traits.wado/Div::div"(&divisor);
+    let remainder: u128 = val."core:prelude/int128.wado/u128^core:prelude/traits.wado/Sub::sub"(&quotient."core:prelude/int128.wado/u128^core:prelude/traits.wado/Mul::mul"(&divisor));
+    let half: u128 = divisor."core:prelude/int128.wado/u128^core:prelude/traits.wado/Div::div"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(2));
+    if ((remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&half) == Ordering::Greater) || (remainder."core:prelude/int128.wado/u128^core:prelude/traits.wado/Eq::eq"(&half) && quotient."core:prelude/int128.wado/u128^core:prelude/traits.wado/Rem::rem"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(2))."core:prelude/int128.wado/u128^core:prelude/traits.wado/Eq::eq"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(1)))) {
+        return quotient."core:prelude/int128.wado/u128^core:prelude/traits.wado/Add::add"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(1));
+    }
+    return quotient;
+}
+
+fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, upper: bool) {
+    let precision: i32 = f.precision;
+    let mut value: u128 = abs_value;
+    let mut exponent: i32 = ("core::prelude/int128.wado::count_digits_u128"(value) - 1);
+    if (precision >= 0) {
+        let total: i32 = (precision + 1);
+        let drop: i32 = ((exponent + 1) - total);
+        if (drop > 0) {
+            value = "core::prelude/int128.wado::round_off_digits_u128"(value, drop);
+            if ("core::prelude/int128.wado::count_digits_u128"(value) > total) {
+                value = value."core:prelude/int128.wado/u128^core:prelude/traits.wado/Div::div"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(10));
+                exponent = (exponent + 1);
+            }
+        }
+    } else {
+        loop {
+            if !((value."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(10)) != Ordering::Less) && value."core:prelude/int128.wado/u128^core:prelude/traits.wado/Rem::rem"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(10))."core:prelude/int128.wado/u128^core:prelude/traits.wado/Eq::eq"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(0))) {
+                break;
+            }
+            value = value."core:prelude/int128.wado/u128^core:prelude/traits.wado/Div::div"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(10));
+        }
+    }
+    let digits: String = value."core:prelude/int128.wado/u128::to_string"();
+    let fraction_len: i32 = (digits."core:prelude/string.wado/String::len"() - 1);
+    let mark: i32 = f."core:prelude/format.wado/Formatter::mark"();
+    if is_negative {
+        f."core:prelude/format.wado/Formatter::write_char"('-');
+    } else {
+        if f.sign_plus {
+            f."core:prelude/format.wado/Formatter::write_char"('+');
+        }
+    }
+    f."core:prelude/format.wado/Formatter::write_char"(digits."core:prelude/string.wado/String::char_at_byte_unchecked"(0));
+    if ((precision > 0) || ((precision < 0) && (fraction_len > 0))) {
+        f."core:prelude/format.wado/Formatter::write_char"('.');
+        f.buf."core:prelude/string.wado/String::push_str_range_unchecked"(&digits, 1, digits."core:prelude/string.wado/String::len"());
+        let mut i: i32 = fraction_len;
+        loop {
+            if !(i < precision) {
+                break;
+            }
+            __for_0_body: {
+                f."core:prelude/format.wado/Formatter::write_char"('0');
+            }
+            i = (i + 1);
+        }
+    }
+    f."core:prelude/format.wado/Formatter::write_char"(if upper {
+        'E';
+    } else {
+        'e';
+    });
+    f."core:prelude/format.wado/Formatter::write_str"(&Box<i32> { value: exponent }.i32::to_string());
+    f."core:prelude/format.wado/Formatter::apply_padding"(mark);
+}
+
+fn abs_to_u128(val: i128) -> u128 {
+    if (val."core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(&"core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(0)) != Ordering::Less) {
+        return "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_i128"(val);
+    }
+    return "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_i128"(val."core:prelude/int128.wado/i128^core:prelude/traits.wado/Add::add"(&"core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(1))."core:prelude/int128.wado/i128^core:prelude/traits.wado/Neg::neg"())."core:prelude/int128.wado/u128^core:prelude/traits.wado/Add::add"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(1));
+}
+
 pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/Display::fmt"(self: &u128, f: &mut Formatter) {
     self."core:prelude/int128.wado/u128::fmt_into"(f);
+}
+
+pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
+    self."core:prelude/int128.wado/u128::fmt_into"(f);
+}
+
+pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: &u128, f: &mut Formatter) {
+    "core::prelude/int128.wado::write_int_exp_128"(f, false, *self, false);
+}
+
+pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: &u128, f: &mut Formatter) {
+    "core::prelude/int128.wado::write_int_exp_128"(f, false, *self, true);
 }
 
 pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/Inspect::inspect"(self: &u128, f: &mut Formatter) {
@@ -4943,7 +5064,7 @@ pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/LowerHexAlt::fmt_
 }
 
 pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: &u128, f: &mut Formatter) {
-    self."core:prelude/int128.wado/u128::fmt_base"(f, 16, true, String { repr: packed"0X", used: 2 });
+    self."core:prelude/int128.wado/u128::fmt_base"(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/Eq::eq"(self: &u128, other: &u128) -> bool {
@@ -5125,6 +5246,18 @@ pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/Display::fmt"(sel
     self."core:prelude/int128.wado/i128::fmt_into"(f);
 }
 
+pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
+    self."core:prelude/int128.wado/i128::fmt_into"(f);
+}
+
+pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: &i128, f: &mut Formatter) {
+    "core::prelude/int128.wado::write_int_exp_128"(f, (*self."core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(&"core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(0)) == Ordering::Less), "core::prelude/int128.wado::abs_to_u128"(*self), false);
+}
+
+pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: &i128, f: &mut Formatter) {
+    "core::prelude/int128.wado::write_int_exp_128"(f, (*self."core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(&"core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(0)) == Ordering::Less), "core::prelude/int128.wado::abs_to_u128"(*self), true);
+}
+
 pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/Inspect::inspect"(self: &i128, f: &mut Formatter) {
     self."core:prelude/int128.wado/i128::fmt_into"(f);
 }
@@ -5162,7 +5295,7 @@ pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/LowerHexAlt::fmt_
 }
 
 pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: &i128, f: &mut Formatter) {
-    "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_i128"(*self)."core:prelude/int128.wado/u128::fmt_base"(f, 16, true, String { repr: packed"0X", used: 2 });
+    "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_i128"(*self)."core:prelude/int128.wado/u128::fmt_base"(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/Eq::eq"(self: &i128, other: &i128) -> bool {
@@ -5367,14 +5500,6 @@ pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)-
 pub fn "fn(char)->char^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: Box<fn(char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char)->char^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
-    self."core:prelude/int128.wado/u128^core:prelude/traits.wado/Display::fmt"(f);
-}
-
-pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
-    self."core:prelude/int128.wado/i128^core:prelude/traits.wado/Display::fmt"(f);
-}
 
 pub fn "core:prelude/intparse.wado/ParseIntError::new"(kind: IntErrorKind) -> ParseIntError {
     return ParseIntError { kind: kind };
@@ -5930,6 +6055,108 @@ fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, abs_val: i64, digit_co
     }
 }
 
+fn count_digits_u64(val: u64) -> i32 {
+    if (val == 0) {
+        return 1;
+    }
+    let mut n: i32 = 0;
+    let mut t: u64 = val;
+    loop {
+        if !(t > 0) {
+            break;
+        }
+        __for_0_body: {
+            n = (n + 1);
+        }
+        t = (t / 10);
+    }
+    return n;
+}
+
+fn round_off_digits_u64(val: u64, drop: i32) -> u64 {
+    let mut divisor: u64 = 1;
+    let mut i: i32 = 0;
+    loop {
+        if !(i < drop) {
+            break;
+        }
+        __for_0_body: {
+            divisor = (divisor * 10);
+        }
+        i = (i + 1);
+    }
+    let quotient: u64 = (val / divisor);
+    let remainder: u64 = (val - (quotient * divisor));
+    let half: u64 = (divisor / 2);
+    if ((remainder > half) || ((remainder == half) && ((quotient % 2) == 1))) {
+        return (quotient + 1);
+    }
+    return quotient;
+}
+
+fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bool) {
+    let precision: i32 = f.precision;
+    let mut value: u64 = abs_value;
+    let mut exponent: i32 = ("core::prelude/primitive.wado::count_digits_u64"(value) - 1);
+    if (precision >= 0) {
+        let total: i32 = (precision + 1);
+        let drop: i32 = ((exponent + 1) - total);
+        if (drop > 0) {
+            value = "core::prelude/primitive.wado::round_off_digits_u64"(value, drop);
+            if ("core::prelude/primitive.wado::count_digits_u64"(value) > total) {
+                value = (value / 10);
+                exponent = (exponent + 1);
+            }
+        }
+    } else {
+        loop {
+            if !((value >= 10) && ((value % 10) == 0)) {
+                break;
+            }
+            value = (value / 10);
+        }
+    }
+    let digits: String = Box<u64> { value: value }.u64::to_string();
+    let fraction_len: i32 = (digits."core:prelude/string.wado/String::len"() - 1);
+    let mark: i32 = f."core:prelude/format.wado/Formatter::mark"();
+    if is_negative {
+        f."core:prelude/format.wado/Formatter::write_char"('-');
+    } else {
+        if f.sign_plus {
+            f."core:prelude/format.wado/Formatter::write_char"('+');
+        }
+    }
+    f."core:prelude/format.wado/Formatter::write_char"(digits."core:prelude/string.wado/String::char_at_byte_unchecked"(0));
+    if ((precision > 0) || ((precision < 0) && (fraction_len > 0))) {
+        f."core:prelude/format.wado/Formatter::write_char"('.');
+        f.buf."core:prelude/string.wado/String::push_str_range_unchecked"(&digits, 1, digits."core:prelude/string.wado/String::len"());
+        let mut i: i32 = fraction_len;
+        loop {
+            if !(i < precision) {
+                break;
+            }
+            __for_0_body: {
+                f."core:prelude/format.wado/Formatter::write_char"('0');
+            }
+            i = (i + 1);
+        }
+    }
+    f."core:prelude/format.wado/Formatter::write_char"(if upper {
+        'E';
+    } else {
+        'e';
+    });
+    f."core:prelude/format.wado/Formatter::write_str"(&Box<i32> { value: exponent }.i32::to_string());
+    f."core:prelude/format.wado/Formatter::apply_padding"(mark);
+}
+
+fn abs_to_u64(val: i64) -> u64 {
+    if (val >= 0) {
+        return val as u64;
+    }
+    return (-(val + 1) as u64 + 1);
+}
+
 fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
     if (val_i64 == 0) {
         return 1;
@@ -6045,6 +6272,20 @@ pub fn char::is_ascii_digit(self: Box<char>) -> bool {
     return ((self.value as u32 - '0' as u32) < 10);
 }
 
+pub fn char::len_utf8(self: Box<char>) -> i32 {
+    let cp: i32 = self.value as i32;
+    if (cp < 128) {
+        return 1;
+    }
+    if (cp < 2048) {
+        return 2;
+    }
+    if (cp < 65536) {
+        return 3;
+    }
+    return 4;
+}
+
 fn i8::fmt_into(self: Box<i8>, f: &mut Formatter) {
     Box<i32> { value: self.value as i32 }.i32::fmt_decimal(f);
 }
@@ -6135,6 +6376,13 @@ fn i32::fmt_decimal(self: Box<i32>, f: &mut Formatter) {
 
 fn i32::fmt_into(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_decimal(f);
+}
+
+pub fn i32::to_string(self: Box<i32>) -> String {
+    let mut buf: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(12);
+    let mut f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut buf);
+    self.i32::fmt_into(&mut f);
+    return buf;
 }
 
 fn "i32^core:prelude/traits.wado/FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i32, ParseIntError> {
@@ -6289,6 +6537,13 @@ fn u64::fmt_base(self: Box<u64>, f: &mut Formatter, base: i32, upper: bool, pref
 
 fn u64::fmt_into(self: Box<u64>, f: &mut Formatter) {
     self.u64::fmt_decimal(f);
+}
+
+pub fn u64::to_string(self: Box<u64>) -> String {
+    let mut buf: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(21);
+    let mut f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut buf);
+    self.u64::fmt_into(&mut f);
+    return buf;
 }
 
 fn "u64^core:prelude/traits.wado/FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u64, ParseIntError> {
@@ -6684,6 +6939,54 @@ pub fn "f64^core:prelude/traits.wado/Display::fmt"(self: Box<f64>, f: &mut Forma
     self.f64::fmt_into(f);
 }
 
+pub fn "bool^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<bool>, f: &mut Formatter) {
+    self.bool::fmt_into(f);
+}
+
+pub fn "char^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<char>, f: &mut Formatter) {
+    self."char^core:prelude/traits.wado/Display::fmt"(f);
+}
+
+pub fn "i8^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
+    self.i8::fmt_into(f);
+}
+
+pub fn "u8^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
+    self.u8::fmt_into(f);
+}
+
+pub fn "i16^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
+    self.i16::fmt_into(f);
+}
+
+pub fn "u16^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
+    self.u16::fmt_into(f);
+}
+
+pub fn "i32^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
+    self.i32::fmt_into(f);
+}
+
+pub fn "u32^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
+    self.u32::fmt_into(f);
+}
+
+pub fn "i64^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
+    self.i64::fmt_into(f);
+}
+
+pub fn "u64^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
+    self.u64::fmt_into(f);
+}
+
+pub fn "f32^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<f32>, f: &mut Formatter) {
+    self.f32::fmt_into(f);
+}
+
+pub fn "f64^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: Box<f64>, f: &mut Formatter) {
+    self.f64::fmt_into(f);
+}
+
 pub fn "()^core:prelude/traits.wado/Inspect::inspect"(self: &(), f: &mut Formatter) {
     f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"()", used: 2 });
 }
@@ -6872,6 +7175,70 @@ pub fn "f64^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<f64>, f:
 
 pub fn "f64^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<f64>, f: &mut Formatter) {
     self.f64::fmt_exp(f.precision, 1, f);
+}
+
+pub fn "i8^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<i8>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, (self.value < 0), "core::prelude/primitive.wado::abs_to_u64"(self.value as i64), false);
+}
+
+pub fn "i8^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<i8>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, (self.value < 0), "core::prelude/primitive.wado::abs_to_u64"(self.value as i64), true);
+}
+
+pub fn "u8^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<u8>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, false, self.value as u64, false);
+}
+
+pub fn "u8^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<u8>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, false, self.value as u64, true);
+}
+
+pub fn "i16^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<i16>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, (self.value < 0), "core::prelude/primitive.wado::abs_to_u64"(self.value as i64), false);
+}
+
+pub fn "i16^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<i16>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, (self.value < 0), "core::prelude/primitive.wado::abs_to_u64"(self.value as i64), true);
+}
+
+pub fn "u16^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<u16>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, false, self.value as u64, false);
+}
+
+pub fn "u16^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<u16>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, false, self.value as u64, true);
+}
+
+pub fn "i32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<i32>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, (self.value < 0), "core::prelude/primitive.wado::abs_to_u64"(self.value as i64), false);
+}
+
+pub fn "i32^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<i32>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, (self.value < 0), "core::prelude/primitive.wado::abs_to_u64"(self.value as i64), true);
+}
+
+pub fn "u32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<u32>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, false, self.value as u64, false);
+}
+
+pub fn "u32^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<u32>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, false, self.value as u64, true);
+}
+
+pub fn "i64^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<i64>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, (self.value < 0), "core::prelude/primitive.wado::abs_to_u64"(self.value), false);
+}
+
+pub fn "i64^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<i64>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, (self.value < 0), "core::prelude/primitive.wado::abs_to_u64"(self.value), true);
+}
+
+pub fn "u64^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(self: Box<u64>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, false, self.value, false);
+}
+
+pub fn "u64^core:prelude/traits.wado/UpperExp::fmt_upper_exp"(self: Box<u64>, f: &mut Formatter) {
+    "core::prelude/primitive.wado::write_int_exp"(f, false, self.value, true);
 }
 
 pub fn "i8^core:prelude/traits.wado/Binary::fmt_binary"(self: Box<i8>, f: &mut Formatter) {
@@ -7099,35 +7466,35 @@ pub fn "u64^core:prelude/traits.wado/LowerHexAlt::fmt_lower_hex_alt"(self: Box<u
 }
 
 pub fn "i8^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: Box<i8>, f: &mut Formatter) {
-    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0X", used: 2 });
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "u8^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: Box<u8>, f: &mut Formatter) {
-    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0X", used: 2 });
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "i16^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: Box<i16>, f: &mut Formatter) {
-    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0X", used: 2 });
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "u16^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: Box<u16>, f: &mut Formatter) {
-    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0X", used: 2 });
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "i32^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: Box<i32>, f: &mut Formatter) {
-    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0X", used: 2 });
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "u32^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: Box<u32>, f: &mut Formatter) {
-    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0X", used: 2 });
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "i64^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: Box<i64>, f: &mut Formatter) {
-    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0X", used: 2 });
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "u64^core:prelude/traits.wado/UpperHexAlt::fmt_upper_hex_alt"(self: Box<u64>, f: &mut Formatter) {
-    self.u64::fmt_base(f, 16, true, String { repr: packed"0X", used: 2 });
+    self.u64::fmt_base(f, 16, true, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "i8^core:prelude/traits.wado/Eq::eq"(self: Box<i8>, other: Box<i8>) -> bool {
@@ -9409,6 +9776,10 @@ pub fn "core:prelude/string.wado/String::len"(self: &String) -> i32 {
     return self.used;
 }
 
+pub fn "core:prelude/string.wado/String::is_empty"(self: &String) -> bool {
+    return (self.used == 0);
+}
+
 pub fn "core:prelude/string.wado/String::get_byte_unchecked"(self: &String, index: i32) -> u8 {
     return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
@@ -9471,8 +9842,21 @@ pub fn "core:prelude/string.wado/String::push_str"(self: &mut String, other: &St
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, start, &other.repr as &Array<u8>, 0, other_len);
 }
 
+pub fn "core:prelude/string.wado/String::push_str_range_unchecked"(self: &mut String, s: &String, start: i32, end: i32) {
+    let n: i32 = (end - start);
+    if (n <= 0) {
+        return;
+    }
+    let dst: i32 = self."core:prelude/string.wado/String::internal_reserve_uninit"(n);
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, dst, &s.repr as &Array<u8>, start, n);
+}
+
 pub fn "core:prelude/string.wado/String::chars"(self: &String) -> StrCharIter with stores[self] {
     return StrCharIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
+}
+
+pub fn "core:prelude/string.wado/String::char_at_byte_unchecked"(self: &String, byte_index: i32) -> char {
+    return "core::prelude/primitive.wado::char::from_u32_unchecked"("core::prelude/string.wado::decode_char_at"(&self.repr as &Array<u8>, byte_index).0);
 }
 
 pub fn "core:prelude/string.wado/String::push"(self: &mut String, c: char) {
@@ -11818,6 +12202,13 @@ pub fn "wasi:cli/types.wado/ErrorCode^core:prelude/traits.wado/DisplayAlt::fmt_a
     self."wasi:cli/types.wado/ErrorCode^core:prelude/traits.wado/Display::fmt"(f);
 }
 
+fn leading_sign_byte_len(first: u8) -> i32 {
+    if ((first == 45) || (first == 43)) {
+        return 1;
+    }
+    return 0;
+}
+
 pub fn "core:prelude/format.wado/Formatter::resolved_seq_limit"(self: &Formatter) -> i32 {
     if (self.precision == -2) {
         return 256;
@@ -11851,12 +12242,27 @@ pub fn "core:prelude/format.wado/Formatter::write_char_n"(self: &mut Formatter, 
 }
 
 pub fn "core:prelude/format.wado/Formatter::pad"(self: &mut Formatter, content: String) {
-    let content_len: i32 = content."core:prelude/string.wado/String::len"();
-    if ((self.width <= 0) || (content_len >= self.width)) {
+    if (self.width <= 0) {
+        self.buf."core:prelude/string.wado/String::push_str"(&content);
+        return;
+    }
+    let content_len: i32 = content."core:prelude/string.wado/String::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"();
+    if (content_len >= self.width) {
         self.buf."core:prelude/string.wado/String::push_str"(&content);
         return;
     }
     let padding: i32 = (self.width - content_len);
+    if self.zero_pad {
+        let sign_len: i32 = if content."core:prelude/string.wado/String::is_empty"() {
+            0;
+        } else {
+            "core::prelude/format.wado::leading_sign_byte_len"(content."core:prelude/string.wado/String::get_byte_unchecked"(0));
+        };
+        self.buf."core:prelude/string.wado/String::push_str_range_unchecked"(&content, 0, sign_len);
+        self."core:prelude/format.wado/Formatter::write_char_n"('0', padding);
+        self.buf."core:prelude/string.wado/String::push_str_range_unchecked"(&content, sign_len, content."core:prelude/string.wado/String::len"());
+        return;
+    }
     let align: Alignment = self.align;
     if match align {
         Left => true,
@@ -11893,18 +12299,30 @@ pub fn "core:prelude/format.wado/Formatter::apply_padding"(self: &mut Formatter,
 
 #[inline(never)]
 fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self: &mut Formatter, start_pos: i32) {
-    let content_len: i32 = (self.buf."core:prelude/string.wado/String::len"() - start_pos);
+    let content_bytes: i32 = (self.buf."core:prelude/string.wado/String::len"() - start_pos);
+    let content_len: i32 = self."core:prelude/format.wado/Formatter::count_chars_from"(start_pos);
     if (content_len >= self.width) {
         return;
     }
     let padding: i32 = (self.width - content_len);
-    let fill_byte: u8 = self.fill as u8;
+    if self.zero_pad {
+        let sign_len: i32 = if (content_bytes > 0) {
+            "core::prelude/format.wado::leading_sign_byte_len"(self.buf."core:prelude/string.wado/String::get_byte_unchecked"(start_pos));
+        } else {
+            0;
+        };
+        let at: i32 = (start_pos + sign_len);
+        self."core:prelude/format.wado/Formatter::shift_right"(at, (content_bytes - sign_len), padding);
+        self."core:prelude/format.wado/Formatter::write_fill_at"(at, padding, '0');
+        return;
+    }
     let align: Alignment = self.align;
+    let fill: char = self.fill;
     if match align {
         Left => true,
         _ => false,
     } {
-        self.buf."core:prelude/string.wado/String::append_byte_filled"(fill_byte, padding);
+        self."core:prelude/format.wado/Formatter::write_char_n"(fill, padding);
     } else {
         if match align {
             Center => true,
@@ -11912,47 +12330,82 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self: &mut Formatter
         } {
             let left_pad: i32 = (padding / 2);
             let right_pad: i32 = (padding - left_pad);
-            self.buf."core:prelude/string.wado/String::append_byte_filled"(fill_byte, left_pad);
-            let mut i: i32 = (content_len - 1);
-            loop {
-                if !(i >= 0) {
-                    break;
-                }
-                self.buf."core:prelude/string.wado/String::set_byte_unchecked"(((start_pos + left_pad) + i), self.buf."core:prelude/string.wado/String::get_byte_unchecked"((start_pos + i)));
-                i = (i - 1);
-            }
-            let mut j: i32 = 0;
-            loop {
-                if !(j < left_pad) {
-                    break;
-                }
-                __for_0_body: {
-                    self.buf."core:prelude/string.wado/String::set_byte_unchecked"((start_pos + j), fill_byte);
-                }
-                j = (j + 1);
-            }
-            self.buf."core:prelude/string.wado/String::append_byte_filled"(fill_byte, right_pad);
+            self."core:prelude/format.wado/Formatter::shift_right"(start_pos, content_bytes, (left_pad * Box<char> { value: fill }.char::len_utf8()));
+            self."core:prelude/format.wado/Formatter::write_fill_at"(start_pos, left_pad, fill);
+            self."core:prelude/format.wado/Formatter::write_char_n"(fill, right_pad);
         } else {
-            self.buf."core:prelude/string.wado/String::append_byte_filled"(fill_byte, padding);
-            let mut i: i32 = (content_len - 1);
-            loop {
-                if !(i >= 0) {
-                    break;
-                }
-                self.buf."core:prelude/string.wado/String::set_byte_unchecked"(((start_pos + padding) + i), self.buf."core:prelude/string.wado/String::get_byte_unchecked"((start_pos + i)));
-                i = (i - 1);
-            }
-            let mut j: i32 = 0;
-            loop {
-                if !(j < padding) {
-                    break;
-                }
-                __for_1_body: {
-                    self.buf."core:prelude/string.wado/String::set_byte_unchecked"((start_pos + j), fill_byte);
-                }
-                j = (j + 1);
+            self."core:prelude/format.wado/Formatter::shift_right"(start_pos, content_bytes, (padding * Box<char> { value: fill }.char::len_utf8()));
+            self."core:prelude/format.wado/Formatter::write_fill_at"(start_pos, padding, fill);
+        }
+    }
+}
+
+fn "core:prelude/format.wado/Formatter::count_chars_from"(self: &Formatter, start_pos: i32) -> i32 {
+    let end: i32 = self.buf."core:prelude/string.wado/String::len"();
+    let mut count: i32 = 0;
+    let mut i: i32 = start_pos;
+    loop {
+        if !(i < end) {
+            break;
+        }
+        __for_0_body: {
+            if ((self.buf."core:prelude/string.wado/String::get_byte_unchecked"(i) & 192) != 128) {
+                count = (count + 1);
             }
         }
+        i = (i + 1);
+    }
+    return count;
+}
+
+fn "core:prelude/format.wado/Formatter::shift_right"(self: &mut Formatter, start_pos: i32, content_bytes: i32, gap: i32) {
+    self.buf."core:prelude/string.wado/String::append_byte_filled"(0, gap);
+    let mut i: i32 = (content_bytes - 1);
+    loop {
+        if !(i >= 0) {
+            break;
+        }
+        self.buf."core:prelude/string.wado/String::set_byte_unchecked"(((start_pos + gap) + i), self.buf."core:prelude/string.wado/String::get_byte_unchecked"((start_pos + i)));
+        i = (i - 1);
+    }
+}
+
+fn "core:prelude/format.wado/Formatter::write_fill_at"(self: &mut Formatter, at: i32, n: i32, c: char) {
+    let fill_len: i32 = Box<char> { value: c }.char::len_utf8();
+    if (fill_len == 1) {
+        let fill_byte: u8 = c as u8;
+        let mut j: i32 = 0;
+        loop {
+            if !(j < n) {
+                break;
+            }
+            __for_0_body: {
+                self.buf."core:prelude/string.wado/String::set_byte_unchecked"((at + j), fill_byte);
+            }
+            j = (j + 1);
+        }
+        return;
+    }
+    let mut encoded: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(4);
+    encoded."core:prelude/string.wado/String::push"(c);
+    let mut j: i32 = 0;
+    loop {
+        if !(j < n) {
+            break;
+        }
+        __for_1_body: {
+            let mut k: i32 = 0;
+            loop {
+                if !(k < fill_len) {
+                    break;
+                }
+                __for_2_body: {
+                    self.buf."core:prelude/string.wado/String::set_byte_unchecked"(((at + (j * fill_len)) + k), encoded."core:prelude/string.wado/String::get_byte_unchecked"(k));
+                }
+                k = (k + 1);
+            }
+        }
+        j = (j + 1);
     }
 }
 
@@ -12069,6 +12522,10 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Display::fmt"(s
     } else {
         f."core:prelude/format.wado/Formatter::pad"(*self);
     }
+}
+
+pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/DisplayAlt::fmt_alt"(self: &String, f: &mut Formatter) {
+    self."core:prelude/string.wado/String^core:prelude/traits.wado/Display::fmt"(f);
 }
 
 pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: &String, f: &mut Formatter) {
@@ -17552,10 +18009,6 @@ fn "$value_copy$core:prelude/intparse.wado/ParseFloatError"(v: ParseFloatError) 
     return ParseFloatError { kind: v.kind };
 }
 
-fn "$value_copy$core:prelude/int128.wado/i128"(v: i128) -> i128 {
-    return i128 { low: v.low, high: v.high };
-}
-
 fn "$value_copy$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>"(v: Result<[bool, i32], IntErrorKind>) -> Result<[bool, i32], IntErrorKind> {
     return match v {
         Ok(__vc_payload_0) => Result<[bool, i32], IntErrorKind>::Ok("ops.mess_dirty.wado::$value_copy$[bool,i32]"(__vc_payload_0)),
@@ -17569,6 +18022,10 @@ fn "$value_copy$[bool,i32]"(v: [bool, i32]) -> [bool, i32] {
 
 fn "$value_copy$[core:prelude/int128.wado/u128,core:prelude/int128.wado/u128]"(v: [u128, u128]) -> [u128, u128] {
     return [core:prelude/int128.wado/u128,core:prelude/int128.wado/u128] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(v.1) };
+}
+
+fn "$value_copy$core:prelude/int128.wado/i128"(v: i128) -> i128 {
+    return i128 { low: v.low, high: v.high };
 }
 
 fn "$value_copy$[u64,i64]"(v: [u64, i64]) -> [u64, i64] {

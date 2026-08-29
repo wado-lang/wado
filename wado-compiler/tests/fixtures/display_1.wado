@@ -143,12 +143,12 @@ fn test_template_specifiers_i128() with Stdout {
     assert `${i:>10x}` == "        2a";
     assert `${i:^10x}` == "    2a    ";
     assert `${i:X}` == "2A";
-    assert `${i:#X}` == "0X2A";
-    assert `${i:#010X}` == "0X0000002A";
+    assert `${i:#X}` == "0x2A";
+    assert `${i:#010X}` == "0x0000002A";
     assert `${neg:x}` == "ffffffffffffffffffffffffffffffd6";
     assert `${neg:#x}` == "0xffffffffffffffffffffffffffffffd6";
     assert `${neg:X}` == "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD6";
-    assert `${neg:#X}` == "0XFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD6";
+    assert `${neg:#X}` == "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD6";
     let zero: i128 = 0;
     assert `${zero}` == "0";
     assert `${zero:+}` == "+0";
@@ -176,7 +176,7 @@ fn test_template_specifiers_i128() with Stdout {
     assert `${u:x}` == "2a";
     assert `${u:X}` == "2A";
     assert `${u:#x}` == "0x2a";
-    assert `${u:#X}` == "0X2A";
+    assert `${u:#X}` == "0x2A";
     assert `${u:#010x}` == "0x0000002a";
     assert `${u:<10x}` == "2a        ";
     let uzero: u128 = 0;

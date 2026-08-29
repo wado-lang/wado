@@ -1040,6 +1040,10 @@ An owned, fixed-length byte buffer.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for bool`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for bool`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1156,6 +1160,10 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for char`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for char`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1208,6 +1216,10 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for i8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for i8`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1215,6 +1227,14 @@ Encodes this character as UTF-8, returning the bytes.
 #### `impl InspectAlt for i8`
 
 ##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i8`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i8`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Binary for i8`
 
@@ -1346,6 +1366,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for u8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for u8`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1353,6 +1377,14 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl InspectAlt for u8`
 
 ##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u8`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u8`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Binary for u8`
 
@@ -1438,6 +1470,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for i16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for i16`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1445,6 +1481,14 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl InspectAlt for i16`
 
 ##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i16`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i16`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Binary for i16`
 
@@ -1538,6 +1582,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for u16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for u16`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1545,6 +1593,14 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl InspectAlt for u16`
 
 ##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u16`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u16`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Binary for u16`
 
@@ -1642,6 +1698,10 @@ Counts the number of set bits (population count).
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for i32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for i32`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1649,6 +1709,14 @@ Counts the number of set bits (population count).
 #### `impl InspectAlt for i32`
 
 ##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i32`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i32`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Binary for i32`
 
@@ -1750,6 +1818,10 @@ Counts the number of set bits (population count).
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for u32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for u32`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1757,6 +1829,14 @@ Counts the number of set bits (population count).
 #### `impl InspectAlt for u32`
 
 ##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u32`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u32`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Binary for u32`
 
@@ -1866,6 +1946,10 @@ Counts the number of set bits (population count).
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for i64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for i64`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1873,6 +1957,14 @@ Counts the number of set bits (population count).
 #### `impl InspectAlt for i64`
 
 ##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Binary for i64`
 
@@ -1986,6 +2078,10 @@ Counts the number of set bits (population count).
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for u64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for u64`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -1993,6 +2089,14 @@ Counts the number of set bits (population count).
 #### `impl InspectAlt for u64`
 
 ##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Binary for u64`
 
@@ -2272,6 +2376,10 @@ Creates an f32 from its bit representation.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for f32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for f32`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -2532,6 +2640,10 @@ Creates an f64 from its bit representation.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+#### `impl DisplayAlt for f64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl Inspect for f64`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
@@ -2733,7 +2845,7 @@ Whether to use zero-padding (`0` flag)
 
 #### `width: i32`
 
-Minimum field width; `NO_WIDTH` for none
+Minimum field width in characters; `NO_WIDTH` for none
 
 #### `precision: i32`
 
@@ -2773,7 +2885,8 @@ Write `n` copies of a character to the output buffer.
 #### `pub fn pad(&mut self, content: String)`
 
 Pad a pre-formatted content string to the configured width.
-If no width is set or content is already at least as wide, writes content as-is.
+If no width is set or content is already as wide, writes content as-is.
+Width counts characters, so a multi-byte content pads by what it renders.
 
 #### `pub fn mark(&self) -> i32`
 
@@ -2788,7 +2901,6 @@ Used with `apply_padding` for the speculative-write pattern:
 
 Apply width/alignment padding to content already written at `start_pos`.
 Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
-The fill character must be ASCII (single byte); non-ASCII fill is not supported.
 
 #### `pub fn write_from_memory(&mut self, ptr: i32, len: i32)`
 
@@ -2913,6 +3025,18 @@ Convert u128 to String (for template string interpolation)
 #### `impl Display for u128`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl DisplayAlt for u128`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u128`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u128`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Inspect for u128`
 
@@ -3129,6 +3253,18 @@ Convert i128 to String (for template string interpolation)
 #### `impl Display for i128`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl DisplayAlt for i128`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i128`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i128`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Inspect for i128`
 

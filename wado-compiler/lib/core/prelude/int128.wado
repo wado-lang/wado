@@ -40,8 +40,11 @@ use {
     LenientParseError,
     ConvertError,
     Display,
+    DisplayAlt,
     Inspect,
     InspectAlt,
+    LowerExp,
+    UpperExp,
     Binary,
     BinaryAlt,
     Octal,
@@ -423,9 +426,108 @@ impl LenientFromStr for u128 {
     }
 }
 
+/// Count decimal digits of a u128 value.
+fn count_digits_u128(val: u128) -> i32 {
+    if val == 0 {
+        return 1;
+    }
+    let mut n: i32 = 0;
+    for let mut t = val; t > 0; t = t / 10 {
+        n += 1;
+    }
+    return n;
+}
+
+/// Drop the last `drop` decimal digits of `val`, rounding half to even.
+fn round_off_digits_u128(val: u128, drop: i32) -> u128 {
+    let mut divisor: u128 = 1;
+    for let mut i = 0; i < drop; i += 1 {
+        divisor = divisor * 10;
+    }
+    let quotient = val / divisor;
+    let remainder = val - quotient * divisor;
+    let half = divisor / 2;
+    if remainder > half || (remainder == half && quotient % 2 == 1) {
+        return quotient + 1;
+    }
+    return quotient;
+}
+
+/// The 128-bit counterpart of `write_int_exp` in `core:prelude/primitive.wado`:
+/// a mantissa of `precision + 1` digits, or the digits with trailing zeros
+/// stripped, then `e`/`E` and the decimal exponent.
+fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, upper: bool) {
+    let precision = f.precision;
+    let mut value = abs_value;
+    let mut exponent = count_digits_u128(value) - 1;
+    if precision >= 0 {
+        let total = precision + 1;
+        let drop = exponent + 1 - total;
+        if drop > 0 {
+            value = round_off_digits_u128(value, drop);
+            if count_digits_u128(value) > total {
+                // The rounding carried: 999 became 1000, one decade up.
+                value = value / 10;
+                exponent += 1;
+            }
+        }
+    } else {
+        while value >= 10 && value % 10 == 0 {
+            value = value / 10;
+        }
+    }
+
+    let digits = value.to_string();
+    let fraction_len = digits.len() - 1;
+    let mark = f.mark();
+    if is_negative {
+        f.write_char('-');
+    } else if f.sign_plus {
+        f.write_char('+');
+    }
+    f.write_char(digits.char_at_byte_unchecked(0));
+    if precision > 0 || (precision < 0 && fraction_len > 0) {
+        f.write_char('.');
+        f.buf.push_str_range_unchecked(&digits, 1, digits.len());
+        for let mut i = fraction_len; i < precision; i += 1 {
+            f.write_char('0');
+        }
+    }
+    f.write_char(if upper { 'E' } else { 'e' });
+    f.write_str(&exponent.to_string());
+    f.apply_padding(mark);
+}
+
+/// The magnitude of an i128, `MIN` included — `-MIN` does not fit i128, so it
+/// is stepped through `MIN + 1`.
+fn abs_to_u128(val: i128) -> u128 {
+    if val >= 0 {
+        return u128::from_i128(val);
+    }
+    return u128::from_i128(-(val + 1)) + 1;
+}
+
 impl Display for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
         self.fmt_into(f);
+    }
+}
+
+impl DisplayAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl LowerExp for u128 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp_128(f, false, *self, false);
+    }
+}
+
+impl UpperExp for u128 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp_128(f, false, *self, true);
     }
 }
 
@@ -482,7 +584,7 @@ impl LowerHexAlt for u128 {
 }
 impl UpperHexAlt for u128 {
     pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, true, "0X");
+        self.fmt_base(f, 16, true, "0x");
     }
 }
 
@@ -930,6 +1032,24 @@ impl Display for i128 {
     }
 }
 
+impl DisplayAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl LowerExp for i128 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp_128(f, *self < 0, abs_to_u128(*self), false);
+    }
+}
+
+impl UpperExp for i128 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp_128(f, *self < 0, abs_to_u128(*self), true);
+    }
+}
+
 impl Inspect for i128 {
     pub fn inspect(&self, f: &mut Formatter) {
         self.fmt_into(f);
@@ -985,7 +1105,7 @@ impl LowerHexAlt for i128 {
 }
 impl UpperHexAlt for i128 {
     pub fn fmt_upper_hex_alt(&self, f: &mut Formatter) {
-        u128::from_i128(*self).fmt_base(f, 16, true, "0X");
+        u128::from_i128(*self).fmt_base(f, 16, true, "0x");
     }
 }
 

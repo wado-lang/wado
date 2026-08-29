@@ -70,6 +70,9 @@ Where `spec` follows Rust's format specification mini-language.
 - `f` selects no separate trait: `Display` already honours `precision`, so
   `${x:.2f}` and `${x:.2}` render the same. It exists so a float format reads as
   one.
+- `e`/`E` apply to integers as well as floats. An integer mantissa drops its
+  trailing zeros (`${1200:e}` → `"1.2e3"`), or carries `precision + 1` digits
+  rounded half to even (`${1250:.1e}` → `"1.2e3"`), matching Rust.
 - The grammar is closed: any other specifier character is a compile error. A
   printf-ism like `${x:08d}` does not silently lose its `d`.
 - No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `${:e}/${:E}`.
@@ -84,7 +87,18 @@ Format specifiers can include additional parameters in this order:
 ${expr:[[fill]align][sign][#][0][width][.precision]type}
 ```
 
+Every part is optional, but the specifier as a whole is not: `${x:}` is a
+compile error, as is anything left over after the type character. Whitespace
+around the specifier is trimmed, so `${ x : 5 }` reads as `${x:5}`.
+
+`fill` is any character the interpolation scanner does not read as structure
+when it splits `${…}` — so not `'`, `"`, `` ` ``, `{`, `}`, nor a `/` that opens
+a comment. None of those is a sensible thing to pad with.
+
 #### Alignment and Width
+
+Width counts characters, not bytes or display columns: `${"あい":>6}` pads to
+`"    あい"`. A fill character wider than one byte pads by whole characters.
 
 | Syntax     | Description                | Example     | Output    |
 | ---------- | -------------------------- | ----------- | --------- |
@@ -94,6 +108,9 @@ ${expr:[[fill]align][sign][#][0][width][.precision]type}
 | `${x:>5}`  | Right align                | `${42:>5}`  | `"   42"` |
 | `${x:05}`  | Zero-padding               | `${42:05}`  | `"00042"` |
 | `${x:_>5}` | Fill with `_`, right align | `${42:_>5}` | `"___42"` |
+
+`0` is a flag, not a width: `${x:0.2f}` is zero-padding plus a precision, not a
+width of zero.
 
 #### Precision
 
@@ -105,7 +122,9 @@ println(`${100.0:.4}`);      // => "100.0000"
 println(`${1.23e5:.1e}`);    // => "1.2e5"
 ```
 
-For integers in exponential notation, precision specifies significant digits:
+For integers in exponential notation, precision specifies the mantissa's decimal
+places. Outside `e`/`E` an integer has no fraction to cut, so precision is
+ignored (`${42:.2}` → `"42"`), matching Rust:
 
 ```wado
 println(`${12345:.2e}`);     // => "1.23e4"
@@ -139,6 +158,10 @@ also bounds elements inside collections (e.g. long `String` elements of an
 `List`). Tuples and structs are fixed-size, so their own arity is never capped,
 but their `String` / `List` fields still honor the active precision.
 
+The same shared `Formatter` carries `width` into element rendering, so
+`${a:6?}` pads each element rather than the collection as a whole — Rust
+behaves the same way.
+
 ##### Default Inspect cap and the precision sentinels
 
 `Inspect` / `InspectAlt` (`:?` / `:#?`) of a `String` or `List` apply a default
@@ -153,9 +176,9 @@ single "unspecified" value:
   back to `DEFAULT_SEQ_LIMIT`; every other type (floats, ints, `Display`) treats
   it the same as unset (its `precision >= 0` check stays false).
 - `PRECISION_INFINITE` (-1): render with no cap; sequence `Inspect` skips
-  truncation. There is no surface syntax for it yet (the `.N` grammar cannot
-  produce a negative value), so it is currently reachable only by constructing a
-  `Formatter` directly — see the TODO in `format.wado`.
+  truncation. It has no surface syntax (the `.N` grammar cannot produce a
+  negative value), so it is reachable only by constructing a `Formatter`
+  directly.
 
 This keeps precision's meaning intact per type (decimal places for floats, max
 length for sequences) while letting `:?` cap sequences by default without
@@ -169,15 +192,25 @@ affecting non-sequence operands.
 | `${x:+}`  | Always show sign (negative) | `${-42:+}` | `"-42"` |
 | (default) | Only negative sign          | `${42}`    | `"42"`  |
 
+Zero padding goes after the sign, so the value reads as one figure
+(`${-42:08}` → `"-0000042"`), and the `0` flag wins over an explicit fill and
+alignment.
+
 #### Alternate Form
 
-The `#` flag provides alternate representations:
+The `#` flag selects the `Alt` half of the format trait pair (see
+[WEP: Format Traits](./wep-2026-02-01-format-traits.md)):
 
-| Type     | Effect          | Example    | Output       |
-| -------- | --------------- | ---------- | ------------ |
-| `x`, `X` | Add `0x` prefix | `${42:#x}` | `"0x2a"`     |
-| `b`      | Add `0b` prefix | `${42:#b}` | `"0b101010"` |
-| `o`      | Add `0o` prefix | `${42:#o}` | `"0o52"`     |
+| Type     | Effect                | Example    | Output       |
+| -------- | --------------------- | ---------- | ------------ |
+| `x`, `X` | Add `0x` prefix       | `${42:#x}` | `"0x2a"`     |
+| `b`      | Add `0b` prefix       | `${42:#b}` | `"0b101010"` |
+| `o`      | Add `0o` prefix       | `${42:#o}` | `"0o52"`     |
+| `?`      | Pretty-print (indent) | `${p:#?}`  | multi-line   |
+| (none)   | `DisplayAlt`          | `${42:#}`  | `"42"`       |
+| `e`, `E` | No alternate form     | `${42:#e}` | `"4.2e1"`    |
+
+`${x:#X}` prefixes `0x`, not `0X`, as Rust does.
 
 ### Complete Examples
 
@@ -225,9 +258,9 @@ println(`${arr.len()}`);  // => "5"
 
 This WEP extends [WEP: Type Stringification](./wep-2026-01-16-type-stringification.md):
 
-1. **`${expr}`**: Uses Display trait, falls back to inspect
-2. **`${expr:?}`**: Always uses inspect (compiler intrinsic)
-3. **`${expr:spec}`**: Uses appropriate trait for `spec` (e.g., Binary, LowerHex, LowerExp)
+1. **`${expr}`**: Uses `Display`; a type without one is a compile error
+2. **`${expr:?}`**: Uses `Inspect`, which every type has (synthesised on demand)
+3. **`${expr:spec}`**: Uses the trait `spec` names (e.g., Binary, LowerHex, LowerExp)
 
 Resolution order for `${expr:spec}`:
 
@@ -238,7 +271,7 @@ Resolution order for `${expr:spec}`:
 **Key differences from Rust**:
 
 1. **Arbitrary expressions**: Wado allows any expression in `${expr}`, while Rust only allows simple value expressions (no method calls, operators, etc. without parentheses)
-2. **Inspect fallback**: Wado provides inspect as a fallback for `{}` and `${:?}`, while Rust requires explicit trait implementations
+2. **Inspect for every type**: `${x:?}` needs no derive — `Inspect` / `InspectAlt` are synthesised from the type's shape. `Display` is not: only primitives, `String`, plain enums and newtypes have one, so `${x}` on a struct or variant needs a hand-written `impl Display`. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)
 3. **Other format specifiers**: Format specifiers like `${:x}` still require the type to support that trait (or be a primitive)
 4. **No `:p` specifier**: Wado excludes `:p` since it has no pointer types
 
@@ -268,18 +301,24 @@ Resolution order for `${expr:spec}`:
 3. **Implementation complexity**: Requires implementing all Rust format traits
    - **Mitigation**: Can implement incrementally, starting with most common specifiers
 
-### Implemented Extensions
+### Known gaps
 
-1. **Pretty-print**: `${:#?}` for indented multi-line debug output via `InspectAlt` trait
-
-### Future Extensions
-
-Following Rust's ecosystem, we can add:
-
-1. **Dynamic width and precision**: Allow runtime values using nested `${}` syntax
-   - Syntax: `${value:${width}.${precision}}` (Python-style)
-   - Rationale: Python's nested-interpolation approach is more consistent with Wado's "arbitrary expressions" philosophy than Rust's `width$` syntax, which requires argument lists. Variables in the current scope can be referenced directly.
-   - Example: `let w = 8; let p = 2; println(\`${pi:${w}.${p}}\`);`→`" 3.14"`
+- [ ] Dynamic width and precision: the grammar takes literal digits only, so a
+      width computed at runtime cannot be expressed. Closing it takes a nested
+      interpolation — `${value:${width}.${precision}}`, Python-style, which fits
+      Wado's arbitrary-expression interpolations better than Rust's `width$`
+      form (that one names argument-list positions Wado does not have). The
+      interpolation scanner already tracks brace depth, so the spec text can
+      carry a nested `${…}`; the parser and `format_spec` would need to keep it
+      as an expression rather than digits.
+- [ ] Meaningless parameters are silently dropped, against the closed grammar's
+      intent: precision on an integer, `+` on a `String`, `#` on `e`/`E`. Only
+      the type checker knows which combination is meaningless, so the check
+      belongs in template synthesis, not the parser.
+- [ ] The `0` flag pads non-numeric values with zeros (`${true:08}` →
+      `"0000true"`) and every value is right-aligned by default. Rust ignores
+      the flag outside numbers and defaults non-numeric values to left. The
+      `Formatter` carries no notion of "this value is a number" to decide with.
 
 ### Migration from Other Languages
 

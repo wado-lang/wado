@@ -1814,6 +1814,8 @@ let message = `Count: ${count}`;   // "Count: 42"
 let pi = 3.14159;
 let formatted = `Pi: ${pi:.2}`;   // "Pi: 3.14"
 let hex = `${255:x}`;             // "ff"
+let sci = `${1200:e}`;            // "1.2e3" (integers as well as floats)
+let padded = `${"あい":>6}`;       // "    あい" (width counts characters)
 
 // Inspect (debug) format — works for any type
 let p = Point { x: 10, y: 20 };

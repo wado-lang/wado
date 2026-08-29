@@ -278,7 +278,7 @@ let s = `${3.14}`;                        // "3.14"
 // Format specifiers via Display (see docs/wep-2026-01-17-template-format-specifiers.md)
 let formatted = `${3.14159:0.2f}`;        // "3.14"
 let hex = `${255:x}`;                     // "ff"
-let hex_alt = `${255:#x}`;                // "0xff" (DisplayAlt)
+let hex_alt = `${255:#x}`;                // "0xff" (LowerHexAlt)
 
 // Inspect (:?) — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
 println(`${point:?}`);                    // "Point { x: 10, y: 20 }"

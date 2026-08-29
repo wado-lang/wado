@@ -15,6 +15,8 @@ Template strings in Wado support format specifiers: `` `${x:spec}` ``. As define
 | `e`       | Lowercase exponential | `${x:e}` → `"4.2e1"`  |
 | `E`       | Uppercase exponential | `${x:E}` → `"4.2E1"`  |
 
+(`x` is `42` in each row.)
+
 This WEP defines the trait system and Formatter infrastructure that backs these format specifiers.
 
 ## Decision
@@ -25,7 +27,7 @@ Format traits write to a `Formatter` object that holds format options and a refe
 
 ```wado
 /// Text alignment for padding
-variant Alignment {
+enum Alignment {
     Left,
     Center,
     Right,
@@ -37,71 +39,111 @@ struct Formatter {
     fill: char,
     align: Alignment,
     sign_plus: bool,
-    alternate: bool,
     zero_pad: bool,
-    width: i32,        // -1 = not specified
-    precision: i32,    // -1 = not specified
+    width: i32,        // NO_WIDTH (-1) = not specified
+    precision: i32,    // PRECISION_DEFAULT (-2) = not specified
+    indent: i32,       // pretty-print depth, used by InspectAlt
     buf: &mut String,
-}
-
-impl Formatter {
-    fn new(buf: &mut String) -> Formatter;
-    fn write_str(&mut self, s: &String);
-    fn write_char(&mut self, c: char);
-    fn width(&self) -> i32;
-    fn precision(&self) -> i32;
-    fn alternate(&self) -> bool;
-    fn sign_plus(&self) -> bool;
 }
 ```
 
-### Format Traits
+The fields are read directly; there are no accessors. `#` needs no field — it
+selects the `Alt` trait at compile time (see below).
 
-All format traits follow the same pattern: write to a `Formatter`.
+`Formatter`'s methods split into writing, padding, and pretty-printing:
 
 ```wado
-trait Display {
+impl Formatter {
+    fn new(buf: &mut String) -> Formatter with stores[buf];
+
+    // Writing
+    fn write_str(&mut self, s: &String);
+    fn write_char(&mut self, c: char);
+    fn write_char_n(&mut self, c: char, n: i32);
+    fn write_from_memory(&mut self, ptr: i32, len: i32);
+
+    // Padding. `pad` takes rendered content; `mark` / `apply_padding` bracket a
+    // write straight into the buffer; `prepare_int_write` reserves the digit
+    // area of an integer, having placed sign, prefix and padding itself.
+    fn pad(&mut self, content: String);
+    fn mark(&self) -> i32;
+    fn apply_padding(&mut self, start_pos: i32);
+    fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32;
+
+    // Pretty-printing
+    fn write_indent(&mut self);
+    fn write_newline_indent(&mut self);
+    fn open_brace(&mut self, open: String);
+    fn close_brace(&mut self, close: String);
+
+    // The cap a sequence Inspect applies: the explicit precision, else
+    // DEFAULT_SEQ_LIMIT.
+    fn resolved_seq_limit(&self) -> i32;
+}
+```
+
+Width counts characters, so padding scans the rendered bytes rather than
+subtracting offsets. `synthesis::template` builds `Formatter` literals directly
+instead of calling `new`, so it repeats the sentinel constants; the e2e fixture
+`template_formatter_sentinels.wado` fails if the two drift.
+
+`String::push_display` (the `PushDisplay` trait) writes one `Display` value into
+a `String` in place, skipping the temporary that a `` `${value}` `` template
+would allocate — the hot path in the serde numeric encoders.
+
+### Format Traits
+
+All format traits follow the same pattern: write to a `Formatter`. Each method
+is named after its trait, so a type implementing several of them declares no
+overloads.
+
+```wado
+pub trait Display {
     fn fmt(&self, f: &mut Formatter);
 }
 
-trait Binary {
-    fn fmt(&self, f: &mut Formatter);
+pub trait Binary {
+    fn fmt_binary(&self, f: &mut Formatter);
 }
 
-trait Octal {
-    fn fmt(&self, f: &mut Formatter);
+pub trait Octal {
+    fn fmt_octal(&self, f: &mut Formatter);
 }
 
-trait LowerHex {
-    fn fmt(&self, f: &mut Formatter);
+pub trait LowerHex {
+    fn fmt_lower_hex(&self, f: &mut Formatter);
 }
 
-trait UpperHex {
-    fn fmt(&self, f: &mut Formatter);
+pub trait UpperHex {
+    fn fmt_upper_hex(&self, f: &mut Formatter);
 }
 
-trait LowerExp {
-    fn fmt(&self, f: &mut Formatter);
+pub trait LowerExp {
+    fn fmt_lower_exp(&self, f: &mut Formatter);
 }
 
-trait UpperExp {
-    fn fmt(&self, f: &mut Formatter);
+pub trait UpperExp {
+    fn fmt_upper_exp(&self, f: &mut Formatter);
 }
 ```
 
 ### Debug Formatting
 
-The `:?` specifier resolves to the `Inspect` trait. The `:#?` specifier resolves to the `InspectAlt` trait for pretty-printed (indented multi-line) output. The compiler auto-synthesizes `Inspect` and `InspectAlt` for all user types; types can provide custom implementations to override.
+The `:?` specifier resolves to the `Inspect` trait. The `:#?` specifier resolves to the `InspectAlt` trait for pretty-printed (indented multi-line) output. The compiler synthesises both for any type a bound reaches, derived from the type's shape over `ReflectStruct` / `ReflectVariant` / `ReflectEnum`; types can provide custom implementations to override. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ```wado
-trait Inspect {
+internal trait Inspect {
     fn inspect(&self, f: &mut Formatter);
 }
 
-trait InspectAlt {
+internal trait InspectAlt {
     fn inspect_alt(&self, f: &mut Formatter);
 }
 ```
+
+`Inspect`, `InspectAlt` and every `Alt` trait are `internal`: they are the
+compiler's dispatch targets, not an API to name in a bound. A type can still
+write its own `impl` to override the synthesised one.
 
 ### Display Derivation
 
@@ -125,7 +167,13 @@ Each format trait has an alternate variant activated by the `#` flag. For Inspec
 | `Binary`   | `BinaryAlt`   | `${:#b}` | Add `0b` prefix               |
 | `Octal`    | `OctalAlt`    | `${:#o}` | Add `0o` prefix               |
 | `LowerHex` | `LowerHexAlt` | `${:#x}` | Add `0x` prefix               |
-| `UpperHex` | `UpperHexAlt` | `${:#X}` | Add `0X` prefix               |
+| `UpperHex` | `UpperHexAlt` | `${:#X}` | Add `0x` prefix, `A-F` digits |
+
+`LowerExp` / `UpperExp` have no `Alt` half: `${x:#e}` resolves to the plain
+trait, and `#` has no effect there.
+
+Each `Alt` method carries the trait's name too: `fmt_alt`, `inspect_alt`,
+`fmt_binary_alt`, `fmt_octal_alt`, `fmt_lower_hex_alt`, `fmt_upper_hex_alt`.
 
 ### Format Resolution
 
@@ -135,29 +183,37 @@ Each format trait has an alternate variant activated by the `#` flag. For Inspec
 | `?`       | `Inspect::inspect`                                     |
 | `#`       | `DisplayAlt::fmt_alt`                                  |
 | `#?`      | `InspectAlt::inspect_alt`                              |
-| `b`       | `Binary::fmt`                                          |
-| `o`       | `Octal::fmt`                                           |
-| `x`       | `LowerHex::fmt`                                        |
-| `X`       | `UpperHex::fmt`                                        |
-| `e`       | `LowerExp::fmt`                                        |
-| `E`       | `UpperExp::fmt`                                        |
+| `b`       | `Binary::fmt_binary`                                   |
+| `o`       | `Octal::fmt_octal`                                     |
+| `x`       | `LowerHex::fmt_lower_hex`                              |
+| `X`       | `UpperHex::fmt_upper_hex`                              |
+| `e`       | `LowerExp::fmt_lower_exp`                              |
+| `E`       | `UpperExp::fmt_upper_exp`                              |
+| `f`       | `Display::fmt` (`Display` already honours precision)   |
 
 ### Primitive Implementations
 
-| Type           | Traits                                               |
-| -------------- | ---------------------------------------------------- |
-| Integer types  | `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex` |
-| Float types    | `Display`, `LowerExp`, `UpperExp`                    |
-| `bool`, `char` | `Display`                                            |
-| `String`       | `Display`                                            |
+| Type           | Traits                                                                       |
+| -------------- | ---------------------------------------------------------------------------- |
+| Integer types  | `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex`, `LowerExp`, `UpperExp` |
+| Float types    | `Display`, `LowerExp`, `UpperExp`                                            |
+| `bool`, `char` | `Display`                                                                    |
+| `String`       | `Display`                                                                    |
+
+Each also implements the `Alt` half of every trait it has, `DisplayAlt`
+included — the `DisplayAlt` fallback the compiler synthesises walks a module's
+declared types, which no primitive is, so a primitive without the `impl` would
+fail `${x:#}`. `Inspect` / `InspectAlt` are implemented for every primitive too.
 
 ### Zero Padding
 
-Zero padding (`${x:08}`) inserts zeros after sign/prefix but before digits:
+Zero padding (`${x:08}`) inserts zeros after sign/prefix but before digits, and
+wins over an explicit fill and alignment:
 
 ```
 ${-42:08}   → "-0000042"
 ${42:#08x}  → "0x00002a"
+${-42:*<08} → "-0000042"
 ```
 
 ## Consequences
@@ -174,13 +230,16 @@ ${42:#08x}  → "0x00002a"
 1. **Infrastructure complexity**: Requires `Formatter` and `Alignment` types
 2. **Implementation effort**: All primitive formatting needs trait implementations
 
-### Implemented Extensions
+### Known gaps
 
-1. **`${:#?}`**: Pretty-print debug with indentation via `InspectAlt` trait
-
-### Future Extensions
-
-1. **Dynamic width/precision**: `${value:${width}.${precision}}`
+- [ ] The `Alt` traits double the trait surface — `core:prelude/primitive.wado`
+      alone carries 47 `Alt` implementations — and each new one is a hole until
+      written (`${x:#}` on a primitive was a compile error until `DisplayAlt`
+      was implemented for each). An `alternate: bool` on `Formatter` would
+      collapse the pairs into one trait per specifier; the branch it costs is
+      on a field the template synthesiser sets from a compile-time constant.
+- [ ] Dynamic width/precision (`${value:${width}.${precision}}`) — see
+      [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md).
 
 ## References
 
