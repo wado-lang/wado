@@ -34,6 +34,29 @@ export fn run() {
 }
 "#;
 
+/// Folding reduces the parse to a call whose `Result` nobody reads, and a
+/// scalarized callee's result in drop position is what `sroa_variant_return`
+/// used to rebox every round for the passes after it to delete again.
+const DISCARDED_RESULT_SOURCE: &str = r#"
+use { println, Stdout } from "core:cli";
+
+fn parse_scalar<T: FromStr>(s: &String) -> Result<T, i32> {
+    return match T::from_str_range(s, 0, 3) {
+        Ok(v) => Result::Ok(v),
+        Err(_) => Result::Err(-1),
+    };
+}
+
+export fn run() with Stdout {
+    let r = parse_scalar::<u64>(&"123");
+    if let Ok(v) = r {
+        println(`${v}`);
+    } else {
+        println("err");
+    }
+}
+"#;
+
 /// A struct whose derived `Inspect` is a chain of `if wrote_field { ", " } else
 /// { " { "; wrote_field = true }`, one link per field.
 fn inspect_chain_source(fields: usize) -> String {
@@ -95,9 +118,11 @@ fn cap_report(log: &[(Code, String)]) -> Option<&str> {
 
 #[test]
 fn nir_loop_converges_before_the_cap() {
-    for level in [OptLevel::O2, OptLevel::O3] {
-        let log = debug_log_of(SOURCE, level, None);
-        assert_eq!(cap_report(&log), None, "{level:?} did not converge");
+    for source in [SOURCE, DISCARDED_RESULT_SOURCE] {
+        for level in [OptLevel::O2, OptLevel::O3] {
+            let log = debug_log_of(source, level, None);
+            assert_eq!(cap_report(&log), None, "{level:?} did not converge");
+        }
     }
 }
 

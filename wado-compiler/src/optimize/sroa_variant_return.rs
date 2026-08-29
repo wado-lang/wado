@@ -189,14 +189,7 @@ fn rebox_stragglers(
         }
         let span = func.span;
         let bound = handled_call_sites(&body, scalarized, own_return);
-        let mut targets: Vec<ExprId> = Vec::new();
-        collect_straggler_calls(
-            &body,
-            NodeRef::Block(body.root),
-            scalarized,
-            &bound,
-            &mut targets,
-        );
+        let targets = straggler_calls(&body, scalarized, &bound);
         let reboxed = !targets.is_empty();
         for call in targets {
             crate::compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
@@ -238,14 +231,7 @@ fn rebox_stragglers_in_globals(
         let locals = &mut global.locals;
         let body = global.init.slot_expr_mut().body_mut();
         let bound = handled_call_sites(body, scalarized, own_return);
-        let mut targets: Vec<ExprId> = Vec::new();
-        collect_straggler_calls(
-            body,
-            NodeRef::Block(body.root),
-            scalarized,
-            &bound,
-            &mut targets,
-        );
+        let targets = straggler_calls(body, scalarized, &bound);
         if targets.is_empty() {
             continue;
         }
@@ -483,22 +469,45 @@ fn handled_call_sites(
         .collect()
 }
 
+/// Calls to a scalarized callee that the rewrite left typed as the tuple where
+/// their consumer still expects the variant. A call in drop position has no
+/// consumer to mistype, so reboxing it only builds a value the passes after
+/// this one delete — which is a rewrite each fixed-point iteration undoes.
+fn straggler_calls(
+    body: &Body,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+    handled: &IndexSet<ExprId>,
+) -> Vec<ExprId> {
+    let mut out = Vec::new();
+    collect_straggler_calls(
+        body,
+        NodeRef::Block(body.root),
+        scalarized,
+        handled,
+        &super::arena_query::discarded_exprs(body),
+        &mut out,
+    );
+    out
+}
+
 fn collect_straggler_calls(
     body: &Body,
     node: NodeRef,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
     handled: &IndexSet<ExprId>,
+    discarded: &IndexSet<ExprId>,
     out: &mut Vec<ExprId>,
 ) {
     if let NodeRef::Expr(e) = node
         && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
         && scalarized.contains_key(func_id)
         && !handled.contains(&e)
+        && !discarded.contains(&e)
     {
         out.push(e);
     }
     body.for_each_child(node, |c| {
-        collect_straggler_calls(body, c, scalarized, handled, out);
+        collect_straggler_calls(body, c, scalarized, handled, discarded, out);
     });
 }
 
@@ -685,14 +694,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
         // validation, which no hand-written source can force, and this runs
         // over every fixture in the suite.
         let handled = handled_call_sites(body, &scalarized, func.return_type);
-        let mut stragglers = Vec::new();
-        collect_straggler_calls(
-            body,
-            NodeRef::Block(body.root),
-            &scalarized,
-            &handled,
-            &mut stragglers,
-        );
+        let stragglers = straggler_calls(body, &scalarized, &handled);
         // `collect_straggler_calls` descends from the root, so it never sees
         // the nodes a rewrite orphaned — the arena is not compacted, and
         // reporting those would flag code that no longer runs.
@@ -727,14 +729,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     for global in &project.globals {
         let body = global.init.slot_expr().body();
         let handled = handled_call_sites(body, &scalarized, global.ty);
-        let mut stragglers = Vec::new();
-        collect_straggler_calls(
-            body,
-            NodeRef::Block(body.root),
-            &scalarized,
-            &handled,
-            &mut stragglers,
-        );
+        let stragglers = straggler_calls(body, &scalarized, &handled);
         assert!(
             stragglers.is_empty(),
             "variant-return SROA left {} unreboxed call(s) to a scalarized \

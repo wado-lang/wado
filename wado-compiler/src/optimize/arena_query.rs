@@ -30,6 +30,24 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
     out
 }
 
+/// Every expression a statement evaluates and throws away. A block's last
+/// statement is excluded: it may be the block's value, and reading a discarded
+/// result where one is consumed is the unsound direction.
+pub(super) fn discarded_exprs(body: &Body) -> IndexSet<ExprId> {
+    let mut out = IndexSet::default();
+    for block in body.blocks.values() {
+        let Some((_, dropped)) = block.stmts.split_last() else {
+            continue;
+        };
+        for s in dropped {
+            if let StmtKind::Expr(Operand::Expr(e)) = body.stmts[*s].kind {
+                out.insert(e);
+            }
+        }
+    }
+    out
+}
+
 /// Every local a reachable promoted operand reads — the `Opaque(Local)` leaves
 /// of the values the skeleton still carries. A pass deciding a local is unused
 /// unions this into its skeleton census.
