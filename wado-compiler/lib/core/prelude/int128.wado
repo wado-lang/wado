@@ -217,11 +217,9 @@ impl u128 {
         return builtin::f32_reinterpret_i32(bits as i32);
     }
 
-    /// Divide self by divisor, returning (quotient, remainder).
-    /// One native division when both operands fit in 64 bits, binary long
-    /// division otherwise. Panics if divisor is zero.
+    /// Divide self by divisor, returning (quotient, remainder). One native
+    /// division when both fit in 64 bits, binary long division otherwise.
     pub fn div_rem(&self, divisor: &u128) -> [u128, u128] {
-        // Check for division by zero
         if divisor.low == 0 && divisor.high == 0 {
             panic("u128 division by zero");
         }

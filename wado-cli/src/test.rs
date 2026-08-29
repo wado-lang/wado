@@ -55,9 +55,8 @@ pub struct TestOptions {
     /// removes them. Empty means "run every test".
     pub test_name_filters: Vec<String>,
     pub format: TestFormat,
-    /// `--profile`: sample the guest across the one file's tests. Forces
-    /// `jobs = 1` and drops the per-test timeout, both of which the profiler
-    /// would otherwise contend with over the epoch.
+    /// `--profile`: sample the guest across the one file's tests, serially and
+    /// without the per-test timeout, which is counted in the epoch it samples on.
     pub profile: ProfileMode,
 }
 
@@ -190,8 +189,9 @@ impl Opt {
                 short: None,
                 value: Some("<mode>"),
                 desc: "Profile the guest across one file's tests: guest[,path[,interval_ms]]\n\
-                       (default: profile.json, 10ms). Runs serially, and the per-test\n\
-                       timeout is off — the profiler owns the epoch it was counted in",
+                       (default: profile.json, 10ms). Runs serially, and nothing\n\
+                       bounds a test that hangs — the profiler samples on the epoch\n\
+                       deadline the per-test timeout was counted in",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -542,7 +542,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         cpus.max(2)
     });
 
-    if profile.is_guest() {
+    if matches!(profile, ProfileMode::Guest { .. }) {
         if no_run {
             return Err(CliExit::error(
                 "--profile has nothing to sample under --no-run",
@@ -602,8 +602,8 @@ struct LoadedModule {
     _module_permit: OwnedSemaphorePermit,
 }
 
-/// The `GuestProfiler` between the store that samples into it and the run that
-/// writes it out. `None` inside the `Option` once taken to be written.
+/// The `GuestProfiler` between the stores that sample into it and the run that
+/// takes it back out to write.
 type GuestProfilerSlot = Arc<Mutex<Option<GuestProfiler>>>;
 
 /// Non-TODO module that failed `Component::new`/`create_linker` or whose
@@ -944,6 +944,7 @@ fn load_module(
     artifact: CompiledArtifact,
     opt_level: wasmtime::OptLevel,
     profile: &ProfileMode,
+    profiler_slot: Option<&GuestProfilerSlot>,
     module_permit: OwnedSemaphorePermit,
     observer: Arc<StageObserver>,
     reporter: &Arc<dyn TestReporter>,
@@ -953,19 +954,17 @@ fn load_module(
         let engine = Arc::new(runtime::create_test_engine(opt_level, profile)?);
         let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
         let linker = Arc::new(runtime::create_linker(&engine)?);
-        // `parse_args` admits one file when profiling, so one profiler covers
-        // the run and every test in the file samples into it.
-        let profiler = match profile {
-            ProfileMode::Guest { interval_ms, .. } => {
+        let profiler = match (profile, profiler_slot) {
+            (ProfileMode::Guest { interval_ms, .. }, Some(slot)) => {
                 let interval = Duration::from_millis(*interval_ms);
-                let profiler = GuestProfiler::new_component(
+                *lock(slot) = Some(GuestProfiler::new_component(
                     &engine,
                     "wado",
                     interval,
                     (*component).clone(),
                     std::iter::empty::<(String, wasmtime::Module)>(),
-                )?;
-                Some((Arc::new(Mutex::new(Some(profiler))), interval))
+                )?);
+                Some((Arc::clone(slot), interval))
             }
             _ => None,
         };
@@ -1235,7 +1234,7 @@ async fn run_load_stage(
     loaded_tx: mpsc::Sender<Arc<LoadedModule>>,
     lfail_tx: mpsc::Sender<LoadFailure>,
     epoch_ticker: Arc<EpochTicker>,
-    profiler_out: Arc<Mutex<Option<GuestProfilerSlot>>>,
+    profiler_slot: Option<GuestProfilerSlot>,
     reporter: Arc<dyn TestReporter>,
 ) -> (usize, usize) {
     let mut ok_count = 0_usize;
@@ -1251,6 +1250,7 @@ async fn run_load_stage(
             let reporter = Arc::clone(&reporter);
             let reporter_for_join_err = Arc::clone(&reporter);
             let profile_for_load = profile.clone();
+            let slot_for_load = profiler_slot.clone();
             // Each load worker is its own task so its progress is not
             // gated by `buffer_unordered`'s outer poll.
             tokio::spawn(async move {
@@ -1274,6 +1274,7 @@ async fn run_load_stage(
                         artifact,
                         opt_level,
                         &profile_for_load,
+                        slot_for_load.as_ref(),
                         module_permit,
                         observer_inner,
                         &reporter,
@@ -1303,9 +1304,6 @@ async fn run_load_stage(
                 ok_count += 1;
                 if module.tests.is_empty() {
                     skip_count += 1;
-                }
-                if let Some((slot, _)) = module.profiler.clone() {
-                    *lock(&profiler_out) = Some(slot);
                 }
                 epoch_ticker.register(&module.engine);
                 if loaded_tx.send(Arc::new(module)).await.is_ok() {
@@ -1541,7 +1539,7 @@ async fn run_pipeline(
     preopened_dirs: Arc<Vec<(String, String)>>,
     no_run: bool,
     profile: ProfileMode,
-    profiler_slot: Arc<Mutex<Option<GuestProfilerSlot>>>,
+    profiler_slot: Option<GuestProfilerSlot>,
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
 ) -> PipelineOutcome {
@@ -2185,7 +2183,7 @@ async fn run_one_package(
     show_banner: bool,
     no_run: bool,
     profile: ProfileMode,
-    profiler_slot: Arc<Mutex<Option<GuestProfilerSlot>>>,
+    profiler_slot: Option<GuestProfilerSlot>,
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
 ) -> PackageTotals {
@@ -2338,25 +2336,25 @@ fn report_changed_inputs(run_cache: &RunCache) -> bool {
     true
 }
 
-/// Write the guest profile the run sampled into, if it was profiling. A run
-/// asked for a profile and unable to produce it has failed, so the error is
-/// the caller's exit code rather than a line on stderr.
+/// Write the guest profile the run sampled into. A run asked for a profile and
+/// unable to produce one has failed, so this is an exit code, not a warning.
 fn write_profile(
     profile: &ProfileMode,
-    profiler_slot: &Arc<Mutex<Option<GuestProfilerSlot>>>,
+    profiler_slot: Option<&GuestProfilerSlot>,
 ) -> Result<(), CliExit> {
     let ProfileMode::Guest { path, .. } = profile else {
         return Ok(());
     };
-    let Some(profiler) = lock(profiler_slot).take().and_then(|s| lock(&s).take()) else {
+    let Some(profiler) = profiler_slot.and_then(|s| lock(s).take()) else {
         return Err(CliExit::error(
             "--profile sampled nothing: the file under test never loaded",
         ));
     };
-    std::fs::File::create(path)
-        .map_err(anyhow::Error::from)
-        .and_then(|f| Ok(profiler.finish(std::io::BufWriter::new(f))?))
-        .map_err(|e| CliExit::error(format!("failed to write {path}: {e}")))?;
+    let write = |e: &dyn std::fmt::Display| CliExit::error(format!("failed to write {path}: {e}"));
+    let file = std::fs::File::create(path).map_err(|e| write(&e))?;
+    profiler
+        .finish(std::io::BufWriter::new(file))
+        .map_err(|e| write(&e))?;
     eprintln!("Profile written to {path}");
     eprintln!("View at https://profiler.firefox.com/");
     Ok(())
@@ -2408,9 +2406,10 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
-    // `parse_args` admits one file under `--profile`, so one profiler covers
-    // the whole run and the write below happens once.
-    let profiler_slot: Arc<Mutex<Option<GuestProfilerSlot>>> = Arc::new(Mutex::new(None));
+    // `parse_args` admits one file under `--profile`, so this one slot holds
+    // the run's only profiler and the write below happens once.
+    let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
+        .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {
         let totals = run_one_package(
@@ -2424,7 +2423,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             multi_pkg,
             no_run,
             profile.clone(),
-            Arc::clone(&profiler_slot),
+            profiler_slot.clone(),
             reporter.clone(),
             Arc::clone(&run_cache),
         )
@@ -2434,7 +2433,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
-    write_profile(&profile, &profiler_slot)?;
+    write_profile(&profile, profiler_slot.as_ref())?;
 
     if report_changed_inputs(&run_cache) {
         return Err(CliExit::silent_failure(1));
