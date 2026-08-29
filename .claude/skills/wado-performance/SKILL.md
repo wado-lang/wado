@@ -160,11 +160,8 @@ and dropped, with the A/B that killed it and what it generalizes to. **Read it
 before starting**, and add an entry whenever an A/B comes back flat or negative
 — a dead end nobody wrote down is one somebody re-measures.
 
-Shorter reverted anti-wins, kept here so they aren't retried: a GC-array digit
-table (checked load per digit), two-digit arithmetic (the divides were already
-fused), forcing inlining (loop bloat). Stop when the floor is the
-representation — a store-bound loop on an `Array<T>`-backed `String` is
-near-optimal short of leaving GC arrays.
+Stop when the floor is the representation — a store-bound loop on an
+`Array<T>`-backed `String` is near-optimal short of leaving GC arrays.
 
 ## See also
 

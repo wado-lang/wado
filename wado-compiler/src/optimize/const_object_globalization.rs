@@ -467,17 +467,12 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
     }
 }
 
-/// The `&<literal>` nodes whose referent escapes the borrow — the ones the
-/// `InlineRef` case must leave alone.
+/// The `&<literal>` nodes whose referent escapes the borrow, reached either
+/// directly or through a local bound to it (`let r = &LIT; f(r)`).
 ///
-/// A borrow reads, which is why that case has no other callee gate, and holds
-/// only while the callee keeps it a borrow.
-/// `List::from(elements: Array<T>)` keeps the array it is handed as the list's
-/// spine, and the caller keeps no copy because the literal it borrowed was
-/// fresh — so hoisting it hands every caller the same object to mutate.
-///
-/// Two ways in: a direct call argument, or a local bound to the borrow first
-/// (`let r = &LIT; f(r)`).
+/// A borrow only reads while the callee keeps it one: `List::from(elements)`
+/// keeps the array as the list's spine, so hoisting the fresh literal it
+/// borrowed hands every caller the same object to mutate.
 fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
     let is_ref = |body: &Body, e: ExprId| {

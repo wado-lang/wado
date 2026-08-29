@@ -331,16 +331,12 @@ enum LenTerm {
     Local(u32),
 }
 
-/// Collapse a run of adjacent appends on one buffer into a single reservation:
-/// `buf.push('"'); buf.push_str(s)` becomes one `internal_reserve_uninit`
-/// followed by raw writes. Each `push`/`push_str` otherwise pays its own
-/// capacity check, and a run of them re-checks a capacity the first call
-/// already established.
+/// Collapse a run of adjacent appends on one buffer into one
+/// `internal_reserve_uninit` and raw writes, sparing each its capacity check.
 ///
-/// A source may be the buffer itself (`buf.push_str(&buf)`), so its length is
-/// read at the start of its own group and the reservation covers only what
-/// follows it — hoisting that read over an earlier write in the same run would
-/// measure a buffer the run itself grew.
+/// A source may be the buffer itself (`buf.push_str(&buf)`), so a run-time
+/// length is read at the start of its own group: hoisting it over an earlier
+/// write in the same run would measure a buffer the run itself grew.
 pub(super) struct AppendFuseRule {
     push_str_id: FuncId,
     push_ascii_id: FuncId,
@@ -702,7 +698,6 @@ fn const_str_len(body: &Body, arg: ExprId) -> Option<i32> {
         return None;
     };
     let backing = i32::try_from(bytes.len()).ok()?;
-    // Sizing writes by the backing array instead would run them past the text.
     let len = field(SeqField::Len)
         .and_then(|op| body.operand_const_int(op))
         .and_then(|v| i32::try_from(v).ok())
@@ -739,20 +734,19 @@ fn same_place(body: &Body, a: ExprId, b: ExprId) -> bool {
                 field_index: fb,
                 ..
             },
-        ) => {
-            fa == fb
-                && match (ia.as_expr(), ib.as_expr()) {
-                    (Some(x), Some(y)) => same_place(body, x, y),
-                    (Some(_) | None, _) => false,
-                }
-        }
+        ) => fa == fb && same_operand(body, *ia, *ib),
         (ExprKind::Unary { op: oa, expr: ia }, ExprKind::Unary { op: ob, expr: ib }) => {
-            oa == ob
-                && match (ia.as_expr(), ib.as_expr()) {
-                    (Some(x), Some(y)) => same_place(body, x, y),
-                    (Some(_) | None, _) => false,
-                }
+            oa == ob && same_operand(body, *ia, *ib)
         }
+        _ => false,
+    }
+}
+
+/// [`same_place`] for the operand a place expression is built over. A promoted
+/// operand has no place to compare, so it never matches.
+fn same_operand(body: &Body, a: Operand, b: Operand) -> bool {
+    match (a.as_expr(), b.as_expr()) {
+        (Some(x), Some(y)) => same_place(body, x, y),
         _ => false,
     }
 }

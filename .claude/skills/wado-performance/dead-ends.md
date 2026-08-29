@@ -217,3 +217,18 @@ benchmark. Next attempt should instrument collections first, not guess a factor.
 Measure a candidate on cbor-twitter, fts and a deserialize phase too; those are
 where a wider factor takes its cost, and a factor tuned on canada alone looks
 free.
+
+## Three short ones (2026-07/08)
+
+Each measured flat or negative, each with an obvious-sounding motivation:
+
+- **A GC-array digit table.** Indexing a table of digit characters adds a
+  bounds-checked load per digit; plain arithmetic already had none.
+- **Two-digit-at-a-time formatting.** The divides it was meant to halve were
+  already fused into magic multiplies, so it bought only extra multiplies.
+- **Forcing inlining.** Raising the threshold bloats the hot loop; wasmtime
+  calls a small Wasm function cheaply enough that the call was never the cost.
+
+The generalization: stop when the floor is the representation. A store-bound
+loop over an `Array<T>`-backed `String` is near-optimal short of leaving GC
+arrays, and no scheme that keeps the array beats it.

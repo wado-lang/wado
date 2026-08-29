@@ -680,29 +680,15 @@ impl FieldForm {
     }
 }
 
-/// The form in which the body holds param `idx`'s field.
+/// The form in which the body holds param `idx`'s field — the scalar
+/// parameter's type, so `niri` reads the same signature codegen lowers.
 ///
-/// The pass runs after `value_copy` has placed the copies value semantics call
-/// for, so a by-value scalar parameter gets none: handing the callee `p.f`
-/// hands it the caller's storage. That is what the pass means and what codegen
-/// does — `&F` and `F` are the same `ref` once lowered — but not what a
-/// by-value signature *says*, and `niri` reads the signature, duly copying.
-///
-/// Matching the callee's own borrow also keeps the rewrite from leaving one
-/// behind. Rewriting `self.f` to the param turns `&self.f` into `&param`, a
-/// borrow of what is already a reference; that makes the local address-taken,
-/// which stops `copy_prop` folding it back and strands a temporary at every
-/// call site. Taking the borrow into the parameter's type lets
-/// [`borrow_of_scalarized`] absorb it instead.
-///
-/// Only a borrow of the field *itself* counts — `&p.f`, not `&p.f.g`, which
-/// borrows a sub-field and leaves `p.f` read as a value. This has to agree
-/// exactly with what [`borrow_of_scalarized`] absorbs: a form claiming a borrow
-/// the rewrite then fails to find leaves the parameter typed as a reference
-/// while the body still reads it as a value. Which is why the walk is the
-/// reachable tree, the one [`param_field_use`] and [`rewrite_param_reads`] also
-/// walk — an in-place rewrite leaves dead nodes behind in the arena, and a
-/// borrow only one of the three sees is exactly that disagreement.
+/// Only a borrow of the field *itself* counts, `&p.f` and not `&p.f.g`, and it
+/// must agree exactly with what [`borrow_of_scalarized`] absorbs: a form
+/// claiming a borrow the rewrite cannot find types the parameter as a reference
+/// the body still reads as a value. Hence the reachable tree, which
+/// [`param_field_use`] and [`rewrite_param_reads`] walk too — a borrow only one
+/// of the three sees is that disagreement.
 fn param_field_form(body: &Body, idx: u32) -> FieldForm {
     let mut form = FieldForm::Value;
     for e in crate::nir_visitor::reachable_exprs(body) {
@@ -1062,16 +1048,11 @@ fn borrow_of_scalarized<'a>(
 }
 
 /// Pre-order: replace the SROA'd param's `FieldAccess` with the bare scalar
-/// `Local`, before children are reshaped. Matching on the field's index rather
-/// than its name avoids over-stripping a same-named field of the field's own
-/// type (e.g. `b.value.value`, whose inner `.value` belongs to another struct).
+/// `Local`, keyed on the field index so `b.value.value` keeps its inner read.
 ///
-/// A `Local` read is left standing — the param forwarded whole to another
-/// scalarized position, the one use [`param_field_use`] admits besides a field
-/// read. [`rewrite_arg`] retypes it where it stands, at the call it feeds:
-/// leaving the node claiming the wrapper's type would let a later round take
-/// that stale type as licence to project the wrapper's field onto a value that
-/// is already the field.
+/// A `Local` read stands — the param forwarded whole to another scalarized
+/// position. [`rewrite_arg`] retypes it at the call it feeds, before a later
+/// round can read the stale wrapper type as licence to project the field twice.
 fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) {
     if let NodeRef::Expr(id) = node {
         // `&mut self.f` where the param is already `&mut F`: the whole borrow
