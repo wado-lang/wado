@@ -43,7 +43,7 @@ use { action_language_is_emittable, translate_action, translate_members, transla
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
-use { escape_ident } from "./ident.wado";
+use { escape_ident, PARSER_HANDLE } from "./ident.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
 /// keeps a keyword-named arg (`type`) a legal identifier; the value is stored
@@ -216,7 +216,7 @@ pub fn add_parser_super_effect(f: &mut FnSpec, ctx: &GenContext) {
 pub fn gen_predicate_fns(w: &mut CodeWriter, ctx: &GenContext) {
     for let entry of ctx.predicate_fns() {
         let mut f = FnSpec::new(&pred_fn_name(entry.0));
-        f.add_param(&"p", &"&Parser");
+        f.add_param(&PARSER_HANDLE, &"&Parser");
         add_parser_super_effect(&mut f, ctx);
         f.set_return_type(&"bool");
         f.emit_begin(w);

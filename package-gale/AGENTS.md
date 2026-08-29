@@ -60,7 +60,9 @@ wado run package-gale dump path/to/Grammar.g4
 wado run package-gale dump --lexer path/to/Grammar.g4
 ```
 
-Each strategy is the value `lexer_gen` branches on, so it cannot drift from the emit. The traversal reaching it is mirrored, not shared — add a `lexer_dump_test.wado` case when you change tail propagation, suffix cutting, or fragment inlining.
+Which matcher covers a rule is `lexer_rule_route`, and the emit reads it rather than re-deciding: both "does this rule get its own `try_`" and "does the dispatch call it" are derived from that one answer, so a shortcut added to the route is one every emit site already knows about. Asking the shortcuts separately is what let a rule keep its actions past the keyword classifier and still lose them to the shared literal matcher.
+
+The per-rule emit _decisions_ below the route — plain vs lookahead-aware repeat, first-match vs arm scoring, suffix cutting, fragment inlining — are still a mirrored traversal rather than a shared one: each strategy is the value `lexer_gen` branches on, so a strategy cannot drift, but the walk reaching it can. Add a `lexer_dump_test.wado` case when you change one.
 
 For a grammar outside the repo, `wado run --dir <dir> package-gale dump Grammar.g4` — see `--dir` in the root [`AGENTS.md`](../AGENTS.md).
 

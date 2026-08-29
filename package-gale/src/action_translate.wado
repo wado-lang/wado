@@ -8,21 +8,21 @@ use { ParserRule, AttrDecl, AltAction, Alternative, Element } from "./ir.wado";
 use { resolve_attrs, ResolvedAttr, AttrTarget, AltBinding } from "./attr_resolve.wado";
 use { find_attr_refs, AttrRef } from "./attr_scan.wado";
 use { splice_attrs } from "./attr_substitute.wado";
-use { to_pascal_case, to_snake_case, escape_ident } from "./ident.wado";
+use {
+    to_pascal_case,
+    to_snake_case,
+    escape_ident,
+    PARSER_HANDLE,
+    LEXER_HANDLE,
+    VALS_LOCAL,
+    MIN_PREC_LOCAL,
+} from "./ident.wado";
 use { is_self_ref_element } from "./lr_util.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
     return `${to_pascal_case(&rule.name)}Vals`;
 }
-
-/// The recognizer handle in emitted context-API calls (`p.token_text(...)`):
-/// `p` in a parse / predicate body, `self` in a `@members` method body.
-pub global PARSER_HANDLE: String = "p";
-
-/// The lexer handle in emitted lexer-action calls (`lx.emit(...)`): the
-/// `&mut Lexer` parameter of the generated `apply_<rule>_actions`.
-pub global LEXER_HANDLE: String = "lx";
 
 /// Translate `body` against `rule`'s environment, resolving `$`-refs over the
 /// value channel and leaving surrounding Wado verbatim. `vals_in_scope` is true
@@ -172,9 +172,6 @@ fn vals_field_ref(field: &String) -> String {
     return `${VALS_LOCAL}.${*field}`;
 }
 
-/// The value-struct local every rule that emits a value channel binds.
-pub global VALS_LOCAL: String = "vals";
-
 /// Whether `body` reads `$<label>.text` for the rule-call binding `dedup_base`,
 /// the one reference that needs the call's token range captured.
 pub fn action_reads_rule_span(body: &String, dedup_base: &String) -> bool {
@@ -196,10 +193,6 @@ pub fn action_reads_rule_ctx(body: &String, dedup_base: &String) -> bool {
     }
     return false;
 }
-
-/// The precedence-threshold parameter a left-recursive rule fn carries; read
-/// by a `$_p` substitution in an LR rule (elsewhere `$_p` is the literal 0).
-global MIN_PREC_LOCAL: String = "min_prec";
 
 /// The LR precedence-climbing accumulator local (`gen_lr_fn`), holding the left
 /// operand's vals. java2wado maps `((Ctx)$ctx).<rule>(0)` onto it.

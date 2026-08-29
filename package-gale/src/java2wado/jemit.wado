@@ -21,7 +21,7 @@ use {
     RULE_START_TOK_LOCAL,
     LR_ACC_LOCAL,
 } from "../action_translate.wado";
-use { to_snake_case } from "../ident.wado";
+use { to_snake_case, MIN_PREC_LOCAL } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 use { str_lit } from "../wadopoet.wado";
 use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
@@ -83,34 +83,90 @@ pub struct JEnv {
     pub in_members: bool = false,
 }
 
-/// The recognizer API is not one surface: what a body may reach depends on which
-/// recognizer carries it and on whether the body sits inside a match at all.
-/// Both questions are asked once, here, rather than at each entry of the table
-/// below — an entry that forgot to ask emitted a method the generated
-/// recognizer does not have, and the failure surfaced as the generated module's
-/// own compile error instead of a diagnostic naming the call.
-///
-/// A read of the match window: the lexer's `chars` / `start` / `pos`, or the
-/// parser's rule-start token. A `@members` method is a method on the recognizer
-/// struct and stands outside every match, so those locals name nothing there.
-fn match_window_expr(env: &JEnv, what: &String, expr: String) -> Result<String, String> {
-    if env.in_members {
-        builtin::cold_path();
-        return Result::Err(
-            `java2wado: @members: '${*what}' reads the match window, which a member method stands outside of`,
-        );
-    }
-    return Result::Ok(expr);
+/// The ANTLR recognizer API this translator answers for. One variant per
+/// special, so the two questions every one of them has to answer — which
+/// recognizer carries it, and whether reading it needs the enclosing match —
+/// are asked of the variant rather than remembered at the site that emits it.
+/// A special added here does not compile until `api_host` and `api_needs_frame`
+/// have an arm for it; the emit sites reached it without either, which is how a
+/// body came to name a method the generated recognizer does not have.
+enum ApiCall {
+    /// `getText()`: the lexer's matched slice, the parser's rule span.
+    Text,
+    /// `getCharPositionInLine()`.
+    CharPos,
+    /// `_tokenStartCharPositionInLine`.
+    TokenStartCharPos,
+    /// `getRuleInvocationStack()`.
+    RuleStack,
+    /// `_input.getText()`.
+    InputText,
+    /// `<token>.getText()`.
+    TokenText,
+    /// `_input.LA(k)`.
+    La,
+    /// `_input.LT(k)`.
+    Lt,
 }
 
-/// A call into the parser's token-stream / rule-context API. The generated
-/// `Lexer` carries none of it — it has characters and a cursor, not tokens and
-/// rules — so a lexer body reaching for it is refused by name.
-fn parser_api_expr(env: &JEnv, what: &String, expr: String) -> Result<String, String> {
-    if env.lexer {
+/// Which recognizer carries the call. The generated `Lexer` has characters and
+/// a cursor; the `Parser` has tokens and rules; neither carries the other's.
+enum ApiHost {
+    Parser,
+    Lexer,
+    Either,
+}
+
+fn api_host(call: ApiCall) -> ApiHost {
+    return match call {
+        Text => ApiHost::Either,
+        CharPos | TokenStartCharPos => ApiHost::Lexer,
+        RuleStack | InputText | TokenText | La | Lt => ApiHost::Parser,
+    };
+}
+
+/// Whether the call reads the enclosing match — the lexer's `chars` / `start` /
+/// `pos`, or the parser's rule-start token. A `@members` method is a method on
+/// the recognizer struct and stands outside every match, so those locals name
+/// nothing there.
+fn api_needs_frame(call: ApiCall) -> bool {
+    return match call {
+        Text | CharPos | TokenStartCharPos => true,
+        RuleStack | InputText | TokenText | La | Lt => false,
+    };
+}
+
+fn api_name(call: ApiCall) -> String {
+    return match call {
+        Text => "getText()",
+        CharPos => "getCharPositionInLine()",
+        TokenStartCharPos => "_tokenStartCharPositionInLine",
+        RuleStack => "getRuleInvocationStack()",
+        InputText => "_input.getText()",
+        TokenText => "<token>.getText()",
+        La => "_input.LA()",
+        Lt => "_input.LT()",
+    };
+}
+
+/// The expression a recognizer-API call emits, or a loud error where the body
+/// cannot reach it. Every special goes through here, so neither question can be
+/// answered at one spelling and forgotten at another.
+fn api_expr(env: &JEnv, call: ApiCall, expr: String) -> Result<String, String> {
+    let wrong_host = match api_host(call) {
+        Parser => env.lexer,
+        Lexer => !env.lexer,
+        Either => false,
+    };
+    if wrong_host {
+        builtin::cold_path();
+        let carried = if env.lexer { "the parser's token stream" } else { "the lexer's match cursor" };
+        return Result::Err(`java2wado: '${api_name(call)}' reads ${carried}, which this body has no access to`);
+    }
+    if api_needs_frame(call) && env.in_members {
         builtin::cold_path();
         return Result::Err(
-            `java2wado: '${*what}' reads the parser's token stream, which a lexer body has no access to`,
+            `java2wado: @members: '${api_name(call)}' reads the match window, which a member method stands outside of`,
         );
     }
     return Result::Ok(expr);
@@ -470,17 +526,17 @@ fn emit_call(
 /// belongs to, whether the body may reach it) holds however it is written.
 fn emit_recognizer_call(env: &JEnv, name: &String, args_w: &String) -> Result<String, String> {
     if *name == "getText" {
-        return match_window_expr(env, name, if env.lexer {
+        return api_expr(env, ApiCall::Text, if env.lexer {
             lexer_matched_text_expr();
         } else {
             `${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`;
         });
     }
-    if env.lexer && *name == "getCharPositionInLine" {
-        return match_window_expr(env, name, lexer_cursor_column_expr());
+    if *name == "getCharPositionInLine" {
+        return api_expr(env, ApiCall::CharPos, lexer_cursor_column_expr());
     }
     if *name == "getRuleInvocationStack" {
-        return parser_api_expr(env, name, `${env.this_bind}.rule_stack()`);
+        return api_expr(env, ApiCall::RuleStack, `${env.this_bind}.rule_stack()`);
     }
     check_member_call_reachable(env, name)?;
     return Result::Ok(`${env.this_bind}.${to_snake_case(name)}(${*args_w})`);
@@ -594,16 +650,16 @@ fn emit_member_call(
     }
     if meth == "getText" {
         if name_is(&m.recv, &"_input") {
-            return parser_api_expr(env, &"_input.getText()", `${env.this_bind}.input_text()`);
+            return api_expr(env, ApiCall::InputText, `${env.this_bind}.input_text()`);
         }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-        return parser_api_expr(env, &"<token>.getText()", `${env.this_bind}.token_text(${r})`);
+        return api_expr(env, ApiCall::TokenText, `${env.this_bind}.token_text(${r})`);
     }
     if meth == "LA" && name_is(&m.recv, &"_input") {
-        return parser_api_expr(env, &"_input.LA()", `${env.this_bind}.la(${*args_w})`);
+        return api_expr(env, ApiCall::La, `${env.this_bind}.la(${*args_w})`);
     }
     if meth == "LT" && name_is(&m.recv, &"_input") {
-        return parser_api_expr(env, &"_input.LT()", `${env.this_bind}.lt(${*args_w})`);
+        return api_expr(env, ApiCall::Lt, `${env.this_bind}.lt(${*args_w})`);
     }
     if meth == "equals" {
         if raw_args.is_empty() {
@@ -669,8 +725,8 @@ fn name_expr(
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
-    if env.lexer && *name == "_tokenStartCharPositionInLine" {
-        return match_window_expr(env, name, lexer_token_start_column_expr());
+    if *name == "_tokenStartCharPositionInLine" {
+        return api_expr(env, ApiCall::TokenStartCharPos, lexer_token_start_column_expr());
     }
     return match resolve_name(env, name) {
         Local => Result::Ok(*name),

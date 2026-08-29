@@ -46,24 +46,43 @@ fn is_wado_reserved(name: &String) -> bool {
     };
 }
 
-/// Every name a generated parse function binds that a `.g4` identifier can also
-/// reach. A binding named after one shadows it with the matched value, so the
-/// rest of the alternative reads a token where it meant the parser, the value
-/// channel, or the lookahead.
+/// The names a generated recognizer function binds that a `.g4` identifier can
+/// also reach: the parse fn's parameters and the locals its body opens. They are
+/// declared here, and the emitters spell them from here, so the set below is the
+/// set in the generated code rather than a second list kept beside it.
 ///
-/// The list is the parse fn's own surface, read off the emitters rather than
-/// collected as each collision turned up: its parameters — the recognizer
-/// handle `p`, the caller-FOLLOW mask `follow`, an LR rule's precedence
-/// `min_prec` — and the locals its body opens, the value channel `vals` and the
-/// multi-alt dispatch's `kind`. `lx` is the lexer's handle, held to the same
-/// rule so the two recognizers answer alike.
-///
-/// A name added to a parse fn from here on should be underscore-led, as
+/// A name added from here on should be underscore-led instead, as
 /// `_rule_start_tok` and `_lr_acc` are: ANTLR's `NameStartChar` admits no
 /// underscore, so such a name is unreachable from a grammar by construction and
-/// needs no entry at all.
+/// needs no declaration at all.
+pub global PARSER_HANDLE: String = "p";
+
+/// The lexer handle in emitted lexer-action calls (`lx.emit(...)`): the
+/// `&mut Lexer` parameter of the generated `apply_<rule>_actions`.
+pub global LEXER_HANDLE: String = "lx";
+
+/// The value-struct local every rule that emits a value channel binds.
+pub global VALS_LOCAL: String = "vals";
+
+/// A left-recursive rule's precedence parameter, which `$_p` reads.
+pub global MIN_PREC_LOCAL: String = "min_prec";
+
+/// The lookahead a multi-alt rule's dispatch reads before choosing.
+pub global DISPATCH_KIND_LOCAL: String = "kind";
+
+/// The caller-FOLLOW mask parameter, threaded when `emit_follow` is on.
+pub global FOLLOW_PARAM: String = "follow";
+
+/// Whether a name is one of them. A binding named after one shadows it with the
+/// matched value, so the rest of the alternative reads a token where it meant
+/// the parser, the value channel, or the lookahead.
 fn is_generated_local(name: &String) -> bool {
-    return *name matches { "p" | "lx" | "vals" | "min_prec" | "kind" | "follow" };
+    return *name == PARSER_HANDLE
+        || *name == LEXER_HANDLE
+        || *name == VALS_LOCAL
+        || *name == MIN_PREC_LOCAL
+        || *name == DISPATCH_KIND_LOCAL
+        || *name == FOLLOW_PARAM;
 }
 
 /// Escape an identifier that would collide with a Wado reserved word or a

@@ -37,6 +37,7 @@ use {
     follow_sep,
     elements_match,
 } from "./gen_util.wado";
+use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, str_lit } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
@@ -161,7 +162,7 @@ use { rebind_op_field, non_greedy_static_undecided, peel_repeat_body_label } fro
 /// `follow_yields` in `runtime/follow.wado`.
 fn add_follow_param(f: &mut FnSpec) {
     f.add_param_spec(ParamSpec {
-        name: "follow",
+        name: FOLLOW_PARAM,
         type_str: "&List<List<i32>>",
         default_value: Option::Some("&EMPTY_FOLLOW"),
     });
@@ -2135,7 +2136,7 @@ fn gen_rule_entry_wrapper(
     let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&"p", &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, &"&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
     // just `_parse_X(p, follow)` and let `min_prec` default — uniform for
     // LR and non-LR targets. Omitted entirely when the grammar has no
@@ -2248,7 +2249,7 @@ fn gen_parse_fn_simple_named(
 
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&"p", &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
@@ -2301,13 +2302,13 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&"p", &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
     f.set_return_type(&rule_result_type());
     f.emit_begin(w);
-    w.line(&"let kind = p.peek_kind();");
+    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     let mut firsts: List<String> = [];
     for let alt of &rule.alternatives {
@@ -2442,7 +2443,7 @@ fn gen_parse_fn_named(
 
                     let mut f = FnSpec::new(&helper_name);
                     add_parser_super_effect(&mut f, ctx);
-                    f.add_param(&"p", &"&mut Parser");
+                    f.add_param(&PARSER_HANDLE, &"&mut Parser");
                     if ctx.emit_follow() {
                         add_follow_param(&mut f);
                     }
@@ -2491,7 +2492,7 @@ fn gen_parse_fn_named(
         let atom_name = `${*fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
         add_parser_super_effect(&mut f, ctx);
-        f.add_param(&"p", &"&mut Parser");
+        f.add_param(&PARSER_HANDLE, &"&mut Parser");
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
@@ -2563,7 +2564,7 @@ fn gen_parse_fn_named(
     } else {
         let mut f = FnSpec::new(fn_name);
         add_parser_super_effect(&mut f, ctx);
-        f.add_param(&"p", &"&mut Parser");
+        f.add_param(&PARSER_HANDLE, &"&mut Parser");
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
@@ -2674,7 +2675,7 @@ fn gen_multi_alt_body(
     }
     let depth = find_needed_depth(&all_pos_sets);
 
-    w.line(&"let kind = p.peek_kind();");
+    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt_index = non_lr_indices[i];
@@ -3210,7 +3211,7 @@ fn gen_lr_fn(
     let rk = rule_kind_const(&rule.name);
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&"p", &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
@@ -6904,7 +6905,7 @@ fn gen_multi_alt_body_alt(
     non_lr_indices: &List<i32>,
     fn_name: &String,
 ) {
-    w.line(&"let kind = p.peek_kind();");
+    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];

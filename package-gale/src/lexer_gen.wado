@@ -715,6 +715,26 @@ pub fn lexer_rule_route(
     return LexerRuleRoute::Matcher;
 }
 
+/// Whether the first-char dispatch calls `rule`'s own matcher.
+///
+/// Exactly the rules the route leaves to their own matcher: everything else is
+/// reached another way — a keyword through its carrier's reclassification, a
+/// fixed literal through the shared matcher, a fragment inlined or called by
+/// name — and dispatching it a second time would run it twice or, where the
+/// shortcut records no `best_act`, drop what the rule carries. Derived from the
+/// route rather than re-deciding it, so a shortcut added there is one the
+/// dispatch already knows about.
+fn lexer_rule_is_dispatched(
+    rule: &LexerRule,
+    lexer_rules: &List<LexerRule>,
+    keywords: &List<KeywordInfo>,
+    lit_tokens: &List<LitToken>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+) -> bool {
+    return lexer_rule_route(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) matches { Matcher };
+}
+
 /// Whether `rule` gets its own `try_` matcher.
 fn lexer_rule_has_match_fn(
     rule: &LexerRule,
@@ -3346,17 +3366,6 @@ fn literal_duplicate_const(
     return null;
 }
 
-/// Whether the shared literal matcher already covers this rule's text.
-fn is_literal_duplicate(
-    rule: &LexerRule,
-    all_rules: &List<LexerRule>,
-    lit_tokens: &List<LitToken>,
-    grammar_opts: &List<GrammarOption>,
-    grammar_ci: bool,
-) -> bool {
-    return literal_duplicate_const(rule, all_rules, lit_tokens, grammar_opts, grammar_ci) matches { Some(_) };
-}
-
 /// Sentinel for the keyword-length min-finding loop below: larger than
 /// any realistic lexer keyword, so the first real length replaces it.
 global KEYWORD_LEN_SENTINEL: i32 = 9999;
@@ -4201,11 +4210,8 @@ fn build_mode_try_calls(
         }
     }
     for let rule of lexer_rules {
-        if !rule.is_fragment
-            && !rule.is_virtual
-            && rule.mode == mode
-            && !is_keyword_rule_name(&rule.name, keywords)
-            && !is_literal_duplicate(rule, lexer_rules, lit_tokens, grammar_opts, grammar_ci) {
+        if rule.mode == mode
+            && lexer_rule_is_dispatched(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) {
             let mut call = build_rule_try_call(
                 rule,
                 lexer_rules,
