@@ -24,6 +24,9 @@ use crate::wir::{
 /// defined functions have already been registered with their `WirFuncId`.
 pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 
+/// The `$canonical_inspectable_base` vtable slot a `fn(..)^Inspect` stub reads.
+pub const CANONICAL_INSPECT_SLOT: &str = "inspect";
+
 /// A declared type that has no WIR registration yet.
 ///
 /// Expected during `register_types`, where the caller takes `placeholder` and
@@ -212,7 +215,7 @@ fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, Typ
         if func.is_dead {
             continue;
         }
-        if let Some((_, arity, return_type)) = func.fn_canonical_dispatch() {
+        if let Some((arity, return_type)) = func.fn_canonical_dispatch() {
             set.insert((arity, return_type));
         }
     }
@@ -487,7 +490,7 @@ impl<'a> WirContext<'a> {
         let supertype = if is_inspectable {
             let callback_fn_type_id = self.get_or_create_canonical_callback_fn_type();
             fields.push(WirField {
-                name: "inspect".to_string(),
+                name: CANONICAL_INSPECT_SLOT.to_string(),
                 ty: WirType::Ref {
                     type_id: callback_fn_type_id,
                     nullable: false,
@@ -551,7 +554,7 @@ impl<'a> WirContext<'a> {
                 mutable: false,
             },
             WirField {
-                name: "inspect".to_string(),
+                name: CANONICAL_INSPECT_SLOT.to_string(),
                 ty: WirType::Ref {
                     type_id: callback_fn_type_id,
                     nullable: false,

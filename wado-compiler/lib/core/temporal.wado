@@ -121,30 +121,30 @@ impl Ord for ZonedDateTime;
 // Display — ISO 8601 / RFC 3339 stringification.
 //
 // The format specifier's precision selects how many sub-second digits to print
-// (truncated, not rounded). With no precision given, `Display` (`${x}`) prints
-// whole seconds and the alternate form (`${x:#}`) prints milliseconds. `Inspect`
-// (`${x:?}`) is left as the auto-derived structural form.
+// (truncated, not rounded). With no precision given, `${x}` prints whole
+// seconds and `${x:#}` milliseconds. `Inspect` (`${x:?}`) is left as the
+// auto-derived structural form.
 
 impl Display for Instant {
     fn fmt(&self, f: &mut Formatter) {
-        if f.alternate {
-            let digits = resolve_fraction_digits(f, 3);
-            f.pad(render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z"));
-            return;
-        }
-        let digits = resolve_fraction_digits(f, 0);
+        let digits = resolve_fraction_digits(f, default_fraction_digits(f));
         f.pad(render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z"));
     }
 }
 
 impl Display for ZonedDateTime {
     fn fmt(&self, f: &mut Formatter) {
-        if f.alternate {
-            format_zoned(self, f, 3);
-            return;
-        }
-        format_zoned(self, f, 0);
+        format_zoned(self, f, default_fraction_digits(f));
     }
+}
+
+/// Sub-second digits when the spec sets no precision: milliseconds under the
+/// alternate form, whole seconds otherwise.
+fn default_fraction_digits(f: &Formatter) -> i32 {
+    if f.alternate {
+        return 3;
+    }
+    return 0;
 }
 
 /// Resolve the formatter's precision into a sub-second digit count in `0..=9`,
@@ -241,9 +241,9 @@ fn format_fraction(nanoseconds: u32, digits: i32) -> String {
     return `.${padding}${value_str}`;
 }
 
-/// Render a `ZonedDateTime` for `Display`. Only fixed UTC offsets
-/// are supported; an IANA zone name traps, because resolving its offset needs
-/// a time-zone database this module does not bundle.
+/// Render a `ZonedDateTime` for `Display`. Only fixed UTC offsets are
+/// supported; an IANA zone name traps, because resolving its offset needs a
+/// time-zone database this module does not bundle.
 fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
     let digits = resolve_fraction_digits(f, default_digits);
     let offset = parse_fixed_offset(&zdt.time_zone);

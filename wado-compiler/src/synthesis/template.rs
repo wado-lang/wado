@@ -41,8 +41,8 @@ pub(super) struct FormatStdlibNames {
     pub formatter_fq: FqTypeName,
     /// In the order [`Align`] names them.
     pub alignment_cases: [EnumCase; 3],
-    /// Keyed by kind and by whether the spec asked for the alternate (`#`) form.
-    traits: Vec<(FormatKind, bool, FormatTrait)>,
+    /// Keyed by kind: `#` sets a `Formatter` field, it does not pick a trait.
+    traits: Vec<(FormatKind, FormatTrait)>,
 }
 
 #[derive(Clone, Debug)]
@@ -71,83 +71,16 @@ impl FormatStdlibNames {
             name: items.trait_fq(item),
             method: items.trait_method_name(item).to_string(),
         };
-        // `#` is a `Formatter` field, not a trait choice, so both entries of a
-        // kind name the same trait; the pair keeps the lookup total.
         let traits = vec![
-            (
-                FormatKind::Display,
-                false,
-                format_trait(CompilerItem::Display),
-            ),
-            (
-                FormatKind::Display,
-                true,
-                format_trait(CompilerItem::Display),
-            ),
-            (
-                FormatKind::Fixed,
-                false,
-                format_trait(CompilerItem::Display),
-            ),
-            (FormatKind::Fixed, true, format_trait(CompilerItem::Display)),
-            (
-                FormatKind::Inspect,
-                false,
-                format_trait(CompilerItem::Inspect),
-            ),
-            (
-                FormatKind::Inspect,
-                true,
-                format_trait(CompilerItem::Inspect),
-            ),
-            (
-                FormatKind::Binary,
-                false,
-                format_trait(CompilerItem::Binary),
-            ),
-            (FormatKind::Binary, true, format_trait(CompilerItem::Binary)),
-            (FormatKind::Octal, false, format_trait(CompilerItem::Octal)),
-            (FormatKind::Octal, true, format_trait(CompilerItem::Octal)),
-            (
-                FormatKind::LowerHex,
-                false,
-                format_trait(CompilerItem::LowerHex),
-            ),
-            (
-                FormatKind::LowerHex,
-                true,
-                format_trait(CompilerItem::LowerHex),
-            ),
-            (
-                FormatKind::UpperHex,
-                false,
-                format_trait(CompilerItem::UpperHex),
-            ),
-            (
-                FormatKind::UpperHex,
-                true,
-                format_trait(CompilerItem::UpperHex),
-            ),
-            (
-                FormatKind::LowerExp,
-                false,
-                format_trait(CompilerItem::LowerExp),
-            ),
-            (
-                FormatKind::LowerExp,
-                true,
-                format_trait(CompilerItem::LowerExp),
-            ),
-            (
-                FormatKind::UpperExp,
-                false,
-                format_trait(CompilerItem::UpperExp),
-            ),
-            (
-                FormatKind::UpperExp,
-                true,
-                format_trait(CompilerItem::UpperExp),
-            ),
+            (FormatKind::Display, format_trait(CompilerItem::Display)),
+            (FormatKind::Fixed, format_trait(CompilerItem::Display)),
+            (FormatKind::Inspect, format_trait(CompilerItem::Inspect)),
+            (FormatKind::Binary, format_trait(CompilerItem::Binary)),
+            (FormatKind::Octal, format_trait(CompilerItem::Octal)),
+            (FormatKind::LowerHex, format_trait(CompilerItem::LowerHex)),
+            (FormatKind::UpperHex, format_trait(CompilerItem::UpperHex)),
+            (FormatKind::LowerExp, format_trait(CompilerItem::LowerExp)),
+            (FormatKind::UpperExp, format_trait(CompilerItem::UpperExp)),
         ];
         assert_formatter_layout(type_table);
         Self {
@@ -163,16 +96,13 @@ impl FormatStdlibNames {
     }
 
     pub fn format_trait(&self, spec: Option<&TemplateFormatSpec>) -> &FormatTrait {
-        let (kind, alternate) = match spec {
-            Some(spec) => (spec.kind, spec.alternate),
-            None => (FormatKind::Display, false),
-        };
+        let kind = spec.map_or(FormatKind::Display, |spec| spec.kind);
         &self
             .traits
             .iter()
-            .find(|(k, alt, _)| *k == kind && *alt == alternate)
-            .expect("every (kind, alternate) pair names a trait")
-            .2
+            .find(|(k, _)| *k == kind)
+            .expect("every format kind names a trait")
+            .1
     }
 
     /// The `Alignment` case for `align`, defaulting to right as the stdlib does.

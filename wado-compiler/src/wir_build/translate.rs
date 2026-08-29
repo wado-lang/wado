@@ -614,12 +614,10 @@ fn register_inspect_wrapper(
 #[allow(clippy::needless_pass_by_value)] // signature mirrors the param-name plumbing in translate_function_bodies
 fn build_fn_canonical_dispatch_body(
     ctx: &mut WirContext<'_>,
-    trait_kind: crate::nir::FnDispatchTrait,
     self_param_name: String,
     formatter_param_name: String,
     self_box_type_id: Option<TypeId>,
 ) -> Option<Vec<WirInstr>> {
-    use crate::nir::FnDispatchTrait;
     use crate::wir::{WirAbstractHeapType, WirType};
 
     // No inspectable canonical struct was ever registered → the stub is
@@ -630,10 +628,6 @@ fn build_fn_canonical_dispatch_body(
         heap_type: WirAbstractHeapType::Struct,
         nullable: true,
     };
-    let field_name = match trait_kind {
-        FnDispatchTrait::Inspect => "inspect",
-    };
-
     // When the boxing pass rewrote `&fn(...)` to `Box<fn(...)>`, the
     // self parameter holds a wrapper struct whose `.value` field carries
     // the actual closure ref. Unwrap before refcasting.
@@ -687,7 +681,7 @@ fn build_fn_canonical_dispatch_body(
             type_id: callback_fn_type_id.clone(),
             func_ref: Box::new(WirInstr::StructGet {
                 type_id: base_type_id.clone(),
-                field_name: field_name.to_string(),
+                field_name: super::context::CANONICAL_INSPECT_SLOT.to_string(),
                 expr: Box::new(WirInstr::LocalGet {
                     name: typed_self.clone(),
                     result_ty: WirType::Ref {
@@ -839,7 +833,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         // through `CanonicalClosure_K` — rather than translating it. Skipping
         // string-matching post-pass keeps name-format knowledge
         // confined to `name.rs` and `synthesis::traits`.
-        if let Some((trait_kind, _arity, _return_type)) = tir_func.fn_canonical_dispatch() {
+        if tir_func.fn_canonical_dispatch().is_some() {
             let self_param_name = tir_func
                 .params
                 .first()
@@ -863,7 +857,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             let _ = type_table;
             let body = build_fn_canonical_dispatch_body(
                 ctx,
-                trait_kind,
                 self_param_name,
                 formatter_param_name,
                 self_box_type_id,

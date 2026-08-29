@@ -19,8 +19,8 @@ use crate::token::Span;
 
 /// Body a per-functor format impl gets.
 enum FunctorFmtBody {
-    /// `f.write_alt_str("<signature>", "<source>")` — `|i32| -> i32` plainly,
-    /// `|x: i32| (x + 1)` under the alternate flag.
+    /// The signature `|i32| -> i32`, or the source `|x: i32| (x + 1)` under
+    /// the alternate flag.
     SignatureOrSource,
     /// `self.<target trait>::<target method>(f)` — follows the delegation chain.
     Delegate(CompilerItem),
@@ -750,14 +750,8 @@ impl ClosureLowerer {
         }
     }
 
-    /// Synthesize the per-functor format impls for a single functor, one per
-    /// entry in [`CLOSURE_FORMAT_TRAITS`]. Each takes
-    /// `(&self: &__Closure_N, f: &mut Formatter)`. `Inspect` writes the
-    /// signature, or the source constant when `f.alternate` is set; `Display`
-    /// delegates to it, so `{f}` shows the signature and `{f:#}` / `{f:#?}` the
-    /// source.
-    /// `ClosureCallSiteLowerer` retargets the Fn-keyed template call to the
-    /// matching impl here; standard DCE drops the unreferenced ones.
+    /// Synthesize one `(&self: &__Closure_N, f: &mut Formatter)` impl per
+    /// [`CLOSURE_FORMAT_TRAITS`] entry; DCE drops the unreferenced ones.
     fn generate_functor_format_methods(
         &mut self,
         struct_name: &str,
@@ -1682,11 +1676,12 @@ impl ClosureCallSiteLowerer<'_> {
         };
     }
 
-    /// Redirect a `fn(..)^{Inspect,Display}` call on a specialised closure
-    /// local to the per-functor impl. Both shapes must be redirected: `Display`
-    /// delegates through `Inspect::inspect`, which would trap the canonical
-    /// stub's `ref.cast`. The rewritten
-    /// `FunctionRef` takes the *functor's* module, where the impl was lowered.
+    /// Redirect a [`CLOSURE_FORMAT_TRAITS`] call on a specialised closure local
+    /// to `__Closure_N^<Trait>::<method>` in the functor's own module, keeping
+    /// the trait and method. Left alone, the Fn-keyed dispatch stub would
+    /// `ref.cast` the devirtualised `&__Closure_N` receiver to the canonical
+    /// inspectable base and trap — `Display` included, since it delegates
+    /// through `Inspect::inspect`.
     fn try_redirect_inspect_to_functor(&self, receiver: &mut TirExpr, func: &mut FunctionRef) {
         let info = match &func.method_info {
             Some(info) => info,
@@ -1698,13 +1693,6 @@ impl ClosureCallSiteLowerer<'_> {
         let Some(base_trait) = info.base_trait_name() else {
             return;
         };
-        // Retarget any format-trait call on a directly-known closure literal to
-        // the matching per-functor impl (`__Closure_N^<Trait>::<method>`), which
-        // takes `&__Closure_N` directly. This redirect is trait-agnostic: it
-        // keeps the same trait/method, so the delegation (`Display → Inspect`)
-        // lives in the functor impls like every other type. Without it the Fn-keyed dispatch stub would `ref.cast` the
-        // devirtualised `&__Closure_N` receiver to the canonical inspectable
-        // base and trap. Membership uses the shared `CLOSURE_FORMAT_TRAITS` set.
         let is_format_trait = {
             let items = self.type_table.compiler_items();
             CLOSURE_FORMAT_TRAITS

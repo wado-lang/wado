@@ -14,10 +14,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirLocal,
-    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
-    TirTypeParam, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm,
+    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField, TirTypeParam, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -3948,6 +3948,7 @@ fn generate_newtype_fmt_fn(
 /// being bodyless it bypasses the inliner and the other body walkers. WIR build
 /// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the real body,
 /// a `call_ref` through the matching `CanonicalClosure_K`'s vtable slot.
+#[allow(clippy::too_many_arguments)]
 fn generate_fn_inspect_fn(
     receiver: &FqTypeName,
     arity: usize,
@@ -3955,35 +3956,8 @@ fn generate_fn_inspect_fn(
     ref_fn_type: TypeId,
     fmt_type: TypeId,
     span: Span,
-    inspect_trait: &crate::name::FqTraitName,
-    inspect_method: &str,
-) -> TirFunction {
-    generate_fn_canonical_dispatch_stub(
-        FnDispatchTrait::Inspect,
-        inspect_trait,
-        inspect_method,
-        receiver,
-        arity,
-        return_type,
-        ref_fn_type,
-        fmt_type,
-        span,
-    )
-}
-
-/// Body of [`generate_fn_inspect_fn`]: the stub carries its trait label and
-/// the `FnDispatchTrait` that `FunctionKind` records.
-#[allow(clippy::too_many_arguments)]
-fn generate_fn_canonical_dispatch_stub(
-    trait_kind: FnDispatchTrait,
     trait_name: &crate::name::FqTraitName,
     method_name: &str,
-    receiver: &FqTypeName,
-    arity: usize,
-    return_type: TypeId,
-    ref_fn_type: TypeId,
-    fmt_type: TypeId,
-    span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, trait_name, method_name);
     let qualified_name = method_info.to_mangled_name();
@@ -4001,11 +3975,7 @@ fn generate_fn_canonical_dispatch_stub(
     // Bodyless functions are naturally skipped by the inliner and other
     // TIR-body walkers, so no `InlineHint::Never` is needed.
     func.body = None;
-    func.kind = FunctionKind::FnCanonicalDispatch {
-        trait_kind,
-        arity,
-        return_type,
-    };
+    func.kind = FunctionKind::FnCanonicalDispatch { arity, return_type };
     func
 }
 

@@ -46,9 +46,8 @@ struct FunctionAnalysis {
     callees: IndexSet<FunctionId>,
     /// Effect calls: (`interface_name`, `op_name`)
     effect_calls: IndexSet<(String, String)>,
-    /// Pending `__Closure_N^Inspect::inspect` edges. Added to the
-    /// graph by `apply_inspect_edges` after the inspectable-signature set is
-    /// known.
+    /// Pending `__Closure_N^Inspect::inspect` edges, added to the graph by
+    /// `apply_inspect_edges` once the inspectable-signature set is known.
     pending_inspects: Vec<PendingInspectEdge>,
     /// `(module-path-joined-by-::, name)` pairs that this function reads via
     /// `GlobalVarGet`. Globals only written to (via `GlobalVarSet`) are not
@@ -203,26 +202,25 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
 /// Function reachability via call-graph BFS. Implementation detail of
 /// [`analyze_dce`]; not called directly anywhere else.
 ///
-/// Consumes the call graph (and its pending inspect edges) built in
-/// the single AST walk of [`build_analysis_graph`]; mutates the graph
-/// by adding the gated per-functor `__Closure_N^Inspect` edges
-/// once the inspectable-signature set is known.
+/// Consumes the call graph (and its pending inspect edges) built in the single
+/// AST walk of [`build_analysis_graph`]; mutates the graph by adding the gated
+/// per-functor `__Closure_N^Inspect` edges once the inspectable-signature set
+/// is known.
 fn compute_function_reachability(
     project: &mut NirPackage,
     descriptors: &[FunctionRef],
     graph: &mut AnalysisGraph,
 ) -> IndexSet<usize> {
     // Phase 2a: compute the provisional reachable set from the raw graph
-    // (without per-functor `__Closure_N^Inspect` edges). This is
-    // what determines whether a `:?`/`:#?` call site is actually live.
+    // (without per-functor `__Closure_N^Inspect` edges). This is what
+    // determines whether a `:?` / `:#?` call site is actually live.
     let reachable_v1 = compute_reachable_from_entries(project, &graph.call_graph);
 
-    // Phase 2b: derive the inspectable `(arity, ret)` set from the
-    // reachable functions only, then add the gated inspect edges to the
-    // call graph. The per-functor impls themselves don't issue any
-    // `Fn^Inspect` calls (they just write per-literal strings), so
-    // the inspectable set is stable under this expansion — no fixpoint
-    // iteration is needed.
+    // Phase 2b: derive the inspectable `(arity, ret)` set from the reachable
+    // functions only, then add the gated inspect edges to the call graph. The
+    // per-functor impls themselves don't issue any `Fn^Inspect` calls (they
+    // just write per-literal strings), so the inspectable set is stable under
+    // this expansion — no fixpoint iteration is needed.
     let inspectable =
         collect_inspectable_signatures_from_reachable(project, descriptors, &reachable_v1);
     let items = project.type_table.borrow();
@@ -839,7 +837,7 @@ fn apply_inspect_edges(
             continue;
         };
         for edge in edges {
-            if sigs.inspect.contains(&edge.key) {
+            if sigs.contains(&edge.key) {
                 callees.insert(FunctionId::Method(MethodName::new(
                     edge.closure_module.clone(),
                     edge.struct_name.clone(),
@@ -854,10 +852,7 @@ fn apply_inspect_edges(
 /// Every `(arity, return_type)` signature receiving a `fn(..)^Inspect` call.
 /// Gates the per-functor root marking from `ClosureToCanonical`: with no real
 /// caller those impls cannot be invoked indirectly.
-#[derive(Default)]
-struct InspectableSignatures {
-    inspect: IndexSet<(usize, TypeId)>,
-}
+type InspectableSignatures = IndexSet<(usize, TypeId)>;
 
 /// Compute the inspectable `(arity, return_type)` set from the bodies
 /// of *reachable* functions only. Restricting the scan to live code
@@ -871,6 +866,11 @@ fn collect_inspectable_signatures_from_reachable(
 ) -> InspectableSignatures {
     let mut sigs = InspectableSignatures::default();
     let type_table = &*project.type_table.borrow();
+    // The registry, not a literal: a stdlib rename flows through, and no user
+    // trait named `Inspect` can pass for the compiler item.
+    let inspect_name = type_table
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Inspect);
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let func_id = function_id_for(&func);
@@ -878,7 +878,7 @@ fn collect_inspectable_signatures_from_reachable(
             continue;
         }
         if let Some(body) = func.body.as_ref() {
-            scan_inspect_signatures_block(body, type_table, descriptors, &mut sigs);
+            scan_inspect_signatures_block(body, type_table, descriptors, inspect_name, &mut sigs);
         }
     }
     sigs
@@ -921,6 +921,7 @@ fn scan_inspect_signatures_block(
     body: &Body,
     type_table: &TypeTable,
     descriptors: &[FunctionRef],
+    inspect_name: &str,
     sigs: &mut InspectableSignatures,
 ) {
     let mut stack = vec![NodeRef::Block(body.root)];
@@ -940,9 +941,8 @@ fn scan_inspect_signatures_block(
                 ..
             } = type_table.get(recv_type)
             {
-                let key = (params.len(), *return_type);
-                if trait_name == "Inspect" {
-                    sigs.inspect.insert(key);
+                if trait_name == inspect_name {
+                    sigs.insert((params.len(), *return_type));
                 }
             }
         }
@@ -1372,14 +1372,12 @@ impl<'a> DceWalker<'a> {
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             )));
 
-        // Per-functor `__Closure_N^Inspect` impls only
-        // need to stay alive when their matching `fn(..)^Inspect`
-        // dispatch stub is reachable — tracked independently per trait so a
-        // program that never prints a closure of that shape doesn't keep it (nor its
-        // per-literal source-string constant) alive. The gating set isn't
-        // known yet (it's derived from the first reachable-set computation),
-        // so record a pending edge here for `apply_inspect_edges` to
-        // resolve later.
+        // A per-functor `__Closure_N^Inspect` impl only needs to stay alive
+        // when its matching `fn(..)^Inspect` dispatch stub is reachable, so a
+        // program that never prints a closure of that shape keeps neither it
+        // nor its per-literal source-string constant. The gating set is derived
+        // from the first reachable-set computation, so record a pending edge
+        // for `apply_inspect_edges` to resolve later.
         if let ResolvedType::Function {
             params,
             return_type,

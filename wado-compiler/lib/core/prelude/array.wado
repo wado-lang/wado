@@ -261,18 +261,10 @@ internal fn write_seq_inspect<T: Inspect>(
     f.write_char(']');
 }
 
-/// The alternate (`#`) rendering `write_seq_inspect` hands off to: each element
-/// on its own indented line; `marker` appends a `...` line when elements are
-/// dropped. Separate from its caller so neither shape carries the other s
-/// branches.
-internal fn write_seq_inspect_alt<T: Inspect>(
-    repr: &Array<T>,
-    start: i32,
-    end: i32,
-    f: &mut Formatter,
-    marker: bool,
-    limit: i32,
-) {
+/// The alternate (`#`) rendering [`write_seq_inspect`] hands off to: one
+/// element per indented line, `marker` appending a `...` line for the dropped
+/// ones.
+fn write_seq_inspect_alt<T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
     if start >= end {
         f.write_str(&"[]");
         return;

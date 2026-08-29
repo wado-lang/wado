@@ -7,14 +7,18 @@
 //
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
-
 use { Display, Inspect } from "core:prelude/traits.wado";
 use { String, StrCharIter } from "core:prelude/string.wado";
 use { Option } from "core:prelude/types.wado";
 use { unreachable } from "core:rt";
-/// Bytes a leading sign occupies in rendered numeric content — what zero
-/// padding is inserted after.
-fn leading_sign_byte_len(first: u8) -> i32 {
+
+/// Bytes the leading sign occupies in the `len` bytes at `at` — where zero
+/// padding starts, so `-42` pads to `-0042` and not `00-42`.
+fn leading_sign_byte_len(s: &String, at: i32, len: i32) -> i32 {
+    if len == 0 {
+        return 0;
+    }
+    let first = s.get_byte_unchecked(at);
     if first == b'-' || first == b'+' {
         return 1;
     }
@@ -140,7 +144,7 @@ impl Formatter {
         if self.zero_pad {
             // Zero padding goes after the sign, so the value reads as one
             // figure: `-0000042`, never `0000-42`.
-            let sign_len = if content.is_empty() { 0 } else { leading_sign_byte_len(content.get_byte_unchecked(0)) };
+            let sign_len = leading_sign_byte_len(&content, 0, content.len());
             self.buf.push_str_range_unchecked(&content, 0, sign_len);
             self.write_char_n('0', padding);
             self.buf.push_str_range_unchecked(&content, sign_len, content.len());
@@ -196,11 +200,7 @@ impl Formatter {
         if self.zero_pad {
             // Zero padding goes after the sign, so the value reads as one
             // figure: `-0000042`, never `0000-42`.
-            let sign_len = if content_bytes > 0 {
-                leading_sign_byte_len(self.buf.get_byte_unchecked(start_pos));
-            } else {
-                0;
-            };
+            let sign_len = leading_sign_byte_len(self.buf, start_pos, content_bytes);
             let at = start_pos + sign_len;
             self.shift_right(at, content_bytes - sign_len, padding);
             self.write_fill_at(at, padding, '0');

@@ -2565,15 +2565,12 @@ fn convert_function_kind(kind: &tir::FunctionKind) -> nir::FunctionKind {
         tir::FunctionKind::ValueCopy { type_id } => {
             nir::FunctionKind::ValueCopy { type_id: *type_id }
         }
-        tir::FunctionKind::FnCanonicalDispatch {
-            trait_kind,
-            arity,
-            return_type,
-        } => nir::FunctionKind::FnCanonicalDispatch {
-            trait_kind: convert_fn_dispatch_trait(*trait_kind),
-            arity: *arity,
-            return_type: *return_type,
-        },
+        tir::FunctionKind::FnCanonicalDispatch { arity, return_type } => {
+            nir::FunctionKind::FnCanonicalDispatch {
+                arity: *arity,
+                return_type: *return_type,
+            }
+        }
     }
 }
 
@@ -2596,12 +2593,6 @@ fn convert_return_abi(abi: &tir::ReturnAbi) -> nir::ReturnAbi {
             result_types: result_types.clone(),
             field_names: field_names.clone(),
         },
-    }
-}
-
-fn convert_fn_dispatch_trait(kind: tir::FnDispatchTrait) -> nir::FnDispatchTrait {
-    match kind {
-        tir::FnDispatchTrait::Inspect => nir::FnDispatchTrait::Inspect,
     }
 }
 

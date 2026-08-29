@@ -17,8 +17,7 @@ stays eager (a body for every type kind) — gating it would demand a discovery
 mechanism for `${v:?}` over an unbounded type param (whose concrete reference
 only materializes at monomorphize) with no offsetting code-size benefit.
 
-`Display` is **not** total (revised
-2026-07-15). `Display` is never auto-derived for a struct, variant, or generic
+`Display` is **not** total: it is never auto-derived for a struct, variant, or generic
 container — a type has a human-facing string representation only if someone
 wrote `impl Display`, so `${x}` on such a type is a compile error (use `${x:?}`
 for debug output), and `T: Display` is a real obligation. The two exceptions
@@ -93,8 +92,8 @@ would need a discovery mechanism for `${v:?}` over an unbounded type param —
 whose concrete `T^Inspect` reference only materializes at monomorphize, after
 synthesis — for no code-size gain.
 
-`Display` is the `display` policy — deliberately **not** total
-(revised 2026-07-15). A human-facing string representation is not something the
+`Display` is the `display` policy — deliberately **not** total. A
+human-facing string representation is not something the
 compiler can invent structurally the way it can a debug dump: for a struct
 there is no canonical field layout, delimiter, or ordering to pick, so `Display`
 is left to the author. `${x}` on a type with no `Display` is a compile error
@@ -111,7 +110,7 @@ compiler derives it eagerly:
   (`peel_transparent_newtype`), covering every transparent format trait. Only
   `Inspect` is overridden per newtype (for the `as Name` tag).
 
-`${x:#}` needs the same `Display` (manual, enum-synthesized, or
+`${x:#}` needs that same `Display` (manual, enum-synthesized, or
 newtype-inherited), so the alternate display of a `Display`-less type is
 likewise a compile error. The demand
 `on_bound` traits are _not_ total (a `fn`-typed field, a field without a
@@ -286,8 +285,7 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
   generated `Inspect` for every type), but removes the freedom to introduce a
   genuinely non-debug-formattable type later without revisiting the totality
   short-circuit.
-- `Display`'s non-totality (revised 2026-07-15) is a source-compatibility
-  break: every `${x}` and `String::push_display` that relied on the old
+- `Display`'s non-totality is a source-compatibility break: every `${x}` and `String::push_display` that relied on the old
   Display-delegates-to-Inspect fallback for a struct / variant / container now
   fails to compile and must switch to `${x:?}` or add a manual `impl Display`.
   Accepted as the point of the change — a silent debug fallback is what made
@@ -328,8 +326,7 @@ derivation.
   generically, erasing most of the saving). Neither buys enough against a total
   trait whose universal availability is a feature. Rejected in favor of eager
   generation plus total obligation semantics.
-- **Keep `Display` total (auto-derived, delegating to `Inspect`).** The status
-  quo before 2026-07-15. Ergonomic — `${x}` always worked — but `T: Display`
+- **Keep `Display` total (auto-derived, delegating to `Inspect`).** Ergonomic — `${x}` always worked — but `T: Display`
   was then satisfied by every type, so it certified nothing: `push_display` and
   every `Display`-bounded API silently accepted debug-only types, and the
   Display body was a redundant echo of `Inspect`. Rejected: making `Display`

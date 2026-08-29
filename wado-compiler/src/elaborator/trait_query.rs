@@ -84,10 +84,9 @@ impl OnBoundTrait {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
 
-    /// `Inspect` is total over every type: the bound always holds and the body
-    /// is generated eagerly. `Display` is not — a `T: Display` bound is checked
-    /// against a real impl.
-    pub(super) fn is_format(self) -> bool {
+    /// Holds for every type, so the bound is satisfied before any body exists.
+    /// `Display` is not: a `T: Display` bound is checked against a real impl.
+    pub(super) fn is_total(self) -> bool {
         matches!(self, Self::Inspect)
     }
 
@@ -947,7 +946,7 @@ impl TypeSystem {
         let Some(trait_) = self.compiler_trait_def(tr.compiler_item()) else {
             return false;
         };
-        if tr.is_format() {
+        if tr.is_total() {
             return true;
         }
         if tr == OnBoundTrait::Default {
@@ -1087,7 +1086,7 @@ impl TypeSystem {
     ) -> bool {
         let on_bound = self.on_bound_of(trait_);
 
-        if on_bound.is_some_and(OnBoundTrait::is_format) {
+        if on_bound.is_some_and(OnBoundTrait::is_total) {
             return true;
         }
 

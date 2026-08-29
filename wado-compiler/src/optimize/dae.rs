@@ -60,9 +60,8 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
 }
 
 /// Closure-functor methods whose `is_closure_call` pin is lifted:
-/// `__Closure_N::__call` and the
-/// `^Inspect` impls. Each is reached only through a synthesised
-/// function-table wrapper, and `register_closure_wrappers` /
+/// `__Closure_N::__call` and its `^Inspect` impl. Each is reached only through
+/// a synthesised function-table wrapper, and `register_closure_wrappers` /
 /// `register_inspect_wrapper` adapt that wrapper to the shrunken signature.
 fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     let mut keys: IndexSet<FnKey> = IndexSet::default();
@@ -77,8 +76,8 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
             keys.insert(id);
         }
     }
-    // Sweep for synthesised `__Closure_N^Inspect` impls, which have
-    // no field on `ClosureFunctor` to key off. The trait is matched against the
+    // Sweep for synthesised `__Closure_N^Inspect` impls, which have no field on
+    // `ClosureFunctor` to key off. The trait is matched against the
     // compiler-item registry — the same source `generate_functor_format_methods`
     // stamps into `trait_name` — so a stdlib rename flows through and no user
     // trait named `Inspect` can shadow it.
