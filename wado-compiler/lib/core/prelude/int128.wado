@@ -226,43 +226,34 @@ impl u128 {
             panic("u128 division by zero");
         }
 
-        // Quick return if dividend < divisor
-        if *self < *divisor {
-            return [u128::zero(), *self];
-        }
-
-        // Quick return if dividend == divisor
-        if *self == *divisor {
-            return [
-                u128::one(),
-                u128::zero(),
-            ];
-        }
-
-        // Binary long division
         let mut quotient = u128::zero();
         let mut remainder = u128::zero();
-        let one = u128::one();
 
-        // Process each bit from high to low (bit 127 down to bit 0)
-        let mut i: i32 = 127;
-        while i >= 0 {
-            // remainder = remainder << 1
-            remainder = remainder << 1;
-
-            // Get bit i of dividend and set bit 0 of remainder
-            let bit = self.get_bit(i);
-            if bit {
-                remainder = remainder | one;
+        if self.high == 0 && divisor.high == 0 {
+            // Both operands inside 64 bits is the common case — rendering a
+            // decimal divides by ten once per digit, a unit conversion by a
+            // small constant — and one native division answers it.
+            quotient = u128::from_u64(self.low / divisor.low);
+            remainder = u128::from_u64(self.low % divisor.low);
+        } else if *self < *divisor {
+            remainder = *self;
+        } else if *self == *divisor {
+            quotient = u128::one();
+        } else {
+            // Binary long division, one bit at a time from 127 down.
+            let one = u128::one();
+            let mut i: i32 = 127;
+            while i >= 0 {
+                remainder = remainder << 1;
+                if self.get_bit(i) {
+                    remainder = remainder | one;
+                }
+                if remainder >= *divisor {
+                    remainder = remainder - *divisor;
+                    quotient = quotient.set_bit(i);
+                }
+                i -= 1;
             }
-
-            // If remainder >= divisor, subtract and set quotient bit
-            if remainder >= *divisor {
-                remainder = remainder - *divisor;
-                quotient = quotient.set_bit(i);
-            }
-
-            i -= 1;
         }
 
         return [quotient, remainder];
