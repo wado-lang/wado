@@ -286,7 +286,8 @@ fn collect_and_validate(
             // existed.
             let before = candidates.len();
             candidates.retain(|_, info| {
-                info.field_index != u32::MAX && is_sroa_eligible_inner_type(info.inner_type_id)
+                info.field_index != u32::MAX
+                    && is_sroa_eligible_inner_type(info.inner_type_id, &type_table)
             });
             if candidates.len() == before {
                 break;
@@ -331,9 +332,18 @@ fn candidate_info_for(
     })
 }
 
-/// A wrapper field that has no Wasm value cannot become a parameter.
-fn is_sroa_eligible_inner_type(type_id: TypeId) -> bool {
-    type_id != TypeTable::UNIT && type_id != TypeTable::NEVER
+/// A wrapper field that has no Wasm value cannot become a parameter: the call
+/// site would pass a local codegen never declares.
+///
+/// What decides is the type the field ends at, not the shape around it. A
+/// reference is transparent at the WIR level, so `&()` leaves nothing on the
+/// stack just as `()` does, and a newtype stands for whatever it wraps.
+fn is_sroa_eligible_inner_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    let mut ty = type_table.get_ultimate_base_type(type_id);
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(ty) {
+        ty = type_table.get_ultimate_base_type(*inner);
+    }
+    ty != TypeTable::UNIT && ty != TypeTable::NEVER
 }
 
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
