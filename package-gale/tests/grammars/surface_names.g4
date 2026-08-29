@@ -17,8 +17,8 @@ prog : one | two | three ;
 one : P KIND { p.emit("one") } ;
 two : VALS FOLLOW MIN_PREC { p.emit("two") } ;
 
-// `min_prec` is a parameter only of a left-recursive rule's fn, so binding
-// `MIN_PREC` inside one is what puts the two names in the same scope.
+// `min_prec` is a parameter only of a left-recursive rule's fn, so `expr`
+// binding `MIN_PREC` is what puts the two names in one scope.
 three : expr { p.emit("three") } ;
 expr : expr PLUS expr | MIN_PREC ;
 
