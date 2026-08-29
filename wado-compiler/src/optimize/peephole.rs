@@ -10,6 +10,7 @@ use crate::nir::NirFunction;
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
+use super::aggregate_forward::AggregateForwardRule;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
 use super::elide_box_local::build_elide_box_local;
@@ -18,7 +19,7 @@ use super::gate::{FunctionGate, GatedPass};
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
-use super::string_push::{ConstAsciiPushRule, ShortPushStrRule, resolve_ctx};
+use super::string_push::{AppendFuseRule, ConstAsciiPushRule, ShortPushStrRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
 
 /// Run the unified peephole rule set over every function body. Returns whether
@@ -39,6 +40,9 @@ pub(super) fn run_peephole(
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_ctx = resolve_ctx(project);
     let const_ascii_push_rule = push_ctx.as_ref().and_then(ConstAsciiPushRule::new);
+    // Ordered after the two rules above within one session: the run it fuses is
+    // what their per-byte expansion produces.
+    let append_fuse_rule = push_ctx.as_ref().and_then(AppendFuseRule::new);
     let push_rule = push_ctx.map(ShortPushStrRule::new);
     // Environment-free constant folding shares the session. It needs the
     // program-wide CTFE callee map and the type table; the per-function `env`
@@ -50,6 +54,7 @@ pub(super) fn run_peephole(
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
+    let aggregate_forward_rule = AggregateForwardRule;
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let tuple_projection_rule = TupleProjectionRule;
 
@@ -133,7 +138,8 @@ pub(super) fn run_peephole(
             rules.push(slot_temp_sroa_rule);
         }
         rules.extend([
-            &elide_rule as &dyn Rule,
+            &aggregate_forward_rule as &dyn Rule,
+            &elide_rule,
             &const_fold_rule,
             &branch_prune_rule,
             &tuple_projection_rule,
@@ -143,6 +149,9 @@ pub(super) fn run_peephole(
         }
         if let Some(const_ascii_push_rule) = const_ascii_push_rule.as_ref() {
             rules.push(const_ascii_push_rule);
+        }
+        if let Some(append_fuse_rule) = append_fuse_rule.as_ref() {
+            rules.push(append_fuse_rule);
         }
         let mut engine = Engine::new(body, &mut buffers, locals);
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm

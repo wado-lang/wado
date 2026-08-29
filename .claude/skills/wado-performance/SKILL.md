@@ -9,7 +9,8 @@ Speed of the **compiled guest Wasm** (what wasmtime runs), not the native
 compiler — that is `profiling-wado-compiler`.
 
 Loop: profile the hot function → read its WIR for what it allocates/copies per
-iteration → change one thing → A/B same-machine best-of-three → keep or revert.
+iteration → change one thing → A/B both arms in one session, plus the WIR diff of
+the hot function → keep or revert (§5 says which evidence decides).
 
 ## 1. Profile
 
@@ -26,9 +27,12 @@ jitdump` gives instruction-level (store- vs compute-bound), see
 `docs/jitdump-profiling.md`.
 
 **Dev-profile inflation:** a `cargo run` `wado` JITs guest code near-release but
-runs the wasmtime runtime / GC / allocator at dev speed, so profiles over-weight
-allocation/GC frames — read percentages as relative and confirm a GC/alloc win
-on a release build.
+runs the wasmtime runtime / GC / allocator at dev speed (~4–5× slower), so
+profiles over-weight allocation/GC frames — read percentages as relative and
+**size any GC or allocation win by its release number, not the dev multiple**. A
+flat-CST rewrite that cut a benchmark ~3× on dev gained ~1.47× on release,
+because release GC was only ~⅓ of wall-clock to begin with. Pure compute does not
+inflate, so a compute-bound win carries over intact.
 
 **Rule out a super-linear pass before blaming GC** — that same inflation makes an
 algorithmic blow-up read as GC-bound; sweep input size (faster-than-linear growth
@@ -60,17 +64,44 @@ for `Array<T>`-backed `String` / `List`).
 
 ## 3. WasmGC cost facts
 
-- **Small-object churn is the GC cost**, not allocation — the `copying` collector
-  re-traces live objects every cycle. Fix with fewer, flatter objects (a flat
-  column store over a node tree). Measure the share with `--collector null` (no
-  GC; it leaks, so drive a fixed iteration count) vs `--collector copying`.
+- **The live set is the cost, not the allocation count.** The `copying` collector
+  traces what survives a cycle; an object that dies before the next one is never
+  copied, however many there were. Cutting _transient_ allocations therefore moves
+  nothing — a compiler pass that removed thousands of per-token `Box<i32>` allocs
+  measured within noise under `copying` (and −0.7 ms/iter under `null`). Chase the
+  footprint, not the volume. The same rule retires "iterate by index to stop
+  `for x of &list` boxing": the boxes die immediately.
+- **Module-lifetime GC data is a tax on every collection.** A decoded table held
+  in a global as one `List<i32>` per state (~7.4K permanently live objects) made
+  _identical_ hot-function wasm run 3–6× slower purely from the resident graph;
+  flattening it to offset/count columns fixed it. A resident 160 KB flat
+  `List<i32>` costs ~+0.9 ms/parse, the 7,400-list shape ~+2.4 ms. **Prefer flat
+  columns over nested lists, and don't build what nothing reads.** Measure the GC
+  share with `--collector null` (it leaks, so drive a fixed iteration count) vs
+  `--collector copying`.
+- **`with_capacity` zero-fills.** `List::with_capacity(n)` is an
+  `array.new_default`, so an over-sized arena pays for every slot it never uses —
+  once badly enough to turn a 2× faster build into a 4× slower one. Growing from
+  `[]` by doubling is not the fix either: it zero-fills ~2.4× more than a
+  reasonable pre-size. Size it about right, or grow.
 - **GC-array access is bounds-checked, no unchecked variant.** A lookup table in
   a GC array adds a checked load per access — it lost to plain arithmetic.
+- **`array.copy` is fast; leave it alone.** It has a fast path that does not call
+  out to the runtime, and it beats a hand-written loop from a couple of bytes on
+  — the loop pays the bounds check above on both the get and the set of every
+  byte. Neither hand-roll it nor contort an algorithm to avoid it
+  (`dead-ends.md`).
 - **Constant `/` and `%` are cheap** (Cranelift magic-multiply, `x/k` and `x%k`
   fused) — don't trade a divide for extra multiplies.
+- **A compare cascade is not a dispatch problem.** Cranelift lowers a short
+  `else if` chain competitively, and a `match` over it (a `br_table`) adds an
+  indirect branch: two separate rewrites to jump tables measured flat and
+  slightly slower. Such a frame is usually call-frequency-bound, not
+  dispatch-bound — cut the calls, not the branch.
 - **Write into the caller's buffer, not a temp.** `` `{v}` `` allocates a
   throwaway `String` and copies it in, per value; `buf.push_display(&v)` skips
-  both. `reserve()` before a push burst pays one capacity check, not N.
+  both. A run of adjacent `push` / `push_str` calls is fused into one capacity
+  check by `nir/string_push`, so write the appends plainly and let it batch them.
 - **`internal_raw_data()` / returning `Array<T>` by value is a copy API** — for a
   single read use `get_unchecked` / `set_byte_unchecked`.
 
@@ -86,22 +117,55 @@ likelihood when the slow path is always taken once reached.
 
 ## 5. Measurement
 
-Only relative numbers carry signal. A/B one change same-machine best-of-three,
-back to back — never against another machine or session (a "regression" is often
-a slower VM that hour; re-measure the unchanged reference to check). The recorded
-scores are produced on a fixed machine, so a branch measures its own two builds
-and quotes those. Isolate the phase — A/B a float-format change on `fts`, not on
-a serialize benchmark that dilutes it.
+Only relative numbers carry signal. **A/B both arms in the same session**, best of
+three or four, alternating and with the order swapped once — the first run of a
+session reads high, so a fixed order silently taxes whichever arm goes second.
+Run on an **idle** host, nothing else building: an A/B taken beside a compiling
+test suite has put both arms inside each other's spread and flipped their
+ranking. Nothing in a number says whether its host was idle, so
+`benchmark/README.md` is a sanity check on the arm you just built, never the
+control for it — even on the machine that produced it; a HEAD build has measured
+615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
+A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it.
+
+**What decides adoption**, in priority order:
+
+1. **The benchmark moves** → keep it.
+2. **The WIR A/B diff shows fewer instructions** → keep it, benchmark flat or not.
+   The benchmark simply does not reach them.
+3. **The benchmark is flat and the diff is qualitative** — a different sequence,
+   with no reading of it that says which is faster → keep whichever emits the
+   **smaller wasm**. This is the only question wasm size answers.
+4. **Anything else** → drop it, and write it up in `dead-ends.md`.
+
+Only a WIR diff decides case 2. Diff the two `wado dump -O2` outputs and read
+what the hot function issues per iteration — a run of N capacity checks collapsed
+to one, a call gone from a loop body. Nothing else establishes "fewer
+instructions": not the dump's line count, and not the wasm byte count.
+
+**Neither wasm size nor dump size correlates with speed.** Smaller output is
+routinely slower and larger output routinely faster — the bytes are mostly code
+that never runs, and what does run is priced by what the loop executes. The three
+quantities move independently: the append fusion grew `wado dump -O2` on
+syntax-highlight 8.3% (a fused write unparses its offset as an expression) and
+shrank the `-Os` binary 1.5%, while the thing that justified it was a +8%
+benchmark and a diff showing one less capacity check per key. Size is its own
+budget (`mise run report-wasm-size`); as evidence about speed it is only the
+tiebreaker at rank 3.
 
 ## 6. Lessons
 
-Reverted anti-wins, kept so they aren't retried: a GC-array digit table (checked
-load per digit), two-digit arithmetic (the divides were already fused), forcing
-inlining (loop bloat). Stop when the floor is the representation — a store-bound
-loop on an `Array<T>`-backed `String` is near-optimal short of leaving GC arrays.
+`dead-ends.md` (next to this file) is the record: every optimization measured
+and dropped, with the A/B that killed it and what it generalizes to. **Read it
+before starting**, and add an entry whenever an A/B comes back flat or negative
+— a dead end nobody wrote down is one somebody re-measures.
+
+Stop when the floor is the representation — a store-bound loop on an
+`Array<T>`-backed `String` is near-optimal short of leaving GC arrays.
 
 ## See also
 
+- `dead-ends.md` — what has already been measured and dropped.
 - `profiling-wado-compiler` — the native `wado` binary (host side).
 - `benchmark` — run the suite / wasm-size report.
 - `optimizer-debug` — a NIR/WIR pass producing _wrong_ code, not just slow.

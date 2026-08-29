@@ -43,8 +43,10 @@ fn walk_body() -> String {
     let wir_package = result.wir_package.as_ref().expect("wir retained");
     let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
 
+    // No closing quote: `sroa_param` may have left the surviving definition
+    // under a `$scalar` clone name, which does not change what is asserted here.
     let start = wir_text
-        .find("fn \"match_place_scrutinee_test.wado/walk\"")
+        .find("fn \"match_place_scrutinee_test.wado/walk")
         .expect("walk function in WIR");
     let rest = &wir_text[start..];
     let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());

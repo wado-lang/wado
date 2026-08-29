@@ -9,6 +9,10 @@ three parts:
 - **Tried and didn't pan out** — measured dead-ends and non-levers, kept so we
   don't repeat them.
 
+Wado-wide performance rules — the WasmGC cost model, what decides adoption, and
+the measured dead-ends — live in the `wado-performance` skill; this file keeps
+what is true of Gale specifically.
+
 Read with [`AGENTS.md`](./AGENTS.md) (dev-cycle essentials) and
 [`antlr4-compatibility.md`](./antlr4-compatibility.md) (prediction / codegen
 design). Design of the flat CST lives in
@@ -79,8 +83,8 @@ Result vs the old node tree (dev host, `benchmark-syntax-highlight`):
 | GC portion          |      21.5 |        4.1 | **~5.2× less** |
 
 On the **release** host the same change is only **~1.47×** (5.06 → 3.45 ms/iter,
-`benchmark/README.md`) — the dev multiple is GC-inflated (see the standing rule
-below). Still enough to move Gale from 4th to 2nd place, ahead of native
+`benchmark/README.md`) — the dev multiple is GC-inflated (the `wado-performance`
+skill's §1). Still enough to move Gale from 4th to 2nd place, ahead of native
 tree-sitter and Lezer.
 
 The residual ~4.1 ms GC is highlight's own captures/HTML allocation (the profile
@@ -110,49 +114,22 @@ already exact, so size this on a keyword-dense or mode-bearing grammar.
 
 ### Standing rules (measured)
 
-- **Live-set is the cost, not allocation count.** Under the copying collector,
-  cost = the live set traced/copied each cycle; an object that dies before the
-  next collection is never copied, so it is free regardless of how many there
-  are. So cutting _transient_ allocations does not move wall-clock — confirmed on
-  the compiler-side `wir/elide_adjacent_box_locals` pass, which removed thousands
-  of per-token `Box<i32>` allocs (−0.7 ms/iter under `null`) but was **within
-  noise under `copying`**. The lever is the live footprint, not allocation volume.
-- **Module-lifetime GC-reachable data is a per-collection tax.** The decoded
-  `ATN_SIM` global once held one inner `List<i32>` per state (~7.4K permanently
-  live objects for SQLite); the copying collector re-traced them on **every**
-  cycle, and identical wasm for the hot functions ran ~3–6× slower purely from
-  that resident graph (`sqlite_parse` 2.4 → 4.3 ms/iter, #1475). Controlled: a
-  resident 160 KB flat `List<i32>` costs ~+0.9 ms/parse; the 7,400-list ATN shape
-  cost ~+2.4 ms. Fix shipped by flattening `state_cont_*` to offset/count columns
-  and gating the LR fixpoint behind `needs_scan_atn`. **Prefer flat columns over
-  nested lists, and don't decode/build what the grammar never reads.** The
-  residual cost of even flat resident data is a Wado-runtime GC characteristic,
-  tracked outside Gale.
-- **Benchmark on an idle host, and only against an arm measured in the same
-  window.** An A/B of the continuation probe run beside a compiling test suite
-  put both arms at 4.65–4.97 MB/s; idle, the same two commits measured 4.83–5.36
-  and their ranking flipped. Worse, one commit measured `sqlite_parse` at 2.302
-  and 2.918 ms/iter a few hours apart on the same idle host — a 27% swing for
-  identical code, while the `sqlparser-rs` reference row stayed at its baseline,
-  so the reference does not certify the window either. A number in this file is
-  evidence about the commits it was taken beside, not an absolute to compare a
-  later run against; re-measure both arms rather than one.
-- **A GC-bound win measured on the dev host overstates the release win.** The
-  dev-profile runtime / GC / allocator run unoptimized (~4–5× slower, the
-  measurement note above), so GC is a far larger share of dev wall-clock than
-  release, and eliminating it looks correspondingly bigger. Concrete: the flat
-  CST cut `syntax_highlight` ~3× on dev (GC ~5×) but only ~1.47× on release,
-  because release GC was only ~⅓ of wall-clock to begin with. **Size any
-  GC-focused optimization by its release number, not the dev multiple** — and
-  conversely, a compute-bound win (e.g. the highlight `classify` / render levers)
-  carries over to release largely intact, since the dev host does not inflate
-  pure compute.
+The four rules these benchmarks established — live set over allocation count,
+module-lifetime GC data as a per-collection tax, benchmark on an idle host
+against a same-window arm, and size a GC win by its release number — are Wado's,
+not Gale's, and live in the `wado-performance` skill with the evidence from here.
+
+What is Gale's: the decoded ATN is the module-lifetime data those rules are
+about. `state_cont_*` is flat offset/count columns and the LR fixpoint is gated
+behind `needs_scan_atn` for exactly that reason (#1475) — a change that puts one
+`List` per ATN state back into a global will cost 3–6× on `sqlite_parse` however
+fast its own code is.
 
 ### Live profile (`syntax_highlight`, 1928 leaf samples @1 ms, 2026-07)
 
 A dated snapshot — the `push` rows have shrunk since the runtime pushers went
 to one capacity check per row/token; re-profile before sizing a new lever off
-this table. The dev profile is noisy per-frame (see the measurement note);
+this table. The dev profile is noisy per-frame;
 mid-size frames swing ±several points across runs, so read the buckets, not
 the individual rows.
 
@@ -344,7 +321,7 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   that are left.
 
   This borrows a list that is already a root, so it adds nothing to the live set
-  — unlike sharing its _elements_, which cost 3× ([`benchmark/perf.md`](../benchmark/perf.md)).
+  — unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md)).
 
 ## Tried and didn't pan out
 
@@ -417,11 +394,12 @@ ATN literal is a measured problem.)
 
 ### Measured non-levers
 
-- **Inlining hot methods / per-method micro-opt.** No wall-time change from
-  forcing inlining of small hot functions; the cursor spike went further —
-  raising the inline threshold _worsened_ runtime (bloats hot loops: sharp
-  14→15 cliff, 18 → 55 ms). (Why small-call inlining rarely helps on wasmtime:
-  the `wado-performance` skill.)
+General findings — forcing inlining, raising the inline threshold, `br_table`
+over a compare cascade, `String::grow` pre-sizing, index loops in place of
+`for x of &List<i32>` — were all first measured here and now live in the
+`wado-performance` skill and its `dead-ends.md`. What stays is bound to Gale's
+own shapes:
+
 - **Re-sizing `TokenStream::new`'s arrays** (~8.5% self-time). The cost is
   inherent WasmGC `array.new_default` zero-fill across 10 parallel `List<i32>`
   arrays, each pre-sized to `chars/4`. Measured fill for the benchmark input:
@@ -431,43 +409,15 @@ ATN literal is a measured problem.)
   within jitter. Leave the `chars/4` pre-size.
 - **Kind-set membership** (`_kind_set_*`, ~3%). A `k matches { TK_… | … }` test
   over the large SQLite keyword set, called from scan dispatch and lookahead
-  gates. These lower to a Wasm `br_table`, yet the self-time is unchanged from
-  the old compare-cascade — so kind-set is **call-frequency-bound, not
-  dispatch-bound**; a perfect-hash/bitset would not help (Cranelift already
-  lowers the cascade competitively). A pure-compute frame the dev host does _not_
-  inflate, so its release share is a touch higher.
-- **HTML-output `String` pre-size** (`String::grow`, 9% dev self-time). The
-  `highlight_html` output grows once past its `source.len() * 5` reserve (HTML is
-  ~6× source for keyword-dense SQL). Bumping to `* 7` removes the grow but a
-  release A/B (best-of-5) was **identical** (3.90 vs 3.91 MB/s): `String::grow` is
-  an allocation/zero-fill cost the dev host inflates, so its release share is
-  ~1–2%, below the `syntax_highlight` benchmark's noise. A live example of the
-  dev-vs-release standing rule — unlike the CST-column pre-size, which lands a
-  clear ~6% because `sqlite_parse` is build-only. Left at `* 5`.
-
-- **Run-at-a-time HTML escaping** (2026-07). `highlight_html` escapes char by char;
-  batching the stretches between escapable bytes into one `push_str_range_unchecked`
-  measured **flat** (median 2.93 vs 2.90 ms/iter). The captures are dense — ~2900 over
-  13366 chars, so the mean unescaped stretch is ~4.6 chars and the per-run bookkeeping
-  costs what the batching saves. Input-shape-bound: sparse captures would answer
-  differently.
-
-- **Keyword classifier: fold-once + `match` first-char dispatch** (2026-08).
-  Rewrote `classify_keyword`'s per-length first-char dispatch from the linear
-  `eq_ignore_ascii_case` else-if chain to a fold-once
-  `chars[start].to_ascii_lowercase()` feeding a `match` (br_table), dropping
-  each arm's now-redundant case-insensitive `kc = 0` guard. Dev A/B best-of-3
-  measured a consistent slight **loss** (3.309 → 3.357 ms/iter,
-  `sqlite_parse`): the short compare chain predicts well, while the jump table
-  adds an indirect branch — same shape as the kind-set finding above (Cranelift
-  lowers compare cascades competitively; the frame is call-frequency-bound).
-  Reverted.
-
-- **Index loops instead of `for x of &List<i32>`** (2026-07). Iterating by reference
-  boxes every element; rewriting `follow_yields`'s membership scan and `classify`'s
-  `rule_stack` scan as index loops removes every box and measured **within noise** (won
-  1 of 3 paired rounds). Another instance of the live-set standing rule — the boxes die
-  immediately, so the collector never traces them.
+  gates. Lowering it to a `br_table` left self-time unchanged, so kind-set is
+  **call-frequency-bound, not dispatch-bound** — cut the calls, not the branch.
+  The same answer came back for `classify_keyword`'s first-char dispatch.
+- **Run-at-a-time HTML escaping** (2026-07). `highlight_html` escapes char by
+  char; batching the stretches between escapable bytes into one
+  `push_str_range_unchecked` measured **flat** (median 2.93 vs 2.90 ms/iter). The
+  captures are dense — ~2900 over 13366 chars, so the mean unescaped stretch is
+  ~4.6 chars and the per-run bookkeeping costs what the batching saves.
+  Input-shape-bound: sparse captures would answer differently.
 
 ## Correctness items with a performance flavor
 

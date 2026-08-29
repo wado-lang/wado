@@ -732,19 +732,26 @@ fn collect_alias_node(
     type_table: &TypeTable,
     out: &mut FnAliases,
 ) {
+    // The name a copy binds to. Its source is marked below, from every binding
+    // shape — a store into `x.f` publishes the object with no local to pair.
+    if let Some((dst, value)) = super::alias::copy_edge(body, node)
+        && let Some(ve) = value.as_expr()
+    {
+        mark_gc_alias_pair(body, Some(dst), ve, type_table, &mut out.locals);
+    }
     match node {
         NodeRef::Stmt(s) => {
             if let StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } =
                 &body.stmts[s].kind
                 && let Some(ve) = value.as_expr()
             {
-                mark_whole_gc_ref_copy_source(body, ve, type_table, &mut out.locals);
+                mark_gc_alias_pair(body, None, ve, type_table, &mut out.locals);
             }
         }
         NodeRef::Expr(e) => match &body.exprs[e].kind {
             ExprKind::Assign { value, .. } => {
                 if let Some(ve) = value.as_expr() {
-                    mark_whole_gc_ref_copy_source(body, ve, type_table, &mut out.locals);
+                    mark_gc_alias_pair(body, None, ve, type_table, &mut out.locals);
                 }
             }
             ExprKind::Unary {
@@ -822,21 +829,38 @@ fn collect_alias_operand(
     }
 }
 
-/// If `value` is a bare `Local` of GC-heap type — a whole-struct copy that
-/// (because the struct is a reference) shares the heap object with its
-/// source — record that source local as aliased. A deep value copy is
-/// wrapped in `copy_value(...)` (an `ExprKind::Call`), not a bare `Local`,
-/// so it does not match here.
-fn mark_whole_gc_ref_copy_source(
+/// Both ends of an aliasing binding. A GC struct is a reference, so `let b = a`
+/// and `let b = &mut a` leave two names for one heap object, and a write through
+/// either bypasses a scalar held under the other. A deep value copy is wrapped
+/// in `copy_value(...)` (an `ExprKind::Call`), so it does not match.
+fn mark_gc_alias_pair(
     body: &Body,
+    dst: Option<u32>,
     value: ExprId,
     type_table: &TypeTable,
     out: &mut IndexSet<u32>,
 ) {
-    if let ExprKind::Local { index, .. } = &body.exprs[value].kind
-        && is_gc_heap_type(body.exprs[value].type_id, type_table)
-    {
-        out.insert(*index);
+    let Some(src) = gc_alias_source(body, value, type_table) else {
+        return;
+    };
+    out.insert(src);
+    out.extend(dst);
+}
+
+/// The local `value` reads as a whole GC object, directly or through one borrow.
+fn gc_alias_source(body: &Body, value: ExprId, type_table: &TypeTable) -> Option<u32> {
+    let place = match &body.exprs[value].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } => inner.as_expr()?,
+        _ => value,
+    };
+    match &body.exprs[place].kind {
+        ExprKind::Local { index, .. } if is_gc_heap_type(body.exprs[place].type_id, type_table) => {
+            Some(*index)
+        }
+        _ => None,
     }
 }
 
@@ -1634,33 +1658,8 @@ fn bind_for_sync(
     {
         return (Vec::new(), value, Vec::new());
     }
-    let type_id = body.operand_type(value);
-    let tmp_idx = ctx.alloc_temp(type_id);
-    let tmp_name = ctx.temp_name(tmp_idx);
-    let let_sid = push_stmt(
-        body,
-        StmtKind::Let {
-            name: tmp_name.clone(),
-            local_index: tmp_idx,
-            is_mut: false,
-            is_reactive: false,
-            type_id,
-            value,
-            // The temp captures a fresh r-value, so no deep value-copy applies.
-            skip_value_copy: true,
-        },
-        span,
-    );
-    let read = push_expr(
-        body,
-        ExprKind::Local {
-            index: tmp_idx,
-            name: tmp_name,
-        },
-        type_id,
-        span,
-    );
-    (vec![let_sid], read.into(), vec![(tmp_idx, type_id)])
+    let (let_sid, read, tmp_idx, type_id) = bind_temp(body, value, ctx, span);
+    (vec![let_sid], read, vec![(tmp_idx, type_id)])
 }
 
 /// Whether `stmt` never falls through to the statement after it — a `loop`
@@ -1960,6 +1959,20 @@ fn hoist_operand_to_temp(
     ctx: &mut WalkCtx,
     span: crate::token::Span,
 ) -> (Operand, u32, TypeId) {
+    let (let_sid, read, tmp_idx, type_id) = bind_temp(body, value, ctx, span);
+    out.push(let_sid);
+    (read, tmp_idx, type_id)
+}
+
+/// Bind `value` to a fresh pooled temp, handing back the `let`, a read of it,
+/// and the temp's index and type. The temp captures a fresh r-value, so no
+/// deep value-copy applies.
+fn bind_temp(
+    body: &mut Body,
+    value: Operand,
+    ctx: &mut WalkCtx,
+    span: crate::token::Span,
+) -> (StmtId, Operand, u32, TypeId) {
     let type_id = body.operand_type(value);
     let tmp_idx = ctx.alloc_temp(type_id);
     let tmp_name = ctx.temp_name(tmp_idx);
@@ -1976,8 +1989,7 @@ fn hoist_operand_to_temp(
         },
         span,
     );
-    out.push(let_sid);
-    let local_e = push_expr(
+    let read = push_expr(
         body,
         ExprKind::Local {
             index: tmp_idx,
@@ -1986,7 +1998,7 @@ fn hoist_operand_to_temp(
         type_id,
         span,
     );
-    (local_e.into(), tmp_idx, type_id)
+    (let_sid, read.into(), tmp_idx, type_id)
 }
 
 /// Commit every scalar-canonical candidate to the field for an escape

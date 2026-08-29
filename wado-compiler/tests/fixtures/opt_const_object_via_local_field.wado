@@ -1,0 +1,40 @@
+// A constant aggregate stays globalizable when one of its fields arrives
+// through a local. `repr` is bound once to a constant array and read only
+// here, so `Blob { repr, len: 3 }` denotes the same object every iteration —
+// it belongs in a global, not in two allocations per turn of the loop.
+//
+// The shape is what SROA leaves: any pass that lifts a constant sub-object
+// into its own binding puts the aggregate into it, and globalization has to
+// see through that binding rather than give up at the `Local`.
+
+use { println, Stdout } from "core:cli";
+
+struct Blob {
+    repr: Array<u8>,
+    len: i32,
+}
+
+#[inline(never)]
+fn take(out: &mut List<i32>, b: &Blob) {
+    out.push(b.len + b.repr.len());
+}
+
+export fn run() with Stdout {
+    let mut acc: List<i32> = [];
+    for let mut i = 0; i < builtin::black_box(3); i += 1 {
+        let repr: Array<u8> = [1, 2, 3];
+        take(&mut acc, &Blob { repr: repr, len: 3 });
+    }
+    println(`${acc.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n",
+    "wir_expect:O2": [
+        "global global:opt_const_object_via_local_field.wado::__const_obj_1: ref null \"opt_const_object_via_local_field.wado//Blob\" = struct.new \"opt_const_object_via_local_field.wado//Blob\" { repr: array.new_fixed<u8>(1, 2, 3), len: 3 }"
+    ],
+    "wir_not_expect:O2": [
+        "repr = array.new_fixed<u8>(1, 2, 3)"
+    ]
+}

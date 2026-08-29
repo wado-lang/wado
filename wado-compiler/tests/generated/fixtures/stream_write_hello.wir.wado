@@ -64,6 +64,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:stream_write_hello.wado::__modules_initialized: bool = 0;
+global mut global:stream_write_hello.wado::__const_obj_0: ref null Array<u8> = ref.null none;
 
 fn "stream_write_hello.wado/run"() with Stdout {
     let packed_4: i64;
@@ -77,7 +78,6 @@ fn "stream_write_hello.wado/run"() with Stdout {
     let packed_27: i64;
     let rx_28: i32;
     let tx_29: i32;
-    let __sroa_data_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_write_hello.wado::__modules_initialized);
         cold_path;
@@ -87,10 +87,12 @@ fn "stream_write_hello.wado/run"() with Stdout {
     rx_5 = builtin::i32_wrap_i64(local.tee packed_4("wasi/stream-new"()));
     tx_6 = builtin::i32_wrap_i64(packed_4 >> 32_i64);
     "wasi/stream-drop-readable"(rx_5);
-    __sroa_data_repr = array.new_data<u8>("Hello
+    if ref.is_null(global:stream_write_hello.wado::__const_obj_0) {
+        global:stream_write_hello.wado::__const_obj_0 = array.new_data<u8>("Hello
 ");
+    }
     ptr_21 = "mem/realloc"(0, 0, 1, 6);
-    "core:rt/gc_array_to_memory"(__sroa_data_repr, 0, ptr_21, 6);
+    "core:rt/gc_array_to_memory"(global:stream_write_hello.wado::__const_obj_0, 0, ptr_21, 6);
     ptr_11 = builtin::i32_wrap_i64(local.tee packed_10(builtin::i64_extend_i32_s(ptr_21) | 25769803776_i64));
     len_12 = builtin::i32_wrap_i64(packed_10 >> 32_i64);
     "core:rt/cm_stream_write_drain"(tx_6, ptr_11, len_12, 1);
@@ -119,8 +121,8 @@ fn "stream_write_hello.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len_3: i32;
     let new_repr: ref Array<u8>;
+    let self_5: i32;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
@@ -133,12 +135,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let repr_29: ref Array<u8>;
     let len_35: i32;
     let ptr_36: i32;
-    len_3 = message.used;
+    self_5 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len_3 + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
-        builtin::array_set_u8(new_repr, len_3, 10);
-        len_18 = local.tee end_15(len_3 + 1) - 0;
+        new_repr = builtin::array_new<u8>(self_5 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_5);
+        builtin::array_set_u8(new_repr, self_5, 10);
+        len_18 = local.tee end_15(self_5 + 1) - 0;
         ptr_19 = "mem/realloc"(0, 0, 1, len_18);
         "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
         ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
@@ -147,7 +149,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_29 = message.repr;
-        len_35 = len_3 - 0;
+        len_35 = self_5 - 0;
         ptr_36 = "mem/realloc"(0, 0, 1, len_35);
         "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
         ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
@@ -161,12 +163,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b1: block {
-        l2: loop {
-            break_if b1 i >= len;
+    b2: block {
+        l3: loop {
+            break_if b2 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l2;
+            continue l3;
         };
     };
 }
@@ -190,16 +192,16 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 offset >= count;
+    b4: block {
+        l5: loop {
+            break_if b4 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b3 select i32((result >> 4) == 0, 1, (result & 15) != 0);
-            continue l4;
+            break_if b4 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l5;
         };
     };
 }
