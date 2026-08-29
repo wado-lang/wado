@@ -16,6 +16,8 @@ The timing matters too. With the Wasm Component Model and WASI 0.3 maturing, Wad
 
 No macros. The code you read is the code that runs, so the emitted WAT is something you can reason about by looking at the source.
 
+Code generation is not banned; it is kept outside the language. [Kiln](./wep-2026-04-12-kiln.md) runs a generator in a sandbox before name resolution and writes plain `.wado` to disk, so generated code is code you can read too — and a whole dialect of Wado can live outside the language without any tool having to learn it. What Wado refuses is the in-language kind: forms only the compiler can expand, that every tool must learn, whose expansion exists nowhere you can open.
+
 ### Readable without context switching
 
 Explicit over implicit: no implicit type conversions, no function overloading, no hidden dependencies. You should never have to jump to another file to know what a function does.

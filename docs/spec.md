@@ -4049,7 +4049,7 @@ Explicit type annotations prevent ambiguity and make dependencies clear, alignin
 
 See [WEP: Kiln](./wep-2026-04-12-kiln.md) and [WEP: Gale](./wep-2026-03-02-gale.md).
 
-A `use` clause whose source is a non-`.wado`, non-`.wasm` schema file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`) is processed by Kiln — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
+A `use` clause whose source is a non-`.wado`, non-`.wasm` input file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`, or a Wado dialect's own extension) is processed by Kiln — a code-generation pipeline that lowers the input to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
 
 ```wado
 // Gale generates a parser from an ANTLR4 grammar

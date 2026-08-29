@@ -310,7 +310,7 @@ The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::sema
 
 ## Kiln (Schema-Driven Code Generation)
 
-Kiln is the compiler's mechanism for turning external schemas (`.proto`, `.graphql`, `.g4`, `.wit`, custom IDLs) into `.wado` source. A **generator** is itself an ordinary Wado package that targets the `core:kiln/generator` world; the compiler builds it to a Wasm component, and the host (`wado-cli`) executes it via wasmtime to produce `.wado` source files. Invocations are content-addressed by their schema bytes, options, and the generator's source hash. See [WEP 2026-04-12: Kiln](./wep-2026-04-12-kiln.md).
+Kiln is the compiler's mechanism for turning an external input — a schema (`.proto`, `.graphql`, `.g4`, `.wit`, custom IDLs) or a Wado dialect — into `.wado` source. A **generator** is itself an ordinary Wado package that targets the `core:kiln/generator` world; the compiler builds it to a Wasm component, and the host (`wado-cli`) executes it via wasmtime to produce `.wado` source files. Invocations are content-addressed by their schema bytes, options, and the generator's source hash. See [WEP 2026-04-12: Kiln](./wep-2026-04-12-kiln.md).
 
 The compiler-side pieces live in `src/kiln/`:
 
