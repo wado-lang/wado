@@ -47,13 +47,12 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
 }
 
 /// Body-walk placeholder for a function / method / test. The
-/// combined walk records the signature facts (`fn_param_types`,
+/// body walk records the signature facts (`fn_param_types`,
 /// `fn_return_types`, `decl_type_params`, `function_effects`,
 /// `method_names`, …) and resolves the body for its side-effect fact
 /// recording, but no longer assembles the function's TIR — reify is the
-/// sole producer. The returned `TirFunction` flows only into the
-/// discarded `tir_module` of `resolve_module`, so a minimal shell with
-/// the right name + span is all callers need.
+/// sole producer. No caller reads the returned `TirFunction`, so a minimal
+/// shell with the right name + span satisfies the signature.
 fn placeholder_function(name: String, span: Span) -> TirFunction {
     TirFunction {
         module_source: ModuleSource::default(),
@@ -1968,7 +1967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a global variable declaration for its fact-recording side
     /// effects. Reify (`reify_global`) is the sole producer of the `TirGlobal`,
     /// re-emitting the initializer from the AST + recorded per-`AstId`
-    /// expression types, so the combined walk builds no TIR here.
+    /// expression types, so the body walk builds no TIR here.
     pub(super) fn resolve_global(&mut self, global_decl: &GlobalDecl) {
         let ty = self.resolve_type(&global_decl.ty);
 
@@ -2784,8 +2783,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // from the recorded facts (`method_impl_type_params`,
         // `method_names`, `fn_param_types`, `fn_return_types`,
         // `decl_type_params`, `function_effects`, the impl facts, …) + the
-        // AST. The combined walk's copy is discarded, so a minimal shell
-        // is all `resolve_module` needs.
+        // AST. No caller reads this return value, so a minimal shell
+        // satisfies the signature.
         Some(placeholder_function(func.name.clone(), func.span))
     }
 }

@@ -1,16 +1,6 @@
 //! Utility functions for the elaborator phase.
 
-use crate::tir::{PrimitiveType, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
-use crate::token::Span;
-
-/// The combined walk records facts and returns
-/// `TypeId`; reify is the sole TIR producer. The few combined-walk sites that
-/// hand an already-resolved operand to a reify-shared builder (which still
-/// takes a `TirExpr`) wrap the resolved type with this `Unit` sentinel — only
-/// its `type_id` / `span` are ever read.
-pub(super) fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Check if a positive integer literal value fits in the target integer type.
 /// Returns `Some(error_message)` if out of range, `None` if OK.

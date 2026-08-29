@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -828,5 +830,93 @@ fn print_highlights_text(filename: &str, highlights: &[DocumentHighlight]) {
             h.range.start.character + 1,
             highlight_kind_str(h.kind),
         );
+    }
+}
+
+pub async fn run_inlay_hints(filename: &str, json_output: bool) -> Result<(), CliExit> {
+    let prepared = prepare_query(filename).await?;
+    let hints = prepared
+        .engine
+        .inlay_hints(
+            &prepared.uri,
+            wado_lsp::Range::WHOLE_DOCUMENT,
+            &prepared.host,
+        )
+        .await;
+    let source = prepared
+        .engine
+        .get_document(&prepared.uri)
+        .expect("prepare_query opened the document");
+
+    if json_output {
+        print_inlay_hints_json(filename, &hints);
+    } else {
+        print_inlay_hints_text(source, prepared.engine.position_encoding(), &hints);
+    }
+
+    warn_on_compile_errors(&prepared.host, hints.is_empty());
+    Ok(())
+}
+
+fn inlay_hint_kind_str(kind: wado_lsp::InlayHintKind) -> &'static str {
+    match kind {
+        wado_lsp::InlayHintKind::Type => "type",
+        wado_lsp::InlayHintKind::Parameter => "parameter",
+    }
+}
+
+fn print_inlay_hints_json(filename: &str, hints: &[wado_lsp::InlayHint]) {
+    let json_hints: Vec<serde_json::Value> = hints
+        .iter()
+        .map(|h| {
+            let mut hint = json!({
+                "file": filename,
+                "position": { "line": h.position.line, "character": h.position.character },
+                "label": h.label,
+                "kind": inlay_hint_kind_str(h.kind),
+            });
+            // Absent, not null: the wire omits an unset padding flag, and this
+            // output is here to show what the client receives.
+            for (key, flag) in [
+                ("paddingLeft", h.padding_left),
+                ("paddingRight", h.padding_right),
+            ] {
+                if let Some(flag) = flag {
+                    hint[key] = flag.into();
+                }
+            }
+            hint
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&json_hints).unwrap());
+}
+
+/// Print every line that carries a hint, with the hints spliced in at the
+/// anchors the client would render them at.
+fn print_inlay_hints_text(
+    source: &str,
+    encoding: wado_lsp::PositionEncoding,
+    hints: &[wado_lsp::InlayHint],
+) {
+    if hints.is_empty() {
+        println!("No inlay hints.");
+        return;
+    }
+    let lines: Vec<&str> = source.lines().collect();
+    let mut by_line: BTreeMap<u32, Vec<&wado_lsp::InlayHint>> = BTreeMap::new();
+    for hint in hints {
+        by_line.entry(hint.position.line).or_default().push(hint);
+    }
+    for (index, mut anchored) in by_line {
+        let line = lines.get(index as usize).copied().unwrap_or_default();
+        let mut rendered = line.to_string();
+        // Right to left, so each splice leaves the offsets still to come valid.
+        anchored.sort_by_key(|h| Reverse(h.position.character));
+        for hint in anchored {
+            let byte =
+                wado_lsp::text::character_to_byte_offset(line, hint.position.character, encoding);
+            rendered.insert_str(byte, &format!("‹{}›", hint.label));
+        }
+        println!("{:>5} | {rendered}", index + 1);
     }
 }

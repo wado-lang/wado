@@ -1,6 +1,7 @@
 //! [`ModuleSemantics`] — per-module semantic facts (WEP 2026-05-26), one
 //! instance per loaded module that the per-module [`super::Elaborator`] takes
-//! for the length of `resolve_module` and every other phase borrows. Membership
+//! for the length of one pass over that module and every other phase borrows.
+//! Membership
 //! splits across four sub-structs, each in its own file so the "does this fit?"
 //! question that gates a new field stays reviewable.
 
@@ -16,6 +17,8 @@ pub(crate) use types::TypeAnnotations;
 
 use crate::ast::AstId;
 use crate::hashmap::IndexMap;
+use crate::symbol::Symbol;
+use crate::tir::TypeId;
 
 /// Per-module semantic facts. See the module-level documentation for the
 /// membership rules and ownership story.
@@ -31,6 +34,67 @@ pub(crate) struct ModuleSemantics {
     /// set per impl, which snapshot isolation gives and a flat map could not.
     /// Each value's `decls` / `imports` are cloned from the impl module.
     pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
+}
+
+/// The fact kinds [`crate::semantics::Semantics`] answers by `AstId`, and so
+/// routes to a module by.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum FactKind {
+    Reference,
+    LocalSymbol,
+    LocalType,
+    ExpressionType,
+    MethodDispatch,
+    Coercion,
+    Desugar,
+}
+
+/// A routed fact kind and the map it lives in, paired once: a query names a
+/// [`Fact`], so it cannot route by one kind and read another.
+#[derive(Clone, Copy)]
+pub(crate) struct Fact<V: 'static> {
+    pub(crate) kind: FactKind,
+    pub(crate) map: fn(&ModuleSemantics) -> &IndexMap<AstId, V>,
+}
+
+impl<V> Fact<V> {
+    const fn new(kind: FactKind, map: fn(&ModuleSemantics) -> &IndexMap<AstId, V>) -> Self {
+        Self { kind, map }
+    }
+
+    fn keys(self, sem: &ModuleSemantics) -> impl Iterator<Item = (AstId, FactKind)> + '_ {
+        (self.map)(sem).keys().map(move |id| (*id, self.kind))
+    }
+}
+
+impl ModuleSemantics {
+    pub(crate) const REFERENCES: Fact<AstId> =
+        Fact::new(FactKind::Reference, |sem| &sem.bindings.references);
+    pub(crate) const LOCAL_SYMBOLS: Fact<Symbol> =
+        Fact::new(FactKind::LocalSymbol, |sem| &sem.bindings.local_symbols);
+    pub(crate) const LOCAL_TYPES: Fact<TypeId> =
+        Fact::new(FactKind::LocalType, |sem| &sem.types.local_types);
+    pub(crate) const EXPRESSION_TYPES: Fact<TypeId> =
+        Fact::new(FactKind::ExpressionType, |sem| &sem.types.expression_types);
+    pub(crate) const METHOD_DISPATCH: Fact<types::MethodDispatch> =
+        Fact::new(FactKind::MethodDispatch, |sem| &sem.types.method_dispatch);
+    pub(crate) const COERCIONS: Fact<types::CoercionChoice> =
+        Fact::new(FactKind::Coercion, |sem| &sem.types.coercions);
+    pub(crate) const DESUGARS: Fact<types::DesugarKind> =
+        Fact::new(FactKind::Desugar, |sem| &sem.types.desugars);
+
+    /// Every fact this module's walk recorded that `Semantics` answers from —
+    /// the list its routing is built over.
+    pub(crate) fn routed_facts(&self) -> impl Iterator<Item = (AstId, FactKind)> + '_ {
+        Self::REFERENCES
+            .keys(self)
+            .chain(Self::LOCAL_SYMBOLS.keys(self))
+            .chain(Self::LOCAL_TYPES.keys(self))
+            .chain(Self::EXPRESSION_TYPES.keys(self))
+            .chain(Self::METHOD_DISPATCH.keys(self))
+            .chain(Self::COERCIONS.keys(self))
+            .chain(Self::DESUGARS.keys(self))
+    }
 }
 
 #[cfg(debug_assertions)]

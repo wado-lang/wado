@@ -412,40 +412,6 @@ pub fn context_set(slot: i32, value: i32);
 #[canonical("wasi", "task-cancel")]
 pub fn task_cancel();
 
-// --- Thread ---
-
-/// Yield control to other threads.
-#[canonical("wasi", "thread-yield")]
-pub fn thread_yield(cancellable: i32);
-
-/// Returns the index of the current thread.
-#[canonical("wasi", "thread-index")]
-pub fn thread_index() -> i32;
-
-/// Create a new thread via indirect call.
-#[canonical("wasi", "thread-new-indirect")]
-pub fn thread_new_indirect(func_type_index: i32, table_index: i32);
-
-/// Suspend and switch to a suspended thread.
-#[canonical("wasi", "thread-suspend-to-suspended")]
-pub fn thread_suspend_to_suspended(target: i32, cancellable: i32);
-
-/// Suspend the current thread.
-#[canonical("wasi", "thread-suspend")]
-pub fn thread_suspend(cancellable: i32) -> i32;
-
-/// Suspend and switch to another thread.
-#[canonical("wasi", "thread-suspend-to")]
-pub fn thread_suspend_to(target: i32, cancellable: i32) -> i32;
-
-/// Schedule a suspended thread to resume.
-#[canonical("wasi", "thread-unsuspend")]
-pub fn thread_unsuspend(target: i32);
-
-/// Yield to a suspended thread and resume when done.
-#[canonical("wasi", "thread-yield-to-suspended")]
-pub fn thread_yield_to_suspended(target: i32, cancellable: i32);
-
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).

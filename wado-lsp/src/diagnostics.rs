@@ -38,6 +38,21 @@ pub struct Range {
     pub end: Position,
 }
 
+impl Range {
+    /// Every position in a document, for callers with no viewport to narrow a
+    /// range-filtered query (`inlay_hints`) to.
+    pub const WHOLE_DOCUMENT: Self = Self {
+        start: Position {
+            line: 0,
+            character: 0,
+        },
+        end: Position {
+            line: u32::MAX,
+            character: u32::MAX,
+        },
+    };
+}
+
 /// A diagnostic message (error, warning, etc.) for a text document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diagnostic {

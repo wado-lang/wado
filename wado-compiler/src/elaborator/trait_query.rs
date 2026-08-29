@@ -542,7 +542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
-        // `canonical_decl_key` is local-first (issue #1298), so the type-param
+        // `decl_key_or_local` is local-first (issue #1298), so the type-param
         // list and the default-method bodies resolve to the same trait.
         if let Some(params) = self
             .decl_key_or_local(trait_name)

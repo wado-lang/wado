@@ -1,26 +1,5 @@
-//! Inlay hints — inline annotations rendered next to source positions to
-//! surface types and parameter names the user did not write.
-//!
-//! Three kinds of hints are produced:
-//!
-//! 1. **Type hints** on `let` patterns, closure parameters, and `for x of …`
-//!    bindings that lack an explicit `: T` annotation. Tuple / struct /
-//!    variant / or-patterns recurse into their leaves so each bound
-//!    identifier hints with the elaborator's inferred type for that leaf.
-//!    Types come from [`Semantics::local_type_name`], populated by the
-//!    elaborator via `record_local_symbol`.
-//! 2. **Parameter-name hints** at free-function call sites. The callee's
-//!    `FunctionSymbol::params` (set up by the analyzer) drives the labels.
-//! 3. **Parameter-name hints at method / static-method call sites.** The
-//!    callee's `Function` AST node is reached by following the elaborator's
-//!    use→def edge from the method-name token's `AstId` to the declaring
-//!    impl method, then reading `Function::params` directly from the AST.
-//!    Impl methods are not registered in the symbol table, so the AST is
-//!    the source of truth here.
-//!
-//! All hint positions are produced as `Position`s in the LSP-negotiated
-//! [`PositionEncoding`]. Hints whose anchor falls outside the requested
-//! `range` are filtered out at the end of [`inlay_hints`].
+//! Inlay hints — inferred types on unannotated bindings, parameter names at
+//! call sites. Positions are in the LSP-negotiated [`PositionEncoding`].
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{
@@ -41,8 +20,13 @@ lsp_repr_u32_enum!(
     }
 );
 
+/// What a receiver is called in a positional name list — by the parser and by
+/// the symbol table alike. Reserved in Wado, so no declared parameter collides.
+const SELF_PARAM: &str = "self";
+
 /// An inlay hint produced for the requesting document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InlayHint {
     pub position: Position,
     pub label: String,
@@ -89,7 +73,7 @@ struct HintCollector<'a> {
     hints: Vec<InlayHint>,
 }
 
-impl HintCollector<'_> {
+impl<'a> HintCollector<'a> {
     /// Position immediately after `span` ends — where a `: T` label is anchored.
     fn position_after(&self, span: Span) -> Position {
         self.position(
@@ -191,9 +175,11 @@ impl HintCollector<'_> {
     /// 2. The use→def edge points at an impl method's `AstId`, which the
     ///    analyzer does not register as a symbol. `Semantics::function_at`
     ///    looks the `Function` AST node up through the per-module
-    ///    [`AstIndex`] in O(1); we read its params from there (self
-    ///    params filtered out).
-    fn callee_param_names(&self, callee: &Expr) -> Option<Vec<String>> {
+    ///    [`AstIndex`] in O(1); we read its params from there.
+    ///
+    /// Both routes name a path-form call, so a positionally passed receiver
+    /// (`Scale::scaled(&p, …)`) keeps its slot — see [`path_form_param_names`].
+    fn callee_param_names(&self, callee: &Expr) -> Option<Vec<&'a str>> {
         let ident = match callee {
             Expr::Ident(i) => i,
             _ => return None,
@@ -212,49 +198,46 @@ impl HintCollector<'_> {
         if let Some(symbol) = self.ctx.sem.symbol_at(def_key)
             && let SymbolKind::Function(f) = &symbol.kind
         {
-            return Some(f.params.clone());
+            return Some(f.params.iter().map(String::as_str).collect());
         }
         let func = self.ctx.sem.function_at(def_key)?;
-        Some(filter_non_self_param_names(func))
+        Some(path_form_param_names(func))
     }
 
     /// Hint parameters for a `MethodCallExpr` (`receiver.method(args)`).
-    ///
-    /// Impl methods are not present in the symbol table, so the use→def
-    /// edge points at the declaring `Function`'s `AstId`. The per-module
-    /// [`AstIndex`] indexes that mapping so `Semantics::function_at`
-    /// resolves it in O(1).
     fn hint_method_call_args(&mut self, call: &ast::MethodCallExpr) {
-        let Some(param_names) = self.method_param_names(call.method_id) else {
+        let Some(func) = self.method_decl(call.method_id) else {
             return;
         };
-        self.emit_arg_param_hints(&param_names, &call.args);
+        self.emit_arg_param_hints(&dot_form_param_names(func), &call.args);
     }
 
     /// Hint parameters for a `StaticMethodCallExpr` (`Type::method(args)`).
-    /// Same resolution as `hint_method_call_args` — the elaborator records
-    /// the same use→def edge for both call shapes.
+    /// Same resolution as `hint_method_call_args`, but the receiver of a
+    /// method reached this way is `args[0]`, so its slot is kept.
     fn hint_static_method_call_args(&mut self, call: &ast::StaticMethodCallExpr) {
-        let Some(param_names) = self.method_param_names(call.method_id) else {
+        let Some(func) = self.method_decl(call.method_id) else {
             return;
         };
-        self.emit_arg_param_hints(&param_names, &call.args);
+        self.emit_arg_param_hints(&path_form_param_names(func), &call.args);
     }
 
-    /// Parameter names of the impl/trait method whose declaration `AstId`
-    /// is the use→def target of `method_id_at_call`. Returns `None` for
-    /// synthetic / unresolved call sites.
-    fn method_param_names(&self, method_id_at_call: ast::AstId) -> Option<Vec<String>> {
+    /// The impl/trait method whose declaration `AstId` is the use→def target
+    /// of `method_id_at_call`. `None` for synthetic / unresolved call sites.
+    fn method_decl(&self, method_id_at_call: ast::AstId) -> Option<&'a Function> {
         let def_key = self.ctx.sem.referenced_symbol(method_id_at_call)?;
-        let func = self.ctx.sem.function_at(def_key)?;
-        Some(filter_non_self_param_names(func))
+        self.ctx.sem.function_at(def_key)
     }
 
-    fn emit_arg_param_hints(&mut self, param_names: &[String], args: &[Expr]) {
+    fn emit_arg_param_hints(&mut self, param_names: &[&str], args: &[Expr]) {
         // Align positional args with their parameter names. An arity
         // mismatch (more args than params) terminates the loop early; the
         // elaborator flags that as a diagnostic on its own path.
         for (param_name, arg) in param_names.iter().zip(args.iter()) {
+            // A receiver reads as the receiver; `self:` in front of it is noise.
+            if *param_name == SELF_PARAM {
+                continue;
+            }
             self.push_param_hint(param_name, arg.span());
         }
     }
@@ -266,17 +249,27 @@ impl HintCollector<'_> {
     }
 }
 
-/// Parameter names of `func` with self params filtered out.
-///
-/// `&self` / `&mut self` are surfaced as `SelfKind::Ref` / `SelfKind::MutRef`
-/// by the parser; only `SelfKind::None` params can ever appear as positional
-/// call arguments.
-fn filter_non_self_param_names(func: &Function) -> Vec<String> {
+/// Parameter names of `func` positioned for a call that does **not** pass the
+/// receiver in `args` — the dot form, `recv.m(a, b)`, so the receiver is gone.
+fn dot_form_param_names(func: &Function) -> Vec<&str> {
     func.params
         .iter()
         .filter(|p| matches!(p.self_kind, ast::SelfKind::None))
-        .map(|p| p.name.clone())
+        .map(|p| p.name.as_str())
         .collect()
+}
+
+/// Parameter names of `func` positioned for a call written in path form —
+/// `Scale::scaled(&p, 2, 3)`, where the receiver *is* `args[0]` and so keeps
+/// its slot. Dropping it shifts every label one argument to the left.
+fn path_form_param_names(func: &Function) -> Vec<&str> {
+    debug_assert!(
+        func.params
+            .iter()
+            .all(|p| (p.self_kind == ast::SelfKind::None) == (p.name != SELF_PARAM)),
+        "a receiver is named `self` and nothing else can be",
+    );
+    func.params.iter().map(|p| p.name.as_str()).collect()
 }
 
 impl AstVisitor for HintCollector<'_> {
@@ -350,20 +343,9 @@ mod tests {
     use crate::text::PositionEncoding;
     use futures::executor::block_on;
 
-    const WHOLE_DOCUMENT: Range = Range {
-        start: Position {
-            line: 0,
-            character: 0,
-        },
-        end: Position {
-            line: u32::MAX,
-            character: u32::MAX,
-        },
-    };
-
     async fn hints_for(source: &str) -> Vec<InlayHint> {
         with_ctx(source, PositionEncoding::Utf16, |ctx| {
-            inlay_hints(ctx, WHOLE_DOCUMENT)
+            inlay_hints(ctx, Range::WHOLE_DOCUMENT)
         })
         .await
     }
@@ -763,17 +745,7 @@ mod tests {
         let host = MapHost::single(path, src);
         let sem = futures::executor::block_on(wado_compiler::semantics(src, &host, Some(path)));
         let ctx = QueryContext::new(&sem, src, &uri, PositionEncoding::Utf16);
-        let max_range = Range {
-            start: Position {
-                line: 0,
-                character: 0,
-            },
-            end: Position {
-                line: u32::MAX,
-                character: u32::MAX,
-            },
-        };
-        let hints = inlay_hints(&ctx, max_range);
+        let hints = inlay_hints(&ctx, Range::WHOLE_DOCUMENT);
         let h = hints
             .iter()
             .find(|h| h.label == ": i32" && h.kind == InlayHintKind::Type)
@@ -837,17 +809,7 @@ mod tests {
             let host = MapHost::with_files(&[("./other.wado", other), (path, entry)]);
             let sem = wado_compiler::semantics(entry, &host, Some(path)).await;
             let ctx = QueryContext::new(&sem, entry, &uri, PositionEncoding::Utf16);
-            let max_range = Range {
-                start: Position {
-                    line: 0,
-                    character: 0,
-                },
-                end: Position {
-                    line: u32::MAX,
-                    character: u32::MAX,
-                },
-            };
-            let hints = inlay_hints(&ctx, max_range);
+            let hints = inlay_hints(&ctx, Range::WHOLE_DOCUMENT);
             let param_labels: Vec<_> = labels(&hints)
                 .into_iter()
                 .filter(|(_, k)| *k == InlayHintKind::Parameter)
@@ -857,6 +819,75 @@ mod tests {
                 param_labels.contains(&"a: ".to_string())
                     && param_labels.contains(&"b: ".to_string()),
                 "cross-module `add(1, 2)` should still surface `a:`/`b:`; got {param_labels:?}",
+            );
+        });
+    }
+
+    /// Sugar: parameter-name labels paired with the 0-based character each
+    /// anchors at, for the tests where alignment is the point.
+    fn param_anchors(hints: &[InlayHint]) -> Vec<(String, u32)> {
+        hints
+            .iter()
+            .filter(|h| h.kind == InlayHintKind::Parameter)
+            .map(|h| (h.label.clone(), h.position.character))
+            .collect()
+    }
+
+    #[test]
+    fn path_form_method_call_aligns_names_past_the_receiver() {
+        // The receiver is passed positionally, so `&self` occupies slot 0.
+        block_on(async {
+            let src = concat!(
+                "trait Scale {\n",
+                "    fn scaled(&self, factor: i32, bias: i32) -> i32;\n",
+                "}\n",
+                "struct P { x: i32 }\n",
+                "impl Scale for P {\n",
+                "    fn scaled(&self, factor: i32, bias: i32) -> i32 {\n",
+                "        return self.x * factor + bias\n",
+                "    }\n",
+                "}\n",
+                "fn f() -> i32 {\n",
+                "    let p = P { x: 1 };\n",
+                "    return Scale::scaled(&p, 2, 3);\n",
+                "}\n",
+            );
+            let hints = hints_for(src).await;
+            let anchors = param_anchors(&hints);
+            // `    return Scale::scaled(&p, 2, 3);`
+            //                           ^25 ^29 ^32
+            assert_eq!(
+                anchors,
+                vec![("factor: ".to_string(), 29), ("bias: ".to_string(), 32)],
+                "the receiver takes no label and the rest keep their own; got {anchors:?}",
+            );
+        });
+    }
+
+    #[test]
+    fn method_call_syntax_still_skips_the_receiver_param() {
+        // The dot form leaves the receiver out of `args`, so `&self` is dropped.
+        block_on(async {
+            let src = concat!(
+                "struct P { x: i32 }\n",
+                "impl P {\n",
+                "    fn scaled(&self, factor: i32, bias: i32) -> i32 {\n",
+                "        return self.x * factor + bias\n",
+                "    }\n",
+                "}\n",
+                "fn f() -> i32 {\n",
+                "    let p = P { x: 1 };\n",
+                "    return p.scaled(2, 3);\n",
+                "}\n",
+            );
+            let hints = hints_for(src).await;
+            let anchors = param_anchors(&hints);
+            // `    return p.scaled(2, 3);`
+            //                      ^20 ^23
+            assert_eq!(
+                anchors,
+                vec![("factor: ".to_string(), 20), ("bias: ".to_string(), 23)],
+                "dot-form args align with the non-self params; got {anchors:?}",
             );
         });
     }

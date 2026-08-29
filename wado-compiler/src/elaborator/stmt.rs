@@ -6,15 +6,12 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{
-    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable,
-};
+use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
-use super::util::placeholder;
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
@@ -26,8 +23,8 @@ enum RefBinding {
 }
 
 /// Variables a pattern binds into the function context, as `(name,
-/// local_index, type_id)` triples in declaration (pre-order). The combined
-/// walk's pattern resolvers return these instead of a `TirPattern`: reify
+/// local_index, type_id)` triples in declaration (pre-order). The body walk's
+/// pattern resolvers return these instead of a `TirPattern`: reify
 /// rebuilds the real pattern node independently, so the only thing the walk
 /// must surface is the binding set (used by or-pattern validation).
 type PatBindings = Vec<(String, u32, TypeId)>;
@@ -43,11 +40,8 @@ const BUILTIN_GENERIC_HEADS: &[&str] = &[
 ];
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Walk a block for its fact-recording side effects. Reify rebuilds the
-    /// `TirBlock` from the AST; this walk
-    /// resolves each statement (recording types / dispatch / desugar facts and
-    /// emitting diagnostics) and manages the lexical scope. `expected_type` is
-    /// still propagated to the trailing statement so the coercion fact lands.
+    /// Walk a block: resolve each statement and manage the lexical scope.
+    /// `expected_type` reaches the trailing statement so its coercion fact lands.
     pub(super) fn resolve_block(
         &mut self,
         block: &Block,
@@ -340,7 +334,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
         }
+
+        // Resolved here, with the struct's own type params in scope, so a
+        // default naming a sibling param (`<A, B = A>`) means what it says —
+        // reify has only the enclosing function's params.
+        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
+                index: i as u32,
+                projected_from: None,
+            })
+            .collect();
         drop(scope);
+
+        self.sem
+            .types
+            .decl_type_params
+            .insert(struct_decl.id, type_params);
 
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
             return;
@@ -586,7 +603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else if let Some(coerced) =
                         self.try_coerce_struct_to_map(ast_value, ctx, target_type)
                     {
-                        (coerced.type_id, target_type)
+                        (coerced, target_type)
                     } else {
                         self.report_if_not_a_map_target(target_type, struct_lit.span);
                         let value_type = self.resolve_expr(ast_value, ctx, None);
@@ -1417,7 +1434,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `ref_binding` so that identifier bindings get `&InnerType` instead of `InnerType`.
     /// Bind a refutable pattern's variables into `ctx` and run the same
     /// disambiguation / diagnostics as reify's pattern builder, returning the
-    /// bindings it introduced in declaration (pre-order). The combined walk
+    /// bindings it introduced in declaration (pre-order). The body walk
     /// only needs the binding side effects and facts — reify rebuilds the real
     /// `TirPattern` independently — so no `TirPattern` node is assembled here.
     pub(super) fn resolve_if_pattern(
@@ -1970,7 +1987,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// True when the scrutinee is a variant type that has a `None` case, so a
     /// `null` literal pattern lowers to a `None` variant pattern (which binds
-    /// nothing). Reify rebuilds the actual `None` pattern; the combined walk
+    /// nothing). Reify rebuilds the actual `None` pattern; the body walk
     /// only needs the yes/no answer for its binding/fact walk.
     fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> bool {
         let Some(variant_info) = self.variant_of_type(scrutinee_type) else {
@@ -1985,8 +2002,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_info.cases.iter().any(|c| c.name == none_case_name)
     }
 
-    /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the combined
-    /// walk, emitting the bad-bounds / reversed / empty diagnostics. Range
+    /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,
+    /// emitting the bad-bounds / reversed / empty diagnostics. Range
     /// patterns bind nothing and reify rebuilds the real `TirPattern::Range`,
     /// so no pattern node is produced here.
     fn resolve_range_pattern(
@@ -2149,7 +2166,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the iterable to determine its type
         let iterable_type_id = self.resolve_expr(actual_iterable, ctx, None);
-        let iterable = placeholder(iterable_type_id, actual_iterable.span());
 
         // Check if it's a tuple type — looking through a single `&`/`&mut`
         // wrapper. A reference iterable (`&[..T]`) iterates element-by-ref
@@ -2181,10 +2197,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfVariadic);
-                self.resolve_variadic_for_of(for_of, iterable, is_enumerate, by_ref, ctx);
+                self.resolve_variadic_for_of(for_of, iterable_type_id, is_enumerate, by_ref, ctx);
             } else {
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfTuple);
-                self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, by_ref, ctx);
+                self.resolve_tuple_for_of(
+                    for_of,
+                    iterable_type_id,
+                    &elems,
+                    is_enumerate,
+                    by_ref,
+                    ctx,
+                );
             }
         } else {
             // Check that the iterable type implements IntoIterator
@@ -2242,7 +2265,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn resolve_variadic_for_of(
         &mut self,
         for_of: &ForOfStmt,
-        iterable: TirExpr,
+        iterable: TypeId,
         is_enumerate: bool,
         by_ref: bool,
         ctx: &mut FunctionContext,
@@ -2267,7 +2290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inner = {
                 let type_table = self.tysys.type_table.borrow();
                 let (elems, _) = type_table
-                    .as_tuple_through_ref(iterable.type_id)
+                    .as_tuple_through_ref(iterable)
                     .unwrap_or_else(|| panic!("variadic for-of requires tuple iterable"));
                 // Prefer a direct TypePack element
                 if let Some(tp) = elems
@@ -2392,7 +2415,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn resolve_tuple_for_of(
         &mut self,
         for_of: &ForOfStmt,
-        iterable: TirExpr,
+        iterable: TypeId,
         elems: &[TypeId],
         is_enumerate: bool,
         by_ref: bool,
@@ -2416,7 +2439,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Store iterable in a temp variable to avoid re-evaluation (reify
         // rebuilds the `__tuple_N` binding; we reserve its local slot here so
         // the walk-order local indices stay in sync with reify).
-        let tuple_type_id = iterable.type_id;
+        let tuple_type_id = iterable;
         let temp_name = format!("__tuple_{unique_id}");
         ctx.add_local(temp_name, tuple_type_id, false, None);
 
@@ -2548,7 +2571,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
         // `.filter(…)`, `.map(…)`) is already part of `for_of.iterable`.
         let into_iter_receiver_type = self.resolve_expr(&for_of.iterable, ctx, None);
-        let into_iter_receiver = placeholder(into_iter_receiver_type, for_of.iterable.span());
 
         // `<receiver>.into_iter()` — the synthetic call passes
         // `call_id == None` so `record_method_dispatch` skips it; the
@@ -2557,7 +2579,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (WEP 2026-05-26).
         let into_iter_outcome = self.resolve_method_call_with(
             MethodCallInput {
-                receiver: into_iter_receiver,
+                receiver: into_iter_receiver_type,
                 receiver_ast: None,
                 method_name: "into_iter",
                 method_id: None,
@@ -2572,7 +2594,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
         );
         let into_iter_dispatch = into_iter_outcome.dispatch;
-        let iter_type = into_iter_outcome.expr.type_id;
+        let iter_type = into_iter_outcome.type_id;
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error.
@@ -2601,26 +2623,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `let mut __iter_N = …;` — `defining_ast_id: None` keeps this
         // synthetic local out of `local_symbols`. Reify rebuilds the `let`;
         // we reserve the local slot here for walk-order parity.
-        let iter_local_index =
-            ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
+        ctx.add_local(iter_var, iter_type, /* is_mut */ true, None);
 
         // Make `__for_of_N` visible to a body-level `break __for_of_N`
         // (no existing user does this, but the validation in `resolve_break`
         // would otherwise reject it). Pop after the body has been resolved.
         ctx.active_labels.push(label);
 
-        // `__iter_N.next()` — dispatch on the Local receiver, no AST.
-        let iter_local_ref = TirExpr::new(
-            TirExprKind::Local {
-                index: iter_local_index,
-                name: iter_var,
-            },
-            iter_type,
-            span,
-        );
+        // `__iter_N.next()` — dispatch on the `__iter_N` local, no AST.
         let next_outcome = self.resolve_method_call_with(
             MethodCallInput {
-                receiver: iter_local_ref,
+                receiver: iter_type,
                 receiver_ast: None,
                 method_name: "next",
                 method_id: None,
@@ -2635,7 +2648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
         );
         let next_dispatch = next_outcome.dispatch;
-        let option_type = next_outcome.expr.type_id;
+        let option_type = next_outcome.type_id;
 
         // Build the `Option::Some(<user binding>)` arm pattern directly as
         // TIR. Resolving the user's `for_of.binding` against the Item type
@@ -2877,7 +2890,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 self.record_desugar(w.id, super::sem::types::DesugarKind::WhileLetChain);
                 // The else-branch (an unconditional `break`) is rebuilt by reify;
-                // the combined walk only binds the chain patterns and walks the
+                // the body walk only binds the chain patterns and walks the
                 // then-body for facts.
                 ctx.enter_scope();
                 self.resolve_let_chain_stmts(elements, &w.body, ctx, None, false, *cond_span);

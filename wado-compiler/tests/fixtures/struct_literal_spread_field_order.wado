@@ -1,0 +1,53 @@
+// A generic struct literal infers each slot from the field that fills it, by
+// the field's declaration index — not by the order the fields were written.
+//
+// Without a spread the literal's fields are sorted into declaration order
+// before inference, which hides the distinction. A spread skips that sort and
+// leaves only the written subset, so `second` first would bind `A` to `String`
+// and give back `Pair<String, i32>`.
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+test "an out-of-order literal infers by declaration index" {
+    let p = Pair { second: "x", first: 1 };
+    let a: i32 = p.first;
+    let b: String = p.second;
+    assert a == 1;
+    assert b == "x";
+}
+
+test "a spread does not change which slot a field fills" {
+    let base = Pair { first: 0, second: "" };
+    let p = Pair { ..base, second: "x", first: 1 };
+    let a: i32 = p.first;
+    let b: String = p.second;
+    assert a == 1;
+    assert b == "x";
+}
+
+test "a spread filling one slot leaves the other to the base" {
+    let base = Pair { first: 7, second: "kept" };
+    let p = Pair { ..base, first: 9 };
+    assert p.first == 9;
+    assert p.second == "kept";
+}
+
+struct Holder<T> {
+    tag: String,
+    items: List<T>,
+}
+
+// A sequence literal filling a slot-typed field is coerced in a second pass,
+// once the slot is known. That pass has to find the same field the first pass
+// deferred: keyed by position, it followed the sort into declaration order and
+// coerced whichever field had landed there, silently building a shorter list.
+test "a deferred sequence coercion follows its own field, not a position" {
+    let h = Holder { items: [1, 2, 3], tag: "x" };
+    assert h.items.len() == 3;
+    assert h.items[0] == 1;
+    assert h.items[2] == 3;
+    assert h.tag == "x";
+}

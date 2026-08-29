@@ -125,8 +125,8 @@ pub(crate) struct ModuleDecls {
     pub(crate) generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
 
     /// Anonymous structs synthesised from struct literals during expression
-    /// resolution. Flushed into the [`crate::tir::TirModule`] at the end of
-    /// [`super::super::Elaborator::resolve_module`].
+    /// resolution. Reify reads them back into the [`crate::tir::TirModule`]
+    /// in `reify_module`.
     pub(crate) pending_anonymous_structs: Vec<crate::tir::TirStruct>,
 
     /// Synthesis requests recorded by `impl Trait for Type;`.

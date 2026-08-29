@@ -1,0 +1,26 @@
+// An operator dispatched to a trait method checks each operand against the
+// parameter the impl declares. A mismatch names the operand that caused it, not
+// the whole expression: `s` here, at column 18.
+
+type Steps = i32;
+
+struct Meters {
+    v: i32,
+}
+
+impl Shl<i32> for Meters {
+    fn shl(&self, rhs: i32) -> Meters {
+        return Meters { v: self.v << rhs };
+    }
+}
+
+export fn run() {
+    let a = Meters { v: 1 };
+    let s: Steps = 3;
+    let c = a << s;
+}
+
+__DATA__
+{
+    "compile_error": ":20:18: analysis error: type mismatch: expected 'i32', found 'Steps'"
+}

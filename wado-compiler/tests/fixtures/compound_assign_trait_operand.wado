@@ -1,0 +1,42 @@
+// `a OP= b` on an operator-overloaded receiver resolves the right operand
+// against the receiver's type, then dispatches through the impl, which declares
+// its own operand type. The two must not be confused: `Meters` is what the RHS
+// is resolved against and `i32` is what `Shl<i32>` accepts, and a `From<i32>`
+// in scope is what would let the first answer stand in for the second.
+
+struct Meters {
+    v: i32,
+}
+
+impl From<i32> for Meters {
+    fn from(v: i32) -> Meters {
+        return Meters { v: v };
+    }
+}
+
+impl Shl<i32> for Meters {
+    fn shl(&self, rhs: i32) -> Meters {
+        return Meters { v: self.v << rhs };
+    }
+}
+
+impl Add<i32> for Meters {
+    fn add(&self, rhs: i32) -> Meters {
+        return Meters { v: self.v + rhs };
+    }
+}
+
+test "a literal right operand takes the impl's operand type" {
+    let mut m = Meters { v: 1 };
+    m <<= 3;
+    assert m.v == 8;
+    m += 2;
+    assert m.v == 10;
+}
+
+test "a typed right operand reaches the impl unchanged" {
+    let mut m = Meters { v: 1 };
+    let k: i32 = 4;
+    m <<= k;
+    assert m.v == 16;
+}
