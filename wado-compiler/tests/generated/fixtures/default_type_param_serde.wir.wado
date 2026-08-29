@@ -346,9 +346,9 @@ type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(
 
 type "functype//core:prelude/fpfmt.wado/write_digits_at$scalar" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(100)
 
-type "functype//core:prelude/primitive.wado/fmt_float_special$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, "core:prelude/fpfmt.wado//enum:SpecialKind", ref "core:prelude/string.wado//String");  // TypeId(101)
+type "functype//core:value/core/value/to_value<default_type_param_serde.wado/__anon_{a:i32}>$spec0" = fn() -> [i32, ref null "core:value//Value", ref null "core:serde//SerializeError"];  // TypeId(101)
 
-type "functype//core:value/core/value/to_value<default_type_param_serde.wado/__anon_{a:i32}>$spec0$scalar" = fn() -> [i32, ref null "core:value//Value", ref null "core:serde//SerializeError"];  // TypeId(102)
+type "functype//core:prelude/primitive.wado/fmt_float_special$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, "core:prelude/fpfmt.wado//enum:SpecialKind", ref "core:prelude/string.wado//String");  // TypeId(102)
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> [ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128"];  // TypeId(103)
 
@@ -560,7 +560,7 @@ fn "default_type_param_serde.wado/__test_1_an_explicit_anonymous_struct_payload_
     let __fuse_at_9: i32;
     let __fuse_at_10: i32;
     let v_12: ref "core:value//Value";
-    v_0 = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: ref.as_non_null(let __vr_2_mv_0: i32; let __vr_2_mv_1: ref null "core:value//Value"; let __vr_2_mv_2: ref null "core:serde//SerializeError"; multivalue_bind [__vr_2_mv_0, __vr_2_mv_1, __vr_2_mv_2] = "core:value/core/value/to_value<default_type_param_serde.wado/__anon_{a:i32}>$spec0$scalar"(); (if __vr_2_mv_0 == 0 -> ref "core:value//Value" {
+    v_0 = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: ref.as_non_null(let __vr_2_mv_0: i32; let __vr_2_mv_1: ref null "core:value//Value"; let __vr_2_mv_2: ref null "core:serde//SerializeError"; multivalue_bind [__vr_2_mv_0, __vr_2_mv_1, __vr_2_mv_2] = "core:value/core/value/to_value<default_type_param_serde.wado/__anon_{a:i32}>$spec0"(); (if __vr_2_mv_0 == 0 -> ref "core:value//Value" {
         v_12 = ref.as_non_null(__vr_2_mv_1);
         v_12;
     } else if @likely(__vr_2_mv_0 == 1) -> ref "core:value//Value" {
@@ -1997,6 +1997,21 @@ fn "core:prelude/fpfmt.wado/write_digits_at$scalar"(buf, offset, val, nd) {
     };
 }
 
+fn "core:value/core/value/to_value<default_type_param_serde.wado/__anon_{a:i32}>$spec0"() {
+    let out: ref "core:prelude/types.wado//Box<core:value/Value>";
+    let __qm_e: ref "core:serde//SerializeError";
+    let __match_5: ref null "core:serde//SerializeError";
+    out = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value" { 0 } };
+    __match_5 = "core:serde/default_type_param_serde.wado/__anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar$spec0"(out);
+    if @likely(ref.is_null(__match_5)) {
+    } else {
+        __qm_e = ref.as_non_null(__match_5);
+        cold_path;
+        return 1, ref.null none, __qm_e;
+    }
+    return 0, "default_type_param_serde.wado/$value_copy$core:value/Value"(out.value), ref.null none;
+}
+
 fn "core:prelude/primitive.wado/fmt_float_special$spec0$scalar"(f, is_neg, kind, zero_repr) {
     let new_used: i32;
     let start: i32;
@@ -2025,21 +2040,6 @@ fn "core:prelude/primitive.wado/fmt_float_special$spec0$scalar"(f, is_neg, kind,
         }));
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f, zero_repr);
     }
-}
-
-fn "core:value/core/value/to_value<default_type_param_serde.wado/__anon_{a:i32}>$spec0$scalar"() {
-    let out: ref "core:prelude/types.wado//Box<core:value/Value>";
-    let __qm_e: ref "core:serde//SerializeError";
-    let __match_5: ref null "core:serde//SerializeError";
-    out = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value" { 0 } };
-    __match_5 = "core:serde/default_type_param_serde.wado/__anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar$spec0"(out);
-    if @likely(ref.is_null(__match_5)) {
-    } else {
-        __qm_e = ref.as_non_null(__match_5);
-        cold_path;
-        return 1, ref.null none, __qm_e;
-    }
-    return 0, "default_type_param_serde.wado/$value_copy$core:value/Value"(out.value), ref.null none;
 }
 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divisor) {
