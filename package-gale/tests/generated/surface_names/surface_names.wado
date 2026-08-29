@@ -1078,6 +1078,7 @@ pub enum TokenKind {
     VALS,
     FOLLOW,
     MIN_PREC,
+    PLUS,
     WS,
     Eof,
     Error,
@@ -1088,9 +1089,10 @@ pub global TK_KIND: i32 = 1;
 pub global TK_VALS: i32 = 2;
 pub global TK_FOLLOW: i32 = 3;
 pub global TK_MIN_PREC: i32 = 4;
-pub global TK_WS: i32 = 5;
-pub global TK_EOF: i32 = 6;
-pub global TK_ERROR: i32 = 7;
+pub global TK_PLUS: i32 = 5;
+pub global TK_WS: i32 = 6;
+pub global TK_EOF: i32 = 7;
+pub global TK_ERROR: i32 = 8;
 
 struct Lexer {
     chars: List<char>,
@@ -1146,6 +1148,13 @@ fn try_MIN_PREC(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_PLUS(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '+' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
@@ -1178,6 +1187,9 @@ pub fn tokenize(input: &String) -> TokenStream {
         if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char matches { '+' } {
+            end = try_PLUS(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PLUS; }
         } else if first_char matches { 'f' } {
             end = try_FOLLOW(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FOLLOW; }
@@ -1221,6 +1233,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_VALS => "VALS",
         TK_FOLLOW => "FOLLOW",
         TK_MIN_PREC => "MIN_PREC",
+        TK_PLUS => "PLUS",
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
@@ -1231,8 +1244,10 @@ pub fn token_kind_name(kind: i32) -> String {
 pub global RK_PROG: NodeKind = 0;
 pub global RK_ONE: NodeKind = 1;
 pub global RK_TWO: NodeKind = 2;
+pub global RK_THREE: NodeKind = 3;
+pub global RK_EXPR: NodeKind = 4;
 
-global RULE_NAMES: List<String> = ["prog", "one", "two"];
+global RULE_NAMES: List<String> = ["prog", "one", "two", "three", "expr"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1592,6 +1607,14 @@ fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
+        } else if alt_kind == TK_MIN_PREC {
+            pos = start;
+            try_2: {
+                pos = scan_three(tokens, pos);
+                if pos < 0 { break try_2; }
+                break scan_alts;
+            }
+            return -1;
         } else {
             return -1;
         }
@@ -1619,6 +1642,55 @@ fn scan_two(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
+fn scan_three(tokens: &Array<i32>, pos: i32) -> i32 {
+    let scan_start = pos;
+    let mut pos = pos;
+    pos = scan_expr(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
+    return pos;
+}
+
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_MIN_PREC { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_PLUS { return -1; }
+    pos += 1;
+    pos = scan_expr(tokens, pos, 2);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expr_atom(tokens, pos);
+    if pos < 0 { return -1; }
+    loop {
+        let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
+        if suffix_kind == TK_PLUS {
+            if 1 >= min_prec {
+                let lr_saved_pos = pos;
+                pos = scan_expr_lr_0(tokens, pos);
+                if pos < 0 { pos = lr_saved_pos; break; }
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+        if pos == _lr_pos0 {
+            break;
+        }
+    }
+    return pos;
+}
+
 fn _parse_prog__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_P {
@@ -1627,6 +1699,10 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
     }
     if kind == TK_VALS {
         let two = _parse_two(p);
+        return;
+    }
+    if kind == TK_MIN_PREC {
+        let three = _parse_three(p);
         return;
     }
     p.no_viable(
@@ -1689,6 +1765,75 @@ fn _parse_two(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_three__inner(p: &mut Parser) -> () {
+    let expr = _parse_expr(p);
+    if !p.speculating {
+         p.emit("three") 
+    }
+    return;
+}
+
+fn _parse_three(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_THREE, _start);
+    _parse_three__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("three");
+    }
+}
+
+fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
+    let kind = p.peek_kind();
+    if kind == TK_MIN_PREC {
+        let min_prec_ = p.expect(TK_MIN_PREC, &EMPTY_SYNC);
+        return;
+    }
+    p.no_viable(
+        "no alternative of expr matches",
+        p.peek_span(),
+        &SYNC_3,
+    );
+    return;
+}
+
+fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
+    let _cp = p.b.checkpoint();
+    let _start = p.peek_start();
+    p.b.start_node(RK_EXPR, _start);
+    _parse_expr__inner_atom(p, min_prec);
+    p.b.finish_node(p.last_end());
+    loop {
+        if p.recovering { break; }
+        let _sk = p.peek_kind();
+        if _sk == TK_PLUS {
+            if 1 >= min_prec {
+                if scan_expr_lr_0(&p.kinds, p.pos) < 0 {
+                    break;
+                }
+                p.b.start_node_at(_cp, RK_EXPR, _start);
+                let plus = p.expect(TK_PLUS, &EMPTY_SYNC);
+                let expr_2 = _parse_expr(p, 2);
+                p.b.finish_node(p.last_end());
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return;
+}
+
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
+    if p.recovering { return; }
+    _parse_expr__inner(p, min_prec);
+    if p.recovering {
+        p.push_rule_stack("expr");
+    }
+}
+
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -1723,9 +1868,17 @@ pub fn parse_two(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_two(p));
 }
 
+pub fn parse_three(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_three(p));
+}
+
+pub fn parse_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));
+}
+
 fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(8);
-    for let mut k = 0; k < 8; k += 1 {
+    let mut v: List<String> = List::with_capacity(9);
+    for let mut k = 0; k < 9; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;
@@ -1754,7 +1907,7 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_P, TK_VALS];
+global SYNC_0: List<i32> = [TK_MIN_PREC, TK_P, TK_VALS];
 global SYNC_1: List<i32> = [TK_KIND];
 global SYNC_2: List<i32> = [TK_FOLLOW];
 global SYNC_3: List<i32> = [TK_MIN_PREC];

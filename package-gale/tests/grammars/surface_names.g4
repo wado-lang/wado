@@ -12,14 +12,20 @@ grammar SurfaceNames;
 
 options { language = Wado; }
 
-prog : one | two ;
+prog : one | two | three ;
 
 one : P KIND { p.emit("one") } ;
 two : VALS FOLLOW MIN_PREC { p.emit("two") } ;
+
+// `min_prec` is a parameter only of a left-recursive rule's fn, so binding
+// `MIN_PREC` inside one is what puts the two names in the same scope.
+three : expr { p.emit("three") } ;
+expr : expr PLUS expr | MIN_PREC ;
 
 P : 'p' ;
 KIND : 'k' ;
 VALS : 'v' ;
 FOLLOW : 'f' ;
 MIN_PREC : 'm' ;
+PLUS : '+' ;
 WS : [ \t\r\n]+ -> skip ;

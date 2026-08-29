@@ -36,6 +36,11 @@ test "elements named after generated locals compile and parse" {
     let two = names::parse(&"v f m");
     assert two.ok(), `clean parse: ${two.diagnostics.len()} diagnostics`;
     assert two.output == "two", `output: '${two.output}'`;
+
+    // The left-recursive fn takes `min_prec` and binds `MIN_PREC` in one scope.
+    let three = names::parse(&"m + m");
+    assert three.ok(), `clean parse: ${three.diagnostics.len()} diagnostics`;
+    assert three.output == "three", `output: '${three.output}'`;
 }
 
 test "a members-only lexer compiles and tokenizes" {
