@@ -48,8 +48,7 @@ WS : ' ' -> skip ;
         Err(e) => panic(`parse_checked failed: ${e.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
-    // The positive half: without it the negative assertion also passes on output
-    // that binds nothing at all.
+    // Without this, the negative assertion also passes on output binding nothing.
     assert out.contains("let p_ = p.expect(TK_P"), `the escaped binding must be emitted: ${out}`;
     assert !out.contains("let p = p."), `the handle must not be shadowed: ${out}`;
 }
@@ -70,8 +69,7 @@ WS : ' ' -> skip ;
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
     assert out.contains("let kind = p.peek_kind();"), "the dispatch still reads the lookahead";
-    // The positive half: the negative assertions below also pass on output that
-    // binds neither element.
+    // Without these, the negative assertions also pass on output binding neither.
     assert out.contains("let kind_ = p.expect(TK_KIND"), `the escaped binding must be emitted: ${out}`;
     assert out.contains("let vals_ = p.expect(TK_VALS"), `the escaped binding must be emitted: ${out}`;
     assert !out.contains("let kind = p.expect("), `the lookahead must not be shadowed: ${out}`;

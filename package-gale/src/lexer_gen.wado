@@ -1,7 +1,6 @@
 use {
     Grammar,
     GrammarOption,
-    OptionValue,
     LexerRule,
     LexerAlternative,
     LexerElement,
@@ -9,12 +8,8 @@ use {
     LexerNotElement,
     CharClass,
     CharRange,
-    RepeatKind,
     ParserRule,
-    Alternative,
     Element,
-    RepeatElement,
-    LabelElement,
     AltAction,
     find_lexer_rule,
     lexer_alias_text,
@@ -42,7 +37,7 @@ use {
     lexer_action_bodies_are_base_calls,
     super_emit_hook_expr,
 } from "./superclass.wado";
-use { MemberDecls, MemberField, members_present } from "./java2wado/jmembers.wado";
+use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
 use {
     ModeAttrUse,
@@ -1768,6 +1763,12 @@ fn probe_ea(replay: bool, ea: bool) -> bool {
     return replay || ea;
 }
 
+/// The id a probe's locals carry. Only a replay emits a probe, so only a replay
+/// mints one — the match pass keeps the numbering it had.
+fn probe_id(w: &mut CodeWriter, replay: bool) -> i32 {
+    return if replay { w.next_id() } else { 0 };
+}
+
 /// How a repeat at `alt.elements[index]` is emitted, and — when the plain
 /// greedy loop is enough — why the lookahead-aware one was not needed.
 pub enum LexerRepeatEmit {
@@ -3191,13 +3192,10 @@ fn gen_lexer_non_greedy_repeat(
     let pea = probe_ea(replay, ea);
     // Each iteration goes through the same bounded form the greedy loop uses, so
     // the replay stops where the match did: an inner carrying an action mutates
-    // what the exit try's predicates read, which the match pass never saw. Only
-    // the replay names a probe, so only it mints the ids — the match pass stays
-    // byte-identical.
-    let iter_id = if replay { w.next_id() } else { 0 };
-    // For Plus, match at least one element first
+    // what the exit try's predicates read, which the match pass never saw.
+    let iter_id = probe_id(w, replay);
     if let Plus = rep.kind {
-        let plus_id = if replay { w.next_id() } else { 0 };
+        let plus_id = probe_id(w, replay);
         gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, plus_id);
     }
     // Loop: try matching the rest first (non-greedy), otherwise consume one more

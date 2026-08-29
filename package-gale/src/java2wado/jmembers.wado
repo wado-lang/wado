@@ -388,7 +388,6 @@ fn build_method(
 ) -> Result<String, String> {
     let recv = if mutates { "&mut self" } else { "&self" };
     let mut sig = `fn ${*name}(${recv}`;
-    // A parameter is a local, so it takes the escape every reference to it does.
     for let p of params {
         sig.push_str(&`, ${escape_ident(&p.0)}: ${p.1}`);
     }

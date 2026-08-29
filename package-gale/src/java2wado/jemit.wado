@@ -21,10 +21,10 @@ use {
     RULE_START_TOK_LOCAL,
     LR_ACC_LOCAL,
 } from "../action_translate.wado";
-use { to_snake_case, escape_ident, MIN_PREC_LOCAL } from "../ident.wado";
+use { to_snake_case, escape_ident } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 use { str_lit } from "../wadopoet.wado";
-use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
+use { JExpr, JMember, JCall, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 
@@ -345,9 +345,6 @@ fn emit_local(
             return Result::Err(`java2wado: local '${l.name}' needs an initializer`);
         },
     };
-    // A Java local named after a generated one (`p`, `kind`, `vals`) would
-    // shadow it for the rest of the fn, so the declaration takes the same
-    // escape every reference to it does.
     return Result::Ok(`let mut ${escape_ident(&l.name)}: ${ty} = ${init};`);
 }
 

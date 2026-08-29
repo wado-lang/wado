@@ -1,6 +1,5 @@
 use {
     Grammar,
-    Alternative,
     OptionValue,
     LexerRule,
     ParserRule,
@@ -17,7 +16,6 @@ use {
 } from "./ir.wado";
 use { build as build_follow_env } from "./follow_env.wado";
 use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
-use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use {
     collect_literal_tokens,
     gen_token_constants,
@@ -40,7 +38,7 @@ use {
     stage_lexer_bodies,
     translate_attr_types,
 } from "./java2wado.wado";
-use { MemberDecls, member_names, members_present } from "./java2wado/jmembers.wado";
+use { member_names, members_present } from "./java2wado/jmembers.wado";
 use {
     lexer_superclass_name,
     parser_superclass_name,
@@ -55,8 +53,8 @@ use {
 } from "./superclass.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
-use { GenContext, sets_overlap } from "./gen_context.wado";
-use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
+use { GenContext } from "./gen_context.wado";
+use { CodeWriter, EnumSpec, Vis } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
@@ -68,19 +66,8 @@ use {
     DiagnosticOwner,
     DiagnosticSite,
     Rule,
-    SimpleRule,
-    MultiAltRule,
-    MultiAltDispatch,
-    LeftRecursiveRule,
-    LrAlt,
     AltBody,
-    Op,
-    GroupOp,
     GroupShape,
-    SimpleCstShape,
-    SingleAltShape,
-    GeneralShape,
-    FieldDecl,
 } from "./gir.wado";
 
 pub struct GenerateOptions {
