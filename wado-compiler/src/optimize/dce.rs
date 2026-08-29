@@ -323,12 +323,12 @@ fn extend_reachable_for_optimizer_passes(
     // calls, so the target must survive the pre-loop DCE. Gating on a surviving
     // candidate makes the edge self-limiting. The `$value_copy$` half is not
     // gated: WIR build names those helpers after the final DCE.
-    if let (Some((str_id, str_func_id)), Some(char_id)) = (push_str.clone(), push_char_id.clone())
-        && reachable.contains(&str_id)
-        && !reachable.contains(&char_id)
-        && has_short_push_str_candidate(project, str_func_id)
+    if let (Some((str_id, str_func_id)), Some(char_id)) = (&push_str, &push_char_id)
+        && reachable.contains(str_id)
+        && !reachable.contains(char_id)
+        && has_short_push_str_candidate(project, *str_func_id)
     {
-        reachable.extend(compute_reachable(call_graph, &char_id));
+        reachable.extend(compute_reachable(call_graph, char_id));
     }
 
     // `nir/string_push`'s append fusion writes a run of appends in terms of the

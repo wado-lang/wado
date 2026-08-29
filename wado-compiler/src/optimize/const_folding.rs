@@ -334,11 +334,7 @@ fn build_global_env(
                 interp.with_callees(callees);
                 interp.with_ctfe_builtins(ctfe_builtins);
                 interp.with_globals(&env);
-                let body = declared.body();
-                match declared.expr() {
-                    Operand::Expr(e) => interp.reduce_to_lattice(body, e),
-                    op @ Operand::Value(_) => interp.operand_to_lattice(body, op),
-                }
+                operand_lattice(&interp, declared.body(), declared.expr())
             }
         };
         if !matches!(lattice, Lattice::Unevaluated) {
@@ -1033,10 +1029,7 @@ impl ConstFoldVisitor<'_> {
         match &engine.body.exprs[target].kind {
             ExprKind::Local { index, .. } => {
                 let index = *index;
-                let lat = match value {
-                    Operand::Expr(ve) => self.interpreter.reduce_to_lattice(engine.body, ve),
-                    Operand::Value(_) => self.interpreter.operand_to_lattice(engine.body, value),
-                };
+                let lat = operand_lattice(&self.interpreter, engine.body, value);
                 self.interpreter.invalidate_local(index);
                 self.interpreter.bind_local(index, scalar_only(lat));
             }
@@ -1080,20 +1073,15 @@ impl ConstFoldVisitor<'_> {
             }
             _ => return,
         };
-        let lat = match value {
-            Operand::Expr(e) => self.interpreter.reduce_to_lattice(body, e),
-            Operand::Value(_) => self.interpreter.operand_to_lattice(body, value),
-        };
+        let lat = operand_lattice(&self.interpreter, body, value);
         // A mutable binding carries its value forward only while that value is a
         // scalar. An aggregate is mutated in place — through an element `&mut`,
         // an iterator, a captured reference — none of which reassigns the local
         // or borrows it by name, so no write summary here would drop the stale
         // constant.
         let lat = if is_mut { scalar_only(lat) } else { lat };
-        // Drop any prior knowledge keyed by this index (rare — a fresh
-        // `let` typically introduces a unique index, but defensive).
-        // This also clears stale field entries from a same-index reuse
-        // before we record new ones below.
+        // A same-index reuse would otherwise keep the earlier `let`'s constant
+        // and its field entries.
         self.interpreter.invalidate_local(local_index);
         self.interpreter
             .record_ref_root(local_index, Self::borrowed_root(body, value));
@@ -1195,6 +1183,15 @@ impl ConstFoldVisitor<'_> {
             // reference the callee can store and mutate; drop the local.
             self.interpreter.invalidate_local(*idx);
         }
+    }
+}
+
+/// What an operand denotes: an expression is reduced first, a promoted value
+/// read straight from the pool, which already holds it folded.
+fn operand_lattice(interp: &Interpreter<'_>, body: &Body, op: Operand) -> Lattice {
+    match op {
+        Operand::Expr(e) => interp.reduce_to_lattice(body, e),
+        Operand::Value(_) => interp.operand_to_lattice(body, op),
     }
 }
 

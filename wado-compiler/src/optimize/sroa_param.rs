@@ -310,12 +310,7 @@ fn candidate_info_for(
     type_table: &TypeTable,
     field_table: &FieldTableIndex,
 ) -> Option<SroaInfo> {
-    let struct_type_id = match type_table.get(param_type) {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-        ResolvedType::Struct { .. } => param_type,
-        _ => return None,
-    };
-    let key = struct_key_of(struct_type_id, type_table)?;
+    let key = struct_key_behind_ref(param_type, type_table)?;
     let fields = field_table.get(&key)?;
     if fields.is_empty() {
         return None;
@@ -364,6 +359,14 @@ fn reference_param_struct_key(
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_key_of(*inner, type_table),
         _ => None,
     }
+}
+
+/// The struct `type_id` names, whether it is the struct or one reference to it.
+fn struct_key_behind_ref(
+    type_id: TypeId,
+    type_table: &TypeTable,
+) -> Option<(String, ModuleSource)> {
+    struct_key_of(type_id, type_table).or_else(|| reference_param_struct_key(type_id, type_table))
 }
 
 /// Reject a reference candidate whose call-time snapshot the callee could
@@ -455,10 +458,9 @@ fn mut_reachable_contains(
     }
     let (inner, inner_writable) = match type_table.get(ty) {
         ResolvedType::Struct { def, type_args } => {
-            let module_source = &type_table.struct_head_module(*def).clone();
             let key = (
                 type_table.struct_rendered_name(*def, type_args),
-                module_source.clone(),
+                type_table.struct_head_module(*def).clone(),
             );
             let writable_here = writable || type_table.is_mut_box(ty);
             if writable_here && &key == target {
@@ -607,8 +609,7 @@ fn transitive_reachable_writes(project: &NirPackage) -> Vec<ReachableWrites> {
     while let Some(c) = work.pop() {
         queued[c] = false;
         let callee_set = writes[c].clone();
-        for k in 0..callers[c].len() {
-            let caller = callers[c][k];
+        for &caller in &callers[c] {
             if writes[caller].absorb(&callee_set) && !queued[caller] {
                 queued[caller] = true;
                 work.push(caller);
@@ -1360,8 +1361,7 @@ fn peel_one_ref(body: &Body, arg: ExprId) -> ExprId {
 
 /// Whether `ty` names the wrapper struct, directly or behind a reference or box.
 fn denotes_struct(ty: TypeId, key: &(String, ModuleSource), type_table: &TypeTable) -> bool {
-    struct_key_of(ty, type_table).as_ref() == Some(key)
-        || reference_param_struct_key(ty, type_table).as_ref() == Some(key)
+    struct_key_behind_ref(ty, type_table).as_ref() == Some(key)
         || type_table
             .box_payload_of(ty)
             .is_some_and(|p| struct_key_of(p, type_table).as_ref() == Some(key))

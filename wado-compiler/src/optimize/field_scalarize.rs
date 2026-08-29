@@ -1658,33 +1658,8 @@ fn bind_for_sync(
     {
         return (Vec::new(), value, Vec::new());
     }
-    let type_id = body.operand_type(value);
-    let tmp_idx = ctx.alloc_temp(type_id);
-    let tmp_name = ctx.temp_name(tmp_idx);
-    let let_sid = push_stmt(
-        body,
-        StmtKind::Let {
-            name: tmp_name.clone(),
-            local_index: tmp_idx,
-            is_mut: false,
-            is_reactive: false,
-            type_id,
-            value,
-            // The temp captures a fresh r-value, so no deep value-copy applies.
-            skip_value_copy: true,
-        },
-        span,
-    );
-    let read = push_expr(
-        body,
-        ExprKind::Local {
-            index: tmp_idx,
-            name: tmp_name,
-        },
-        type_id,
-        span,
-    );
-    (vec![let_sid], read.into(), vec![(tmp_idx, type_id)])
+    let (let_sid, read, tmp_idx, type_id) = bind_temp(body, value, ctx, span);
+    (vec![let_sid], read, vec![(tmp_idx, type_id)])
 }
 
 /// Whether `stmt` never falls through to the statement after it — a `loop`
@@ -1984,6 +1959,20 @@ fn hoist_operand_to_temp(
     ctx: &mut WalkCtx,
     span: crate::token::Span,
 ) -> (Operand, u32, TypeId) {
+    let (let_sid, read, tmp_idx, type_id) = bind_temp(body, value, ctx, span);
+    out.push(let_sid);
+    (read, tmp_idx, type_id)
+}
+
+/// Bind `value` to a fresh pooled temp, handing back the `let`, a read of it,
+/// and the temp's index and type. The temp captures a fresh r-value, so no
+/// deep value-copy applies.
+fn bind_temp(
+    body: &mut Body,
+    value: Operand,
+    ctx: &mut WalkCtx,
+    span: crate::token::Span,
+) -> (StmtId, Operand, u32, TypeId) {
     let type_id = body.operand_type(value);
     let tmp_idx = ctx.alloc_temp(type_id);
     let tmp_name = ctx.temp_name(tmp_idx);
@@ -2000,8 +1989,7 @@ fn hoist_operand_to_temp(
         },
         span,
     );
-    out.push(let_sid);
-    let local_e = push_expr(
+    let read = push_expr(
         body,
         ExprKind::Local {
             index: tmp_idx,
@@ -2010,7 +1998,7 @@ fn hoist_operand_to_temp(
         type_id,
         span,
     );
-    (local_e.into(), tmp_idx, type_id)
+    (let_sid, read.into(), tmp_idx, type_id)
 }
 
 /// Commit every scalar-canonical candidate to the field for an escape

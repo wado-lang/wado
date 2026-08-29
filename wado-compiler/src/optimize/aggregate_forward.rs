@@ -1,10 +1,9 @@
 //! Deliver a freshly built aggregate to its consumer directly, so the binding
 //! [`super::sroa`] sees is the literal — its candidate is a `Let` bound to one.
 //!
-//! `?` leaves two hops in the way. `sroa_variant_return` rewrites a
-//! `Result<S, E>`-returning call into slots, so an inlined callee that always
-//! succeeds constructs the `Ok` only for the caller to open it again, and the
-//! opened payload is then re-bound to the name the body actually uses:
+//! `?` leaves two hops in the way. `sroa_variant_return` puts a `Result`-
+//! returning call into slots, so an inlined callee that always succeeds builds
+//! the `Ok` only for the caller to open again, and re-binds the payload:
 //!
 //! ```text
 //! __vr   = Option<S>::Some(S { … });
@@ -12,11 +11,9 @@
 //! seq    = __qm_v;                          // `mut`, so copy_prop declines
 //! ```
 //!
-//! Neither hop is elidable on its own: `elide_local` wants a local nobody reads,
-//! and `copy_prop` will not propagate into a binding that is later written. Both
-//! collapse here, leaving `seq = S { … }` for SROA to scalarize — which is why
-//! every serde container serializer kept its struct on the heap and read each
-//! field back through it.
+//! Neither is elidable alone — `elide_local` wants a local nobody reads, and
+//! `copy_prop` will not propagate into one later written. Both collapse here,
+//! leaving `seq = S { … }` for SROA to scalarize.
 
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};

@@ -611,6 +611,21 @@ fn hoist_value_arg(
         span,
     });
 
+    let wrap_block = set_then_get_block(body, inner, module_source, name, ty, guarded, span);
+    body.exprs[arg_expr].kind = ExprKind::Block(wrap_block);
+}
+
+/// `{ GlobalVarSet(name, inner); GlobalVarGet(name) }` — the block that gives
+/// `inner` a name without moving where it runs.
+fn set_then_get_block(
+    body: &mut Body,
+    inner: ExprId,
+    module_source: &ModuleSource,
+    name: &str,
+    ty: TypeId,
+    guarded: Option<crate::nir::FuncId>,
+    span: crate::token::Span,
+) -> BlockId {
     let set_expr = body.exprs.push(ExprNode {
         kind: ExprKind::GlobalVarSet {
             module_source: module_source.clone(),
@@ -620,8 +635,8 @@ fn hoist_value_arg(
         type_id: TypeTable::UNIT,
         span,
     });
-    let set_stmt = if let Some(is_uninitialized) = guarded {
-        guard_set_on_uninit(
+    let set_stmt = match guarded {
+        Some(is_uninitialized) => guard_set_on_uninit(
             body,
             set_expr,
             module_source,
@@ -629,12 +644,11 @@ fn hoist_value_arg(
             ty,
             is_uninitialized,
             span,
-        )
-    } else {
-        body.stmts.push(StmtNode {
+        ),
+        None => body.stmts.push(StmtNode {
             kind: StmtKind::Expr(Operand::Expr(set_expr)),
             span,
-        })
+        }),
     };
     let get_expr = body.exprs.push(ExprNode {
         kind: ExprKind::GlobalVarGet {
@@ -648,11 +662,10 @@ fn hoist_value_arg(
         kind: StmtKind::Expr(Operand::Expr(get_expr)),
         span,
     });
-    let wrap_block = body.blocks.push(BlockNode {
+    body.blocks.push(BlockNode {
         stmts: vec![set_stmt, get_stmt],
         span,
-    });
-    body.exprs[arg_expr].kind = ExprKind::Block(wrap_block);
+    })
 }
 
 /// Local indices declared by exactly one `let` statement in `body`.
@@ -701,47 +714,7 @@ fn hoist_inline_ref(
     };
     let span = body.exprs[ref_expr].span;
 
-    let set_expr = body.exprs.push(ExprNode {
-        kind: ExprKind::GlobalVarSet {
-            module_source: module_source.clone(),
-            name: name.to_string(),
-            value: Operand::Expr(inner),
-        },
-        type_id: TypeTable::UNIT,
-        span,
-    });
-    let set_stmt = if let Some(is_uninitialized) = guarded {
-        guard_set_on_uninit(
-            body,
-            set_expr,
-            module_source,
-            name,
-            ty,
-            is_uninitialized,
-            span,
-        )
-    } else {
-        body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(Operand::Expr(set_expr)),
-            span,
-        })
-    };
-    let get_expr = body.exprs.push(ExprNode {
-        kind: ExprKind::GlobalVarGet {
-            module_source: module_source.clone(),
-            name: name.to_string(),
-        },
-        type_id: ty,
-        span,
-    });
-    let get_stmt = body.stmts.push(StmtNode {
-        kind: StmtKind::Expr(Operand::Expr(get_expr)),
-        span,
-    });
-    let wrap_block = body.blocks.push(BlockNode {
-        stmts: vec![set_stmt, get_stmt],
-        span,
-    });
+    let wrap_block = set_then_get_block(body, inner, module_source, name, ty, guarded, span);
     let block_expr = body.exprs.push(ExprNode {
         kind: ExprKind::Block(wrap_block),
         type_id: ty,
