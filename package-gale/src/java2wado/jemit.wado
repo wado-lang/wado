@@ -21,7 +21,7 @@ use {
     RULE_START_TOK_LOCAL,
     LR_ACC_LOCAL,
 } from "../action_translate.wado";
-use { to_snake_case, MIN_PREC_LOCAL } from "../ident.wado";
+use { to_snake_case, escape_ident, MIN_PREC_LOCAL } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 use { str_lit } from "../wadopoet.wado";
 use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
@@ -345,7 +345,10 @@ fn emit_local(
             return Result::Err(`java2wado: local '${l.name}' needs an initializer`);
         },
     };
-    return Result::Ok(`let mut ${l.name}: ${ty} = ${init};`);
+    // A Java local named after a generated one (`p`, `kind`, `vals`) would
+    // shadow it for the rest of the fn, so the declaration takes the same
+    // escape every reference to it does.
+    return Result::Ok(`let mut ${escape_ident(&l.name)}: ${ty} = ${init};`);
 }
 
 /// Emit `System.out.print`/`println` as `<this>.emit(<template>)`, rendering the
@@ -715,7 +718,7 @@ fn name_expr(
         return api_expr(env, ApiCall::TokenStartCharPos, lexer_token_start_column_expr());
     }
     return match resolve_name(env, name) {
-        Local => Result::Ok(*name),
+        Local => Result::Ok(escape_ident(name)),
         RuleArg => resolve_attr_ref(rule, rules, &`$${*name}`, vals_in_scope, bindings, &env.this_bind),
         Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
         Unknown => if env.lexer {

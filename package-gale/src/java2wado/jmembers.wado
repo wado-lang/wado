@@ -7,7 +7,7 @@ use { JToken } from "./jlexer.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr, JStmt } from "./jparser.wado";
 use { emit_java_stmts, emit_expr, map_java_type, with_locals, JEnv } from "./jemit.wado";
-use { to_snake_case } from "../ident.wado";
+use { to_snake_case, escape_ident } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 
 /// One field on the generated recognizer struct, from a `@members` field decl.
@@ -388,8 +388,9 @@ fn build_method(
 ) -> Result<String, String> {
     let recv = if mutates { "&mut self" } else { "&self" };
     let mut sig = `fn ${*name}(${recv}`;
+    // A parameter is a local, so it takes the escape every reference to it does.
     for let p of params {
-        sig.push_str(&`, ${p.0}: ${p.1}`);
+        sig.push_str(&`, ${escape_ident(&p.0)}: ${p.1}`);
     }
     sig.push(')');
     if *ret_java != "void" {

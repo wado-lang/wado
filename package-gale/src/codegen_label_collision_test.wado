@@ -70,6 +70,10 @@ WS : ' ' -> skip ;
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
     assert out.contains("let kind = p.peek_kind();"), "the dispatch still reads the lookahead";
+    // The positive half: the negative assertions below also pass on output that
+    // binds neither element.
+    assert out.contains("let kind_ = p.expect(TK_KIND"), `the escaped binding must be emitted: ${out}`;
+    assert out.contains("let vals_ = p.expect(TK_VALS"), `the escaped binding must be emitted: ${out}`;
     assert !out.contains("let kind = p.expect("), `the lookahead must not be shadowed: ${out}`;
     assert !out.contains("let vals = p.expect("), `the value channel must not be shadowed: ${out}`;
 }

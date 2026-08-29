@@ -92,18 +92,21 @@ test "merge_grammars keeps each split's bare @members with the recognizer that d
     let parser = parse("parser grammar FooParser;\n@members { tag: String = \"\"; }\nr : A ;").unwrap();
     let merged = merge_grammars([parser, lexer]);
 
-    let mut lexer_members = 0;
-    let mut parser_members = 0;
+    // The bodies, not just the counts: swapping the two blocks keeps one of each.
+    let mut lexer_body = String::new();
+    let mut parser_body = String::new();
     for let act of &merged.named_actions {
         if is_lexer_members(act, &merged.kind) {
-            lexer_members += 1;
+            lexer_body.push_str(&act.body.text);
         }
         if is_parser_members(act, &merged.kind) {
-            parser_members += 1;
+            parser_body.push_str(&act.body.text);
         }
     }
-    assert lexer_members == 1, `lexer @members: ${lexer_members}`;
-    assert parser_members == 1, `parser @members: ${parser_members}`;
+    assert lexer_body.contains("depth"), `lexer @members: '${lexer_body}'`;
+    assert !lexer_body.contains("tag"), `lexer @members: '${lexer_body}'`;
+    assert parser_body.contains("tag"), `parser @members: '${parser_body}'`;
+    assert !parser_body.contains("depth"), `parser @members: '${parser_body}'`;
 }
 
 test "merge_grammars tolerates a numeric channel id with no channels block" {

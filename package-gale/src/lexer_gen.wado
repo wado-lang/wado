@@ -1557,21 +1557,10 @@ fn gen_lexer_alts_replay(
         let label = `sel_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = sel_saved_${id};`);
-        // The selection has to pick the arm the match picked, so it evaluates
-        // the predicates the match evaluated even where the enclosing replay
-        // body does not (`probe_ea`).
-        gen_lexer_alt_seq(
-            w,
-            &alts[i],
-            &plan.arms[i],
-            0,
-            all_rules,
-            &`break ${label}`,
-            ci,
-            probe_ea(true, ea),
-            hm,
-            false,
-        );
+        // The selection has to pick the arm the match picked, so it always
+        // evaluates the predicates the match evaluated — even where the
+        // enclosing replay body does not.
+        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, all_rules, &`break ${label}`, ci, true, hm, false);
         if longest {
             w.line(&`if pos > sel_best_${id} \{ sel_best_${id} = pos; sel_alt_${id} = ${i}; \}`);
         } else {

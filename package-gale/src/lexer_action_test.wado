@@ -540,6 +540,8 @@ B : 'b' ;
 
 /// How many times `needle` appears in `haystack`.
 fn count_occurrences(haystack: &String, needle: &String) -> i32 {
+    // An empty needle is found at every position without advancing `pos`.
+    assert !needle.is_empty(), "count_occurrences needs a needle to advance past";
     let mut n = 0;
     let mut pos = 0;
     loop {

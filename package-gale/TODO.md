@@ -34,7 +34,7 @@ Empty right now.
 
 ## Stage C — action / predicate execution
 
-Design in [`action.md`](./action.md). Landed: every lexer emit the match can take replays its actions in place (restructured repeats included), the lexer `$`-attribute surface answers in a `language = Wado` body, `@lexer::members` works under `language = Java`, and a same-named label resolves against the rule its own alternative called. What is left below is held by something other than action execution.
+Design in [`action.md`](./action.md). Landed: every lexer emit the match can take replays its translatable actions in place (restructured repeats included), the lexer `$`-attribute surface answers in a `language = Wado` body, `@lexer::members` works under `language = Java`, and a same-named label resolves against the rule its own alternative called. A body the translator refuses is still reported and dropped rather than replayed — `UnsupportedAction`, warn-and-emit, unchanged. What is left below is held by something other than action execution.
 
 One narrow gap remains in the surface itself: `$line` has no `$`-form, because the inlined runtime carries no line-number helper and adding one would land in every generated parser for an attribute no grammar asks for. A reference to it is a loud error.
 
