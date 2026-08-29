@@ -1100,21 +1100,36 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
     out
 }
 
-/// The sibling-const locals read anywhere inside `value`.
+/// The sibling-const locals read anywhere inside `value`, closed over what each
+/// of their definitions reads in turn — a hoist that takes `a` has to take the
+/// `b` that `a` is built from, or it leaves `b` allocating where it stood and
+/// the initializer naming a local out of scope.
 fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> IndexSet<u32> {
     let mut out = IndexSet::default();
-    let Some(e) = value.as_expr() else {
-        return out;
-    };
-    let mut stack = vec![NodeRef::Expr(e)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node
-            && let ExprKind::Local { index, .. } = &body.exprs[id].kind
-            && siblings.set.contains(index)
-        {
-            out.insert(*index);
+    let mut pending = vec![value];
+    while let Some(op) = pending.pop() {
+        let Some(e) = op.as_expr() else { continue };
+        let mut found = IndexSet::default();
+        let mut stack = vec![NodeRef::Expr(e)];
+        while let Some(node) = stack.pop() {
+            if let NodeRef::Expr(id) = node
+                && let ExprKind::Local { index, .. } = &body.exprs[id].kind
+                && siblings.set.contains(index)
+            {
+                found.insert(*index);
+            }
+            body.for_each_operand(node, |o| {
+                if let Some(v) = o.as_value() {
+                    body.values.collect_opaque_locals(v, &mut found);
+                }
+            });
+            body.for_each_child(node, |c| stack.push(c));
         }
-        body.for_each_child(node, |c| stack.push(c));
+        for idx in found {
+            if siblings.set.contains(&idx) && out.insert(idx) {
+                pending.extend(siblings.defs.get(&idx).copied());
+            }
+        }
     }
     out
 }
@@ -1669,8 +1684,8 @@ impl Gate<'_> {
             return false;
         }
         let Some(body) = f.body.as_ref() else {
-            // A builtin has no body to walk; its read-only parameters are
-            // stated on the reference itself.
+            // Nothing to walk: only the builtins that state a read-only
+            // parameter on the reference itself pass, everything else fails.
             return crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
                 .reads_param_only(param_pos);
         };

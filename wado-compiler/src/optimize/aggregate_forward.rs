@@ -103,13 +103,16 @@ impl Rule for AggregateForwardRule {
 
     /// The value bound to a local that the next statement reads. The aggregate
     /// moves to where that read stood, so the two statements must be adjacent
-    /// and the binding must have this one reader.
+    /// and the binding must have this one reader — counting the promoted ones,
+    /// which the `Let` would otherwise leave naming a local it no longer binds.
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         let found = stmts.windows(2).enumerate().find_map(|(at, pair)| {
             let (local, source) = binding(engine.body, pair[0])?;
             let forward = consumer(engine.body, pair[1], local, source)?;
-            (engine.local_reads(local).len() == 1 && engine.local_has_one_version(local))
+            (engine.local_reads(local).len() == 1
+                && engine.local_has_one_version(local)
+                && engine.promoted_read_count(local) == 0)
                 .then_some((at, forward))
         });
         let Some((at, (read, forwarded))) = found else {
