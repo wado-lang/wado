@@ -94,10 +94,9 @@ jobs:
             if: steps.precheck.outputs.should-run == 'true'
             run: mise run doc-stdlib
 
-      # Whole-tree formatters, after the parallel join so they don't race a
-      # regenerator. `mise run format` is the local entry point for all three;
-      # here they stay separate steps so each is timed and fails on its own, and
-      # these two — disjoint trees, neither taking the cargo lock — run together.
+      # Whole-tree formatters (`mise run format` locally), separate steps so each
+      # is timed and fails on its own. After the join so they don't race a
+      # regenerator; these two take no cargo lock.
       - parallel:
           - name: Format Markdown
             if: steps.precheck.outputs.should-run == 'true'
@@ -106,9 +105,7 @@ jobs:
             if: steps.precheck.outputs.should-run == 'true'
             run: ./target/debug/wado format -w .
 
-      # The third formatter: a second compile, and rustfmt has to follow
-      # clippy-fix's rewrites, so it runs last and keeps the cargo lock
-      # uncontended.
+      # Last: a second compile, and rustfmt has to follow clippy-fix's rewrites.
       - name: Clippy autofix and rustfmt
         if: steps.precheck.outputs.should-run == 'true'
         run: |

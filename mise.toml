@@ -241,11 +241,9 @@ AST round-trip, and no comment drop. The corpus is not reformatted in place \
 """
 run = "cargo test -p wado-compiler --test format"
 
-# The three formatters own disjoint file sets, so `format` is the one entry
-# point and the parts stay separately runnable for CI, which builds the binaries
-# once and calls them directly.
+# Disjoint file sets, so the three run concurrently.
 [tasks.format]
-description = "Format every source file: Rust, Markdown, and Wado"
+description = "Format Rust, Markdown, and Wado files"
 depends = ["format-rust", "format-md", "format-wado"]
 
 [tasks.format-rust]
@@ -256,15 +254,11 @@ run = "cargo fmt --all"
 description = "Format Markdown files"
 run = "cargo run -p wado-dev-tools --quiet -- format-md"
 
-[tasks.format-wado]
-description = "Format Wado source files"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
 # Exclusions come from each package's wado.toml [format] (wado-compiler excludes
 # `tests/**`); generated/, build/, submodules and gitignored paths are automatic.
-cargo run --bin wado -- format -w .
-"""
+[tasks.format-wado]
+description = "Format Wado files"
+run = "cargo run --bin wado -- format -w ."
 
 [tasks.clippy]
 description = "Run clippy checks"

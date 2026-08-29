@@ -35,7 +35,7 @@ mise run on-task-started   # install project tools
 ```sh
 mise run test        # test Rust crates
 mise run test-wado   # test Wado modules
-mise run format      # format every source file: Rust, Markdown, and Wado
+mise run format      # format Rust, Markdown, and Wado files
 
 mise run benchmark-all     # runs all benchmarks and reports the results
 mise run report-wasm-size  # measures the size of the generated Wasm files and reports the results
@@ -149,7 +149,7 @@ Behaviour that no `--help` will remind you of:
 - A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world. `--world test` exports the entry module's `test` blocks and drops everything else; `serve` and `test` pick their world automatically.
 - The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP (long-running), `debug` for the test world (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on the test world picking `debug`.
 - `wado run` reaches only the directories granted to it: the current one, or exactly the `--dir` grants once any is given. Paths open relative to a grant, so an absolute path never opens.
-- `mise run format` skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. Naming a file or a directory _inside_ an excluded tree bypasses the exclusion, so never `wado format -w` a fixture path directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
+- The Wado formatter skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. Naming a file or a directory _inside_ an excluded tree bypasses the exclusion, so never `wado format -w` a fixture path directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
 
 ## Dependencies
 
