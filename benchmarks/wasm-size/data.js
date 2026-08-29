@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787996465888,
+  "lastUpdate": 1788042770870,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51845,6 +51845,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c034073ca5ecd5894edeb9776cef821ccd37dfe8"
         },
         "date": 1787996464980,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6071,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17398,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 256714,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd210936b41de335929a939fe75728a22f994dc1",
+          "message": "Merge pull request #1923 from wado-lang/claude/format-specifier-wep-review-jcy9w6\n\nrefactor(format)!: `#` is a `Formatter` field, not a trait per specifier",
+          "timestamp": "2026-08-30T07:17:28+09:00",
+          "tree_id": "a1cee9d98d0c08a8149436e9ca6667fc034909da",
+          "url": "https://github.com/wado-lang/wado/commit/bd210936b41de335929a939fe75728a22f994dc1"
+        },
+        "date": 1788042770328,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
