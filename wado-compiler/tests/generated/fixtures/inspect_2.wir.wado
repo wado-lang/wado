@@ -318,13 +318,13 @@ type "functype//core:prelude/traits.wado/inspect_2.wado/InspLine^core:prelude/tr
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<inspect_2.wado/InspPoint>^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<inspect_2.wado/InspPoint>>", ref "core:prelude/format.wado//Formatter");  // TypeId(118)
 
-type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(119)
+type "functype//core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(119)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(120)
+type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(120)
 
-type "functype//core:prelude/traits.wado/inspect_2.wado/InspPair<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "inspect_2.wado//InspPair<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(121)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(121)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(122)
+type "functype//core:prelude/traits.wado/inspect_2.wado/InspPair<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "inspect_2.wado//InspPair<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(122)
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>", ref "core:prelude/string.wado//String");  // TypeId(123)
 
@@ -626,8 +626,8 @@ fn "inspect_2.wado/__test_3_hidden_fields"() {
     let __fuse_at_17: i32;
     let __fuse_at_18: i32;
     let __fuse_at_19: i32;
-    let s_40: ref "core:prelude/string.wado//String";
-    let s_78: ref "core:prelude/string.wado//String";
+    let s_33: ref "core:prelude/string.wado//String";
+    let s_71: ref "core:prelude/string.wado//String";
     if ref.is_null(global:inspect_2.wado::__const_obj_57) {
         global:inspect_2.wado::__const_obj_57 = struct.new "inspect_2.wado//InspUser" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, password: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("secret123"), used: 9 }, age: 30 };
     }
@@ -645,10 +645,10 @@ condition: `${u:?}` == \"InspUser { name: \\\"Alice\\\", age: 30, .. }\"
         unreachable;
     }
     __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    s_40 = global:inspect_2.wado::__const_obj_50;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, s_40);
-    s_78 = global:inspect_2.wado::__const_obj_49;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, s_78);
+    s_33 = global:inspect_2.wado::__const_obj_50;
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, s_33);
+    s_71 = global:inspect_2.wado::__const_obj_49;
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, s_71);
     __cond_5 = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_10, global:inspect_2.wado::__const_obj_48);
     if @unlikely(__cond_5 == 0) {
         cold_path;
@@ -3203,6 +3203,22 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<inspect_2.wado/InspP
     }
 }
 
+fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base, upper, prefix) {
+    let bits_per_digit: i32;
+    let mask: i32;
+    let digit_count: i32;
+    let offset: i32;
+    bits_per_digit = (if base == 2 -> i32 {
+        1;
+    } else {
+        select i32(base == 8, 3, 4);
+    });
+    mask = base - 1;
+    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, prefix, digit_count);
+    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, mask, upper);
+}
+
 fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(self, f) {
     let count: i32;
     let truncated: bool;
@@ -3232,15 +3248,15 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
     __iter_5 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self_15.repr, used: self_15.used, byte_index: 0 };
     _licm_buf_54 = f;
-    b220: block {
-        l221: loop {
+    b221: block {
+        l222: loop {
             let __match_10_mv_0: i32;
             let __match_10_mv_1: char;
             multivalue_bind [__match_10_mv_0, __match_10_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(__iter_5);
             if __match_10_mv_0 == 0 {
                 if count >= 256 {
                     truncated = 1;
-                    break b220;
+                    break b221;
                 }
                 if __match_10_mv_1 == 34 {
                     new_used_64 = _licm_buf_54.used + 2;
@@ -3314,9 +3330,9 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
                 }
                 count = count + 1;
             } else {
-                break b220;
+                break b221;
             }
-            continue l221;
+            continue l222;
         };
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f, 34);
@@ -3403,22 +3419,6 @@ fn "core:prelude/traits.wado/inspect_2.wado/InspPair<core:prelude/string.wado/St
     "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(self.second, f);
     s_37 = global:core:prelude/traits.wado::__const_obj_262;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f, s_37);
-}
-
-fn "core:prelude/primitive.wado/u64::fmt_base$scalar$spec0$scalar"(self, f, base, upper, prefix) {
-    let bits_per_digit: i32;
-    let mask: i32;
-    let digit_count: i32;
-    let offset: i32;
-    bits_per_digit = (if base == 2 -> i32 {
-        1;
-    } else {
-        select i32(base == 8, 3, 4);
-    });
-    mask = base - 1;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, prefix, digit_count);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, mask, upper);
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(self, f) {

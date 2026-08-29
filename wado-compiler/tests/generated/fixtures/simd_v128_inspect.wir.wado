@@ -95,7 +95,7 @@ global global:simd_v128_inspect.wado::__const_obj_2: ref null "core:prelude/stri
 global global:core:prelude/primitive.wado::__const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 49, 50, 56, 40, 48, 120), used: 7 };
 global global:core:prelude/traits.wado::__const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
-global global:core:prelude/traits.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
+global global:core:prelude/traits.wado::__const_obj_13: ref null Array<u8> = array.new_fixed<u8>(32, 123, 32);
 global global:core:prelude/traits.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87, 114, 97, 112), used: 4 };
 
 fn "simd_v128_inspect.wado/run"() with Stdout {
@@ -532,7 +532,6 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
 
 fn "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
     let s_8: ref "core:prelude/string.wado//String";
-    let s_13: ref "core:prelude/string.wado//String";
     let s_18: ref "core:prelude/string.wado//String";
     let s_24: ref "core:prelude/string.wado//String";
     let s_28: ref "core:prelude/string.wado//String";
@@ -540,20 +539,19 @@ fn "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wad
     let start: i32;
     s_8 = global:core:prelude/traits.wado::__const_obj_14;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f, s_8);
-    s_13 = global:core:prelude/traits.wado::__const_obj_13;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f, s_13);
-    new_used = f.used + 5;
+    new_used = f.used + 8;
     if @unlikely(new_used > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used);
     }
     start = f.used;
     f.used = new_used;
-    builtin::array_set_u8(f.repr, start, 98);
-    builtin::array_set_u8(f.repr, start + 1, 121);
-    builtin::array_set_u8(f.repr, start + 2, 116);
-    builtin::array_set_u8(f.repr, start + 3, 101);
-    builtin::array_set_u8(f.repr, start + 4, 115);
+    builtin::array_copy<u8>(f.repr, start, global:core:prelude/traits.wado::__const_obj_13, 0, 3);
+    builtin::array_set_u8(f.repr, start + 3, 98);
+    builtin::array_set_u8(f.repr, start + 4, 121);
+    builtin::array_set_u8(f.repr, start + 5, 116);
+    builtin::array_set_u8(f.repr, start + 6, 101);
+    builtin::array_set_u8(f.repr, start + 7, 115);
     s_18 = global:core:prelude/traits.wado::__const_obj_12;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f, s_18);
     "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: self.bytes }, f);
