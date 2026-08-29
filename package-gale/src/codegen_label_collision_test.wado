@@ -48,6 +48,9 @@ WS : ' ' -> skip ;
         Err(e) => panic(`parse_checked failed: ${e.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
+    // The positive half: without it the negative assertion also passes on output
+    // that binds nothing at all.
+    assert out.contains("let p_ = p.expect(TK_P"), `the escaped binding must be emitted: ${out}`;
     assert !out.contains("let p = p."), `the handle must not be shadowed: ${out}`;
 }
 

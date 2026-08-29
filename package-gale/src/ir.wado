@@ -1034,6 +1034,20 @@ impl CharRange {
     }
 }
 
+/// A bare `@members` names the recognizer its own grammar has, and the merged
+/// grammar is `Combined` whatever the splits were — so the split's kind is
+/// written onto the action here, while it is still known.
+fn scoped_by_declaring_kind(act: &NamedAction, kind: &GrammarKind) -> NamedAction {
+    if act.scope matches { Some(_) } {
+        return *act;
+    }
+    let scope = match kind {
+        Lexer => "lexer",
+        Parser | Combined => "parser",
+    };
+    return NamedAction { scope: Option::Some(scope), name: act.name, body: act.body };
+}
+
 pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     if grammars.len() == 1 {
         return grammars[0];
@@ -1092,7 +1106,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         // Named actions are concatenated — they are position-bearing markers,
         // not key/value pairs, so duplicates are preserved.
         for let act of &g.named_actions {
-            named_actions.push(*act);
+            named_actions.push(scoped_by_declaring_kind(act, &g.kind));
         }
         // Build mode index remapping table for this grammar
         let mut remap: List<i32> = [];

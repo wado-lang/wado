@@ -628,7 +628,7 @@ fn gen_current_mode_reader(w: &mut CodeWriter, vis: Vis) {
 
 fn gen_one_mode_command_assert(w: &mut CodeWriter) {
     w.line(
-        &"assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, \"a lexer action may issue at most one mode command per token\";",
+        &`assert self.act_push_mode < 0 && !self.act_pop_mode && self.${LEXER_SET_MODE_FIELD} < 0, "a lexer action may issue at most one mode command per token";`,
     );
 }
 
@@ -1312,13 +1312,13 @@ fn gen_lexer_action_replay(
         // exists.
         if surface.mode_write_guard {
             w.line(
-                &"assert (if lexer.act_push_mode >= 0 { 1 } else { 0 }) + (if lexer.act_pop_mode { 1 } else { 0 }) + (if lexer.act_set_mode >= 0 { 1 } else { 0 }) <= 1, \"a lexer action may issue at most one mode command per token\";",
+                &`assert (if lexer.act_push_mode >= 0 \{ 1 \} else \{ 0 \}) + (if lexer.act_pop_mode \{ 1 \} else \{ 0 \}) + (if lexer.${LEXER_SET_MODE_FIELD} >= 0 \{ 1 \} else \{ 0 \}) <= 1, "a lexer action may issue at most one mode command per token";`,
             );
         }
         w.line(&"if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }");
         w.line(&"if lexer.act_pop_mode { best_pop_mode = true; }");
         if has_set_mode_rules {
-            w.line(&"if lexer.act_set_mode >= 0 { best_set_mode = lexer.act_set_mode; }");
+            w.line(&`if lexer.${LEXER_SET_MODE_FIELD} >= 0 \{ best_set_mode = lexer.${LEXER_SET_MODE_FIELD}; \}`);
         }
     }
     w.end();
@@ -3200,9 +3200,16 @@ fn gen_lexer_non_greedy_repeat(
     // it evaluates the predicates the match evaluated (`probe_ea`); the rest is
     // then re-run below without them, its decision already made.
     let pea = probe_ea(replay, ea);
+    // Each iteration goes through the same bounded form the greedy loop uses, so
+    // the replay stops where the match did: an inner carrying an action mutates
+    // what the exit try's predicates read, which the match pass never saw. Only
+    // the replay names a probe, so only it mints the ids — the match pass stays
+    // byte-identical.
+    let iter_id = if replay { w.next_id() } else { 0 };
     // For Plus, match at least one element first
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, ea, hm, replay);
+        let plus_id = if replay { w.next_id() } else { 0 };
+        gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, plus_id);
     }
     // Loop: try matching the rest first (non-greedy), otherwise consume one more
     w.begin(&"loop");
@@ -3223,7 +3230,7 @@ fn gen_lexer_non_greedy_repeat(
     if !replay {
         w.line(&`pos = ng_saved_${id};`);
     }
-    gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, ea, hm, replay);
+    gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, iter_id);
     w.end();
     if replay {
         gen_lexer_alt_seq(w, rest, rest_plan, 0, all_rules, fail_action, ci, ea, hm, /*replay=*/ true);

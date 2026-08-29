@@ -528,12 +528,24 @@ fn attr_ref_use(chars: &List<char>, r: &AttrRef) -> AttrUse {
     }
     if chars[j] == '=' {
         // `==` compares.
-        return if j + 1 < chars.len() && chars[j + 1] == '=' { AttrUse::Read } else { AttrUse::Write };
+        return if char_at(chars, j + 1) == '=' { AttrUse::Read } else { AttrUse::Write };
     }
-    if chars[j] matches { '+' | '-' | '*' | '/' | '%' } && j + 1 < chars.len() && chars[j + 1] == '=' {
+    // `<<=` and `>>=` assign; `<=` and `>=` compare.
+    if chars[j] matches { '<' | '>' } {
+        let shift = char_at(chars, j + 1) == chars[j] && char_at(chars, j + 2) == '=';
+        return if shift { AttrUse::ReadWrite } else { AttrUse::Read };
+    }
+    // The rest of Wado's compound assignments, all one character before `=`.
+    if chars[j] matches { '+' | '-' | '*' | '/' | '%' | '&' | '|' | '^' } && char_at(chars, j + 1) == '=' {
         return AttrUse::ReadWrite;
     }
     return AttrUse::Read;
+}
+
+/// `chars[i]`, or `'\0'` past the end — no operator spelling contains it, so a
+/// truncated one never matches.
+fn char_at(chars: &List<char>, i: i32) -> char {
+    return if i < chars.len() { chars[i] } else { '\0' };
 }
 
 /// The local a call site binds a rule / label / token result to, matching

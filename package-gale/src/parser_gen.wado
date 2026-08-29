@@ -2330,7 +2330,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
         let mut first = true;
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let single: List<String> = [single_token_first(&rule.alternatives[i].elements[0])];
-            let cond = ctx.kind_check_str(&single, &"kind");
+            let cond = ctx.kind_check_str(&single, &DISPATCH_KIND_LOCAL);
             if first {
                 w.begin(&`if ${cond}`);
                 first = false;
@@ -2338,7 +2338,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
                 w.else_begin(&`else if ${cond}`);
             }
             w.line(&`p.b.set_alt(${i});`);
-            w.line(&"let _ = p.expect(kind, &EMPTY_SYNC);");
+            w.line(&`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
             w.line(&"return;");
         }
         w.end();
@@ -2348,10 +2348,10 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
         return;
     }
 
-    let check = ctx.kind_check_str(&firsts, &"kind");
+    let check = ctx.kind_check_str(&firsts, &DISPATCH_KIND_LOCAL);
     w.begin(&`if ${check}`);
     // The token is appended by `expect`; no struct to build.
-    w.line(&"let _ = p.expect(kind, &EMPTY_SYNC);");
+    w.line(&`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
     w.line(&"return;");
     w.end();
     gen_error_fallback(w, rule, &type_name, ctx);
@@ -6795,9 +6795,9 @@ fn gen_prediction_code_inner(
             // been consumed, so a `Consume` prefix re-reads.
             let check_var = if d.depth == 0 {
                 if skip == 0 {
-                    String::from("kind");
+                    DISPATCH_KIND_LOCAL;
                 } else {
-                    String::from("p.peek_kind()");
+                    `${PARSER_HANDLE}.peek_kind()`;
                 }
             } else {
                 `p.peek_at(${d.depth})`;
@@ -6920,7 +6920,7 @@ fn gen_multi_alt_body_alt(
         } else {
             String::new();
         };
-        let cond = ctx.kind_check_str(&union_first, &"kind");
+        let cond = ctx.kind_check_str(&union_first, &DISPATCH_KIND_LOCAL);
         w.begin(&`if ${cond}${gate}`);
 
         if group.len() == 1 {

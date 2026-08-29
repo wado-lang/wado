@@ -1,7 +1,7 @@
 // Source: Gale test fixture (Stage C lexer action under a restructured repeat)
 // License: same as the Gale package
 //
-// Three repeats the emitter restructures the sequence around, each leaving
+// Four repeats the emitter restructures the sequence around, each leaving
 // `count` at 2 when its actions run where they are written:
 //
 //   A  lookahead-aware: the scan overshoots and gives the chars back, so the
@@ -10,6 +10,8 @@
 //      from the iteration that ends the loop, not from every one attempted.
 //   E  placement: the action sits between the repeat and the suffix, so it reads
 //      the cursor where the repeat stopped, not where the token ends.
+//   G  decision: a predicate re-based onto the non-greedy rest is what ends the
+//      loop, so the replay's exit try has to evaluate it too.
 //
 // `M` reads the count the run left behind and retypes itself, so the token the
 // parser sees says whether the actions ran the right number of times.
