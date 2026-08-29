@@ -89,7 +89,7 @@ Unlike Rust:
 - Value semantics: every value is deeply copied when assigned or passed to a function, except for references.
   - And thus no Copy or Clone traits.
 - Wado splits Rust's `enum` into `variant` for sum types with payloads and `enum` for plain discriminants (no payload). Bitmask types use `flags`.
-- No macros. Code generation lives outside the language, in Kiln generators (a schema — or a whole Wado dialect — becomes `.wado` source before compiling).
+- No macros.
 - No user-defined attributes.
 - No `unsafe` and no raw pointers.
 - Semicolons are just separators. Functions that return values must use `return`.

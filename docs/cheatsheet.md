@@ -36,9 +36,9 @@ let p = geo::Point::new(1, 2);      // access via namespace
 impl geo::Show for Local { ... }    // and on either side of an impl head
 ```
 
-### Schema Imports
+### Generated Imports
 
-Non-`.wado` files (`.g4`, `.proto`, ...) are imported via a generator declared in `[build-dependencies]` of `wado.toml`. See [WEP: Kiln](./wep-2026-04-12-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
+Any non-`.wado` file (`.g4`, `.proto`, a Wado dialect, ...) is imported via a generator declared in `[build-dependencies]` of `wado.toml`. See [WEP: Kiln](./wep-2026-04-12-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
 
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files

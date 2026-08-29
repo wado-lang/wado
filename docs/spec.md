@@ -4045,11 +4045,11 @@ An inline `with` source and a `wado.toml` entry for the same specifier are mutua
 
 Explicit type annotations prevent ambiguity and make dependencies clear, aligning with Wado's design philosophy of explicit imports.
 
-### Schema Imports (Kiln)
+### Generated Imports (Kiln)
 
 See [WEP: Kiln](./wep-2026-04-12-kiln.md) and [WEP: Gale](./wep-2026-03-02-gale.md).
 
-A `use` clause whose source is a non-`.wado`, non-`.wasm` input file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`, or a Wado dialect's own extension) is processed by Kiln — a code-generation pipeline that lowers the input to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
+A `use` clause whose source is any non-`.wado`, non-`.wasm` file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`, or a Wado dialect's own extension) is processed by Kiln — a code-generation pipeline that lowers the input to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
 
 ```wado
 // Gale generates a parser from an ANTLR4 grammar
