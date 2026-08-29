@@ -1,6 +1,10 @@
-//! The NIR fixed-point loop must converge, not run to its iteration cap.
-//! `sroa_variant_return` reported a change every round for a call site it had
-//! already rewritten, which held the loop open to the cap.
+//! The NIR fixed-point loop must converge, not run to its iteration cap. Three
+//! ways it failed to: `sroa_variant_return` reporting a change every round for a
+//! call site it had already rewritten, `sroa_param` doing the same for a clone
+//! it had already minted, and `const_fold` folding a decided-branch chain one
+//! link per round.
+
+use std::fmt::Write as _;
 
 use wado_compiler::{Code, CompilerOptions, LogLevel, OptLevel, Severity};
 
@@ -33,7 +37,32 @@ export fn run() {
 }
 "#;
 
-fn debug_log(opt_level: OptLevel, opt_iterations: Option<u32>) -> Vec<(Code, String)> {
+/// A derived `Inspect` separates fields with `if wrote_field { ", " } else
+/// { " { "; wrote_field = true }`, so the body is a chain of branches on one
+/// flag. Folding it one branch per fixpoint iteration makes the iteration count
+/// track the field count, which a 16-field struct alone runs past the cap.
+fn inspect_chain_source(fields: usize) -> String {
+    let mut decls = String::new();
+    let mut inits = String::new();
+    for i in 0..fields {
+        writeln!(decls, "    f{i}: i32,").unwrap();
+        writeln!(inits, "        f{i}: builtin::black_box({i}),").unwrap();
+    }
+    format!(
+        "use {{ print, Stdout }} from \"core:cli\";\n\
+         struct Node {{\n{decls}}}\n\
+         export fn run() with (Stdout) {{\n\
+         \x20   let n = Node {{\n{inits}    }};\n\
+         \x20   print(`${{n:?}}`)\n\
+         }}\n"
+    )
+}
+
+fn debug_log_of(
+    source: &str,
+    opt_level: OptLevel,
+    opt_iterations: Option<u32>,
+) -> Vec<(Code, String)> {
     let host = crate::common::InMemoryHost::new();
     let options = CompilerOptions {
         opt_level,
@@ -43,7 +72,7 @@ fn debug_log(opt_level: OptLevel, opt_iterations: Option<u32>) -> Vec<(Code, Str
     };
     crate::common::runtime()
         .block_on(wado_compiler::compile_with_options(
-            SOURCE,
+            source,
             &host,
             Some("opt_loop_convergence.wado"),
             options,
@@ -57,11 +86,18 @@ fn debug_log(opt_level: OptLevel, opt_iterations: Option<u32>) -> Vec<(Code, Str
         .collect()
 }
 
-fn iterations_run(opt_level: OptLevel) -> usize {
-    debug_log(opt_level, None)
-        .iter()
+fn debug_log(opt_level: OptLevel, opt_iterations: Option<u32>) -> Vec<(Code, String)> {
+    debug_log_of(SOURCE, opt_level, opt_iterations)
+}
+
+fn iterations_of(log: &[(Code, String)]) -> usize {
+    log.iter()
         .filter(|(code, message)| *code == Code::SpanStart && message.starts_with("nir/iteration "))
         .count()
+}
+
+fn iterations_run(opt_level: OptLevel) -> usize {
+    iterations_of(&debug_log(opt_level, None))
 }
 
 fn cap_report(log: &[(Code, String)]) -> Option<&str> {
@@ -102,5 +138,18 @@ fn exhausted_cap_is_reported_with_the_passes_still_changing() {
             "NIR optimizer hit the 1-iteration cap without converging; still changing: [nir/"
         ),
         "unexpected report: {report}"
+    );
+}
+
+/// A decided branch runs exactly one arm, so folding must carry the env through
+/// it. Dropping what the arm writes instead costs one iteration per link of the
+/// chain, which shows up as an iteration count that scales with the field count.
+#[test]
+fn inspect_chain_folds_in_one_iteration_per_struct_not_per_field() {
+    let four = iterations_of(&debug_log_of(&inspect_chain_source(4), OptLevel::O3, None));
+    let sixteen = iterations_of(&debug_log_of(&inspect_chain_source(16), OptLevel::O3, None));
+    assert!(
+        sixteen <= four,
+        "iteration count tracks the field count ({four} for 4 fields, {sixteen} for 16)"
     );
 }

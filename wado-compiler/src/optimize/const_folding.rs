@@ -101,12 +101,20 @@ pub fn fold_constants(
     let mut buffers = EngineBuffers::default();
     let len = project.functions.len();
     gate.run_gated(GatedPass::ConstFold, len, |fid| {
-        fold_function(
+        let c = fold_function(
             &project.functions[fid.index()],
             &mut visitor,
             &mut buffers,
             &type_table,
-        )
+        );
+        if c {
+            crate::compiler_trace!(
+                "const_fold",
+                "changed {}",
+                project.functions[fid.index()].borrow().name
+            );
+        }
+        c
     })
 }
 
@@ -787,14 +795,7 @@ impl ConstFoldVisitor<'_> {
                 let condition = *condition;
                 let then_block = *then_block;
                 let else_block = *else_block;
-                let writes = collect_write_effects(engine.body, NodeRef::Stmt(s));
-                let mut changed = self.visit_operand(engine, condition);
-                changed |= self.visit_alternative_block(engine, &writes, then_block);
-                if let Some(eb) = else_block {
-                    changed |= self.visit_alternative_block(engine, &writes, eb);
-                }
-                self.apply_loop_invalidations(&writes);
-                changed
+                self.visit_branch(engine, NodeRef::Stmt(s), condition, then_block, else_block)
             }
             _ => unreachable!("non-control-flow stmt reached control-flow arm"),
         }
@@ -824,13 +825,13 @@ impl ConstFoldVisitor<'_> {
         // reaching-def across arms is the engine `ValueGraph`'s concern.
         match expr_shape(engine.body, e) {
             ExprShape::If(condition, then_branch, else_branch) => {
-                let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
-                let mut changed = self.visit_operand(engine, condition);
-                changed |= self.visit_alternative_block(engine, &writes, then_branch);
-                if let Some(eb) = else_branch {
-                    changed |= self.visit_alternative_block(engine, &writes, eb);
-                }
-                self.apply_loop_invalidations(&writes);
+                let mut changed = self.visit_branch(
+                    engine,
+                    NodeRef::Expr(e),
+                    condition,
+                    then_branch,
+                    else_branch,
+                );
                 changed |= self.reduce_local(engine, e);
                 changed
             }
@@ -1168,6 +1169,39 @@ impl ConstFoldVisitor<'_> {
     ) -> bool {
         self.apply_loop_invalidations(writes);
         self.visit_block(engine, block)
+    }
+
+    /// Walk an `if`, in statement or expression position. Its arms are
+    /// alternatives — unless the env already decides the condition, in which
+    /// case exactly one of them runs and the walk carries the env straight
+    /// through it, keeping what that arm writes. Treating a decided branch as
+    /// an alternative instead costs one fixpoint iteration per link of a chain
+    /// like a derived `Inspect`'s `if wrote_field { ", " } else { " { ";
+    /// wrote_field = true }` — one iteration per field of the struct.
+    fn visit_branch(
+        &mut self,
+        engine: &mut Engine,
+        node: NodeRef,
+        condition: Operand,
+        then_block: BlockId,
+        else_block: Option<BlockId>,
+    ) -> bool {
+        let mut changed = self.visit_operand(engine, condition);
+        if let Lattice::Const(Value::Bool(taken)) =
+            operand_lattice(&self.interpreter, engine.body, condition)
+        {
+            if let Some(arm) = if taken { Some(then_block) } else { else_block } {
+                changed |= self.visit_block(engine, arm);
+            }
+            return changed;
+        }
+        let writes = collect_write_effects(engine.body, node);
+        changed |= self.visit_alternative_block(engine, &writes, then_block);
+        if let Some(eb) = else_block {
+            changed |= self.visit_alternative_block(engine, &writes, eb);
+        }
+        self.apply_loop_invalidations(&writes);
+        changed
     }
 
     /// Apply a [`LoopWriteEffects`] summary to the interpreter,
