@@ -146,8 +146,12 @@ fn exhausted_cap_is_reported_with_the_passes_still_changing() {
 /// chain, which shows up as an iteration count that scales with the field count.
 #[test]
 fn inspect_chain_folds_in_one_iteration_per_struct_not_per_field() {
-    let four = iterations_of(&debug_log_of(&inspect_chain_source(4), OptLevel::O3, None));
-    let sixteen = iterations_of(&debug_log_of(&inspect_chain_source(16), OptLevel::O3, None));
+    let four_log = debug_log_of(&inspect_chain_source(4), OptLevel::O3, None);
+    let sixteen_log = debug_log_of(&inspect_chain_source(16), OptLevel::O3, None);
+    // Without this, both runs reaching the cap would compare equal and pass.
+    assert_eq!(cap_report(&four_log), None);
+    assert_eq!(cap_report(&sixteen_log), None);
+    let (four, sixteen) = (iterations_of(&four_log), iterations_of(&sixteen_log));
     assert!(
         sixteen <= four,
         "iteration count tracks the field count ({four} for 4 fields, {sixteen} for 16)"

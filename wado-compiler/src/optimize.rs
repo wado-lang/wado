@@ -90,7 +90,7 @@ struct OptConfig {
 /// Optimization level. Every level runs DCE and the post-loop rewrites the Wasm
 /// backend depends on; what varies is the fixed-point loop, whose iteration
 /// count and inline threshold go `O0` (skipped entirely), `O1` (2 / 4),
-/// `O2` (10 / 13, the default), `O3` (30 / 32). `Os` is `O2` plus name-section
+/// `O2` (10 / 13, the default), `O3` (20 / 32). `Os` is `O2` plus name-section
 /// stripping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
@@ -105,7 +105,7 @@ pub enum OptLevel {
     #[default]
     O2,
     /// Aggressive production optimizations. All passes including DCE.
-    /// Iterations: 30, Inline threshold: 32.
+    /// Iterations: 20, Inline threshold: 32.
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
@@ -195,6 +195,9 @@ pub fn optimize(
             // The iteration cap is defensive: a program that has not settled by
             // here is not converging, and each further round costs a full pass
             // sequence for what the ones before it already declined to finish.
+            // The heaviest source in the tree — the Gale-generated SQLite parser
+            // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack, not a
+            // budget; `cap_is_defect` below asserts as much.
             // Threshold 32 sits just under a size cliff at 33 on syntax-highlight
             // (859KB → 1049KB), for no speed gain.
             let config = OptConfig {
