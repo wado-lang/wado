@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787992318597,
+  "lastUpdate": 1787996465888,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51801,6 +51801,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/847dc411fef2ba9ab55666f84b1a9b27873673d8"
         },
         "date": 1787992317756,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6071,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17398,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 256714,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c034073ca5ecd5894edeb9776cef821ccd37dfe8",
+          "message": "Merge pull request #1917 from wado-lang/claude/stage-c-implementation-ovu4hn\n\nfeat(gale): finish Stage C action execution for the lexer",
+          "timestamp": "2026-08-29T18:26:29+09:00",
+          "tree_id": "7b695e737cc4dc16496f3451d390300816045924",
+          "url": "https://github.com/wado-lang/wado/commit/c034073ca5ecd5894edeb9776cef821ccd37dfe8"
+        },
+        "date": 1787996464980,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
