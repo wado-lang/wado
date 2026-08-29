@@ -70,14 +70,12 @@ global mut global:opt_const_ascii_push_direct.wado::__modules_initialized: bool 
 
 fn "opt_const_ascii_push_direct.wado/run"() with Stdout {
     let buf: ref "core:prelude/string.wado//String";
-    let new_used_7: i32;
-    let start_8: i32;
-    let new_used_21: i32;
-    let start_22: i32;
+    let new_used: i32;
+    let start: i32;
     let handle: i32;
     let packed: i64;
-    let rx_36: i32;
-    let tx_37: i32;
+    let rx_26: i32;
+    let tx_27: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_const_ascii_push_direct.wado::__modules_initialized);
         cold_path;
@@ -85,27 +83,20 @@ fn "opt_const_ascii_push_direct.wado/run"() with Stdout {
         global:opt_const_ascii_push_direct.wado::__modules_initialized = 1;
     };
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
-    new_used_7 = 0 + 1;
-    if @unlikely(new_used_7 > builtin::array_len(buf.repr)) {
+    new_used = 0 + 2;
+    if @unlikely(new_used > builtin::array_len(buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
     }
-    start_8 = buf.used;
-    buf.used = new_used_7;
-    builtin::array_set_u8(buf.repr, start_8, 97);
-    new_used_21 = buf.used + 1;
-    if @unlikely(new_used_21 > builtin::array_len(buf.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_21);
-    }
-    start_22 = buf.used;
-    buf.used = new_used_21;
-    builtin::array_set_u8(buf.repr, start_22, 90);
+    start = buf.used;
+    buf.used = new_used;
+    builtin::array_set_u8(buf.repr, start, 97);
+    builtin::array_set_u8(buf.repr, start + 1, 90);
     "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, 8364);
-    rx_36 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_37 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_const_ascii_push_direct.wado/__cm_binding__Stdout_write_via_stream"(rx_36);
-    "core:cli/write_to_stream"(tx_37, buf, 1);
+    rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_const_ascii_push_direct.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
+    "core:cli/write_to_stream"(tx_27, buf, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -125,8 +116,8 @@ fn "opt_const_ascii_push_direct.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len_3: i32;
     let new_repr: ref Array<u8>;
+    let self_5: i32;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
@@ -139,12 +130,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let repr_29: ref Array<u8>;
     let len_35: i32;
     let ptr_36: i32;
-    len_3 = message.used;
+    self_5 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len_3 + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
-        builtin::array_set_u8(new_repr, len_3, 10);
-        len_18 = local.tee end_15(len_3 + 1) - 0;
+        new_repr = builtin::array_new<u8>(self_5 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_5);
+        builtin::array_set_u8(new_repr, self_5, 10);
+        len_18 = local.tee end_15(self_5 + 1) - 0;
         ptr_19 = "mem/realloc"(0, 0, 1, len_18);
         "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
         ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
@@ -153,7 +144,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_29 = message.repr;
-        len_35 = len_3 - 0;
+        len_35 = self_5 - 0;
         ptr_36 = "mem/realloc"(0, 0, 1, len_35);
         "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
         ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
@@ -190,12 +181,12 @@ fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b6: block {
-        l7: loop {
-            break_if b6 i >= len;
+    b5: block {
+        l6: loop {
+            break_if b5 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l7;
+            continue l6;
         };
     };
 }
@@ -219,16 +210,16 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b8: block {
-        l9: loop {
-            break_if b8 offset >= count;
+    b7: block {
+        l8: loop {
+            break_if b7 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b8 select i32((result >> 4) == 0, 1, (result & 15) != 0);
-            continue l9;
+            break_if b7 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l8;
         };
     };
 }

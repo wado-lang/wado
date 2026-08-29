@@ -33,6 +33,10 @@ Writes a JSON-escaped string (with surrounding quotes) into buf. Only `"`,
 `\`, and controls (< 0x20) are escaped — all ASCII, so a run of multi-byte
 UTF-8 copies through unchanged.
 
+The scan runs first so the common escape-free string is a plain append run
+the NIR append fusion collapses; the escaping form is out-of-line and
+resumes at the offending byte.
+
 ### `pub fn to_string<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError>`
 
 Serializes a value to a JSON string. Convenience over `to_bytes` for text
