@@ -3971,9 +3971,8 @@ fn generate_fn_inspect_fn(
     )
 }
 
-/// Shared body for [`generate_fn_inspect_fn`] /
-/// [`generate_fn_inspect_alt_fn`]. The two only differ in the trait
-/// label and the `FnDispatchTrait` carried in `FunctionKind`.
+/// Body of [`generate_fn_inspect_fn`]: the stub carries its trait label and
+/// the `FnDispatchTrait` that `FunctionKind` records.
 #[allow(clippy::too_many_arguments)]
 fn generate_fn_canonical_dispatch_stub(
     trait_kind: FnDispatchTrait,

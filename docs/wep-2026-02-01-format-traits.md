@@ -39,6 +39,7 @@ struct Formatter {
     fill: char,
     align: Alignment,
     sign_plus: bool,
+    alternate: bool,   // the `#` flag
     zero_pad: bool,
     width: i32,        // NO_WIDTH (-1) = not specified
     precision: i32,    // PRECISION_DEFAULT (-2) = not specified

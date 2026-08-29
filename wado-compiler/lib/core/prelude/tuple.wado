@@ -9,7 +9,8 @@
 use { Formatter } from "core:prelude/format.wado";
 use { Ordering } from "core:prelude/traits.wado";
 
-/// Inspect for tuples: `[1, "hello", true]`
+/// Inspect for tuples: `[1, "hello", true]`, or one indented element per line
+/// under the alternate (`#`) form.
 impl<..T: Inspect> Inspect for [..T] {
     fn inspect(&self, f: &mut Formatter) {
         if f.alternate {
@@ -35,14 +36,6 @@ impl<..T: Inspect> Inspect for [..T] {
     }
 }
 
-/// Alternate (`#`) inspect for tuples — pretty-printed:
-/// ```
-/// [
-///   1,
-///   "hello",
-///   true,
-/// ]
-/// ```
 /// Eq for tuples: element-wise equality.
 impl<..T: Eq> Eq for [..T] {
     fn eq(&self, other: &Self) -> bool {
@@ -93,5 +86,3 @@ impl<..T: Display> Display for [..T] {
         f.write_str(&"]");
     }
 }
-
-/// Display for tuples; the alternate form pretty-prints, as inspect does.

@@ -187,7 +187,7 @@ fn round_off_digits_u64(val: u64, drop: i32) -> u64 {
     let quotient = val / divisor;
     let remainder = val - quotient * divisor;
     let half = divisor / 2;
-    if remainder > half || (remainder == half && quotient % 2 == 1) {
+    if remainder > half || remainder == half && quotient % 2 == 1 {
         return quotient + 1;
     }
     return quotient;
@@ -226,7 +226,7 @@ fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bo
         f.write_char('+');
     }
     f.write_char(digits.char_at_byte_unchecked(0));
-    if precision > 0 || (precision < 0 && fraction_len > 0) {
+    if precision > 0 || precision < 0 && fraction_len > 0 {
         f.write_char('.');
         f.buf.push_str_range_unchecked(&digits, 1, digits.len());
         for let mut i = fraction_len; i < precision; i += 1 {
@@ -244,7 +244,7 @@ fn abs_to_u64(val: i64) -> u64 {
     if val >= 0 {
         return val as u64;
     }
-    return (-(val + 1)) as u64 + 1;
+    return -(val + 1) as u64 + 1;
 }
 
 /// Count digits of a u64 value (as raw i64 bits) in the given power-of-2 base.

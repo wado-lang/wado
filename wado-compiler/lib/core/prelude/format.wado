@@ -140,11 +140,7 @@ impl Formatter {
         if self.zero_pad {
             // Zero padding goes after the sign, so the value reads as one
             // figure: `-0000042`, never `0000-42`.
-            let sign_len = if content.is_empty() {
-                0;
-            } else {
-                leading_sign_byte_len(content.get_byte_unchecked(0));
-            };
+            let sign_len = if content.is_empty() { 0 } else { leading_sign_byte_len(content.get_byte_unchecked(0)) };
             self.buf.push_str_range_unchecked(&content, 0, sign_len);
             self.write_char_n('0', padding);
             self.buf.push_str_range_unchecked(&content, sign_len, content.len());
@@ -233,7 +229,7 @@ impl Formatter {
         let end = self.buf.len();
         let mut count = 0;
         for let mut i = start_pos; i < end; i += 1 {
-            if (self.buf.get_byte_unchecked(i) & 0xc0) != 0x80 {
+            if self.buf.get_byte_unchecked(i) & 0xc0 != 0x80 {
                 count += 1;
             }
         }
@@ -507,5 +503,3 @@ impl<T: Inspect> Inspect for &mut T {
         (*inner).inspect(f);
     }
 }
-
-

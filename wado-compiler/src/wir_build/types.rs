@@ -1057,8 +1057,8 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
 
     // Every unique function signature in the shared type table, each carrying
     // whether its `CanonicalClosure_K` takes the slim `{ env, func }` schema or
-    // the inspectable `{ env, inspect, inspect_alt, func }` one — decided by
-    // whether a `fn(..)^Inspect[Alt]` for that `(arity, return_type)` survived
+    // the inspectable `{ env, inspect, func }` one — decided by
+    // whether a `fn(..)^Inspect` for that `(arity, return_type)` survived
     // DCE. The `(arity, return_type)` also maps back to the canonical struct
     // type id the dispatch body casts to.
     let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool, usize, crate::tir::TypeId)> =

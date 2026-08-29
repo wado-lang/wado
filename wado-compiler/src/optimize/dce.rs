@@ -46,7 +46,7 @@ struct FunctionAnalysis {
     callees: IndexSet<FunctionId>,
     /// Effect calls: (`interface_name`, `op_name`)
     effect_calls: IndexSet<(String, String)>,
-    /// Pending `__Closure_N^Inspect[Alt]::inspect[_alt]` edges. Added to the
+    /// Pending `__Closure_N^Inspect::inspect` edges. Added to the
     /// graph by `apply_inspect_edges` after the inspectable-signature set is
     /// known.
     pending_inspects: Vec<PendingInspectEdge>,
@@ -205,7 +205,7 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
 ///
 /// Consumes the call graph (and its pending inspect edges) built in
 /// the single AST walk of [`build_analysis_graph`]; mutates the graph
-/// by adding the gated per-functor `__Closure_N^Inspect[Alt]` edges
+/// by adding the gated per-functor `__Closure_N^Inspect` edges
 /// once the inspectable-signature set is known.
 fn compute_function_reachability(
     project: &mut NirPackage,
@@ -213,14 +213,14 @@ fn compute_function_reachability(
     graph: &mut AnalysisGraph,
 ) -> IndexSet<usize> {
     // Phase 2a: compute the provisional reachable set from the raw graph
-    // (without per-functor `__Closure_N^Inspect[Alt]` edges). This is
+    // (without per-functor `__Closure_N^Inspect` edges). This is
     // what determines whether a `:?`/`:#?` call site is actually live.
     let reachable_v1 = compute_reachable_from_entries(project, &graph.call_graph);
 
     // Phase 2b: derive the inspectable `(arity, ret)` set from the
     // reachable functions only, then add the gated inspect edges to the
     // call graph. The per-functor impls themselves don't issue any
-    // `Fn^Inspect[Alt]` calls (they just write per-literal strings), so
+    // `Fn^Inspect` calls (they just write per-literal strings), so
     // the inspectable set is stable under this expansion — no fixpoint
     // iteration is needed.
     let inspectable =
@@ -733,7 +733,7 @@ type PendingInspectsByCaller = IndexMap<FunctionId, Vec<PendingInspectEdge>>;
 type FuncPositions = IndexMap<FunctionId, usize>;
 
 /// Result of the single call-graph build. The call graph is the raw
-/// reachability graph *without* `__Closure_N^Inspect[Alt]` edges; those
+/// reachability graph *without* `__Closure_N^Inspect` edges; those
 /// edges are gated by the inspectable-signature set and added after the
 /// fact by `apply_inspect_edges`.
 ///
@@ -825,7 +825,7 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
     }
 }
 
-/// Augment `call_graph` with the gated `__Closure_N^Inspect[Alt]::inspect[_alt]`
+/// Augment `call_graph` with the gated `__Closure_N^Inspect::inspect`
 /// edges. Inserts exactly one edge per (caller, struct, trait) match against
 /// the inspectable-signature set computed in Phase 1b.
 fn apply_inspect_edges(
@@ -1373,7 +1373,7 @@ impl<'a> DceWalker<'a> {
             )));
 
         // Per-functor `__Closure_N^Inspect` impls only
-        // need to stay alive when their matching `fn(..)^Inspect[Alt]`
+        // need to stay alive when their matching `fn(..)^Inspect`
         // dispatch stub is reachable — tracked independently per trait so a
         // program that never prints a closure of that shape doesn't keep it (nor its
         // per-literal source-string constant) alive. The gating set isn't

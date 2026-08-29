@@ -443,7 +443,7 @@ fn round_off_digits_u128(val: u128, drop: i32) -> u128 {
     let quotient = val / divisor;
     let remainder = val - quotient * divisor;
     let half = divisor / 2;
-    if remainder > half || (remainder == half && quotient % 2 == 1) {
+    if remainder > half || remainder == half && quotient % 2 == 1 {
         return quotient + 1;
     }
     return quotient;
@@ -482,7 +482,7 @@ fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, uppe
         f.write_char('+');
     }
     f.write_char(digits.char_at_byte_unchecked(0));
-    if precision > 0 || (precision < 0 && fraction_len > 0) {
+    if precision > 0 || precision < 0 && fraction_len > 0 {
         f.write_char('.');
         f.buf.push_str_range_unchecked(&digits, 1, digits.len());
         for let mut i = fraction_len; i < precision; i += 1 {

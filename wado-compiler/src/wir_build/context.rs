@@ -221,7 +221,7 @@ fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, Typ
 
 /// Per-functor wrapper functions for the `CanonicalClosure_K` vtable slots,
 /// populated by `register_closure_wrappers` and read by
-/// `translate_closure_to_canonical`. `inspect` / `inspect_alt` are `None` where
+/// `translate_closure_to_canonical`. `inspect` is `None` where
 /// [`WirContext::inspectable_fn_dispatch`] calls the signature unreachable, and
 /// the struct then takes the slim `{ env, func }` schema.
 #[derive(Clone, Debug)]
@@ -243,7 +243,7 @@ impl<'a> WirContext<'a> {
         // the context keeps no separate copy.
 
         // The per-`(arity, ret)` inspectable gate. DCE has already run, so the
-        // surviving `fn(..)^Inspect[Alt]` stubs name exactly the shapes needing
+        // surviving `fn(..)^Inspect` stubs name exactly the shapes needing
         // vtable slots. A program that inspects no closure leaves this empty —
         // slim `{ env, func }`.
         let inspectable_fn_dispatch = compute_inspectable_fn_dispatch(package);
@@ -489,7 +489,7 @@ impl<'a> WirContext<'a> {
             fields.push(WirField {
                 name: "inspect".to_string(),
                 ty: WirType::Ref {
-                    type_id: callback_fn_type_id.clone(),
+                    type_id: callback_fn_type_id,
                     nullable: false,
                 },
                 mutable: false,
@@ -553,7 +553,7 @@ impl<'a> WirContext<'a> {
             WirField {
                 name: "inspect".to_string(),
                 ty: WirType::Ref {
-                    type_id: callback_fn_type_id.clone(),
+                    type_id: callback_fn_type_id,
                     nullable: false,
                 },
                 mutable: false,

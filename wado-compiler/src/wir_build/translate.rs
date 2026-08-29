@@ -430,7 +430,7 @@ fn register_call_wrapper(
     ctx.register_function(func, None)
 }
 
-/// Build an inspect / `inspect_alt` wrapper for a functor. Its external
+/// Build the inspect wrapper for a functor. Its external
 /// signature is fixed at `(env, formatter)` by the canonical callback type, so
 /// the function-table slot stays stable across DAE shrinkage on the impl: only
 /// surviving params are forwarded. A DCE'd impl leaves an `Unreachable` body,
@@ -834,7 +834,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         let tir_func = pending_body.tir_func.borrow();
         let type_table = pending_body.type_table.borrow();
 
-        // A `fn(..)^Inspect[Alt]` dispatch stub carries an empty TIR
+        // A `fn(..)^Inspect` dispatch stub carries an empty TIR
         // placeholder body; substitute the real one — a vtable indirect call
         // through `CanonicalClosure_K` — rather than translating it. Skipping
         // string-matching post-pass keeps name-format knowledge
