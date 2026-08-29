@@ -1,0 +1,20 @@
+//! Stage C / java2wado: a `@lexer::members` block under `language = Java`. The
+//! field lands on the generated `Lexer`, an action writes it through a
+//! `&mut self` method, and a predicate reads it through a `&self` one — the
+//! receiver a predicate can reach, since it runs against `&Lexer` for every
+//! candidate rule.
+
+use jm from "./grammars/java_lex_members.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/java_lex_members" },
+    };
+
+test "a java lexer member gates a predicate and is written by an action" {
+    let deep = jm::parse_s(&"aab");
+    assert deep.ok(), "clean parse";
+    assert deep.output == "aaB", `two pushes let the predicate through, got '${deep.output}'`;
+
+    let shallow = jm::parse_s(&"ab");
+    assert shallow.ok(), "clean parse";
+    assert shallow.output == "ac", `one push leaves the predicate false, got '${shallow.output}'`;
+}

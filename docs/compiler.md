@@ -308,18 +308,18 @@ The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::sema
 
 `Engine` itself performs no I/O — every query takes an `&impl CompilerHost`, so the caller decides how imported modules are loaded. `wado-lsp` ships a `FilesystemCompilerHost`; embeddings (VS Code Wasm, browser playground) supply their own host. The `wado-compiler` crate must compile to `wasm32-unknown-unknown` to support those bundled deployments; CI enforces this. See [WEP 2026-04-18: LSP Architecture](./wep-2026-04-18-lsp-architecture.md).
 
-## Kiln (Schema-Driven Code Generation)
+## Kiln (Code Generation from Input Files)
 
-Kiln is the compiler's mechanism for turning external schemas (`.proto`, `.graphql`, `.g4`, `.wit`, custom IDLs) into `.wado` source. A **generator** is itself an ordinary Wado package that targets the `core:kiln/generator` world; the compiler builds it to a Wasm component, and the host (`wado-cli`) executes it via wasmtime to produce `.wado` source files. Invocations are content-addressed by their schema bytes, options, and the generator's source hash. See [WEP 2026-04-12: Kiln](./wep-2026-04-12-kiln.md).
+Kiln is the compiler's mechanism for turning any input file — a schema (`.proto`, `.graphql`, `.g4`, `.wit`), a Wado dialect, anything a generator understands — into `.wado` source. A **generator** is itself an ordinary Wado package that targets the `core:kiln/generator` world; the compiler builds it to a Wasm component, and the host (`wado-cli`) executes it via wasmtime to produce `.wado` source files. Invocations are content-addressed by their input bytes, options, and the generator's source hash. See [WEP 2026-04-12: Kiln](./wep-2026-04-12-kiln.md).
 
 The compiler-side pieces live in `src/kiln/`:
 
 | Module             | Concern                                                                              |
 | ------------------ | ------------------------------------------------------------------------------------ |
-| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + schema paths)    |
+| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + input paths)     |
 | `inline.rs`        | Collects inline `use … with { generator: … }` invocations (`InvocationIndex`)        |
 | `plan.rs`          | DAG + topological sort of invocations; rejects cycles                                |
-| `cache.rs`         | Cache-key composition over schemas, options, and the generator's identity hash       |
+| `cache.rs`         | Cache-key composition over inputs, options, and the generator's identity hash        |
 | `header.rs`        | Generated-file `#![generated]` header emission and parsing                           |
 | `metadata.rs`      | Persisted per-invocation cache state (`<primary>.kiln.json`)                         |
 | `options.rs`       | Extracts an `OptionsDescriptor` from a generator's `pub struct Options`              |

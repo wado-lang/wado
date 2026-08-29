@@ -113,6 +113,26 @@ pub variant GrammarKind {
     Parser,
 }
 
+pub fn is_parser_members(act: &NamedAction, kind: &GrammarKind) -> bool {
+    return is_members(act, &"parser", !kind matches { Lexer });
+}
+
+pub fn is_lexer_members(act: &NamedAction, kind: &GrammarKind) -> bool {
+    return is_members(act, &"lexer", kind matches { Lexer });
+}
+
+/// Whether a named action is a `@members` block for one recognizer: scoped to it
+/// explicitly, or bare in a grammar whose kind names it.
+fn is_members(act: &NamedAction, scope: &String, bare_is_mine: bool) -> bool {
+    if act.name != "members" {
+        return false;
+    }
+    return match &act.scope {
+        Some(s) => *s == *scope,
+        None => bare_is_mine,
+    };
+}
+
 /// RefKind distinguishes the three flavors of pending (unresolved)
 /// reference that `parse()` collects. The kind selects which rule table
 /// `check_references` resolves against. See the variants for details.
@@ -1014,6 +1034,19 @@ impl CharRange {
     }
 }
 
+/// A bare `@members` names its own grammar's recognizer, and the merge is
+/// `Combined` whatever the splits were — so the kind is written on while known.
+fn scoped_by_declaring_kind(act: &NamedAction, kind: &GrammarKind) -> NamedAction {
+    if act.scope matches { Some(_) } {
+        return *act;
+    }
+    let scope = match kind {
+        Lexer => "lexer",
+        Parser | Combined => "parser",
+    };
+    return NamedAction { scope: Option::Some(scope), name: act.name, body: act.body };
+}
+
 pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     if grammars.len() == 1 {
         return grammars[0];
@@ -1072,7 +1105,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         // Named actions are concatenated — they are position-bearing markers,
         // not key/value pairs, so duplicates are preserved.
         for let act of &g.named_actions {
-            named_actions.push(*act);
+            named_actions.push(scoped_by_declaring_kind(act, &g.kind));
         }
         // Build mode index remapping table for this grammar
         let mut remap: List<i32> = [];
@@ -1218,8 +1251,9 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
 ///
 /// ANTLR4 aliases a parser literal only to a rule whose entire body is that
 /// one string literal: `K : 'k' 'w' ;` and `K : ('kw') ;` do not alias
-/// `'kw'`. An action does not block it, and must not — `is_literal_duplicate`
-/// would then dedup the rule away and drop the action with it.
+/// `'kw'`. An action does not block it: aliasing settles token identity, and
+/// which matcher covers the text is `lexer_rule_route`'s question — it keeps a
+/// body-carrying rule out of the shared literal matcher on its own.
 pub fn lexer_alias_text(rule: &LexerRule) -> Option<String> {
     if rule.is_fragment || rule.is_virtual || rule.mode != DEFAULT_MODE || rule.body.len() != 1 {
         return null;

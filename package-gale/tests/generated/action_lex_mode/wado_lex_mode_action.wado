@@ -1074,6 +1074,7 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 }
 pub enum TokenKind {
     LT,
+    M,
     W,
     WS,
     GT,
@@ -1083,12 +1084,13 @@ pub enum TokenKind {
 }
 
 pub global TK_LT: i32 = 0;
-pub global TK_W: i32 = 1;
-pub global TK_WS: i32 = 2;
-pub global TK_GT: i32 = 3;
-pub global TK_N: i32 = 4;
-pub global TK_EOF: i32 = 5;
-pub global TK_ERROR: i32 = 6;
+pub global TK_M: i32 = 1;
+pub global TK_W: i32 = 2;
+pub global TK_WS: i32 = 3;
+pub global TK_GT: i32 = 4;
+pub global TK_N: i32 = 5;
+pub global TK_EOF: i32 = 6;
+pub global TK_ERROR: i32 = 7;
 
 struct Lexer {
     chars: List<char>,
@@ -1102,6 +1104,7 @@ struct Lexer {
     act_pop_mode: bool = false,
     act_set_mode: i32 = -1,
     act_mode_depth: i32 = 0,
+    act_mode: i32 = 0,
 }
 
 impl Lexer {
@@ -1121,15 +1124,16 @@ impl Lexer {
         self.act_output.push_str(&s);
     }
 
-    fn reset_actions(&mut self, depth: i32) {
-        self.act_type = -1;
-        self.act_channel = -1;
+    fn reset_actions(&mut self, kind: i32, channel: i32, depth: i32, mode: i32) {
+        self.act_type = kind;
+        self.act_channel = channel;
         self.act_skip = false;
         self.act_more = false;
         self.act_push_mode = -1;
         self.act_pop_mode = false;
         self.act_set_mode = -1;
         self.act_mode_depth = depth;
+        self.act_mode = mode;
     }
 
     fn set_type(&mut self, t: i32) {
@@ -1152,17 +1156,25 @@ impl Lexer {
         assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_push_mode = m;
         self.act_mode_depth += 1;
+        self.act_mode = m;
     }
 
     fn pop_mode(&mut self) {
         assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_pop_mode = true;
         self.act_mode_depth -= 1;
+        self.act_mode = -1;
     }
 
     fn set_mode(&mut self, m: i32) {
         assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_set_mode = m;
+    }
+
+    fn mode(&self) -> i32 {
+        if self.act_set_mode >= 0 { return self.act_set_mode; }
+        assert self.act_mode >= 0, "$mode after pop_mode reads a mode only the mode stack holds";
+        return self.act_mode;
     }
 
     fn mode_depth(&self) -> i32 {
@@ -1181,6 +1193,14 @@ fn apply_LT_actions(lx: &mut Lexer, start: i32, end: i32) {
     lx.push_mode(MODE_INNER);
 }
 
+fn apply_M_actions(lx: &mut Lexer, start: i32, end: i32) {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'm' { return; }
+    pos += 1;
+    if lx.mode() == MODE_DEFAULT_MODE { lx.act_set_mode = MODE_INNER }
+}
+
 fn apply_GT_actions(lx: &mut Lexer, start: i32, end: i32) {
     let chars = &lx.chars;
     let mut pos = start;
@@ -1192,6 +1212,13 @@ fn apply_GT_actions(lx: &mut Lexer, start: i32, end: i32) {
 fn try_LT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_M(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
     pos += 1;
     return pos;
 }
@@ -1275,6 +1302,11 @@ pub fn tokenize(input: &String) -> TokenStream {
             } else if first_char matches { '<' } {
                 end = try_LT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
+            } else if first_char matches { 'm' } {
+                end = try_M(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_M; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
+                end = try_W(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             } else if first_char matches { 'a'..='z' } {
                 end = try_W(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
@@ -1285,7 +1317,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if current_mode == 1 {
             if first_char matches { '>' } {
                 end = try_GT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
+                if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 2; }
             } else if first_char matches { '0'..='9' } {
                 end = try_N(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_N; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
@@ -1300,16 +1332,19 @@ pub fn tokenize(input: &String) -> TokenStream {
             lexer.pos = start + 1;
         } else {
             if best_act >= 0 {
-                lexer.reset_actions(mode_stack.len());
+                lexer.reset_actions(best_kind, best_channel, mode_stack.len(), current_mode);
                 if best_act == 0 {
                     apply_LT_actions(&mut lexer, start, best_end);
                 } else if best_act == 1 {
+                    apply_M_actions(&mut lexer, start, best_end);
+                } else if best_act == 2 {
                     apply_GT_actions(&mut lexer, start, best_end);
                 }
-                if lexer.act_type >= 0 { best_kind = lexer.act_type; }
-                if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }
+                best_kind = lexer.act_type;
+                best_channel = lexer.act_channel;
                 if lexer.act_more { best_more = true; }
                 if lexer.act_skip { best_act_skip = true; }
+                assert (if lexer.act_push_mode >= 0 { 1 } else { 0 }) + (if lexer.act_pop_mode { 1 } else { 0 }) + (if lexer.act_set_mode >= 0 { 1 } else { 0 }) <= 1, "a lexer action may issue at most one mode command per token";
                 if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }
                 if lexer.act_pop_mode { best_pop_mode = true; }
                 if lexer.act_set_mode >= 0 { best_set_mode = lexer.act_set_mode; }
@@ -1358,6 +1393,7 @@ pub fn tokenize(input: &String) -> TokenStream {
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
         TK_LT => "LT",
+        TK_M => "M",
         TK_W => "W",
         TK_WS => "WS",
         TK_GT => "GT",
@@ -1790,6 +1826,13 @@ fn _parse_item__inner(p: &mut Parser) -> () {
         }
         return;
     }
+    if kind == TK_M {
+        let m = p.expect(TK_M, &EMPTY_SYNC);
+        if !p.speculating {
+             p.emit("m") 
+        }
+        return;
+    }
     p.no_viable(
         "no alternative of item matches",
         p.peek_span(),
@@ -1840,8 +1883,8 @@ pub fn parse_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut v: List<String> = List::with_capacity(8);
+    for let mut k = 0; k < 8; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;
@@ -1870,9 +1913,9 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_GT | TK_LT | TK_N | TK_W };
+    return k matches { TK_GT | TK_LT | TK_M | TK_N | TK_W };
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_GT, TK_LT, TK_N, TK_W];
+global SYNC_0: List<i32> = [TK_GT, TK_LT, TK_M, TK_N, TK_W];
 

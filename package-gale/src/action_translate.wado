@@ -4,25 +4,25 @@
 //! cannot emit returns a loud error naming it, so codegen surfaces a diagnostic
 //! rather than emitting invalid code. Shared with java2wado via `resolve_attr_ref`.
 
-use { ParserRule, AttrDecl, AltAction, Alternative, Element } from "./ir.wado";
-use { resolve_attrs, ResolvedAttr, AttrTarget } from "./attr_resolve.wado";
+use { ParserRule, AttrDecl, Alternative, Element } from "./ir.wado";
+use { resolve_attrs, ResolvedAttr, AttrTarget, AltBinding } from "./attr_resolve.wado";
 use { find_attr_refs, AttrRef } from "./attr_scan.wado";
 use { splice_attrs } from "./attr_substitute.wado";
-use { to_pascal_case, to_snake_case, escape_ident } from "./ident.wado";
+use {
+    to_pascal_case,
+    to_snake_case,
+    escape_ident,
+    PARSER_HANDLE,
+    LEXER_HANDLE,
+    VALS_LOCAL,
+    MIN_PREC_LOCAL,
+} from "./ident.wado";
 use { is_self_ref_element } from "./lr_util.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
     return `${to_pascal_case(&rule.name)}Vals`;
 }
-
-/// The recognizer handle in emitted context-API calls (`p.token_text(...)`):
-/// `p` in a parse / predicate body, `self` in a `@members` method body.
-pub global PARSER_HANDLE: String = "p";
-
-/// The lexer handle in emitted lexer-action calls (`lx.emit(...)`): the
-/// `&mut Lexer` parameter of the generated `apply_<rule>_actions`.
-pub global LEXER_HANDLE: String = "lx";
 
 /// Translate `body` against `rule`'s environment, resolving `$`-refs over the
 /// value channel and leaving surrounding Wado verbatim. `vals_in_scope` is true
@@ -33,7 +33,7 @@ pub fn translate_wado_action(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules, bindings)?;
@@ -60,7 +60,7 @@ pub fn resolve_attr_ref(
     rules: &List<ParserRule>,
     ref_text: &String,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
     return translate_wado_action(rule, rules, ref_text, vals_in_scope, bindings, handle);
@@ -128,9 +128,9 @@ fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
 
 /// The actual local a `$ref` binds to: the post-dedup binding (so `e_2` resolves
 /// correctly), falling back to `base` when the reference is not in the map.
-fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &String) -> String {
-    return match bindings.iter_ref().find(|b: &[bool, String, String]| b.0 == is_token && b.1 == *base) {
-        Some(b) => b.2,
+fn binding_for(bindings: &List<AltBinding>, is_token: bool, base: &String) -> String {
+    return match bindings.iter_ref().find(|b: &AltBinding| b.is_token == is_token && b.base == *base) {
+        Some(b) => b.field,
         None => *base,
     };
 }
@@ -172,9 +172,6 @@ fn vals_field_ref(field: &String) -> String {
     return `${VALS_LOCAL}.${*field}`;
 }
 
-/// The value-struct local every rule that emits a value channel binds.
-pub global VALS_LOCAL: String = "vals";
-
 /// Whether `body` reads `$<label>.text` for the rule-call binding `dedup_base`,
 /// the one reference that needs the call's token range captured.
 pub fn action_reads_rule_span(body: &String, dedup_base: &String) -> bool {
@@ -197,10 +194,6 @@ pub fn action_reads_rule_ctx(body: &String, dedup_base: &String) -> bool {
     return false;
 }
 
-/// The precedence-threshold parameter a left-recursive rule fn carries; read
-/// by a `$_p` substitution in an LR rule (elsewhere `$_p` is the literal 0).
-global MIN_PREC_LOCAL: String = "min_prec";
-
 /// The LR precedence-climbing accumulator local (`gen_lr_fn`), holding the left
 /// operand's vals. java2wado maps `((Ctx)$ctx).<rule>(0)` onto it.
 pub global LR_ACC_LOCAL: String = "_lr_acc";
@@ -208,7 +201,7 @@ pub global LR_ACC_LOCAL: String = "_lr_acc";
 /// The Wado local a rule-child reference binds to (post-dedup), for a rule child
 /// named `name` — the same lookup the identity translator uses for `$rule`.
 /// Shared with java2wado's ctx-child accessor (`((Ctx)$ctx).<rule>(k)`).
-pub fn rule_binding_for(bindings: &List<[bool, String, String]>, name: &String) -> String {
+pub fn rule_binding_for(bindings: &List<AltBinding>, name: &String) -> String {
     return binding_for(bindings, false, &binding_name(name));
 }
 
@@ -281,7 +274,7 @@ fn action_attr_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String,
 ) -> Result<String, String> {
     if r.target matches { ParserSpecial } {
@@ -339,18 +332,25 @@ fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result
     };
 }
 
+/// What a lexer body may reach: the commit latches belong to an action, and
+/// `$mode` needs a grammar that declares one.
+pub struct LexerAttrEnv {
+    pub in_action: bool = true,
+    pub uses_modes: bool = false,
+}
+
 /// Translate a lexer predicate / action body (identity translator): resolve
 /// lexer `$`-attributes to expressions over the match fn's `chars` / `start` /
-/// `pos`, leaving the surrounding host text (already Wado) verbatim. Only
-/// `$text` (the matched slice) is emitted today; any other `$`-reference is a
-/// loud error, so codegen never emits an unresolved `$ref`. A `$`-free body
-/// (`pos - start == 4`) passes through unchanged.
-pub fn translate_lexer_predicate(body: &String) -> Result<String, String> {
+/// `pos` and the `lx` commit latches, leaving the surrounding host text (already
+/// Wado) verbatim. An unresolved `$`-reference is a loud error, so codegen never
+/// emits one. A `$`-free body (`pos - start == 4`) passes through unchanged.
+pub fn translate_lexer_body(body: &String, env: &LexerAttrEnv) -> Result<String, String> {
     let raw = find_attr_refs(body);
+    let chars: List<char> = body.chars().collect();
     let mut refs: List<ResolvedAttr> = [];
     let mut replacements: List<String> = [];
     for let r of &raw {
-        replacements.push(lexer_attr_expr(r)?);
+        replacements.push(lexer_attr_expr(r, env, attr_ref_use(&chars, r))?);
         refs.push(ResolvedAttr {
             target: AttrTarget::LexerSpecial,
             name: r.name,
@@ -361,15 +361,6 @@ pub fn translate_lexer_predicate(body: &String) -> Result<String, String> {
         });
     }
     return Result::Ok(splice_attrs(body, &refs, &replacements));
-}
-
-/// Translate a lexer `{ ... }` action body (identity translator). Same
-/// resolution as `translate_lexer_predicate` — `$text` maps to the matched
-/// slice over the apply-fn's `chars` / `start` / `pos`, the rest passes through
-/// verbatim (already Wado, calling the `lx` action-context API). A body that
-/// references an unresolved `$`-attribute is a loud error.
-pub fn translate_lexer_action(body: &String) -> Result<String, String> {
-    return translate_lexer_predicate(body);
 }
 
 /// The match-fn expression for the text matched so far (`chars[start..pos]`),
@@ -390,25 +381,171 @@ pub fn lexer_token_start_column_expr() -> String {
     return "char_pos_in_line(chars, start)";
 }
 
-/// The match-fn expression a lexer `$`-attribute becomes. `$text` is the slice
-/// matched so far; other lexer attributes await their own resolution.
-fn lexer_attr_expr(r: &AttrRef) -> Result<String, String> {
-    if r.name == "text" && r.member matches { None } {
-        return Result::Ok(lexer_matched_text_expr());
-    }
-    builtin::cold_path();
-    return Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
+/// How a `$`-reference is used at its site. `$mode`'s read and its write land on
+/// different `Lexer` fields, so the site decides before the expression is built.
+pub enum AttrUse {
+    Read,
+    Write,
+    /// `$type += 1`: both, in one site.
+    ReadWrite,
 }
 
+/// What a lexer `$`-attribute name denotes. Total over the names, so an
+/// unsupported one is a case here rather than a sentinel a caller must test for.
+variant LexerAttr {
+    /// A read over the match window, which answers in a predicate too — it is
+    /// the cursor, not the outcome.
+    Window(String),
+    /// A commit latch an action may assign: `$type = X` and `lx.set_type(X)`
+    /// write one field, seeded from the tournament so a read answers as ANTLR's.
+    Latch,
+    Unsupported,
+}
+
+fn lexer_attr(name: &String) -> LexerAttr {
+    return match *name {
+        "text" => LexerAttr::Window(lexer_matched_text_expr()),
+        "pos" => LexerAttr::Window(lexer_cursor_column_expr()),
+        "index" => LexerAttr::Window("pos"),
+        "type" | "channel" | "mode" => LexerAttr::Latch,
+        _ => LexerAttr::Unsupported,
+    };
+}
+
+/// The match-fn expression a lexer `$`-attribute becomes.
+fn lexer_attr_expr(r: &AttrRef, env: &LexerAttrEnv, use_: AttrUse) -> Result<String, String> {
+    if r.member matches { Some(_) } {
+        builtin::cold_path();
+        return Result::Err(`$${r.name}: a lexer attribute has no members`);
+    }
+    return match lexer_attr(&r.name) {
+        Window(expr) => if use_ matches { Read } {
+            Result::Ok(expr);
+        } else {
+            builtin::cold_path();
+            Result::Err(`$${r.name}: this lexer attribute is a read of the match window, not a settable one`);
+        },
+        Latch => lexer_latch_expr(r, env, use_),
+        Unsupported => {
+            builtin::cold_path();
+            Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
+        },
+    };
+}
+
+/// A commit latch's expression. Only an action reaches one: a predicate is
+/// evaluated for losing candidates too, so it settles nothing.
+fn lexer_latch_expr(r: &AttrRef, env: &LexerAttrEnv, use_: AttrUse) -> Result<String, String> {
+    if !env.in_action {
+        builtin::cold_path();
+        return Result::Err(
+            `$${r.name}: a lexer predicate is evaluated for losing candidates too, so the commit latches neither answer nor settle anything there`,
+        );
+    }
+    if r.name != "mode" {
+        return Result::Ok(`${LEXER_HANDLE}.act_${r.name}`);
+    }
+    if !env.uses_modes {
+        builtin::cold_path();
+        return Result::Err("$mode: this grammar declares no lexer mode to switch to");
+    }
+    return match use_ {
+        Read => Result::Ok(`${LEXER_HANDLE}.${LEXER_MODE_READER}()`),
+        Write => Result::Ok(`${LEXER_HANDLE}.${LEXER_SET_MODE_FIELD}`),
+        // The current mode and the pending switch are separate fields, so one
+        // site cannot be both. `$mode = <mode>` is the ANTLR spelling.
+        ReadWrite => Result::Err("$mode: read it and assign it in separate statements"),
+    };
+}
+
+/// The `Lexer` field holding the mode the token is being matched in, seeded per
+/// token from the tokenize loop. Not the pending-switch latch below.
+pub global LEXER_MODE_FIELD: String = "act_mode";
+
+/// The method a `$mode` read goes through, rather than the field: it asserts the
+/// mode is one the `Lexer` can name (see `gen_current_mode_reader`).
+pub global LEXER_MODE_READER: String = "mode";
+
+/// The `Lexer` latch a `$mode` assignment (or `lx.set_mode(m)`) writes.
+pub global LEXER_SET_MODE_FIELD: String = "act_set_mode";
+
 /// Resolve one whole `$ref` occurrence (delimiters included) in a lexer body,
-/// for a front end that has already isolated the reference (java2wado).
-pub fn resolve_lexer_attr_ref(text: &String) -> Result<String, String> {
+/// for a front end that has already isolated the reference (java2wado) and so
+/// knows from its own syntax tree how the site uses it.
+pub fn resolve_lexer_attr_ref(
+    text: &String,
+    env: &LexerAttrEnv,
+    use_: AttrUse = AttrUse::Read,
+) -> Result<String, String> {
     let refs = find_attr_refs(text);
     if refs.len() != 1 {
         builtin::cold_path();
         return Result::Err(`lexer attribute: '${*text}' is not a single $-reference`);
     }
-    return lexer_attr_expr(&refs[0]);
+    return lexer_attr_expr(&refs[0], env, use_);
+}
+
+/// Which of `$mode`'s two fields a grammar's lexer bodies name — each gates an
+/// emit site. Read off the bodies before staging translates them away.
+pub struct ModeAttrUse {
+    pub reads: bool = false,
+    pub writes: bool = false,
+}
+
+/// Accumulate one body's `$mode` uses. Language-independent: a `$`-reference is
+/// ANTLR syntax, spelled the same in every host language java2wado admits.
+pub fn body_mode_attr_use(body: &String, out: &mut ModeAttrUse) {
+    let refs = find_attr_refs(body);
+    if refs.is_empty() {
+        return;
+    }
+    let chars: List<char> = body.chars().collect();
+    for let r of &refs {
+        if r.name != "mode" || r.member matches { Some(_) } {
+            continue;
+        }
+        match attr_ref_use(&chars, r) {
+            Read => out.reads = true,
+            Write => out.writes = true,
+            // Refused by `lexer_attr_expr`; the body is dropped with a
+            // diagnostic, so neither field is reached.
+            ReadWrite => {
+            },
+        }
+    }
+}
+
+/// How the site uses a reference, read off the text that follows: a bare `=`
+/// assigns, a compound one does both. `$x` is a leaf, so nothing but the
+/// operator right after it can make the site a write.
+fn attr_ref_use(chars: &List<char>, r: &AttrRef) -> AttrUse {
+    let mut j = r.end;
+    while j < chars.len() && chars[j].is_ascii_whitespace() {
+        j += 1;
+    }
+    if j >= chars.len() {
+        return AttrUse::Read;
+    }
+    if chars[j] == '=' {
+        // `==` compares.
+        return if char_at(chars, j + 1) == '=' { AttrUse::Read } else { AttrUse::Write };
+    }
+    // `<<=` and `>>=` assign; `<=` and `>=` compare.
+    if chars[j] matches { '<' | '>' } {
+        let shift = char_at(chars, j + 1) == chars[j] && char_at(chars, j + 2) == '=';
+        return if shift { AttrUse::ReadWrite } else { AttrUse::Read };
+    }
+    // The rest of Wado's compound assignments, all one character before `=`.
+    if chars[j] matches { '+' | '-' | '*' | '/' | '%' | '&' | '|' | '^' } && char_at(chars, j + 1) == '=' {
+        return AttrUse::ReadWrite;
+    }
+    return AttrUse::Read;
+}
+
+/// `chars[i]`, or `'\0'` past the end — no operator spelling contains it, so a
+/// truncated one never matches.
+fn char_at(chars: &List<char>, i: i32) -> char {
+    return if i < chars.len() { chars[i] } else { '\0' };
 }
 
 /// The local a call site binds a rule / label / token result to, matching
@@ -419,11 +556,7 @@ pub fn binding_name(name: &String) -> String {
 
 /// A token reference resolves to its bound stream index; a member reads that
 /// token through the context API.
-fn token_member_expr(
-    r: &ResolvedAttr,
-    bindings: &List<[bool, String, String]>,
-    handle: &String,
-) -> Result<String, String> {
+fn token_member_expr(r: &ResolvedAttr, bindings: &List<AltBinding>, handle: &String) -> Result<String, String> {
     return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member, handle);
 }
 
@@ -451,7 +584,7 @@ fn token_member_of(idx: &String, member: &Option<String>, handle: &String) -> Re
 fn rule_member_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
     handle: &String,
 ) -> Result<String, String> {
     let binding = binding_for(bindings, false, &binding_name(&r.name));

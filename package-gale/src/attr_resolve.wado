@@ -8,7 +8,7 @@
 //! and the fragment span the substitution engine later rewrites. An
 //! unresolvable reference is a loud error, never a silent passthrough.
 
-use { ParserRule, Element, Alternative, AttrDecl } from "./ir.wado";
+use { ParserRule, Element } from "./ir.wado";
 use { AttrRef, find_attr_refs } from "./attr_scan.wado";
 use { to_snake_case, escape_ident } from "./ident.wado";
 
@@ -47,6 +47,20 @@ pub struct ResolvedAttr {
     pub end: i32,
 }
 
+/// One binding an alternative made: the post-dedup local a `$ref` resolves to,
+/// plus what it was bound from. Built after dedup, so `e_2` and a same-named
+/// label over two rules both reach the real local.
+pub struct AltBinding {
+    pub is_token: bool,
+    /// Pre-dedup base name — the label, or the element's own name.
+    pub base: String,
+    /// The local the emit bound, `base` with any dedup suffix.
+    pub field: String,
+    /// The referenced rule's name for a rule call, empty for the token ops:
+    /// which rule a label names is the only ambiguity kind cannot settle.
+    pub ref_name: String = "",
+}
+
 struct LabelInfo {
     name: String,
     list: bool,
@@ -78,7 +92,7 @@ pub fn resolve_attrs(
     body: &String,
     rule: &ParserRule,
     rules: &List<ParserRule>,
-    bindings: &List<[bool, String, String]> = &NO_BINDINGS,
+    bindings: &List<AltBinding> = &NO_BINDINGS,
 ) -> Result<List<ResolvedAttr>, String> {
     let env = build_attr_env(rule);
     let refs = find_attr_refs(body);
@@ -94,7 +108,7 @@ fn resolve_one(
     r: &AttrRef,
     env: &AttrEnv,
     rules: &List<ParserRule>,
-    bindings: &List<[bool, String, String]>,
+    bindings: &List<AltBinding>,
 ) -> Result<ResolvedAttr, String> {
     if let Some(lab) = label_named(env, &r.name, bindings) {
         let target = label_target(&lab);
@@ -134,15 +148,15 @@ fn resolve_one(
 
 /// Empty binding list — the default when a caller resolves outside an
 /// alternative (validation passes, tests).
-global NO_BINDINGS: List<[bool, String, String]> = [];
+global NO_BINDINGS: List<AltBinding> = [];
 
 /// The label named `name`. A label name may be bound in more than one
-/// alternative and to a different kind in each (`x=sub` in one, `x='y'` in
-/// another); the environment is rule-wide, so pick the one whose kind matches
-/// what the *enclosing alternative* actually bound. Without that, every
-/// alternative resolves as the first one declared. Falls back to first-match
-/// when the alternative binds nothing by that name.
-fn label_named(env: &AttrEnv, name: &String, bindings: &List<[bool, String, String]>) -> Option<LabelInfo> {
+/// alternative, to a different kind in each (`x=sub` in one, `x='y'` in
+/// another) or to a different rule (`x=a | x=b`); the environment is rule-wide,
+/// so pick the one the *enclosing alternative* actually bound. Without that,
+/// every alternative resolves as the first one declared. Falls back to
+/// first-match when the alternative binds nothing by that name.
+fn label_named(env: &AttrEnv, name: &String, bindings: &List<AltBinding>) -> Option<LabelInfo> {
     // Compare on the name codegen derived, not the surface one: `myLabel` would
     // otherwise never match a binding and every alternative would take `first`.
     let key = escape_ident(&to_snake_case(name));
@@ -155,12 +169,19 @@ fn label_named(env: &AttrEnv, name: &String, bindings: &List<[bool, String, Stri
             first = Option::Some(*lab);
         }
         for let b of bindings {
-            if b.1 == key && b.0 == lab.is_token {
+            if b.base == key && b.is_token == lab.is_token && binding_names(b, lab) {
                 return Option::Some(*lab);
             }
         }
     }
     return first;
+}
+
+/// Whether the binding names the element this label records. A rule call
+/// carries its target's name, which is what separates `x=a` from `x=b`; the
+/// other ops leave it empty and are settled by kind alone.
+fn binding_names(b: &AltBinding, lab: &LabelInfo) -> bool {
+    return b.ref_name.is_empty() || b.ref_name == lab.ref_name;
 }
 
 fn label_target(lab: &LabelInfo) -> AttrTarget {

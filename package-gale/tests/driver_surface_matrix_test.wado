@@ -1,0 +1,48 @@
+//! The surface matrix: fixtures whose job is to be *compiled*.
+//!
+//! Every defect the matrix was added for had one signature — generation
+//! succeeded and the generated module did not compile. `src/*_test.wado` asserts
+//! on emitted text, which cannot see that, and a driver test only sees it for a
+//! grammar someone had already written. These fixtures exist so each action
+//! surface has been through the Wado compiler at least once: importing them is
+//! the assertion, and the bodies below only prove the generated code also runs.
+
+use acts from "./grammars/surface_actions.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/surface_actions" },
+    };
+use names from "./grammars/surface_names.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/surface_names" },
+    };
+use lexmem from "./grammars/surface_lexer_members.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/surface_lexer_members" },
+    };
+
+test "the action surface compiles and runs" {
+    // `bump` through the value channel and `label` across the second members
+    // block, plus the lexer action's own print.
+    let r = acts::parse(&"( x");
+    assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
+    assert r.output == "open\nn=1\n", `output: '${r.output}'`;
+}
+
+test "elements named after generated locals compile and parse" {
+    let one = names::parse(&"p k");
+    assert one.ok(), `clean parse: ${one.diagnostics.len()} diagnostics`;
+    assert one.output == "one", `output: '${one.output}'`;
+
+    let two = names::parse(&"v f m");
+    assert two.ok(), `clean parse: ${two.diagnostics.len()} diagnostics`;
+    assert two.output == "two", `output: '${two.output}'`;
+
+    let three = names::parse(&"m + m");
+    assert three.ok(), `clean parse: ${three.diagnostics.len()} diagnostics`;
+    assert three.output == "three", `output: '${three.output}'`;
+}
+
+test "a members-only lexer compiles and tokenizes" {
+    let ts = lexmem::tokenize(&"a b");
+    assert ts.len() == 3, `tokens: ${ts.len()}`;
+}

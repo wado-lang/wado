@@ -11,12 +11,13 @@ use {
     gen_token_constants,
     gen_lexer,
     lexer_try_fn_name,
+    lexer_mode_attr_use,
     LitToken,
     compute_elem_first_chars,
     resolve_ci,
 } from "./lexer_gen.wado";
 use { CodeWriter } from "./wadopoet.wado";
-use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
+use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { SuperOp } from "./superclass.wado";
 use { TreeMap } from "core:collections";
 
@@ -159,10 +160,10 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     let mut w = CodeWriter::new();
     let atn_class = TreeMap::<String, i32>::new();
     let fields: List<MemberField> = [];
-    let methods: List<String> = [];
+    let methods: List<MemberMethod> = [];
     let members = MemberDecls { fields, methods };
     let no_ops: List<SuperOp> = [];
-    gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, &"", &no_ops);
+    gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, &"", &no_ops, &lexer_mode_attr_use(&g));
     let out = w.to_string();
     assert out.contains("fn try_ID("), out;
     assert out.contains("fn try_Id("), out;
@@ -174,10 +175,10 @@ fn lexer_source(src: String) -> String {
     let mut w = CodeWriter::new();
     let atn_class = TreeMap::<String, i32>::new();
     let fields: List<MemberField> = [];
-    let methods: List<String> = [];
+    let methods: List<MemberMethod> = [];
     let members = MemberDecls { fields, methods };
     let no_ops: List<SuperOp> = [];
-    gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, &"", &no_ops);
+    gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, &"", &no_ops, &lexer_mode_attr_use(&g));
     return w.to_string();
 }
 

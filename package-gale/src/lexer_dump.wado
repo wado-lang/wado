@@ -1,23 +1,5 @@
-//! `gale dump --lexer` rendering — per lexer rule, the matcher that covers its
-//! text and the emit strategy of every decision inside it.
-//!
-//! Each strategy is the value the emitter branches on (`lexer_rule_route`,
-//! `lexer_alts_emit`, `lexer_repeat_emit`, `lexer_group_emit` in
-//! `lexer_gen.wado`), so the report names the branch emission took rather than
-//! a re-derivation of it.
-//!
-//! The traversal reaching each decision is mirrored rather than shared, so it
-//! must match `gen_lexer_alt_seq` step for step:
-//!
-//! - the same tail propagation;
-//! - the same alternative handed to a cut-out suffix — a non-greedy repeat gets
-//!   the alt's later actions re-based onto it (`lexer_alt_rest`), every other
-//!   emit the bare elements;
-//! - the same stop-or-continue after a construct that consumed the rest of the
-//!   sequence;
-//! - a non-recursive fragment reported at each use site that inlines it.
-//!
-//! Every construct then appears exactly where it is emitted, once.
+//! `gale dump --lexer` rendering: per lexer rule, `lexer_rule_route` and the
+//! `lexer_rule_plan` tree `gen_lexer` emits from, read out.
 //!
 //! Not reported: a repeat directly under another repeat or a `~`. No sequence
 //! surrounds such a position, so there is no strategy to pick.
@@ -43,14 +25,14 @@ use {
     resolve_ci,
     lexer_try_fn_name,
     lexer_rule_route,
-    lexer_rule_is_called,
-    lexer_alts_emit,
-    lexer_repeat_emit,
-    lexer_group_emit,
     lexer_alt_suffix,
-    lexer_alt_rest,
-    lexer_alt_last_is_tail,
-    fragment_is_recursive,
+    find_fragment,
+    lexer_rule_plan,
+    LexerBodyPlan,
+    LexerSeqPlan,
+    LexerGroupPlan,
+    LexerRepeatPlan,
+    LexerElemPlan,
 } from "./lexer_gen.wado";
 use { grammar_needs_latn, build_latn } from "./latn.wado";
 use { TreeMap } from "core:collections";
@@ -202,96 +184,80 @@ fn route_emits_body(route: &LexerRuleRoute) -> bool {
 }
 
 // ==========================================================================
-// The walk — mirrors gen_lexer_alt_seq / gen_lexer_alts / gen_lexer_elem
+// The walk — the plan gen_lexer emits from, rendered
 // ==========================================================================
 
 fn walk_rule_body(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
-    let ci = resolve_ci(&ctx.grammar_opts, &rule.options);
-    // A rule reached by call is entered with its caller's suffix still to
-    // consume, so its body alternation is not in tail position.
-    let tail = !lexer_rule_is_called(rule, &ctx.rules);
-    if rule.body.len() == 1 {
-        walk_alt(o, ctx, &rule.body[0], ci, tail);
-    } else {
-        walk_alts(o, ctx, &rule.body, ci, tail, /*top=*/ true);
-    }
+    let plan = lexer_rule_plan(rule, &ctx.rules, &ctx.grammar_opts);
+    render_body(o, ctx, &rule.body, &plan, /*top=*/ true);
 }
 
-/// `top` is the rule's own body alternation. It is reported even out of tail
-/// position — that a rule's alternation cannot take maximal munch is a thing
-/// someone asks this dump for — while a nested one there stays quiet, its
-/// enclosing construct having already reported the decision.
-fn walk_alts(o: &mut DumpOut, ctx: &DumpCtx, alts: &List<LexerAlternative>, ci: bool, tail: bool, top: bool) {
-    let emit = lexer_alts_emit(alts, &ctx.rules, tail);
-    if top || !emit matches { FirstMatchNotTail } {
-        if emit matches { MaximalMunch } {
-            o.alts_maximal_munch += 1;
-        } else {
-            o.alts_first_match += 1;
-        }
-        decision_line(o, &`alternation ${alts_text(alts, 0)} — ${alts_emit_label(emit)}`);
-    }
-    // Maximal munch scans every arm to its end, so each arm inherits the tail
-    // position; first-match does not (`gen_lexer_alts`).
-    let arm_tail = emit matches { MaximalMunch };
-    for let alt of alts {
-        walk_alt(o, ctx, alt, ci, arm_tail);
-    }
-}
-
-fn walk_alt(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, ci: bool, tail: bool) {
-    let last_is_tail = lexer_alt_last_is_tail(alt, tail);
-    for let mut i = 0; i < alt.elements.len(); i += 1 {
-        let elem = &alt.elements[i];
-        if let Repeat(rep) = elem {
-            if walk_repeat(o, ctx, alt, i, rep, ci, last_is_tail) {
-                return;
-            }
-            continue;
-        }
-        if let Group(g_alts) = elem {
-            let emit = lexer_group_emit(alt, i, &ctx.rules, ci);
-            // `SingleArm` is not an alternation and `NoSuffix` is the
-            // tail-alternation decision, reported by `walk_alts` instead.
-            if !emit matches { FirstMatchSingleArm | FirstMatchNoSuffix } {
-                if emit matches { ArmScoring } {
-                    o.group_arm_scoring += 1;
+/// `top` is the rule's own body alternation, reported even out of tail position
+/// — that it cannot take maximal munch is a thing someone asks this dump for.
+/// A nested one there stays quiet: its enclosing construct reported the decision.
+fn render_body(o: &mut DumpOut, ctx: &DumpCtx, alts: &List<LexerAlternative>, plan: &LexerBodyPlan, top: bool) {
+    match plan {
+        Single(seq) => render_seq(o, ctx, &alts[0], seq),
+        Alts(ap) => {
+            if top || !ap.emit matches { FirstMatchNotTail } {
+                if ap.emit matches { MaximalMunch } {
+                    o.alts_maximal_munch += 1;
                 } else {
-                    o.group_first_match += 1;
+                    o.alts_first_match += 1;
                 }
-                decision_line(
-                    o,
-                    &`alternation ${alts_text(g_alts, 0)}${suffix_text(alt, i)} — ${group_emit_label(emit)}`,
-                );
+                decision_line(o, &`alternation ${alts_text(alts, 0)} — ${alts_emit_label(ap.emit)}`);
             }
-            if emit matches { ArmScoring } {
-                // Each arm is scanned match-only, outside tail position
-                // (`gen_lexer_alts_lookahead_aware`). The suffix is only peeked
-                // there — `pos` is restored and the emit `continue`s — so the
-                // sequence still commits it, and this loop walks it next.
-                for let g of g_alts {
-                    walk_alt(o, ctx, g, ci, false);
-                }
-                continue;
+            for let mut i = 0; i < alts.len(); i += 1 {
+                render_seq(o, ctx, &alts[i], &ap.arms[i]);
             }
-        }
-        walk_elem(o, ctx, elem, ci, last_is_tail && i == alt.elements.len() - 1);
+        },
     }
 }
 
-/// Report and walk the repeat at `alt.elements[index]`. Returns true when the
-/// emit consumed the rest of the alternative, so the caller stops iterating.
-fn walk_repeat(
-    o: &mut DumpOut,
-    ctx: &DumpCtx,
-    alt: &LexerAlternative,
-    index: i32,
-    rep: &LexerRepeatElement,
-    ci: bool,
-    last_is_tail: bool,
-) -> bool {
-    let emit = lexer_repeat_emit(alt, index, &ctx.rules, ci);
-    match emit {
+fn render_seq(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, plan: &LexerSeqPlan) {
+    for let mut i = 0; i < plan.steps.len(); i += 1 {
+        match &plan.steps[i] {
+            Repeat(rp) => render_repeat(o, ctx, alt, i, rp),
+            Group(gp) => render_group(o, ctx, alt, i, gp),
+            Elem(ep) => render_elem(o, ctx, &alt.elements[i], ep),
+        }
+    }
+}
+
+/// `SingleArm` is not an alternation and `NoSuffix` is the tail-alternation
+/// decision `render_body` reports, so neither is a line here.
+fn render_group(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i32, plan: &LexerGroupPlan) {
+    let Group(g_alts) = &alt.elements[index] else {
+        panic("a group step plans something other than a group");
+    };
+    if !plan.emit matches { FirstMatchSingleArm | FirstMatchNoSuffix } {
+        if plan.emit matches { ArmScoring } {
+            o.group_arm_scoring += 1;
+        } else {
+            o.group_first_match += 1;
+        }
+        decision_line(
+            o,
+            &`alternation ${alts_text(g_alts, 0)}${suffix_text(alt, index)} — ${group_emit_label(plan.emit)}`,
+        );
+    }
+    match &plan.shape {
+        // The suffix is a step of the enclosing sequence, which renders it — the
+        // scoring only peeks it.
+        Scored(arms) => {
+            for let mut a = 0; a < g_alts.len(); a += 1 {
+                render_seq(o, ctx, &g_alts[a], &arms[a]);
+            }
+        },
+        FirstMatch(body) => render_body(o, ctx, g_alts, body, /*top=*/ false),
+    }
+}
+
+fn render_repeat(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i32, plan: &LexerRepeatPlan) {
+    let Repeat(rep) = &alt.elements[index] else {
+        panic("a repeat step plans something other than a repeat");
+    };
+    match plan.emit {
         NonGreedy => {
             o.repeat_non_greedy += 1;
         },
@@ -304,91 +270,61 @@ fn walk_repeat(
     }
     decision_line(
         o,
-        &`repeat ${elem_text(&alt.elements[index], 0)}${suffix_text(alt, index)} — ${repeat_emit_label(emit)}`,
+        &`repeat ${elem_text(&alt.elements[index], 0)}${suffix_text(alt, index)} — ${repeat_emit_label(plan.emit)}`,
     );
-
-    // Every emit runs the inner as its own loop body, so nothing of the
-    // alternative follows it there.
-    walk_elem(o, ctx, &rep.element, ci, false);
-    match emit {
-        // The rest of the alt — its re-based predicates included — is tried
-        // before each extra iteration, outside tail position
-        // (`gen_lexer_non_greedy_repeat`).
-        NonGreedy => {
-            walk_alt(o, ctx, &lexer_alt_rest(alt, index), ci, false);
-            return true;
-        },
-        // The forward scan peeks and then commits the suffix as the bare
-        // element sequence `gen_lexer_suffix_seq` lowers, carrying the alt's
-        // tail position (`gen_lexer_repeat_lookahead_aware`). The alt's own
-        // predicates stay with the alt: it `break`s, so the post-loop pass
-        // still places the trailing one.
-        LookaheadAware => {
-            walk_alt(o, ctx, &suffix_alt(alt, index), ci, last_is_tail);
-            return true;
-        },
-        // The suffix stays part of the sequence; the caller walks on.
-        PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable => {
-            return false;
-        },
+    render_elem(o, ctx, &rep.element, &plan.inner);
+    if let Some(cut) = &plan.rest {
+        render_seq(o, ctx, &cut.alt, &cut.plan);
     }
 }
 
 /// The ` then <suffix>` a decision line carries, so the reason it gives can be
 /// read against the thing it is about. Empty when nothing follows.
 fn suffix_text(alt: &LexerAlternative, index: i32) -> String {
-    let suffix = suffix_alt(alt, index);
+    let suffix = LexerAlternative { elements: lexer_alt_suffix(alt, index) };
     if suffix.elements.is_empty() {
         return "";
     }
     return ` then ${alt_text(&suffix, 0)}`;
 }
 
-/// What follows `alt.elements[index]`, as the alternative `gen_lexer_suffix_seq`
-/// lowers: the trailing elements alone. An emit that re-bases the alt's actions
-/// onto its remainder uses `lexer_alt_rest` instead.
-fn suffix_alt(alt: &LexerAlternative, index: i32) -> LexerAlternative {
-    return LexerAlternative { elements: lexer_alt_suffix(alt, index) };
-}
-
-fn walk_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, ci: bool, tail: bool) {
-    match *elem {
-        Group(alts) => {
-            if alts.len() == 1 {
-                walk_alt(o, ctx, &alts[0], ci, tail);
-            } else {
-                walk_alts(o, ctx, &alts, ci, tail, /*top=*/ false);
-            }
-        },
-        // A repeat reached here runs its own loop, so nothing follows its inner
-        // within it (`gen_lexer_repeat`).
-        Repeat(rep) => walk_elem(o, ctx, &rep.element, ci, false),
-        Not(n) => walk_elem(o, ctx, &n.element, ci, false),
-        RuleRef(name) => {
-            if name == "EOF" {
-                return;
-            }
-            // A non-recursive fragment is inlined here, carrying this site's
-            // tail position; everything else lowers to a call.
-            let Some(frag) = find_inlined_fragment(&ctx.rules, &name) else {
-                return;
+fn render_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, plan: &LexerElemPlan) {
+    match plan {
+        Body(body) => render_elem_body(o, ctx, elem, body),
+        PlainRepeat(nested) => {
+            let Repeat(rep) = elem else {
+                panic("a repeat plan against something other than a repeat");
             };
-            let saved = o.scope;
-            o.scope = `${o.scope}${name} › `;
-            if frag.body.len() == 1 {
-                walk_alt(o, ctx, &frag.body[0], ci, tail);
-            } else {
-                walk_alts(o, ctx, &frag.body, ci, tail, /*top=*/ false);
-            }
-            o.scope = saved;
+            render_elem(o, ctx, &rep.element, &nested.inner);
         },
-        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => {
+        Not(nested) => {
+            let Not(n) = elem else {
+                panic("a not plan against something other than a not");
+            };
+            render_elem(o, ctx, &n.element, &nested.inner);
+        },
+        Leaf => {
         },
     }
 }
 
-fn find_inlined_fragment(rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[rules] {
-    return rules.iter_ref().find(|r| r.name == *name && r.is_fragment && fragment_is_recursive(r, rules) == false);
+/// A group's own alternatives, or the fragment inlined at a rule reference —
+/// which the report prefixes with that reference, as the emit nests it there.
+fn render_elem_body(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, body: &LexerBodyPlan) {
+    if let Group(alts) = elem {
+        render_body(o, ctx, alts, body, /*top=*/ false);
+        return;
+    }
+    let RuleRef(name) = elem else {
+        panic("a body plan against neither a group nor a rule reference");
+    };
+    let Some(frag) = find_fragment(&ctx.rules, name) else {
+        panic("a body plan against a rule reference with no fragment");
+    };
+    let saved = o.scope;
+    o.scope = `${o.scope}${name} › `;
+    render_body(o, ctx, &frag.body, body, /*top=*/ false);
+    o.scope = saved;
 }
 
 fn decision_line(o: &mut DumpOut, text: &String) {

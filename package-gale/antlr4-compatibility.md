@@ -281,7 +281,7 @@ Defaults: any single-grammar parser descriptor whose `[output]` would
 auto-skip from Stage B becomes a Stage B′ candidate automatically,
 unless it sits in `[stage_b_oracle_skip]`. Composite descriptors
 (slave grammars) remain out of scope until the importer learns to
-resolve them (see "Descriptor importer — infrastructure gaps" in
+resolve them (see "Composite (slave-grammar) descriptors" in
 [`TODO.md`](./TODO.md)). Lexer descriptors stay on Stage A token-
 equivalence — there is no parse tree to compare.
 
@@ -390,7 +390,9 @@ requires a cross-language translator (Java / Python / TypeScript /
 Rust / … → Wado) for the in-band action source, plus wiring for
 `superClass`, `tokenVocab`, and other host-side hooks. Sketch and
 rationale live in
-[`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md).
+[`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md); the
+implementation design and what is left of it are in
+[`action.md`](./action.md) and [`TODO.md`](./TODO.md).
 
 Stage C is sequenced after Stage A and Stage B because the descriptor
 corpus is the cheapest way to discover which constructs a translator

@@ -5,9 +5,10 @@
 use { ParserRule, Visibility } from "../ir.wado";
 use { JToken } from "./jlexer.wado";
 use { tokenize_java } from "./jlexer.wado";
-use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr } from "./jparser.wado";
-use { emit_java_stmts, emit_expr, map_java_type, JEnv } from "./jemit.wado";
-use { to_snake_case } from "../ident.wado";
+use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr, JStmt } from "./jparser.wado";
+use { emit_java_stmts, emit_expr, map_java_type, with_locals, JEnv } from "./jemit.wado";
+use { to_snake_case, escape_ident } from "../ident.wado";
+use { AltBinding } from "../attr_resolve.wado";
 
 /// One field on the generated recognizer struct, from a `@members` field decl.
 pub struct MemberField {
@@ -16,21 +17,79 @@ pub struct MemberField {
     pub init: String,
 }
 
-/// The struct fields and methods a `@members` block contributes. `methods` are
-/// ready-to-splice `fn ... { ... }` sources.
+/// One method a `@members` block contributes: its snake_cased name, whether it
+/// takes `&mut self`, and the ready-to-splice `fn ... { ... }` source.
+pub struct MemberMethod {
+    pub name: String,
+    /// Takes `&mut self`, so a body holding a shared handle cannot call it.
+    pub mutates: bool,
+    pub source: String,
+}
+
+/// The struct fields and methods a `@members` block contributes.
 pub struct MemberDecls {
     pub fields: List<MemberField>,
-    pub methods: List<String>,
+    pub methods: List<MemberMethod>,
+}
+
+/// What an action / predicate body may resolve a bare name against: the
+/// `@members` methods and fields the grammar declares, plus which of the methods
+/// write through the recognizer. All snake_cased, as the declarations are.
+pub struct MemberNames {
+    pub methods: List<String> = [],
+    pub fields: List<String> = [],
+    /// Only consulted where the handle is a shared reference (a lexer predicate).
+    pub mutating: List<String> = [],
+}
+
+/// Whether the block declared anything at all.
+pub fn members_present(members: &MemberDecls) -> bool {
+    return !members.fields.is_empty() || !members.methods.is_empty();
+}
+
+/// The names translated members declare.
+pub fn member_names(members: &MemberDecls) -> MemberNames {
+    let mut out = MemberNames {};
+    for let m of &members.methods {
+        out.methods.push(m.name);
+        if m.mutates {
+            out.mutating.push(m.name);
+        }
+    }
+    for let f of &members.fields {
+        out.fields.push(f.name);
+    }
+    return out;
+}
+
+/// A method as parsed, before its receiver is known: which methods mutate is a
+/// fixed point over the whole block, so no body can be emitted until every one
+/// has been read.
+struct ParsedMethod {
+    name: String,
+    params: List<[String, String]>,
+    ret_java: String,
+    stmts: List<JStmt>,
 }
 
 /// Translate a `@members` block body to fields + methods. `grammar_name` keys the
 /// `<Name>Parser` token-constant qualifier; a call inside a method body resolves
 /// against the block's own method names.
-pub fn translate_java_members(body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
+pub fn translate_java_members(body: &String, grammar_name: &String, lexer: bool = false) -> Result<MemberDecls, String> {
     let tokens = tokenize_java(body)?;
-    let env = JEnv { this_bind: "self", grammar: *grammar_name, methods: scan_method_names(&tokens) };
+    // A method body resolves names against the whole block: its siblings, and
+    // the fields declared after it as much as before it.
+    let scanned = scan_member_names(&tokens);
+    let env = JEnv {
+        this_bind: "self",
+        grammar: *grammar_name,
+        methods: scanned.methods,
+        fields: scanned.fields,
+        lexer,
+        in_members: true,
+    };
     let mut fields: List<MemberField> = [];
-    let mut methods: List<String> = [];
+    let mut parsed: List<ParsedMethod> = [];
     let mut pos = 0;
     while pos < tokens.len() {
         skip_modifiers(&tokens, &mut pos);
@@ -42,26 +101,178 @@ pub fn translate_java_members(body: &String, grammar_name: &String) -> Result<Me
         let name = member_ident(&tokens, pos, &"name")?;
         pos += 1;
         if punct_is(&tokens, pos, &"(") {
-            methods.push(parse_method(&tokens, &mut pos, &name, &ty, &env)?);
+            parsed.push(parse_method(&tokens, &mut pos, &name, &ty)?);
         } else {
             fields.push(parse_field(&tokens, &mut pos, &name, &ty, &env)?);
         }
     }
+    let mut_methods = mutating_methods(&parsed);
+    let mut methods: List<MemberMethod> = [];
+    for let m of &parsed {
+        let dummy = ParserRule::new("", Visibility::Default, [], []);
+        let no_rules: List<ParserRule> = [];
+        let no_bindings: List<AltBinding> = [];
+        // The parameters shadow a field of the same name, as Java's scoping does,
+        // and so do the body's own locals.
+        let mut menv = env;
+        for let p of &m.params {
+            menv.locals.push(p.0);
+        }
+        let scoped = with_locals(&menv, &m.stmts);
+        let body_wado = emit_java_stmts(&dummy, &no_rules, &m.stmts, false, &no_bindings, &scoped)?;
+        let name = to_snake_case(&m.name);
+        let mutates = mut_methods.contains(&name);
+        let source = build_method(&name, &m.params, &m.ret_java, &body_wado, mutates)?;
+        methods.push(MemberMethod { name, mutates, source });
+    }
     return Result::Ok(MemberDecls { fields, methods });
 }
 
-/// The snake_cased method names a `@members` block declares, for resolving method
-/// calls in other action bodies. Best-effort: a malformed block yields the names
-/// it can, and the real translation reports the error.
-pub fn java_member_method_names(body: &String) -> List<String> {
-    return match tokenize_java(body) {
-        Ok(tokens) => scan_method_names(&tokens),
-        Err(_) => [],
+/// The methods that write through the recognizer: one assigning a field, or
+/// calling a method that does. Iterated to a fixed point, so a read-only method
+/// keeps `&self` however deep its call chain.
+fn mutating_methods(ms: &List<ParsedMethod>) -> List<String> {
+    let mut out: List<String> = [];
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let m of ms {
+            let name = to_snake_case(&m.name);
+            if out.contains(&name) {
+                continue;
+            }
+            let mut scope = param_names(&m.params);
+            if stmts_mutate(&m.stmts, &mut scope, &out) {
+                out.push(name);
+                changed = true;
+            }
+        }
+    }
+    return out;
+}
+
+fn param_names(params: &List<[String, String]>) -> List<String> {
+    let mut out: List<String> = [];
+    for let p of params {
+        out.push(p.0);
+    }
+    return out;
+}
+
+/// Whether these statements write a field or call a known-mutating method.
+/// `scope` grows with each local the list declares, so an assignment to one is
+/// not a field write.
+fn stmts_mutate(stmts: &List<JStmt>, scope: &mut List<String>, mutators: &List<String>) -> bool {
+    for let s of stmts {
+        match s {
+            Assign(a) => {
+                if assigns_field(&a.target, scope) || expr_mutates(&a.value, scope, mutators) {
+                    return true;
+                }
+            },
+            Local(l) => {
+                if let Some(e) = &l.init {
+                    if expr_mutates(e, scope, mutators) {
+                        return true;
+                    }
+                }
+                scope.push(l.name);
+            },
+            Expr(e) => {
+                if expr_mutates(e, scope, mutators) {
+                    return true;
+                }
+            },
+            Return(v) => {
+                if let Some(e) = v {
+                    if expr_mutates(e, scope, mutators) {
+                        return true;
+                    }
+                }
+            },
+            Assert(a) => {
+                if expr_mutates(&a.cond, scope, mutators) {
+                    return true;
+                }
+            },
+        }
+    }
+    return false;
+}
+
+/// Whether an assignment target names a recognizer field: `this.x`, or a bare
+/// name the method did not declare.
+fn assigns_field(target: &JExpr, scope: &List<String>) -> bool {
+    return match target {
+        Name(n) => !scope.contains(n),
+        Member(m) => name_is_this(&m.recv),
+        _ => false,
     };
 }
 
-fn scan_method_names(tokens: &List<JToken>) -> List<String> {
-    let mut names: List<String> = [];
+fn expr_mutates(e: &JExpr, scope: &List<String>, mutators: &List<String>) -> bool {
+    return match e {
+        Call(c) => {
+            // `System.out.print` appends to the recognizer's output sink, which
+            // is a write like any field's.
+            if is_print_call(&c.callee) || mutators.contains(&to_snake_case(&call_method_name(&c.callee))) {
+                return true;
+            }
+            // The callee too: `this.bump().toString()` hides the write one
+            // receiver down.
+            if expr_mutates(&c.callee, scope, mutators) {
+                return true;
+            }
+            for let a of &c.args {
+                if expr_mutates(a, scope, mutators) {
+                    return true;
+                }
+            }
+            false;
+        },
+        // `x++` / `--x` write their operand.
+        Unary(u) => (u.op == "++" || u.op == "--") && assigns_field(&u.operand, scope)
+            || expr_mutates(&u.operand, scope, mutators),
+        Member(m) => expr_mutates(&m.recv, scope, mutators),
+        Cast(c) => expr_mutates(&c.operand, scope, mutators),
+        Binary(b) => expr_mutates(&b.lhs, scope, mutators) || expr_mutates(&b.rhs, scope, mutators),
+        Paren(p) => expr_mutates(&p.inner, scope, mutators),
+        Int(_) | Str(_) | Bool(_) | Attr(_) | Name(_) => false,
+    };
+}
+
+/// Whether the callee is a qualified `print` / `println` — the sink write. A
+/// bare one is a member method and resolves as such.
+fn is_print_call(callee: &JExpr) -> bool {
+    return match callee {
+        Member(m) => m.name == "print" || m.name == "println",
+        _ => false,
+    };
+}
+
+/// The member method a callee names, whether written bare or through `this.`.
+/// A call on anything else (`s.trim()`, `_input.LT(1).getText()`) only shares
+/// the name — it writes through no recognizer, so it is not one.
+fn call_method_name(callee: &JExpr) -> String {
+    return match callee {
+        Name(n) => *n,
+        Member(m) => if name_is_this(&m.recv) { m.name } else { "" },
+        _ => "",
+    };
+}
+
+fn name_is_this(e: &JExpr) -> bool {
+    return match e {
+        Name(n) => *n == "this",
+        _ => false,
+    };
+}
+
+/// The names a block declares, for resolving a method body's calls against its
+/// siblings. What a body *outside* the block may resolve is `member_names` over
+/// the translated result, so a refused block declares nothing anywhere.
+fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
+    let mut out = MemberNames {};
     let mut pos = 0;
     while pos < tokens.len() {
         skip_modifiers(tokens, &mut pos);
@@ -77,7 +288,7 @@ fn scan_method_names(tokens: &List<JToken>) -> List<String> {
         }
         pos += 2;
         if punct_is(tokens, pos, &"(") {
-            names.push(to_snake_case(&name_opt.unwrap()));
+            out.methods.push(to_snake_case(&name_opt.unwrap()));
             pos = skip_parens(tokens, pos);
             if !punct_is(tokens, pos, &"{") {
                 break;
@@ -88,6 +299,7 @@ fn scan_method_names(tokens: &List<JToken>) -> List<String> {
             }
             pos = close.unwrap() + 1;
         } else {
+            out.fields.push(to_snake_case(&name_opt.unwrap()));
             while pos < tokens.len() && !punct_is(tokens, pos, &";") {
                 pos += 1;
             }
@@ -96,7 +308,7 @@ fn scan_method_names(tokens: &List<JToken>) -> List<String> {
             }
         }
     }
-    return names;
+    return out;
 }
 
 fn skip_parens(tokens: &List<JToken>, open: i32) -> i32 {
@@ -139,16 +351,13 @@ fn parse_field(
         return Result::Err(`java2wado: @members: expected ';' after field '${*name}'`);
     }
     *pos += 1;
-    return Result::Ok(MemberField { name: *name, ty, init });
+    // snake_cased at the declaration, as a method name is: every read of it —
+    // `this.nestLevel` and the bare `nestLevel` alike — resolves through
+    // `to_snake_case`, so the field must be spelled the same way.
+    return Result::Ok(MemberField { name: to_snake_case(name), ty, init });
 }
 
-fn parse_method(
-    tokens: &List<JToken>,
-    pos: &mut i32,
-    name: &String,
-    ret_java: &String,
-    env: &JEnv,
-) -> Result<String, String> {
+fn parse_method(tokens: &List<JToken>, pos: &mut i32, name: &String, ret_java: &String) -> Result<ParsedMethod, String> {
     let params = parse_params(tokens, pos)?;
     if !punct_is(tokens, *pos, &"{") {
         return Result::Err(`java2wado: @members: expected '\{' for method '${*name}'`);
@@ -157,30 +366,30 @@ fn parse_method(
     let body_tokens = slice_tokens(tokens, *pos + 1, close);
     *pos = close + 1;
     let stmts = parse_java_stmts(&body_tokens)?;
-    let dummy = ParserRule::new("", Visibility::Default, [], []);
-    let no_rules: List<ParserRule> = [];
-    let no_bindings: List<[bool, String, String]> = [];
-    let body_wado = emit_java_stmts(&dummy, &no_rules, &stmts, false, &no_bindings, env)?;
-    return build_method(name, &params, ret_java, &body_wado);
+    return Result::Ok(ParsedMethod { name: *name, params, ret_java: *ret_java, stmts });
 }
 
 /// Emit a field initializer, which has no rule / value-channel context.
 fn emit_member_expr(e: &JExpr, env: &JEnv) -> Result<String, String> {
     let dummy = ParserRule::new("", Visibility::Default, [], []);
     let no_rules: List<ParserRule> = [];
-    let no_bindings: List<[bool, String, String]> = [];
+    let no_bindings: List<AltBinding> = [];
     return emit_expr(&dummy, &no_rules, e, false, &no_bindings, env);
 }
 
+/// `&self` unless the body writes: the narrower receiver is what lets a lexer
+/// predicate, which holds `&Lexer`, reach a read-only member method at all.
 fn build_method(
     name: &String,
     params: &List<[String, String]>,
     ret_java: &String,
     body_wado: &String,
+    mutates: bool,
 ) -> Result<String, String> {
-    let mut sig = `fn ${to_snake_case(name)}(&mut self`;
+    let recv = if mutates { "&mut self" } else { "&self" };
+    let mut sig = `fn ${*name}(${recv}`;
     for let p of params {
-        sig.push_str(&`, ${p.0}: ${p.1}`);
+        sig.push_str(&`, ${escape_ident(&p.0)}: ${p.1}`);
     }
     sig.push(')');
     if *ret_java != "void" {

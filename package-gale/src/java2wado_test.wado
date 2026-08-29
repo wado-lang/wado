@@ -1,15 +1,30 @@
-use { translate_action, translate_predicate, translate_members, grammar_has_superclass } from "./java2wado.wado";
+use { translate_action, translate_predicate, translate_members, stage_lexer_bodies } from "./java2wado.wado";
+use { grammar_has_superclass } from "./superclass.wado";
 use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
+use { AltBinding } from "./attr_resolve.wado";
+use { MemberNames } from "./java2wado/jmembers.wado";
+use { generate, GenerateOptions, GeneratedOutput } from "./codegen.wado";
+use { Diagnostic } from "./gir.wado";
 
-global NO_BINDINGS: List<[bool, String, String]> = [];
-global NO_METHODS: List<String> = [];
+global NO_BINDINGS: List<AltBinding> = [];
+global NO_MEMBERS: MemberNames = MemberNames {};
+global GEN_OPTS: GenerateOptions = GenerateOptions {};
 
-fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
-    return java_pred_m(src, rule_src, vals_in_scope, &NO_METHODS);
+fn gen(src: &String) -> GeneratedOutput {
+    let mut g = parse(*src).unwrap();
+    return generate(&mut g, &GEN_OPTS);
 }
 
-fn java_pred_m(src: &String, rule_src: &String, vals_in_scope: bool, methods: &List<String>) -> String {
+fn unsupported_count(diags: &List<Diagnostic>) -> i32 {
+    return diags.iter_ref().filter(|d: &Diagnostic| d.kind matches { UnsupportedAction }).count();
+}
+
+fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
+    return java_pred_m(src, rule_src, vals_in_scope, &NO_MEMBERS);
+}
+
+fn java_pred_m(src: &String, rule_src: &String, vals_in_scope: bool, members: &MemberNames) -> String {
     let g = parse(`grammar T;
 ${*rule_src}
 `).unwrap();
@@ -22,7 +37,7 @@ ${*rule_src}
         vals_in_scope,
         &NO_BINDINGS,
         &g.name,
-        methods,
+        members,
     ).unwrap();
 }
 
@@ -39,7 +54,7 @@ ${*rule_src}
         vals_in_scope,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
 }
 
@@ -54,8 +69,9 @@ test "java predicate: rule arg reference" {
 }
 
 test "java predicate: negation with parens" {
+    // The field declaration is snake_cased, so every read of it is too.
     let out = java_pred(&"!(this.enumKeyword)", &"a : ID ;", false);
-    assert out == "!(p.enumKeyword)", `out: '${out}'`;
+    assert out == "!(p.enum_keyword)", `out: '${out}'`;
 }
 
 test "java predicate: input lookahead vs token constant" {
@@ -69,9 +85,43 @@ test "java predicate: token text equals" {
 }
 
 test "java predicate: member method call snake-cases" {
-    let methods: List<String> = ["pred"];
-    let out = java_pred_m(&"this.pred($i == 99)", &"a[i32 i] : ID ;", true, &methods);
+    let members = MemberNames {
+        methods: ["pred"],
+    };
+    let out = java_pred_m(&"this.pred($i == 99)", &"a[i32 i] : ID ;", true, &members);
     assert out == "p.pred(vals.i == 99)", `out: '${out}'`;
+}
+
+test "java action: a bare @members field reads through the recognizer" {
+    // Java reaches a field bare; unqualified it would name nothing in Wado.
+    let members = MemberNames {
+        fields: ["calls"],
+    };
+    let out = java_action_m(&"calls = calls + 1;", &"a : ID ;", false, &members);
+    assert out == "p.calls = p.calls + 1;", `out: '${out}'`;
+
+    // A rule argument shadows the field, as it does in ANTLR's own output — and
+    // it is `$calls` under another spelling, so both land on the one storage a
+    // write has to be visible through.
+    let shadowed = java_action_m(&"calls = calls + 1;", &"a[i32 calls] : ID ;", true, &members);
+    assert shadowed == "vals.calls = vals.calls + 1;", `shadowed: '${shadowed}'`;
+}
+
+test "java action: a bare rule argument is `$arg` under another spelling" {
+    // The generated parameter is `escape_ident(to_snake_case(...))` and `$arg`
+    // reads `vals.<raw>`, so passing the surface name through would name nothing
+    // for a camelCased arg — and would leave a write invisible to `$arg`.
+    let out = java_action_m(
+        &"maxDepth = maxDepth + 1;",
+        &"a[i32 maxDepth] : ID ;",
+        true,
+        &NO_MEMBERS,
+    );
+    assert out == "vals.maxDepth = vals.maxDepth + 1;", `out: '${out}'`;
+
+    // A body-declared local of the same name shadows the argument.
+    let local = java_action_m(&"int maxDepth = 2; maxDepth = 3;", &"a[i32 maxDepth] : ID ;", true, &NO_MEMBERS);
+    assert local == "let mut maxDepth: i32 = 2; maxDepth = 3;", `local: '${local}'`;
 }
 
 test "java: an undeclared recognizer method is a loud error" {
@@ -89,12 +139,32 @@ test "java: an unknown Type constant is a loud error" {
 }
 
 test "java: a declared @members method resolves; an undeclared sibling does not" {
-    let methods: List<String> = ["is_keyword"];
-    let ok = java_pred_m(&"this.isKeyword()", &"a : ID ;", false, &methods);
+    let members = MemberNames {
+        methods: ["is_keyword"],
+    };
+    let ok = java_pred_m(&"this.isKeyword()", &"a : ID ;", false, &members);
     assert ok == "p.is_keyword()", `out: '${ok}'`;
 
     let res = java_pred_res(&"this.isKeyword()", &"a : ID ;", false);
     assert res.is_err(), "an undeclared method must be a loud error even qualified by this";
+}
+
+test "java: a call resolves in Java's method namespace, not against the variables" {
+    // Java declares methods and variables in separate namespaces, so a field of
+    // the same name hides the method at a name position and never at a call one.
+    let members = MemberNames {
+        methods: ["depth"],
+        fields: ["depth"],
+    };
+    let bare = java_action_m(&"depth();", &"a : ID ;", false, &members);
+    assert bare == "p.depth();", `bare: '${bare}'`;
+
+    let qualified = java_action_m(&"this.depth();", &"a : ID ;", false, &members);
+    assert qualified == "p.depth();", `qualified: '${qualified}'`;
+
+    // A rule argument shares the name too, and shadows only the read.
+    let arg = java_action_m(&"depth(); depth = 1;", &"a[i32 depth] : ID ;", true, &members);
+    assert arg == "p.depth(); vals.depth = 1;", `arg: '${arg}'`;
 }
 
 test "java predicate: negated equals is parenthesized" {
@@ -102,11 +172,126 @@ test "java predicate: negated equals is parenthesized" {
     assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '${out}'`;
 }
 
+test "java members: a refused block declares nothing an action can then resolve" {
+    // ANTLR concatenates a recognizer's `@members` blocks, so one malformed
+    // block refuses them all. What an action may resolve is read off the
+    // translated result, so the refusal is the only diagnostic — never a call
+    // to a member the struct never got.
+    let out = gen(&"grammar T;
+options { language = Java; }
+@members { int good() { return 1; } }
+@members { int ; }
+a : ID { good(); } ;
+ID : [a-z]+ ;
+");
+    assert !out.source.contains("p.good()"), "a member from a refused block must not be called";
+    assert !out.source.contains("fn good"), "a member from a refused block must not be declared";
+    assert unsupported_count(&out.diagnostics) >= 1, "the refusal must be reported";
+}
+
+test "java members: a well-formed block still resolves across its siblings" {
+    let out = gen(&"grammar T;
+options { language = Java; }
+@members { int good() { return helper(); } }
+@members { int helper() { return 1; } }
+a : ID { good(); } ;
+ID : [a-z]+ ;
+");
+    assert out.source.contains("fn good"), "a method declared in one block is emitted";
+    assert out.source.contains("fn helper"), "a method declared in a sibling block is emitted";
+    assert out.source.contains("p.good()"), "an action resolves a member the struct got";
+    assert unsupported_count(&out.diagnostics) == 0, "a well-formed block is not reported";
+}
+
 test "java members: method name is snake_cased at definition to match calls" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"boolean isKeyword() { return true; }", &"T").unwrap();
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0] == "fn is_keyword(&mut self) -> bool { return true; }", `method: '${m.methods[0]}'`;
+    assert m.methods[0].source == "fn is_keyword(&self) -> bool { return true; }", `method: '${m.methods[0].source}'`;
+}
+
+test "java members: the receiver follows what the body does" {
+    // Fixed point over the block: a reader that only calls readers stays `&self`,
+    // and one that reaches a writer through a call chain does not.
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int n = 0;
+          boolean reads() { return this.n > 0; }
+          void writes() { this.n = 1; }
+          boolean delegates() { return this.reads(); }
+          void indirect() { this.writes(); }",
+        &"T",
+    ).unwrap();
+    assert m.methods.len() == 4, `methods: ${m.methods.len()}`;
+    assert !m.methods[0].mutates && m.methods[0].source.contains("fn reads(&self)"), `reads: '${m.methods[0].source}'`;
+    assert m.methods[1].mutates && m.methods[1].source.contains("fn writes(&mut self)"), `writes: '${m.methods[1].source}'`;
+    assert !m.methods[2].mutates, `delegates: '${m.methods[2].source}'`;
+    assert m.methods[3].mutates, `indirect: '${m.methods[3].source}'`;
+}
+
+test "java members: a write one receiver down still counts" {
+    // The mutating call is the *callee's* receiver, not an argument.
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int n = 0;
+          String writes() { this.n = 1; return \"x\"; }
+          boolean hidden() { return this.writes().equals(\"x\"); }",
+        &"T",
+    ).unwrap();
+    assert m.methods[1].mutates, `hidden: '${m.methods[1].source}'`;
+}
+
+test "java members: a method body reads a field of its own block, bare or qualified" {
+    // Java reaches a field either way, and the declaration is snake_cased, so
+    // both spellings have to land on the same struct field.
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int nestLevel = 0;
+          int bare() { return nestLevel + 1; }
+          int qualified() { return this.nestLevel + 1; }",
+        &"T",
+    ).unwrap();
+    assert m.fields[0].name == "nest_level", `field: '${m.fields[0].name}'`;
+    assert m.methods[0].source.contains("return self.nest_level + 1;"), `bare: '${m.methods[0].source}'`;
+    assert m.methods[1].source.contains("return self.nest_level + 1;"), `qualified: '${m.methods[1].source}'`;
+}
+
+test "java members: a local or parameter shadows a field of the same name" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int n = 0;
+          int shadowed(int n) { return n; }
+          int local() { int n = 2; return n; }",
+        &"T",
+    ).unwrap();
+    assert m.methods[0].source.contains("return n;"), `param: '${m.methods[0].source}'`;
+    assert m.methods[1].source.contains("return n;"), `local: '${m.methods[1].source}'`;
+}
+
+test "java members: a call on something other than the recognizer is not a member call" {
+    // `s.trim()` only shares the name of the mutating member; it writes through
+    // no recognizer, so `reads` keeps `&self` — and stays reachable from a lexer
+    // predicate.
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"int n = 0;
+          void trim() { this.n = 1; }
+          boolean reads(String s) { return s.trim().equals(\"x\"); }",
+        &"T",
+    ).unwrap();
+    assert m.methods[0].mutates, `trim: '${m.methods[0].source}'`;
+    assert !m.methods[1].mutates && m.methods[1].source.contains("fn reads(&self"), `reads: '${m.methods[1].source}'`;
+}
+
+test "java members: printing writes the output sink, so its method takes &mut self" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, &"void say() { System.out.println(\"x\"); }", &"T").unwrap();
+    assert m.methods[0].mutates && m.methods[0].source.contains("fn say(&mut self)"), `say: '${m.methods[0].source}'`;
 }
 
 test "java predicate: boolean literal" {
@@ -128,7 +313,7 @@ e returns [i32 v] : ID ;
         false,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == "x.v + 1", `out: '${out}'`;
 }
@@ -146,7 +331,7 @@ r : ID ;
         false,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == "`ID ${p.token_text(id)}`", `out: '${out}'`;
 }
@@ -164,12 +349,16 @@ r returns [i32 v] : ID { $v = 1; } ;
         true,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == " vals.v = 1; ", `out: '${out}'`;
 }
 
 fn java_action(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
+    return java_action_m(src, rule_src, vals_in_scope, &NO_MEMBERS);
+}
+
+fn java_action_m(src: &String, rule_src: &String, vals_in_scope: bool, members: &MemberNames) -> String {
     let g = parse(`grammar T;
 ${*rule_src}
 `).unwrap();
@@ -182,7 +371,7 @@ ${*rule_src}
         vals_in_scope,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        members,
     ).unwrap();
 }
 
@@ -199,7 +388,7 @@ ${*rule_src}
         vals_in_scope,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
 }
 
@@ -219,7 +408,7 @@ ${*rule}
         false,
         &NO_BINDINGS,
         &"T",
-        &NO_METHODS,
+        &NO_MEMBERS,
         &"{'a'}",
     );
     assert vocab matches { Ok(code) && code.contains("{'a'}") }, `${vocab:?}`;
@@ -239,7 +428,7 @@ ${*rule}
             false,
             &NO_BINDINGS,
             &"T",
-            &NO_METHODS,
+            &NO_MEMBERS,
             &"{'a'}",
         );
         assert out matches { Err(_) }, `${*body} must not fold: ${out:?}`;
@@ -314,8 +503,8 @@ test "java action: ctx-cast LR-binary value idiom" {
 e returns [i32 v] : e '+' e | INT ;
 ").unwrap();
     let lang = ActionLanguage::Java;
-    let bindings: List<[bool, String, String]> = [
-        [false, "e", "e"],
+    let bindings: List<AltBinding> = [
+        AltBinding { is_token: false, base: "e", field: "e", ref_name: "e" },
     ];
     let out = translate_action(
         &lang,
@@ -325,7 +514,7 @@ e returns [i32 v] : e '+' e | INT ;
         true,
         &bindings,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == "vals.v = _lr_acc.v + e.v;", `out: '${out}'`;
 }
@@ -343,7 +532,7 @@ e returns [i32 v] : e '+' e | INT ;
         true,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     ).unwrap();
     assert out == "_lr_acc.v > 0", `out: '${out}'`;
 }
@@ -361,7 +550,7 @@ r returns [i32 v] : INT ;
         true,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
     assert res.is_err(), "$ctx child access outside an LR rule must be a loud error";
 }
@@ -370,7 +559,7 @@ test "java members: field declarations become struct fields" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"boolean enumKeyword = true; int i = 0;", &"T").unwrap();
     assert m.fields.len() == 2, `fields: ${m.fields.len()}`;
-    assert m.fields[0].name == "enumKeyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: ${m.fields[0].name}:${m.fields[0].ty}=${m.fields[0].init}`;
+    assert m.fields[0].name == "enum_keyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: ${m.fields[0].name}:${m.fields[0].ty}=${m.fields[0].init}`;
     assert m.fields[1].name == "i" && m.fields[1].ty == "i32" && m.fields[1].init == "0", `f1: ${m.fields[1].name}:${m.fields[1].ty}=${m.fields[1].init}`;
     assert m.methods.is_empty(), "no methods expected";
 }
@@ -395,14 +584,82 @@ test "java members: method with a param, print, and return" {
     ).unwrap();
     assert m.fields.is_empty(), "no fields expected";
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0] == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\\n`); return v; }", `method: '${m.methods[0]}'`;
+    assert m.methods[0].source == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\\n`); return v; }", `method: '${m.methods[0].source}'`;
 }
 
 test "java members: void method, no params" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"public void foo() { System.out.println(\"foo\"); }", &"T").unwrap();
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0] == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '${m.methods[0]}'`;
+    assert m.methods[0].source == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '${m.methods[0].source}'`;
+}
+
+test "java members: a member method stands outside every match" {
+    // The cursor locals and the rule's start token live in the generated
+    // functions, not on the struct, so a window read here has to be a loud
+    // error rather than an emit naming something that is not in scope.
+    let lang = ActionLanguage::Java;
+    for let body of &[
+        "boolean head() { return getText(); }", "int col() { return getCharPositionInLine(); }",
+        "int col() { return _tokenStartCharPositionInLine; }", "boolean head() { return $text; }",
+    ] {
+        assert translate_members(&lang, body, &"T", /*lexer=*/ true).is_err(), `must refuse: '${*body}'`;
+    }
+    assert translate_members(&lang, &"boolean head() { return getText(); }", &"T").is_err(), "parser side too";
+}
+
+test "java members: a lexer member resolves against the lexer's own surface" {
+    // Collected for the lexer, so a name Gale does not model on it is reported
+    // by name rather than passed through into the generated module.
+    let lang = ActionLanguage::Java;
+    let unmodelled = translate_members(&lang, &"boolean at() { return _input; }", &"T", /*lexer=*/ true);
+    assert unmodelled.is_err(), "an unmodelled recognizer field must be reported";
+
+    let src = "int n = 0; boolean deep() { return this.n > 1; }";
+    let ok = translate_members(&lang, &src, &"T", /*lexer=*/ true).unwrap();
+    assert ok.methods.len() == 1, `methods: ${ok.methods.len()}`;
+    assert ok.methods[0].source == "fn deep(&self) -> bool { return self.n > 1; }", `method: '${ok.methods[0].source}'`;
+}
+
+test "the parser's token-stream API is refused in a lexer body" {
+    // The generated `Lexer` has characters and a cursor, not tokens and rules,
+    // so each of these would have emitted a method it does not carry.
+    let lang = ActionLanguage::Java;
+    for let body of &[
+        "_input.LA(1) == 0", "_input.LT(1).getText().equals(\"x\")", "_input.getText().equals(\"x\")",
+        "getRuleInvocationStack().isEmpty()",
+    ] {
+        let mut g = parse(`lexer grammar L;
+A : 'a' { ${*body} }? ;
+`).unwrap();
+        let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
+        assert msgs.len() == 1, `must refuse '${*body}': ${msgs.len()} diagnostics`;
+    }
+
+    // The same call in a parser body is the API it belongs to.
+    let ok = java_pred(&"_input.LA(1) == 0", &"a : ID ;", false);
+    assert ok == "p.la(1) == 0", `out: '${ok}'`;
+}
+
+test "a recognizer call resolves the same bare and through `this`" {
+    // `getText()` and `this.getText()` are one call in Java. In a lexer both are
+    // the matched slice; taking the `this.` spelling for a receiver made it a
+    // token read the lexer has no stream for, and the body was dropped.
+    let lang = ActionLanguage::Java;
+    for let body of &["getText()", "this.getText()"] {
+        let mut g = parse(`lexer grammar L;
+A : 'a' { System.out.println(${*body}); } ;
+`).unwrap();
+        let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
+        assert msgs.is_empty(), `must resolve '${*body}': ${msgs.len()} diagnostics`;
+        let staged = g.lexer_rules[0].body[0].actions[0].source.text;
+        assert staged.contains("LexerSlice::new(chars, start, pos).to_string()"), `staged: '${staged}'`;
+    }
+
+    // And in a parser body both are the rule's own consumed span.
+    let bare = java_action(&"System.out.println(getText());", &"a : ID ;", false);
+    let qualified = java_action(&"System.out.println(this.getText());", &"a : ID ;", false);
+    assert bare == qualified, `bare '${bare}' vs qualified '${qualified}'`;
 }
 
 test "grammar_has_superclass keys the Phase 4 carve-out" {
@@ -421,8 +678,8 @@ a : A ;
 test "a ctx token accessor folds only for a token the alternative always matches" {
     // `((SContext)$ctx).A() != null` asks whether the alternative matched `A`:
     // a constant for a mandatory element, unanswerable for an optional one.
-    let bindings: List<[bool, String, String]> = [
-        [true, "a", "a"],
+    let bindings: List<AltBinding> = [
+        AltBinding { is_token: true, base: "a", field: "a" },
     ];
     let g = parse("grammar T;
 s : ID A ;
@@ -438,7 +695,7 @@ A : '!' ;
         false,
         &bindings,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
         true,
     );
     assert mandatory matches { Ok(code) && code == "true" }, `${mandatory:?}`;
@@ -453,7 +710,7 @@ A : '!' ;
         false,
         &bindings,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
     assert mid_alt matches { Err(_) }, `a mid-alternative position must not fold: ${mid_alt:?}`;
 
@@ -465,7 +722,7 @@ A : '!' ;
         false,
         &NO_BINDINGS,
         &g.name,
-        &NO_METHODS,
+        &NO_MEMBERS,
     );
     assert optional matches { Err(_) }, `an unbound token must not fold: ${optional:?}`;
 }
