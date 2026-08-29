@@ -16,8 +16,8 @@ use lexopt::Arg::Value;
 use tokio::sync::OwnedSemaphorePermit;
 use tokio::sync::{Semaphore, mpsc};
 use wado_compiler::hashmap::IndexMap;
-use wasmtime::Engine;
 use wasmtime::component::{Component, Linker};
+use wasmtime::{Engine, GuestProfiler, UpdateDeadline};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
@@ -25,7 +25,7 @@ use crate::discover;
 use crate::knobs::{CompileKnobs, KnobOpt, OptLevel};
 use crate::manifest as project_manifest;
 use crate::run_cache::RunCache;
-use crate::runtime::{self, WasiState};
+use crate::runtime::{self, ProfileMode, WasiState};
 use crate::sync::lock;
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
@@ -55,6 +55,10 @@ pub struct TestOptions {
     /// removes them. Empty means "run every test".
     pub test_name_filters: Vec<String>,
     pub format: TestFormat,
+    /// `--profile`: sample the guest across the one file's tests. Forces
+    /// `jobs = 1` and drops the per-test timeout, both of which the profiler
+    /// would otherwise contend with over the epoch.
+    pub profile: ProfileMode,
 }
 
 /// `--format` selects how a run's progress is rendered.
@@ -112,6 +116,7 @@ enum Opt {
     Dir,
     NoDir,
     NoRun,
+    Profile,
     Help,
 }
 
@@ -125,6 +130,7 @@ impl Opt {
         Self::Dir,
         Self::NoDir,
         Self::NoRun,
+        Self::Profile,
         Self::Help,
     ];
 
@@ -178,6 +184,14 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Compile (and refresh Kiln caches) but skip the wasmtime execution phase",
+            },
+            Self::Profile => args::OptSpec {
+                long: Some("profile"),
+                short: None,
+                value: Some("mode"),
+                desc: "Profile the guest across one file's tests: guest[,path[,interval_ms]]\n\
+                       (default: profile.json, 10ms). Runs serially, and the per-test\n\
+                       timeout is off — the profiler owns the epoch it was counted in",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -419,6 +433,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut dirs = args::DirGrants::default();
     let mut no_run = false;
     let mut format = TestFormat::Heartbeat;
+    let mut profile = ProfileMode::None;
     // Tests compile unoptimized by default: the compile stage dominates a run,
     // and `-O` opts back in.
     let mut knobs = CompileKnobs {
@@ -461,6 +476,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                 Opt::Dir => dirs.add(&mut parser)?,
                 Opt::NoDir => dirs.suppress_default(),
                 Opt::NoRun => no_run = true,
+                Opt::Profile => {
+                    profile = runtime::parse_profile(&args::require_string(&mut parser)?)?;
+                }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -519,10 +537,24 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     // Default to CPU count to saturate compile/execute. Load derives a
     // lower cap internally (Cranelift JIT is multi-threaded; see `run`).
     // `.max(2)` covers single-core environments.
-    let jobs = jobs.unwrap_or_else(|| {
+    let mut jobs = jobs.unwrap_or_else(|| {
         let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
         cpus.max(2)
     });
+
+    if profile.is_guest() {
+        // One profile, so one module: samples from two components would land in
+        // one output with no way to tell them apart, and parallel workers would
+        // interleave their stacks.
+        let files: usize = package_runs.iter().map(|r| r.paths.len()).sum();
+        if files != 1 {
+            return Err(CliExit::error(format!(
+                "--profile needs exactly one file to profile, found {files} — \
+                 narrow it with a path or --filter"
+            )));
+        }
+        jobs = 1;
+    }
 
     Ok(TestOptions {
         package_runs,
@@ -532,6 +564,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         no_run,
         test_name_filters,
         format,
+        profile,
     })
 }
 
@@ -558,8 +591,15 @@ struct LoadedModule {
     component: Arc<Component>,
     linker: Arc<Linker<WasiState>>,
     tests: Vec<ParsedTest>,
+    /// `--profile`: the run's one sampler and its sampling period, shared with
+    /// `run` so it can write the profile once every test has fed it.
+    profiler: Option<(GuestProfilerSlot, Duration)>,
     _module_permit: OwnedSemaphorePermit,
 }
+
+/// The `GuestProfiler` between the store that samples into it and the run that
+/// writes it out. `None` inside the `Option` once taken to be written.
+type GuestProfilerSlot = Arc<Mutex<Option<GuestProfiler>>>;
 
 /// Non-TODO module that failed `Component::new`/`create_linker` or whose
 /// load worker panicked. Counted on the `load` axis; does not abort the run.
@@ -898,16 +938,33 @@ async fn compile_artifact(
 fn load_module(
     artifact: CompiledArtifact,
     opt_level: wasmtime::OptLevel,
+    profile: &ProfileMode,
     module_permit: OwnedSemaphorePermit,
     observer: Arc<StageObserver>,
     reporter: &Arc<dyn TestReporter>,
 ) -> LoadOutcome {
     let load_start = Instant::now();
     let panic_or_result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<_> {
-        let engine = Arc::new(runtime::create_test_engine(opt_level)?);
+        let engine = Arc::new(runtime::create_test_engine(opt_level, profile)?);
         let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
         let linker = Arc::new(runtime::create_linker(&engine)?);
-        Ok((engine, component, linker))
+        // `parse_args` admits one file when profiling, so one profiler covers
+        // the run and every test in the file samples into it.
+        let profiler = match profile {
+            ProfileMode::Guest { interval_ms, .. } => {
+                let interval = Duration::from_millis(*interval_ms);
+                let profiler = GuestProfiler::new_component(
+                    &engine,
+                    "wado",
+                    interval,
+                    (*component).clone(),
+                    std::iter::empty::<(String, wasmtime::Module)>(),
+                )?;
+                Some((Arc::new(Mutex::new(Some(profiler))), interval))
+            }
+            _ => None,
+        };
+        Ok((engine, component, linker, profiler))
     }));
     let load_duration = load_start.elapsed();
     observer.add_work(load_duration);
@@ -930,7 +987,7 @@ fn load_module(
     };
 
     match load_result {
-        Ok((engine, component, linker)) => {
+        Ok((engine, component, linker, profiler)) => {
             // Recover original (lossless) test names from the custom section
             // the compiler embeds. Keyed by kebab export name. The compiler
             // emits an entry for every test export, so a discovered test
@@ -974,6 +1031,7 @@ fn load_module(
                 component,
                 linker,
                 tests,
+                profiler,
                 _module_permit: module_permit,
             })
         }
@@ -1164,6 +1222,7 @@ async fn run_compile_stage(
 async fn run_load_stage(
     artifact_rx: mpsc::Receiver<CompiledArtifact>,
     opt_level: wasmtime::OptLevel,
+    profile: ProfileMode,
     parallelism: usize,
     cpu_budget: Arc<Semaphore>,
     modules_budget: Arc<Semaphore>,
@@ -1171,6 +1230,7 @@ async fn run_load_stage(
     loaded_tx: mpsc::Sender<Arc<LoadedModule>>,
     lfail_tx: mpsc::Sender<LoadFailure>,
     epoch_ticker: Arc<EpochTicker>,
+    profiler_out: Arc<Mutex<Option<GuestProfilerSlot>>>,
     reporter: Arc<dyn TestReporter>,
 ) -> (usize, usize) {
     let mut ok_count = 0_usize;
@@ -1185,6 +1245,7 @@ async fn run_load_stage(
             let path_for_failure = artifact.path.clone();
             let reporter = Arc::clone(&reporter);
             let reporter_for_join_err = Arc::clone(&reporter);
+            let profile_for_load = profile.clone();
             // Each load worker is its own task so its progress is not
             // gated by `buffer_unordered`'s outer poll.
             tokio::spawn(async move {
@@ -1207,6 +1268,7 @@ async fn run_load_stage(
                     load_module(
                         artifact,
                         opt_level,
+                        &profile_for_load,
                         module_permit,
                         observer_inner,
                         &reporter,
@@ -1236,6 +1298,9 @@ async fn run_load_stage(
                 ok_count += 1;
                 if module.tests.is_empty() {
                     skip_count += 1;
+                }
+                if let Some((slot, _)) = module.profiler.clone() {
+                    *lock(&profiler_out) = Some(slot);
                 }
                 epoch_ticker.register(&module.engine);
                 if loaded_tx.send(Arc::new(module)).await.is_ok() {
@@ -1396,14 +1461,16 @@ struct EpochTicker {
 }
 
 impl EpochTicker {
-    fn start() -> Self {
+    /// `interval` is the timeout's tick under a plain run and the profiler's
+    /// sampling period under `--profile`, the two sharing one epoch.
+    fn start(interval: Duration) -> Self {
         let engines: Arc<Mutex<Vec<Weak<Engine>>>> = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = stop.clone();
         let engines_clone = engines.clone();
         let handle = std::thread::spawn(move || {
             while !stop_clone.load(Ordering::Relaxed) {
-                std::thread::sleep(Duration::from_millis(EPOCH_INTERVAL_MS));
+                std::thread::sleep(interval);
                 // Clone the Arcs we still need, then release the lock
                 // before doing the actual epoch increments. Keeps the
                 // critical section short — the lock is also taken by
@@ -1468,6 +1535,7 @@ async fn run_pipeline(
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
     no_run: bool,
+    profile: ProfileMode,
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
 ) -> PipelineOutcome {
@@ -1501,7 +1569,12 @@ async fn run_pipeline(
 
     // Epoch ticker lives only when execute will run; in `--no-run` mode
     // no engines are loaded and there's nothing to tick.
-    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start()));
+    let tick = match &profile {
+        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
+        _ => Duration::from_millis(EPOCH_INTERVAL_MS),
+    };
+    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start(tick)));
+    let profiler_slot: Arc<Mutex<Option<GuestProfilerSlot>>> = Arc::new(Mutex::new(None));
 
     let paths_owned: Vec<String> = paths.to_vec();
     let compile_future = run_compile_stage(
@@ -1522,6 +1595,7 @@ async fn run_pipeline(
             Box::pin(run_load_stage(
                 artifact_rx,
                 opt_level,
+                profile.clone(),
                 load_jobs,
                 budget.cpu.clone(),
                 budget.modules.clone(),
@@ -1529,6 +1603,7 @@ async fn run_pipeline(
                 loaded_tx,
                 lfail_tx,
                 ticker.clone(),
+                profiler_slot.clone(),
                 reporter.clone(),
             ))
         } else {
@@ -1586,6 +1661,22 @@ async fn run_pipeline(
     let results = result_task.await.expect("result collector panicked");
 
     drop(epoch_ticker); // Stops the tick thread.
+
+    if let ProfileMode::Guest { path, .. } = &profile
+        && let Some(slot) = lock(&profiler_slot).take()
+        && let Some(profiler) = lock(&slot).take()
+    {
+        let written = std::fs::File::create(path)
+            .map_err(anyhow::Error::from)
+            .and_then(|f| Ok(profiler.finish(std::io::BufWriter::new(f))?));
+        match written {
+            Ok(()) => {
+                eprintln!("Profile written to {path}");
+                eprintln!("View at https://profiler.firefox.com/");
+            }
+            Err(e) => eprintln!("failed to write {path}: {e}"),
+        }
+    }
 
     PipelineOutcome {
         compiled_count,
@@ -1650,8 +1741,20 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
             Err(e) => return fail_result(job, format!("failed to set up store: {e}"), start),
         };
 
-    let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
-    store.set_epoch_deadline(deadline_ticks);
+    // Profiling samples on every epoch tick, so it takes the deadline the
+    // timeout was counted in; `parse_args` says so on the flag.
+    if let Some((slot, interval)) = module.profiler.clone() {
+        store.epoch_deadline_callback(move |store_ctx| {
+            if let Some(profiler) = lock(&slot).as_mut() {
+                profiler.sample(&store_ctx, interval);
+            }
+            Ok(UpdateDeadline::Continue(1))
+        });
+        store.set_epoch_deadline(1);
+    } else {
+        let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
+        store.set_epoch_deadline(deadline_ticks);
+    }
 
     let instance = match module
         .linker
@@ -2092,6 +2195,7 @@ async fn run_one_package(
     preopened_dirs: Arc<Vec<(String, String)>>,
     show_banner: bool,
     no_run: bool,
+    profile: ProfileMode,
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
 ) -> PackageTotals {
@@ -2106,6 +2210,7 @@ async fn run_one_package(
         execute_jobs,
         preopened_dirs,
         no_run,
+        profile,
         reporter.clone(),
         run_cache,
     )
@@ -2249,6 +2354,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let flags = Arc::new(opts.compile_flags());
     let jobs = opts.jobs;
     let no_run = opts.no_run;
+    let profile = opts.profile;
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
@@ -2299,6 +2405,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             preopened_dirs.clone(),
             multi_pkg,
             no_run,
+            profile.clone(),
             reporter.clone(),
             Arc::clone(&run_cache),
         )

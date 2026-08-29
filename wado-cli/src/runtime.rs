@@ -307,6 +307,15 @@ pub enum ProfileMode {
     },
 }
 
+impl ProfileMode {
+    /// Whether this mode samples the guest, which is the one that needs a
+    /// `GuestProfiler` on each store rather than only engine configuration.
+    #[must_use]
+    pub const fn is_guest(&self) -> bool {
+        matches!(self, Self::Guest { .. })
+    }
+}
+
 /// Parse a `--profile` argument value. Shared by `run` and `serve`.
 ///
 /// # Errors
@@ -433,12 +442,14 @@ pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
 }
 
 /// Create a wasmtime Engine for test execution with epoch interruption enabled.
+/// `profile` is what `wado test --profile` selects; the per-test timeout uses
+/// the same epoch, so a profiling run trades that timeout for the samples.
 ///
 /// # Errors
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
-pub fn create_test_engine(opt_level: OptLevel) -> Result<Engine> {
-    let mut config = create_config(opt_level, &ProfileMode::None, DEFAULT_COLLECTOR);
+pub fn create_test_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engine> {
+    let mut config = create_config(opt_level, profile, DEFAULT_COLLECTOR);
     config.epoch_interruption(true);
     Ok(Engine::new(&config)?)
 }
