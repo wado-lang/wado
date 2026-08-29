@@ -921,13 +921,7 @@ fn substitute_sibling_lets(
         let Some(def) = value.as_expr() else { continue };
         defs.insert(*local_index, def);
     }
-    let sibling_set: IndexSet<StmtId> = sibling_lets.iter().copied().collect();
-    for bid in body.blocks.keys().collect::<Vec<_>>() {
-        let stmts = &mut body.blocks[bid].stmts;
-        if stmts.iter().any(|s| sibling_set.contains(s)) {
-            stmts.retain(|s| !sibling_set.contains(s));
-        }
-    }
+    detach_stmts(body, sibling_lets);
     let Some(set_expr) = find_global_var_set(body, module_source, name) else {
         panic!(
             "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
@@ -944,6 +938,16 @@ fn substitute_sibling_lets(
             continue;
         }
         body.for_each_child(node, |c| stack.push(c));
+    }
+}
+
+/// Detach `stmts` from every block they appear in. A full scan is load-bearing:
+/// an early exit that stops after N removals can leave one behind in a later
+/// block, which then double-lists once a new block also claims it.
+fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
+    let set: IndexSet<StmtId> = stmts.iter().copied().collect();
+    for bid in body.blocks.keys().collect::<Vec<_>>() {
+        body.blocks[bid].stmts.retain(|s| !set.contains(s));
     }
 }
 
@@ -2384,59 +2388,39 @@ fn inline_sibling_lets(
     if sibling_lets.is_empty() {
         return;
     }
-    // Detach the sibling stmts from every block they appear in. A full scan is
-    // load-bearing: an early exit that stops after N removals can leave a
-    // sibling behind in a later block, which then double-lists once the new
-    // initializer block also claims it.
-    let sibling_set: IndexSet<StmtId> = sibling_lets.iter().copied().collect();
-    for bid in body.blocks.keys().collect::<Vec<_>>() {
-        let stmts = &mut body.blocks[bid].stmts;
-        if stmts.iter().any(|s| sibling_set.contains(s)) {
-            stmts.retain(|s| !sibling_set.contains(s));
-        }
-    }
+    detach_stmts(body, sibling_lets);
     // Find the freshly planted `GlobalVarSet` and wrap its value.
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::GlobalVarSet {
-                name: n,
-                value,
-                module_source: ms,
-            } = &body.exprs[e].kind
-            && n == name
-            && ms == module_source
-        {
-            let value = *value;
-            let span = body.exprs[e].span;
-            let value_ty = match value {
-                Operand::Expr(ve) => body.exprs[ve].type_id,
-                Operand::Value(_) => TypeTable::UNIT,
-            };
-            let tail = body.stmts.push(StmtNode {
-                kind: StmtKind::Expr(value),
-                span,
-            });
-            let mut stmts: Vec<StmtId> = sibling_lets.to_vec();
-            stmts.push(tail);
-            let block = body.blocks.push(BlockNode { stmts, span });
-            let block_expr = body.exprs.push(ExprNode {
-                kind: ExprKind::Block(block),
-                type_id: value_ty,
-                span,
-            });
-            let ExprKind::GlobalVarSet { value, .. } = &mut body.exprs[e].kind else {
-                unreachable!("matched above");
-            };
-            *value = Operand::Expr(block_expr);
-            return;
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    panic!(
-        "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
-         between planting and sibling inlining"
-    );
+    let Some(e) = find_global_var_set(body, module_source, name) else {
+        panic!(
+            "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
+             between planting and sibling inlining"
+        );
+    };
+    let ExprKind::GlobalVarSet { value, .. } = &body.exprs[e].kind else {
+        unreachable!("find_global_var_set matched a GlobalVarSet")
+    };
+    let value = *value;
+    let span = body.exprs[e].span;
+    let value_ty = match value {
+        Operand::Expr(ve) => body.exprs[ve].type_id,
+        Operand::Value(_) => TypeTable::UNIT,
+    };
+    let tail = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(value),
+        span,
+    });
+    let mut stmts: Vec<StmtId> = sibling_lets.to_vec();
+    stmts.push(tail);
+    let block = body.blocks.push(BlockNode { stmts, span });
+    let block_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::Block(block),
+        type_id: value_ty,
+        span,
+    });
+    let ExprKind::GlobalVarSet { value, .. } = &mut body.exprs[e].kind else {
+        unreachable!("matched above");
+    };
+    *value = Operand::Expr(block_expr);
 }
 
 /// True when `expr` cannot end as a Wasm constant instruction, so

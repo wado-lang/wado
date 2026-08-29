@@ -336,9 +336,7 @@ fn extend_reachable_for_optimizer_passes(
     // wherever an append is reachable at all. Ungated beyond that: the fusion
     // reads a run out of a block rather than a single recognisable call, and a
     // later DCE drops the four again when no run fused.
-    if push_str
-        .map(|(id, _)| reachable.contains(&id))
-        .unwrap_or(false)
+    if push_str.is_some_and(|(id, _)| reachable.contains(&id))
         || push_char_id.is_some_and(|id| reachable.contains(&id))
     {
         for id in fused {

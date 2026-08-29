@@ -684,14 +684,19 @@ impl FieldForm {
 /// which stops `copy_prop` folding it back and strands a temporary at every
 /// call site. Taking the borrow into the parameter's type lets
 /// [`borrow_of_scalarized`] absorb it instead.
+///
 /// Only a borrow of the field *itself* counts — `&p.f`, not `&p.f.g`, which
 /// borrows a sub-field and leaves `p.f` read as a value. This has to agree
 /// exactly with what [`borrow_of_scalarized`] absorbs: a form claiming a borrow
 /// the rewrite then fails to find leaves the parameter typed as a reference
-/// while the body still reads it as a value.
+/// while the body still reads it as a value. Which is why the walk is the
+/// reachable tree, the one [`param_field_use`] and [`rewrite_param_reads`] also
+/// walk — an in-place rewrite leaves dead nodes behind in the arena, and a
+/// borrow only one of the three sees is exactly that disagreement.
 fn param_field_form(body: &Body, idx: u32) -> FieldForm {
     let mut form = FieldForm::Value;
-    for node in body.exprs.values() {
+    for e in crate::nir_visitor::reachable_exprs(body) {
+        let node = &body.exprs[e];
         let ExprKind::Unary { op, expr: inner } = &node.kind else {
             continue;
         };
@@ -861,11 +866,18 @@ fn mint_scalarized_clones(
         }
         // This pass runs once per fixpoint iteration, so a clone it minted on an
         // earlier one already stands under this name. Reuse it rather than mint
-        // a second function with the same identity.
+        // a second function with the same identity — but only when this run
+        // arrives at the same signature. A body another pass has since changed
+        // can resolve a different field, or a different set of positions, and
+        // retargeting calls to a clone shaped by the earlier answer passes it
+        // arguments it does not take. Leaving them on the original is always
+        // sound: the original still has the shape they pass.
         let func_key =
             FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
         if let Some(&existing) = project.func_index.get(&func_key) {
-            clones.insert(*key, existing);
+            if standing_clone_matches(project, existing, &clone, *key, candidates) {
+                clones.insert(*key, existing);
+            }
             continue;
         }
         let id = FuncId::new(next_id);
@@ -923,6 +935,31 @@ fn mint_scalarized_clones(
         project.functions.push(f);
     }
     clones
+}
+
+/// Whether the clone already standing under this name is the one this run would
+/// mint: same arity, and the same type at every position — the scalar type where
+/// this run scalarizes, the original's elsewhere.
+fn standing_clone_matches(
+    project: &NirPackage,
+    existing: FnKey,
+    fresh: &NirFunction,
+    key: FnKey,
+    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+) -> bool {
+    let Some(standing) = project.functions.get(existing.index()) else {
+        return false;
+    };
+    let standing = standing.borrow();
+    standing.params.len() == fresh.params.len()
+        && standing.params.iter().enumerate().all(|(pi, param)| {
+            // `fresh` is still the original's copy here, so its type is what a
+            // position this run does not scalarize keeps.
+            let want = candidates
+                .get(&(key, pi))
+                .map_or(fresh.params[pi].type_id, |info| info.scalar_type_id);
+            param.type_id == want
+        })
 }
 
 /// Give the clone its own entry in `function_strings`, which is name-keyed: DCE
@@ -988,11 +1025,12 @@ fn borrow_of_scalarized<'a>(
 /// than its name avoids over-stripping a same-named field of the field's own
 /// type (e.g. `b.value.value`, whose inner `.value` belongs to another struct).
 ///
-/// A `Local` read left standing — the param forwarded whole to another
-/// scalarized position — is retyped in place. Leaving the node claiming the
-/// wrapper's type makes every later reader of it wrong, and the call-site
-/// rewrite is one: it would take the stale type as licence to project the
-/// wrapper's field onto a value that is already the field.
+/// A `Local` read is left standing — the param forwarded whole to another
+/// scalarized position, the one use [`param_field_use`] admits besides a field
+/// read. [`rewrite_arg`] retypes it where it stands, at the call it feeds:
+/// leaving the node claiming the wrapper's type would let a later round take
+/// that stale type as licence to project the wrapper's field onto a value that
+/// is already the field.
 fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) {
     if let NodeRef::Expr(id) = node {
         // `&mut self.f` where the param is already `&mut F`: the whole borrow

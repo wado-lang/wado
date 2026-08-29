@@ -19,6 +19,10 @@ use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
 use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
 
+/// A set of local indices, in the form [`crate::nir_value_graph::ValueGraph`]'s
+/// opaque-local collection hands back.
+type LocalIndexSet = crate::hashmap::IndexSet<u32>;
+
 impl Interpreter<'_> {
     /// Splice each constant-condition `if` statement of `block` into `block`
     /// itself, leaving the arm the condition chooses.
@@ -709,43 +713,71 @@ fn collapse_equal_arms<S: EditSink>(
     sink.replace_with_value(e, then_value)
 }
 
-/// Whether the subtree under `op` reads any of the locals `binds` binds.
 /// The locals a match-arm guard declares. Non-empty means the guard is more
 /// than a test: this lowering puts a nested pattern's sub-bindings inside it,
 /// and the arm body reads them, so neither folding it to its value nor
 /// splicing the arm without it preserves the program.
-pub(crate) fn guard_declares_locals(body: &Body, guard: Operand) -> bool {
-    let Some(g) = guard.as_expr() else {
-        return false;
-    };
-    let mut bound = Bound {
-        locals: crate::hashmap::IndexSet::default(),
-    };
-    bound.visit_node(body, NodeRef::Expr(g));
-    !bound.locals.is_empty()
-}
-
-struct Bound {
-    locals: crate::hashmap::IndexSet<u32>,
-}
-
-impl NirRefVisitor for Bound {
-    fn visit_node(&mut self, body: &Body, node: NodeRef) {
-        if let NodeRef::Stmt(s) = node
-            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
-        {
-            self.locals.insert(*local_index);
-        }
-        self.walk_node(body, node);
+///
+/// A promoted guard is a pure value, so it declares nothing.
+fn guard_bound_locals(body: &Body, guard: Operand) -> LocalIndexSet {
+    struct Bound {
+        locals: LocalIndexSet,
     }
+
+    impl NirRefVisitor for Bound {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Stmt(s) = node
+                && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            {
+                self.locals.insert(*local_index);
+            }
+            self.walk_node(body, node);
+        }
+    }
+
+    let mut bound = Bound {
+        locals: LocalIndexSet::default(),
+    };
+    if let Some(g) = guard.as_expr() {
+        bound.visit_node(body, NodeRef::Expr(g));
+    }
+    bound.locals
+}
+
+/// Whether `guard` is more than a test — see [`guard_bound_locals`].
+pub(crate) fn guard_declares_locals(body: &Body, guard: Operand) -> bool {
+    !guard_bound_locals(body, guard).is_empty()
 }
 
 /// Whether `guard` binds a local that `body_op` reads — the locals a nested
 /// pattern's sub-bindings occupy, which only the guard declares.
 fn guard_bindings_escape(body: &Body, guard: Operand, body_op: Operand) -> bool {
+    let bound = guard_bound_locals(body, guard);
+    !bound.is_empty() && operand_reads_any_of(body, body_op, &bound)
+}
+
+/// Whether the subtree under `op` reads any of the locals `binds` binds.
+pub(super) fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> bool {
+    let locals: LocalIndexSet = binds.iter().map(|(bound, _)| *bound).collect();
+    operand_reads_any_of(body, op, &locals)
+}
+
+/// Whether the subtree under `op` reads any of `locals`, in either form: a
+/// skeleton `Local` node, or a promoted operand that extracts back to one.
+fn operand_reads_any_of(body: &Body, op: Operand, locals: &LocalIndexSet) -> bool {
     struct Reads<'a> {
-        locals: &'a crate::hashmap::IndexSet<u32>,
+        locals: &'a LocalIndexSet,
         found: bool,
+    }
+    impl Reads<'_> {
+        fn read_value(&mut self, body: &Body, op: Operand) {
+            let Some(v) = op.as_value() else {
+                return;
+            };
+            let mut opaque = LocalIndexSet::default();
+            body.values.collect_opaque_locals(v, &mut opaque);
+            self.found |= opaque.iter().any(|l| self.locals.contains(l));
+        }
     }
     impl NirRefVisitor for Reads<'_> {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
@@ -756,69 +788,19 @@ fn guard_bindings_escape(body: &Body, guard: Operand, body_op: Operand) -> bool 
                 self.found = true;
             }
             // A promoted operand reads its local just as a skeleton `Local` does.
-            body.for_each_operand(node, |op| {
-                if let Some(v) = op.as_value() {
-                    let mut opaque = crate::hashmap::IndexSet::default();
-                    body.values.collect_opaque_locals(v, &mut opaque);
-                    self.found |= opaque.iter().any(|l| self.locals.contains(l));
-                }
-            });
+            body.for_each_operand(node, |op| self.read_value(body, op));
             self.walk_node(body, node);
         }
     }
-    // A promoted guard is a pure value: it declares nothing, so nothing escapes.
-    let Some(g) = guard.as_expr() else {
-        return false;
-    };
-    let mut bound = Bound {
-        locals: crate::hashmap::IndexSet::default(),
-    };
-    bound.visit_node(body, NodeRef::Expr(g));
-    if bound.locals.is_empty() {
-        return false;
-    }
-    match body_op {
-        Operand::Expr(b) => {
-            let mut reads = Reads {
-                locals: &bound.locals,
-                found: false,
-            };
-            reads.visit_node(body, NodeRef::Expr(b));
-            reads.found
-        }
-        Operand::Value(v) => {
-            let mut opaque = crate::hashmap::IndexSet::default();
-            body.values.collect_opaque_locals(v, &mut opaque);
-            opaque.iter().any(|l| bound.locals.contains(l))
-        }
-    }
-}
-
-pub(super) fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> bool {
-    struct Reads<'a> {
-        binds: &'a PatBindings,
-        found: bool,
-    }
-    impl NirRefVisitor for Reads<'_> {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Expr(e) = node
-                && let ExprKind::Local { index, .. } = &body.exprs[e].kind
-                && self.binds.iter().any(|(bound, _)| bound == index)
-            {
-                self.found = true;
-            }
-            self.walk_node(body, node);
-        }
-    }
-    let Some(expr) = op.as_expr() else {
-        return false;
-    };
-    let mut visitor = Reads {
-        binds,
+    let mut reads = Reads {
+        locals,
         found: false,
     };
-    visitor.visit_node(body, NodeRef::Expr(expr));
-    visitor.found
+    match op {
+        Operand::Expr(e) => reads.visit_node(body, NodeRef::Expr(e)),
+        Operand::Value(_) => reads.read_value(body, op),
+    }
+    reads.found
 }
 
 /// Simplify a short-circuit one operand already decides. The neutral element

@@ -1198,10 +1198,6 @@ impl ConstFoldVisitor<'_> {
     }
 }
 
-/// Summary of every local a loop body could mutate. Used by
-/// [`ConstFoldVisitor::apply_loop_invalidations`] to drop just those
-/// `local` lattice entries before and after the body walk — facts about
-/// locals the body does not touch survive.
 /// A lattice a mutable local may carry between writes: a scalar constant, or
 /// nothing. See [`ConstFoldVisitor::update_env_from_stmt`].
 fn scalar_only(lat: Lattice) -> Lattice {
@@ -1211,6 +1207,10 @@ fn scalar_only(lat: Lattice) -> Lattice {
     }
 }
 
+/// Summary of every local a loop body could mutate. Used by
+/// [`ConstFoldVisitor::apply_loop_invalidations`] to drop just those
+/// `local` lattice entries before and after the body walk — facts about
+/// locals the body does not touch survive.
 #[derive(Default)]
 struct LoopWriteEffects {
     /// `local = expr` targets — fully reassigned, so the local's lattice
