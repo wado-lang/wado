@@ -2205,17 +2205,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if !stmts.iter().any(diverges) {
             return stmts;
         }
+        let is_marker = |s: &TirStmt| {
+            matches!(&s.kind, TirStmtKind::Expr(e)
+                if matches!(&e.kind, TirExprKind::Call { func, .. }
+                    if func.builtin_name().as_deref() == Some("builtin::cold_path")))
+        };
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
+        // A marker makes the rest of its block cold, which is where `block_cut`
+        // stops pricing and where `cold_outline`'s region starts, so the first
+        // one in a block is the only one worth placing — and a synthesis site
+        // that placed its own ahead of the statements it built keeps it.
+        let mut marked = false;
         for s in stmts {
-            // A synthesis site that already placed one keeps it, rather than
-            // gaining a second.
-            let marked = out.last().is_some_and(|p: &TirStmt| {
-                matches!(&p.kind, TirStmtKind::Expr(e)
-                    if matches!(&e.kind, TirExprKind::Call { func, .. }
-                        if func.name == "cold_path"))
-            });
+            marked = marked || is_marker(&s);
             if diverges(&s) && !marked {
                 out.push(self.make_cold_path_stmt(s.span));
+                marked = true;
             }
             out.push(s);
         }
