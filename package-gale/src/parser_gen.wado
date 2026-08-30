@@ -6960,13 +6960,11 @@ fn group_partition(
     // An empty alternative has no first set of its own; what selects it is
     // what may follow the group, which lower computed at its position.
     apply_empty_alt_admits(&mut first_sets, empty_alt_admits);
-    // Only a General group can hold a wildcard-led alternative; a rule-ref one
-    // is a single call per alternative.
-    let groups = match kind {
-        General => compute_overlap_groups_with_wildcard(alts, &first_sets, ctx),
-        RuleRef => compute_overlap_groups(&first_sets),
-    };
-    return [first_sets, groups];
+    // One partition for both kinds. A rule-ref group was assumed unable to
+    // hold an open-ended alternative, because it is a single call per
+    // alternative — but the rule that call reaches can be open-ended, and
+    // lower's SimpleCst dispatch and scan group both know it now.
+    return [first_sets, compute_overlap_groups_with_wildcard(alts, &first_sets, ctx)];
 }
 
 /// Parse one alt's elements; the chosen alt's elements append to the
