@@ -1401,6 +1401,13 @@ test "ATN-class LR grammar keeps the decoder's LR tables" {
     assert str_contains(&output, &"\", true);");
 }
 
+fn find_index(haystack: &String, needle: &String) -> i32 {
+    return match haystack.find(*needle) {
+        Some(idx) => idx,
+        None => -1,
+    };
+}
+
 fn count_substr(haystack: &String, needle: &String) -> i32 {
     let mut n = 0;
     let mut at = find_substr(haystack, needle);
@@ -1443,6 +1450,15 @@ A : 'a' ;
 B : 'b' ;
 ";
 
+// A rule's own alternatives are a decision too, and an empty one among them is
+// selected by no lookahead.
+global RULE_LEVEL_EMPTY_ALT_G4: String = "
+grammar T;
+x : A | | B ;
+A : 'a' ;
+B : 'b' ;
+";
+
 // An LR suffix's group body is walked by the op-only walker, which reads the
 // dispatch lower baked rather than the surface alternatives.
 global OP_WALKER_EMPTY_ALT_G4: String = "
@@ -1463,6 +1479,19 @@ test "an undecided dispatch keeps every alternative reachable" {
     let body = extract_fn_body(&output, &"fn _parse_r__inner(");
     assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
     assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+}
+
+test "a rule's empty alternative does not shadow the ones after it" {
+    // A rule's arms are guarded `if`s that return, so an unconditional one is
+    // the same dead-code hazard as an `else if true` in a group's chain: it
+    // belongs after every arm a lookahead can select.
+    let mut g = parse(RULE_LEVEL_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    let empty_arm = find_index(&body, &"scope:");
+    let b_arm = find_index(&body, &"TK_B");
+    assert b_arm >= 0, `alt B is missing: ${body}`;
+    assert empty_arm > b_arm, `the empty alternative runs before B can be tested: ${body}`;
 }
 
 test "the op walker's undecided chain keeps every alternative reachable" {

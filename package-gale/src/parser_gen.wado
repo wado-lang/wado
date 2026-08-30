@@ -2643,7 +2643,16 @@ fn gen_multi_alt_body(
 
     w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
+    let mut admits_everything: List<bool> = [];
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
+        let alt = &rule.alternatives[non_lr_indices[i]];
+        let no_cond = depth == 0 || all_pos_sets[i].is_empty();
+        let ungated = !ctx.emit_actions() || alt_initial_gate_conditions(alt, ctx).is_empty();
+        admits_everything.push(no_cond && ungated);
+    }
+
+    for let slot of &arms_fallback_last(non_lr_indices, &admits_everything) {
+        let i = *slot;
         let alt_index = non_lr_indices[i];
         let alt = &rule.alternatives[alt_index];
 
@@ -6278,6 +6287,28 @@ fn branch_test_of(kinds: &List<String>) -> BranchTest {
 /// that can never fail. A gated one can decline, so it stays where it is.
 fn is_decision_fallback(b: &DecisionBranch) -> bool {
     return b.test matches { Always } && b.gate.is_empty();
+}
+
+/// Reorder arms so the ones admitting everything come last, keeping the rest
+/// in their alternative order. `fallback_last` is this rule over a group's
+/// branches; a rule's own alternatives are a decision too, and its arms are
+/// guarded `if`s that return, so an unconditional one placed early is the same
+/// dead code as an `else if true` mid-chain.
+fn arms_fallback_last(arms: &List<i32>, admits_everything: &List<bool>) -> List<i32> {
+    assert arms.len() == admits_everything.len(), "one verdict per arm";
+    let mut out: List<i32> = [];
+    let mut fallbacks: List<i32> = [];
+    for let mut i = 0; i < arms.len(); i += 1 {
+        if admits_everything[i] {
+            fallbacks.push(i);
+        } else {
+            out.push(i);
+        }
+    }
+    for let i of &fallbacks {
+        out.push(*i);
+    }
+    return out;
 }
 
 /// Branches that all admit everything are one branch, not a chain of arms only
