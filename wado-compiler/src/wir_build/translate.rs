@@ -2032,17 +2032,22 @@ impl FunctionTranslator<'_, '_> {
 
     /// Run `prelude` before `call`, preserving the call's value: a `Seq` for a
     /// void call, a value-typed `Block` otherwise.
+    ///
+    /// A `Block` names exactly one stack result, so `multi_value` — the callee
+    /// returning its aggregate as N results — takes the `Seq` shape too: the
+    /// N results reach the enclosing `MultiValueLocalBind` unwrapped.
     pub(super) fn wrap_call_with_prelude(
         &mut self,
         mut prelude: Vec<WirInstr>,
         call: WirInstr,
         result_type: TypeId,
+        multi_value: bool,
     ) -> WirInstr {
         if prelude.is_empty() {
             return call;
         }
         prelude.push(call);
-        if self.is_stackless_type(result_type) || result_type == TypeTable::NEVER {
+        if multi_value || self.is_stackless_type(result_type) || result_type == TypeTable::NEVER {
             WirInstr::Seq(prelude)
         } else {
             let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
@@ -2413,7 +2418,12 @@ impl FunctionTranslator<'_, '_> {
                         func_id: wir_func_id,
                         args: translated_args,
                     };
-                    self.wrap_call_with_prelude(prelude, call, expr.type_id)
+                    self.wrap_call_with_prelude(
+                        prelude,
+                        call,
+                        expr.type_id,
+                        self.callee_returns_multi_value(func),
+                    )
                 } else {
                     self.unresolved_call_or_trap(func, expr.span, || {
                         format!(
