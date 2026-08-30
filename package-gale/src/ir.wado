@@ -1815,12 +1815,18 @@ fn canon_repeat(kind: RepeatKind, element: &Element, non_greedy: bool) -> Elemen
 }
 
 /// The inner Optional of an Optional whose body is one, or `null` where the
-/// body is anything else. A label sits between the two whenever the surface
-/// spelled one (`x=(A|)?`), and it belongs to what the collapse keeps: the
-/// label binds the body, not the choice to take it, so `x=(A|)?` is `x=(A)?`.
-/// Leaving it where it stood is what nests the Repeat under it instead.
+/// body is anything else. Two things can stand between the two optionals and
+/// neither changes what the collapse keeps:
+///
+/// * a bare `( … )`, which `strip_transparent_wrappers` answers for — the same
+///   answer lowering gives, so canon and lowering cannot disagree about what
+///   the body is. Listing the wrappers here instead is what left `((A|))?`
+///   and `(A?)?` nesting a Repeat: the list had `Label` on it and not `Group`.
+/// * a label, which the collapse keeps because it binds the body, not the
+///   choice to take it: `x=(A|)?` is `x=(A)?`.
 fn peel_nested_optional(element: &Element) -> Option<RepeatElement> {
-    return match element {
+    let bare = strip_transparent_wrappers(element);
+    return match &bare {
         Repeat(inner) => {
             if inner.kind matches { Optional } {
                 Option::Some(*inner);
