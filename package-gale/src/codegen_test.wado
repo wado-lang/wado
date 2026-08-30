@@ -1480,6 +1480,26 @@ s : .? B EOF ;
 B : 'b' ;
 ";
 
+// `x` derives only epsilon, but through a rule reference — the mirror of an
+// open-ended alternative reached the same way.
+global INDIRECT_EPSILON_ALT_G4: String = "
+grammar T;
+s : ( x | A ) B EOF ;
+x : ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// The op walker's `Direct` chain sees only baked token sets, and an
+// alternative open-ended through a rule keeps a Direct branch.
+global OP_INDIRECT_WILDCARD_G4: String = "
+grammar T;
+e : e ( w | A ) | C ;
+w : . ;
+A : 'a' ;
+C : 'c' ;
+";
+
 // `w` is open-ended, but through a rule reference: its first set is empty for
 // the same reason a surface `.`'s is, and it is not the empty alternative.
 global INDIRECT_WILDCARD_ALT_G4: String = "
@@ -1565,6 +1585,31 @@ test "an optional over a wildcard has no first set to guard on" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
     assert count_substr(&body, &"p.any()") > 0, `the wildcard body must still be emitted: ${body}`;
+}
+
+test "an alternative that derives only epsilon through a rule is untestable" {
+    // The mirror of the open-ended case: `x` matches nothing, so no lookahead
+    // selects it and it belongs after the arm that one can. Reading the
+    // surface elements calls it non-empty and leaves it first, where the `A`
+    // arm behind it is dead.
+    let mut g = parse(INDIRECT_EPSILON_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    let a_arm = find_index(&body, &"grp_kind == TK_A");
+    let eps_arm = find_index(&body, &"_parse_x(p)");
+    assert a_arm >= 0, `the A alternative lost its test: ${body}`;
+    assert eps_arm > a_arm, `the epsilon alternative must trail the arm a lookahead can pick: ${body}`;
+}
+
+test "the op walker keeps an alternative open-ended through a rule in place" {
+    let mut g = parse(OP_INDIRECT_WILDCARD_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_e__inner(");
+    let wild_arm = find_index(&body, &"_parse_w(p)");
+    let named_arm = find_index(&body, &"_gk == TK_A");
+    assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
+    assert named_arm < 0 || wild_arm < named_arm, `it was demoted behind a later alternative: ${body}`;
 }
 
 test "an alternative open-ended through a rule keeps its index too" {

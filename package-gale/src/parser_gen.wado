@@ -164,6 +164,7 @@ use {
     sync_set_ref,
 } from "./kind_set_gen.wado";
 use {
+    alt_body_matches_nothing,
     apply_empty_alt_admits,
     non_greedy_static_undecided,
     peel_repeat_body_label,
@@ -2660,7 +2661,8 @@ fn gen_multi_alt_body(
         // is whether it matches anything — asking for a wildcard in the
         // surface elements misses one reached through a rule reference.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
-        untestable.push(no_cond && alt_matches_nothing(alt) && !alt_gates_branch(alt, ctx));
+        let gated = alt_gates_branch(alt, ctx);
+        untestable.push(no_cond && alt_matches_nothing(alt, ctx) && !gated);
     }
 
     for let slot of &arms_fallback_last(&untestable) {
@@ -3166,7 +3168,7 @@ fn gen_alt_dispatch(
             all_first.push(*t);
         }
     }
-    let branches = direct_dispatch_branches(&dd);
+    let branches = direct_dispatch_branches(&dd, alts);
     assert !branches.is_empty(), "a Direct dispatch decides between alternatives, so it has branches";
     if decision_reads_lookahead(&branches) {
         w.line(&"let _gk = p.peek_kind();");
@@ -3191,14 +3193,20 @@ fn gen_alt_dispatch(
 }
 
 /// The branches a baked `Direct` dispatch takes, as the one branch type every
-/// chain renders. Lower bakes an empty token set for an alternative no
-/// lookahead selects; that is the chain's fallback, not a test that passes.
-fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
+/// chain renders. Lower bakes an empty token set both for an alternative no
+/// lookahead selects and for one that is open-ended, and only the first is the
+/// chain's fallback — the alternatives are what tell them apart, which is why
+/// they are a parameter here rather than an assumption about `Direct`.
+fn direct_dispatch_branches(dd: &DirectDispatch, alts: &List<AltBody>) -> List<DecisionBranch> {
     let mut branches: List<DecisionBranch> = [];
     for let br of &dd.branches {
-        // Disjoint first sets, so no branch here is a wildcard's: an empty
-        // token set is an alternative the lookahead cannot decide.
-        let test = admits_or_untestable(&br.tokens);
+        let test = if !br.tokens.is_empty() {
+            Admits::Kinds(br.tokens);
+        } else if alt_body_matches_nothing(alt_by_index(alts, br.alt_index)) {
+            Admits::Untestable;
+        } else {
+            Admits::Everything;
+        };
         branches.push(DecisionBranch {
             test,
             gate: "",
@@ -6348,7 +6356,7 @@ fn decision_branches(
 ) -> List<DecisionBranch> {
     // A group's partition is over `alts` itself here, so slot and alternative
     // index are the same thing.
-    let epsilon = epsilon_flags(alts);
+    let epsilon = epsilon_flags(alts, ctx);
     let mut branches: List<DecisionBranch> = [];
     for let group of groups {
         branches.push(DecisionBranch {
@@ -6422,7 +6430,7 @@ fn op_group_alt_decision(g: &GroupOp) -> Option<List<DecisionBranch>> {
         return null;
     }
     return match &g.dispatch {
-        Direct(dd) => Option::Some(direct_dispatch_branches(dd)),
+        Direct(dd) => Option::Some(direct_dispatch_branches(dd, &g.alts)),
         // The tournament has no lookahead gate of its own: every alternative
         // is a candidate, and the scan lengths decide.
         Tournament(td) => Option::Some([
@@ -6745,18 +6753,25 @@ fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, epsil
     return admits_or_untestable(&group_first_union(group, first_sets));
 }
 
-/// Whether an alternative matches nothing at all — the canonical form of "no
-/// lookahead can decide this", and what an empty first set means where the
-/// alternative is not open-ended.
-fn alt_matches_nothing(alt: &Alternative) -> bool {
-    return alt.elements.is_empty();
+/// Whether an alternative derives only the empty string — the canonical form
+/// of "no lookahead can decide this", and what an empty first set means where
+/// the alternative is not open-ended. Written empty is one way; reaching a
+/// rule that is, is another, and counting elements sees only the first.
+fn alt_matches_nothing(alt: &Alternative, ctx: &mut GenContext) -> bool {
+    for let elem of &alt.elements {
+        let mut visiting: List<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// The epsilon verdicts for a partition over `alts` itself.
-fn epsilon_flags(alts: &List<Alternative>) -> List<bool> {
+fn epsilon_flags(alts: &List<Alternative>, ctx: &mut GenContext) -> List<bool> {
     let mut out: List<bool> = [];
     for let alt of alts {
-        out.push(alt_matches_nothing(alt));
+        out.push(alt_matches_nothing(alt, ctx));
     }
     return out;
 }
@@ -7506,7 +7521,7 @@ fn gen_multi_alt_body_alt(
     // slots into `non_lr_indices` and the verdicts have to be too.
     let mut epsilon: List<bool> = [];
     for let idx of non_lr_indices {
-        epsilon.push(alt_matches_nothing(&rule.alternatives[*idx]));
+        epsilon.push(alt_matches_nothing(&rule.alternatives[*idx], ctx));
     }
     let mut untestable: List<bool> = [];
     for let group of groups {

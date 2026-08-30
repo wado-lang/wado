@@ -1044,6 +1044,15 @@ fn op_nullable(op: &Op) -> bool {
     };
 }
 
+/// Whether a lowered alternative derives only the empty string, so no
+/// lookahead selects it. The op-side twin of `alt_matches_nothing`: the op
+/// walker has no surface elements to consult, and consulting them would answer
+/// for an alternative written empty and not for one that reaches a rule which
+/// is.
+pub fn alt_body_matches_nothing(body: &AltBody) -> bool {
+    return seq_all_nullable(&body.ops);
+}
+
 fn seq_all_nullable(ops: &List<Op>) -> bool {
     for let op of ops {
         if !op_nullable(op) {
