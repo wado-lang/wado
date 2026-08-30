@@ -3171,7 +3171,7 @@ fn gen_alt_dispatch(
             all_first.push(*t);
         }
     }
-    let branches = direct_dispatch_branches(&dd, alts);
+    let branches = direct_dispatch_branches(&dd, alts, ctx);
     assert !branches.is_empty(), "a Direct dispatch decides between alternatives, so it has branches";
     if decision_reads_lookahead(&branches) {
         w.line(&"let _gk = p.peek_kind();");
@@ -3200,12 +3200,12 @@ fn gen_alt_dispatch(
 /// lookahead selects and for one that is open-ended, and only the first is the
 /// chain's fallback — the alternatives are what tell them apart, which is why
 /// they are a parameter here rather than an assumption about `Direct`.
-fn direct_dispatch_branches(dd: &DirectDispatch, alts: &List<AltBody>) -> List<DecisionBranch> {
+fn direct_dispatch_branches(dd: &DirectDispatch, alts: &List<AltBody>, ctx: &mut GenContext) -> List<DecisionBranch> {
     let mut branches: List<DecisionBranch> = [];
     for let br of &dd.branches {
         let test = if !br.tokens.is_empty() {
             Admits::Kinds(br.tokens);
-        } else if alt_body_matches_nothing(alt_by_index(alts, br.alt_index)) {
+        } else if alt_body_matches_nothing(alt_by_index(alts, br.alt_index), ctx) {
             Admits::Untestable;
         } else {
             Admits::Everything;
@@ -3848,7 +3848,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             // has alternatives: what it fails to find ends the loop, and the
             // dispatch commits to what it found.
             if let Group(g) = &r.body {
-                if let Some(branches) = op_group_alt_decision(g) {
+                if let Some(branches) = op_group_alt_decision(g, ctx) {
                     let [winner, best] = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, false);
                     w.line(&`if ${best} <= p.pos \{ break; \}`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
@@ -3911,7 +3911,7 @@ fn gen_op_optional(
     }
     if r.strategy matches { OptionalScanGuard } {
         if let Group(g) = &r.body {
-            if let Some(branches) = op_group_alt_decision(g) {
+            if let Some(branches) = op_group_alt_decision(g, ctx) {
                 // The scan that decides entry is the scan the dispatch
                 // decides on: one answer, one set of scans. The caller-FOLLOW
                 // yield gate wraps them, so an optional that must yield does
@@ -6429,12 +6429,12 @@ fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContex
 /// branch per alternative, `Tournament` one branch holding them all. Its
 /// callers commit to what the decision picks and never report, so there is no
 /// expected set to carry.
-fn op_group_alt_decision(g: &GroupOp) -> Option<List<DecisionBranch>> {
+fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<DecisionBranch>> {
     if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } {
         return null;
     }
     return match &g.dispatch {
-        Direct(dd) => Option::Some(direct_dispatch_branches(dd, &g.alts)),
+        Direct(dd) => Option::Some(direct_dispatch_branches(dd, &g.alts, ctx)),
         // The tournament has no lookahead gate of its own: every alternative
         // is a candidate, and the scan lengths decide.
         Tournament(td) => Option::Some([
