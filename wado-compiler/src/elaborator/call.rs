@@ -2180,13 +2180,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if inferable.is_empty() {
             return;
         }
-        let scope_params: Vec<TypeId> = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .values()
-            .map(|&(_, tid)| tid)
-            .collect();
+        let scope_params = self.scope_type_param_ids();
 
         // When inference produced no type args at all, every inferable
         // parameter is unresolved. Otherwise check each against its inferred
@@ -2246,13 +2240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let scope_params: Vec<TypeId> = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .values()
-            .map(|&(_, tid)| tid)
-            .collect();
+        let scope_params = self.scope_type_param_ids();
         let unresolved = |this: &Self, slot: Option<&TypeId>| -> bool {
             match slot {
                 None => true,
@@ -2347,13 +2335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `x: T`); monomorphization resolves it, so leave it — replacing it
         // with the default would wrongly pin it to the default type. Mirrors
         // the `scope_params` guard in `defer_or_report_uninferred_fn_type_args`.
-        let scope_params: Vec<TypeId> = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .values()
-            .map(|&(_, tid)| tid)
-            .collect();
+        let scope_params = self.scope_type_param_ids();
         // Fill in declaration order so a default that references an earlier
         // param (`U = T`) sees `T`'s slot already resolved.
         for i in 0..n {
@@ -2401,13 +2383,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.report_uninferred_fn_type_args(callee, type_args, span);
             return;
         }
-        let scope_params: Vec<TypeId> = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .values()
-            .map(|&(_, tid)| tid)
-            .collect();
+        let scope_params = self.scope_type_param_ids();
 
         let unresolved = |this: &Self, i: usize| -> bool {
             if from_empty {

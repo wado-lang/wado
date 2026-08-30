@@ -1,0 +1,41 @@
+// A `VariantCase::extract` payload is the enclosing scope's pack forwarded
+// through the case's payload parameter, so it must reach a free generic
+// function's type argument the same way a scalar type parameter does — by
+// reference and by value.
+
+fn show_ref<P: Inspect>(payload: &P) -> String {
+    return `${payload:?}`;
+}
+
+// Same spelling as the pack in scope at the call site: the callee's own slot
+// must not be confused with the caller's forwarded one.
+fn show_value<P: Inspect>(payload: P) -> String {
+    return `${payload:?}`;
+}
+
+fn render<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(v: &V) -> String {
+    let mut out = "";
+    for let case of ReflectVariant::<V>::members() {
+        if case.holds(v) && !case.is_unit() {
+            out = `${case.name()}:${show_ref(&case.extract(v))}:${show_value(case.extract(v))}`;
+        }
+    }
+    return out;
+}
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Named(String),
+    Point,
+}
+
+test "an extracted payload infers a free generic function's type argument" {
+    assert render(&Shape::Circle(2.5)) == "Circle:2.5:2.5";
+    assert render(&Shape::Rectangle([3.0, 4.0])) == "Rectangle:[3.0, 4.0]:[3.0, 4.0]";
+    assert render(&Shape::Named("hi")) == `Named:"hi":"hi"`;
+    assert render(&Shape::Point) == "";
+}
+
+__DATA__
+{"test": {}}

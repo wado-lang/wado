@@ -11,7 +11,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::TypeId;
+use crate::tir::{ResolvedType, TypeId};
 
 use super::Elaborator;
 use super::trait_env::InheritedBound;
@@ -298,6 +298,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.bound_decl(bound, known)
             .map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
             .unwrap_or_default()
+    }
+
+    /// The type-parameter ids the enclosing generic scope owns — what a slot
+    /// bound to one of them means "the caller forwarded its own generics",
+    /// not "inference gave up".
+    ///
+    /// A `..P` pack contributes its scalar element placeholder
+    /// `TypeParam { P, index }` as well: that is the spelling a mapped pack's
+    /// element carries (`make_mapped_type_pack`), so a value drawn from one —
+    /// `VariantCase<V, P>::extract` — forwards the scope's pack just as a
+    /// scalar parameter forwards itself.
+    pub(super) fn scope_type_param_ids(&self) -> Vec<TypeId> {
+        let mut tt = self.tysys.type_table.borrow_mut();
+        self.annotate_ctx
+            .trait_ctx
+            .type_params
+            .iter()
+            .flat_map(|(name, &(index, tid))| {
+                let elem = matches!(tt.get(tid), ResolvedType::TypePack { .. })
+                    .then(|| tt.make_type_param(name.clone(), index));
+                std::iter::once(tid).chain(elem)
+            })
+            .collect()
     }
 
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
