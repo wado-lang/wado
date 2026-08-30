@@ -7,14 +7,7 @@ export fn run() with (Stdout, Stdin) {
     let [stdin_stream, _done] = Stdin::read_via_stream();
 
     // Read chunks from stdin
-    let mut total = 0;
-    loop {
-        let chunk = stdin_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        total = total + chunk.len();
-    }
+    let total = stdin_stream.read_to_end().len();
     stdin_stream.drop();
 
     println(`read ${total} bytes`);

@@ -49,14 +49,7 @@ export fn run() with (Preopens, Stdout) {
         DescriptorFlags::Read,
     ).wait().unwrap();
     let [rstream, rdone] = rfile.read_via_stream(0 as Filesize);
-    let mut n = 0;
-    loop {
-        let chunk = rstream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        n = n + chunk.len();
-    }
+    let n = rstream.read_to_end().len();
     rstream.drop();
     match rdone.read() {
         Some(Ok(_)) => {

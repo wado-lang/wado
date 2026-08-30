@@ -1957,8 +1957,7 @@ impl CmInterfaceRegistry {
                     .collect();
                 // As for an interface method, the CM-ABI return type drops the
                 // `AsyncCall<T>` wrapper user code keeps seeing.
-                let return_type =
-                    unwrap_async_call_if_async(func.is_async, &func.return_type);
+                let return_type = unwrap_async_call_if_async(func.is_async, &func.return_type);
                 self.register_world_import(
                     &func.name,
                     cm_func_name,

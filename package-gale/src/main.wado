@@ -346,16 +346,7 @@ fn grant_hint(path: &String) -> String {
 /// EOF (truncated input).
 fn read_all(file: &Descriptor) -> Result<ByteList, ErrorCode> {
     let [read_stream, done] = file.read_via_stream(0 as Filesize);
-    let mut result: ByteList = [];
-    loop {
-        let chunk = read_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let b of chunk {
-            result.push(b);
-        }
-    }
+    let result = read_stream.read_to_end() as ByteList;
     read_stream.drop();
     let read_result = done.read();
     done.drop();

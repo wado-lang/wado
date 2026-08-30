@@ -85,14 +85,7 @@ fn read_body(resp: Response) -> ByteList {
     let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
 
-    let mut buf: List<u8> = [];
-    loop {
-        let chunk = body_stream_rx.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        buf.extend(&chunk);
-    }
+    let buf = body_stream_rx.read_to_end();
     body_stream_rx.drop();
     return buf as ByteList;
 }

@@ -48,10 +48,10 @@ export fn run() with (Stdout, Stderr, Preopens) {
         let sub3 = Stdout::write_via_stream(out_rx);
         loop {
             let chunk = file_rx.read(4096);
-            if chunk.len() == 0 {
+            out_tx.write_all(chunk.items);
+            if chunk.result != CopyResult::Completed {
                 break;
             }
-            out_tx.write(chunk);
         }
         file_rx.drop();
         out_tx.drop();

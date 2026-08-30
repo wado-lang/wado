@@ -174,14 +174,7 @@ fn write_file(root: &Descriptor, path: &String, source: &String) -> bool with St
 
 fn read_all(file: &Descriptor) -> List<u8> {
     let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut result: List<u8> = [];
-    loop {
-        let chunk = read_stream.read(65536);
-        if chunk.len() == 0 {
-            break;
-        }
-        result.extend(&chunk);
-    }
+    let result = read_stream.read_to_end();
     read_stream.drop();
     return result;
 }

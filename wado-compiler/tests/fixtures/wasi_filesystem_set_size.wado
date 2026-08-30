@@ -21,16 +21,7 @@ fn write_bytes(file: &Descriptor, data: List<u8>) with Descriptor {
 
 fn read_all(file: &Descriptor) -> List<u8> with Descriptor {
     let [read_stream, read_future] = file.read_via_stream(0 as Filesize);
-    let mut result: List<u8> = [];
-    loop {
-        let chunk = read_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let b of chunk {
-            result.push(b);
-        }
-    }
+    let result = read_stream.read_to_end();
     read_stream.drop();
         read_future.drop();
     return result;

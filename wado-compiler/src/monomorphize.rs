@@ -72,50 +72,90 @@ use state::Monomorphizer;
 /// 3. Runs monomorphization to instantiate generics
 /// 4. Writes results back to `FlatPackage`
 /// 5. Strips effect params (validated by prior effect checker)
-pub fn monomorphize(flat: &mut FlatPackage) {
-    // Collect all generic functions from the flat list.
-    // Link has already set module_source on each function.
-    let all_generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>> = flat
-        .functions
-        .iter()
-        .filter_map(|func_rc| {
-            let func = func_rc.borrow();
-            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
-                let key = generic_function_key(func.is_method(), &func.module_source, &func.name);
-                Some((key, Rc::clone(func_rc)))
-            } else {
-                None
-            }
-        })
-        .collect();
+pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
+    let mut session = Monomorphization {
+        // Collect all generic functions from the flat list.
+        // Link has already set module_source on each function.
+        generic_functions: flat
+            .functions
+            .iter()
+            .filter_map(|func_rc| {
+                let func = func_rc.borrow();
+                if func.has_real_type_params() || !func.impl_type_params.is_empty() {
+                    let key =
+                        generic_function_key(func.is_method(), &func.module_source, &func.name);
+                    Some((key, Rc::clone(func_rc)))
+                } else {
+                    None
+                }
+            })
+            .collect(),
+        // Collect all generic structs keyed by (name, module_source).
+        // This allows same-named generic structs from different modules to coexist.
+        generic_structs: flat
+            .structs
+            .iter()
+            .filter(|s| !s.type_params.is_empty())
+            .map(|s| ((s.name.clone(), s.module_source.clone()), s.clone()))
+            .collect(),
+        monomorphizer: Monomorphizer::new(flat.trait_env.clone()),
+        scanned_functions: 0,
+    };
+    session.run(flat);
+    session
+}
 
-    // Collect all generic structs keyed by (name, module_source).
-    // This allows same-named generic structs from different modules to coexist.
-    let mut resolved_generic_structs: IndexMap<(String, ModuleSource), TirStruct> =
-        IndexMap::default();
-    for tir_struct in &flat.structs {
-        if !tir_struct.type_params.is_empty() {
-            let key = (tir_struct.name.clone(), tir_struct.module_source.clone());
-            resolved_generic_structs.insert(key, tir_struct.clone());
-        }
+/// One monomorphization of a package, resumable.
+///
+/// The templates a run consumes leave the package (a generic function is
+/// dropped from the function list once its instances exist), and the instances
+/// it minted are remembered only here. A later pass that adds bodies — CM
+/// binding synthesis over a generic body's instances — therefore resumes this
+/// session rather than starting a new one, which would re-mint every instance
+/// under a name that already exists.
+pub struct Monomorphization {
+    monomorphizer: Monomorphizer,
+    generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>>,
+    generic_structs: IndexMap<(String, ModuleSource), TirStruct>,
+    /// How many of `flat.functions` a previous run already read call sites
+    /// from. A run leaves every body it scanned rewritten to the mangled
+    /// instance names, and a rewritten call no longer spells its method type
+    /// arguments — reading one again queues an instance keyed by the receiver
+    /// alone, whose body keeps the method's own type parameters. Only the
+    /// bodies appended since the last run are new sites; the resumed run's own
+    /// instantiation loop covers what those reach.
+    scanned_functions: usize,
+}
+
+impl Monomorphization {
+    /// Instantiate every generic the bodies added since the last run reach and
+    /// this session has not already minted.
+    pub fn resume(&mut self, flat: &mut FlatPackage) {
+        self.run(flat);
     }
 
-    // Create a temporary TirModule with all flat data for monomorphization.
-    // This reuses the existing Monomorphizer infrastructure without rewriting it.
-    let mut temp_module = TirModule::new(flat.entry_module_source.clone());
-    temp_module.type_table = flat.type_table.clone();
-    temp_module.functions = std::mem::take(&mut flat.functions);
-    temp_module.structs = std::mem::take(&mut flat.structs);
-    temp_module.globals = std::mem::take(&mut flat.globals);
+    fn run(&mut self, flat: &mut FlatPackage) {
+        // Create a temporary TirModule with all flat data for monomorphization.
+        // This reuses the existing Monomorphizer infrastructure without rewriting it.
+        let mut temp_module = TirModule::new(flat.entry_module_source.clone());
+        temp_module.type_table = flat.type_table.clone();
+        temp_module.functions = std::mem::take(&mut flat.functions);
+        temp_module.structs = std::mem::take(&mut flat.structs);
+        temp_module.globals = std::mem::take(&mut flat.globals);
+        assert!(temp_module.functions.len() >= self.scanned_functions);
 
-    // Run monomorphization on the combined module.
-    let mut monomorph = Monomorphizer::new(flat.trait_env.clone());
-    temp_module = monomorph.monomorphize_with_externals(
-        temp_module,
-        &all_generic_functions,
-        &resolved_generic_structs,
-    );
+        let temp_module = self.monomorphizer.monomorphize_with_externals(
+            temp_module,
+            &self.generic_functions,
+            &self.generic_structs,
+            self.scanned_functions,
+        );
+        self.scanned_functions = temp_module.functions.len();
+        write_back(flat, temp_module);
+    }
+}
 
+fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
     // Write results back to FlatPackage
     flat.functions = temp_module.functions;
     flat.structs = temp_module.structs;
@@ -282,6 +322,7 @@ impl Monomorphizer {
         mut module: TirModule,
         external_generic_functions: &IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>>,
         external_generic_structs: &IndexMap<(String, ModuleSource), TirStruct>,
+        scanned_functions: usize,
     ) -> TirModule {
         // Phase 0: index the functions a written impl already defines, so a
         // template instantiation landing on one of those names is never queued
@@ -379,7 +420,7 @@ impl Monomorphizer {
         self.functions.templates = Rc::new(generic_functions.clone());
 
         // Phase 8: Collect function instantiation sites from Call expressions
-        self.collect_function_instantiation_sites(&module, &generic_functions);
+        self.collect_function_instantiation_sites(&module, &generic_functions, scanned_functions);
 
         // Phase 9: Process function instantiations and generate concrete functions.
         // Use iterative approach: each newly instantiated function may have method calls

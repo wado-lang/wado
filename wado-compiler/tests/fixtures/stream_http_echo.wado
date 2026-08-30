@@ -11,10 +11,10 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let mut chunks: List<List<u8>> = [];
     loop {
         let chunk = body_stream.read(4096);
-        if chunk.len() == 0 {
+        chunks.push(chunk.items);
+        if chunk.result != CopyResult::Completed {
             break;
         }
-        chunks.push(chunk);
     }
     body_stream.drop();
 

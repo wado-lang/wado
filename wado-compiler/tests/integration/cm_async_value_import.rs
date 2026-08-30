@@ -125,6 +125,37 @@ export fn run() with Stdout {
     assert_eq!(stdout, "[10, 12]\n");
 }
 
+/// A `#[cm]` call inside a generic body binds per instance: the payload is a
+/// type parameter until monomorphize mints `read_once<u32>`, so the helper it
+/// calls is synthesized after that — see
+/// `docs/wep-2026-08-30-stream-copy-result.md`.
+#[test]
+fn a_generic_body_binds_its_stream_read_per_instance() {
+    let stdout = run_against_dep(
+        DOUBLE_STREAM,
+        r#"
+use { double_stream } from "./dep.wasm" with { type: "wasm" };
+use { println, Stdout } from "core:cli";
+
+fn read_once<T>(s: &Stream<T>) -> List<T> {
+    return s.read(16);
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u32>::new();
+    let call = double_stream(rx);
+    tx.write([4, 5]);
+    tx.drop();
+    let out = call.wait();
+    let got = read_once::<u32>(&out);
+    out.drop();
+    println(`${got:?}`);
+}
+"#,
+    );
+    assert_eq!(stdout, "[8, 10]\n");
+}
+
 /// The `future<T>` half of the same surface, through a sync export.
 #[test]
 fn future_round_trips_through_an_imported_world_function() {

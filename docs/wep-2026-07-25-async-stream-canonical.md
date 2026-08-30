@@ -132,7 +132,7 @@ replaces it. This is a follow-up to the correctness change, not a precondition.
 
 `CopyResult.DROPPED` says the peer end is gone, and the canonical traps on any
 read or write issued after it — the state is per handle, not per copy. A final
-copy can report elements *and* the drop together, which is what a peer that
+copy can report elements _and_ the drop together, which is what a peer that
 writes its payload and drops in one go produces, so a loop that reads until an
 empty list issues one read too many and traps.
 

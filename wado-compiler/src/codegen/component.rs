@@ -4190,20 +4190,19 @@ fn generate_cm_world_func_imports(
         let local_name = func.local_alias_name();
         let func_type_name = format!("world-func-type-{}", func.wasi_func_name);
 
-        let mut val_type = |builder: &mut ComponentBuilder,
-                            ctx: &mut ComponentModelContext,
-                            ty: &Type| {
-            let resolved = project
-                .cm_interface_registry
-                .resolve_type_preserving_local_newtypes(ty);
-            let mut sink = TopLevelSink { builder, ctx };
-            type_gen.ast_type_to_cm(
-                &mut sink,
-                &resolved,
-                &project.cm_interface_registry,
-                &no_resources,
-            )
-        };
+        let mut val_type =
+            |builder: &mut ComponentBuilder, ctx: &mut ComponentModelContext, ty: &Type| {
+                let resolved = project
+                    .cm_interface_registry
+                    .resolve_type_preserving_local_newtypes(ty);
+                let mut sink = TopLevelSink { builder, ctx };
+                type_gen.ast_type_to_cm(
+                    &mut sink,
+                    &resolved,
+                    &project.cm_interface_registry,
+                    &no_resources,
+                )
+            };
 
         let mut param_vals: Vec<(String, ComponentValType)> = Vec::new();
         for (_, cm_name, ty) in &func.params {

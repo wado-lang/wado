@@ -12,11 +12,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let mut body: List<u8> = [];
     loop {
         let chunk = body_stream.read(1);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let byte of chunk {
+        for let byte of chunk.items {
             body.push(byte);
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
         }
     }
     body_stream.drop();

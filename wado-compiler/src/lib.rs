@@ -1525,9 +1525,16 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 9: Monomorphize (FlatPackage → FlatPackage) ===
     {
         let _span = logger.span("monomorphize");
-        monomorphize(&mut flat);
+        let mut mono = monomorphize(&mut flat);
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
+
+        // A `#[cm]` async primitive called from a generic body only learns its
+        // payload here, where the instance carries a concrete element type. The
+        // helpers this mints call generic stdlib functions in turn, so the
+        // session resumes to instantiate them.
+        synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
+        mono.resume(&mut flat);
     }
 
     // === Phase 9a: Erase Newtypes and Flags ===
@@ -1957,10 +1964,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 )?;
             }
 
-            // Monomorphize
+            // Monomorphize, then bind the async primitives whose payload the
+            // instances just made concrete (mirrors `compile_with_options`).
             {
                 let _span = logger.span("monomorphize");
-                monomorphize(&mut flat);
+                let mut mono = monomorphize(&mut flat);
+                synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
+                mono.resume(&mut flat);
             }
 
             // Erase Newtypes and Flags (after monomorphize, before lower)

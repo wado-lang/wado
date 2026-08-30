@@ -92,6 +92,7 @@ pub fn link(package: Package) -> FlatPackage {
     FlatPackage {
         entry_module_source: package.entry_module_source,
         type_table,
+        interner: package.interner,
         functions,
         structs,
         enums,

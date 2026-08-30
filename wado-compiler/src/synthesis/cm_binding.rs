@@ -38,10 +38,7 @@ pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
-use resource_rewrite::{
-    rewrite_cm_resource_methods, synthesize_future_reads, synthesize_future_writes,
-    synthesize_record_stream_reads, synthesize_stream_reads, synthesize_stream_writes,
-};
+pub use resource_rewrite::rewrite_async_primitives_monomorphized;
 use task_return::{expand_task_returns_in_func, strip_task_returns_in_func};
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
@@ -264,6 +261,11 @@ fn unresolvable_future_stream_payload(
     check_records: bool,
 ) -> Option<String> {
     let (payload, is_future) = future_stream_payload_site(tt, expr)?;
+    // A generic body names its payload with a type parameter; what it lowers to
+    // is decided per instance. The post-monomorphize half judges those.
+    if !tt.is_concrete(payload) {
+        return None;
+    }
     if check_records && let Some(name) = unresolvable_record_in_payload(tt, registry, payload) {
         return Some(format!(
             "record type `{name}` is used as a `future` / `stream` payload, \
@@ -1141,10 +1143,5 @@ fn strip_unexpanded_task_returns(project: &Package) {
 /// [`RecordPayloadsValidated`] witness: the rewrites destroy the pristine
 /// `future-new` / `stream-new` shape that validation scans.
 fn rewrite_async_primitives(project: &mut Package, _validated: RecordPayloadsValidated) {
-    synthesize_record_stream_reads(project);
-    synthesize_future_reads(project);
-    synthesize_future_writes(project);
-    synthesize_stream_writes(project);
-    synthesize_stream_reads(project);
-    rewrite_cm_resource_methods(project);
+    resource_rewrite::rewrite_async_primitives(project);
 }

@@ -93,16 +93,7 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
         DescriptorFlags::Read,
     ).wait()?;
     let [stream, done] = opened.read_via_stream(0 as Filesize);
-    let mut bytes: List<u8> = [];
-    loop {
-        let chunk = stream.read(FILE_READ_CHUNK);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let b of chunk {
-            bytes.push(b);
-        }
-    }
+    let bytes = stream.read_to_end();
     stream.drop();
     let read_result = done.read();
     done.drop();
@@ -150,13 +141,13 @@ fn list_subdirs(dir: &Descriptor) -> List<String> {
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(DIR_READ_CHUNK);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let e of chunk {
+        for let e of chunk.items {
             if e.type matches { Directory } {
                 out.push(e.name);
             }
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
         }
     }
     stream.drop();
@@ -170,13 +161,13 @@ fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> List<String> {
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(DIR_READ_CHUNK);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let e of chunk {
+        for let e of chunk.items {
             if e.type matches { RegularFile } && e.name.ends_with(*suffix) {
                 out.push(e.name);
             }
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
         }
     }
     stream.drop();

@@ -772,10 +772,16 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
 
 impl Monomorphizer {
     /// Collect function instantiation sites from call expressions
+    ///
+    /// `scanned` is how many leading functions a previous run already read,
+    /// and left rewritten to mangled instance names. Reading one of those again
+    /// would queue an instance from a call that no longer spells its method
+    /// type arguments.
     pub fn collect_function_instantiation_sites(
         &mut self,
         module: &TirModule,
         generic_functions: &IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
+        scanned: usize,
     ) {
         let mut type_table = module.type_table.borrow_mut();
         let mut collector = InstantiationCollector {
@@ -783,7 +789,7 @@ impl Monomorphizer {
             generic_functions,
             type_table: &mut type_table,
         };
-        for func_rc in &module.functions {
+        for func_rc in &module.functions[scanned..] {
             let func = func_rc.borrow();
             // Skip generic functions - their bodies contain TypeParam references that
             // would incorrectly queue instantiations with TypeParam TypeIds instead of
@@ -798,9 +804,13 @@ impl Monomorphizer {
             }
         }
 
-        // Also scan global variable initializers for function instantiation sites
-        for global in &module.globals {
-            collector.visit_expr(global.init.slot_expr());
+        // Also scan global variable initializers for function instantiation
+        // sites. A resumed run adds no globals, and the first run's pass over
+        // them left the same rewritten calls a re-read must not queue from.
+        if scanned == 0 {
+            for global in &module.globals {
+                collector.visit_expr(global.init.slot_expr());
+            }
         }
     }
 
