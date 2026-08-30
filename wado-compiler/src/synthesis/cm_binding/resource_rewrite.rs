@@ -168,29 +168,34 @@ pub(super) struct BindingSites<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
     pub interner: &'a RefCell<ModuleSourceInterner>,
     pub entry_module_source: ModuleSource,
-    /// The names already taken. A payload concrete before monomorphize got its
-    /// helper from the first half; the same payload reached again from an
-    /// instantiated generic body must call that helper, not mint a second one
-    /// under the same name.
+    /// The helper names the entry module already holds — the same key
+    /// `(module_source, name)` that identifies a function downstream, narrowed
+    /// to the one module every helper lands in.
+    ///
+    /// A payload concrete before monomorphize took its helper from the first
+    /// half; reaching that payload again from an instantiated generic body must
+    /// call that helper, not mint a second one under its name.
     existing: IndexSet<String>,
 }
 
 impl<'a> BindingSites<'a> {
     fn from_package(project: &'a Package) -> Self {
-        let functions: Vec<Rc<RefCell<TirFunction>>> = project
+        let entry = project
             .tir_modules
-            .values()
-            .flat_map(|m| m.functions.iter().cloned())
-            .collect();
+            .get(&project.entry_module_source)
+            .expect("entry module must exist in tir_modules");
         Self {
-            existing: function_names(&functions),
-            functions,
-            type_table: project
+            existing: entry
+                .functions
+                .iter()
+                .map(|f| f.borrow().name.clone())
+                .collect(),
+            functions: project
                 .tir_modules
-                .get(&project.entry_module_source)
-                .expect("entry module must exist in tir_modules")
-                .type_table
-                .clone(),
+                .values()
+                .flat_map(|m| m.functions.iter().cloned())
+                .collect(),
+            type_table: entry.type_table.clone(),
             cm_interface_registry: &project.cm_interface_registry,
             interner: &project.interner,
             entry_module_source: project.entry_module_source.clone(),
@@ -200,17 +205,20 @@ impl<'a> BindingSites<'a> {
     fn from_flat(flat: &'a crate::flat_package::FlatPackage) -> Self {
         Self {
             functions: flat.functions.clone(),
-            existing: function_names(&flat.functions),
+            existing: flat
+                .functions
+                .iter()
+                .filter_map(|f| {
+                    let f = f.borrow();
+                    (f.module_source == flat.entry_module_source).then(|| f.name.clone())
+                })
+                .collect(),
             type_table: flat.type_table.clone(),
             cm_interface_registry: &flat.cm_interface_registry,
             interner: &flat.interner,
             entry_module_source: flat.entry_module_source.clone(),
         }
     }
-}
-
-fn function_names(functions: &[Rc<RefCell<TirFunction>>]) -> IndexSet<String> {
-    functions.iter().map(|f| f.borrow().name.clone()).collect()
 }
 
 /// Shared driver for the `synthesize_*` binding passes: walk every TIR
@@ -446,15 +454,10 @@ fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
 /// The stream-write element type for a scalar / structural `stream-write`, or
 /// `None` for `u8` and record streams (handled elsewhere).
 fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let (receiver, func, _) = expr.kind.as_method_call()?;
-    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-write") {
+    if cm_name_of(expr) != Some("stream-write") {
         return None;
     }
-    let mut recv = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
-        recv = *inner;
-    }
-    let elem = *tt.generic_type_args(recv)?.first()?;
+    let elem = stream_receiver_element(tt, expr)?;
     has_value_payload(tt, elem).then_some(elem)
 }
 
@@ -1200,15 +1203,14 @@ fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
     (!has_value_payload(tt, elem_type_id)).then_some(elem_type_id)
 }
 
-/// The element type of a `stream-read` call, read off the receiver's
-/// `Stream<T>`. Never off the returned `StreamChunk<T>`: monomorphize replaces
-/// that instance with a concrete struct, so the receiver is the one spelling
-/// that names `T` on both sides of the phase.
-fn stream_read_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let (receiver, func, _) = expr.kind.as_method_call()?;
-    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-read") {
-        return None;
-    }
+/// What the receiver of a stream `#[cm]` method streams — the one answer to
+/// that question, since every caller here needs the same peel.
+///
+/// Read off the receiver, never off what the call returns: `Stream::read`
+/// yields a `StreamChunk<T>` instance that monomorphize replaces with a
+/// concrete struct, while the receiver names `T` on both sides of the phase.
+fn stream_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let (receiver, _, _) = expr.kind.as_method_call()?;
     let mut recv = receiver.type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
         recv = *inner;
@@ -1216,23 +1218,21 @@ fn stream_read_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId
     tt.generic_type_args(recv)?.first().copied()
 }
 
-/// The element type a `stream-write-raw` call's receiver streams.
-fn stream_write_raw_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let (receiver, func, _) = expr.kind.as_method_call()?;
-    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-write-raw") {
+/// The `#[cm(...)]` name a call carries, if any.
+fn cm_name_of(expr: &TirExpr) -> Option<&str> {
+    let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
-    }
-    let mut recv = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
-        recv = *inner;
-    }
-    tt.generic_type_args(recv)?.first().copied()
+    };
+    func.method_info.as_ref()?.cm_name.as_deref()
 }
 
 /// The element type of a `stream-read` call, or `None` for anything else and
 /// for the `u8` stream, which `core:rt` binds by hand.
 fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let elem = stream_read_receiver_element(tt, expr)?;
+    if cm_name_of(expr) != Some("stream-read") {
+        return None;
+    }
+    let elem = stream_receiver_element(tt, expr)?;
     (!is_u8(tt, elem)).then_some(elem)
 }
 
@@ -1650,11 +1650,26 @@ enum BindingTarget {
     Entry(String),
 }
 
+/// The stream entries of [`cm_binding_function`] — the `core:rt` adapters and
+/// canonical indices written for a `u8` element. A wider element is
+/// parameterized before it reaches them, and the rewriter checks that here
+/// rather than assuming it: an element that slipped through lowered into a
+/// signature meant for bytes, which fails Wasm validation several phases later.
+const U8_STREAM_BINDINGS: &[&str] = &[
+    "stream-drop-readable",
+    "stream-drop-writable",
+    "stream-cancel-read",
+    "stream-cancel-write",
+    "stream-read",
+    "stream-write",
+    "stream-write-raw",
+];
+
 /// `None` for a method not handled here — it falls through to WIR translate.
 fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
     use BindingTarget::{Canonical, Internal};
     use CanonicalIntrinsic as C;
-    // A non-u8 element is parameterized before it reaches here.
+    // Every stream arm below is `U8_STREAM_BINDINGS`, gated by the caller.
     let u8_stream = CmStreamPayload::U8;
     Some(match cm_name {
         // Simple drops → direct CmRawCall (non-parameterized)
@@ -1807,27 +1822,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             return;
         }
         // WASI-record stream reads call a generated binding function.
-        if cm_name == "stream-read" {
-            if let Some(elem_type_id) = record_stream_read_element(self.tt, expr) {
-                let elem_name = self.tt.base_type_name(elem_type_id);
-                let func_name = record_stream_read_func_name(&elem_name);
-                rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
-                return;
-            }
-            // Only the `u8` stream reaches the hand-written `core:rt` adapter;
-            // a value-payload read was handled just above.
-            if !stream_read_receiver_element(self.tt, expr).is_some_and(|e| is_u8(self.tt, e)) {
-                return;
-            }
-        }
-        // `write_raw` hands the CM the backing array as it stands, which only
-        // means anything where the Wado element already matches the CM layout —
-        // the byte case. `core:rt`'s adapter is written for `u8` alone, so any
-        // other element stays unbound and is reported, rather than lowering
-        // through a signature it does not have. `write_all` is the API there.
-        if cm_name == "stream-write-raw"
-            && !stream_write_raw_receiver_element(self.tt, expr).is_some_and(|e| is_u8(self.tt, e))
+        if cm_name == "stream-read"
+            && let Some(elem_type_id) = record_stream_read_element(self.tt, expr)
         {
+            let elem_name = self.tt.base_type_name(elem_type_id);
+            let func_name = record_stream_read_func_name(&elem_name);
+            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
             return;
         }
         // Stream ops on a non-u8 element, and future drop / cancel: parameterized
@@ -1837,6 +1837,16 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
                 .or_else(|| parameterize_future_cm_name(&cm_name, expr, self.tt));
         if let Some(intrinsic) = parameterized {
             rewrite_cm_call(expr, BindingTarget::Canonical(intrinsic), self.entry_source);
+            return;
+        }
+        // What is left of the stream surface is the hand-written `u8` path.
+        // Everything above is what parameterizes a wider element; an element
+        // that reached here unparameterized has no lowering, so it stays
+        // unbound and is reported rather than going through a signature that
+        // was written for bytes.
+        if U8_STREAM_BINDINGS.contains(&cm_name.as_str())
+            && !stream_receiver_element(self.tt, expr).is_some_and(|e| is_u8(self.tt, e))
+        {
             return;
         }
         // Look up the binding function for everything else.
@@ -1969,14 +1979,7 @@ fn parameterize_stream_cm_name(
         "stream-cancel-write" => CanonicalIntrinsic::StreamCancelWrite,
         _ => return None,
     };
-    let (receiver, _, _) = expr.kind.as_method_call()?;
-    let mut type_id = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
-        type_id = *inner;
-    }
-    if let Some(type_args) = tt.generic_type_args(type_id)
-        && let Some(&elem) = type_args.first()
-    {
+    if let Some(elem) = stream_receiver_element(tt, expr) {
         let elem_name = tt.base_type_name(elem);
         if elem_name != "u8" {
             if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {

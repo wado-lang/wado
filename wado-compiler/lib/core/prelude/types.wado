@@ -253,6 +253,10 @@ pub resource Stream<T> {
 
 impl Stream<T> {
     /// Read until the writable end drops, and return everything it wrote.
+    ///
+    /// Unlike the write loops, an empty `Completed` copy is not a stop: it is
+    /// the peer offering nothing this time, and more can still follow. What
+    /// ends the read is the result, which is the whole point of carrying it.
     pub fn read_to_end(&self) -> List<T> {
         let mut all: List<T> = [];
         loop {
