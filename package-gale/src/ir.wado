@@ -1834,6 +1834,44 @@ fn canon_repeat(kind: RepeatKind, element: &Element, non_greedy: bool) -> Elemen
     return Element::Repeat(RepeatElement { kind, element: *element, non_greedy });
 }
 
+/// The shape lowering requires of a canonical grammar, checked at the pass
+/// boundary rather than discovered inside it. Reaching one of these is a defect
+/// in canonicalization, not in the grammar — a grammar error is reported by
+/// `check_epsilon_closure` and friends long before here — so it asserts rather
+/// than diagnoses, and names the pass that owed the shape. Without it lowering
+/// panics from inside `repeat_inner_base_name`, which says only that the shape
+/// arrived, never who minted it: four separate producers were found that way,
+/// one review round each.
+pub fn assert_canonical_shape(grammar: &Grammar) {
+    for let rule of &grammar.parser_rules {
+        for let alt of &rule.alternatives {
+            for let e of &alt.elements {
+                assert_canonical_element(e, &rule.name);
+            }
+        }
+    }
+}
+
+fn assert_canonical_element(elem: &Element, rule: &String) {
+    match elem {
+        Repeat(rep) => {
+            assert !peel_nested_repeat(&rep.element) matches { Some(_) }, `rule "${*rule}": a repeat over a repeat reached lowering — every Repeat canonicalization mints must go through canon_repeat, which collapses the pair`;
+            assert_canonical_element(&rep.element, rule);
+        },
+        Group(g) => {
+            for let a of &g.alternatives {
+                for let e of &a.elements {
+                    assert_canonical_element(e, rule);
+                }
+            }
+        },
+        Label(lab) => assert_canonical_element(&lab.element, rule),
+        Not(n) => assert_canonical_element(&n.element, rule),
+        _ => {
+        },
+    }
+}
+
 /// Whether a repeat of this kind can match nothing.
 fn repeat_admits_empty(kind: RepeatKind) -> bool {
     return match kind {

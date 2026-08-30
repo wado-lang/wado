@@ -38,7 +38,14 @@ use {
     elements_match,
 } from "./gen_util.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
-use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
+use {
+    Admits,
+    GenContext,
+    admits_or_everything,
+    is_nullable,
+    sets_overlap,
+    union_kind_arrays,
+} from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, str_lit } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
 use {
@@ -840,7 +847,8 @@ fn gen_lr_suffix_dispatch(
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
         let group = &lr_dispatch.groups[g];
 
-        let cond = ctx.kind_check_str(&group_first_union(group, &suffix_first_sets), &"suffix_kind");
+        let union_first = group_first_union(group, &suffix_first_sets);
+        let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &"suffix_kind");
         if is_first {
             w.begin(&`if ${cond}`);
             is_first = false;
@@ -1260,7 +1268,7 @@ fn gen_scan_multi_alt(
 
     let mut first_branch = true;
     for let mut g = 0; g < groups_alts.len(); g += 1 {
-        let cond = ctx.kind_check_str(&groups_tokens[g], &"alt_kind");
+        let cond = ctx.admits_check_str(&admits_or_everything(&groups_tokens[g]), &"alt_kind");
         if first_branch {
             w.begin(&`if ${cond}`);
             first_branch = false;
@@ -3332,7 +3340,7 @@ fn gen_lr_fn(
                 }
             }
         }
-        let cond = ctx.kind_check_str(&union_first, &"_sk");
+        let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &"_sk");
         if first {
             w.begin(&`if ${cond}`);
             first = false;
@@ -6254,34 +6262,22 @@ fn gen_scan_winner_round(
 /// at once: a branch that admits every lookahead, and a branch whose first set
 /// is absent. Rendering both as `true` put an unconditional arm in the middle
 /// of the chain and made every later alternative dead code.
-variant BranchTest {
-    /// Admits every lookahead: a wildcard-led alternative, or an empty
-    /// alternative whose admit set is the caller's FOLLOW and so is not
-    /// statically known. Either way the branch is the chain's fallback and
-    /// belongs last.
-    Always,
-    /// Admits exactly these token kinds. Never empty.
-    Kinds(List<String>),
-}
-
 /// One branch of a group's decision: the lookahead that admits it, the
 /// alternative-initial predicate it is further gated by, and the alternatives
 /// it holds.
 struct DecisionBranch {
-    test: BranchTest,
+    test: Admits,
     /// Rendered `&& (…)` suffix, empty where the branch has no predicate.
     gate: String,
     alts: List<i32>,
 }
 
-/// The branch a set of admitted kinds makes. An empty set is the absent first
-/// set of an empty alternative whose follow is the caller's, which admits
-/// whatever the branches before it did not.
-fn branch_test_of(kinds: &List<String>) -> BranchTest {
-    if kinds.is_empty() {
-        return BranchTest::Always;
-    }
-    return BranchTest::Kinds(*kinds);
+/// The branch a set of admitted kinds makes. An empty set here is a wildcard's
+/// absent first set, or an empty alternative whose follow is the caller's:
+/// either way nothing narrows the branch, and `fallback_last` puts it where an
+/// arm that narrows nothing belongs.
+fn branch_test_of(kinds: &List<String>) -> Admits {
+    return admits_or_everything(kinds);
 }
 
 /// A branch that admits everything and is gated by nothing decides nothing the
@@ -6289,7 +6285,7 @@ fn branch_test_of(kinds: &List<String>) -> BranchTest {
 /// there is what keeps a later alternative from being emitted behind a test
 /// that can never fail. A gated one can decline, so it stays where it is.
 fn is_decision_fallback(b: &DecisionBranch) -> bool {
-    return b.test matches { Always } && b.gate.is_empty();
+    return b.test matches { Everything } && b.gate.is_empty();
 }
 
 /// Reorder arms so the ones admitting everything come last, keeping the rest
@@ -6330,7 +6326,7 @@ fn fallback_last(branches: &List<DecisionBranch>) -> List<DecisionBranch> {
         }
     }
     if !fallback_alts.is_empty() {
-        out.push(DecisionBranch { test: BranchTest::Always, gate: "", alts: fallback_alts.sorted() });
+        out.push(DecisionBranch { test: Admits::Everything, gate: "", alts: fallback_alts.sorted() });
     }
     return out;
 }
@@ -6356,14 +6352,7 @@ fn decision_branches(
 }
 
 fn render_branch_cond(b: &DecisionBranch, kind_expr: &String, ctx: &mut GenContext) -> String {
-    let test = match &b.test {
-        Always => "true",
-        Kinds(kinds) => {
-            assert !kinds.is_empty(), "a Kinds branch admits at least one token";
-            ctx.kind_check_str(kinds, kind_expr);
-        },
-    };
-    return `${test}${b.gate}`;
+    return `${ctx.admits_check_str(&b.test, kind_expr)}${b.gate}`;
 }
 
 /// A group's decision, taken once and read by everything that has to know
@@ -6428,7 +6417,7 @@ fn op_group_alt_decision(g: &GroupOp) -> Option<List<DecisionBranch>> {
         // The tournament has no lookahead gate of its own: every alternative
         // is a candidate, and the scan lengths decide.
         Tournament(td) => Option::Some([
-            DecisionBranch { test: BranchTest::Always, gate: "", alts: td.alts },
+            DecisionBranch { test: Admits::Everything, gate: "", alts: td.alts },
         ]),
     };
 }
@@ -6513,7 +6502,7 @@ fn gen_decision_measure(
 /// lengths are the whole decision.
 fn decision_is_unconditional(branches: &List<DecisionBranch>) -> bool {
     assert !branches.is_empty(), "a group's partition has at least one branch";
-    return branches.len() == 1 && branches[0].test matches { Always } && branches[0].gate.is_empty();
+    return branches.len() == 1 && branches[0].test matches { Everything } && branches[0].gate.is_empty();
 }
 
 /// Whether any branch's test reads the lookahead. A chain whose every branch
@@ -7362,7 +7351,7 @@ fn gen_prediction_code_inner(
             };
             for let mut i = 0; i < d.branches.len(); i += 1 {
                 let branch = &d.branches[i];
-                let cond = ctx.kind_check_str(&branch.tokens, &check_var);
+                let cond = ctx.admits_check_str(&admits_or_everything(&branch.tokens), &check_var);
                 if i == 0 {
                     w.begin(&`if ${cond}`);
                 } else {
@@ -7488,7 +7477,7 @@ fn gen_multi_alt_body_alt(
         } else {
             String::new();
         };
-        let cond = ctx.kind_check_str(&union_first, &DISPATCH_KIND_LOCAL);
+        let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &DISPATCH_KIND_LOCAL);
         w.begin(&`if ${cond}${gate}`);
 
         if group.len() == 1 {

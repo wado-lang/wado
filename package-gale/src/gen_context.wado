@@ -56,6 +56,40 @@ impl RuleCaptures {
 
 global NO_CAPTURES: RuleCaptures = RuleCaptures {};
 
+/// What a lookahead test admits. A `List<String>` cannot say it: the empty set
+/// reads as "everything narrows to nothing, so admit all" at a wildcard branch
+/// and as "nothing selects this" at an alternative with no first set, and a
+/// renderer that answers for both has to guess. It guessed `true`, and the
+/// alternatives after the guess became unreachable — six times, in six
+/// emitters. So the case is named where it is known, not where it is rendered.
+pub variant Admits {
+    Everything,
+    Nothing,
+    /// Never empty: an empty set is `Everything` or `Nothing`, and which one
+    /// is not a property of the set.
+    Kinds(List<String>),
+}
+
+/// A set that narrows the lookahead, where having none to narrow by means
+/// nothing is excluded — a wildcard-led alternative, a guard with no first set
+/// to test. This is the reading `kind_check_str` used to take for everyone.
+pub fn admits_or_everything(kinds: &List<String>) -> Admits {
+    if kinds.is_empty() {
+        return Admits::Everything;
+    }
+    return Admits::Kinds(*kinds);
+}
+
+/// A set that selects, where having none to select by means never selected —
+/// an alternative whose first set is absent, which belongs after everything a
+/// lookahead can pick rather than ahead of it.
+pub fn admits_or_nothing(kinds: &List<String>) -> Admits {
+    if kinds.is_empty() {
+        return Admits::Nothing;
+    }
+    return Admits::Kinds(*kinds);
+}
+
 /// Codegen-time context shared across emit walkers. Holds the
 /// first / nullable / single-token / scannable caches, the
 /// `single_alt_owner` and `kind_set` registries, and the
@@ -1845,18 +1879,20 @@ impl GenContext {
 
     /// Render a token-set membership check on `expr`.
     ///
-    ///   - 0 tokens → `"true"` (the empty set never excludes anything in
-    ///     practice; callers that build up first-sets use this).
     ///   - 1 token  → `<expr> == TK_X` (no `matches` overhead).
     ///   - ≥2 tokens → `_kind_set_<id>(<expr>)` after interning.
     ///
     /// Multi-element sets always go through the helper indirection so
     /// duplicate sets across the grammar share a single function body
     /// in the generated wasm.
+    ///
+    /// An empty set is not a condition. It used to render as `true`, which
+    /// reads as "admits everything" — the right answer where the set is a
+    /// wildcard's absent first set, and the wrong one where it is an
+    /// alternative nothing selects. Six emitters took the wrong one. Say which
+    /// it is at the site that knows, with `Admits`, and pass a real set here.
     pub fn kind_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
-        if tokens.is_empty() {
-            return "true";
-        }
+        assert !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
             return `${*expr} == ${tokens[0]}`;
         }
@@ -1868,6 +1904,20 @@ impl GenContext {
     /// Sugar for `kind_check_str` against `p.peek_kind()`.
     pub fn first_check_str(&mut self, first_set: &List<String>) -> String {
         return self.kind_check_str(first_set, &"p.peek_kind()");
+    }
+
+    /// Render what an `Admits` admits, as a condition on `expr`.
+    pub fn admits_check_str(&mut self, admits: &Admits, expr: &String) -> String {
+        return match admits {
+            Everything => "true",
+            Nothing => "false",
+            Kinds(kinds) => self.kind_check_str(kinds, expr),
+        };
+    }
+
+    /// Sugar for `admits_check_str` against `p.peek_kind()`.
+    pub fn admits_first_check_str(&mut self, admits: &Admits) -> String {
+        return self.admits_check_str(admits, &"p.peek_kind()");
     }
 
     /// Returns the set of token kinds that the rule's body may greedily

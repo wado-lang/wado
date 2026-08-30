@@ -10,7 +10,7 @@ use {
     LabelElement,
     Visibility,
 } from "./ir.wado";
-use { GenContext } from "./gen_context.wado";
+use { GenContext, admits_or_everything, admits_or_nothing } from "./gen_context.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
@@ -54,11 +54,27 @@ fn mk_ctx_with(rules: List<ParserRule>) -> GenContext {
 }
 
 
-test "kind_check_str: empty set returns 'true'" {
+test "an empty set is not a condition until the site says what it admits" {
+    // This used to be `kind_check_str: empty set returns 'true'` — the fold
+    // pinned as intended behaviour. It is what let six emitters render an
+    // alternative nothing selects as an arm that always runs, with every
+    // alternative after it unreachable. The set does not carry the answer;
+    // the site does.
     let mut ctx = mk_ctx();
     let empty: List<String> = [];
-    let s = ctx.kind_check_str(&empty, &"k");
-    assert s == "true", `expected "true" got "${s}"`;
+    let nothing_narrows = ctx.admits_check_str(&admits_or_everything(&empty), &"k");
+    assert nothing_narrows == "true", `expected "true" got "${nothing_narrows}"`;
+    let nothing_selects = ctx.admits_check_str(&admits_or_nothing(&empty), &"k");
+    assert nothing_selects == "false", `expected "false" got "${nothing_selects}"`;
+}
+
+test "a non-empty set renders the same either way" {
+    let mut ctx = mk_ctx();
+    let toks: List<String> = ["TK_FOO"];
+    let narrows = ctx.admits_check_str(&admits_or_everything(&toks), &"k");
+    let selects = ctx.admits_check_str(&admits_or_nothing(&toks), &"k");
+    assert narrows == "k == TK_FOO", `expected "k == TK_FOO", got "${narrows}"`;
+    assert selects == narrows, "which reading an empty set takes cannot change a non-empty one";
 }
 
 test "kind_check_str: single token uses '==' not 'matches'" {
