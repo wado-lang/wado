@@ -1921,9 +1921,13 @@ impl GenContext {
         return `_kind_set_${id}(${*expr})`;
     }
 
-    /// Sugar for `kind_check_str` against `p.peek_kind()`.
+    /// Render a guard: enter, or go round again, while the lookahead is in
+    /// `first_set`. A body with no first set is open-ended (`.` / `~X`), and a
+    /// guard has one reading of that — nothing excludes it. Saying so here is
+    /// why this is its own entry point rather than sugar for `kind_check_str`,
+    /// which refuses to choose for callers that do not all agree.
     pub fn first_check_str(&mut self, first_set: &List<String>) -> String {
-        return self.kind_check_str(first_set, &"p.peek_kind()");
+        return self.admits_first_check_str(&admits_or_everything(first_set));
     }
 
     /// Render what an `Admits` admits, as a condition on `expr`.

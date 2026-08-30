@@ -1472,6 +1472,14 @@ A : 'a' ;
 B : 'b' ;
 ";
 
+// A wildcard body has no first set to narrow the guard by — nothing is
+// excluded, so the optional is entered on any token. The same is true of `~X`.
+global WILDCARD_OPTIONAL_G4: String = "
+grammar T;
+s : .? B EOF ;
+B : 'b' ;
+";
+
 // A wildcard-led alternative admits every token *exactly*, and its index still
 // competes: ANTLR4 takes the lowest viable alternative, so `. EOF` wins over
 // `A EOF` on `a`. Unlike an empty alternative, it must not be reordered.
@@ -1535,6 +1543,17 @@ test "the overlap rule dispatch orders its fallback last too" {
     let a_arm = find_index(&body, &"if kind == TK_A");
     assert a_arm >= 0, `the A-led alternatives lost their arm: ${body}`;
     assert empty_arm > a_arm, `the empty alternative runs before A can be tested: ${body}`;
+}
+
+test "an optional over a wildcard has no first set to guard on" {
+    // A guard is a site where an empty set means "nothing is excluded". The
+    // renderer no longer answers that for its callers, so a guard that can be
+    // handed one has to say so — and this one panicked the generator until it
+    // did.
+    let mut g = parse(WILDCARD_OPTIONAL_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert count_substr(&body, &"p.any()") > 0, `the wildcard body must still be emitted: ${body}`;
 }
 
 test "a wildcard alternative keeps its index against a narrower one" {

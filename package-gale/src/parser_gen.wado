@@ -2658,7 +2658,7 @@ fn gen_multi_alt_body(
         // untestable: it admits every token exactly, so shadowing the
         // alternatives after it is the lowest-viable-alternative rule.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
-        untestable.push(no_cond && !alt_is_wildcard_led(alt) && !alt_has_gate(alt, ctx));
+        untestable.push(no_cond && !alt_is_wildcard_led(alt) && !alt_gates_branch(alt, ctx));
     }
 
     for let slot of &arms_fallback_last(&untestable) {
@@ -4529,6 +4529,15 @@ fn any_alt_gated(branches: &List<DecisionBranch>, ctx: &GenContext) -> bool {
     return ctx.emit_actions() && branches.iter_ref().any(|b: &DecisionBranch| !b.gate.is_empty());
 }
 
+/// Whether an alternative's predicate actually reaches its emitted arm. With
+/// actions retained but not emitted, `alt_gate_and_suffix` renders nothing, so
+/// an alternative that "has a gate" still gets an unconditional arm — and one
+/// left among the others is what the alternatives behind it are dead behind.
+/// Asking `alt_has_gate` alone is what missed that.
+fn alt_gates_branch(alt: &Alternative, ctx: &GenContext) -> bool {
+    return ctx.emit_actions() && alt_has_gate(alt, ctx);
+}
+
 /// The alternatives of a repeat's group body, or `null` when the body is not a
 /// group (a leaf or a rule call has no per-alternative gate).
 fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with stores[inner] {
@@ -6335,10 +6344,13 @@ fn decision_branches(
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> List<DecisionBranch> {
+    // A group's partition is over `alts` itself here, so slot and alternative
+    // index are the same thing.
+    let wildcard = wildcard_flags(alts);
     let mut branches: List<DecisionBranch> = [];
     for let group of groups {
         branches.push(DecisionBranch {
-            test: group_branch_admits(group, first_sets, alts),
+            test: group_branch_admits(group, first_sets, &wildcard),
             gate: group_gate(group, alts, ctx),
             alts: *group,
         });
@@ -6712,11 +6724,26 @@ fn group_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List
 /// What a branch admits. A wildcard-led alternative admits every token and
 /// says so exactly, which is why it keeps its place; a union that comes out
 /// empty is an alternative the lookahead cannot decide, which does not.
-fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, alts: &List<Alternative>) -> Admits {
-    if group.iter_ref().any(|idx: &i32| alt_is_wildcard_led(&alts[*idx])) {
+/// `wildcard` is parallel to `first_sets`, not to the rule's alternatives. A
+/// group holds slots into whatever index space its partition was built in, and
+/// a left-recursive rule partitions only its non-LR alternatives — so reading
+/// the alternative list directly read a different alternative than the first
+/// set beside it.
+fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, wildcard: &List<bool>) -> Admits {
+    assert wildcard.len() == first_sets.len(), "one wildcard verdict per partitioned alternative";
+    if group.iter_ref().any(|slot: &i32| wildcard[*slot]) {
         return Admits::Everything;
     }
     return admits_or_untestable(&group_first_union(group, first_sets));
+}
+
+/// The wildcard verdicts for a partition over `alts` itself.
+fn wildcard_flags(alts: &List<Alternative>) -> List<bool> {
+    let mut out: List<bool> = [];
+    for let alt of alts {
+        out.push(alt_is_wildcard_led(alt));
+    }
+    return out;
 }
 
 /// The gate a lone alternative's alt-initial predicates contribute, registered
@@ -7459,10 +7486,16 @@ fn gen_multi_alt_body_alt(
     // return, so one the lookahead cannot decide is what every later
     // alternative would be dead behind. A wildcard-led group decides — it
     // admits every token exactly — and keeps its place.
+    // The partition is over the non-LR alternatives, so a group's members are
+    // slots into `non_lr_indices` — the wildcard verdicts have to be too.
+    let mut wildcard: List<bool> = [];
+    for let idx of non_lr_indices {
+        wildcard.push(alt_is_wildcard_led(&rule.alternatives[*idx]));
+    }
     let mut untestable: List<bool> = [];
     for let group of groups {
-        let ungated = group.len() != 1 || !alt_has_gate(&rule.alternatives[non_lr_indices[group[0]]], ctx);
-        let admits = group_branch_admits(group, first_sets, &rule.alternatives);
+        let ungated = group.len() != 1 || !alt_gates_branch(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+        let admits = group_branch_admits(group, first_sets, &wildcard);
         untestable.push(admits_is_untestable(&admits) && ungated);
     }
 
