@@ -33,23 +33,30 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     changed
 }
 
-/// The [`FuncId`](crate::nir::FuncId)s of the diverging panic / `unreachable`
-/// builtins, recognized by name on the function record. Resolved once per pass
-/// run so the panic-block matcher identifies a panic callee by id. The driver
-/// hands the result to the engine via [`Engine::set_panic_callee_ids`].
+/// The [`FuncId`](crate::nir::FuncId)s of every function that cannot return.
+/// Resolved once per pass run so the panic-block matcher identifies a diverging
+/// callee by id. The driver hands the result to the engine via
+/// [`Engine::set_panic_callee_ids`].
 pub(super) fn resolve_panic_ids(
     project: &crate::nir_package::NirPackage,
 ) -> crate::hashmap::IndexSet<crate::nir::FuncId> {
+    let type_table = project.type_table.borrow();
     project
         .functions
         .iter()
         .filter_map(|f| {
             let f = f.borrow();
-            // Exact identity: the two diverging `core:rt` builtins by name. A
-            // substring match on `"panic"` would misclassify a user function
-            // like `panic_free_parse`, letting its call sites masquerade as
-            // bounds-check panic blocks.
-            (f.module_source.is_core_rt() && matches!(f.name.as_str(), "panic" | "unreachable"))
+            // A `-> !` return type, not a name: what the matcher needs is that
+            // the arm cannot continue, which is exactly what the type says. It
+            // holds for `core:rt`'s `panic` / `unreachable`, for a stdlib helper
+            // like `unwrap_failed` that ends in one, and for the helper
+            // `cold_outline` moves a panic guard into — none of which a name
+            // list would reach, and it cannot mistake a `panic_free_parse` that
+            // merely reads like one.
+            // `dce` erases the type slots only a dead function still names, so
+            // asking one for its return type would fault on a retired `TypeId`.
+            // A dead function is also uncallable, so there is nothing to lose.
+            (!f.is_dead && type_table.is_never(f.return_type))
                 .then_some(f.id)
                 .flatten()
         })
