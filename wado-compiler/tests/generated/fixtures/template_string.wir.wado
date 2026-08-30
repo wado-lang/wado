@@ -10,14 +10,18 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(3)
+struct core:prelude/types.wado//Box<u64> {  // TypeId(3)
+    mut value: u64,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(4)
+array Array<u8> (mut u8);  // TypeId(4)
+
+struct core:prelude/string.wado//String {  // TypeId(5)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(5)
+struct core:prelude/format.wado//Formatter {  // TypeId(6)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -29,143 +33,155 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/fpfmt.wado//PmHiLo {  // TypeId(6)
+struct core:prelude/fpfmt.wado//PmHiLo {  // TypeId(7)
     mut hi: u64,
     mut lo: u64,
 }
 
-array Array<u64> (mut u64);  // TypeId(7)
+array Array<u64> (mut u64);  // TypeId(8)
 
-struct core:prelude//List<u64> {  // TypeId(8)
+struct core:prelude//List<u64> {  // TypeId(9)
     mut repr: ref Array<u64>,
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(11)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(12)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(13)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(13)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//template_string.wado/template_string_bool" = fn();  // TypeId(18)
+type "functype//template_string.wado/template_string_bool" = fn();  // TypeId(19)
 
-type "functype//template_string.wado/template_string_char" = fn();  // TypeId(19)
+type "functype//template_string.wado/template_string_char" = fn();  // TypeId(20)
 
-type "functype//template_string.wado/template_string_f64" = fn();  // TypeId(20)
+type "functype//template_string.wado/template_string_f64" = fn();  // TypeId(21)
 
-type "functype//template_string.wado/template_string_i32" = fn();  // TypeId(21)
+type "functype//template_string.wado/template_string_i32" = fn();  // TypeId(22)
 
-type "functype//template_string.wado/template_string_i64" = fn();  // TypeId(22)
+type "functype//template_string.wado/template_string_i64" = fn();  // TypeId(23)
 
-type "functype//template_string.wado/template_string_multiline" = fn();  // TypeId(23)
+type "functype//template_string.wado/template_string_multiline" = fn();  // TypeId(24)
 
-type "functype//template_string.wado/template_string_three_interp" = fn();  // TypeId(24)
+type "functype//template_string.wado/template_string_three_interp" = fn();  // TypeId(25)
 
-type "functype//template_string.wado/template_string_two_end" = fn();  // TypeId(25)
+type "functype//template_string.wado/template_string_two_end" = fn();  // TypeId(26)
 
-type "functype//template_string.wado/template_string_two_interp" = fn();  // TypeId(26)
+type "functype//template_string.wado/template_string_two_interp" = fn();  // TypeId(27)
 
-type "functype//template_string.wado/template_string_two_middle" = fn();  // TypeId(27)
+type "functype//template_string.wado/template_string_two_middle" = fn();  // TypeId(28)
 
-type "functype//template_string.wado/template_string_nested_expr" = fn();  // TypeId(28)
+type "functype//template_string.wado/template_string_nested_expr" = fn();  // TypeId(29)
 
-type "functype//template_string.wado/run" = fn();  // TypeId(29)
+type "functype//template_string.wado/run" = fn();  // TypeId(30)
 
-type "functype//template_string.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(30)
+type "functype//template_string.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(31)
 
-type "functype//template_string.wado/__cm_export__run" = fn();  // TypeId(31)
+type "functype//template_string.wado/__cm_export__run" = fn();  // TypeId(32)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(32)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(33)
 
-type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(33)
+type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(34)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(34)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(35)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> ref "core:prelude/fpfmt.wado//PmHiLo";  // TypeId(35)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> ref "core:prelude/fpfmt.wado//PmHiLo";  // TypeId(36)
 
-type "functype//core:prelude/fpfmt.wado/uscale" = fn(u64, u64, u64, i32) -> u64;  // TypeId(36)
+type "functype//core:prelude/fpfmt.wado/uscale" = fn(u64, u64, u64, i32) -> u64;  // TypeId(37)
 
-type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32, i32];  // TypeId(37)
+type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32, i32];  // TypeId(38)
 
-type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(38)
+type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(39)
 
-type "functype//core:prelude/fpfmt.wado/write_decimal" = fn(ref "core:prelude/string.wado//String", u64, i32, i32);  // TypeId(39)
+type "functype//core:prelude/fpfmt.wado/write_decimal" = fn(ref "core:prelude/string.wado//String", u64, i32, i32);  // TypeId(40)
 
-type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, "core:prelude/fpfmt.wado//enum:SpecialKind"];  // TypeId(40)
+type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, "core:prelude/fpfmt.wado//enum:SpecialKind"];  // TypeId(41)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(41)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(42)
 
-type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(42)
+type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(43)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(43)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(44)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(44)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(45)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(45)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(46)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(46)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(47)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(47)
+type "functype//core:rt/unreachable" = fn();  // TypeId(48)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(48)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(49)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(49)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(50)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(50)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(51)
 
-type "functype//core:prelude/fpfmt.wado/write_digits_at$scalar" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(51)
+type "functype//core:prelude/fpfmt.wado/write_digits_at$scalar" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(52)
 
-type "functype//core:prelude/primitive.wado/fmt_float_special$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, "core:prelude/fpfmt.wado//enum:SpecialKind", ref "core:prelude/string.wado//String");  // TypeId(52)
+type "functype//core:prelude/primitive.wado/fmt_float_special$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, "core:prelude/fpfmt.wado//enum:SpecialKind", ref "core:prelude/string.wado//String");  // TypeId(53)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(53)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(54)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(55)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(55)
+type "functype//core:prelude/primitive.wado/u64^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<u64>", ref "core:prelude/format.wado//Formatter");  // TypeId(56)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(56)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(57)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(57)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(58)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(58)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(59)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(59)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(60)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(60)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(61)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(61)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(62)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(62)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(63)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(63)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(64)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(65)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar" = fn(ref Array<u8>, i32, u8);  // TypeId(65)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(66)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(66)
+type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(67)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(67)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar" = fn(ref Array<u8>, i32, u8);  // TypeId(68)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(68)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(69)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
+type "functype//core:prelude/primitive.wado/u64::fmt_into$scalar" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(70)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(70)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(71)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(71)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(72)
+
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar$spec0$scalar" = fn(i64, ref "core:prelude/string.wado//String");  // TypeId(73)
+
+type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(74)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(76)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(77)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(78)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -184,18 +200,25 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:core:prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
 global global:core:prelude/fpfmt.wado::POW10_FINE: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: array.new_fixed<u64>(-9223372036854775808_i64, -6917529027641081856_i64, -4035225266123964416_i64, -432345564227567616_i64, -7187745005283311616_i64, -4372995238176751616_i64, -854558029293551616_i64, -7451627795949551616_i64, -4702848726509551616_i64, -1266874889709551616_i64, -7709325833709551616_i64, -5024971273709551616_i64, -1669528073709551616_i64, -7960984073709551616_i64, -5339544073709551616_i64, -2062744073709551616_i64, -8206744073709551616_i64, -5646744073709551616_i64, -2446744073709551616_i64, -8446744073709551616_i64, -5946744073709551616_i64, -2821744073709551616_i64, -8681119073709551616_i64, -6239712823709551616_i64, -3187955011209551616_i64, -8910000909647051616_i64, -6525815118631426616_i64), used: 27 };
 global mut global:template_string.wado::__modules_initialized: bool = 0;
-global global:core:prelude/fpfmt.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
-global global:core:prelude/fpfmt.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
-global global:core:prelude/fpfmt.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:core:prelude/fpfmt.wado::__const_obj_15: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
-global global:core:prelude/fpfmt.wado::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
-global global:core:prelude/fpfmt.wado::__const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
-global global:template_string.wado::__const_obj_77: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101, 58, 32), used: 10 };
-global global:template_string.wado::__const_obj_79: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101, 58, 32), used: 10 };
-global global:template_string.wado::__const_obj_80: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:template_string.wado::__const_obj_85: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 83, 101, 99, 111, 110, 100, 58, 32), used: 9 };
-global global:template_string.wado::__const_obj_86: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 122, 101, 114, 111, 32, 40), used: 9 };
-global global:core:prelude/primitive.wado::__const_obj_105: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
+global global:core:prelude/fpfmt.wado::__const_obj_16: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 27 };
+global global:core:prelude/fpfmt.wado::__const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
+global global:core:prelude/fpfmt.wado::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
+global global:core:prelude/fpfmt.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
+global global:core:prelude/fpfmt.wado::__const_obj_20: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 316 };
+global global:core:prelude/fpfmt.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
+global global:core:prelude/fpfmt.wado::__const_obj_22: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
+global global:core:prelude/fpfmt.wado::__const_obj_23: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
+global global:core:prelude/fpfmt.wado::__const_obj_64: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 20 };
+global global:core:prelude/primitive.wado::__const_obj_96: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 116, 32, 61, 61, 32, 48, 10), used: 19 };
+global global:core:prelude/primitive.wado::__const_obj_97: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 153 };
+global global:core:prelude/primitive.wado::__const_obj_98: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 112, 114, 105, 109, 105, 116, 105, 118, 101, 46, 119, 97, 100, 111), used: 27 };
+global global:core:prelude/primitive.wado::__const_obj_99: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 114, 105, 116, 101, 95, 100, 101, 99, 105, 109, 97, 108, 95, 100, 105, 103, 105, 116, 115), used: 20 };
+global global:template_string.wado::__const_obj_106: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101, 58, 32), used: 10 };
+global global:template_string.wado::__const_obj_108: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101, 58, 32), used: 10 };
+global global:template_string.wado::__const_obj_111: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 83, 101, 99, 111, 110, 100, 58, 32), used: 9 };
+global global:template_string.wado::__const_obj_112: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 122, 101, 114, 111, 32, 40), used: 9 };
+global global:core:prelude/primitive.wado::__const_obj_120: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::__const_obj_128: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
 
 fn "template_string.wado/template_string_bool"() with Stdout {
     let __local_2_2: ref "core:prelude/string.wado//String";
@@ -379,7 +402,7 @@ fn "template_string.wado/template_string_f64"() with Stdout {
     "core:cli/write_to_stream"(tx_47, __local_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4, global:template_string.wado::__const_obj_77);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4, global:template_string.wado::__const_obj_106);
     "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(-2.5, __local_4_4);
     rx_59 = builtin::i32_wrap_i64(local.tee packed_58("wasi/stream-new"()));
     tx_60 = builtin::i32_wrap_i64(packed_58 >> 32_i64);
@@ -390,58 +413,62 @@ fn "template_string.wado/template_string_f64"() with Stdout {
 
 fn "template_string.wado/template_string_i32"() with Stdout {
     let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
     let handle_13: i32;
-    let packed_21: i64;
-    let rx_22: i32;
-    let tx_23: i32;
-    let handle_28: i32;
-    let packed_36: i64;
-    let rx_37: i32;
-    let tx_38: i32;
-    let handle_43: i32;
-    let new_used: i32;
+    let packed_17: i64;
+    let rx_18: i32;
+    let tx_19: i32;
+    let handle_24: i32;
+    let packed_28: i64;
+    let rx_29: i32;
+    let tx_30: i32;
+    let handle_35: i32;
     let start: i32;
-    let packed_92: i64;
-    let rx_93: i32;
-    let tx_94: i32;
+    let packed_80: i64;
+    let rx_81: i32;
+    let tx_82: i32;
     __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, global:template_string.wado::__const_obj_79);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(42, __local_3);
-    rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
-    tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
-    handle_13 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
-    "core:cli/write_to_stream"(tx_23, __local_3, 1);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, global:template_string.wado::__const_obj_108);
+    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(42, __local_4_4);
+    rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
+    tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
+    handle_13 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
+    "core:cli/write_to_stream"(tx_19, __local_3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_13);
     __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:template_string.wado::__const_obj_77);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(-17, __local_5);
-    rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
-    tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
-    handle_28 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
-    "core:cli/write_to_stream"(tx_38, __local_5, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_28);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:template_string.wado::__const_obj_106);
+    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(-17, __local_6);
+    rx_29 = builtin::i32_wrap_i64(local.tee packed_28("wasi/stream-new"()));
+    tx_30 = builtin::i32_wrap_i64(packed_28 >> 32_i64);
+    handle_24 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_29);
+    "core:cli/write_to_stream"(tx_30, __local_5, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_24);
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    new_used = 0 + 6;
-    if @unlikely(new_used > builtin::array_len(__local_7.repr)) {
+    if @unlikely(6 > builtin::array_len(__local_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, 6);
     }
     start = __local_7.used;
-    __local_7.used = new_used;
+    __local_7.used = 6;
     builtin::array_set_u8(__local_7.repr, start, 122);
     builtin::array_set_u8(__local_7.repr, start + 1, 101);
     builtin::array_set_u8(__local_7.repr, start + 2, 114);
     builtin::array_set_u8(__local_7.repr, start + 3, 111);
     builtin::array_set_u8(__local_7.repr, start + 4, 58);
     builtin::array_set_u8(__local_7.repr, start + 5, 32);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(0, __local_7);
-    rx_93 = builtin::i32_wrap_i64(local.tee packed_92("wasi/stream-new"()));
-    tx_94 = builtin::i32_wrap_i64(packed_92 >> 32_i64);
-    handle_43 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_93);
-    "core:cli/write_to_stream"(tx_94, __local_7, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_43);
+    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(0, __local_8);
+    rx_81 = builtin::i32_wrap_i64(local.tee packed_80("wasi/stream-new"()));
+    tx_82 = builtin::i32_wrap_i64(packed_80 >> 32_i64);
+    handle_35 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_81);
+    "core:cli/write_to_stream"(tx_82, __local_7, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_35);
 }
 
 fn "template_string.wado/template_string_i64"() with Stdout {
@@ -462,13 +489,9 @@ fn "template_string.wado/template_string_i64"() with Stdout {
     let packed_86: i64;
     let rx_87: i32;
     let tx_88: i32;
-    let offset_107: i32;
-    let offset_127: i32;
-    let offset_147: i32;
     __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, global:template_string.wado::__const_obj_79);
-    offset_107 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(__local_3, 0, global:template_string.wado::__const_obj_80, 5);
-    "core:prelude/primitive.wado/write_decimal_digits"(__local_3.repr, offset_107, 12345_i64, 5);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, global:template_string.wado::__const_obj_108);
+    "core:prelude/primitive.wado/i64::fmt_decimal$scalar$spec0$scalar"(12345_i64, __local_3);
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     handle_13 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
@@ -487,17 +510,15 @@ fn "template_string.wado/template_string_i64"() with Stdout {
     builtin::array_set_u8(__local_5.repr, start + 2, 103);
     builtin::array_set_u8(__local_5.repr, start + 3, 58);
     builtin::array_set_u8(__local_5.repr, start + 4, 32);
-    offset_127 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(__local_5, 0, global:template_string.wado::__const_obj_80, 12);
-    "core:prelude/primitive.wado/write_decimal_digits"(__local_5.repr, offset_127, 100000000000_i64, 12);
+    "core:prelude/primitive.wado/i64::fmt_decimal$scalar$spec0$scalar"(100000000000_i64, __local_5);
     rx_72 = builtin::i32_wrap_i64(local.tee packed_71("wasi/stream-new"()));
     tx_73 = builtin::i32_wrap_i64(packed_71 >> 32_i64);
     handle_28 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_72);
     "core:cli/write_to_stream"(tx_73, __local_5, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_28);
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:template_string.wado::__const_obj_77);
-    offset_147 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(__local_7, 1, global:template_string.wado::__const_obj_80, 4);
-    "core:prelude/primitive.wado/write_decimal_digits"(__local_7.repr, offset_147, 9876_i64, 4);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:template_string.wado::__const_obj_106);
+    "core:prelude/primitive.wado/i64::fmt_decimal$scalar$spec0$scalar"(-9876_i64, __local_7);
     rx_87 = builtin::i32_wrap_i64(local.tee packed_86("wasi/stream-new"()));
     tx_88 = builtin::i32_wrap_i64(packed_86 >> 32_i64);
     handle_78 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_87);
@@ -517,19 +538,19 @@ fn "template_string.wado/template_string_multiline"() with Stdout {
     let rx_79: i32;
     let tx_80: i32;
     let start_86: i32;
-    let f_132: ref "core:prelude/format.wado//Formatter";
-    let f_137: ref "core:prelude/format.wado//Formatter";
-    let new_used_142: i32;
-    let start_143: i32;
-    let f_183: ref "core:prelude/format.wado//Formatter";
-    let handle_189: i32;
-    let packed_191: i64;
-    let rx_192: i32;
-    let tx_193: i32;
-    let handle_198: i32;
-    let packed_200: i64;
-    let rx_201: i32;
-    let tx_202: i32;
+    let new_used_134: i32;
+    let start_135: i32;
+    let handle_177: i32;
+    let packed_179: i64;
+    let rx_180: i32;
+    let tx_181: i32;
+    let handle_186: i32;
+    let packed_188: i64;
+    let rx_189: i32;
+    let tx_190: i32;
+    let f_203: ref "core:prelude/format.wado//Formatter";
+    let f_205: ref "core:prelude/format.wado//Formatter";
+    let f_207: ref "core:prelude/format.wado//Formatter";
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_17 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_20);
@@ -561,38 +582,38 @@ Best regards"), used: 43 }, 1);
     builtin::array_set_u8(__local_7.repr, start_86 + 5, 58);
     builtin::array_set_u8(__local_7.repr, start_86 + 6, 32);
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
-    f_132 = __local_8;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(1, f_132);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:template_string.wado::__const_obj_85);
+    f_203 = __local_8;
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(1, f_203);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:template_string.wado::__const_obj_111);
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
-    f_137 = __local_8;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(2, f_137);
-    new_used_142 = __local_7.used + 6;
-    if @unlikely(new_used_142 > builtin::array_len(__local_7.repr)) {
+    f_205 = __local_8;
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(2, f_205);
+    new_used_134 = __local_7.used + 6;
+    if @unlikely(new_used_134 > builtin::array_len(__local_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used_142);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used_134);
     }
-    start_143 = __local_7.used;
-    __local_7.used = new_used_142;
-    builtin::array_set_u8(__local_7.repr, start_143, 10);
-    builtin::array_set_u8(__local_7.repr, start_143 + 1, 83);
-    builtin::array_set_u8(__local_7.repr, start_143 + 2, 117);
-    builtin::array_set_u8(__local_7.repr, start_143 + 3, 109);
-    builtin::array_set_u8(__local_7.repr, start_143 + 4, 58);
-    builtin::array_set_u8(__local_7.repr, start_143 + 5, 32);
+    start_135 = __local_7.used;
+    __local_7.used = new_used_134;
+    builtin::array_set_u8(__local_7.repr, start_135, 10);
+    builtin::array_set_u8(__local_7.repr, start_135 + 1, 83);
+    builtin::array_set_u8(__local_7.repr, start_135 + 2, 117);
+    builtin::array_set_u8(__local_7.repr, start_135 + 3, 109);
+    builtin::array_set_u8(__local_7.repr, start_135 + 4, 58);
+    builtin::array_set_u8(__local_7.repr, start_135 + 5, 32);
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
-    f_183 = __local_8;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(3, f_183);
-    rx_192 = builtin::i32_wrap_i64(local.tee packed_191("wasi/stream-new"()));
-    tx_193 = builtin::i32_wrap_i64(packed_191 >> 32_i64);
-    handle_189 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_192);
-    "core:cli/write_to_stream"(tx_193, __local_7, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_189);
-    rx_201 = builtin::i32_wrap_i64(local.tee packed_200("wasi/stream-new"()));
-    tx_202 = builtin::i32_wrap_i64(packed_200 >> 32_i64);
-    handle_198 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_201);
-    "core:cli/write_to_stream"(tx_202, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 }, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_198);
+    f_207 = __local_8;
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(3, f_207);
+    rx_180 = builtin::i32_wrap_i64(local.tee packed_179("wasi/stream-new"()));
+    tx_181 = builtin::i32_wrap_i64(packed_179 >> 32_i64);
+    handle_177 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_180);
+    "core:cli/write_to_stream"(tx_181, __local_7, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_177);
+    rx_189 = builtin::i32_wrap_i64(local.tee packed_188("wasi/stream-new"()));
+    tx_190 = builtin::i32_wrap_i64(packed_188 >> 32_i64);
+    handle_186 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_189);
+    "core:cli/write_to_stream"(tx_190, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 }, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_186);
 }
 
 fn "template_string.wado/template_string_three_interp"() with Stdout {
@@ -645,25 +666,27 @@ fn "template_string.wado/template_string_two_middle"() with Stdout {
 
 fn "template_string.wado/template_string_nested_expr"() with Stdout {
     let __local_4_4: ref "core:prelude/string.wado//String";
+    let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/string.wado//String";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
     let handle_17: i32;
     let start_23: i32;
-    let new_used_140: i32;
-    let start_141: i32;
-    let packed_185: i64;
-    let rx_186: i32;
-    let tx_187: i32;
-    let handle_192: i32;
-    let new_used_205: i32;
-    let start_206: i32;
-    let packed_214: i64;
-    let rx_215: i32;
-    let tx_216: i32;
-    let handle_221: i32;
-    let packed_265: i64;
-    let rx_266: i32;
-    let tx_267: i32;
+    let new_used_132: i32;
+    let start_133: i32;
+    let packed_177: i64;
+    let rx_178: i32;
+    let tx_179: i32;
+    let handle_184: i32;
+    let new_used_193: i32;
+    let start_194: i32;
+    let packed_202: i64;
+    let rx_203: i32;
+    let tx_204: i32;
+    let handle_209: i32;
+    let packed_253: i64;
+    let rx_254: i32;
+    let tx_255: i32;
     __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
     if @unlikely(8 > builtin::array_len(__local_6.repr)) {
         cold_path;
@@ -679,36 +702,37 @@ fn "template_string.wado/template_string_nested_expr"() with Stdout {
     builtin::array_set_u8(__local_6.repr, start_23 + 5, 115);
     builtin::array_set_u8(__local_6.repr, start_23 + 6, 58);
     builtin::array_set_u8(__local_6.repr, start_23 + 7, 32);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(7, __local_4_4); new_used_140 = __local_4_4.used + 7; if @unlikely(new_used_140 > builtin::array_len(__local_4_4.repr)) {
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(7, __local_5); new_used_132 = __local_4_4.used + 7; if @unlikely(new_used_132 > builtin::array_len(__local_4_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4_4, new_used_140);
-    }; start_141 = __local_4_4.used; __local_4_4.used = new_used_140; builtin::array_set_u8(__local_4_4.repr, start_141, 32); builtin::array_set_u8(__local_4_4.repr, start_141 + 1, 105); builtin::array_set_u8(__local_4_4.repr, start_141 + 2, 115); builtin::array_set_u8(__local_4_4.repr, start_141 + 3, 32); builtin::array_set_u8(__local_4_4.repr, start_141 + 4, 111); builtin::array_set_u8(__local_4_4.repr, start_141 + 5, 100); builtin::array_set_u8(__local_4_4.repr, start_141 + 6, 100); __local_4_4);
-    rx_186 = builtin::i32_wrap_i64(local.tee packed_185("wasi/stream-new"()));
-    tx_187 = builtin::i32_wrap_i64(packed_185 >> 32_i64);
-    handle_17 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_186);
-    "core:cli/write_to_stream"(tx_187, __local_6, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4_4, new_used_132);
+    }; start_133 = __local_4_4.used; __local_4_4.used = new_used_132; builtin::array_set_u8(__local_4_4.repr, start_133, 32); builtin::array_set_u8(__local_4_4.repr, start_133 + 1, 105); builtin::array_set_u8(__local_4_4.repr, start_133 + 2, 115); builtin::array_set_u8(__local_4_4.repr, start_133 + 3, 32); builtin::array_set_u8(__local_4_4.repr, start_133 + 4, 111); builtin::array_set_u8(__local_4_4.repr, start_133 + 5, 100); builtin::array_set_u8(__local_4_4.repr, start_133 + 6, 100); __local_4_4);
+    rx_178 = builtin::i32_wrap_i64(local.tee packed_177("wasi/stream-new"()));
+    tx_179 = builtin::i32_wrap_i64(packed_177 >> 32_i64);
+    handle_17 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_178);
+    "core:cli/write_to_stream"(tx_179, __local_6, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_17);
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:template_string.wado::__const_obj_86);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(7, __local_7);
-    new_used_205 = __local_7.used + 1;
-    if @unlikely(new_used_205 > builtin::array_len(__local_7.repr)) {
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:template_string.wado::__const_obj_112);
+    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(7, __local_8);
+    new_used_193 = __local_7.used + 1;
+    if @unlikely(new_used_193 > builtin::array_len(__local_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used_205);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used_193);
     }
-    start_206 = __local_7.used;
-    __local_7.used = new_used_205;
-    builtin::array_set_u8(__local_7.repr, start_206, 41);
-    rx_215 = builtin::i32_wrap_i64(local.tee packed_214("wasi/stream-new"()));
-    tx_216 = builtin::i32_wrap_i64(packed_214 >> 32_i64);
-    handle_192 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_215);
-    "core:cli/write_to_stream"(tx_216, __local_7, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_192);
-    rx_266 = builtin::i32_wrap_i64(local.tee packed_265("wasi/stream-new"()));
-    tx_267 = builtin::i32_wrap_i64(packed_265 >> 32_i64);
-    handle_221 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_266);
-    "core:cli/write_to_stream"(tx_267, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inner=one"), used: 9 }, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_221);
+    start_194 = __local_7.used;
+    __local_7.used = new_used_193;
+    builtin::array_set_u8(__local_7.repr, start_194, 41);
+    rx_203 = builtin::i32_wrap_i64(local.tee packed_202("wasi/stream-new"()));
+    tx_204 = builtin::i32_wrap_i64(packed_202 >> 32_i64);
+    handle_184 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_203);
+    "core:cli/write_to_stream"(tx_204, __local_7, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_184);
+    rx_254 = builtin::i32_wrap_i64(local.tee packed_253("wasi/stream-new"()));
+    tx_255 = builtin::i32_wrap_i64(packed_253 >> 32_i64);
+    handle_209 = "template_string.wado/__cm_binding__Stdout_write_via_stream"(rx_254);
+    "core:cli/write_to_stream"(tx_255, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inner=one"), used: 9 }, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_209);
 }
 
 fn "template_string.wado/run"() with Stdout {
@@ -939,7 +963,7 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     self_23 = global:core:prelude/fpfmt.wado::POW10_FINE;
     if @unlikely(r >= 27) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); __fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_6, global:core:prelude/fpfmt.wado::__const_obj_17, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_6 + 20, global:core:prelude/fpfmt.wado::__const_obj_16, 17); __fuse_at_8 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_8 + 4, global:core:prelude/fpfmt.wado::__const_obj_15, 22); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8 + 26, 58); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 316 }, __local_5); __fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 2); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_9, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_9 + 1, 32); __fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 49); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_7, global:core:prelude/fpfmt.wado::__const_obj_14, 19); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_7 + 19, global:core:prelude/fpfmt.wado::__const_obj_13, 30); __fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 7); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10, 105); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 1, 110); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 2, 100); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 3, 101); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 4, 120); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 6, 32); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: r }, __local_5); __fuse_at_11 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 12); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_11, 10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_11 + 1, global:core:prelude/fpfmt.wado::__const_obj_12, 11); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 27 }, __local_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 10); __local_4);
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); __fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_6, global:core:prelude/fpfmt.wado::__const_obj_23, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_6 + 20, global:core:prelude/fpfmt.wado::__const_obj_22, 17); __fuse_at_8 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_8 + 4, global:core:prelude/fpfmt.wado::__const_obj_21, 22); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_8 + 26, 58); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:core:prelude/fpfmt.wado::__const_obj_20, __local_5); __fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 2); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_9, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_9 + 1, 32); __fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 49); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_7, global:core:prelude/fpfmt.wado::__const_obj_19, 19); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_7 + 19, global:core:prelude/fpfmt.wado::__const_obj_18, 30); __fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 7); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10, 105); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 1, 110); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 2, 100); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 3, 101); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 4, 120); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_10 + 6, 32); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: r }, __local_5); __fuse_at_11 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 12); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4.repr, __fuse_at_11, 10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4.repr, __fuse_at_11 + 1, global:core:prelude/fpfmt.wado::__const_obj_17, 11); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(global:core:prelude/fpfmt.wado::__const_obj_16, __local_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 10); __local_4);
         unreachable;
     }
     f = builtin::array_get_value<u64>(self_23.repr, r);
@@ -1055,7 +1079,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
         if select i32(p_7 >= 0, p_7 < 27, 0) {
             break __inline_get_pow10_3: struct.new "core:prelude/fpfmt.wado//PmHiLo" { hi: self_38 = global:core:prelude/fpfmt.wado::POW10_FINE; if @unlikely(p_7 >= 27) {
                 cold_path;
-                "core:rt/panic"(__local_4_42 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); __fuse_at_6_44 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_6_44, global:core:prelude/fpfmt.wado::__const_obj_17, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_6_44 + 20, global:core:prelude/fpfmt.wado::__const_obj_16, 17); __fuse_at_8_46 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_8_46 + 4, global:core:prelude/fpfmt.wado::__const_obj_15, 22); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46 + 26, 58); __local_5_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_42); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 316 }, __local_5_43); __fuse_at_9_47 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 2); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_9_47, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_9_47 + 1, 32); __fuse_at_7_45 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 49); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_7_45, global:core:prelude/fpfmt.wado::__const_obj_14, 19); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_7_45 + 19, global:core:prelude/fpfmt.wado::__const_obj_13, 30); __fuse_at_10_48 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 7); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48, 105); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 1, 110); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 2, 100); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 3, 101); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 4, 120); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 6, 32); __local_5_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_42); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: p_7 }, __local_5_43); __fuse_at_11_49 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 12); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_11_49, 10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_11_49 + 1, global:core:prelude/fpfmt.wado::__const_obj_12, 11); __local_5_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_42); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 27 }, __local_5_43); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4_42, 10); __local_4_42);
+                "core:rt/panic"(__local_4_42 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); __fuse_at_6_44 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_6_44, global:core:prelude/fpfmt.wado::__const_obj_23, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_6_44 + 20, global:core:prelude/fpfmt.wado::__const_obj_22, 17); __fuse_at_8_46 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_8_46 + 4, global:core:prelude/fpfmt.wado::__const_obj_21, 22); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_8_46 + 26, 58); __local_5_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_42); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:core:prelude/fpfmt.wado::__const_obj_20, __local_5_43); __fuse_at_9_47 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 2); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_9_47, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_9_47 + 1, 32); __fuse_at_7_45 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 49); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_7_45, global:core:prelude/fpfmt.wado::__const_obj_19, 19); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_7_45 + 19, global:core:prelude/fpfmt.wado::__const_obj_18, 30); __fuse_at_10_48 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 7); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48, 105); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 1, 110); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 2, 100); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 3, 101); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 4, 120); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_10_48 + 6, 32); __local_5_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_42); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: p_7 }, __local_5_43); __fuse_at_11_49 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_42, 12); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_42.repr, __fuse_at_11_49, 10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_42.repr, __fuse_at_11_49 + 1, global:core:prelude/fpfmt.wado::__const_obj_17, 11); __local_5_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_42); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(global:core:prelude/fpfmt.wado::__const_obj_16, __local_5_43); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4_42, 10); __local_4_42);
                 unreachable;
             }; builtin::array_get_value<u64>(self_38.repr, p_7), lo: 0_i64 };
         }
@@ -1072,7 +1096,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
         multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/fpfmt.wado/trim_zeros"(d_div_10, 0 - (p_7 - 1));
         return __pattern_temp_0_mv_0, __pattern_temp_0_mv_1, local.tee nd_34((local.tee x_52(64 - builtin::i32_wrap_i64(builtin::i64_clz(__pattern_temp_0_mv_0))) * 78913) >> 18) + (__pattern_temp_0_mv_0 >=u self_55 = global:core:prelude/fpfmt.wado::POW10; if @unlikely(nd_34 >= 20) {
             cold_path;
-            "core:rt/panic"(__local_4_59 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); __fuse_at_6_61 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_6_61, global:core:prelude/fpfmt.wado::__const_obj_17, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_6_61 + 20, global:core:prelude/fpfmt.wado::__const_obj_16, 17); __fuse_at_8_63 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_8_63 + 4, global:core:prelude/fpfmt.wado::__const_obj_15, 22); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63 + 26, 58); __local_5_60 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_59); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 316 }, __local_5_60); __fuse_at_9_64 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 2); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_9_64, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_9_64 + 1, 32); __fuse_at_7_62 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 49); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_7_62, global:core:prelude/fpfmt.wado::__const_obj_14, 19); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_7_62 + 19, global:core:prelude/fpfmt.wado::__const_obj_13, 30); __fuse_at_10_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 7); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65, 105); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 1, 110); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 2, 100); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 3, 101); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 4, 120); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 6, 32); __local_5_60 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_59); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: nd_34 }, __local_5_60); __fuse_at_11_66 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 12); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_11_66, 10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_11_66 + 1, global:core:prelude/fpfmt.wado::__const_obj_12, 11); __local_5_60 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_59); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 20 }, __local_5_60); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4_59, 10); __local_4_59);
+            "core:rt/panic"(__local_4_59 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); __fuse_at_6_61 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_6_61, global:core:prelude/fpfmt.wado::__const_obj_23, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_6_61 + 20, global:core:prelude/fpfmt.wado::__const_obj_22, 17); __fuse_at_8_63 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_8_63 + 4, global:core:prelude/fpfmt.wado::__const_obj_21, 22); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_8_63 + 26, 58); __local_5_60 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_59); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:core:prelude/fpfmt.wado::__const_obj_20, __local_5_60); __fuse_at_9_64 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 2); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_9_64, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_9_64 + 1, 32); __fuse_at_7_62 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 49); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_7_62, global:core:prelude/fpfmt.wado::__const_obj_19, 19); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_7_62 + 19, global:core:prelude/fpfmt.wado::__const_obj_18, 30); __fuse_at_10_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 7); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65, 105); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 1, 110); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 2, 100); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 3, 101); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 4, 120); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_10_65 + 6, 32); __local_5_60 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_59); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: nd_34 }, __local_5_60); __fuse_at_11_66 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_59, 12); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_59.repr, __fuse_at_11_66, 10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_59.repr, __fuse_at_11_66 + 1, global:core:prelude/fpfmt.wado::__const_obj_17, 11); __local_5_60 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_59); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(global:core:prelude/fpfmt.wado::__const_obj_64, __local_5_60); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4_59, 10); __local_4_59);
             unreachable;
         }; builtin::array_get_value<u64>(self_55.repr, nd_34));
     }
@@ -1082,7 +1106,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     }
     return d_20, 0 - p_7, local.tee nd_37((local.tee x_69(64 - builtin::i32_wrap_i64(builtin::i64_clz(d_20))) * 78913) >> 18) + (d_20 >=u self_72 = global:core:prelude/fpfmt.wado::POW10; if @unlikely(nd_37 >= 20) {
         cold_path;
-        "core:rt/panic"(__local_4_76 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); __fuse_at_6_78 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_6_78, global:core:prelude/fpfmt.wado::__const_obj_17, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_6_78 + 20, global:core:prelude/fpfmt.wado::__const_obj_16, 17); __fuse_at_8_80 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_8_80 + 4, global:core:prelude/fpfmt.wado::__const_obj_15, 22); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80 + 26, 58); __local_5_77 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_76); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 316 }, __local_5_77); __fuse_at_9_81 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 2); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_9_81, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_9_81 + 1, 32); __fuse_at_7_79 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 49); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_7_79, global:core:prelude/fpfmt.wado::__const_obj_14, 19); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_7_79 + 19, global:core:prelude/fpfmt.wado::__const_obj_13, 30); __fuse_at_10_82 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 7); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82, 105); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 1, 110); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 2, 100); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 3, 101); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 4, 120); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 6, 32); __local_5_77 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_76); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: nd_37 }, __local_5_77); __fuse_at_11_83 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 12); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_11_83, 10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_11_83 + 1, global:core:prelude/fpfmt.wado::__const_obj_12, 11); __local_5_77 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_76); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 20 }, __local_5_77); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4_76, 10); __local_4_76);
+        "core:rt/panic"(__local_4_76 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); __fuse_at_6_78 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_6_78, global:core:prelude/fpfmt.wado::__const_obj_23, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_6_78 + 20, global:core:prelude/fpfmt.wado::__const_obj_22, 17); __fuse_at_8_80 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_8_80 + 4, global:core:prelude/fpfmt.wado::__const_obj_21, 22); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_8_80 + 26, 58); __local_5_77 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_76); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:core:prelude/fpfmt.wado::__const_obj_20, __local_5_77); __fuse_at_9_81 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 2); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_9_81, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_9_81 + 1, 32); __fuse_at_7_79 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 49); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_7_79, global:core:prelude/fpfmt.wado::__const_obj_19, 19); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_7_79 + 19, global:core:prelude/fpfmt.wado::__const_obj_18, 30); __fuse_at_10_82 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 7); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82, 105); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 1, 110); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 2, 100); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 3, 101); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 4, 120); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_10_82 + 6, 32); __local_5_77 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_76); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: nd_37 }, __local_5_77); __fuse_at_11_83 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4_76, 12); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_4_76.repr, __fuse_at_11_83, 10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_4_76.repr, __fuse_at_11_83 + 1, global:core:prelude/fpfmt.wado::__const_obj_17, 11); __local_5_77 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_76); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(global:core:prelude/fpfmt.wado::__const_obj_64, __local_5_77); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4_76, 10); __local_4_76);
         unreachable;
     }; builtin::array_get_value<u64>(self_72.repr, nd_37));
 }
@@ -1223,23 +1247,32 @@ fn "core:prelude/fpfmt.wado/check_special"(f) {
     return 0, is_neg, 0;
 }
 
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let pos: i32;
-    let temp: i64;
+    let t: u64;
+    let i: i32;
+    let __local_8: ref "core:prelude/string.wado//String";
+    let __local_9: ref "core:prelude/format.wado//Formatter";
+    let __fuse_at_10: i32;
+    let __fuse_at_11: i32;
+    let __fuse_at_12: i32;
     pos = offset + digit_count;
-    if abs_val == 0_i64 {
-        builtin::array_set_u8(arr, offset, 48);
-    } else {
-        temp = abs_val;
-        b75: block {
-            l76: loop {
-                break_if b75 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
-                temp = temp / 10_i64;
-                continue l76;
-            };
+    t = val;
+    i = 0;
+    b74: block {
+        l75: loop {
+            break_if b74 i >= digit_count;
+            pos = pos - 1;
+            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            t = t /u 10_i64;
+            i = i + 1;
+            continue l75;
         };
+    };
+    if @unlikely((t == 0_i64) == 0) {
+        cold_path;
+        "core:rt/panic"(__local_8 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(112); __fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_8, 40); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_8.repr, __fuse_at_10, global:core:prelude/fpfmt.wado::__const_obj_23, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_8.repr, __fuse_at_10 + 20, global:core:prelude/primitive.wado::__const_obj_99, 20); __fuse_at_11 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_8, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_8.repr, __fuse_at_11, 32); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_8.repr, __fuse_at_11 + 1, 97); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_8.repr, __fuse_at_11 + 2, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_8.repr, __fuse_at_11 + 3, 32); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_8.repr, __fuse_at_11 + 4, global:core:prelude/primitive.wado::__const_obj_98, 27); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_8.repr, __fuse_at_11 + 31, 58); __local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:core:prelude/primitive.wado::__const_obj_97, __local_9); __fuse_at_12 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_8, 22); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_8.repr, __fuse_at_12, global:core:prelude/primitive.wado::__const_obj_96, 19); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_8.repr, __fuse_at_12 + 19, 116); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_8.repr, __fuse_at_12 + 20, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_8.repr, __fuse_at_12 + 21, 32); __local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/u64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<u64>" { value: t }, __local_9); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 10); __local_8);
+        unreachable;
     }
 }
 
@@ -1423,11 +1456,15 @@ fn "core:prelude/primitive.wado/fmt_float_special$spec0$scalar"(f, is_neg, kind,
 }
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self.value, f);
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self.value, f);
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self.value, f);
+}
+
+fn "core:prelude/primitive.wado/u64^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    "core:prelude/primitive.wado/u64::fmt_into$scalar"(self.value, f);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -1824,35 +1861,93 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
-    let abs_val: i64;
+    let abs_val: u64;
     let digit_count: i32;
     let offset: i32;
     let n: i32;
-    let t: i64;
+    let t: u64;
     is_negative = self < 0;
     abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
-    digit_count = __inline_count_digits_i64_0: block -> i32 {
+    digit_count = __inline_count_digits_u64_0: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_i64_0: 1;
+            break __inline_count_digits_u64_0: 1;
         }
         n = 0;
         t = abs_val;
         b147: block {
             l148: loop {
-                break_if b147 t <= 0_i64;
+                break_if b147 t <=u 0_i64;
                 n = n + 1;
-                t = t / 10_i64;
+                t = t /u 10_i64;
                 continue l148;
             };
         };
-        break __inline_count_digits_i64_0: n;
+        break __inline_count_digits_u64_0: n;
     };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:template_string.wado::__const_obj_80, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_120, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, abs_val, digit_count);
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(self, index, value) {
     builtin::array_set_u8(self, index, value);
+}
+
+fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar"(self, f) {
+    let digit_count: i32;
+    let offset: i32;
+    let n: i32;
+    let t: u64;
+    digit_count = __inline_count_digits_u64_0: block -> i32 {
+        if self == 0_i64 {
+            break __inline_count_digits_u64_0: 1;
+        }
+        n = 0;
+        t = self;
+        b150: block {
+            l151: loop {
+                break_if b150 t <=u 0_i64;
+                n = n + 1;
+                t = t /u 10_i64;
+                continue l151;
+            };
+        };
+        break __inline_count_digits_u64_0: n;
+    };
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/primitive.wado::__const_obj_120, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, self, digit_count);
+}
+
+fn "core:prelude/primitive.wado/u64::fmt_into$scalar"(self, f) {
+    "core:prelude/primitive.wado/u64::fmt_decimal$scalar"(self, f);
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, alt_prefix, digit_count) {
+    let self_16: ref "core:prelude/string.wado//String";
+    let new_used_21: i32;
+    let start_22: i32;
+    let self_44: ref "core:prelude/string.wado//String";
+    let new_used_46: i32;
+    let start_47: i32;
+    if is_negative {
+        self_16 = self.buf;
+        new_used_21 = self_16.used + 1;
+        if @unlikely(new_used_21 > builtin::array_len(self_16.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_16, new_used_21);
+        }
+        start_22 = self_16.used;
+        self_16.used = new_used_21;
+        builtin::array_set_u8(self_16.repr, start_22, 45);
+    } else {
+    }
+    return self_44 = self.buf, new_used_46 = self_44.used + digit_count, if @unlikely(new_used_46 > builtin::array_len(self_44.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_44, new_used_46);
+    }, start_47 = self_44.used, self_44.used = new_used_46, start_47;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
@@ -1877,32 +1972,32 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }, start_47 = self.used, self.used = new_used_46, start_47;
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
+fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let is_negative: bool;
-    let abs_val: i64;
+    let abs_val: u64;
     let digit_count: i32;
     let offset: i32;
     let n: i32;
-    let t: i64;
-    is_negative = self < 0;
-    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
-    digit_count = __inline_count_digits_i64_0: block -> i32 {
+    let t: u64;
+    is_negative = self < 0_i64;
+    abs_val = select i64(is_negative, 0_i64 - self, self);
+    digit_count = __inline_count_digits_u64_0: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_i64_0: 1;
+            break __inline_count_digits_u64_0: 1;
         }
         n = 0;
         t = abs_val;
-        b153: block {
-            l154: loop {
-                break_if b153 t <= 0_i64;
+        b159: block {
+            l160: loop {
+                break_if b159 t <=u 0_i64;
                 n = n + 1;
-                t = t / 10_i64;
-                continue l154;
+                t = t /u 10_i64;
+                continue l160;
             };
         };
-        break __inline_count_digits_i64_0: n;
+        break __inline_count_digits_u64_0: n;
     };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:template_string.wado::__const_obj_80, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_120, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(f.repr, offset, abs_val, digit_count);
 }
 
@@ -1914,7 +2009,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(self, f) {
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";
     multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2] = "core:prelude/fpfmt.wado/check_special"(self);
     if __pattern_temp_0_mv_0 {
-        "core:prelude/primitive.wado/fmt_float_special$spec0$scalar"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, global:core:prelude/primitive.wado::__const_obj_105);
+        "core:prelude/primitive.wado/fmt_float_special$spec0$scalar"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, global:core:prelude/primitive.wado::__const_obj_128);
         return;
     }
     let result_mv_digits: u64;
@@ -1933,6 +2028,35 @@ fn "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(self, f) {
     } else {
     }
     "core:prelude/fpfmt.wado/write_decimal"(f, result_mv_digits, result_mv_exponent, result_mv_n_digits);
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(self, f) {
+    let is_negative: bool;
+    let abs_val: u64;
+    let digit_count: i32;
+    let offset: i32;
+    let n: i32;
+    let t: u64;
+    is_negative = self < 0;
+    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
+    digit_count = __inline_count_digits_u64_0: block -> i32 {
+        if abs_val == 0_i64 {
+            break __inline_count_digits_u64_0: 1;
+        }
+        n = 0;
+        t = abs_val;
+        b165: block {
+            l166: loop {
+                break_if b165 t <=u 0_i64;
+                n = n + 1;
+                t = t /u 10_i64;
+                continue l166;
+            };
+        };
+        break __inline_count_digits_u64_0: n;
+    };
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_120, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, abs_val, digit_count);
 }
 
 export fn "template_string.wado/__cm_export__run" as "run"

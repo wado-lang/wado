@@ -12,6 +12,8 @@ pub global PARSE_EXP_MAX: i32 = 350;
 
 pub global PARSE_EXP_MIN: i32 = -351;
 
+global LOW32: u64 = 4294967295;
+
 global CM_EVENT_SUBTASK: i32 = 1;
 
 global CM_SUBTASK_STARTED: u32 = 1;
@@ -4258,7 +4260,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 134 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 136 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: self.high != 0\n", used: 27 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"self.high: ", used: 11 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4311,7 +4313,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 170 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 172 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: a >> (mant_bits - 1) as u64 == 1\n", used: 45 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"a: ", used: 3 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4379,7 +4381,7 @@ fn "core:prelude/int128.wado/u128::div_rem_wide"(hi: u64, lo: u64, d: u64) -> [u
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 222 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 223 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: hi < d\n", used: 19 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"hi: ", used: 4 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4396,45 +4398,64 @@ fn "core:prelude/int128.wado/u128::div_rem_wide"(hi: u64, lo: u64, d: u64) -> [u
     if (hi == 0) {
         return [(lo / d), (lo % d)];
     }
-    let low32: u64 = 4294967295;
     let s: u64 = core::builtin::i64_clz(d as i64) as u64;
     let dn: u64 = (d << s);
     let dn1: u64 = (dn >> 32);
-    let dn0: u64 = (dn & low32);
+    let dn0: u64 = (dn & core::prelude/int128.wado::LOW32);
     let mut un32: u64 = (hi << s);
     if (s != 0) {
         un32 = (un32 | (lo >> (64 - s)));
     }
     let un10: u64 = (lo << s);
     let un1: u64 = (un10 >> 32);
-    let un0: u64 = (un10 & low32);
-    let mut q1: u64 = (un32 / dn1);
-    let mut rhat: u64 = (un32 - (q1 * dn1));
-    loop {
-        if !((q1 > low32) || ((q1 * dn0) > ((rhat << 32) | un1))) {
-            break;
-        }
-        q1 = (q1 - 1);
-        rhat = (rhat + dn1);
-        if (rhat > low32) {
-            break;
-        }
-    }
+    let un0: u64 = (un10 & core::prelude/int128.wado::LOW32);
+    let q1: u64 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::trial_quotient"(un32, un1, dn1, dn0);
     let un21: u64 = (((un32 << 32) + un1) - (q1 * dn));
-    let mut q0: u64 = (un21 / dn1);
-    rhat = (un21 - (q0 * dn1));
-    loop {
-        if !((q0 > low32) || ((q0 * dn0) > ((rhat << 32) | un0))) {
-            break;
-        }
-        q0 = (q0 - 1);
-        rhat = (rhat + dn1);
-        if (rhat > low32) {
-            break;
+    __assert_1: {
+        let __cond: bool = (un21 < dn);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(139);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"u128::div_rem_wide", used: 18 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<i32> { value: 244 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: un21 < dn\n", used: 22 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"un21: ", used: 6 });
+                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<u64> { value: un21 }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"dn: ", used: 4 });
+                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<u64> { value: dn }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
         }
     }
+    let q0: u64 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::trial_quotient"(un21, un0, dn1, dn0);
     let r: u64 = ((((un21 << 32) + un0) - (q0 * dn)) >> s);
     return [((q1 << 32) | q0), r];
+}
+
+fn "core:prelude/int128.wado/u128::trial_quotient"(num: u64, next: u64, dn1: u64, dn0: u64) -> u64 {
+    let mut q: u64 = (num / dn1);
+    let mut rhat: u64 = (num - (q * dn1));
+    loop {
+        if !((q > core::prelude/int128.wado::LOW32) || ((q * dn0) > ((rhat << 32) | next))) {
+            break;
+        }
+        q = (q - 1);
+        rhat = (rhat + dn1);
+        if (rhat > core::prelude/int128.wado::LOW32) {
+            break;
+        }
+    }
+    return q;
 }
 
 pub fn "core:prelude/int128.wado/u128::div_rem"(self: &u128, divisor: &u128) -> [u128, u128] {
@@ -4520,19 +4541,14 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self: &u128, f: &mut F
     let digit_count: i32 = (top_digits + ((chunks - 1) * 19));
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(is_neg, String { repr: packed"", used: 0 }, digit_count);
     let arr: &mut Array<u8> = f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"();
-    let mut pos: i32 = (offset + digit_count);
+    let end: i32 = (offset + digit_count);
     if (chunks == 3) {
-        "core::prelude/int128.wado::write_u64_digits"(arr, pos, bottom, 19);
-        pos = (pos - 19);
-        "core::prelude/int128.wado::write_u64_digits"(arr, pos, mid, 19);
-        pos = (pos - 19);
-    } else {
-        if (chunks == 2) {
-            "core::prelude/int128.wado::write_u64_digits"(arr, pos, bottom, 19);
-            pos = (pos - 19);
-        }
+        "core::prelude/primitive.wado::write_decimal_digits"(arr, (end - 38), mid, 19);
     }
-    "core::prelude/int128.wado::write_u64_digits"(arr, pos, top, top_digits);
+    if (chunks > 1) {
+        "core::prelude/primitive.wado::write_decimal_digits"(arr, (end - 19), bottom, 19);
+    }
+    "core::prelude/primitive.wado::write_decimal_digits"(arr, offset, top, top_digits);
 }
 
 fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, base: i32, upper: bool, alt_prefix: String) {
@@ -4598,7 +4614,7 @@ fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, bas
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                     let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                    Box<i32> { value: 436 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                    Box<i32> { value: 423 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: pos == offset\n", used: 26 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"pos: ", used: 5 });
                     __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -4621,45 +4637,6 @@ fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/FromStr::from_str_ran
 
 pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/FromStr::from_str"(s: &String) -> Result<u128, ParseIntError> {
     return "core::prelude/int128.wado::core:prelude/int128.wado/u128^core:prelude/traits.wado/FromStr::from_str_range"(s, 0, s."core:prelude/string.wado/String::len"());
-}
-
-fn write_u64_digits(arr: &mut Array<u8>, end: i32, val: u64, count: i32) {
-    let mut pos: i32 = end;
-    let mut t: u64 = val;
-    let mut i: i32 = 0;
-    loop {
-        if !(i < count) {
-            break;
-        }
-        __for_0_body: {
-            pos = (pos - 1);
-            core::builtin::array_set_u8(arr, pos, ('0' as i32 + (t % 10) as i32) as u8);
-            t = (t / 10);
-        }
-        i = (i + 1);
-    }
-    __assert_0: {
-        let __cond: bool = (t == 0);
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(112);
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"write_u64_digits", used: 16 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 477 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: t == 0\n", used: 19 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"t: ", used: 3 });
-                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<u64> { value: t }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
 }
 
 fn count_digits_u128(val: u128) -> i32 {
@@ -5554,39 +5531,41 @@ pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(c
 
 pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
-fn count_digits_i64(val: i64) -> i32 {
-    if (val == 0) {
-        return 1;
-    }
-    let mut n: i32 = 0;
-    let mut t: i64 = val;
+fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count: i32) {
+    let mut pos: i32 = (offset + digit_count);
+    let mut t: u64 = val;
+    let mut i: i32 = 0;
     loop {
-        if !(t > 0) {
+        if !(i < digit_count) {
             break;
         }
         __for_0_body: {
-            n = (n + 1);
+            pos = (pos - 1);
+            core::builtin::array_set_u8(arr, pos, ('0' as i32 + (t % 10) as i32) as u8);
+            t = (t / 10);
         }
-        t = (t / 10);
+        i = (i + 1);
     }
-    return n;
-}
-
-fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, abs_val: i64, digit_count: i32) {
-    let mut pos: i32 = (offset + digit_count);
-    if (abs_val == 0) {
-        core::builtin::array_set_u8(arr, offset, 48);
-    } else {
-        let mut temp: i64 = abs_val;
-        loop {
-            if !(temp > 0) {
-                break;
-            }
-            __for_0_body: {
-                pos = (pos - 1);
-                core::builtin::array_set_u8(arr, pos, ('0' as i32 + (temp % 10) as i32) as u8);
-            }
-            temp = (temp / 10);
+    __assert_0: {
+        let __cond: bool = (t == 0);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(112);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"write_decimal_digits", used: 20 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/primitive.wado", used: 27 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<i32> { value: 153 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: t == 0\n", used: 19 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"t: ", used: 3 });
+                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<u64> { value: t }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
         }
     }
 }
@@ -5900,12 +5879,12 @@ pub fn i32::min(a: i32, b: i32) -> i32 {
 
 fn i32::fmt_decimal(self: Box<i32>, f: &mut Formatter) {
     let is_negative: bool = (self.value < 0);
-    let abs_val: i64 = if is_negative {
+    let abs_val: u64 = if is_negative {
         (0 - self.value as i64);
     } else {
         self.value as i64;
-    };
-    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_i64"(abs_val);
+    } as u64;
+    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(abs_val);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(is_negative, String { repr: packed"", used: 0 }, digit_count);
     "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, abs_val, digit_count);
 }
@@ -5933,15 +5912,10 @@ pub fn "i32^core:prelude/traits.wado/FromStr::from_str"(s: &String) -> Result<i3
 }
 
 fn u32::fmt_decimal(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_i64"(abs_val);
+    let value: u64 = self.value as u64;
+    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(value);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(false, String { repr: packed"", used: 0 }, digit_count);
-    "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, abs_val, digit_count);
+    "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, value, digit_count);
 }
 
 fn u32::fmt_into(self: Box<u32>, f: &mut Formatter) {
@@ -5962,24 +5936,14 @@ pub fn "u32^core:prelude/traits.wado/FromStr::from_str"(s: &String) -> Result<u3
 fn i64::fmt_decimal(self: Box<i64>, f: &mut Formatter) {
     let value: i64 = self.value;
     let is_negative: bool = (value < 0);
-    if (value == -9223372036854775808) {
-        let remaining: i64 = 922337203685477580;
-        let remaining_digits: i32 = "core::prelude/primitive.wado::count_digits_i64"(remaining);
-        let digit_count: i32 = (remaining_digits + 1);
-        let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(true, String { repr: packed"", used: 0 }, digit_count);
-        let repr: &mut Array<u8> = f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"();
-        "core::prelude/primitive.wado::write_decimal_digits"(repr, offset, remaining, remaining_digits);
-        core::builtin::array_set_u8(repr, (offset + remaining_digits), 56);
+    let abs_val: u64 = if is_negative {
+        (0 - value);
     } else {
-        let abs_val: i64 = if is_negative {
-            (0 - value);
-        } else {
-            value;
-        };
-        let digit_count: i32 = "core::prelude/primitive.wado::count_digits_i64"(abs_val);
-        let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(is_negative, String { repr: packed"", used: 0 }, digit_count);
-        "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, abs_val, digit_count);
-    }
+        value;
+    } as u64;
+    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(abs_val);
+    let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(is_negative, String { repr: packed"", used: 0 }, digit_count);
+    "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, abs_val, digit_count);
 }
 
 fn i64::fmt_into(self: Box<i64>, f: &mut Formatter) {
@@ -5995,63 +5959,9 @@ pub fn "i64^core:prelude/traits.wado/FromStr::from_str"(s: &String) -> Result<i6
 }
 
 fn u64::fmt_decimal(self: Box<u64>, f: &mut Formatter) {
-    let val_i64: i64 = self.value as i64;
-    if (val_i64 == 0) {
-        let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(false, String { repr: packed"", used: 0 }, 1);
-        core::builtin::array_set_u8(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, 48);
-        return;
-    }
-    let mut digit_count: i32 = 0;
-    let offset_div: i64 = 1844674407370955161;
-    let mut temp: i64 = val_i64;
-    loop {
-        if !(temp != 0) {
-            break;
-        }
-        digit_count = (digit_count + 1);
-        if (temp >= 0) {
-            temp = (temp / 10);
-        } else {
-            let signed_rem: i64 = (temp % 10);
-            let rem_adjusted: i64 = (signed_rem + 6);
-            let signed_quot: i64 = (temp / 10);
-            let mut carry: i64 = 0;
-            if (rem_adjusted < 0) {
-                carry = -1;
-            }
-            temp = ((signed_quot + offset_div) + carry);
-        }
-    }
+    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(self.value);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(false, String { repr: packed"", used: 0 }, digit_count);
-    let repr: &mut Array<u8> = f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"();
-    let mut pos: i32 = (offset + digit_count);
-    temp = val_i64;
-    loop {
-        if !(temp != 0) {
-            break;
-        }
-        pos = (pos - 1);
-        let mut digit: i32 = 0;
-        if (temp >= 0) {
-            digit = (temp % 10) as i32;
-            temp = (temp / 10);
-        } else {
-            let signed_rem: i64 = (temp % 10);
-            let rem_adjusted: i64 = (signed_rem + 6);
-            if (rem_adjusted >= 0) {
-                digit = rem_adjusted as i32;
-            } else {
-                digit = (rem_adjusted + 10) as i32;
-            }
-            let signed_quot: i64 = (temp / 10);
-            let mut carry: i64 = 0;
-            if (rem_adjusted < 0) {
-                carry = -1;
-            }
-            temp = ((signed_quot + offset_div) + carry);
-        }
-        core::builtin::array_set_u8(repr, pos, ('0' as i32 + digit) as u8);
-    }
+    "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, self.value, digit_count);
 }
 
 fn u64::fmt_base(self: Box<u64>, f: &mut Formatter, base: i32, upper: bool, alt_prefix: String) {

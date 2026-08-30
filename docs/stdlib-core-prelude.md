@@ -2783,8 +2783,7 @@ Used by the compiler to lower `u128 as f32` casts.
 #### `pub fn div_rem(&self, divisor: &u128) -> [u128, u128]`
 
 Divide self by divisor, returning (quotient, remainder). One native
-division when both fit in 64 bits, otherwise one or two Algorithm D
-passes over 32-bit limbs.
+division when both fit in 64 bits, otherwise Algorithm D over limbs.
 
 #### `pub fn to_string(&self) -> String`
 
