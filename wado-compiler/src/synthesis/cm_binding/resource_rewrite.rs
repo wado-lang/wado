@@ -1195,6 +1195,9 @@ fn stream_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
         recv = *inner;
     }
+    // `type MyStream = Stream<u8>` names the same stream; the payload paths peel
+    // it too, so a newtype receiver must answer with the element, not nothing.
+    let recv = crate::component_model::peel_newtypes(tt, recv);
     tt.generic_type_args(recv)?.first().copied()
 }
 
