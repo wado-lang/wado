@@ -912,14 +912,16 @@ test "u128 division of a dividend with a zero low limb" {
     let a = u128::from_pair(0, 18446744073709551615);
     let b = u128::from_pair(4294967295, 4294967295);
     let result = a.div_rem(&b);
-    assert result[1] < b;
-    assert result[0] * b + result[1] == a;
+    assert result[0] == 4294967296;
+    assert result[1] == 79228162477370849450419814400;
 
-    let c = u128::from_pair(18446744069414584320, 0);
-    let d = u128::from_pair(4294967297, 0);
+    // The same dividend shape against a 64-bit divisor, so the wide step runs
+    // with both of its dividend limbs supplied by the leftover remainder.
+    let c = u128::from_pair(0, 18446744069414584320);
+    let d = u128::from_u64(4294967297);
     let r2 = c.div_rem(&d);
-    assert r2[1] < d;
-    assert r2[0] * d + r2[1] == c;
+    assert r2[0] == 79228162477370849454714781694;
+    assert r2[1] == 2;
 }
 
 test "i128 division at large magnitudes" {

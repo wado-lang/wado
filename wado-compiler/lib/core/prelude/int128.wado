@@ -14,6 +14,7 @@ use {
     lenient_int_error,
 } from "core:prelude/intparse.wado";
 use { Array } from "core:prelude/array.wado";
+use { count_digits_u64 } from "core:prelude/primitive.wado";
 use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
@@ -322,34 +323,6 @@ impl u128 {
         }
     }
 
-    /// Get the bit at position i (0 = LSB, 127 = MSB)
-    pub fn get_bit(&self, i: i32) -> bool {
-        let shift: i64 = i as i64;
-        if i < 64 {
-            return self.low >> shift as u64 & 1 != 0;
-        } else {
-            let s: i64 = (i - 64) as i64;
-            return self.high >> s as u64 & 1 != 0;
-        }
-    }
-
-    /// Set the bit at position i to 1, returning a new u128
-    pub fn set_bit(&self, i: i32) -> u128 {
-        let shift: i64 = i as i64;
-        if i < 64 {
-            return u128 {
-                low: self.low | 1 << shift as u64,
-                high: self.high,
-            };
-        } else {
-            let s: i64 = (i - 64) as i64;
-            return u128 {
-                low: self.low,
-                high: self.high | 1 << s as u64,
-            };
-        }
-    }
-
     fn fmt_into(&self, f: &mut Formatter) {
         self.fmt_decimal(f);
     }
@@ -491,16 +464,9 @@ impl LenientFromStr for u128 {
     }
 }
 
-/// Count decimal digits of a u64 value.
-fn count_digits_u64(val: u64) -> i32 {
-    let mut n: i32 = 1;
-    for let mut t = val; t >= 10; t = t / 10 {
-        n += 1;
-    }
-    return n;
-}
-
 /// Write exactly `count` decimal digits of `val` backwards, ending at `end`.
+/// Unlike `write_decimal_digits`, it pads with the leading zeros a decimal
+/// chunk below the most significant one carries.
 fn write_u64_digits(arr: &mut Array<u8>, end: i32, val: u64, count: i32) {
     let mut pos = end;
     let mut t = val;
