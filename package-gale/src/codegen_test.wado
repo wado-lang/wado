@@ -1463,6 +1463,15 @@ C : 'c' ;
 SEMI : ';' ;
 ";
 
+// `A` and `A B` overlap, so the rule takes the overlap dispatch rather than
+// the token-led one — a second rule-level emitter, with its own arms.
+global RULE_OVERLAP_EMPTY_ALT_G4: String = "
+grammar T;
+x : | A | A B ;
+A : 'a' ;
+B : 'b' ;
+";
+
 // A rule's own alternatives are a decision too, and an empty one among them is
 // selected by no lookahead.
 global RULE_LEVEL_EMPTY_ALT_G4: String = "
@@ -1505,6 +1514,16 @@ test "an empty alternative keeps its fallback where the follow set is a prefix" 
     assert count_substr(&body, &"grp_kind == TK_C") == 0, `a prefix of the follow set became the whole test: ${body}`;
     assert count_substr(&body, &"no_viable") == 0, `the group can match nothing, so it cannot report: ${body}`;
     assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+}
+
+test "the overlap rule dispatch orders its fallback last too" {
+    let mut g = parse(RULE_OVERLAP_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    let empty_arm = find_index(&body, &"if true");
+    let a_arm = find_index(&body, &"if kind == TK_A");
+    assert a_arm >= 0, `the A-led alternatives lost their arm: ${body}`;
+    assert empty_arm > a_arm, `the empty alternative runs before A can be tested: ${body}`;
 }
 
 test "a rule's empty alternative does not shadow the ones after it" {

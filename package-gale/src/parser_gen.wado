@@ -2654,7 +2654,7 @@ fn gen_multi_alt_body(
         admits_everything.push(no_cond && !alt_has_gate(alt, ctx));
     }
 
-    for let slot of &arms_fallback_last(non_lr_indices, &admits_everything) {
+    for let slot of &arms_fallback_last(&admits_everything) {
         let i = *slot;
         let alt_index = non_lr_indices[i];
         let alt = &rule.alternatives[alt_index];
@@ -6297,11 +6297,10 @@ fn is_decision_fallback(b: &DecisionBranch) -> bool {
 /// branches; a rule's own alternatives are a decision too, and its arms are
 /// guarded `if`s that return, so an unconditional one placed early is the same
 /// dead code as an `else if true` mid-chain.
-fn arms_fallback_last(arms: &List<i32>, admits_everything: &List<bool>) -> List<i32> {
-    assert arms.len() == admits_everything.len(), "one verdict per arm";
+fn arms_fallback_last(admits_everything: &List<bool>) -> List<i32> {
     let mut out: List<i32> = [];
     let mut fallbacks: List<i32> = [];
-    for let mut i = 0; i < arms.len(); i += 1 {
+    for let mut i = 0; i < admits_everything.len(); i += 1 {
         if admits_everything[i] {
             fallbacks.push(i);
         } else {
@@ -7471,7 +7470,17 @@ fn gen_multi_alt_body_alt(
 ) {
     w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
-    for let mut g = 0; g < groups.len(); g += 1 {
+    // Same rule as the token-led sibling: an arm no lookahead narrows admits
+    // everything, and the arms are independent `if`s that return, so placed
+    // early it is what every later alternative is dead behind.
+    let mut admits_everything: List<bool> = [];
+    for let group of groups {
+        let ungated = group.len() != 1 || !alt_has_gate(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+        admits_everything.push(group_first_union(group, first_sets).is_empty() && ungated);
+    }
+
+    for let slot of &arms_fallback_last(&admits_everything) {
+        let g = *slot;
         let group = &groups[g];
         let union_first = group_first_union(group, first_sets);
         let gate = if group.len() == 1 {
