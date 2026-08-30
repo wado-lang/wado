@@ -5,7 +5,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam};
+use crate::nir::{
+    FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam, ReturnAbi,
+};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, BlockNode, Body, ExprKind, ExprNode, NodeRef, Operand, PatKind, StmtId,
     StmtKind, StmtNode,
@@ -552,14 +554,21 @@ fn build_helper(
                 span: parent.span,
             }
         }));
-    helper.locals = helper
-        .params
+    // The inherited slots verbatim — a parameter's slot is the enclosing frame's
+    // entry, not a re-derivation from its `NirParam` — then one slot per lifted
+    // local, then the rest of the frame shifted past them.
+    let lifted_slots: Vec<NirLocal> = region
+        .args
         .iter()
-        .map(|p| NirLocal {
-            name: p.name.clone(),
-            type_id: p.type_id,
-            is_mut: p.is_mut,
+        .map(|&idx| NirLocal {
+            is_mut: false,
+            ..parent.locals[idx as usize].clone()
         })
+        .collect();
+    helper.locals = parent.locals[..inherited as usize]
+        .iter()
+        .cloned()
+        .chain(lifted_slots)
         .chain(parent.locals[inherited as usize..].iter().cloned())
         .collect();
     // The lifted locals now live in two slots; the shifted copy is dead in the
@@ -594,6 +603,10 @@ fn build_helper(
     helper.scalarized_from = None;
     helper.inline_hint = InlineHint::default();
     helper.return_type = region.return_type;
+    // The enclosing function's return ABI describes a value the helper does not
+    // deliver: it returns `()` or `!`, so a `MultiValue` inherited from the
+    // parent would put result types on a signature nothing produces.
+    helper.return_abi = ReturnAbi::Single;
     helper.task_return_type = None;
     helper.body = Some(body);
     helper
