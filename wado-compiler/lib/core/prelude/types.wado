@@ -301,11 +301,14 @@ pub resource StreamWritable<T> {
 impl StreamWritable<T> {
     /// Write every element, or stop early when the readable end drops.
     /// Returns the result of the copy that ended the loop.
+    ///
+    /// A copy that takes nothing and reports `Completed` ends the loop too: it
+    /// is the peer making no progress, and retrying it is a hang, not a write.
     pub fn write_all(&self, data: List<T>) -> CopyResult {
         let mut rest = data;
         loop {
             let written = self.write(rest);
-            if written.result != CopyResult::Completed || written.count >= rest.len() {
+            if written.result != CopyResult::Completed || written.count <= 0 || written.count >= rest.len() {
                 return written.result;
             }
             let mut remainder: List<T> = [];
@@ -328,7 +331,7 @@ impl StreamWritable<T> {
         loop {
             let written = self.write_raw(Slice::internal_new(repr, offset, end));
             offset += written.count;
-            if written.result != CopyResult::Completed || offset >= end {
+            if written.result != CopyResult::Completed || written.count <= 0 || offset >= end {
                 return written.result;
             }
         }

@@ -1633,13 +1633,14 @@ fn compile_after_load<H: CompilerHost>(
         &entry_filename,
         compiler_host::Code::UnsupportedFeature,
         wir_package.cm_import_violations.iter().map(|v| {
-            (
-                v.span,
-                format!(
-                    "`{}` binds `{}`, which no bundled interface declares; a `#[cm(...)]` member is only callable from the stdlib and from component dependencies",
-                    v.call_display, v.cm_name
-                ),
-            )
+            let reason = if v.cm_name == "stream-write-raw" {
+                // `write_raw` hands over the backing array as it stands, which
+                // only lines up with the CM buffer for bytes.
+                "which only a `u8` stream can bind: the raw write hands the backing array to the canonical unlowered. Use `write` or `write_all`".to_string()
+            } else {
+                "which no bundled interface declares; a `#[cm(...)]` member is only callable from the stdlib and from component dependencies".to_string()
+            };
+            (v.span, format!("`{}` binds `{}`, {reason}", v.call_display, v.cm_name))
         }),
     )?;
 

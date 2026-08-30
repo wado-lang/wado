@@ -128,7 +128,7 @@ Creating and dropping a waitable set per blocked operation is a per-chunk cost o
 every stream transfer. A per-task set, joined and unjoined around each await,
 replaces it. This is a follow-up to the correctness change, not a precondition.
 
-### Known gap: a read cannot report the end
+### A read reports the end
 
 `CopyResult.DROPPED` says the peer end is gone, and the canonical traps on any
 read or write issued after it — the state is per handle, not per copy. A final
@@ -136,18 +136,11 @@ copy can report elements _and_ the drop together, which is what a peer that
 writes its payload and drops in one go produces, so a loop that reads until an
 empty list issues one read too many and traps.
 
-`Stream::read` returns `List<T>`, which has no room for the status, and the
-handle is a bare index with nowhere to record it. Closing this means deciding
-where the fact that an end is finished lives: in the value (the handle paired
-with its status, as `AsyncCall<T>` pairs a subtask with its buffer, which makes
-`read` take `&mut self`), in the result (`read` reports the elements and the
-end together, leaving the state in the caller's control flow), or in the type
-(`read` consumes the stream and returns it only while more can follow). Guest
-state keyed by handle is not among them: the status belongs to the end, not to
-the program.
-
-Until then a peer must read exactly once per copy, which is what
-`cm_async_value_import.rs` does on both sides.
+That is now the caller's to see: `read` returns the elements and the status
+together, leaving the state in the caller's control flow — see
+[Stream Copy Results](./wep-2026-08-30-stream-copy-result.md). What remains
+undefined is operating on an end whose peer has already dropped, which is that
+WEP's known gap.
 
 ### Cancellation stays unreachable
 

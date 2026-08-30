@@ -283,32 +283,6 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
     };
 }
 
-/// CM adapter for stream.read(max) on Stream<T> where T is a CM record.
-/// Allocates a linear memory buffer sized for max*element_size bytes,
-/// calls stream-read, handles BLOCKED, and returns [ptr, packed].
-/// The caller must decode each record from the buffer.
-internal fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_align: i32) -> [i32, i32] {
-    let byte_count = max * element_size;
-    let ptr = builtin::realloc(0, 0, element_align, byte_count);
-    let mut result = builtin::stream_read(handle, ptr, max);
-    if result == -1 {
-        result = cm_await_blocked(handle);
-    }
-    return [ptr, result];
-}
-
-/// Create a new empty List<u8> with the given capacity.
-/// Used by synthesized stream-read binding functions for non-u8 types.
-/// The type parameter is monomorphized away during compilation.
-internal fn array_new_empty(capacity: i32) -> List<u8> {
-    return List::with_capacity(capacity);
-}
-
-/// Free a buffer previously allocated by cm_stream_read_raw.
-internal fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
-    let freed = builtin::realloc(ptr, byte_count, element_align, 0);
-}
-
 /// CM adapter for stream.write(data) on Stream<u8>.
 /// Lowers List<u8> to linear memory and copies once, reporting what the reader
 /// took. `StreamWritable::write_all` is the loop that finishes a buffer.

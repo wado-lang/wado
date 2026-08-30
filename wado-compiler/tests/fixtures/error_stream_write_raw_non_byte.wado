@@ -1,0 +1,17 @@
+// `write_raw` hands the backing array to the canonical as it stands, which only
+// lines up with the CM buffer for bytes. A non-byte element used to reach
+// `core:rt`'s `u8` adapter anyway and emit core Wasm that failed validation;
+// it is a diagnostic now, pointing at the API that does lower.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u32>::new();
+    rx.drop();
+    let data: List<u32> = [1, 2, 3];
+    tx.write_raw_all(data.as_slice());
+    tx.drop();
+    println("unreachable");
+}
+
+__DATA__
+{"compile_error": "binds `stream-write-raw`, which only a `u8` stream can bind"}

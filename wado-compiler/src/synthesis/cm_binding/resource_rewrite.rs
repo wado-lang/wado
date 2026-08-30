@@ -168,16 +168,23 @@ pub(super) struct BindingSites<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
     pub interner: &'a RefCell<ModuleSourceInterner>,
     pub entry_module_source: ModuleSource,
+    /// The names already taken. A payload concrete before monomorphize got its
+    /// helper from the first half; the same payload reached again from an
+    /// instantiated generic body must call that helper, not mint a second one
+    /// under the same name.
+    existing: IndexSet<String>,
 }
 
 impl<'a> BindingSites<'a> {
     fn from_package(project: &'a Package) -> Self {
+        let functions: Vec<Rc<RefCell<TirFunction>>> = project
+            .tir_modules
+            .values()
+            .flat_map(|m| m.functions.iter().cloned())
+            .collect();
         Self {
-            functions: project
-                .tir_modules
-                .values()
-                .flat_map(|m| m.functions.iter().cloned())
-                .collect(),
+            existing: function_names(&functions),
+            functions,
             type_table: project
                 .tir_modules
                 .get(&project.entry_module_source)
@@ -193,12 +200,17 @@ impl<'a> BindingSites<'a> {
     fn from_flat(flat: &'a crate::flat_package::FlatPackage) -> Self {
         Self {
             functions: flat.functions.clone(),
+            existing: function_names(&flat.functions),
             type_table: flat.type_table.clone(),
             cm_interface_registry: &flat.cm_interface_registry,
             interner: &flat.interner,
             entry_module_source: flat.entry_module_source.clone(),
         }
     }
+}
+
+fn function_names(functions: &[Rc<RefCell<TirFunction>>]) -> IndexSet<String> {
+    functions.iter().map(|f| f.borrow().name.clone()).collect()
 }
 
 /// Shared driver for the `synthesize_*` binding passes: walk every TIR
@@ -227,6 +239,7 @@ fn synthesize_bindings<K>(
             }
         }
     }
+    needed.retain(|name, _| !sites.existing.contains(name));
     if needed.is_empty() {
         return Vec::new();
     }
@@ -246,9 +259,10 @@ fn synthesize_bindings<K>(
 ///
 /// For each unique stream element type T found in stream-read calls, generates a
 /// TIR function `__cm_stream_read_<T>` that:
-/// 1. Calls `cm_stream_read_raw(handle, max, elem_size, elem_align)` to get raw buffer
+/// 1. Allocates a `max * elem_size` buffer and issues the element-parameterized
+///    `stream-read` canonical, awaiting BLOCKED
 /// 2. Loops through the buffer, lifting each record from linear memory
-/// 3. Constructs `List<T>` and returns it
+/// 3. Returns them as a `StreamChunk<T>` with the copy's result
 fn synthesize_record_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunction>>> {
     synthesize_bindings(
         sites,
@@ -1202,6 +1216,19 @@ fn stream_read_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId
     tt.generic_type_args(recv)?.first().copied()
 }
 
+/// The element type a `stream-write-raw` call's receiver streams.
+fn stream_write_raw_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let (receiver, func, _) = expr.kind.as_method_call()?;
+    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-write-raw") {
+        return None;
+    }
+    let mut recv = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
+        recv = *inner;
+    }
+    tt.generic_type_args(recv)?.first().copied()
+}
+
 /// The element type of a `stream-read` call, or `None` for anything else and
 /// for the `u8` stream, which `core:rt` binds by hand.
 fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
@@ -1792,6 +1819,16 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             if !stream_read_receiver_element(self.tt, expr).is_some_and(|e| is_u8(self.tt, e)) {
                 return;
             }
+        }
+        // `write_raw` hands the CM the backing array as it stands, which only
+        // means anything where the Wado element already matches the CM layout —
+        // the byte case. `core:rt`'s adapter is written for `u8` alone, so any
+        // other element stays unbound and is reported, rather than lowering
+        // through a signature it does not have. `write_all` is the API there.
+        if cm_name == "stream-write-raw"
+            && !stream_write_raw_receiver_element(self.tt, expr).is_some_and(|e| is_u8(self.tt, e))
+        {
+            return;
         }
         // Stream ops on a non-u8 element, and future drop / cancel: parameterized
         // by the receiver's payload, so they go straight to a canonical call.

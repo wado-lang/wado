@@ -1,0 +1,27 @@
+// A payload reached both directly and through a stdlib wrapper gets one
+// binding, not two. `rx.read(..)` is concrete before monomorphize and takes its
+// `__cm_stream_read_val_u32` helper from the first synthesis half;
+// `read_to_end` is a generic body, so its own `read` only names `u32` once the
+// instance exists and the second half sees the same payload again. Minting the
+// helper twice put two functions with one name in the module, which
+// monomorphize's write-back rejects.
+use { println, Stdout } from "core:cli";
+
+// Separate streams: reading again past a `Dropped` result is the trap this
+// WEP's known gap still leaves, and it is not what this fixture is about.
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u32>::new();
+    tx.drop();
+    let chunk = rx.read(16);
+    rx.drop();
+
+    let [rx2, tx2] = Stream::<u32>::new();
+    tx2.drop();
+    let rest = rx2.read_to_end();
+    rx2.drop();
+
+    println(`${chunk.items.len()} ${chunk.result:?} ${rest.len()}`);
+}
+
+__DATA__
+{"stdout": "0 CopyResult::Dropped 0\n"}
