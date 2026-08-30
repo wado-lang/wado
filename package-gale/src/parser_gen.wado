@@ -3123,7 +3123,13 @@ fn group_token_only_kinds(alts: &List<AltBody>) -> Option<List<String>> {
     return Option::Some(kinds);
 }
 
-fn gen_group_body(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn gen_group_body(
+    w: &mut CodeWriter,
+    g: &GroupOp,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    decided: Option<String> = null,
+) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
         w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &kinds)});`);
         return;
@@ -3132,7 +3138,7 @@ fn gen_group_body(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, nc: &mu
         gen_ops(w, &g.alts[0].ops, ctx, nc);
         return;
     }
-    gen_alt_dispatch(w, &g.alts, &g.scan_alts, &g.dispatch, ctx, nc);
+    gen_alt_dispatch(w, &g.alts, &g.scan_alts, &g.dispatch, ctx, nc, decided);
 }
 
 fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
@@ -3155,11 +3161,16 @@ fn gen_alt_dispatch(
     dispatch: &MultiAltDispatch,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
+    decided: Option<String> = null,
 ) {
     let dd = match *dispatch {
         Direct(d) => d,
         Tournament(td) => {
-            let winner = gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc);
+            let winner = if let Some(var) = decided {
+                var;
+            } else {
+                gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc);
+            };
             let last = td.alts.len() - 1;
             for let mut k = 0; k < td.alts.len(); k += 1 {
                 if k == 0 && k != last {
@@ -3830,6 +3841,19 @@ fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
         gen_op_optional_shape_lookahead(w, r, s, ctx, nc, gate);
         return;
     }
+    if r.strategy matches { OptionalScanGuard } {
+        if let Group(g) = &r.body {
+            if let Some(branches) = op_group_alt_decision(g, ctx) {
+                // The scan that decides entry is the scan the dispatch
+                // decides on: one answer, one set of scans.
+                let winner = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, false);
+                w.begin(&`if ${winner} >= 0${*gate}`);
+                gen_group_body(w, g, ctx, nc, Option::Some(winner));
+                w.end();
+                return;
+            }
+        }
+    }
     let entry = `${gen_op_optional_entry_cond(w, r, ctx, nc)}${*gate}`;
     w.begin(&`if ${entry}`);
     gen_op(w, &r.body, ctx, nc);
@@ -3968,13 +3992,23 @@ fn gen_op_inner_for_storable_repeat(
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
     entry: GroupEntry,
+    decided: Option<String> = null,
 ) {
     let entry = open_group_entry(w, elem, group_branch_kind(&rep_op.body), ctx, entry);
     let op = &rep_op.body;
     let unwrapped_elem = peel_repeat_body_label(elem);
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts),
-        StorableGroup => gen_op_storable_group_inner(w, op, unwrapped_elem, ctx, name_counts, outer_follow, entry),
+        StorableGroup => gen_op_storable_group_inner(
+            w,
+            op,
+            unwrapped_elem,
+            ctx,
+            name_counts,
+            outer_follow,
+            entry,
+            decided,
+        ),
         TransparentGroup => panic(
             "gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm",
         ),
@@ -3993,6 +4027,7 @@ fn gen_op_storable_group_inner(
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
     entry: GroupEntry,
+    decided: Option<String> = null,
 ) {
     let g_op = if let Group(g) = op {
         g;
@@ -4022,6 +4057,7 @@ fn gen_op_storable_group_inner(
             entry,
             ctx,
             name_counts,
+            decided,
         ),
         General(gs) => gen_general_group(
             w,
@@ -4032,6 +4068,7 @@ fn gen_op_storable_group_inner(
             entry,
             ctx,
             name_counts,
+            decided,
         ),
         Transparent => panic("gen_op_storable_group_inner: lower marked StorableGroup but shape is Transparent"),
     };
@@ -4185,14 +4222,28 @@ fn gen_op_storable_optional(
             rep_op.gate_caller_follow,
         ),
         OptionalScanGuard => {
-            let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-            gen_op_storable_optional_with_first(
-                w,
-                rep_op,
-                inner_elem,
-                ctx,
-                &gate_cond_with_caller_follow(&`${scan_pos_var} >= 0`, rep_op.gate_caller_follow),
-            );
+            if let Some(branches) = group_alt_decision(g_op, g_elem, ctx) {
+                // The scan that decides entry is the scan the dispatch
+                // decides on: one answer, one set of scans.
+                let winner = gen_group_decide(
+                    w,
+                    &branches,
+                    &g_op.scan_alts,
+                    ctx,
+                    name_counts,
+                    rep_op.gate_caller_follow,
+                );
+                gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &`${winner} >= 0`, Option::Some(winner));
+            } else {
+                let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+                gen_op_storable_optional_with_first(
+                    w,
+                    rep_op,
+                    inner_elem,
+                    ctx,
+                    &gate_cond_with_caller_follow(&`${scan_pos_var} >= 0`, rep_op.gate_caller_follow),
+                );
+            }
         },
         // `pick_optional_specialised` returned `null`: gate on
         // `body_first_set` (`Plain`).
@@ -4244,10 +4295,14 @@ fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
 /// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
 fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {
     if gate_caller_follow {
-        return `!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (${*cond})`;
+        return `!(${CALLER_FOLLOW_YIELDS}) && (${*cond})`;
     }
     return *cond;
 }
+
+/// The runtime test that the caller's continuation claims the tokens ahead,
+/// so a tail-position repeat must yield rather than take them.
+global CALLER_FOLLOW_YIELDS: String = "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
 
 /// Shared body of every storable-Optional + Group arm: emit a single
 /// `let ${opt_field}: Option<T> = if ${cond} { parse; Some(...) } else
@@ -4261,9 +4316,25 @@ fn gen_op_storable_optional_with_first(
     cond: &String,
 ) {
     let entry = optional_entry_test(cond, inner_elem, group_branch_kind(&rep_op.body), ctx);
+    gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &entry, null);
+}
+
+/// The `if <entry> { … }` an Optional + storable body reduces to. `decided`
+/// carries a winner the entry condition already scanned for, which is also
+/// what makes the entry condition complete: a decision that named an
+/// alternative also proved its branch's lookahead and gate, so it needs no
+/// `optional_entry_test` on top.
+fn gen_op_storable_optional_body(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    inner_elem: &Element,
+    ctx: &mut GenContext,
+    entry: &String,
+    decided: Option<String>,
+) {
     // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
-    w.begin(&`if ${entry}`);
+    w.begin(&`if ${*entry}`);
     let mut nch: List<[String, i32]> = [];
     gen_op_inner_for_storable_repeat(
         w,
@@ -4273,6 +4344,7 @@ fn gen_op_storable_optional_with_first(
         &mut nch,
         &([] as List<String>),
         GroupEntry::Guaranteed,
+        decided,
     );
     w.end();
 }
@@ -5991,6 +6063,22 @@ fn gen_scan_winner_tournament(
     let best_var = dedup_name(&"gd_best", name_counts);
     w.line(&`let mut ${winner_var}: i32 = -1;`);
     w.line(&`let mut ${best_var}: i32 = -1;`);
+    gen_scan_winner_round(w, sorted_group, scan_alts, ctx, name_counts, &winner_var, &best_var);
+    return winner_var;
+}
+
+/// One tournament over caller-owned winner / best variables. A decision
+/// spanning several branches runs one round per branch and keeps a single
+/// answer, so the branch a lookahead selects still decides by scan length.
+fn gen_scan_winner_round(
+    w: &mut CodeWriter,
+    sorted_group: &List<i32>,
+    scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+    winner_var: &String,
+    best_var: &String,
+) {
     let tourney_label = dedup_name(&"gd_tourney", name_counts);
     w.begin(&`${tourney_label}:`);
     let order = sorted_group.sorted();
@@ -5999,7 +6087,7 @@ fn gen_scan_winner_tournament(
         let sb = &scan_alts[ai];
         if sb.elements.is_empty() {
             let epsilon = "p.pos";
-            emit_argmax_update(w, &best_var, &winner_var, &epsilon, ai);
+            emit_argmax_update(w, best_var, winner_var, &epsilon, ai);
         } else {
             let end_var = dedup_name(&"gd_end", name_counts);
             w.line(&`let mut ${end_var}: i32 = -1;`);
@@ -6010,17 +6098,135 @@ fn gen_scan_winner_tournament(
             gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
             w.line(&`${end_var} = pos;`);
             w.end();
-            emit_argmax_update(w, &best_var, &winner_var, &end_var, ai);
+            emit_argmax_update(w, best_var, winner_var, &end_var, ai);
         }
         // The early exit skips the alts still to come; after the last one
         // there are none.
         if oi + 1 < order.len() {
-            w.begin(&`if ${best_var} >= p.kinds.len()`);
+            w.begin(&`if ${*best_var} >= p.kinds.len()`);
             w.line(&`break ${tourney_label};`);
             w.end();
         }
     }
     w.end();
+}
+
+/// One branch of a group's decision: the lookahead that admits it, and the
+/// alternatives it holds.
+struct DecisionBranch {
+    cond: String,
+    alts: List<i32>,
+}
+
+/// The branches a group's dispatch takes, in dispatch order, off the one
+/// partition (`group_partition`). A caller deciding whether to enter the
+/// group reads these, so it cannot disagree with the dispatch about which
+/// alternative a lookahead selects.
+fn group_decision_branches(
+    alts: &List<Alternative>,
+    kind: GroupBranchKind,
+    ctx: &mut GenContext,
+) -> List<DecisionBranch> {
+    let [first_sets, groups] = group_partition(alts, kind, ctx);
+    let mut branches: List<DecisionBranch> = [];
+    for let group of &groups {
+        branches.push(DecisionBranch {
+            cond: group_branch_test(group, &first_sets, alts, &"p.peek_kind()", ctx),
+            alts: *group,
+        });
+    }
+    return branches;
+}
+
+/// The dispatch branches of a group that decides between alternatives, or
+/// `null` for one that does not: a lone alternative, or a token-only group
+/// whose whole body is a single `expect_set`. Only the first has a decision
+/// for a caller's scan guard to share.
+fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext) -> Option<List<DecisionBranch>> {
+    let dispatches = match &g_op.shape {
+        SimpleCst(_) | General(_) => g_op.alts.len() > 1,
+        TokenOnly(_) | SingleAlt(_) | Transparent => false,
+    };
+    if !dispatches {
+        return null;
+    }
+    return Option::Some(group_decision_branches(
+        &g_elem.alternatives,
+        shape_branch_kind(&g_op.shape),
+        ctx,
+    ));
+}
+
+/// `group_alt_decision` for the op-only walker, which reads the dispatch lower
+/// baked rather than the surface alternatives (invariant 9). `Direct` is one
+/// branch per alternative, `Tournament` one branch holding them all.
+fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<DecisionBranch>> {
+    if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } {
+        return null;
+    }
+    return match &g.dispatch {
+        Direct(dd) => {
+            let mut branches: List<DecisionBranch> = [];
+            for let branch of &dd.branches {
+                branches.push(DecisionBranch {
+                    cond: ctx.kind_check_str(&branch.tokens, &"p.peek_kind()"),
+                    alts: [branch.alt_index],
+                });
+            }
+            Option::Some(branches);
+        },
+        // The tournament has no lookahead gate of its own: every alternative
+        // is a candidate, and the scan lengths decide.
+        Tournament(td) => Option::Some([
+            DecisionBranch { cond: "true", alts: td.alts },
+        ]),
+    };
+}
+
+/// Decide a group by scanning: one scan per candidate the lookahead admits,
+/// leaving the winning alt index in a fresh variable (`-1` when no branch
+/// admits the lookahead, or the alternatives it holds do not scan). The
+/// caller that may decline the group gates on that variable and hands it to
+/// the dispatch, which then commits instead of scanning again.
+///
+/// `follow_gate` wraps the scans in the caller-FOLLOW yield test, so a
+/// tail-position group that must yield never pays for them.
+fn gen_group_decide(
+    w: &mut CodeWriter,
+    branches: &List<DecisionBranch>,
+    scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+    follow_gate: bool,
+) -> String {
+    assert !branches.is_empty(), "gen_group_decide: a group's partition has at least one branch";
+    let winner_var = dedup_name(&"gd_winner", name_counts);
+    let best_var = dedup_name(&"gd_best", name_counts);
+    w.line(&`let mut ${winner_var}: i32 = -1;`);
+    w.line(&`let mut ${best_var}: i32 = -1;`);
+    if follow_gate {
+        w.begin(&`if !(${CALLER_FOLLOW_YIELDS})`);
+    }
+    // A lone branch admitting every lookahead has nothing to test: the scan
+    // lengths are the whole decision.
+    let unconditional = branches.len() == 1 && branches[0].cond == "true";
+    for let mut i = 0; i < branches.len(); i += 1 {
+        let branch = &branches[i];
+        if !unconditional {
+            if i == 0 {
+                w.begin(&`if ${branch.cond}`);
+            } else {
+                w.else_begin(&`else if ${branch.cond}`);
+            }
+        }
+        gen_scan_winner_round(w, &branch.alts, scan_alts, ctx, name_counts, &winner_var, &best_var);
+    }
+    if !unconditional {
+        w.end();
+    }
+    if follow_gate {
+        w.end();
+    }
     return winner_var;
 }
 
@@ -6054,8 +6260,13 @@ fn gen_group_scan_dispatch(
     kind: GroupBranchKind,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    decided: Option<String> = null,
 ) {
-    let winner_var = gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts);
+    let winner_var = if let Some(var) = decided {
+        var;
+    } else {
+        gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts);
+    };
     let last = sorted_group.len() - 1;
 
     for let mut k = 0; k < sorted_group.len(); k += 1 {
@@ -6102,6 +6313,11 @@ variant GroupBranchKind {
 /// alternative's alt-initial predicate folded into its condition, closed by
 /// what `entry` owes a token no alternative admits. Every group decision goes
 /// through here (`antlr4-compatibility.md`, "One dispatch emitter").
+///
+/// `decided` names the variable a caller's own scan (`gen_group_decide`) left
+/// the winning alt index in. That scan ran the same partition, testing each
+/// branch's lookahead and gate before scanning the alternatives it holds, so
+/// the dispatch has nothing left to test: it commits to the winner.
 fn gen_group_dispatch(
     w: &mut CodeWriter,
     groups: &List<List<i32>>,
@@ -6113,7 +6329,18 @@ fn gen_group_dispatch(
     entry: GroupEntry,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    decided: Option<String> = null,
 ) {
+    if decided matches { Some(_) } {
+        let mut order: List<i32> = [];
+        for let group of groups {
+            for let idx of branch_emit_order(group, alts, ctx) {
+                order.push(idx);
+            }
+        }
+        gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &order, kind, ctx, name_counts, decided);
+        return;
+    }
     // A gated alternative needs a condition of its own, so it takes the last
     // branch's `else` away and brings the report back with it: a false
     // predicate must not land in the arm meant for the alternative it excludes.
@@ -6209,6 +6436,17 @@ fn group_gate(group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext)
     return alt_gate_and_suffix(&alts[group[0]], ctx);
 }
 
+/// The order a branch emits its alternatives in: mandatory-heavy first, so the
+/// longer match of a shared prefix leads the chain. Emission order only — the
+/// tournament decides the winner by scan length.
+fn branch_emit_order(group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> List<i32> {
+    let mut order = group.sorted();
+    if order.len() > 1 {
+        sort_group_by_mandatory_count_desc(&mut order, alts, ctx);
+    }
+    return order;
+}
+
 fn gen_group_branch_body(
     w: &mut CodeWriter,
     group: &List<i32>,
@@ -6229,8 +6467,7 @@ fn gen_group_branch_body(
     }
     // Alternatives sharing a first token are decided by the longest-match
     // tournament, mandatory-heavy first.
-    let mut sorted_group = group.sorted();
-    sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
+    let sorted_group = branch_emit_order(group, alts, ctx);
     assert group_all_scannable(&sorted_group, alts, kind, ctx), "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
     gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts);
 }
@@ -6271,6 +6508,7 @@ fn gen_general_group(
     entry: GroupEntry,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    decided: Option<String> = null,
 ) {
     let _ = dedup_name(&general_group_field_name(gs.group_index), name_counts);
     let [first_sets, groups] = group_partition(alts, GroupBranchKind::General, ctx);
@@ -6285,6 +6523,7 @@ fn gen_general_group(
         entry,
         ctx,
         name_counts,
+        decided,
     );
 }
 
@@ -6298,6 +6537,7 @@ fn gen_rule_ref_group(
     entry: GroupEntry,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    decided: Option<String> = null,
 ) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     let [first_sets, groups] = group_partition(alts, GroupBranchKind::RuleRef, ctx);
@@ -6312,6 +6552,7 @@ fn gen_rule_ref_group(
         entry,
         ctx,
         name_counts,
+        decided,
     );
 }
 

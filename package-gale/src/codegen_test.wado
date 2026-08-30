@@ -1233,6 +1233,28 @@ B : 'b' ;
     assert generated.diagnostics.is_empty(), `expected no diagnostics, got ${generated.diagnostics.len()}`;
 }
 
+test "an optional group's entry guard is the scan its dispatch decides on" {
+    // `stmt : 'k' ( a | b | a '.' b )? ;` — alts 0 and 2 share FIRST, so the
+    // group needs a longest-match decision. Deciding entry and deciding the
+    // alternative is one question: each alternative is scanned once, and the
+    // dispatch reads the winner the entry guard already found.
+    let input = "grammar Test;
+stmt : 'k' ( a | b | a '.' b )? ;
+a : A ;
+b : B ;
+A : 'a' ;
+B : 'b' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_stmt__inner(");
+    assert body.len() > 0, "expected a _parse_stmt__inner body";
+    let scans_a = count_substr(&body, &"scan_a(");
+    let scans_b = count_substr(&body, &"scan_b(");
+    assert scans_a == 2, `alts 0 and 2 name 'a' once each; scanned it ${scans_a} times`;
+    assert scans_b == 2, `alts 1 and 2 name 'b' once each; scanned it ${scans_b} times`;
+}
+
 fn str_contains(haystack: &String, needle: &String) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();

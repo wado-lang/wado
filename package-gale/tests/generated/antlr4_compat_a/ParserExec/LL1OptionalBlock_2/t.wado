@@ -1627,36 +1627,43 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let _rule_start_tok = p.pos;
-    let mut opt_scan_pos: i32 = -1;
-    opt_scan: {
-        let tokens = &p.kinds;
-        let mut pos: i32 = p.pos;
-        let gp_1 = pos;
-        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_0(sgk_1) {
-            sg_1: {
-                pos = gp_1;
-                sg_1_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_0; }
+    let mut gd_winner: i32 = -1;
+    let mut gd_best: i32 = -1;
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
+        if p.peek_kind() == TK_ID {
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break gd_scan; }
                     pos += 1;
-                    break sg_1;
+                    gd_end = pos;
                 }
-                pos = gp_1;
-                sg_1_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_1_1; }
-                    pos += 1;
-                    break sg_1;
+                if gd_end > gd_best {
+                    gd_best = gd_end;
+                    gd_winner = 0;
                 }
-                break opt_scan;
             }
-        } else {
-            break opt_scan;
+        } else if p.peek_kind() == TK_INT {
+            gd_tourney_2: {
+                let mut gd_end_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_INT { break gd_scan_2; }
+                    pos += 1;
+                    gd_end_2 = pos;
+                }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 1;
+                }
+            }
         }
-        opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        let grp_kind = p.peek_kind();
-        if grp_kind == TK_ID {
+    if gd_winner >= 0 {
+        if gd_winner == 0 {
             let id = p.expect(TK_ID, &EMPTY_SYNC);
         } else {
             if !p.speculating {

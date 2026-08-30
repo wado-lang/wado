@@ -1,0 +1,42 @@
+//! An optional group's entry guard and its alternative dispatch are one
+//! decision: the scan that says "enter" is the scan that names the winner.
+//! Pins the rule that decision follows — longest match, ties to the lowest
+//! alternative — and that a lookahead no alternative matches leaves the
+//! optional unentered. Every tree below was taken from the published
+//! ANTLR4 jar (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use ogd from "./grammars/opt_group_decision.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_opt_group_decision" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = ogd::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = ogd::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "opt-group: nothing to enter on leaves the optional empty" {
+    assert_tree(&"K ;", &"(s K body ;)");
+}
+
+test "opt-group: a scan-length tie goes to the lowest alternative" {
+    assert_tree(&"K a ;", &"(s K (body (name a)) ;)");
+}
+
+test "opt-group: the strictly longer alternative wins" {
+    assert_tree(&"K a . b ;", &"(s K (body (name a) . (name b)) ;)");
+}
+
+test "opt-group: a wildcard alternative loses to a concrete one that scans further" {
+    assert_tree(&"W a = b", &"(s W (wild (assign a = b)))");
+}
+
+test "opt-group: the wildcard alternative takes what the concrete one cannot" {
+    assert_tree(&"W a", &"(s W (wild a))");
+}
+
+test "opt-group: the wildcard alternative does not enter on EOF" {
+    assert_tree(&"W", &"(s W wild)");
+}
