@@ -1,0 +1,59 @@
+//! An empty alternative has no first set to be selected by. What selects it is
+//! what may follow the group, and its alternative index is what ranks it
+//! against the alternatives that do have one. Rendering its absent first set
+//! as an unconditional test made every later alternative dead code — `( A | |
+//! B )` never reached `B`.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use eam from "./grammars/empty_alt_mid.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_empty_alt_mid" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = eam::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = eam::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "empty-alt: a first set that matches selects its alternative" {
+    assert_tree(&"k a", &"(s k a)");
+}
+
+test "empty-alt: an alternative after the empty one is still reachable" {
+    // The regression: `EOF` alone may follow the group, so `b` does not select
+    // the empty alternative and `B` is what remains.
+    assert_tree(&"k b", &"(s k b)");
+}
+
+test "empty-alt: the follow set selects the empty alternative" {
+    assert_tree(&"k", &"(s k)");
+}
+
+test "empty-alt: a first set still beats skipping" {
+    assert_tree(&"m a", &"(s m a x)");
+}
+
+test "empty-alt: a longer alternative wins the tournament it shares" {
+    // `x` is nullable, so `A`, the empty alternative and `B` all admit `a` and
+    // `b`: the lookahead cannot separate them and the scan lengths decide.
+    assert_tree(&"m a b", &"(s m a (x b))");
+    assert_tree(&"m b a", &"(s m b (x a))");
+}
+
+test "empty-alt: nothing to scan leaves the empty alternative" {
+    assert_tree(&"m", &"(s m x)");
+}
+
+#[TODO]
+test "empty-alt: a viable empty alternative outranks a longer later one" {
+    // ANTLR4 picks the lowest-indexed alternative that lets the rule complete,
+    // so the empty alternative (index 1) beats `B` (index 2) and `x` takes the
+    // `b`. Gale's tournament ranks the branch it shares by scan length, where
+    // `B` is longer — the k=1 limit, resolvable only by the follow-aware
+    // decision the ATN simulator makes.
+    assert_tree(&"m b", &"(s m (x b))");
+}

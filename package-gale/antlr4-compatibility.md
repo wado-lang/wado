@@ -485,6 +485,33 @@ order (invariant 4's merge is what puts the two in one branch). Testing the
 branch before scanning also drops the scans of alternatives the lookahead
 cannot reach.
 
+**An empty alternative is admitted by what follows the group.** It has no
+first set to be selected by, so nothing about the alternative itself decides
+it; what does is the group's local FOLLOW, which lower computes at the
+group's position and bakes as `GroupOp.empty_alt_admits` — one value both
+walkers read, rather than an absence each interprets. It has three states,
+because a bare list would fold two of them together: no alternative is empty;
+an empty one whose suffix is nullable, so the answer is the caller's FOLLOW
+and is not statically known; or an empty one admitted by exactly this set.
+
+A branch of the decision therefore carries what it admits (`BranchTest` —
+`Always`, or `Kinds`, never empty) instead of a rendered test. An empty token
+list used to mean both "admits every lookahead" (a wildcard alternative) and
+"has no first set of its own" (an empty alternative), and both rendered as
+`true`: an unconditional arm in the middle of the chain, with every later
+alternative behind a test that can never fail. `( A | | B )` never reached
+`B`. A branch that admits everything and is gated by nothing is the chain's
+`else` and is emitted last (`fallback_last`), which `open_decision_branch`
+asserts.
+
+Where the follow set overlaps another alternative's first set the lookahead
+cannot separate them and they share a tournament branch, an empty alternative
+included — it scans as epsilon, so it wins only where nothing longer does.
+That is where Gale still parts from ANTLR4, which picks the lowest-indexed
+alternative that lets the rule complete rather than the longest scan: the
+`#[TODO]` in `driver_cst_empty_alt_mid_test.wado`, resolvable only by the
+follow-aware decision the ATN simulator makes.
+
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
 greedy `+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`),

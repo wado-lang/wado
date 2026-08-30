@@ -2011,6 +2011,7 @@ fn lower_general_scan_group(
             wildcard_indices.push(ai);
         }
     }
+    apply_empty_alt_admits(&mut first_sets, alts, &group_empty_alt_admits(alts, outer_follow));
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
@@ -2794,6 +2795,7 @@ fn lower_group_op(
                 rule_name,
                 ctx,
                 group_counter,
+                outer_follow,
                 enclosing_at_tail,
             );
         },
@@ -2859,6 +2861,7 @@ fn lower_transparent_group(
         alts: [body],
         scan_alts: [scan_body],
         dispatch: empty_direct_dispatch(),
+        empty_alt_admits: null,
     });
 }
 
@@ -2980,6 +2983,7 @@ fn lower_single_alt_group(
         alts: [body],
         scan_alts: [scan_body],
         dispatch: empty_direct_dispatch(),
+        empty_alt_admits: null,
     });
 }
 
@@ -3009,6 +3013,7 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
     let mut inner_counts: List<[String, i32]> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
+        assert !alt.elements.is_empty(), "a TokenOnly alt is one token, never empty";
         let elem = &alt.elements[0];
         let op = lower_token_only_leaf(elem, &mut inner_counts);
         bodies.push(AltBody {
@@ -3041,6 +3046,7 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         alts: bodies,
         scan_alts: scan_bodies,
         dispatch: dispatch,
+        empty_alt_admits: null,
     });
 }
 
@@ -3087,6 +3093,7 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
 
     let mut first_sets: List<List<String>> = [];
     for let alt of alts {
+        assert !alt.elements.is_empty(), "a SimpleCst alt is one RuleRef, never empty";
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
@@ -3134,6 +3141,7 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         alts: bodies,
         scan_alts: scan_bodies,
         dispatch: dispatch,
+        empty_alt_admits: null,
     });
 }
 
@@ -3187,6 +3195,47 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
 }
 
+/// An empty alternative the lookahead selects. One carrying an alt-initial
+/// predicate is selected by that predicate instead, so it keeps the
+/// unconditional branch the gate hangs on rather than a follow-set test.
+fn alt_is_bare_empty(alt: &Alternative) -> bool {
+    return alt.elements.is_empty() && alt.actions.is_empty();
+}
+
+/// The admit set of a group's empty alternative, or `null` where no
+/// alternative is empty. An empty alternative has no first set to be selected
+/// by; what selects it is what may follow the group, which is `outer_follow`
+/// — itself empty exactly where the suffix is nullable and the answer belongs
+/// to the caller.
+pub fn group_empty_alt_admits(alts: &List<Alternative>, outer_follow: &List<String>) -> Option<List<String>> {
+    for let alt of alts {
+        if alt_is_bare_empty(alt) {
+            return Option::<List<String>>::Some(*outer_follow);
+        }
+    }
+    return null;
+}
+
+/// Write the empty alternative's admit set into the first sets the dispatch
+/// partitions on. Both walkers call it, so neither can read that alternative's
+/// absent first set as an absence of its own.
+pub fn apply_empty_alt_admits(
+    first_sets: &mut List<List<String>>,
+    alts: &List<Alternative>,
+    admits: &Option<List<String>>,
+) {
+    let set = if let Some(s) = admits {
+        s;
+    } else {
+        return;
+    };
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if alt_is_bare_empty(&alts[i]) {
+            first_sets[i] = *set;
+        }
+    }
+}
+
 /// Multi-alt group not covered by `SimpleCst` / `TokenOnly` /
 /// `SingleAlt` — `(stmt | 'go' expr)`. Lowers to
 /// `GroupShape::General` carrying:
@@ -3216,6 +3265,7 @@ fn lower_general_group(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    outer_follow: &List<String>,
     enclosing_at_tail: bool = true,
 ) -> Op {
     let group_index = *group_counter;
@@ -3310,6 +3360,8 @@ fn lower_general_group(
         rule: *rule_name,
         site: DiagnosticSite::GeneralGroup(group_index),
     };
+    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow);
+    apply_empty_alt_admits(&mut first_sets, alts, &empty_alt_admits);
     let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {
@@ -3321,6 +3373,7 @@ fn lower_general_group(
         alts: bodies,
         scan_alts: scan_bodies,
         dispatch: dispatch,
+        empty_alt_admits: empty_alt_admits,
     });
 }
 

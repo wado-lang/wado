@@ -2890,10 +2890,8 @@ test "canonicalizing collapses nested optionals through a bare wrapper" {
     // Asking which wrappers to look through by listing them is what left
     // `((A|))?` nesting a Repeat: the list had `Label` on it and not `Group`.
     let sources = [
-        "grammar S;\nr : ((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
-        "grammar S;\nr : x=((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
-        "grammar S;\nr : (A?)? B ;\nA : 'a' ;\nB : 'b' ;\n",
-        "grammar S;\nr : ((A?))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n", "grammar S;\nr : x=((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : (A?)? B ;\nA : 'a' ;\nB : 'b' ;\n", "grammar S;\nr : ((A?))? B ;\nA : 'a' ;\nB : 'b' ;\n",
     ];
     for let src of &sources {
         let mut g = parse(*src).unwrap();
