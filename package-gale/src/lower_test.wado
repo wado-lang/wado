@@ -2890,8 +2890,20 @@ test "canonicalizing collapses nested optionals through a bare wrapper" {
     // Asking which wrappers to look through by listing them is what left
     // `((A|))?` nesting a Repeat: the list had `Label` on it and not `Group`.
     let sources = [
-        "grammar S;\nr : ((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n", "grammar S;\nr : x=((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
-        "grammar S;\nr : (A?)? B ;\nA : 'a' ;\nB : 'b' ;\n", "grammar S;\nr : ((A?))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : x=((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : (A?)? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ((A?))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        // The fold mints an Optional itself, so it has to normalise like any
+        // other: `( X | )` where `X` is already a repeat is a repeat over a
+        // repeat, the shape lowering cannot name.
+        "grammar S;\nr : ( A? | ) B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ( | A? ) B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ( A* | ) B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ( A+ | ) B ;\nA : 'a' ;\nB : 'b' ;\n",
+        // Spelled directly, with no fold involved.
+        "grammar S;\nr : (A*)? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : (A+)? B ;\nA : 'a' ;\nB : 'b' ;\n",
     ];
     for let src of &sources {
         let mut g = parse(*src).unwrap();
