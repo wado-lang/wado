@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction};
+use crate::nir::{FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, BlockNode, Body, ExprKind, ExprNode, NodeRef, Operand, PatKind, StmtId,
     StmtKind, StmtNode,
@@ -36,19 +36,35 @@ pub fn outline_cold_regions(
     let Some(cold) = cold_path_id(descriptor_cache.descriptors(project)) else {
         return false;
     };
-    let unit = project.type_table.borrow_mut().intern(ResolvedType::Unit);
+    // Interned once: the table is borrowed immutably while a region is being
+    // classified, and both are what a helper can return.
+    let exits = {
+        let mut table = project.type_table.borrow_mut();
+        Exits {
+            unit: table.intern(ResolvedType::Unit),
+            never: table.intern(ResolvedType::Never),
+        }
+    };
     let mut changed = false;
     let mut fi = 0;
     while fi < project.functions.len() {
         let mut ordinal = 0;
-        while let Some(region) = find_region(project, fi, cold) {
-            outline(project, fi, region, ordinal, unit);
+        while let Some(region) = find_region(project, fi, cold, exits, descriptor_cache) {
+            outline(project, fi, region, ordinal);
             ordinal += 1;
             changed = true;
         }
         fi += 1;
     }
     changed
+}
+
+/// The two types a helper can return: `()` when the region falls through, `!`
+/// when it cannot.
+#[derive(Clone, Copy)]
+struct Exits {
+    unit: TypeId,
+    never: TypeId,
 }
 
 /// The `FuncId` of `builtin::cold_path`, if the package resolved one.
@@ -66,6 +82,14 @@ struct Region {
     /// Position of the marker in `block`; the region is everything after it.
     marker: usize,
     stmts: Vec<StmtId>,
+    /// Locals of the enclosing frame the region reads, which the helper takes
+    /// as parameters past the ones it inherits. Ascending.
+    args: Vec<u32>,
+    /// What the helper returns, and so what the call in its place is worth to
+    /// every later pass: `!` when the region cannot fall through — the shape a
+    /// panic guard has, and what proves the guarded branch never continues.
+    /// Losing that turns a bounds check into an ordinary `if`.
+    return_type: TypeId,
 }
 
 /// Whether a function's own shape allows moving code out of it at all. The
@@ -77,7 +101,14 @@ fn is_splittable(func: &NirFunction) -> bool {
 }
 
 /// The first region in function `fi` that this pass may move.
-fn find_region(project: &NirPackage, fi: usize, cold: FuncId) -> Option<Region> {
+fn find_region(
+    project: &NirPackage,
+    fi: usize,
+    cold: FuncId,
+    exits: Exits,
+    descriptor_cache: &mut DescriptorCache,
+) -> Option<Region> {
+    let descriptors = descriptor_cache.descriptors(project);
     let func = project.functions[fi].borrow();
     if func.is_dead || !is_splittable(&func) {
         return None;
@@ -92,7 +123,7 @@ fn find_region(project: &NirPackage, fi: usize, cold: FuncId) -> Option<Region> 
     {
         return None;
     }
-    let param_count = func.params.len() as u32;
+    let params = func.params.len();
     let type_table = project.type_table.borrow();
     for (block, under_loop) in valueless_blocks(body, &type_table) {
         let stmts = &body.blocks[block].stmts;
@@ -100,19 +131,32 @@ fn find_region(project: &NirPackage, fi: usize, cold: FuncId) -> Option<Region> 
             continue;
         };
         let region: Vec<StmtId> = stmts[marker + 1..].to_vec();
-        if is_already_outlined(body, &region) {
+        if buys_nothing(body, &type_table, descriptors, &region, params) {
             continue;
         }
         crate::compiler_trace!(
             "cold_outline",
-            "{}: region of {} stmt(s)",
+            "{}: region of {} stmt(s), {} to hold",
             func.name,
             region.len(),
+            super::inline::region_size(body, &type_table, descriptors, &region),
         );
-        if is_movable(body, &region, param_count, under_loop) {
+        if let Some(args) = free_vars(body, &region, params as u32, under_loop, &func, &type_table)
+        {
+            // A region ending in a `-> !` call cannot fall through, so the
+            // helper inherits that: the call left behind still tells every
+            // later pass the branch never continues.
+            let diverges = region.last().is_some_and(|&s| match &body.stmts[s].kind {
+                StmtKind::Expr(op) => op
+                    .as_expr()
+                    .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)),
+                _ => false,
+            });
             return Some(Region {
                 block,
                 marker,
+                args,
+                return_type: if diverges { exits.never } else { exits.unit },
                 stmts: region,
             });
         }
@@ -169,19 +213,23 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
     out
 }
 
-/// Whether the region is already out of line: empty, or one call and nothing
-/// else. Moving a lone call into a function that only makes that call adds a
-/// frame and removes no code — and, since that is the shape this pass leaves
-/// behind, declining it is also what makes a second scan a fixed point.
-fn is_already_outlined(body: &Body, region: &[StmtId]) -> bool {
-    let [only] = region else {
-        return region.is_empty();
-    };
-    let StmtKind::Expr(op) = &body.stmts[*only].kind else {
-        return false;
-    };
-    op.as_expr()
-        .is_some_and(|e| matches!(&body.exprs[e].kind, ExprKind::Call { .. }))
+/// Whether moving the region would buy nothing: it holds no more than the call
+/// that would replace it. Weighing the region rather than counting its
+/// statements is what sees a lone `panic(…)` whose argument builds a message —
+/// one statement, and the bulk of the function.
+///
+/// This is also what makes a second scan a fixed point: what the pass leaves
+/// behind is exactly a call of that size.
+fn buys_nothing(
+    body: &Body,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    region: &[StmtId],
+    param_count: usize,
+) -> bool {
+    region.is_empty()
+        || super::inline::region_size(body, type_table, descriptors, region)
+            <= super::inline::call_site_size(param_count)
 }
 
 /// Whether `stmt` is a bare `cold_path()` call.
@@ -195,17 +243,30 @@ fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
     matches!(&body.exprs[expr].kind, ExprKind::Call { func_id, .. } if *func_id == cold)
 }
 
-/// Whether the region can become a call without changing what the function
-/// does.
+/// How the region's free variables cross the new boundary, or `None` when one
+/// of them cannot.
 ///
-/// Two conditions, both about what crosses the new boundary. Control must not
-/// leave the region, since a `return` in a function of its own returns from the
-/// wrong frame. And every local it touches must be one the call can hand over:
-/// a parameter, passed straight through as the enclosing function received it,
-/// or one the region declares itself.
-fn is_movable(body: &Body, region: &[StmtId], param_count: u32, under_loop: bool) -> bool {
+/// Control must not leave the region, since a `return` in a function of its own
+/// returns from the wrong frame. Beyond that, each local the region touches has
+/// to be one the call can hand over. A parameter, or a local the region
+/// declares, needs nothing. A local of the enclosing frame is one of three
+/// cases: nothing outside reads it, so it moves with the region; the region only
+/// reads it, so it rides in as an argument; or the region writes one the
+/// enclosing function still reads, which no call can carry back.
+fn free_vars(
+    body: &Body,
+    region: &[StmtId],
+    param_count: u32,
+    under_loop: bool,
+    func: &NirFunction,
+    type_table: &TypeTable,
+) -> Option<Vec<u32>> {
+    if control_escapes(body, region) {
+        return None;
+    }
     let mut declared: IndexSet<u32> = IndexSet::default();
     let mut mentioned: IndexSet<u32> = IndexSet::default();
+    let mut written: IndexSet<u32> = IndexSet::default();
     let mut seen: IndexSet<ValueId> = IndexSet::default();
     let mut stack: Vec<NodeRef> = region.iter().map(|&s| NodeRef::Stmt(s)).collect();
     while let Some(node) = stack.pop() {
@@ -220,11 +281,17 @@ fn is_movable(body: &Body, region: &[StmtId], param_count: u32, under_loop: bool
                     declared.insert(*local_index);
                 }
             }
-            NodeRef::Expr(e) => {
-                if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Local { index, .. } => {
                     mentioned.insert(*index);
                 }
-            }
+                ExprKind::Assign { target, .. } => {
+                    if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
+                        written.insert(*index);
+                    }
+                }
+                _ => {}
+            },
             NodeRef::Block(_) => {}
         }
         body.for_each_operand(node, |op| {
@@ -236,26 +303,42 @@ fn is_movable(body: &Body, region: &[StmtId], param_count: u32, under_loop: bool
         body.for_each_child(node, |c| stack.push(c));
     }
     let outside = mentions_outside(body, region);
-    let foreign: Vec<u32> = mentioned
-        .iter()
-        .copied()
-        .filter(|&idx| {
-            idx >= param_count
-                && !declared.contains(&idx)
-                // A slot nothing outside the region touches moves with it: the
-                // helper inherits the frame, so the index still denotes the same
-                // local, and no one is left behind to read it. Only under a loop
-                // is that different — a second entry would find the slot fresh
-                // instead of holding what the first left.
-                && (outside.contains(&idx) || under_loop)
-        })
-        .collect();
-    let escapes = control_escapes(body, region);
-    crate::compiler_trace!(
-        "cold_outline",
-        "  escapes={escapes} foreign={foreign:?} params={param_count} under_loop={under_loop}"
-    );
-    !escapes && foreign.is_empty()
+    let mut args = Vec::new();
+    for idx in mentioned.iter().copied() {
+        if idx < param_count || declared.contains(&idx) {
+            continue;
+        }
+        // A slot nothing outside touches moves with the region: the helper
+        // inherits the frame, so the index still denotes the same local and no
+        // one is left behind to read it. Under a loop that differs — a second
+        // entry would find the slot fresh instead of holding what the first left
+        // — so it has to cross as an argument like any other.
+        if !outside.contains(&idx) && !under_loop {
+            continue;
+        }
+        // Reading it is what an argument can carry; a write the enclosing
+        // function still reads is not.
+        if written.contains(&idx) || func.address_taken_locals.contains(&idx) {
+            crate::compiler_trace!("cold_outline", "  local {idx} is written across the split");
+            return None;
+        }
+        // An argument is read at the call, where the region read it under
+        // whatever guard stands in front of it. For a primitive that is the same
+        // value either way, the slot always holding one. A reference slot need
+        // not: an assertion's short-circuit operands are filled only on the path
+        // that evaluates them, and passing one the guard would have skipped
+        // hands a null across a non-null parameter.
+        if !matches!(
+            type_table.get(func.locals[idx as usize].type_id),
+            ResolvedType::Primitive(_)
+        ) {
+            crate::compiler_trace!("cold_outline", "  local {idx} may be unset at the call");
+            return None;
+        }
+        args.push(idx);
+    }
+    args.sort_unstable();
+    Some(args)
 }
 
 /// Every local mentioned in the body *outside* `region`, a declaration counting
@@ -347,11 +430,11 @@ fn escapes_from<'a>(
 }
 
 /// Move `region` into a function of its own and leave a call in its place.
-fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32, unit: TypeId) {
+fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
     let id = project.next_func_id();
     let helper = {
         let parent = project.functions[fi].borrow();
-        build_helper(&parent, &region, id, ordinal, unit)
+        build_helper(&parent, &region, id, ordinal)
     };
     let key = FunctionRef::from_resolved(&helper, helper.module_source.clone()).function_id();
     project.func_index.insert(key, id);
@@ -359,26 +442,34 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32, un
 
     let mut parent = project.functions[fi].borrow_mut();
     let span = parent.span;
-    // The helper takes the enclosing parameter list unchanged, so the call is
-    // each parameter passed straight back. `is_mut` is `is_mut_ref` — whether
-    // the callee may write the caller's storage through the slot — the same
-    // reading `lower` gives it.
-    let params = parent.params.clone();
-    let body = parent.body.as_mut().expect("a region implies a body");
-    let args = params
+    // The helper takes the enclosing parameter list, then the locals the region
+    // reads, so the call passes each parameter straight back and each of those
+    // locals by value. `is_mut` is `is_mut_ref` — whether the callee may write
+    // the caller's storage through the slot — the same reading `lower` gives it.
+    let passed: Vec<(u32, TypeId, String, bool)> = parent
+        .params
         .iter()
-        .map(|p| {
+        .map(|p| (p.local_index, p.type_id, p.name.clone(), p.is_mut_ref))
+        .chain(region.args.iter().map(|&i| {
+            let l = &parent.locals[i as usize];
+            (i, l.type_id, l.name.clone(), false)
+        }))
+        .collect();
+    let body = parent.body.as_mut().expect("a region implies a body");
+    let args = passed
+        .iter()
+        .map(|(index, type_id, name, is_mut)| {
             let expr = body.exprs.push(ExprNode {
                 kind: ExprKind::Local {
-                    index: p.local_index,
-                    name: p.name.clone(),
+                    index: *index,
+                    name: name.clone(),
                 },
-                type_id: p.type_id,
+                type_id: *type_id,
                 span,
             });
             ArenaCallArg {
                 expr: Operand::Expr(expr),
-                is_mut: p.is_mut_ref,
+                is_mut: *is_mut,
             }
         })
         .collect();
@@ -389,7 +480,7 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32, un
             args,
             has_receiver: false,
         },
-        type_id: unit,
+        type_id: region.return_type,
         span,
     });
     let stmt = body.stmts.push(StmtNode {
@@ -405,20 +496,22 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32, un
 /// region as its whole body. Cloning the enclosing record rather than building
 /// one field by field is what keeps the two in step — a field added to
 /// [`NirFunction`] is inherited, and only what must differ is written here.
-fn build_helper(
-    parent: &NirFunction,
-    region: &Region,
-    id: FuncId,
-    ordinal: u32,
-    unit: TypeId,
-) -> NirFunction {
+fn build_helper(parent: &NirFunction, region: &Region, id: FuncId, ordinal: u32) -> NirFunction {
     let parent_body = parent.body.as_ref().expect("a region implies a body");
-    let mut body = Body::empty();
-    // Identity remap: the helper keeps the enclosing frame, so every local index
-    // in the moved statements still denotes the same local.
-    let no_params = IndexMap::default();
+    let inherited = parent.params.len() as u32;
+    // The helper's frame is the enclosing one with the region's read-only
+    // locals lifted to parameters: each takes the next slot past the inherited
+    // ones, and every other local shifts by as many.
+    let lifted: IndexMap<u32, u32> = region
+        .args
+        .iter()
+        .enumerate()
+        .map(|(k, &idx)| (idx, inherited + k as u32))
+        .collect();
     let no_labels = IndexMap::default();
-    let ctx = InlineCtx::identity(parent.params.len() as u32, &no_params, &no_labels);
+    let ctx = InlineCtx::lifting(inherited, &lifted, &no_labels);
+
+    let mut body = Body::empty();
     let stmts: Vec<StmtId> = region
         .stmts
         .iter()
@@ -430,6 +523,41 @@ fn build_helper(
     });
 
     let mut helper = parent.clone();
+    helper
+        .params
+        .extend(region.args.iter().enumerate().map(|(k, &idx)| {
+            let local = &parent.locals[idx as usize];
+            NirParam {
+                name: local.name.clone(),
+                type_id: local.type_id,
+                local_index: inherited + k as u32,
+                is_mut: false,
+                is_mut_ref: false,
+                span: parent.span,
+            }
+        }));
+    helper.locals = helper
+        .params
+        .iter()
+        .map(|p| NirLocal {
+            name: p.name.clone(),
+            type_id: p.type_id,
+            is_mut: p.is_mut,
+        })
+        .chain(parent.locals[inherited as usize..].iter().cloned())
+        .collect();
+    // The lifted locals now live in two slots; the shifted copy is dead in the
+    // helper, which is what `elide_local` and the backend's local census expect.
+    helper.address_taken_locals = parent
+        .address_taken_locals
+        .iter()
+        .map(|&i| ctx.local(i))
+        .collect();
+    helper.stores_aliased_locals = parent
+        .stores_aliased_locals
+        .iter()
+        .map(|&i| ctx.local(i))
+        .collect();
     helper.id = Some(id);
     helper.name = crate::name::cold_region_helper_name(&parent.name, ordinal);
     helper.visibility = crate::ast::Visibility::Private;
@@ -449,7 +577,7 @@ fn build_helper(
     helper.kind = FunctionKind::Regular;
     helper.scalarized_from = None;
     helper.inline_hint = InlineHint::default();
-    helper.return_type = unit;
+    helper.return_type = region.return_type;
     helper.task_return_type = None;
     helper.body = Some(body);
     helper

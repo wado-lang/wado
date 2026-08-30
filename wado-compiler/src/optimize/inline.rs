@@ -601,6 +601,33 @@ fn inline_size(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef])
     walk.block(body.root, &mut SeenValues::default())
 }
 
+/// What a run of statements occupies, on the same terms as [`inline_size`].
+/// `cold_outline` weighs a region against the call that would replace it with
+/// this, since a region's cost is its whole subtree — a lone `panic(…)` call
+/// whose argument builds a message is a statement to look at and 150 to hold.
+pub(super) fn region_size(
+    body: &Body,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    stmts: &[StmtId],
+) -> usize {
+    let walk = CostWalk {
+        body,
+        type_table,
+        descriptors,
+        price: Price::Size,
+        consts: None,
+    };
+    let mut seen = SeenValues::default();
+    stmts.iter().map(|&s| walk.stmt(s, &mut seen)).sum()
+}
+
+/// What a call to a helper taking `param_count` arguments costs the caller: the
+/// call itself, plus reading each argument out of a local.
+pub(super) fn call_site_size(param_count: usize) -> usize {
+    weight::CALL + param_count * weight::OP
+}
+
 /// What the caller pays for `body` once constant folding has run on it, given
 /// the parameters in `view` arrive constant at every call site: a branch a
 /// constant decides keeps one arm, and a pure call over constants becomes a
@@ -1391,23 +1418,35 @@ pub fn inline_functions(
     }
     drop(type_table);
 
-    // What the cold discount is worth: the candidates whose full body is over
-    // the threshold and whose hot path is under it. They are the ones the two
-    // prices disagree about, so they are what a decision to drop the discount
-    // would change.
+    // What this round would add, and which callees dominate it. A candidate the
+    // threshold admitted only because the cold discount put its hot path under
+    // it is flagged `cold`: the two prices disagree about exactly those.
     crate::compiler_trace!("inline", "{}", {
-        let discounted: Vec<&Candidate> = priced
+        let mut ranked: Vec<&Candidate> = priced.iter().collect();
+        ranked.sort_by_key(|c| std::cmp::Reverse(splice_growth(c.size, c.sites)));
+        let total: usize = ranked.iter().map(|c| splice_growth(c.size, c.sites)).sum();
+        let top = ranked
             .iter()
-            .filter(|c| c.hot <= inline_threshold && c.size > inline_threshold)
-            .collect();
-        let growth: usize = discounted
-            .iter()
-            .map(|c| splice_growth(c.size, c.sites))
-            .sum();
+            .take(6)
+            .map(|c| {
+                format!(
+                    "\n    {:>8}  {} (hot {}, size {} x {} sites){}",
+                    splice_growth(c.size, c.sites),
+                    c.name,
+                    c.hot,
+                    c.size,
+                    c.sites,
+                    if c.hot <= inline_threshold && c.size > inline_threshold {
+                        "  [cold]"
+                    } else {
+                        ""
+                    }
+                )
+            })
+            .collect::<String>();
         format!(
-            "unit {unit_size}: {} candidates, {} admitted only by the cold discount, worth {growth} of growth",
+            "unit {unit_size}: {} candidates worth {total} of growth{top}",
             priced.len(),
-            discounted.len(),
         )
     });
 
@@ -1827,18 +1866,19 @@ pub(super) struct InlineCtx<'a> {
 }
 
 impl<'a> InlineCtx<'a> {
-    /// A context that renames nothing: every local index, and every label,
-    /// crosses unchanged. What `cold_outline` needs, since the body it writes
-    /// into keeps the frame the statements came from.
-    pub(super) fn identity(
-        param_count: u32,
-        param_to_local: &'a IndexMap<u32, u32>,
+    /// The context `cold_outline` moves a region under: the first `inherited`
+    /// locals keep their indices, each local in `lifted` takes the parameter
+    /// slot it maps to, and everything else shifts past the new parameters.
+    /// With `lifted` empty this renames nothing.
+    pub(super) fn lifting(
+        inherited: u32,
+        lifted: &'a IndexMap<u32, u32>,
         label_map: &'a IndexMap<String, String>,
     ) -> Self {
         Self {
-            param_to_local,
-            local_offset: param_count,
-            param_count,
+            param_to_local: lifted,
+            local_offset: inherited + lifted.len() as u32,
+            param_count: inherited,
             label: "",
             label_map,
         }
@@ -1846,7 +1886,7 @@ impl<'a> InlineCtx<'a> {
 }
 
 impl InlineCtx<'_> {
-    fn local(&self, idx: u32) -> u32 {
+    pub(super) fn local(&self, idx: u32) -> u32 {
         remap_local_index(
             idx,
             self.param_to_local,
