@@ -1813,37 +1813,25 @@ fn _parse_opt__inner(p: &mut Parser) -> () {
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if p.peek_kind() == TK_A && (pred_0(p)) {
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
-                pos += 1;
-                gd_end = pos;
-            }
-            if gd_end > gd_best {
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
+        gd_winner = 0;
+        gd_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
+            pos += 1;
+            gd_best = pos;
         }
     } else if p.peek_kind() == TK_B {
-        gd_tourney_2: {
-            let mut gd_end_2: i32 = -1;
-            gd_scan_2: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
-                pos += 1;
-                gd_end_2 = pos;
-            }
-            if gd_end_2 > gd_best {
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
+        gd_winner = 1;
+        gd_scan_2: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
+            pos += 1;
+            gd_best = pos;
         }
     }
-    if gd_winner >= 0 {
+    if gd_best >= 0 {
         if gd_winner == 0 {
             let a = p.expect(TK_A, &EMPTY_SYNC);
         } else {
@@ -1869,41 +1857,27 @@ fn _parse_star__inner(p: &mut Parser) -> () {
     loop {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
-        let mut gd_best: i32 = p.pos;
+        let mut gd_best: i32 = -1;
         if p.peek_kind() == TK_A && (pred_1(p)) {
-            gd_tourney: {
-                let mut gd_end: i32 = -1;
-                gd_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
-                    pos += 1;
-                    gd_end = pos;
-                }
-                if gd_end > gd_best {
-                    gd_best = gd_end;
-                    gd_winner = 0;
-                }
+            gd_winner = 0;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
+                pos += 1;
+                gd_best = pos;
             }
         } else if p.peek_kind() == TK_B {
-            gd_tourney_2: {
-                let mut gd_end_2: i32 = -1;
-                gd_scan_2: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
-                    pos += 1;
-                    gd_end_2 = pos;
-                }
-                if gd_end_2 > gd_best {
-                    gd_best = gd_end_2;
-                    gd_winner = 1;
-                }
+            gd_winner = 1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
+                pos += 1;
+                gd_best = pos;
             }
         }
-        if gd_winner < 0 {
-            break;
-        }
+        if gd_best <= p.pos { break; }
         if gd_winner == 0 {
             let a = p.expect(TK_A, &EMPTY_SYNC);
         } else {

@@ -16711,48 +16711,36 @@ fn _parse_constructor_declaration__inner(p: &mut Parser, follow: &List<List<i32>
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
         if p.peek_kind() == TK_OpenBrace {
-            gd_tourney: {
-                let mut gd_end: i32 = -1;
-                gd_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    sg_103_done: {
-                        sg_103: {
-                            if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break sg_103; }
-                            pos += 1;
-                            pos = scan_function_body(tokens, pos, &FOLLOW_MASK_9);
-                            if pos < 0 { break sg_103; }
-                            if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break sg_103; }
-                            pos += 1;
-                            break sg_103_done;
-                        }
-                        break gd_scan;
+            gd_winner = 0;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_103_done: {
+                    sg_103: {
+                        if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break sg_103; }
+                        pos += 1;
+                        pos = scan_function_body(tokens, pos, &FOLLOW_MASK_9);
+                        if pos < 0 { break sg_103; }
+                        if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break sg_103; }
+                        pos += 1;
+                        break sg_103_done;
                     }
-                    gd_end = pos;
+                    break gd_scan;
                 }
-                if gd_end > gd_best {
-                    gd_best = gd_end;
-                    gd_winner = 0;
-                }
+                gd_best = pos;
             }
         } else if p.peek_kind() == TK_SemiColon {
-            gd_tourney_2: {
-                let mut gd_end_2: i32 = -1;
-                gd_scan_2: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break gd_scan_2; }
-                    pos += 1;
-                    gd_end_2 = pos;
-                }
-                if gd_end_2 > gd_best {
-                    gd_best = gd_end_2;
-                    gd_winner = 1;
-                }
+            gd_winner = 1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break gd_scan_2; }
+                pos += 1;
+                gd_best = pos;
             }
         }
     }
-    if gd_winner >= 0 {
+    if gd_best >= 0 {
         if gd_winner == 0 {
             let openbrace = p.expect(TK_OpenBrace, &SYNC_29);
             p.atn_ret_pending = 1050;

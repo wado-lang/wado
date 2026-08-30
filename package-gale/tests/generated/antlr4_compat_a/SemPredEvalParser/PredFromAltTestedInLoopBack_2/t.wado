@@ -1699,53 +1699,36 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         }
         let mut gd_winner: i32 = -1;
-        let mut gd_best: i32 = p.pos;
+        let mut gd_best: i32 = -1;
         if p.peek_kind() == TK_LIT_S {
-            gd_tourney: {
-                let mut gd_end: i32 = -1;
-                gd_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_S { break gd_scan; }
-                    pos += 1;
-                    gd_end = pos;
-                }
-                if gd_end > gd_best {
-                    gd_best = gd_end;
-                    gd_winner = 0;
-                }
+            gd_winner = 0;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_S { break gd_scan; }
+                pos += 1;
+                gd_best = pos;
             }
         } else if p.peek_kind() == TK_X {
-            gd_tourney_2: {
-                let mut gd_end_2: i32 = -1;
-                gd_scan_2: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_X { break gd_scan_2; }
-                    pos += 1;
-                    gd_end_2 = pos;
-                }
-                if gd_end_2 > gd_best {
-                    gd_best = gd_end_2;
-                    gd_winner = 1;
-                }
+            gd_winner = 1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_X { break gd_scan_2; }
+                pos += 1;
+                gd_best = pos;
             }
         } else if p.peek_kind() == TK_NL && (p.la(2) != TK_NL) {
-            gd_tourney_3: {
-                let mut gd_end_3: i32 = -1;
-                gd_scan_3: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_NL { break gd_scan_3; }
-                    pos += 1;
-                    gd_end_3 = pos;
-                }
-                if gd_end_3 > gd_best {
-                    gd_best = gd_end_3;
-                    gd_winner = 2;
-                }
+            gd_winner = 2;
+            gd_scan_3: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_NL { break gd_scan_3; }
+                pos += 1;
+                gd_best = pos;
             }
         }
+        if !_plus_first && gd_best <= p.pos { break; }
         if gd_winner < 0 {
             if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_1); }
             break;

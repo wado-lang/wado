@@ -3782,8 +3782,8 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             // dispatch commits to what it found.
             if let Group(g) = &r.body {
                 if let Some(decision) = op_group_alt_decision(g, ctx) {
-                    let winner = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, false, true);
-                    w.line(&`if ${winner} < 0 \{ break; \}`);
+                    let [winner, best] = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, false);
+                    w.line(&`if ${best} <= p.pos \{ break; \}`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
                     w.end();
                     return;
@@ -3849,8 +3849,8 @@ fn gen_op_optional(
                 // decides on: one answer, one set of scans. The caller-FOLLOW
                 // yield gate wraps them, so an optional that must yield does
                 // not pay for a decision it will not use.
-                let winner = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, follow_gate);
-                w.begin(&`if ${winner} >= 0`);
+                let [winner, best] = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, follow_gate);
+                w.begin(&`if ${best} >= 0`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
                 return;
@@ -4226,7 +4226,7 @@ fn gen_op_storable_optional(
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
                 // The scan that decides entry is the scan the dispatch
                 // decides on: one answer, one set of scans.
-                let winner = gen_group_decide(
+                let [winner, best] = gen_group_decide(
                     w,
                     &decision.branches,
                     &g_op.scan_alts,
@@ -4234,7 +4234,7 @@ fn gen_op_storable_optional(
                     name_counts,
                     rep_op.gate_caller_follow,
                 );
-                gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &`${winner} >= 0`, Option::Some(winner));
+                gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &`${best} >= 0`, Option::Some(winner));
             } else {
                 let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
                 gen_op_storable_optional_with_first(
@@ -5912,20 +5912,23 @@ fn gen_rep_decided_entry(
     // No gate break: every branch of the decision carries the gate the loop
     // would test, so a predicate the decision already answered is not asked
     // a second time.
-    let winner = gen_group_decide(w, &decision.branches, &g_op.scan_alts, ctx, name_counts, false, true);
-    w.begin(&`if ${winner} < 0`);
-    if !plus_flag.is_empty() {
-        // The mandatory first iteration has no exit to take, and the dispatch
-        // it would have reached commits rather than reports — so this is the
-        // only answer that position gets, whatever excluded the alternatives.
-        let expected_ref = sync_set_ref(ctx, &decision.expected);
-        w.line(&`if ${*plus_flag} \{ p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); \}`);
+    let [winner, best] = gen_group_decide(w, &decision.branches, &g_op.scan_alts, ctx, name_counts, false);
+    if plus_flag.is_empty() {
+        // Every iteration may decline, and one that consumed nothing would
+        // come round at the same position forever.
+        w.line(&`if ${best} <= p.pos \{ break; \}`);
+        return winner;
     }
+    w.line(&`if !${*plus_flag} && ${best} <= p.pos \{ break; \}`);
+    // The mandatory first iteration cannot decline: it takes what prediction
+    // picked and lets the body report what it cannot match. Only where
+    // prediction picked nothing is there an answer to give here.
+    w.begin(&`if ${winner} < 0`);
+    let expected_ref = sync_set_ref(ctx, &decision.expected);
+    w.line(&`if ${*plus_flag} \{ p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); \}`);
     w.line(&"break;");
     w.end();
-    if !plus_flag.is_empty() {
-        w.line(&`${*plus_flag} = false;`);
-    }
+    w.line(&`${*plus_flag} = false;`);
     return winner;
 }
 
@@ -6278,18 +6281,25 @@ fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<GroupDecis
     };
 }
 
-/// Decide a group by scanning: one scan per candidate the lookahead admits,
-/// leaving the winning alt index in a fresh variable (`-1` when no branch
-/// admits the lookahead, or the alternatives it holds do not scan). The
-/// caller that may decline the group gates on that variable and hands it to
-/// the dispatch, which then commits instead of scanning again.
+/// Decide a group, as `[winner, best]` — two variables because a group's
+/// callers ask two questions of one decision:
+///
+/// * `winner` is **which alternative**, and is prediction's answer: a branch
+///   holding one alternative is picked by the lookahead alone, a branch
+///   holding several by the longest scan among them. `-1` only where no
+///   branch admits the lookahead, or where a branch of several admits it and
+///   none of them scans — the positions ANTLR4 calls no-viable-alternative.
+/// * `best` is **how far that alternative validated**, `-1` where it did not
+///   scan at all.
+///
+/// A caller that may decline the group — an optional, an iteration after a
+/// loop's first — reads `best`; one at a required position reads `winner` and
+/// commits, leaving the body to report what it cannot match. Answering both
+/// from one variable is what made a `+`'s mandatory first iteration decline a
+/// position it had to take.
 ///
 /// `follow_gate` wraps the scans in the caller-FOLLOW yield test, so a
 /// tail-position group that must yield never pays for them.
-///
-/// `require_advance` starts the running best at the entry position instead of
-/// `-1`, so an alternative that matches zero tokens wins nothing: a loop
-/// iteration that consumed nothing would come round again forever.
 fn gen_group_decide(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
@@ -6297,24 +6307,54 @@ fn gen_group_decide(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     follow_gate: bool,
-    require_advance: bool = false,
-) -> String {
+) -> [String, String] {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let best_var = dedup_name(&"gd_best", name_counts);
     w.line(&`let mut ${winner_var}: i32 = -1;`);
-    w.line(&`let mut ${best_var}: i32 = ${if require_advance { "p.pos" } else { "-1" }};`);
+    w.line(&`let mut ${best_var}: i32 = -1;`);
     if follow_gate {
         w.begin(&`if !(${CALLER_FOLLOW_YIELDS})`);
     }
     for let mut i = 0; i < branches.len(); i += 1 {
         open_decision_branch(w, branches, i);
-        gen_scan_winner_round(w, &branches[i].alts, scan_alts, ctx, name_counts, &winner_var, &best_var);
+        let alts = &branches[i].alts;
+        if alts.len() == 1 {
+            gen_decision_measure(w, alts[0], scan_alts, ctx, name_counts, &winner_var, &best_var);
+        } else {
+            gen_scan_winner_round(w, alts, scan_alts, ctx, name_counts, &winner_var, &best_var);
+        }
     }
     close_decision_chain(w, branches);
     if follow_gate {
         w.end();
     }
-    return winner_var;
+    return [winner_var, best_var];
+}
+
+/// The branch the lookahead admits holds one alternative, so it is already the
+/// winner and the scan only measures how far it reaches.
+fn gen_decision_measure(
+    w: &mut CodeWriter,
+    alt_index: i32,
+    scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+    winner_var: &String,
+    best_var: &String,
+) {
+    w.line(&`${*winner_var} = ${alt_index};`);
+    let sb = &scan_alts[alt_index];
+    if sb.elements.is_empty() {
+        w.line(&`${*best_var} = p.pos;`);
+        return;
+    }
+    let scan_label = dedup_name(&"gd_scan", name_counts);
+    w.begin(&`${scan_label}:`);
+    w.line(&"let tokens = &p.kinds;");
+    w.line(&"let mut pos: i32 = p.pos;");
+    gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
+    w.line(&`${*best_var} = pos;`);
+    w.end();
 }
 
 /// A lone branch admitting every lookahead has nothing to test: the scan

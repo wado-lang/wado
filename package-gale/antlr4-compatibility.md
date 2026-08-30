@@ -451,18 +451,28 @@ committing, so the rule's own error path still names the rule rather than one
 alternative's next token.
 
 **A group is decided once, wherever the decision is needed.** That partition
-and tournament is one emitter (`gen_group_decide`), and everything that has to
-know which alternative a group takes here reads it:
+and tournament is one emitter (`gen_group_decide`), and it answers two
+questions of the group rather than one, because its callers ask two: **which
+alternative** (prediction — the lookahead alone where a branch holds one
+alternative, the longest scan where it holds several) and **how far that
+alternative validated**. Everything that has to know what a group takes here
+reads the half that matches its position:
 
-- **A caller that may decline the group** — an optional, or a scan-guarded
-  loop iteration — runs it, enters or iterates on a winner existing, and hands
-  the winning alternative index to the dispatch, which commits to it. What the
-  decision fails to find is what skips the optional or ends the loop, and on a
-  `+`'s mandatory first iteration, what reports.
+- **A caller that may decline the group** — an optional, or a loop iteration
+  after the first — reads how far the alternative validated: what did not
+  validate is what skips the optional or ends the loop.
+- **A caller at a required position** — a `+`'s mandatory first iteration —
+  reads which alternative, and commits to it. It has no exit to take, so
+  declining is not among its answers.
+- **The dispatch** reads which alternative and commits, instead of testing
+  anything again.
 - **A group scanned inside a longer scan** runs it to measure itself, and
   leaves the winner's end in the scan cursor. Measuring by any other rule
   reports a length the parse will not consume, so the decision that reads the
   measurement is taken on a path that does not exist.
+
+Answering both from one variable is what made the mandatory first iteration
+decline a position it had to take.
 
 Deciding twice is what these sites used to do, by rules that were never the
 same: the entry guard argmaxed over the ambiguous alternatives only, visiting
@@ -533,11 +543,17 @@ policy, stated once per call site, and it has three values:
 
 A `+`'s mandatory first iteration is the position no guard covers — it is
 required, so the loop enters it unguarded. A decided body's decision runs
-there anyway and answers it: a winner is what the dispatch commits to, and no
-winner is the `no viable alternative` the dispatch's own `else` used to give,
-including where a false predicate is what excluded every alternative. An
-undecided body still needs both answers emitted where the flag reads true,
-before the body:
+there too, and the position reads the half of it that cannot decline: the
+alternative prediction picked. Where the lookahead admits a branch holding one
+alternative, that alternative is the answer whether or not its scan reached
+the end — the iteration commits and the body reports what it cannot match,
+which is what ANTLR4 does (`( A t | B t )+` on `a` is `missing ';'`, not a
+no-viable-alternative). Only where prediction picked nothing — no branch
+admits the lookahead, or a branch of several admits it and none of them scans
+— is the position a `no viable alternative`, which is again ANTLR4's answer
+(`( A B | A C )+` on `a a`). Fixture `plus_first_commit.g4`, both trees taken
+from the published jar. An undecided body still needs both answers emitted
+where the flag reads true, before the body:
 
 - Gated, single-alternative body — no dispatch to force Guaranteed back, so the
   gate reports. Without it the gate registers the predicate, the body drops its
