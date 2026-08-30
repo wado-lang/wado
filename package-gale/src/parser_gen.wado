@@ -4478,8 +4478,8 @@ fn prequel_expected_names(rule_name: &String, at_entry: bool, ctx: &mut GenConte
 /// Only a lone alternative has a branch of its own to hang one on
 /// (`group_gate`); off with action execution, so an inert grammar stays
 /// byte-identical.
-fn any_alt_gated(groups: &List<List<i32>>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
-    return ctx.emit_actions() && groups.iter_ref().any(|g: &List<i32>| g.len() == 1 && alt_has_gate(&alts[g[0]], ctx));
+fn any_alt_gated(branches: &List<DecisionBranch>, ctx: &GenContext) -> bool {
+    return ctx.emit_actions() && branches.iter_ref().any(|b: &DecisionBranch| !b.gate.is_empty());
 }
 
 /// The alternatives of a repeat's group body, or `null` when the body is not a
@@ -4508,13 +4508,14 @@ fn group_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) ->
     // A guard, not a dispatch chain: an empty alternative widens it to admit
     // everything, which is the safe direction and creates no dead branch.
     let [first_sets, groups] = group_partition(alts, kind, &null, ctx);
+    let branches = decision_branches(alts, &groups, &first_sets, ctx);
     let mut parts: List<String> = [];
-    for let group of &groups {
-        parts.push(`(${group_branch_test(group, &first_sets, alts, &"p.peek_kind()", ctx)})`);
+    for let mut i = 0; i < branches.len(); i += 1 {
+        parts.push(`(${render_branch_cond(&branches[i], &"p.peek_kind()", ctx)})`);
     }
     return Option::Some(GroupAdmits {
         condition: parts.join(" || "),
-        gated: any_alt_gated(&groups, alts, ctx),
+        gated: any_alt_gated(&branches, ctx),
         expected: first_sets_union(&first_sets),
     });
 }
@@ -6254,21 +6255,46 @@ fn is_decision_fallback(b: &DecisionBranch) -> bool {
     return b.test matches { Always } && b.gate.is_empty();
 }
 
+/// Branches that all admit everything are one branch, not a chain of arms only
+/// the first of which is reachable — a wildcard-led alternative and an empty
+/// one both do. Their alternatives share the branch and the scan lengths pick
+/// between them, which is what a branch holding several always meant.
 fn fallback_last(branches: &List<DecisionBranch>) -> List<DecisionBranch> {
     let mut out: List<DecisionBranch> = [];
-    let mut fallback: List<DecisionBranch> = [];
+    let mut fallback_alts: List<i32> = [];
     for let b of branches {
         if is_decision_fallback(b) {
-            fallback.push(*b);
+            for let a of &b.alts {
+                fallback_alts.push(*a);
+            }
         } else {
             out.push(*b);
         }
     }
-    assert fallback.len() <= 1, "a group's partition has at most one branch admitting everything";
-    for let b of &fallback {
-        out.push(*b);
+    if !fallback_alts.is_empty() {
+        out.push(DecisionBranch { test: BranchTest::Always, gate: "", alts: fallback_alts.sorted() });
     }
     return out;
+}
+
+/// The one place a partition becomes emitted branches. The dispatch, the scan
+/// and every caller deciding whether to enter the group read this list, so a
+/// branch cannot admit one thing in one of them and something else in another.
+fn decision_branches(
+    alts: &List<Alternative>,
+    groups: &List<List<i32>>,
+    first_sets: &List<List<String>>,
+    ctx: &mut GenContext,
+) -> List<DecisionBranch> {
+    let mut branches: List<DecisionBranch> = [];
+    for let group of groups {
+        branches.push(DecisionBranch {
+            test: branch_test_of(&group_branch_kinds(group, first_sets, alts)),
+            gate: group_gate(group, alts, ctx),
+            alts: *group,
+        });
+    }
+    return fallback_last(&branches);
 }
 
 fn render_branch_cond(b: &DecisionBranch, kind_expr: &String, ctx: &mut GenContext) -> String {
@@ -6304,16 +6330,8 @@ fn group_decision(
     ctx: &mut GenContext,
 ) -> GroupDecision {
     let [first_sets, groups] = group_partition(alts, kind, empty_alt_admits, ctx);
-    let mut branches: List<DecisionBranch> = [];
-    for let group of &groups {
-        branches.push(DecisionBranch {
-            test: branch_test_of(&group_branch_kinds(group, &first_sets, alts)),
-            gate: group_gate(group, alts, ctx),
-            alts: *group,
-        });
-    }
     return GroupDecision {
-        branches: fallback_last(&branches),
+        branches: decision_branches(alts, &groups, &first_sets, ctx),
         expected: first_sets_union(&first_sets),
     };
 }
@@ -6575,7 +6593,7 @@ variant GroupBranchKind {
 /// the dispatch has nothing left to test: it commits to the winner.
 fn gen_group_dispatch(
     w: &mut CodeWriter,
-    groups: &List<List<i32>>,
+    branches: &List<DecisionBranch>,
     first_sets: &List<List<String>>,
     alts: &List<Alternative>,
     g_op_alts: &List<AltBody>,
@@ -6589,9 +6607,9 @@ fn gen_group_dispatch(
     if decided matches { Some(_) } {
         assert entry matches { Guaranteed }, "gen_group_dispatch: a decided dispatch commits, so it has no arm left to report or break in";
         let mut order: List<i32> = [];
-        for let group of groups {
-            let branch_order = branch_emit_order(group, alts, ctx);
-            assert group.len() == 1 || group_all_scannable(&branch_order, alts, kind, ctx), UNSCANNABLE_ALT;
+        for let b of branches {
+            let branch_order = branch_emit_order(&b.alts, alts, ctx);
+            assert b.alts.len() == 1 || group_all_scannable(&branch_order, alts, kind, ctx), UNSCANNABLE_ALT;
             for let idx of branch_order {
                 order.push(idx);
             }
@@ -6599,32 +6617,29 @@ fn gen_group_dispatch(
         gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &order, kind, ctx, name_counts, decided);
         return;
     }
-    // A gated alternative needs a condition of its own, so it takes the last
-    // branch's `else` away and brings the report back with it: a false
-    // predicate must not land in the arm meant for the alternative it excludes.
-    let gated = any_alt_gated(groups, alts, ctx);
-    let report = gated || entry matches { Required };
+    // A trailing branch that admits everything is the `else`, and there is
+    // nothing left for a report to answer: the group matches here whatever the
+    // lookahead is. A gated alternative needs a condition of its own, so it
+    // takes the last branch's `else` away and brings the report back with it —
+    // a false predicate must not land in the arm meant for the alternative it
+    // excludes.
+    let ends_in_fallback = branches.len() > 1 && is_decision_fallback(&branches[branches.len() - 1]);
+    let report = !ends_in_fallback && (any_alt_gated(branches, ctx) || entry matches { Required });
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let ${grp_var} = p.peek_kind();`);
 
-    for let mut g = 0; g < groups.len(); g += 1 {
-        let group = &groups[g];
+    for let mut g = 0; g < branches.len(); g += 1 {
         // Only a branch that has one before it can drop its condition: the
         // first is what decides whether the group is entered at all.
-        let last_takes_rest = !report && g > 0 && g == groups.len() - 1;
-        let cond = if last_takes_rest {
-            String::new();
-        } else {
-            group_branch_test(group, first_sets, alts, &grp_var, ctx);
-        };
+        let last_takes_rest = !report && g > 0 && g == branches.len() - 1;
         if g == 0 {
-            w.begin(&`if ${cond}`);
+            w.begin(&`if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
         } else if last_takes_rest {
             w.else_begin(&"else");
         } else {
-            w.else_begin(&`else if ${cond}`);
+            w.else_begin(&`else if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
         }
-        gen_group_branch_body(w, group, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
+        gen_group_branch_body(w, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
     }
     if report {
         let expected_ref = sync_set_ref(ctx, &first_sets_union(first_sets));
@@ -6632,19 +6647,6 @@ fn gen_group_dispatch(
         w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     }
     w.end();
-}
-
-/// One branch of a dispatch: its lookahead test, narrowed by the gate a lone
-/// alternative contributes.
-fn group_branch_test(
-    group: &List<i32>,
-    first_sets: &List<List<String>>,
-    alts: &List<Alternative>,
-    kind_expr: &String,
-    ctx: &mut GenContext,
-) -> String {
-    let kinds = group_branch_kinds(group, first_sets, alts);
-    return `${ctx.kind_check_str(&kinds, kind_expr)}${group_gate(group, alts, ctx)}`;
 }
 
 /// The union of a dispatch's branches, the expected set its no-match reports.
@@ -6770,7 +6772,7 @@ fn gen_general_group(
     let [first_sets, groups] = group_partition(alts, GroupBranchKind::General, empty_alt_admits, ctx);
     gen_group_dispatch(
         w,
-        &groups,
+        &decision_branches(alts, &groups, &first_sets, ctx),
         &first_sets,
         alts,
         g_op_alts,
@@ -6801,7 +6803,7 @@ fn gen_rule_ref_group(
     let [first_sets, groups] = group_partition(alts, GroupBranchKind::RuleRef, &null, ctx);
     gen_group_dispatch(
         w,
-        &groups,
+        &decision_branches(alts, &groups, &first_sets, ctx),
         &first_sets,
         alts,
         g_op_alts,

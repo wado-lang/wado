@@ -1426,6 +1426,44 @@ C : 'c' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ";
 
+// A group whose empty alternative is admitted by nothing statically known:
+// `r` is the whole rule, so what follows the group is the caller's FOLLOW.
+global UNDECIDED_EMPTY_ALT_G4: String = "
+grammar T;
+r : ( A | | B ) ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// Both a wildcard-led alternative and an empty one admit every lookahead.
+global WILDCARD_AND_EMPTY_ALT_G4: String = "
+grammar T;
+r : ( A | . | ) ;
+A : 'a' ;
+B : 'b' ;
+";
+
+test "an undecided dispatch keeps every alternative reachable" {
+    // The chain that is not handed a decision built its own conditions, so the
+    // empty alternative's absent first set rendered as `true` there and left
+    // `B` behind a test that can never fail.
+    let mut g = parse(UNDECIDED_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
+    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+}
+
+test "two alternatives admitting everything share one branch" {
+    // A wildcard alternative and an empty one both admit every lookahead. They
+    // are one branch whose winner the scan lengths pick, not two chain arms —
+    // the second of which could never be reached.
+    let mut g = parse(WILDCARD_AND_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
+    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+}
+
 test "dispatch branches sharing a sub-dispatch are emitted once" {
     let mut g = parse(SHARED_SUBDISPATCH_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
