@@ -3206,16 +3206,20 @@ fn alt_is_bare_empty(alt: &Alternative, ctx: &GenContext) -> bool {
     return alt.elements.is_empty() && !alt_has_gate(alt, ctx);
 }
 
-/// The admit set of a group's empty alternative, or `null` where no
-/// alternative is empty. An empty alternative has no first set to be selected
-/// by; what selects it is what may follow the group, which is `outer_follow`
-/// — itself empty exactly where the suffix is nullable and the answer belongs
-/// to the caller.
+/// The admit set of a group's empty alternative, or `null` where there is
+/// nothing to write: no alternative is empty, or the suffix is nullable and
+/// what may follow the group belongs to the caller. An empty alternative has
+/// no first set to be selected by; what selects it is `outer_follow`, and
+/// where that is unknown it admits whatever the branches before it did not —
+/// which is the empty first set it already has.
 pub fn group_empty_alt_admits(
     alts: &List<Alternative>,
     outer_follow: &List<String>,
     ctx: &GenContext,
 ) -> Option<List<String>> {
+    if outer_follow.is_empty() {
+        return null;
+    }
     for let alt of alts {
         if alt_is_bare_empty(alt, ctx) {
             return Option::<List<String>>::Some(*outer_follow);
@@ -3238,6 +3242,7 @@ pub fn apply_empty_alt_admits(
     } else {
         return;
     };
+    assert !set.is_empty(), "an admit set that admits nothing is `null`, not an empty set";
     for let mut i = 0; i < alts.len(); i += 1 {
         if alt_is_bare_empty(&alts[i], ctx) {
             first_sets[i] = *set;

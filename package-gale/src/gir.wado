@@ -837,19 +837,12 @@ pub struct GroupOp {
     /// it. For single-alt groups this is `MultiAltDispatch::Direct` with
     /// one branch.
     pub dispatch: MultiAltDispatch,
-    /// The admit set of an empty alternative: what may follow the group
-    /// inside its own alternative, since an empty alternative has no first
-    /// set of its own to be selected by.
-    ///
-    /// * `null` — no alternative is empty, and there is nothing to admit.
-    /// * `Some([])` — an empty alternative whose suffix is nullable, so the
-    ///   answer is the caller's FOLLOW and not statically known: it admits
-    ///   whatever the branches before it did not.
-    /// * `Some(set)` — admitted by exactly `set`.
-    ///
-    /// Three states because an empty list would otherwise mean both "no empty
-    /// alternative" and "admits anything" — the fold that rendered an absent
-    /// first set as an unconditional test and killed every later branch.
+    /// What admits an empty alternative — what may follow the group inside its
+    /// own alternative, since an empty alternative has no first set of its own
+    /// to be selected by. `Some(set)` is never empty; `null` is every case
+    /// with nothing to write: no alternative is empty, or the suffix is
+    /// nullable and the answer is the caller's FOLLOW, where the alternative
+    /// admits whatever the branches before it did not.
     pub empty_alt_admits: Option<List<String>>,
 }
 

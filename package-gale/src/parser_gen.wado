@@ -3147,7 +3147,9 @@ fn gen_alt_dispatch(
     }
     let branches = direct_dispatch_branches(&dd);
     assert !branches.is_empty(), "a Direct dispatch decides between alternatives, so it has branches";
-    w.line(&"let _gk = p.peek_kind();");
+    if decision_reads_lookahead(&branches) {
+        w.line(&"let _gk = p.peek_kind();");
+    }
     for let mut i = 0; i < branches.len(); i += 1 {
         open_decision_branch(w, &branches, i, &"_gk", ctx);
         let picked = &branches[i].alts;
