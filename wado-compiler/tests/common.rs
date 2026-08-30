@@ -878,6 +878,50 @@ pub fn compile_source_with_opts(
         .map_err(|_: CompileFailure| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
+/// Compile `source` at `-O2` and return the unparsed WIR of the one function
+/// whose header starts with `fn_header`, up to the next top-level `fn`.
+pub fn wir_function_body(path: &std::path::Path, source: &str, fn_header: &str) -> String {
+    let options = wado_compiler::CompilerOptions {
+        opt_level: OptLevel::O2,
+        retain_wir: true,
+        ..Default::default()
+    };
+    let result = compile_source_with_compiler_options(path, source, options)
+        .expect("compilation should succeed");
+    let wir_package = result.wir_package.as_ref().expect("wir retained");
+    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
+
+    let start = wir_text
+        .find(fn_header)
+        .unwrap_or_else(|| panic!("{fn_header} in WIR"));
+    let rest = &wir_text[start..];
+    let end = rest[1..].find("\nfn ").map_or(rest.len(), |i| i + 1);
+    rest[..end].to_string()
+}
+
+/// Assert that `body` pushes into `dst` by moving the element rather than
+/// copying it, and that nothing in it deep-copies more than the one element the
+/// iterator itself yields.
+///
+/// A `!body.contains("array_copy")` in place of this only holds while the
+/// iterator's `next` stays out of line: inlining brings that copy — which value
+/// semantics requires — into the body under test.
+pub fn assert_pushes_by_move(body: &str, dst: &str) {
+    let store = body
+        .lines()
+        .find(|l| l.contains("array_set") && l.contains(&format!("{dst}.repr")))
+        .unwrap_or_else(|| panic!("a push into `{dst}`:\n{body}"));
+    assert!(
+        !store.contains("struct.new") && !store.contains("array_copy"),
+        "the element the iterator already copied must move into `{dst}`:\n{store}"
+    );
+    let copies = body.matches("array_copy").count();
+    assert!(
+        copies <= 1,
+        "only the iterator's own copy of the element may remain, found {copies}:\n{body}"
+    );
+}
+
 /// Compile source code with full compiler options (including WIR backend flag)
 pub fn compile_source_with_compiler_options(
     path: &std::path::Path,

@@ -5,8 +5,6 @@
 
 use std::path::Path;
 
-use wado_compiler::{CompilerOptions, OptLevel};
-
 const SOURCE: &str = r#"
 struct Simple { name: String, ids: List<i32> }
 struct Multi { name: String, alts: List<String> }
@@ -29,28 +27,13 @@ export fn run() {
 "#;
 
 fn walk_body() -> String {
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        retain_wir: true,
-        ..Default::default()
-    };
-    let result = crate::common::compile_source_with_compiler_options(
-        Path::new("match_place_scrutinee_test.wado"),
-        SOURCE,
-        options,
-    )
-    .expect("compilation should succeed");
-    let wir_package = result.wir_package.as_ref().expect("wir retained");
-    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
-
     // No closing quote: `sroa_param` may have left the surviving definition
     // under a `$scalar` clone name, which does not change what is asserted here.
-    let start = wir_text
-        .find("fn \"match_place_scrutinee_test.wado/walk")
-        .expect("walk function in WIR");
-    let rest = &wir_text[start..];
-    let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());
-    rest[..end].to_string()
+    crate::common::wir_function_body(
+        Path::new("match_place_scrutinee_test.wado"),
+        SOURCE,
+        "fn \"match_place_scrutinee_test.wado/walk",
+    )
 }
 
 #[test]

@@ -5,8 +5,6 @@
 
 use std::path::Path;
 
-use wado_compiler::{CompilerOptions, OptLevel};
-
 const SOURCE: &str = r#"
 #[inline(never)]
 fn total(xs: List<i32>, tag: i32) -> i32 {
@@ -25,26 +23,11 @@ export fn run() { assert caller(&[1]) == 8; }
 "#;
 
 fn caller_body() -> String {
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        retain_wir: true,
-        ..Default::default()
-    };
-    let result = crate::common::compile_source_with_compiler_options(
+    crate::common::wir_function_body(
         Path::new("closure_confinement_test.wado"),
         SOURCE,
-        options,
+        "fn \"closure_confinement_test.wado/caller\"",
     )
-    .expect("compilation should succeed");
-    let wir_package = result.wir_package.as_ref().expect("wir retained");
-    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
-
-    let start = wir_text
-        .find("fn \"closure_confinement_test.wado/caller\"")
-        .expect("caller function in WIR");
-    let rest = &wir_text[start..];
-    let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());
-    rest[..end].to_string()
 }
 
 #[test]
