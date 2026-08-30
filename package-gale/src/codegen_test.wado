@@ -1443,6 +1443,17 @@ A : 'a' ;
 B : 'b' ;
 ";
 
+// An LR suffix's group body is walked by the op-only walker, which reads the
+// dispatch lower baked rather than the surface alternatives.
+global OP_WALKER_EMPTY_ALT_G4: String = "
+grammar T;
+e : e ( A x | | B x ) | C ;
+x : C ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+
 test "an undecided dispatch keeps every alternative reachable" {
     // The chain that is not handed a decision built its own conditions, so the
     // empty alternative's absent first set rendered as `true` there and left
@@ -1450,6 +1461,17 @@ test "an undecided dispatch keeps every alternative reachable" {
     let mut g = parse(UNDECIDED_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_r__inner(");
+    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+}
+
+test "the op walker's undecided chain keeps every alternative reachable" {
+    // The op walker reads lower's baked branches, where an alternative no
+    // lookahead selects carries an empty token set — the same absence, and the
+    // same `true`, one emitter further out.
+    let mut g = parse(OP_WALKER_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_e__inner(");
     assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
     assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
 }

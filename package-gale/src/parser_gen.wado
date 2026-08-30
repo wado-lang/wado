@@ -67,6 +67,7 @@ use {
     Rule,
     LrAlt,
     LrDispatchData,
+    DirectDispatch,
     MultiAltDispatch,
     AltBody,
     Op,
@@ -3139,24 +3140,46 @@ fn gen_alt_dispatch(
             return;
         },
     };
-    w.line(&"let _gk = p.peek_kind();");
     let mut all_first: List<String> = [];
-    for let mut i = 0; i < dd.branches.len(); i += 1 {
-        let br = &dd.branches[i];
+    for let br of &dd.branches {
         for let t of &br.tokens {
             all_first.push(*t);
         }
-        let cond = ctx.kind_check_str(&br.tokens, &"_gk");
-        if i == 0 {
-            w.begin(&`if ${cond}`);
-        } else {
-            w.else_begin(&`else if ${cond}`);
-        }
-        gen_ops(w, &alt_by_index(alts, br.alt_index).ops, ctx, nc);
     }
-    w.else_begin(&"else");
-    w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
-    w.end();
+    let branches = direct_dispatch_branches(&dd);
+    w.line(&"let _gk = p.peek_kind();");
+    for let mut i = 0; i < branches.len(); i += 1 {
+        open_decision_branch(w, &branches, i, &"_gk", ctx);
+        let picked = &branches[i].alts;
+        if picked.len() == 1 {
+            gen_ops(w, &alt_by_index(alts, picked[0]).ops, ctx, nc);
+        } else {
+            let winner = gen_scan_winner_tournament(w, picked, scan_alts, ctx, nc);
+            gen_alt_commit(w, alts, picked, &winner, ctx, nc);
+        }
+    }
+    // A trailing branch admitting everything already answers every lookahead,
+    // so the expect-set arm behind it is unreachable.
+    if !is_decision_fallback(&branches[branches.len() - 1]) {
+        w.else_begin(&"else");
+        w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
+    }
+    close_decision_chain(w, &branches);
+}
+
+/// The branches a baked `Direct` dispatch takes, as the one branch type every
+/// chain renders. Lower bakes an empty token set for an alternative no
+/// lookahead selects; that is the chain's fallback, not a test that passes.
+fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
+    let mut branches: List<DecisionBranch> = [];
+    for let br of &dd.branches {
+        branches.push(DecisionBranch {
+            test: branch_test_of(&br.tokens),
+            gate: "",
+            alts: [br.alt_index],
+        });
+    }
+    return fallback_last(&branches);
 }
 
 /// The alternatives a baked dispatch decides between, in the order it emits
@@ -6368,14 +6391,10 @@ fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<GroupDecis
             let mut branches: List<DecisionBranch> = [];
             let mut expected: List<String> = [];
             for let branch of &dd.branches {
-                branches.push(DecisionBranch {
-                    test: branch_test_of(&branch.tokens),
-                    gate: "",
-                    alts: [branch.alt_index],
-                });
                 dedup_append_arr(&mut expected, &branch.tokens);
             }
-            Option::Some(GroupDecision { branches: fallback_last(&branches), expected });
+            branches = direct_dispatch_branches(dd);
+            Option::Some(GroupDecision { branches, expected });
         },
         // The tournament has no lookahead gate of its own: every alternative
         // is a candidate, and the scan lengths decide.
@@ -6489,6 +6508,12 @@ fn open_decision_branch(
         return;
     }
     assert !is_decision_fallback(&branches[i]) || i == branches.len() - 1, "a branch admitting everything is the chain's last, or the ones after it are dead";
+    // The trailing fallback is the `else` it means, not a test that always
+    // passes: one spelling, so the chain reads the way the decision does.
+    if i > 0 && is_decision_fallback(&branches[i]) {
+        w.else_begin(&"else");
+        return;
+    }
     let cond = render_branch_cond(&branches[i], kind_expr, ctx);
     if i == 0 {
         w.begin(&`if ${cond}`);
@@ -6864,9 +6889,10 @@ fn gen_general_alt_parse_and_store(
     ctx.leave_group_body(outer);
 }
 
-/// Returns true iff every alt in `sorted_group` has at least one element
-/// and all its elements are scannable. Used as the precondition for
-/// `gen_general_group_dispatch` (non-RuleRef-only overlapping groups).
+/// Whether every alt in `sorted_group` can be measured by a scan. The
+/// precondition for `gen_general_group_dispatch` (non-RuleRef-only overlapping
+/// groups): a tournament ranks by scan length, so an alt it cannot scan has no
+/// length to rank.
 fn general_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     if sorted_group.len() < 2 {
         return false;
