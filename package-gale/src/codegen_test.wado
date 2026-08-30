@@ -1450,6 +1450,19 @@ A : 'a' ;
 B : 'b' ;
 ";
 
+// `C?` leaves the group's suffix nullable, so what may follow it reaches past
+// the rule into the caller's FOLLOW. The local part (`C`) is a prefix of the
+// answer, not the answer.
+global INEXACT_FOLLOW_EMPTY_ALT_G4: String = "
+grammar T;
+s : r SEMI EOF ;
+r : ( A | | B ) C? ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+SEMI : ';' ;
+";
+
 // A rule's own alternatives are a decision too, and an empty one among them is
 // selected by no lookahead.
 global RULE_LEVEL_EMPTY_ALT_G4: String = "
@@ -1478,6 +1491,19 @@ test "an undecided dispatch keeps every alternative reachable" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_r__inner(");
     assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+}
+
+test "an empty alternative keeps its fallback where the follow set is a prefix" {
+    // A follow set the caller's FOLLOW still extends names only part of what
+    // selects the empty alternative. Written in as the whole set, it rejects
+    // every lookahead the caller could supply — here `;`, a legal parse where
+    // `r` derives nothing.
+    let mut g = parse(INEXACT_FOLLOW_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
+    assert count_substr(&body, &"grp_kind == TK_C") == 0, `a prefix of the follow set became the whole test: ${body}`;
+    assert count_substr(&body, &"no_viable") == 0, `the group can match nothing, so it cannot report: ${body}`;
     assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
 }
 

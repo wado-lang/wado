@@ -1461,6 +1461,7 @@ fn lower_lr_alt_suffix(
         let elem_follow = ctx.compute_call_site_follow(&alt.elements, i);
         let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, i);
         let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, i);
+        let elem_follow_exact = ctx.call_site_follow_is_exact(&alt.elements, i);
         let mut op = lower_op(
             &alt.elements[i],
             &mut name_counts,
@@ -1470,6 +1471,7 @@ fn lower_lr_alt_suffix(
             &elem_follow,
             elem_follow_arg,
             elem_gate,
+            elem_follow_exact,
         );
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
@@ -1878,6 +1880,7 @@ fn lower_scan_element(
     outer_follow: &List<String>,
     follow_arg: FollowArg,
     gate_caller_follow: bool,
+    follow_is_exact: bool = false,
 ) -> ScanElement {
     return match *elem {
         TokenRef(t) => ScanElement::Token(ScanTokenElement { kind: `TK_${t.name}` }),
@@ -1900,6 +1903,7 @@ fn lower_scan_element(
             outer_follow,
             follow_arg,
             gate_caller_follow,
+            follow_is_exact,
         ),
         Repeat(rep) => lower_scan_repeat(
             &rep,
@@ -1911,6 +1915,7 @@ fn lower_scan_element(
             &g,
             ctx,
             outer_follow,
+            follow_is_exact,
             gate_caller_follow,
         ),
     };
@@ -1925,6 +1930,7 @@ fn lower_scan_group(
     g: &GroupElement,
     ctx: &mut GenContext,
     outer_follow: &List<String>,
+    follow_is_exact: bool,
     enclosing_at_tail: bool = true,
 ) -> ScanElement {
     let alts = &g.alternatives;
@@ -1980,7 +1986,7 @@ fn lower_scan_group(
             return lower_simple_cst_scan_group(alts, ctx);
         },
         General => {
-            return lower_general_scan_group(alts, ctx, outer_follow, enclosing_at_tail);
+            return lower_general_scan_group(alts, ctx, outer_follow, follow_is_exact, enclosing_at_tail);
         },
     }
 }
@@ -1989,6 +1995,7 @@ fn lower_general_scan_group(
     alts: &List<Alternative>,
     ctx: &mut GenContext,
     outer_follow: &List<String>,
+    follow_is_exact: bool,
     enclosing_at_tail: bool = true,
 ) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
@@ -2013,7 +2020,7 @@ fn lower_general_scan_group(
             wildcard_indices.push(ai);
         }
     }
-    apply_empty_alt_admits(&mut first_sets, &group_empty_alt_admits(alts, outer_follow, ctx));
+    apply_empty_alt_admits(&mut first_sets, &group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx));
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
@@ -2243,12 +2250,14 @@ fn lower_alt_scan_element(
     // over-count a tail iteration the caller's continuation claims.
     let elem_follow_arg = compute_follow_arg(ctx, alt_elements, i);
     let elem_gate = compute_gate_caller_follow(ctx, alt_elements, i) && enclosing_at_tail;
+    let elem_follow_exact = ctx.call_site_follow_is_exact(alt_elements, i);
     let mut se = lower_scan_element(
         &alt_elements[i],
         ctx,
         &elem_follow,
         elem_follow_arg,
         elem_gate,
+        elem_follow_exact,
     );
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
@@ -2594,6 +2603,7 @@ fn lower_alt_body(
         // context it needs.
         let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, i);
         let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, i);
+        let elem_follow_exact = ctx.call_site_follow_is_exact(&alt.elements, i);
         let mut op = lower_op(
             elem,
             &mut name_counts,
@@ -2603,6 +2613,7 @@ fn lower_alt_body(
             &elem_follow,
             elem_follow_arg,
             elem_gate,
+            elem_follow_exact,
         );
         // For Repeat ops, replace `caller_follow_first` with the basic
         // first set of the surrounding suffix. `compute_call_site_follow`
@@ -2666,6 +2677,7 @@ fn lower_op(
     outer_follow: &List<String>,
     follow_arg: FollowArg,
     gate_caller_follow: bool,
+    follow_is_exact: bool = false,
 ) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
@@ -2719,6 +2731,7 @@ fn lower_op(
             ctx,
             group_counter,
             outer_follow,
+            follow_is_exact,
             gate_caller_follow,
         ),
         Label(lab) => lower_label_op(
@@ -2730,6 +2743,7 @@ fn lower_op(
             outer_follow,
             follow_arg,
             gate_caller_follow,
+            follow_is_exact,
         ),
     };
 }
@@ -2760,6 +2774,7 @@ fn lower_group_op(
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
+    follow_is_exact: bool,
     enclosing_at_tail: bool = true,
 ) -> Op {
     let alts = &g.alternatives;
@@ -2798,6 +2813,7 @@ fn lower_group_op(
                 ctx,
                 group_counter,
                 outer_follow,
+                follow_is_exact,
                 enclosing_at_tail,
             );
         },
@@ -2918,6 +2934,7 @@ fn lower_single_alt_group(
         // from the inner alt's suffix.
         let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, i);
         let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, i) && enclosing_at_tail;
+        let elem_follow_exact = ctx.call_site_follow_is_exact(&alt.elements, i);
         let mut op = lower_op(
             elem,
             &mut inner_counts,
@@ -2927,6 +2944,7 @@ fn lower_single_alt_group(
             &elem_follow,
             elem_follow_arg,
             elem_gate,
+            elem_follow_exact,
         );
         let mut se = lower_scan_element(
             elem,
@@ -2934,6 +2952,7 @@ fn lower_single_alt_group(
             &elem_follow,
             elem_follow_arg,
             elem_gate,
+            elem_follow_exact,
         );
         // Gate `basic_follow` on either side actually being a Repeat —
         // `first_of_elements_from` walks the suffix and isn't free.
@@ -3216,9 +3235,15 @@ fn alt_is_bare_empty(alt: &Alternative, ctx: &GenContext) -> bool {
 pub fn group_empty_alt_admits(
     alts: &List<Alternative>,
     outer_follow: &List<String>,
+    follow_is_exact: bool,
     ctx: &GenContext,
 ) -> Option<EmptyAltAdmits> {
-    if outer_follow.is_empty() {
+    // A follow set the caller's FOLLOW still extends names only part of what
+    // may select the empty alternative. Writing that part in as the whole set
+    // makes the dispatch reject every lookahead the caller could supply, so an
+    // inexact answer is no answer: the alternative admits whatever the
+    // branches before it did not.
+    if !follow_is_exact || outer_follow.is_empty() {
         return null;
     }
     for let mut i = 0; i < alts.len(); i += 1 {
@@ -3273,6 +3298,7 @@ fn lower_general_group(
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
+    follow_is_exact: bool,
     enclosing_at_tail: bool = true,
 ) -> Op {
     let group_index = *group_counter;
@@ -3311,6 +3337,7 @@ fn lower_general_group(
             // the inner alt's suffix.
             let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, ei);
             let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, ei) && enclosing_at_tail;
+            let elem_follow_exact = ctx.call_site_follow_is_exact(&alt.elements, ei);
             let mut op = lower_op(
                 elem,
                 &mut inner_counts,
@@ -3320,6 +3347,7 @@ fn lower_general_group(
                 &elem_follow,
                 elem_follow_arg,
                 elem_gate,
+                elem_follow_exact,
             );
             let mut se = lower_scan_element(
                 elem,
@@ -3327,6 +3355,7 @@ fn lower_general_group(
                 &elem_follow,
                 elem_follow_arg,
                 elem_gate,
+                elem_follow_exact,
             );
             let op_is_repeat = op matches { Repeat(_) };
             let se_is_repeat = se matches { Repeat(_) };
@@ -3367,7 +3396,7 @@ fn lower_general_group(
         rule: *rule_name,
         site: DiagnosticSite::GeneralGroup(group_index),
     };
-    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, ctx);
+    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
     apply_empty_alt_admits(&mut first_sets, &empty_alt_admits);
     let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
@@ -4148,6 +4177,7 @@ fn lower_label_op(
     outer_follow: &List<String>,
     follow_arg: FollowArg,
     gate_caller_follow: bool,
+    follow_is_exact: bool = false,
 ) -> Op {
     let label_field = dedup_name(&lab.field_name, name_counts);
     let mut inner_counts: List<[String, i32]> = [];
@@ -4165,6 +4195,7 @@ fn lower_label_op(
         outer_follow,
         follow_arg,
         gate_caller_follow,
+        follow_is_exact,
     );
     if lab.list {
         // `name+=elem` outside a Repeat: the outer CST struct stores

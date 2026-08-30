@@ -1407,6 +1407,15 @@ impl GenContext {
     ///   first and return empty. This is the "first-exact deep-nullable
     ///   suffix" soundness invariant — see `CLAUDE.md` "Failed
     ///   Approaches" #3 for the rationale.
+    /// Whether `compute_call_site_follow` at `i` is the whole answer. A
+    /// nullable suffix lets the caller's FOLLOW extend it, and a first-exact
+    /// one still returns a non-empty set there — a prefix, not the answer. A
+    /// decision that reads that prefix as the answer rejects every lookahead
+    /// the caller could still supply, so it has to ask this separately.
+    pub fn call_site_follow_is_exact(&mut self, elements: &List<Element>, i: i32) -> bool {
+        return !self.tail_is_nullable_deep(elements, i + 1);
+    }
+
     pub fn compute_call_site_follow(&mut self, elements: &List<Element>, i: i32) -> List<String> {
         let first = self.first_of_elements_from(elements, i + 1);
         if !self.tail_is_nullable_deep(elements, i + 1) {
