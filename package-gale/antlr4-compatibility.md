@@ -494,15 +494,23 @@ because a bare list would fold two of them together: no alternative is empty;
 an empty one whose suffix is nullable, so the answer is the caller's FOLLOW
 and is not statically known; or an empty one admitted by exactly this set.
 
-A branch of the decision therefore carries what it admits (`BranchTest` —
-`Always`, or `Kinds`, never empty) instead of a rendered test. An empty token
-list used to mean both "admits every lookahead" (a wildcard alternative) and
-"has no first set of its own" (an empty alternative), and both rendered as
-`true`: an unconditional arm in the middle of the chain, with every later
-alternative behind a test that can never fail. `( A | | B )` never reached
-`B`. A branch that admits everything and is gated by nothing is the chain's
-`else` and is emitted last (`fallback_last`), which `open_decision_branch`
-asserts.
+A branch of the decision therefore carries what it admits — `Admits`, one of
+`Everything`, `Untestable`, or `Kinds` (never empty) — instead of a rendered
+test, and `kind_check_str` refuses an empty set rather than choosing for the
+caller. An empty token list used to mean both "admits every lookahead" (a
+wildcard alternative) and "has no first set of its own" (an empty
+alternative), and both rendered as `true`: an unconditional arm in the middle
+of the chain, with every later alternative behind a test that can never fail.
+`( A | | B )` never reached `B`.
+
+`Everything` and `Untestable` still render the same `true` and are still not
+the same answer: they differ in whether the arm may keep its place. A wildcard
+admits every token exactly, so the alternatives it shadows are ANTLR4's
+lowest-viable-alternative rule working — `. EOF | A EOF` takes the wildcard on
+`a`. An untestable arm shadows by default rather than by decision, so it is
+the chain's `else` and is emitted last (`fallback_last`), which
+`open_decision_branch` asserts. Ordering the two alike is what briefly cost
+the wildcard its index.
 
 Where the follow set overlaps another alternative's first set the lookahead
 cannot separate them and they share a tournament branch, an empty alternative

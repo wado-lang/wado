@@ -41,7 +41,10 @@ use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use {
     Admits,
     GenContext,
+    admits_is_untestable,
     admits_or_everything,
+    admits_or_untestable,
+    admits_tests_nothing,
     is_nullable,
     sets_overlap,
     union_kind_arrays,
@@ -1877,19 +1880,12 @@ fn scan_decision_branches(ge: &ScanGroupElement) -> List<DecisionBranch> {
     for let group of &groups {
         // A wildcard alternative matches any token, so its branch tests
         // nothing and the scan lengths decide inside it.
-        let union_first: List<String> = if group.iter_ref().any(|idx: &i32| is_wildcard_alt(
-            &ge.wildcard_alt_indices,
-            *idx,
-        )) {
-            [];
+        let admits = if group.iter_ref().any(|idx: &i32| is_wildcard_alt(&ge.wildcard_alt_indices, *idx)) {
+            Admits::Everything;
         } else {
-            group_first_union(group, &ge.alt_first_sets);
+            admits_or_untestable(&group_first_union(group, &ge.alt_first_sets));
         };
-        branches.push(DecisionBranch {
-            test: branch_test_of(&union_first),
-            gate: "",
-            alts: *group,
-        });
+        branches.push(DecisionBranch { test: admits, gate: "", alts: *group });
     }
     return fallback_last(&branches);
 }
@@ -2653,16 +2649,19 @@ fn gen_multi_alt_body(
 
     w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
-    let mut admits_everything: List<bool> = [];
+    let mut untestable: List<bool> = [];
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt = &rule.alternatives[non_lr_indices[i]];
         // `alt_has_gate` asks without registering; `alt_initial_gate_conditions`
         // marks the predicate gated, which is the arm loop's to do once.
+        // A wildcard-led alternative has no condition either, and is not
+        // untestable: it admits every token exactly, so shadowing the
+        // alternatives after it is the lowest-viable-alternative rule.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
-        admits_everything.push(no_cond && !alt_has_gate(alt, ctx));
+        untestable.push(no_cond && !alt_is_wildcard_led(alt) && !alt_has_gate(alt, ctx));
     }
 
-    for let slot of &arms_fallback_last(&admits_everything) {
+    for let slot of &arms_fallback_last(&untestable) {
         let i = *slot;
         let alt_index = non_lr_indices[i];
         let alt = &rule.alternatives[alt_index];
@@ -3196,7 +3195,9 @@ fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
     let mut branches: List<DecisionBranch> = [];
     for let br of &dd.branches {
         branches.push(DecisionBranch {
-            test: branch_test_of(&br.tokens),
+            // Disjoint first sets, so no branch here is a wildcard's: an empty
+            // token set is an alternative the lookahead cannot decide.
+            test: admits_or_untestable(&br.tokens),
             gate: "",
             alts: [br.alt_index],
         });
@@ -5773,13 +5774,14 @@ fn gen_rep_break_with_recovery(
     let recovery = rep_recovery_expr(rep_op, ctx.emit_follow());
     if let Some(call) = recovery {
         if loop_first.is_empty() {
-            // No FIRST tokens to gate the speculative re-parse on. An empty
-            // set makes `first_check_str` emit the constant `true`, so the
-            // recovery would fire on *any* lookahead and could record a
-            // spurious deeper error that hijacks the reported position. Fall
-            // back to the plain break. (Not reachable today: recovery is only
-            // emitted for a `body_scannable` `LeafRuleCall`, and a scannable
-            // RuleRef has a non-empty FIRST — this guards the invariant.)
+            // No FIRST tokens to gate the speculative re-parse on, and no
+            // reading of that emptiness makes one: gating on nothing fires the
+            // recovery on any lookahead and can record a spurious deeper error
+            // that hijacks the reported position, and gating on `false` never
+            // probes at all. Fall back to the plain break. (Not reachable
+            // today: recovery is only emitted for a `body_scannable`
+            // `LeafRuleCall`, and a scannable RuleRef has a non-empty FIRST —
+            // this guards the invariant.)
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             return;
         }
@@ -6272,20 +6274,12 @@ struct DecisionBranch {
     alts: List<i32>,
 }
 
-/// The branch a set of admitted kinds makes. An empty set here is a wildcard's
-/// absent first set, or an empty alternative whose follow is the caller's:
-/// either way nothing narrows the branch, and `fallback_last` puts it where an
-/// arm that narrows nothing belongs.
-fn branch_test_of(kinds: &List<String>) -> Admits {
-    return admits_or_everything(kinds);
-}
-
-/// A branch that admits everything and is gated by nothing decides nothing the
+/// A branch the lookahead cannot decide, gated by nothing, decides nothing the
 /// branches after it could still decide, so it is the chain's `else`. Moving it
 /// there is what keeps a later alternative from being emitted behind a test
 /// that can never fail. A gated one can decline, so it stays where it is.
 fn is_decision_fallback(b: &DecisionBranch) -> bool {
-    return b.test matches { Everything } && b.gate.is_empty();
+    return admits_is_untestable(&b.test) && b.gate.is_empty();
 }
 
 /// Reorder arms so the ones admitting everything come last, keeping the rest
@@ -6326,7 +6320,7 @@ fn fallback_last(branches: &List<DecisionBranch>) -> List<DecisionBranch> {
         }
     }
     if !fallback_alts.is_empty() {
-        out.push(DecisionBranch { test: Admits::Everything, gate: "", alts: fallback_alts.sorted() });
+        out.push(DecisionBranch { test: Admits::Untestable, gate: "", alts: fallback_alts.sorted() });
     }
     return out;
 }
@@ -6343,7 +6337,7 @@ fn decision_branches(
     let mut branches: List<DecisionBranch> = [];
     for let group of groups {
         branches.push(DecisionBranch {
-            test: branch_test_of(&group_branch_kinds(group, first_sets, alts)),
+            test: group_branch_admits(group, first_sets, alts),
             gate: group_gate(group, alts, ctx),
             alts: *group,
         });
@@ -6502,7 +6496,7 @@ fn gen_decision_measure(
 /// lengths are the whole decision.
 fn decision_is_unconditional(branches: &List<DecisionBranch>) -> bool {
     assert !branches.is_empty(), "a group's partition has at least one branch";
-    return branches.len() == 1 && branches[0].test matches { Everything } && branches[0].gate.is_empty();
+    return branches.len() == 1 && admits_tests_nothing(&branches[0].test) && branches[0].gate.is_empty();
 }
 
 /// Whether any branch's test reads the lookahead. A chain whose every branch
@@ -6714,13 +6708,14 @@ fn group_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List
     return union_first;
 }
 
-/// The token kinds a branch admits. Empty for a wildcard-led alternative,
-/// which admits every one of them — `branch_test_of` is what reads that.
-fn group_branch_kinds(group: &List<i32>, first_sets: &List<List<String>>, alts: &List<Alternative>) -> List<String> {
+/// What a branch admits. A wildcard-led alternative admits every token and
+/// says so exactly, which is why it keeps its place; a union that comes out
+/// empty is an alternative the lookahead cannot decide, which does not.
+fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, alts: &List<Alternative>) -> Admits {
     if group.iter_ref().any(|idx: &i32| alt_is_wildcard_led(&alts[*idx])) {
-        return [] as List<String>;
+        return Admits::Everything;
     }
-    return group_first_union(group, first_sets);
+    return admits_or_untestable(&group_first_union(group, first_sets));
 }
 
 /// The gate a lone alternative's alt-initial predicates contribute, registered
@@ -7459,16 +7454,18 @@ fn gen_multi_alt_body_alt(
 ) {
     w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
-    // Same rule as the token-led sibling: an arm no lookahead narrows admits
-    // everything, and the arms are independent `if`s that return, so placed
-    // early it is what every later alternative is dead behind.
-    let mut admits_everything: List<bool> = [];
+    // Same rule as the token-led sibling: the arms are independent `if`s that
+    // return, so one the lookahead cannot decide is what every later
+    // alternative would be dead behind. A wildcard-led group decides — it
+    // admits every token exactly — and keeps its place.
+    let mut untestable: List<bool> = [];
     for let group of groups {
         let ungated = group.len() != 1 || !alt_has_gate(&rule.alternatives[non_lr_indices[group[0]]], ctx);
-        admits_everything.push(group_first_union(group, first_sets).is_empty() && ungated);
+        let admits = group_branch_admits(group, first_sets, &rule.alternatives);
+        untestable.push(admits_is_untestable(&admits) && ungated);
     }
 
-    for let slot of &arms_fallback_last(&admits_everything) {
+    for let slot of &arms_fallback_last(&untestable) {
         let g = *slot;
         let group = &groups[g];
         let union_first = group_first_union(group, first_sets);

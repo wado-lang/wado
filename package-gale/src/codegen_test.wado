@@ -1472,6 +1472,17 @@ A : 'a' ;
 B : 'b' ;
 ";
 
+// A wildcard-led alternative admits every token *exactly*, and its index still
+// competes: ANTLR4 takes the lowest viable alternative, so `. EOF` wins over
+// `A EOF` on `a`. Unlike an empty alternative, it must not be reordered.
+global WILDCARD_FIRST_ALT_G4: String = "
+grammar T;
+s : . EOF # Wild
+  | A EOF # Named
+  ;
+A : 'a' ;
+";
+
 // A rule's own alternatives are a decision too, and an empty one among them is
 // selected by no lookahead.
 global RULE_LEVEL_EMPTY_ALT_G4: String = "
@@ -1526,6 +1537,20 @@ test "the overlap rule dispatch orders its fallback last too" {
     assert empty_arm > a_arm, `the empty alternative runs before A can be tested: ${body}`;
 }
 
+test "a wildcard alternative keeps its index against a narrower one" {
+    // It admits everything and shadowing what follows is the correct answer
+    // here — lowest viable alternative wins. Only an alternative no lookahead
+    // can test belongs at the end.
+    let mut g = parse(WILDCARD_FIRST_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    // A rule's unconditional arm is a bare `scope:` block, not `if true`.
+    let wild_arm = find_index(&body, &"scope:");
+    let named_arm = find_index(&body, &"TK_A");
+    assert wild_arm >= 0, `the wildcard alternative lost its arm: ${body}`;
+    assert named_arm < 0 || wild_arm < named_arm, `the wildcard alternative was moved past a later one: ${body}`;
+}
+
 test "a rule's empty alternative does not shadow the ones after it" {
     // A rule's arms are guarded `if`s that return, so an unconditional one is
     // the same dead-code hazard as an `else if true` in a group's chain: it
@@ -1550,19 +1575,19 @@ test "the op walker's undecided chain keeps every alternative reachable" {
     assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
 }
 
-test "two alternatives admitting everything share one branch" {
-    // A wildcard alternative and an empty one both admit every lookahead. They
-    // are one branch whose winner the scan lengths pick, not two chain arms —
-    // the second of which could never be reached.
+test "a wildcard branch precedes the arm the lookahead cannot decide" {
+    // `( A | . | )`: the wildcard overlaps `A`, so they share a branch the scan
+    // lengths decide, and that branch admits every token — exactly, so it keeps
+    // its index. The empty alternative admits nothing testable, so it is the
+    // trailing arm rather than one placed among the others.
     let mut g = parse(WILDCARD_AND_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_r__inner(");
     assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
-    // One branch admitting everything is the whole decision: nothing to test,
-    // no lookahead to bind, and no arm left for a report to reach.
-    assert count_substr(&body, &"if true") == 0, `a decision that tests nothing must emit no chain: ${body}`;
-    assert count_substr(&body, &"no_viable") == 0, `the report is unreachable behind it: ${body}`;
-    assert count_substr(&body, &"p.peek_kind()") == 0, `the lookahead binding is unused: ${body}`;
+    let wild_arm = find_index(&body, &"if true");
+    let empty_arm = find_index(&body, &"} else {");
+    assert wild_arm >= 0, `the wildcard branch lost its arm: ${body}`;
+    assert empty_arm > wild_arm, `the untestable arm must trail the one that decides: ${body}`;
 }
 
 test "dispatch branches sharing a sub-dispatch are emitted once" {

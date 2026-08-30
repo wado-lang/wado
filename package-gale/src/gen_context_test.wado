@@ -10,7 +10,7 @@ use {
     LabelElement,
     Visibility,
 } from "./ir.wado";
-use { GenContext, admits_or_everything, admits_or_nothing } from "./gen_context.wado";
+use { GenContext, admits_is_untestable, admits_or_everything, admits_or_untestable } from "./gen_context.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
@@ -62,17 +62,22 @@ test "an empty set is not a condition until the site says what it admits" {
     // the site does.
     let mut ctx = mk_ctx();
     let empty: List<String> = [];
-    let nothing_narrows = ctx.admits_check_str(&admits_or_everything(&empty), &"k");
-    assert nothing_narrows == "true", `expected "true" got "${nothing_narrows}"`;
-    let nothing_selects = ctx.admits_check_str(&admits_or_nothing(&empty), &"k");
-    assert nothing_selects == "false", `expected "false" got "${nothing_selects}"`;
+    // Both render `true`; they are still not the same answer. One admits every
+    // token and may keep its place among the arms, the other cannot be decided
+    // and belongs after every arm that can.
+    let exact = admits_or_everything(&empty);
+    let undecidable = admits_or_untestable(&empty);
+    assert ctx.admits_check_str(&exact, &"k") == "true", "a wildcard admits every token";
+    assert ctx.admits_check_str(&undecidable, &"k") == "true", "an untestable arm has no test to render";
+    assert !admits_is_untestable(&exact), "a wildcard decides; ordering it last loses the lowest-alternative rule";
+    assert admits_is_untestable(&undecidable), "an arm with no first set does not decide";
 }
 
 test "a non-empty set renders the same either way" {
     let mut ctx = mk_ctx();
     let toks: List<String> = ["TK_FOO"];
     let narrows = ctx.admits_check_str(&admits_or_everything(&toks), &"k");
-    let selects = ctx.admits_check_str(&admits_or_nothing(&toks), &"k");
+    let selects = ctx.admits_check_str(&admits_or_untestable(&toks), &"k");
     assert narrows == "k == TK_FOO", `expected "k == TK_FOO", got "${narrows}"`;
     assert selects == narrows, "which reading an empty set takes cannot change a non-empty one";
 }
@@ -186,10 +191,14 @@ test "kind_sets: returns entries in insertion order" {
 }
 
 
-test "kind_negate_check_str: empty set returns 'false'" {
+test "kind_negate_check_str: an exclusion set that excludes nothing is not a condition" {
+    // This pinned `"false"` — excluding nothing rendered as matching nothing,
+    // where the truthful reading is that nothing is excluded. The answer was
+    // wrong and invisible: the only caller seeds `TK_EOF`, so the branch never
+    // ran. A renderer that answers for its callers hides exactly this.
     let mut ctx = mk_ctx();
-    let empty: List<String> = [];
-    assert ctx.kind_negate_check_str(&empty, &"k") == "false";
+    let toks: List<String> = ["TK_FOO", "TK_BAR"];
+    assert ctx.kind_negate_check_str(&toks, &"k") == "!_kind_set_0(k)";
 }
 
 test "kind_negate_check_str: single token uses '!='" {

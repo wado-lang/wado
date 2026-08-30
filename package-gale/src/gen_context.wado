@@ -56,18 +56,39 @@ impl RuleCaptures {
 
 global NO_CAPTURES: RuleCaptures = RuleCaptures {};
 
-/// What a lookahead test admits. A `List<String>` cannot say it: the empty set
-/// reads as "everything narrows to nothing, so admit all" at a wildcard branch
-/// and as "nothing selects this" at an alternative with no first set, and a
-/// renderer that answers for both has to guess. It guessed `true`, and the
-/// alternatives after the guess became unreachable — six times, in six
-/// emitters. So the case is named where it is known, not where it is rendered.
+/// What a lookahead test admits. A `List<String>` cannot say it: an empty set
+/// is a wildcard's first set at one site and an empty alternative's absent one
+/// at another, and a renderer that answers for both has to guess. It guessed
+/// `true`, and the alternatives after the guess became unreachable — six
+/// times, in six emitters. So the case is named where it is known.
+///
+/// `Everything` and `Untestable` both render `true` and are still not the same
+/// answer, which is the distinction the first attempt at this type missed:
+/// they differ in whether the arm may keep its place. A wildcard admits every
+/// token *exactly*, so shadowing the alternatives after it is ANTLR4's
+/// lowest-viable-alternative rule working correctly. An untestable arm shadows
+/// them by default rather than by decision, so it goes last.
 pub variant Admits {
+    /// Admits every token, and that is the whole truth about it.
     Everything,
-    Nothing,
-    /// Never empty: an empty set is `Everything` or `Nothing`, and which one
-    /// is not a property of the set.
+    /// Cannot be decided from the lookahead: an alternative whose first set is
+    /// absent because it matches nothing, and whose viability rests on what
+    /// follows the decision. Belongs after every arm that can be tested.
+    Untestable,
+    /// Never empty: an empty set is `Everything` or `Untestable`, and which
+    /// one is not a property of the set.
     Kinds(List<String>),
+}
+
+/// Whether this arm decides nothing the arms after it could still decide, so
+/// that placing it among them is what makes them dead code.
+pub fn admits_is_untestable(admits: &Admits) -> bool {
+    return *admits matches { Untestable };
+}
+
+/// Whether the arm renders no test at all, either way.
+pub fn admits_tests_nothing(admits: &Admits) -> bool {
+    return !*admits matches { Kinds(_) };
 }
 
 /// A set that narrows the lookahead, where having none to narrow by means
@@ -80,12 +101,11 @@ pub fn admits_or_everything(kinds: &List<String>) -> Admits {
     return Admits::Kinds(*kinds);
 }
 
-/// A set that selects, where having none to select by means never selected —
-/// an alternative whose first set is absent, which belongs after everything a
-/// lookahead can pick rather than ahead of it.
-pub fn admits_or_nothing(kinds: &List<String>) -> Admits {
+/// A set that selects, where having none to select by means the lookahead
+/// cannot decide this arm at all.
+pub fn admits_or_untestable(kinds: &List<String>) -> Admits {
     if kinds.is_empty() {
-        return Admits::Nothing;
+        return Admits::Untestable;
     }
     return Admits::Kinds(*kinds);
 }
@@ -1910,7 +1930,7 @@ impl GenContext {
     pub fn admits_check_str(&mut self, admits: &Admits, expr: &String) -> String {
         return match admits {
             Everything => "true",
-            Nothing => "false",
+            Untestable => "true",
             Kinds(kinds) => self.kind_check_str(kinds, expr),
         };
     }
@@ -2060,9 +2080,12 @@ impl GenContext {
     /// `!_kind_set_<id>(<expr>)` for ≥2 tokens, else
     /// `<expr> != TK_X`. Used by non-greedy emit sites.
     pub fn kind_negate_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
-        if tokens.is_empty() {
-            return "false";
-        }
+        // The mirror of `kind_check_str`'s fold, and it took the opposite
+        // default: excluding nothing excludes no token, so the truthful answer
+        // is `true`, and this returned `false`. Its one caller seeds `TK_EOF`,
+        // so the branch was never taken and the wrong answer never showed —
+        // which is the whole reason a renderer must not choose for a caller.
+        assert !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
             return `${*expr} != ${tokens[0]}`;
         }
