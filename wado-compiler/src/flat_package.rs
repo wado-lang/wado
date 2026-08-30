@@ -36,6 +36,11 @@ pub struct FlatPackage {
     /// post-monomorphize synthesis can name a module the way the frontend did.
     pub interner: Rc<RefCell<crate::module_source::ModuleSourceInterner>>,
 
+    /// The effect-dispatch wrappers a resource `#[cm]` call routes through,
+    /// carried past link for the calls that were still generic when the early
+    /// pass rewrote the concrete ones.
+    pub resource_wrappers: crate::synthesis::effect_dispatch::ResourceWrapperIndex,
+
     /// All functions from all modules. Each `TirFunction` carries its own `module_source`.
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
     /// All struct declarations (each carries its own `module_source`)

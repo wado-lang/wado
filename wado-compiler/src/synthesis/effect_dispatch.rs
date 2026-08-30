@@ -2464,16 +2464,49 @@ fn rewrite_call_sites_to_wrappers(
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
 ) {
     let entry_source = project.entry_module_source.clone();
+    let (user_to_wrapper, cm_to_wrappers) = build_wrapper_indexes(project, plans);
+    project.resource_wrappers = cm_to_wrappers.clone();
 
-    // Pre-build one lookup map per call shape. An effect op resolves to a
-    // `Local { path: "<EffectName>" }` call even when it carries `#[cm(…)]`, so
-    // `user_to_wrapper` keys on `(interface_name, op_name)`. A resource method
-    // resolves against its declaring module with `method_info.cm_name` set, so
-    // `cm_to_wrappers` keys on `(decl_module, base_name, cm_name)` plus type args.
+    for module in project.tir_modules.values_mut() {
+        let type_table_rc = module.type_table.clone();
+        let ctx = RewriteCtx {
+            user_to_wrapper: &user_to_wrapper,
+            cm_to_wrappers: &cm_to_wrappers,
+            type_table: type_table_rc,
+            entry_source: &entry_source,
+        };
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if func.is_dispatch_wrapper {
+                continue;
+            }
+            if let Some(body) = &mut func.body {
+                rewrite_calls_in_block(body, &ctx);
+            }
+        }
+    }
+}
+
+/// `(resource_module, base_name, cm_name) → [(type_args, wrapper_name)]`, the
+/// half of the wrapper index a resource call needs. Outlives the pre-cm-binding
+/// pass: a `#[cm]` call in a generic body only names a concrete receiver once
+/// monomorphize mints the instance, and the wrappers it must route through were
+/// already synthesized from the handler impls.
+pub type ResourceWrapperIndex =
+    IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>>;
+
+/// Pre-build one lookup map per call shape. An effect op resolves to a
+/// `Local { path: "<EffectName>" }` call even when it carries `#[cm(…)]`, so
+/// `user_to_wrapper` keys on `(interface_name, op_name)`. A resource method
+/// resolves against its declaring module with `method_info.cm_name` set, so
+/// `cm_to_wrappers` keys on `(decl_module, base_name, cm_name)` plus type args.
+fn build_wrapper_indexes(
+    project: &Package,
+    plans: &IndexMap<InstantiationKey, DispatchPlan>,
+) -> (IndexMap<(String, String), String>, ResourceWrapperIndex) {
     let effect_index = build_effect_index(project);
     let mut user_to_wrapper: IndexMap<(String, String), String> = IndexMap::default();
-    let mut cm_to_wrappers: IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>> =
-        IndexMap::default();
+    let mut cm_to_wrappers: ResourceWrapperIndex = IndexMap::default();
     for ((module, base_name, type_args), plan) in plans {
         let is_resource = effect_index
             .get(&(module.clone(), base_name.clone()))
@@ -2503,23 +2536,32 @@ fn rewrite_call_sites_to_wrappers(
             }
         }
     }
+    (user_to_wrapper, cm_to_wrappers)
+}
 
-    for module in project.tir_modules.values_mut() {
-        let type_table_rc = module.type_table.clone();
-        let ctx = RewriteCtx {
-            user_to_wrapper: &user_to_wrapper,
-            cm_to_wrappers: &cm_to_wrappers,
-            type_table: type_table_rc,
-            entry_source: &entry_source,
-        };
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if func.is_dispatch_wrapper {
-                continue;
-            }
-            if let Some(body) = &mut func.body {
-                rewrite_calls_in_block(body, &ctx);
-            }
+/// Post-monomorphize half: route the `#[cm]` calls that were in a generic body
+/// when [`rewrite_call_sites_to_wrappers`] ran. Their receiver named a type
+/// parameter then, so no instantiation matched and they would otherwise bind
+/// straight to the canonical, past a handler that is installed for them.
+pub fn rewrite_resource_calls_monomorphized(flat: &mut crate::flat_package::FlatPackage) {
+    if flat.resource_wrappers.is_empty() {
+        return;
+    }
+    let entry_source = flat.entry_module_source.clone();
+    let user_to_wrapper: IndexMap<(String, String), String> = IndexMap::default();
+    let ctx = RewriteCtx {
+        user_to_wrapper: &user_to_wrapper,
+        cm_to_wrappers: &flat.resource_wrappers,
+        type_table: flat.type_table.clone(),
+        entry_source: &entry_source,
+    };
+    for func_rc in &flat.functions {
+        let mut func = func_rc.borrow_mut();
+        if func.is_dispatch_wrapper {
+            continue;
+        }
+        if let Some(body) = &mut func.body {
+            rewrite_calls_in_block(body, &ctx);
         }
     }
 }

@@ -1530,9 +1530,12 @@ fn compile_after_load<H: CompilerHost>(
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
 
         // A `#[cm]` async primitive called from a generic body only learns its
-        // payload here, where the instance carries a concrete element type. The
-        // helpers this mints call generic stdlib functions in turn, so the
-        // session resumes to instantiate them.
+        // payload here, where the instance carries a concrete element type. An
+        // installed handler claims the call first — binding it to the canonical
+        // would route past the handler — and the helpers the binding mints call
+        // generic stdlib functions in turn, so the session resumes to
+        // instantiate them.
+        synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
         synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
         mono.resume(&mut flat);
     }
@@ -1969,6 +1972,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             {
                 let _span = logger.span("monomorphize");
                 let mut mono = monomorphize(&mut flat);
+                synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
                 synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
                 mono.resume(&mut flat);
             }

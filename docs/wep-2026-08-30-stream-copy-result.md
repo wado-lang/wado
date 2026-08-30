@@ -157,6 +157,13 @@ The generated bodies call generic stdlib functions (`List<Elem>::with_capacity`)
 whose instantiations monomorphize would already have had to mint. Synthesis
 therefore runs to a fixpoint with monomorphize rather than strictly after it.
 
+Effect dispatch moves with it, and runs first. A handler installed for
+`Stream<u8>` claims `read` wherever it is called from, and the wrappers it
+routes through are synthesized from the handler impls, which name the
+instantiation already. Only the _rewriting_ of the call sites has to happen
+again, over the instances: a call left for the CM binding would reach the
+canonical past the handler that exists for it.
+
 ## Consequences
 
 Positive:
