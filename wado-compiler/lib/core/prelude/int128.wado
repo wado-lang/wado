@@ -13,6 +13,7 @@ use {
     lenient_int_preprocess,
     lenient_int_error,
 } from "core:prelude/intparse.wado";
+use { Array } from "core:prelude/array.wado";
 use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
@@ -213,44 +214,112 @@ impl u128 {
         return builtin::f32_reinterpret_i32(bits as i32);
     }
 
+    /// Divide `[hi, lo]` by `d`, returning (quotient, remainder). Knuth
+    /// Algorithm D over 32-bit limbs: the 128÷64 step Wasm has no instruction
+    /// for. `hi < d` is what keeps the quotient inside 64 bits.
+    fn div_rem_wide(hi: u64, lo: u64, d: u64) -> [u64, u64] {
+        assert hi < d;
+        if hi == 0 {
+            return [lo / d, lo % d];
+        }
+        let low32: u64 = 0xFFFFFFFF;
+
+        // Normalize: shift the divisor until its leading limb has bit 31 set,
+        // which bounds each trial quotient below to within 2 of the true one.
+        let s = builtin::i64_clz(d as i64) as u64;
+        let dn = d << s;
+        let dn1 = dn >> 32;
+        let dn0 = dn & low32;
+        let mut un32 = hi << s;
+        if s != 0 {
+            un32 = un32 | lo >> 64 - s;
+        }
+        let un10 = lo << s;
+        let un1 = un10 >> 32;
+        let un0 = un10 & low32;
+
+        // Each half-quotient: divide the top three limbs by the top divisor
+        // limb, then walk the estimate down until the next limb also fits.
+        let mut q1 = un32 / dn1;
+        let mut rhat = un32 - q1 * dn1;
+        while q1 > low32 || q1 * dn0 > rhat << 32 | un1 {
+            q1 -= 1;
+            rhat += dn1;
+            if rhat > low32 {
+                break;
+            }
+        }
+        // The partial remainders wrap out of 64 bits on the way but land
+        // below `dn`, so the truncated result is exact.
+        let un21 = (un32 << 32) + un1 - q1 * dn;
+
+        let mut q0 = un21 / dn1;
+        rhat = un21 - q0 * dn1;
+        while q0 > low32 || q0 * dn0 > rhat << 32 | un0 {
+            q0 -= 1;
+            rhat += dn1;
+            if rhat > low32 {
+                break;
+            }
+        }
+        let r = (un21 << 32) + un0 - q0 * dn >> s;
+        return [q1 << 32 | q0, r];
+    }
+
     /// Divide self by divisor, returning (quotient, remainder). One native
-    /// division when both fit in 64 bits, binary long division otherwise.
+    /// division when both fit in 64 bits, otherwise one or two Algorithm D
+    /// passes over 32-bit limbs.
     pub fn div_rem(&self, divisor: &u128) -> [u128, u128] {
         if divisor.low == 0 && divisor.high == 0 {
             panic("u128 division by zero");
         }
 
-        let mut quotient = u128::zero();
-        let mut remainder = u128::zero();
-
-        if self.high == 0 && divisor.high == 0 {
-            // Both operands inside 64 bits is the common case — rendering a
-            // decimal divides by ten once per digit, a unit conversion by a
-            // small constant — and one native division answers it.
-            quotient = u128::from_u64(self.low / divisor.low);
-            remainder = u128::from_u64(self.low % divisor.low);
-        } else if *self < *divisor {
-            remainder = *self;
-        } else if *self == *divisor {
-            quotient = u128::one();
-        } else {
-            // Binary long division, one bit at a time from 127 down.
-            let one = u128::one();
-            let mut i: i32 = 127;
-            while i >= 0 {
-                remainder = remainder << 1;
-                if self.get_bit(i) {
-                    remainder = remainder | one;
-                }
-                if remainder >= *divisor {
-                    remainder = remainder - *divisor;
-                    quotient = quotient.set_bit(i);
-                }
-                i -= 1;
+        if divisor.high == 0 {
+            if self.high == 0 {
+                // Both operands inside 64 bits is the common case — a unit
+                // conversion by a small constant — and one native division
+                // answers it.
+                return [
+                    u128::from_u64(self.low / divisor.low),
+                    u128::from_u64(self.low % divisor.low),
+                ];
+            } else {
+                // 128 ÷ 64: the high limb natively, then one wide step whose
+                // dividend is the leftover remainder, below the divisor.
+                let d = divisor.low;
+                let [q_low, r] = u128::div_rem_wide(self.high % d, self.low, d);
+                return [
+                    u128::from_pair(q_low, self.high / d),
+                    u128::from_u64(r),
+                ];
             }
+        } else if *self < *divisor {
+            return [u128::zero(), *self];
+        } else {
+            // The divisor needs more than 64 bits, so the quotient fits in
+            // one word. Estimate it from the normalized leading divisor limb
+            // over a halved dividend — halving is what keeps the wide step's
+            // dividend below its divisor — then correct the estimate, which
+            // this leaves either exact or one too small.
+            let n = builtin::i64_clz(divisor.high as i64) as u64;
+            let mut dn = divisor.high << n;
+            if n != 0 {
+                dn = dn | divisor.low >> 64 - n;
+            }
+            let half_high = self.high >> 1;
+            let half_low = self.low >> 1 | self.high << 63;
+            let [estimate, _] = u128::div_rem_wide(half_high, half_low, dn);
+            let mut q = estimate >> 63 - n;
+            if q != 0 {
+                q -= 1;
+            }
+            let mut rem = *self - u128::from_u64(q) * *divisor;
+            if rem >= *divisor {
+                q += 1;
+                rem = rem - *divisor;
+            }
+            return [u128::from_u64(q), rem];
         }
-
-        return [quotient, remainder];
     }
 
     /// Get the bit at position i (0 = LSB, 127 = MSB)
@@ -300,32 +369,44 @@ impl u128 {
     /// Decimal digits of `self` with an optional sign, shared by the
     /// u128 Display path and the i128 one (which passes its magnitude).
     fn fmt_decimal_magnitude(&self, f: &mut Formatter, is_neg: bool) {
-        if *self == 0 {
-            let offset = f.prepare_int_write(false, "", 1);
-            let arr = f.buf.internal_raw_bytes_mut();
-            builtin::array_set_u8(arr, offset, b'0');
-            return;
+        // Peel 19 digits per division — 10^19 is the largest power of ten
+        // inside a u64 — so a full-width value costs two 128-bit divisions
+        // rather than one per digit, counted and written.
+        let chunk: u128 = 10000000000000000000;
+        let mut top = self.low;
+        let mut mid: u64 = 0;
+        let mut bottom: u64 = 0;
+        let mut chunks: i32 = 1;
+        if self.high != 0 {
+            let [q, r] = self.div_rem(&chunk);
+            bottom = r.low;
+            top = q.low;
+            chunks = 2;
+            if q >= chunk {
+                let [q2, r2] = q.div_rem(&chunk);
+                mid = r2.low;
+                top = q2.low;
+                chunks = 3;
+            }
         }
 
-        let ten: u128 = 10;
-
-        // Count digits first
-        let mut digit_count = 0;
-        for let mut temp = *self; temp > 0; temp /= ten {
-            digit_count += 1;
-        }
-
+        let top_digits = count_digits_u64(top);
+        let digit_count = top_digits + (chunks - 1) * 19;
         let offset = f.prepare_int_write(is_neg, "", digit_count);
         let arr = f.buf.internal_raw_bytes_mut();
 
-        // Write digits in reverse order
         let mut pos = offset + digit_count;
-        for let mut temp = *self; temp > 0; temp /= ten {
-            pos -= 1;
-            let digit: i32 = (temp % ten).low() as i64 as i32;
-            builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
+        if chunks == 3 {
+            write_u64_digits(arr, pos, bottom, 19);
+            pos -= 19;
+            write_u64_digits(arr, pos, mid, 19);
+            pos -= 19;
+        } else if chunks == 2 {
+            write_u64_digits(arr, pos, bottom, 19);
+            pos -= 19;
         }
-        assert pos == offset;
+        write_u64_digits(arr, pos, top, top_digits);
+        assert pos - top_digits == offset;
     }
 
     /// `alt_prefix` is written only when the spec asked for the alternate form
@@ -410,16 +491,38 @@ impl LenientFromStr for u128 {
     }
 }
 
-/// Count decimal digits of a u128 value.
-fn count_digits_u128(val: u128) -> i32 {
-    if val == 0 {
-        return 1;
-    }
-    let mut n: i32 = 0;
-    for let mut t = val; t > 0; t = t / 10 {
+/// Count decimal digits of a u64 value.
+fn count_digits_u64(val: u64) -> i32 {
+    let mut n: i32 = 1;
+    for let mut t = val; t >= 10; t = t / 10 {
         n += 1;
     }
     return n;
+}
+
+/// Write exactly `count` decimal digits of `val` backwards, ending at `end`.
+fn write_u64_digits(arr: &mut Array<u8>, end: i32, val: u64, count: i32) {
+    let mut pos = end;
+    let mut t = val;
+    for let mut i = 0; i < count; i += 1 {
+        pos -= 1;
+        builtin::array_set_u8(arr, pos, ('0' as i32 + (t % 10) as i32) as u8);
+        t = t / 10;
+    }
+    assert t == 0;
+}
+
+/// Count decimal digits of a u128 value.
+fn count_digits_u128(val: u128) -> i32 {
+    let chunk: u128 = 10000000000000000000;
+    if val < chunk {
+        return count_digits_u64(val.low());
+    }
+    let q = val / chunk;
+    if q < chunk {
+        return count_digits_u64(q.low()) + 19;
+    }
+    return count_digits_u64((q / chunk).low()) + 38;
 }
 
 /// Drop the last `drop` decimal digits of `val`, rounding half to even.
