@@ -1,9 +1,6 @@
-// Store-to-load forwarding on struct fields. The forwarded constant is pinned
-// on the scalar the field decomposes to rather than on the `fmt_decimal`
-// argument: `${p2.a}` reads it inside a template region, and an address-taken
-// primitive is stored boxed, so the region sees a `Box<i32>`-typed mention
-// where the environment holds a scalar — which `region_free_reads` refuses to
-// seed. Seeding a boxed scalar would restore it.
+// Store-to-load forwarding on struct fields. Each forwarded constant reaches
+// the formatter call itself, so the field store, the load, and the scalar the
+// field decomposed to are all gone by O2.
 use { println, Stdout } from "core:cli";
 
 struct Pair {
@@ -44,9 +41,9 @@ __DATA__
 {
     "stdout": "10, 42, 100\n",
     "wir_expect:O2": [
-        "i32::fmt_decimal$scalar\"(10,",
-        "__sroa_p2_a = 42",
-        "__sroa_p3_a = 100"
+        "i32::fmt_into$scalar\"(10,",
+        "i32::fmt_into$scalar\"(42,",
+        "i32::fmt_into$scalar\"(100,"
     ],
     "wir_not_expect:O2": [
         "panic("
