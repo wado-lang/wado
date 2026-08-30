@@ -9,11 +9,15 @@
 //   (X*)?    → X*   `q b` and `q a a b` both parse
 //   (X+)?    → X*   zero-or-one of one-or-more is zero-or-more
 //   ( X* | ) → X*   the fold mints an optional too, so it normalises too
+//   (X+)*    → X*   the outer one is not always an optional: a closure over a
+//   (X+)+    → X+   non-nullable repeat body is legal, so both reach here
 grammar NestedRepeat;
 
 s : 'p' (A*)? B
   | 'q' (A+)? B
   | 'r' ( A* | ) B
+  | 's' (A+)* B
+  | 't' (A+)+ B
   ;
 
 A : 'a' ;

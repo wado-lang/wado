@@ -32,3 +32,16 @@ test "nested-repeat: the folded `( X* | )` collapses the same way" {
     assert_tree(&"r b", &"(s r b)");
     assert_tree(&"r a a b", &"(s r a a b)");
 }
+
+test "nested-repeat: a closure over a non-nullable repeat is still one" {
+    // `(X+)*` and `(X+)+` pass the epsilon-closure check — the body is not
+    // nullable — so the outer repeat is not always an optional. They differ in
+    // exactly one thing, and the collapse has to keep it: `*` admits nothing,
+    // `+` does not.
+    assert_tree(&"s b", &"(s s b)");
+    assert_tree(&"s a a b", &"(s s a a b)");
+    assert_tree(&"t a a b", &"(s t a a b)");
+
+    let bad = nr::parse(&"t b");
+    assert bad.has_errors(), "`(A+)+` demands at least one repetition";
+}

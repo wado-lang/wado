@@ -2904,6 +2904,11 @@ test "canonicalizing collapses nested optionals through a bare wrapper" {
         // Spelled directly, with no fold involved.
         "grammar S;\nr : (A*)? B ;\nA : 'a' ;\nB : 'b' ;\n",
         "grammar S;\nr : (A+)? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        // A closure over a repeat body reaches here whenever that body is
+        // non-nullable, which is exactly what the epsilon-closure check lets
+        // through — so the collapse cannot assume the outer one is an Optional.
+        "grammar S;\nr : (A+)* B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : (A+)+ B ;\nA : 'a' ;\nB : 'b' ;\n",
     ];
     for let src of &sources {
         let mut g = parse(*src).unwrap();

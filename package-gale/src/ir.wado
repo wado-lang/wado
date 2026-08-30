@@ -1801,25 +1801,46 @@ fn canon_empty_alt_element(elem: &Element) -> Element {
 /// a body that is already a repeat. Every Repeat the canonicalisation produces
 /// goes through here, so the invariant is established rather than assumed.
 ///
-/// Only an Optional can be the outer one: a closure over a repeat body is a
-/// closure over a nullable body, which `check_epsilon_closure` has already
-/// rejected. So the identities needed are `(X?)? = X?`, `(X*)? = X*` and
-/// `(X+)? = X*` — zero-or-one of one-or-more is zero-or-more.
+/// The outer one is not always an Optional. A closure over a repeat body is a
+/// closure over a *nullable* body only where that body can match nothing, so
+/// `check_epsilon_closure` rejects `(X?)*` and `(X*)+` but passes `(X+)*` and
+/// `(X+)+` — both legal g4, both a repeat over a repeat.
+///
+/// So the collapse reads off what the pair can match: nothing, unless both
+/// sides demand a repetition; many, unless both sides cap at one. That leaves
+/// `(X?)? = X?`, `(X+)+ = X+`, and `X*` for the rest — `(X*)?`, `(X+)? = X*`
+/// (zero-or-one of one-or-more), `(X+)* = X*`.
 ///
 /// Either side preferring to skip makes the collapsed repeat prefer it:
 /// `( | X)?` is `(X??)?`, and entering it still reaches a decision that skips.
 fn canon_repeat(kind: RepeatKind, element: &Element, non_greedy: bool) -> Element {
-    if kind matches { Optional } {
-        if let Some(inner) = peel_nested_repeat(element) {
-            let collapsed = if inner.kind matches { Optional } { RepeatKind::Optional } else { RepeatKind::Star };
-            return Element::Repeat(RepeatElement {
-                kind: collapsed,
-                element: inner.element,
-                non_greedy: non_greedy || inner.non_greedy,
-            });
-        }
+    if let Some(inner) = peel_nested_repeat(element) {
+        assert !repeat_admits_empty(inner.kind) || kind matches { Optional }, "a closure over a nullable body is rejected by check_epsilon_closure before canonicalization";
+        let capped = kind matches { Optional } && inner.kind matches { Optional };
+        let demands_one = kind matches { Plus } && inner.kind matches { Plus };
+        let collapsed = if capped {
+            RepeatKind::Optional;
+        } else if demands_one {
+            RepeatKind::Plus;
+        } else {
+            RepeatKind::Star;
+        };
+        return Element::Repeat(RepeatElement {
+            kind: collapsed,
+            element: inner.element,
+            non_greedy: non_greedy || inner.non_greedy,
+        });
     }
     return Element::Repeat(RepeatElement { kind, element: *element, non_greedy });
+}
+
+/// Whether a repeat of this kind can match nothing.
+fn repeat_admits_empty(kind: RepeatKind) -> bool {
+    return match kind {
+        Optional => true,
+        Star => true,
+        Plus => false,
+    };
 }
 
 /// The inner Repeat of a Repeat whose body is one, or `null` where the body is

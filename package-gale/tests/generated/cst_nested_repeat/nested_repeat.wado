@@ -1085,6 +1085,8 @@ pub global TK_ERROR: i32 = 4;
 pub global TK_LIT_P: i32 = 5;
 pub global TK_LIT_Q: i32 = 6;
 pub global TK_LIT_R: i32 = 7;
+pub global TK_LIT_S: i32 = 8;
+pub global TK_LIT_T: i32 = 9;
 
 struct Lexer {
     chars: List<char>,
@@ -1156,6 +1158,18 @@ fn try_lit_r(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
+fn try_lit_s(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 's' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_t(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 't' { return -1; }
+    return pos + 1;
+}
+
 pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1184,6 +1198,12 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { 'r' } {
             end = try_lit_r(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_R; }
+        } else if first_char matches { 's' } {
+            end = try_lit_s(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_S; }
+        } else if first_char matches { 't' } {
+            end = try_lit_t(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_T; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1215,6 +1235,8 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_LIT_P => "'p'",
         TK_LIT_Q => "'q'",
         TK_LIT_R => "'r'",
+        TK_LIT_S => "'s'",
+        TK_LIT_T => "'t'",
         _ => "Unknown",
     };
 }
@@ -1512,6 +1534,34 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
+        } else if alt_kind == TK_LIT_S {
+            pos = start;
+            try_3: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_S { break try_3; }
+                pos += 1;
+                while pos < tokens.len() && tokens[pos] == TK_A {
+                    pos += 1;
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_B { break try_3; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_LIT_T {
+            pos = start;
+            try_4: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_T { break try_4; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break try_4; }
+                pos += 1;
+                while pos < tokens.len() && tokens[pos] == TK_A {
+                    pos += 1;
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_B { break try_4; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
         } else {
             return -1;
         }
@@ -1578,10 +1628,52 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         p.expect(TK_B, &EMPTY_SYNC);
         return;
     }
+    if kind == TK_LIT_S {
+        p.expect(TK_LIT_S, &SYNC_0);
+        loop {
+            if p.recovering { break; }
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break rep_scan; }
+                pos += 1;
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+            p.expect(TK_A, &EMPTY_SYNC);
+        }
+        p.expect(TK_B, &EMPTY_SYNC);
+        return;
+    }
+    if kind == TK_LIT_T {
+        p.expect(TK_LIT_T, &SYNC_1);
+        let mut _plus_first = true;
+        loop {
+            if p.recovering { break; }
+            if !_plus_first {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break rep_scan; }
+                    pos += 1;
+                    if pos <= p.pos { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+            }
+            _plus_first = false;
+            p.expect(TK_A, &EMPTY_SYNC);
+        }
+        p.expect(TK_B, &EMPTY_SYNC);
+        return;
+    }
     p.no_viable(
         "no alternative of s matches",
         p.peek_span(),
-        &SYNC_1,
+        &SYNC_2,
     );
     return;
 }
@@ -1623,8 +1715,8 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(8);
-    for let mut k = 0; k < 8; k += 1 {
+    let mut v: List<String> = List::with_capacity(10);
+    for let mut k = 0; k < 10; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;
@@ -1652,5 +1744,6 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_A, TK_B];
-global SYNC_1: List<i32> = [TK_LIT_P, TK_LIT_Q, TK_LIT_R];
+global SYNC_1: List<i32> = [TK_A];
+global SYNC_2: List<i32> = [TK_LIT_P, TK_LIT_Q, TK_LIT_R, TK_LIT_S, TK_LIT_T];
 
