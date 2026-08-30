@@ -1234,6 +1234,14 @@ impl InlineBudget {
         }
     }
 
+    /// Whether anything reads a round's prices: a cap to spend them against, or
+    /// a trace that reports them. Taking them walks every body in the unit, so
+    /// the default — no cap, no trace — should not pay for it.
+    pub(super) fn prices_read(&self) -> bool {
+        let trace = crate::trace::filter();
+        self.growth.is_some() || trace.enabled("inline") || trace.enabled("opt_loop")
+    }
+
     /// What the inliner may still add, given the unit's size right now. Read
     /// from the live size rather than accumulated per round, so a round that
     /// over-estimated its growth — or a later pass that folded some away — hands
@@ -1356,19 +1364,26 @@ pub fn inline_functions(
     // Callees that must not receive inlining this round — see `Verdict::hold`.
     let mut held: IndexSet<FuncId> = IndexSet::default();
 
-    let call_sites = call_site_counts(project);
     // What the unit holds right now, and what each admitted candidate would add
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
+    // Both prices cost a walk over the whole unit per round and no level sets a
+    // growth cap, so they are taken only where something reads them.
+    let pricing = budget.prices_read();
+    let call_sites = if pricing {
+        call_site_counts(project)
+    } else {
+        Vec::new()
+    };
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
 
     let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        let size = func
-            .body
-            .as_ref()
-            .map_or(0, |b| inline_size(b, &type_table, descriptors));
+        let size = match func.body.as_ref() {
+            Some(b) if pricing => inline_size(b, &type_table, descriptors),
+            _ => 0,
+        };
         unit_size += size;
         let view = func
             .id
@@ -1400,14 +1415,16 @@ pub fn inline_functions(
             if let Some(strings) = project.function_strings.get(&string_key) {
                 candidate_strings.insert(id, strings.clone());
             }
-            priced.push(Candidate {
-                id,
-                name: func.name.clone(),
-                hot: verdict.hot,
-                size,
-                sites: call_sites.get(id.index()).copied().unwrap_or(0),
-                forced: func.inline_hint == InlineHint::Always,
-            });
+            if pricing {
+                priced.push(Candidate {
+                    id,
+                    name: func.name.clone(),
+                    hot: verdict.hot,
+                    size,
+                    sites: call_sites.get(id.index()).copied().unwrap_or(0),
+                    forced: func.inline_hint == InlineHint::Always,
+                });
+            }
             inline_candidates.insert(id, func.clone());
         }
     }
@@ -1420,25 +1437,24 @@ pub fn inline_functions(
         let mut ranked: Vec<&Candidate> = priced.iter().collect();
         ranked.sort_by_key(|c| std::cmp::Reverse(splice_growth(c.size, c.sites)));
         let total: usize = ranked.iter().map(|c| splice_growth(c.size, c.sites)).sum();
-        let top = ranked
-            .iter()
-            .take(6)
-            .map(|c| {
-                format!(
-                    "\n    {:>8}  {} (hot {}, size {} x {} sites){}",
-                    splice_growth(c.size, c.sites),
-                    c.name,
-                    c.hot,
-                    c.size,
-                    c.sites,
-                    if c.hot <= inline_threshold && c.size > inline_threshold {
-                        "  [cold]"
-                    } else {
-                        ""
-                    }
-                )
-            })
-            .collect::<String>();
+        use std::fmt::Write as _;
+        let top = ranked.iter().take(6).fold(String::new(), |mut s, c| {
+            let _ = write!(
+                s,
+                "\n    {:>8}  {} (hot {}, size {} x {} sites){}",
+                splice_growth(c.size, c.sites),
+                c.name,
+                c.hot,
+                c.size,
+                c.sites,
+                if c.hot <= inline_threshold && c.size > inline_threshold {
+                    "  [cold]"
+                } else {
+                    ""
+                }
+            );
+            s
+        });
         format!(
             "unit {unit_size}: {} candidates worth {total} of growth{top}",
             priced.len(),
