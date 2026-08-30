@@ -1,0 +1,17 @@
+// A zero-length CM copy is a readiness signal: it blocks until a reader
+// rendezvouses. `write_all` / `write_raw_all` write nothing when handed nothing,
+// so an empty buffer returns instead of hanging on a peer that never reads.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    let empty: List<u8> = [];
+    assert tx.write_all(empty) == CopyResult::Completed;
+    assert tx.write_raw_all(empty.as_slice()) == CopyResult::Completed;
+    tx.drop();
+    rx.drop();
+    println("empty write ok");
+}
+
+__DATA__
+{"stdout": "empty write ok\n"}

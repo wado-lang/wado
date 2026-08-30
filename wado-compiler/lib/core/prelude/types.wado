@@ -300,10 +300,20 @@ internal fn write_copy_is_final(written: &StreamWrite) -> bool {
     return written.result != CopyResult::Completed || written.count <= 0;
 }
 
+/// The loops below never offer a zero-length buffer. A zero-length CM write is
+/// a readiness signal that blocks until a reader rendezvouses, so writing
+/// nothing has to mean issuing no copy, not a copy of nothing.
+internal fn nothing_to_write() -> CopyResult {
+    return CopyResult::Completed;
+}
+
 impl StreamWritable<T> {
     /// Write every element, or stop early when the readable end drops.
     /// Returns the result of the copy that ended the loop.
     pub fn write_all(&self, data: List<T>) -> CopyResult {
+        if data.is_empty() {
+            return nothing_to_write();
+        }
         let mut rest = data;
         loop {
             let written = self.write(rest);
@@ -320,6 +330,9 @@ impl StreamWritable<T> {
     /// value-semantics copy. The tail view skips `Slice::slice`, whose clamp
     /// these offsets cannot need and every program that prints would pay for.
     pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult {
+        if data.is_empty() {
+            return nothing_to_write();
+        }
         let repr = data.internal_repr();
         let end = data.internal_start() + data.len();
         let mut offset = data.internal_start();

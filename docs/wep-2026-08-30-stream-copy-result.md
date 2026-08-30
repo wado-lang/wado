@@ -214,6 +214,16 @@ Neutral:
 - A non-byte `write_raw` has no lowering. Giving it one means a slice-sourced
   counterpart to `synthesize_lower_list_to_buffer`, which reads its length and
   elements through `List` alone today.
+- `write_all` and `write_raw_all` re-lower the untransferred tail on every
+  iteration, where the loop inside the compiler lowered once and advanced a
+  pointer. Against a reader taking short prefixes that is quadratic in the
+  bytes copied. A loop in Wado cannot hold the linear-memory pointer the old one
+  advanced, so closing it means an internal `core:rt` drain that lowers once —
+  keeping `write_raw` itself one copy, as the decision above requires.
+- `STREAM_CHUNK_ELEMENTS` is 4096 for every payload, where the call sites this
+  WEP replaced picked per site (`read(65536)` for bytes, `read(16)` for
+  records). The read helper allocates `max * elem_size` up front, so one number
+  cannot suit both; a payload-aware size wants a measurement first.
 
 ## Related WEPs
 
