@@ -143,6 +143,38 @@ control for it — even on the machine that produced it; a HEAD build has measur
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
 A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it.
 
+### A/B-ing a compiler change
+
+A change to the compiler needs two compilers, so build the baseline beside you
+and alternate whole-suite runs between them:
+
+```sh
+git worktree add /tmp/wado-base origin/main
+(cd /tmp/wado-base && cargo build --release -p wado-cli)
+cargo build --release -p wado-cli
+# alternate, so neither arm always goes second
+mise run benchmark-all > h1.log 2>&1
+(cd /tmp/wado-base/benchmark && mise run all) > b1.log 2>&1  # …and so on, 3 each
+node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
+```
+
+`ab.ts` decides each row by whether the two arms' `[min, max]` overlap, not by
+the delta: on a 5 ms benchmark a 6% gap between bests is routine inside one arm's
+own spread. **Read the reference rows first.** C, Rust and JavaScript run the
+same binary in both arms, so a `SLOWER` among them means the host drifted between
+the arms and no Wado row can be read either.
+
+A row that survives that is still worth one targeted confirmation before you
+believe it, because the whole-suite runs are hours apart: loop the single
+benchmark alternating the two binaries directly (`../target/release/wado run -O2
+sieve/sieve.wado`), five pairs, and check the ranking holds pair by pair.
+
+`WADO_SKIP_PASS=<pass>` gives a third arm for free, off the same binary — which
+is how a regression gets attributed to one pass without a third build. Only a
+knob every compiling subcommand accepts can be swept through
+`WADO_BENCH_FLAGS` (the harness spends it on `wado run`), so a knob added to
+`compile` alone is one the sweep cannot reach.
+
 **What decides adoption**, in priority order:
 
 1. **The benchmark moves** → keep it.

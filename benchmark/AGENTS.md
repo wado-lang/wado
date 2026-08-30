@@ -67,7 +67,13 @@ for i in 1 2 3; do mise run all > run$i.log 2>&1; done
 node pick.ts run1.log run2.log run3.log
 ```
 
-`pick.ts` keys each row by (task, implementation, phase) and picks the run with the lowest ms/iter — the true best throughput — so a rounding tie between runs can't select the wrong ms/iter.
+`pick.ts` keys each row by (task, implementation, phase) and picks the run with the lowest ms/iter — the true best throughput — so a rounding tie between runs can't select the wrong ms/iter. Both it and `ab.ts` parse through `logs.ts`.
+
+To compare two compilers rather than N runs of one — an O-level or any other knob change — build the baseline in a worktree and use `ab.ts`, which decides each row by whether the arms' ranges overlap and leaves the reference rows in as the host's control. The `wado-performance` skill has the procedure.
+
+```sh
+node ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
+```
 
 ## Structure
 
