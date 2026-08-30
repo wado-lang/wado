@@ -3798,14 +3798,10 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     }
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
-    let gate = if ctx.emit_follow() && r.gate_caller_follow {
-        " && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
-    } else {
-        "";
-    };
-    let cond = `${ctx.first_check_str(&r.body_first_set)}${gate}`;
+    let follow_gate = ctx.emit_follow() && r.gate_caller_follow;
+    let cond = gate_cond_with_caller_follow(&ctx.first_check_str(&r.body_first_set), follow_gate);
     match r.kind {
-        Optional => gen_op_optional(w, r, ctx, nc, &gate),
+        Optional => gen_op_optional(w, r, ctx, nc, follow_gate),
         Star => {
             w.begin(&`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc);
@@ -3827,8 +3823,15 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
 /// (`gen_op_storable_optional` / `gen_op_transparent_optional`): a `??` asks the
 /// runtime ATN, a shape lookahead branches per shape, and every other strategy
 /// reduces to the single entry condition `gen_op_optional_entry_cond` builds.
-/// `gate` is the walker's caller-FOLLOW yield suffix.
-fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>, gate: &String) {
+/// `follow_gate` is the caller-FOLLOW yield gate, spelled by the one helper
+/// both walkers use rather than by a suffix this one renders for itself.
+fn gen_op_optional(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    follow_gate: bool,
+) {
     if r.non_greedy && ctx.needs_atn() {
         w.begin(&`if ${atn_optional_enter_cond(ctx, r)}`);
         gen_op(w, &r.body, ctx, nc);
@@ -3836,7 +3839,7 @@ fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
         return;
     }
     if let OptionalShapeLookahead(s) = &r.strategy {
-        gen_op_optional_shape_lookahead(w, r, s, ctx, nc, gate);
+        gen_op_optional_shape_lookahead(w, r, s, ctx, nc, follow_gate);
         return;
     }
     if r.strategy matches { OptionalScanGuard } {
@@ -3846,7 +3849,7 @@ fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                 // decides on: one answer, one set of scans. The caller-FOLLOW
                 // yield gate wraps them, so an optional that must yield does
                 // not pay for a decision it will not use.
-                let winner = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, !gate.is_empty());
+                let winner = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, follow_gate);
                 w.begin(&`if ${winner} >= 0`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
@@ -3854,7 +3857,7 @@ fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             }
         }
     }
-    let entry = `${gen_op_optional_entry_cond(w, r, ctx, nc)}${*gate}`;
+    let entry = gate_cond_with_caller_follow(&gen_op_optional_entry_cond(w, r, ctx, nc), follow_gate);
     w.begin(&`if ${entry}`);
     gen_op(w, &r.body, ctx, nc);
     w.end();
@@ -3930,7 +3933,7 @@ fn gen_op_optional_shape_lookahead(
     s: &OptionalShapeLookaheadStrategy,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
-    gate: &String,
+    follow_gate: bool,
 ) {
     let body_ops = if let Group(g) = &r.body {
         g.alts[0].ops;
@@ -3941,7 +3944,7 @@ fn gen_op_optional_shape_lookahead(
     let mut is_first = true;
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
         let entry = &s.shapes[ei];
-        let cond = `${conditions[ei]}${*gate}`;
+        let cond = gate_cond_with_caller_follow(&conditions[ei], follow_gate);
         if is_first {
             w.begin(&`if ${cond}`);
             is_first = false;

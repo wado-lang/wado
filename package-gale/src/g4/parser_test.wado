@@ -1998,6 +1998,45 @@ test "a non-left-recursive grammar with nullable rules is accepted" {
     assert parse_checked(g) matches { Ok(_) }, "a plain grammar with nullable rules must be accepted";
 }
 
+// Epsilon-closure policy: a `*` / `+` whose body can match the empty string
+// comes round at the same position forever. ANTLR4 rejects it
+// (`error(153): rule r contains a closure with at least one alternative that
+// can match an empty string`), measured against the published jar, so
+// `check_epsilon_closure` rejects it at grammar-check time rather than
+// emitting a loop that cannot terminate. An optional over the same body is
+// not a closure and ANTLR4 accepts it.
+
+test "a closure over an empty alternative is rejected" {
+    let g = "grammar EP;\nr : ( A B | )+ C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
+    assert parse_checked(g) matches { Err(_) }, "`( A B | )+` matches empty and would loop forever";
+}
+
+test "a star closure over an empty alternative is rejected" {
+    let g = "grammar ES;\nr : ( A B | )* C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
+    assert parse_checked(g) matches { Err(_) }, "`( A B | )*` matches empty and would loop forever";
+}
+
+test "a closure over a rule that derives only the empty string is rejected" {
+    let g = "grammar ER;\nr : x* C ;\nx : ;\nC : 'c' ;";
+    assert parse_checked(g) matches { Err(_) }, "the closure's body is nullable through the rule reference";
+}
+
+test "a closure over a body that must consume is accepted" {
+    let g = "grammar EK;\nr : ( A B? )+ C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
+    assert parse_checked(g) matches { Ok(_) }, "the body always consumes `A`, so the loop advances";
+}
+
+test "an optional over an empty alternative is accepted" {
+    // ANTLR4 reports nothing for `( A B | )?` — an optional is not a closure.
+    let g = "grammar EO;\nr : ( A B | )? C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
+    assert parse_checked(g) matches { Ok(_) }, "`( A B | )?` is a plain optional";
+}
+
+test "a lexer closure over an empty alternative is rejected" {
+    let g = "grammar EL;\nr : A ;\nA : ( 'a'? )+ ;";
+    assert parse_checked(g) matches { Err(_) }, "a lexer closure matching empty loops forever too";
+}
+
 // The POSIX compatibility properties and ANTLR4's `EmojiPresentation=` values.
 // Neither is a UCD property, so each is derived from tables Gale already has —
 // which makes the derivation, not a table, the thing that can be wrong. `\P`

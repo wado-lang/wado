@@ -19960,7 +19960,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     if pos < 0 { break opt_scan_3; }
                     opt_scan_pos_3 = pos;
                 }
-                if opt_scan_pos_3 >= 0 && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
+                if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos_3 >= 0) {
                     let expression = _parse_expression(p, &EMPTY_FOLLOW, 5);
                 }
                 p.b.finish_node(p.last_end());
