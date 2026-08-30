@@ -67,6 +67,13 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of the function `cold_outline` moves a `cold_path()` region into:
+/// the enclosing function's name with a `$cold` suffix, numbered when it opens
+/// more than one region.
+pub fn cold_region_helper_name(enclosing_name: &str, ordinal: u32) -> String {
+    format!("{enclosing_name}$cold{ordinal}")
+}
+
 /// The name of the function holding an effect operation's default
 /// implementation — the body that runs when the operation is dispatched with
 /// no handler installed. `$`-prefixed like the other synthesized helpers, so it

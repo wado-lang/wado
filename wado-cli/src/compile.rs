@@ -171,6 +171,7 @@ impl Opt {
     const KNOBS: &[KnobOpt] = &[
         KnobOpt::OptLevel,
         KnobOpt::InlineThreshold,
+        KnobOpt::InlineGrowth,
         KnobOpt::OptIterations,
         KnobOpt::LogLevel,
         KnobOpt::NoValidate,
@@ -393,6 +394,7 @@ pub async fn try_compile_with_run_cache(
         opt_level: knobs.opt_level.to_compiler(),
         skip_validation: knobs.skip_validation,
         inline_threshold: knobs.inline_threshold,
+        inline_growth: knobs.inline_growth,
         opt_iterations: knobs.opt_iterations,
         log_level: Some(knobs.log_level),
         allocator: knobs.allocator.clone(),

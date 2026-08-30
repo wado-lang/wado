@@ -21,6 +21,7 @@ mod cm_reexport_type;
 mod cm_resource_unbound;
 mod cm_world_func_import;
 mod codegen_flags;
+mod cold_outline;
 mod compile_errors;
 mod const_global_literal_alias;
 mod dedupe_const_globals;

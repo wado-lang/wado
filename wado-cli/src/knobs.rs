@@ -76,6 +76,7 @@ pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
 pub enum KnobOpt {
     OptLevel,
     InlineThreshold,
+    InlineGrowth,
     OptIterations,
     LogLevel,
     Allocator,
@@ -99,6 +100,12 @@ impl KnobOpt {
                 short: None,
                 value: Some("<n>"),
                 desc: "Override inlining threshold (max statement count per function)",
+            },
+            Self::InlineGrowth => OptSpec {
+                long: Some("optimize-inline-growth"),
+                short: None,
+                value: Some("<pct>"),
+                desc: "Override how far inlining may grow the program, in percent",
             },
             Self::OptIterations => OptSpec {
                 long: Some("optimize-iterations"),
@@ -158,6 +165,7 @@ pub struct CompileKnobs {
     /// follow-up run without `--no-cache` benefits from a warm cache again.
     pub no_cache: bool,
     pub inline_threshold: Option<usize>,
+    pub inline_growth: Option<u32>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
     /// `-f <flag>` codegen feature flags, forwarded verbatim to
@@ -175,6 +183,7 @@ impl Default for CompileKnobs {
             skip_validation: false,
             no_cache: false,
             inline_threshold: None,
+            inline_growth: None,
             opt_iterations: None,
             allocator: None,
             codegen_flags: Vec::new(),
@@ -194,11 +203,11 @@ impl CompileKnobs {
                     parser,
                 )?);
             }
+            KnobOpt::InlineGrowth => {
+                self.inline_growth = Some(args::parse_u32_arg("--optimize-inline-growth", parser)?);
+            }
             KnobOpt::OptIterations => {
-                self.opt_iterations = Some(args::parse_opt_iterations_arg(
-                    "--optimize-iterations",
-                    parser,
-                )?);
+                self.opt_iterations = Some(args::parse_u32_arg("--optimize-iterations", parser)?);
             }
             KnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
             KnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),

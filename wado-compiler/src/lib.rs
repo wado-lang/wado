@@ -244,6 +244,15 @@ pub struct ProviderComponent {
     pub bytes: Vec<u8>,
 }
 
+/// What a caller may override in the optimizer, each `None` meaning "whatever
+/// the level decides".
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OptOverrides {
+    pub inline_threshold: Option<usize>,
+    pub inline_growth: Option<u32>,
+    pub iterations: Option<u32>,
+}
+
 /// Compilation options for the compiler
 #[derive(Debug, Clone)]
 pub struct CompilerOptions {
@@ -261,6 +270,9 @@ pub struct CompilerOptions {
     /// Override the inline threshold for the optimization pass.
     /// When `None`, the default for the `opt_level` is used.
     pub inline_threshold: Option<usize>,
+    /// Override the percent the inliner may grow the unit by.
+    /// When `None`, the default for the `opt_level` is used.
+    pub inline_growth: Option<u32>,
     /// Override the number of fixed-point optimization iterations.
     /// When `None`, the default for the `opt_level` is used.
     pub opt_iterations: Option<u32>,
@@ -326,6 +338,7 @@ impl Default for CompilerOptions {
             skip_validation: false,
             retain_wir: false,
             inline_threshold: None,
+            inline_growth: None,
             opt_iterations: None,
             log_level: None,
             allocator: None,
@@ -1562,8 +1575,11 @@ fn compile_after_load<H: CompilerHost>(
         optimize(
             nir,
             options.opt_level,
-            options.inline_threshold,
-            options.opt_iterations,
+            OptOverrides {
+                inline_threshold: options.inline_threshold,
+                inline_growth: options.inline_growth,
+                iterations: options.opt_iterations,
+            },
             logger,
         )
     };
@@ -1722,8 +1738,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         opt_level,
         None,
         None,
-        None,
-        None,
+        OptOverrides::default(),
         &[],
         &crate::hashmap::IndexMap::default(),
         param_resolution::ParamPolicy::default(),
@@ -1748,8 +1763,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     opt_level: OptLevel,
     target_world: Option<&str>,
     allocator: Option<&str>,
-    inline_threshold: Option<usize>,
-    opt_iterations: Option<u32>,
+    opt: OptOverrides,
     codegen_flags: &[String],
     param_overrides: &crate::hashmap::IndexMap<String, String>,
     param_policy: param_resolution::ParamPolicy,
@@ -1984,7 +1998,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Optimize
             let nir = {
                 let _span = logger.span("optimize");
-                optimize(nir, opt_level, inline_threshold, opt_iterations, &logger)
+                optimize(nir, opt_level, opt, &logger)
             };
 
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
