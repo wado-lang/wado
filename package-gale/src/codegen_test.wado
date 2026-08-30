@@ -1594,19 +1594,19 @@ test "the op walker's undecided chain keeps every alternative reachable" {
     assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
 }
 
-test "a wildcard branch precedes the arm the lookahead cannot decide" {
-    // `( A | . | )`: the wildcard overlaps `A`, so they share a branch the scan
-    // lengths decide, and that branch admits every token — exactly, so it keeps
-    // its index. The empty alternative admits nothing testable, so it is the
-    // trailing arm rather than one placed among the others.
+test "a wildcard puts every alternative in one branch, epsilon included" {
+    // `( A | . | )`: the wildcard admits every token, so no lookahead test
+    // separates any alternative from it — all three share the tournament and
+    // the scan lengths decide, with the empty alternative ranked as epsilon.
+    // Partitioned apart it became an arm behind the wildcard's unconditional
+    // one, which no input could reach.
     let mut g = parse(WILDCARD_AND_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_r__inner(");
-    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
-    let wild_arm = find_index(&body, &"if true");
-    let empty_arm = find_index(&body, &"} else {");
-    assert wild_arm >= 0, `the wildcard branch lost its arm: ${body}`;
-    assert empty_arm > wild_arm, `the untestable arm must trail the one that decides: ${body}`;
+    assert count_substr(&body, &"if true") == 0, `one branch over every alternative needs no chain: ${body}`;
+    assert count_substr(&body, &"gd_tourney") > 0, `the three alternatives must share a tournament: ${body}`;
+    // Epsilon is `p.pos` — the empty alternative measured without scanning.
+    assert count_substr(&body, &"= p.pos;") > 0, `the empty alternative must be ranked, not dropped: ${body}`;
 }
 
 test "dispatch branches sharing a sub-dispatch are emitted once" {

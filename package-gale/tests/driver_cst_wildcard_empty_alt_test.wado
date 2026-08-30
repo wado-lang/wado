@@ -1,0 +1,36 @@
+//! A wildcard alternative and an empty one in the same group. The wildcard
+//! admits every token, so nothing the lookahead can test tells the three
+//! alternatives apart: they are one branch, decided by scan length, with the
+//! empty alternative as epsilon. Partitioned apart, it sat behind the
+//! wildcard's unconditional branch and no input reached it.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use we from "./grammars/wildcard_empty_alt.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_wildcard_empty_alt" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = we::parse(input);
+    assert result.ok(), `unexpected diagnostics for "${*input}"`;
+    let actual = we::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    "${*input}"\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "wildcard+empty: nothing scans, so the empty alternative wins" {
+    assert_tree(&"", &"(s r)");
+}
+
+test "wildcard+empty: a scan-length tie goes to the lowest alternative" {
+    assert_tree(&"a", &"(s (r a))");
+}
+
+test "wildcard+empty: the wildcard takes a token no other alternative admits" {
+    assert_tree(&"b", &"(s (r b))");
+}
+
+test "wildcard+empty: what follows the group still gets its token" {
+    assert_tree(&"a b", &"(s (r a) b)");
+}

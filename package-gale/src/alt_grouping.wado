@@ -91,11 +91,15 @@ pub fn compute_overlap_groups_with_wildcard_indices(
     if wildcard_indices.is_empty() {
         return groups;
     }
+    // Every alternative, including one whose first set is empty because it
+    // matches nothing. A wildcard admits every token, so no lookahead test
+    // separates any alternative from it — and an empty alternative left out of
+    // the merge becomes a branch of its own that the wildcard's unconditional
+    // one shadows, where it should be ranked inside the tournament as epsilon
+    // and win where nothing longer scans (`( A | . | )` on no input).
     let mut merge_set: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
-        if is_wildcard_alt(wildcard_indices, i) || !first_sets[i].is_empty() {
-            merge_set.push(i);
-        }
+        merge_set.push(i);
     }
     if merge_set.len() < 2 {
         return groups;
