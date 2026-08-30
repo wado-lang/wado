@@ -18,7 +18,9 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::dce::{DescriptorCache, callee_descriptor};
+use cranelift_entity::EntityRef;
+
+use super::dce::DescriptorCache;
 use super::inline::{InlineCtx, splice_stmt};
 
 /// Split every cold region the preconditions admit, in every function —
@@ -28,12 +30,18 @@ pub fn outline_cold_regions(
     project: &mut NirPackage,
     descriptor_cache: &mut DescriptorCache,
 ) -> bool {
+    // The marker's own id, so recognising one is an integer compare rather than
+    // a descriptor lookup per call node. A program that never names it has no
+    // region to find at all.
+    let Some(cold) = cold_path_id(descriptor_cache.descriptors(project)) else {
+        return false;
+    };
     let unit = project.type_table.borrow_mut().intern(ResolvedType::Unit);
     let mut changed = false;
     let mut fi = 0;
     while fi < project.functions.len() {
         let mut ordinal = 0;
-        while let Some(region) = find_region(project, fi, descriptor_cache) {
+        while let Some(region) = find_region(project, fi, cold) {
             outline(project, fi, region, ordinal, unit);
             ordinal += 1;
             changed = true;
@@ -41,6 +49,14 @@ pub fn outline_cold_regions(
         fi += 1;
     }
     changed
+}
+
+/// The `FuncId` of `builtin::cold_path`, if the package resolved one.
+fn cold_path_id(descriptors: &[FunctionRef]) -> Option<FuncId> {
+    descriptors
+        .iter()
+        .position(|d| d.builtin_name().as_deref() == Some("builtin::cold_path"))
+        .map(FuncId::new)
 }
 
 /// A cold region: the statements after a `cold_path()` marker, to the end of
@@ -61,25 +77,26 @@ fn is_splittable(func: &NirFunction) -> bool {
 }
 
 /// The first region in function `fi` that this pass may move.
-fn find_region(
-    project: &NirPackage,
-    fi: usize,
-    descriptor_cache: &mut DescriptorCache,
-) -> Option<Region> {
-    let descriptors = descriptor_cache.descriptors(project);
+fn find_region(project: &NirPackage, fi: usize, cold: FuncId) -> Option<Region> {
     let func = project.functions[fi].borrow();
     if func.is_dead || !is_splittable(&func) {
         return None;
     }
     let body = func.body.as_ref()?;
+    // Nearly every function has no marker, so settle that with one linear scan
+    // of the arena before classifying its blocks.
+    if !body
+        .exprs
+        .values()
+        .any(|n| matches!(&n.kind, ExprKind::Call { func_id, .. } if *func_id == cold))
+    {
+        return None;
+    }
     let param_count = func.params.len() as u32;
     let type_table = project.type_table.borrow();
     for (block, under_loop) in valueless_blocks(body, &type_table) {
         let stmts = &body.blocks[block].stmts;
-        let Some(marker) = stmts
-            .iter()
-            .position(|&s| is_cold_marker(body, s, descriptors))
-        else {
+        let Some(marker) = stmts.iter().position(|&s| is_cold_marker(body, s, cold)) else {
             continue;
         };
         let region: Vec<StmtId> = stmts[marker + 1..].to_vec();
@@ -167,20 +184,15 @@ fn is_already_outlined(body: &Body, region: &[StmtId]) -> bool {
         .is_some_and(|e| matches!(&body.exprs[e].kind, ExprKind::Call { .. }))
 }
 
-/// Whether `stmt` is a bare `builtin::cold_path()` call.
-fn is_cold_marker(body: &Body, stmt: StmtId, descriptors: &[FunctionRef]) -> bool {
+/// Whether `stmt` is a bare `cold_path()` call.
+fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
     let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
         return false;
     };
     let Some(expr) = op.as_expr() else {
         return false;
     };
-    matches!(
-        &body.exprs[expr].kind,
-        ExprKind::Call { func_id, .. }
-            if callee_descriptor(descriptors, *func_id).builtin_name().as_deref()
-                == Some("builtin::cold_path")
-    )
+    matches!(&body.exprs[expr].kind, ExprKind::Call { func_id, .. } if *func_id == cold)
 }
 
 /// Whether the region can become a call without changing what the function

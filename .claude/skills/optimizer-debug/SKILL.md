@@ -123,6 +123,23 @@ naming the passes still reporting changes. From there:
    work that tapers (the pass takes one step per round where its own fixed
    point is one sweep away).
 
+## Workflow for output that is far larger than the level below it
+
+`-O3` emitting several times `-O2`'s wasm is the inliner, not the loop —
+check the iteration count first (`WADO_TRACE=opt_loop`) and stop suspecting
+convergence once it is small.
+
+1. Sweep `--optimize-inline-threshold`. A cliff rather than a curve means one
+   callee crossed the budget and is now copied at every call site.
+2. `WADO_TRACE=inline` reports, per round, the unit size and how many
+   candidates the threshold admitted **only** because the cold discount put
+   them under it — with what those are worth in growth. A handful of callees
+   accounting for most of a round's growth is that pattern.
+3. `WADO_TRACE=cold_outline` says why such a callee was not split: control
+   leaving the region, or a local the call cannot hand over.
+4. `--optimize-inline-growth <pct>` caps unit growth, and `--log-level debug`
+   then names what the cap turned down, with both of the callee's prices.
+
 ## Workflow for a "WIR pipeline generated invalid core Wasm module" ICE
 
 The codegen-time validator catches type mismatches the optimizer
