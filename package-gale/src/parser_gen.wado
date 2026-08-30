@@ -62,24 +62,29 @@ use {
     MAX_LOOKAHEAD_DEPTH,
 } from "./prediction.wado";
 use {
-    AltClass,
-    alt_class,
-    alt_class_is_epsilon,
-    alt_class_is_open_ended,
+    DecisionBranch,
     alt_class_of,
     alt_classes,
-    identity_slots,
-    open_ended_indices,
+    alt_classes_of,
+    classes_union,
     compute_overlap_groups,
-    compute_overlap_groups_with_wildcard,
-    compute_overlap_groups_with_wildcard_indices,
+    compute_overlap_groups_of,
+    direct_dispatch_branches,
+    dispatch_branches,
+    fallback_last,
+    group_branch_admits,
+    group_first_union,
     has_multi_alt_groups,
-    is_wildcard_alt,
+    is_decision_fallback,
+    scan_decision_branches,
     sort_group_by_specificity,
     sort_group_by_mandatory_count_desc,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
 use {
+    AltClass,
+    alt_class_first_set,
+    alt_class_is_epsilon,
     LoweredGrammar,
     Rule,
     LrAlt,
@@ -857,7 +862,7 @@ fn gen_lr_suffix_dispatch(
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
         let group = &lr_dispatch.groups[g];
 
-        let union_first = group_first_union(group, &suffix_first_sets);
+        let union_first = suffix_first_union(group, &suffix_first_sets);
         let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &"suffix_kind");
         if is_first {
             w.begin(&`if ${cond}`);
@@ -1875,26 +1880,6 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         w.line(fail_stmt);
     }
     w.end();
-}
-
-/// The branches the scan takes over a group's alternatives: the partition the
-/// parse side dispatches on, off the first sets and wildcard alternatives
-/// lower baked. The lookahead they test against is the scan cursor's, supplied
-/// at emit — the branch itself holds what it admits, not a rendered test.
-fn scan_decision_branches(ge: &ScanGroupElement) -> List<DecisionBranch> {
-    let groups = compute_overlap_groups_with_wildcard_indices(&ge.alt_first_sets, &ge.wildcard_alt_indices);
-    let mut branches: List<DecisionBranch> = [];
-    for let group of &groups {
-        // A wildcard alternative matches any token, so its branch tests
-        // nothing and the scan lengths decide inside it.
-        let admits = if group.iter_ref().any(|idx: &i32| is_wildcard_alt(&ge.wildcard_alt_indices, *idx)) {
-            Admits::Everything;
-        } else {
-            admits_or_untestable(&group_first_union(group, &ge.alt_first_sets));
-        };
-        branches.push(DecisionBranch { test: admits, gate: "", alts: *group });
-    }
-    return fallback_last(&branches);
 }
 
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —
@@ -3170,12 +3155,11 @@ fn gen_alt_dispatch(
             return;
         },
     };
-    let mut all_first: List<String> = [];
+    let mut dispatch_classes: List<AltClass> = [];
     for let br of &dd.branches {
-        for let t of &br.tokens {
-            all_first.push(*t);
-        }
+        dispatch_classes.push(br.alt_class);
     }
+    let all_first = classes_union(&dispatch_classes);
     let branches = direct_dispatch_branches(&dd);
     assert !branches.is_empty(), "a Direct dispatch decides between alternatives, so it has branches";
     if decision_reads_lookahead(&branches) {
@@ -3198,31 +3182,6 @@ fn gen_alt_dispatch(
         w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
     }
     close_decision_chain(w, &branches);
-}
-
-/// The branches a baked `Direct` dispatch takes, as the one branch type every
-/// chain renders. Lower bakes an empty token set both for an alternative no
-/// lookahead selects and for one that is open-ended, and only the first is the
-/// chain's fallback. Lower says which, from the surface alternatives this side
-/// no longer has — working it out from the ops instead is what made the two
-/// walkers answer differently.
-fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
-    let mut branches: List<DecisionBranch> = [];
-    for let br of &dd.branches {
-        let test = if !br.tokens.is_empty() {
-            Admits::Kinds(br.tokens);
-        } else if br.epsilon {
-            Admits::Untestable;
-        } else {
-            Admits::Everything;
-        };
-        branches.push(DecisionBranch {
-            test,
-            gate: "",
-            alts: [br.alt_index],
-        });
-    }
-    return fallback_last(&branches);
 }
 
 /// The alternatives a baked dispatch decides between, in the order it emits
@@ -4198,10 +4157,10 @@ fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
 /// a lone alternative. Walks the scan side via op-driven helpers
 /// (`gen_scan_op_elements_in_block` / `gen_scan_op_group`) using
 /// `g_op.scan_alts` directly. `g_elem` is the surface `Group` matching
-/// `g_op`; it is consulted only to compute the per-alt first sets the scan
-/// partitions on (lower bakes these on `ScanGroupElement.alt_first_sets` but
-/// the `GroupOp` itself does not surface them — recomputing matches what
-/// `lower_scan_group` does).
+/// `g_op`; it is consulted only to classify the alternatives the scan
+/// partitions on (lower bakes those on `ScanGroupElement.alt_classes` but the
+/// `GroupOp` itself does not surface them — reclassifying through the one
+/// classifier is what `lower_scan_group` does too).
 fn gen_op_opt_scan_guard_for_group(
     w: &mut CodeWriter,
     g_op: &GroupOp,
@@ -4220,16 +4179,10 @@ fn gen_op_opt_scan_guard_for_group(
         let body = &g_op.scan_alts[0];
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
     } else {
-        let mut alt_first_sets: List<List<String>> = [];
-        for let alt of &g_elem.alternatives {
-            let mut visiting: List<String> = [];
-            alt_first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-        }
         let scan_elem = ScanGroupElement {
             alts: g_op.scan_alts,
             lenient: false,
-            alt_first_sets,
-            wildcard_alt_indices: open_ended_indices(&g_elem.alternatives, ctx),
+            alt_classes: alt_classes_of(&g_elem.alternatives, ctx),
         };
         gen_scan_op_group(w, &scan_elem, ctx, &fail, false);
     }
@@ -4577,8 +4530,8 @@ fn group_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) ->
     let alts = repeat_body_group_alts(inner)?;
     // A guard, not a dispatch chain: an empty alternative widens it to admit
     // everything, which is the safe direction and creates no dead branch.
-    let [first_sets, groups] = group_partition(alts, kind, &null, ctx);
-    let branches = decision_branches(alts, &groups, &first_sets, ctx);
+    let [classes, groups] = group_partition(alts, kind, &null, ctx);
+    let branches = decision_branches(alts, &groups, &classes, ctx);
     let mut parts: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
         parts.push(`(${render_branch_cond(&branches[i], &"p.peek_kind()", ctx)})`);
@@ -4586,7 +4539,7 @@ fn group_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) ->
     return Option::Some(GroupAdmits {
         condition: parts.join(" || "),
         gated: any_alt_gated(&branches, ctx),
-        expected: first_sets_union(&first_sets),
+        expected: classes_union(&classes),
     });
 }
 
@@ -6274,28 +6227,6 @@ fn gen_scan_winner_round(
     w.end();
 }
 
-/// What a decision branch tests. Two facts an empty token list used to carry
-/// at once: a branch that admits every lookahead, and a branch whose first set
-/// is absent. Rendering both as `true` put an unconditional arm in the middle
-/// of the chain and made every later alternative dead code.
-/// One branch of a group's decision: the lookahead that admits it, the
-/// alternative-initial predicate it is further gated by, and the alternatives
-/// it holds.
-struct DecisionBranch {
-    test: Admits,
-    /// Rendered `&& (…)` suffix, empty where the branch has no predicate.
-    gate: String,
-    alts: List<i32>,
-}
-
-/// A branch the lookahead cannot decide, gated by nothing, decides nothing the
-/// branches after it could still decide, so it is the chain's `else`. Moving it
-/// there is what keeps a later alternative from being emitted behind a test
-/// that can never fail. A gated one can decline, so it stays where it is.
-fn is_decision_fallback(b: &DecisionBranch) -> bool {
-    return admits_is_untestable(&b.test) && b.gate.is_empty();
-}
-
 /// Reorder arms so the ones admitting everything come last, keeping the rest
 /// in their alternative order. `fallback_last` is this rule over a group's
 /// branches; a rule's own alternatives are a decision too, and its arms are
@@ -6317,29 +6248,6 @@ fn arms_fallback_last(admits_everything: &List<bool>) -> List<i32> {
     return out;
 }
 
-/// Branches the lookahead cannot decide are one branch, not a chain of arms
-/// only the first of which is reachable. Their alternatives share it and the
-/// scan lengths pick between them, which is what a branch holding several
-/// always meant. A wildcard's branch is not among them: it admits every token
-/// by decision, so it keeps its place and the partition has already merged
-/// every alternative into it.
-fn fallback_last(branches: &List<DecisionBranch>) -> List<DecisionBranch> {
-    let mut out: List<DecisionBranch> = [];
-    let mut fallback_alts: List<i32> = [];
-    for let b of branches {
-        if is_decision_fallback(b) {
-            for let a of &b.alts {
-                fallback_alts.push(*a);
-            }
-        } else {
-            out.push(*b);
-        }
-    }
-    if !fallback_alts.is_empty() {
-        out.push(DecisionBranch { test: Admits::Untestable, gate: "", alts: fallback_alts.sorted() });
-    }
-    return out;
-}
 
 /// The one place a partition becomes emitted branches. The dispatch, the scan
 /// and every caller deciding whether to enter the group read this list, so a
@@ -6347,16 +6255,14 @@ fn fallback_last(branches: &List<DecisionBranch>) -> List<DecisionBranch> {
 fn decision_branches(
     alts: &List<Alternative>,
     groups: &List<List<i32>>,
-    first_sets: &List<List<String>>,
+    classes: &List<AltClass>,
     ctx: &mut GenContext,
 ) -> List<DecisionBranch> {
-    // A group's partition is over `alts` itself here, so slot and alternative
-    // index are the same thing.
-    let classes = alt_classes(&identity_slots(alts.len()), alts, first_sets, ctx);
+    assert classes.len() == alts.len(), "a group is partitioned over its own alternatives, so slot and alt index coincide";
     let mut branches: List<DecisionBranch> = [];
     for let group of groups {
         branches.push(DecisionBranch {
-            test: group_branch_admits(group, first_sets, &classes),
+            test: group_branch_admits(group, classes),
             gate: group_gate(group, alts, ctx),
             alts: *group,
         });
@@ -6389,10 +6295,10 @@ fn group_decision(
     empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut GenContext,
 ) -> GroupDecision {
-    let [first_sets, groups] = group_partition(alts, kind, empty_alt_admits, ctx);
+    let [classes, groups] = group_partition(alts, kind, empty_alt_admits, ctx);
     return GroupDecision {
-        branches: decision_branches(alts, &groups, &first_sets, ctx),
-        expected: first_sets_union(&first_sets),
+        branches: decision_branches(alts, &groups, &classes, ctx),
+        expected: classes_union(&classes),
     };
 }
 
@@ -6425,14 +6331,7 @@ fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<Decis
     if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } {
         return null;
     }
-    return match &g.dispatch {
-        Direct(dd) => Option::Some(direct_dispatch_branches(dd)),
-        // The tournament has no lookahead gate of its own: every alternative
-        // is a candidate, and the scan lengths decide.
-        Tournament(td) => Option::Some([
-            DecisionBranch { test: Admits::Everything, gate: "", alts: td.alts },
-        ]),
-    };
+    return Option::Some(dispatch_branches(&g.dispatch));
 }
 
 /// Decide a group, as `[winner, best]` — two variables because a group's
@@ -6659,7 +6558,7 @@ variant GroupBranchKind {
 fn gen_group_dispatch(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
-    first_sets: &List<List<String>>,
+    classes: &List<AltClass>,
     alts: &List<Alternative>,
     g_op_alts: &List<AltBody>,
     g_op_scan_alts: &List<ScanBody>,
@@ -6713,49 +6612,22 @@ fn gen_group_dispatch(
         gen_group_branch_body(w, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
     }
     if report {
-        let expected_ref = sync_set_ref(ctx, &first_sets_union(first_sets));
+        let expected_ref = sync_set_ref(ctx, &classes_union(classes));
         w.else_begin(&"else");
         w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     }
     w.end();
 }
 
-/// The union of a dispatch's branches, the expected set its no-match reports.
-fn first_sets_union(first_sets: &List<List<String>>) -> List<String> {
-    let mut expected: List<String> = [];
-    for let f of first_sets {
-        dedup_append_arr(&mut expected, f);
-    }
-    return expected;
-}
-
-/// The union of the first sets of one branch's alternatives — what its
-/// lookahead test admits.
-fn group_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
+/// The union of one branch's first sets, where the branch is over LR suffixes
+/// rather than alternatives. A suffix begins with a mandatory operator token
+/// by construction, so there is nothing here to classify.
+fn suffix_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
     let mut union_first: List<String> = [];
     for let idx of group {
         dedup_append_arr(&mut union_first, &first_sets[*idx]);
     }
     return union_first;
-}
-
-/// What a branch admits. An open-ended alternative admits every token and says
-/// so exactly, which is why it keeps its place; a union that comes out empty
-/// is an alternative the lookahead cannot decide, which does not.
-///
-/// `classes` is parallel to `first_sets`, not to the rule's alternatives. A
-/// group holds slots into whatever index space its partition was built in, and
-/// a left-recursive rule partitions only its non-LR alternatives — so reading
-/// the alternative list directly read a different alternative than the first
-/// set beside it. Taking the classification as a parameter is what keeps the
-/// two spaces from being confused here: whoever built the partition supplies
-/// the classes in the same space.
-fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, classes: &List<AltClass>) -> Admits {
-    assert classes.len() == first_sets.len(), "one class per partitioned alternative";
-    if group.iter_ref().any(|slot: &i32| alt_class_is_open_ended(&classes[*slot])) {
-        return Admits::Everything;
-    }
-    return admits_or_untestable(&group_first_union(group, first_sets));
 }
 
 /// The gate a lone alternative's alt-initial predicates contribute, registered
@@ -6847,11 +6719,11 @@ fn gen_general_group(
     decided: Option<String> = null,
 ) {
     let _ = dedup_name(&general_group_field_name(gs.group_index), name_counts);
-    let [first_sets, groups] = group_partition(alts, GroupBranchKind::General, empty_alt_admits, ctx);
+    let [classes, groups] = group_partition(alts, GroupBranchKind::General, empty_alt_admits, ctx);
     gen_group_dispatch(
         w,
-        &decision_branches(alts, &groups, &first_sets, ctx),
-        &first_sets,
+        &decision_branches(alts, &groups, &classes, ctx),
+        &classes,
         alts,
         g_op_alts,
         g_op_scan_alts,
@@ -6878,11 +6750,11 @@ fn gen_rule_ref_group(
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     // A rule-ref group is one distinct RuleRef per alternative, so none is
     // empty and there is no admit set to supply.
-    let [first_sets, groups] = group_partition(alts, GroupBranchKind::RuleRef, &null, ctx);
+    let [classes, groups] = group_partition(alts, GroupBranchKind::RuleRef, &null, ctx);
     gen_group_dispatch(
         w,
-        &decision_branches(alts, &groups, &first_sets, ctx),
-        &first_sets,
+        &decision_branches(alts, &groups, &classes, ctx),
+        &classes,
         alts,
         g_op_alts,
         g_op_scan_alts,
@@ -6894,29 +6766,23 @@ fn gen_rule_ref_group(
     );
 }
 
-/// A group's first sets and the branches its dispatch takes over them, as
-/// `[first_sets, groups]`. The one place a group is partitioned: the dispatch,
-/// and anything deciding whether to enter it, must read the same branches or
-/// they disagree about which alternative a gate belongs to.
+/// What a group's alternatives match and the branches its dispatch takes over
+/// them, as `[classes, groups]`. The one place a group is partitioned: the
+/// dispatch, and anything deciding whether to enter it, must read the same
+/// branches or they disagree about which alternative a gate belongs to.
 fn group_partition(
     alts: &List<Alternative>,
     kind: GroupBranchKind,
     empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut GenContext,
-) -> [List<List<String>>, List<List<i32>>] {
-    let mut first_sets: List<List<String>> = [];
-    for let alt of alts {
-        let mut visiting: List<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-    }
-    // An empty alternative has no first set of its own; what selects it is
-    // what may follow the group, which lower computed at its position.
-    apply_empty_alt_admits(&mut first_sets, empty_alt_admits);
+) -> [List<AltClass>, List<List<i32>>] {
+    let mut classes = alt_classes_of(alts, ctx);
+    apply_empty_alt_admits(&mut classes, empty_alt_admits);
     // One partition for both kinds. A rule-ref group was assumed unable to
     // hold an open-ended alternative, because it is a single call per
     // alternative — but the rule that call reaches can be open-ended, and
     // lower's SimpleCst dispatch and scan group both know it now.
-    return [first_sets, compute_overlap_groups_with_wildcard(alts, &first_sets, ctx)];
+    return [classes, compute_overlap_groups_of(&classes)];
 }
 
 /// Parse one alt's elements; the chosen alt's elements append to the
@@ -7503,14 +7369,14 @@ fn gen_multi_alt_body_alt(
     let mut untestable: List<bool> = [];
     for let group of groups {
         let ungated = group.len() != 1 || !alt_gates_branch(&rule.alternatives[non_lr_indices[group[0]]], ctx);
-        let admits = group_branch_admits(group, first_sets, &classes);
+        let admits = group_branch_admits(group, &classes);
         untestable.push(admits_is_untestable(&admits) && ungated);
     }
 
     for let slot of &arms_fallback_last(&untestable) {
         let g = *slot;
         let group = &groups[g];
-        let union_first = group_first_union(group, first_sets);
+        let union_first = group_first_union(group, &classes);
         let gate = if group.len() == 1 {
             alt_gate_and_suffix(&rule.alternatives[non_lr_indices[group[0]]], ctx);
         } else {

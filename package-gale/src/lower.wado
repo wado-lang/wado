@@ -46,12 +46,13 @@ use {
 } from "./ir.wado";
 use {
     alt_class,
-    alt_class_is_epsilon,
-    alt_is_open_ended,
-    open_ended_indices,
+    alt_class_of,
+    alt_classes,
+    alt_classes_of,
     compute_overlap_groups,
-    compute_overlap_groups_with_wildcard_indices,
-    is_wildcard_alt,
+    compute_overlap_groups_of,
+    dispatch_branches,
+    scan_decision_branches,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
 use { alt_has_gate } from "./action_gen.wado";
@@ -132,6 +133,10 @@ use {
     DiagnosticKind,
     DiagnosticOwner,
     DiagnosticSite,
+    AltClass,
+    alt_class_first_set,
+    alt_class_is_epsilon,
+    alt_class_is_open_ended,
 } from "./gir.wado";
 
 /// True when an element threads a `FollowArg` into a callee: a `RuleRef`,
@@ -426,23 +431,15 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             walk_scan_element_for_kind_sets(&r.body, ctx);
         },
         Group(g) => {
-            // The branch lookaheads `gen_scan_op_group` tests, over the same
-            // partition it takes. A branch holding a wildcard alternative
-            // tests nothing, so it interns nothing.
-            for let group of &compute_overlap_groups_with_wildcard_indices(&g.alt_first_sets, &g.wildcard_alt_indices) {
-                if group.iter_ref().any(|idx: &i32| is_wildcard_alt(&g.wildcard_alt_indices, *idx)) {
-                    continue;
-                }
-                let mut union_first: List<String> = [];
-                for let idx of &group {
-                    for let tk of &g.alt_first_sets[*idx] {
-                        if !first_contains(&union_first, tk) {
-                            union_first.push(*tk);
-                        }
+            // The very branches `gen_scan_op_group` renders, not a second
+            // derivation of them: a branch whose test emit renders from a kind
+            // set this walker did not intern references an id that does not
+            // exist.
+            for let b of &scan_decision_branches(&g) {
+                if let Kinds(tokens) = &b.test {
+                    if tokens.len() >= 2 {
+                        ctx.intern_kind_set(tokens);
                     }
-                }
-                if union_first.len() >= 2 {
-                    ctx.intern_kind_set(&union_first);
                 }
             }
             for let b of &g.alts {
@@ -468,16 +465,12 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
 }
 
 fn walk_dispatch_for_kind_sets(d: &MultiAltDispatch, ctx: &mut GenContext) {
-    match *d {
-        Direct(dd) => {
-            for let branch of &dd.branches {
-                if branch.tokens.len() >= 2 {
-                    ctx.intern_kind_set(&branch.tokens);
-                }
+    for let b of &dispatch_branches(d) {
+        if let Kinds(tokens) = &b.test {
+            if tokens.len() >= 2 {
+                ctx.intern_kind_set(tokens);
             }
-        },
-        Tournament(_) => {
-        },
+        }
     }
 }
 
@@ -578,7 +571,8 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
     }
 
     let owner = DiagnosticOwner::rule_dispatch(&rule.name);
-    let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, &all_indices, &first_sets, ctx);
+    let classes = alt_classes(&all_indices, &rule.alternatives, &first_sets, ctx);
+    let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, &all_indices, &classes, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -1363,7 +1357,8 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     }
 
     let owner = DiagnosticOwner { rule: rule.name, site: DiagnosticSite::LrAtomDispatch };
-    let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, non_lr_indices, &first_sets, ctx);
+    let classes = alt_classes(non_lr_indices, &rule.alternatives, &first_sets, ctx);
+    let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, non_lr_indices, &classes, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -1670,23 +1665,15 @@ fn build_direct_dispatch(
     let mut branches: List<DispatchBranch> = [];
     for let mut i = 0; i < first_sets.len(); i += 1 {
         branches.push(DispatchBranch {
-            tokens: first_sets[i],
+            alt_class: alt_class(&alts[i], &first_sets[i], ctx),
             alt_index: i,
-            epsilon: alt_class_is_epsilon(&alt_class(&alts[i], &first_sets[i], ctx)),
         });
     }
     return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
 
-/// `indices` selects which of `alts` take part; the two index spaces differ,
-/// which is why the selection is applied here rather than assumed.
-fn any_open_ended_alt(alts: &List<Alternative>, indices: &List<i32>, ctx: &mut GenContext) -> bool {
-    for let mut k = 0; k < indices.len(); k += 1 {
-        if alt_is_open_ended(&alts[indices[k]], ctx) {
-            return true;
-        }
-    }
-    return false;
+fn any_open_ended(classes: &List<AltClass>) -> bool {
+    return classes.iter_ref().any(|c: &AltClass| alt_class_is_open_ended(c));
 }
 
 /// Choose a dispatch for a set of alternatives. When the per-alt
@@ -1705,24 +1692,28 @@ fn build_overlap_dispatch(
     owner: &DiagnosticOwner,
     alts: &List<Alternative>,
     indices: &List<i32>,
-    first_sets: &List<List<String>>,
+    classes: &List<AltClass>,
     ctx: &mut GenContext,
 ) -> MultiAltDispatch {
-    let n_sets = first_sets.len();
+    let n_classes = classes.len();
     let n_indices = indices.len();
-    assert n_sets == n_indices, `${owner.label()}: first_sets is parallel to indices, not to alts (${n_sets} vs ${n_indices})`;
+    assert n_classes == n_indices, `${owner.label()}: classes is parallel to indices, not to alts (${n_classes} vs ${n_indices})`;
 
-    // An open-ended alt's static first set is empty, so `any_overlap` reads it
-    // as disjoint and the Direct chain would give it an unreachable
-    // empty-token branch. Its real first set is universal — the same invariant
-    // `compute_overlap_groups_with_wildcard` applies on the surface IR.
-    if !any_overlap(first_sets) && !any_open_ended_alt(alts, indices, ctx) {
+    // Whether the alternatives overlap is `compute_overlap_groups_of`'s to
+    // answer, the same as for every emitted decision: a branch holding more
+    // than one alternative is exactly an overlap. Asking it separately here is
+    // what let a dispatch be Direct over alternatives the emit chain then
+    // partitioned together.
+    let disjoint = !compute_overlap_groups_of(classes).iter_ref().any(|g: &List<i32>| g.len() > 1);
+    // An open-ended alt's static first set is empty, so a pairwise test reads
+    // it as disjoint and the Direct chain would give it an unreachable
+    // empty-token branch. Its real first set is universal.
+    if disjoint && !any_open_ended(classes) {
         let mut branches: List<DispatchBranch> = [];
         for let mut k = 0; k < indices.len(); k += 1 {
             branches.push(DispatchBranch {
-                tokens: first_sets[k],
+                alt_class: classes[k],
                 alt_index: indices[k],
-                epsilon: alt_class_is_epsilon(&alt_class(&alts[indices[k]], &first_sets[k], ctx)),
             });
         }
         return MultiAltDispatch::Direct(DirectDispatch { branches });
@@ -1734,7 +1725,7 @@ fn build_overlap_dispatch(
     }
 
     // Surface the overlap as an advisory diagnostic.
-    let shared = shared_overlap_tokens(first_sets);
+    let shared = shared_overlap_tokens(classes);
     // Reporting the shared set for an open-ended alt would read as `{}`.
     let cause = if shared.is_empty() {
         "an open-ended alternative (`.` / `~X`) overlaps every lookahead";
@@ -1758,7 +1749,11 @@ fn build_overlap_dispatch(
 /// Collect the token kinds that appear in more than one alt's first
 /// set — the lookahead that made the alts overlap. Order follows first
 /// appearance so the message is stable across runs.
-fn shared_overlap_tokens(first_sets: &List<List<String>>) -> List<String> {
+fn shared_overlap_tokens(classes: &List<AltClass>) -> List<String> {
+    let mut first_sets: List<List<String>> = [];
+    for let c of classes {
+        first_sets.push(alt_class_first_set(c));
+    }
     let mut shared: List<String> = [];
     for let mut i = 0; i < first_sets.len(); i += 1 {
         for let tok of &first_sets[i] {
@@ -1804,18 +1799,6 @@ fn join_kind_set(kinds: &List<String>) -> String {
     }
     out.push('}');
     return out;
-}
-
-/// True iff any pair of first-sets shares at least one token.
-fn any_overlap(first_sets: &List<List<String>>) -> bool {
-    for let mut i = 0; i < first_sets.len(); i += 1 {
-        for let mut j = i + 1; j < first_sets.len(); j += 1 {
-            if sets_overlap(&first_sets[i], &first_sets[j]) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 
@@ -1967,36 +1950,28 @@ fn lower_scan_group(
             for let mut i = 0; i < alt.elements.len(); i += 1 {
                 elements.push(lower_alt_scan_element(&alt.elements, i, ctx, false, enclosing_at_tail));
             }
-            let mut visiting: List<String> = [];
-            let alt_first = ctx.first_of_alt(alt, &mut visiting);
-            let mut wildcard_indices: List<i32> = [];
-            if alt_is_open_ended(alt, ctx) {
-                wildcard_indices.push(0);
-            }
             return ScanElement::Group(ScanGroupElement {
                 alts: [
                     ScanBody { elements },
                 ],
                 lenient: false,
-                alt_first_sets: [alt_first],
-                wildcard_alt_indices: wildcard_indices,
+                alt_classes: [alt_class_of(alt, ctx)],
             });
         },
         TokenOnly => {
             let mut bodies: List<ScanBody> = [];
-            let mut first_sets: List<List<String>> = [];
+            let mut classes: List<AltClass> = [];
             for let alt of alts {
                 let elem = &alt.elements[0];
                 bodies.push(ScanBody {
                     elements: [lower_scan_element(elem, ctx, outer_follow, FollowArg::NoFollow, false)],
                 });
-                first_sets.push([token_only_kind(elem)]);
+                classes.push(AltClass::Selects([token_only_kind(elem)]));
             }
             return ScanElement::Group(ScanGroupElement {
                 alts: bodies,
                 lenient: false,
-                alt_first_sets: first_sets,
-                wildcard_alt_indices: [] as List<i32>,
+                alt_classes: classes,
             });
         },
         SimpleCst => {
@@ -2016,10 +1991,7 @@ fn lower_general_scan_group(
     enclosing_at_tail: bool = true,
 ) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
-    let mut first_sets: List<List<String>> = [];
-    let mut wildcard_indices: List<i32> = [];
-    for let mut ai = 0; ai < alts.len(); ai += 1 {
-        let alt = &alts[ai];
+    for let alt of alts {
         let mut elements: List<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
             elements.push(lower_alt_scan_element(
@@ -2031,19 +2003,13 @@ fn lower_general_scan_group(
             ));
         }
         bodies.push(ScanBody { elements });
-        let mut visiting: List<String> = [];
-        let alt_first = ctx.first_of_alt(alt, &mut visiting);
-        if alt_is_open_ended(alt, ctx) {
-            wildcard_indices.push(ai);
-        }
-        first_sets.push(alt_first);
     }
-    apply_empty_alt_admits(&mut first_sets, &group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx));
+    let mut classes = alt_classes_of(alts, ctx);
+    apply_empty_alt_admits(&mut classes, &group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx));
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
-        alt_first_sets: first_sets,
-        wildcard_alt_indices: wildcard_indices,
+        alt_classes: classes,
     });
 }
 
@@ -3171,7 +3137,8 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         rule: ctx.current_rule_name(),
         site: DiagnosticSite::SimpleCstGroup,
     };
-    let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &first_sets, ctx);
+    let classes = alt_classes(&all_indices, alts, &first_sets, ctx);
+    let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &classes, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::SimpleCst(SimpleCstShape {
             type_name: type_name,
@@ -3193,14 +3160,11 @@ global SIMPLE_CST_NO_FOLLOW: List<String> = [];
 
 fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
-    let mut first_sets: List<List<String>> = [];
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let alt = &alts[i];
-        let elem = &alt.elements[0];
+    for let alt of alts {
         bodies.push(ScanBody {
             elements: [
                 lower_scan_element(
-                    elem,
+                    &alt.elements[0],
                     ctx,
                     &SIMPLE_CST_NO_FOLLOW,
                     FollowArg::NoFollow,
@@ -3208,18 +3172,14 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -
                 ),
             ],
         });
-        let mut visiting: List<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
     // A SimpleCst alternative is one rule call, and the rule it calls can be
     // open-ended — asserting that none is here is what let the scan partition
     // this group differently from the parse.
-    let open_ended = open_ended_indices(alts, ctx);
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
-        alt_first_sets: first_sets,
-        wildcard_alt_indices: open_ended,
+        alt_classes: alt_classes_of(alts, ctx),
     });
 }
 
@@ -3291,18 +3251,18 @@ pub fn group_empty_alt_admits(
     return null;
 }
 
-/// Write the empty alternative's admit set into the first sets the dispatch
-/// partitions on. Both walkers call it with what lower decided, so neither
-/// works out again which alternative earns the set and neither can read that
-/// alternative's absent first set as an absence of its own.
-pub fn apply_empty_alt_admits(first_sets: &mut List<List<String>>, admits: &Option<EmptyAltAdmits>) {
+/// Reclassify the empty alternative as selected by what may follow the group,
+/// which lower computed at its position. Both walkers call it with what lower
+/// decided, so neither works out again which alternative earns the set.
+pub fn apply_empty_alt_admits(classes: &mut List<AltClass>, admits: &Option<EmptyAltAdmits>) {
     let e = if let Some(x) = admits {
         x;
     } else {
         return;
     };
     assert !e.admits.is_empty(), "an admit set that admits nothing is `null`, not an empty set";
-    first_sets[e.alt_index] = e.admits;
+    assert alt_class_is_epsilon(&classes[e.alt_index]), "only the alternative deriving epsilon earns the group's follow set";
+    classes[e.alt_index] = AltClass::Selects(e.admits);
 }
 
 /// Multi-alt group not covered by `SimpleCst` / `TokenOnly` /
@@ -3434,8 +3394,9 @@ fn lower_general_group(
         site: DiagnosticSite::GeneralGroup(group_index),
     };
     let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
-    apply_empty_alt_admits(&mut first_sets, &empty_alt_admits);
-    let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &first_sets, ctx);
+    let mut classes = alt_classes(&all_indices, alts, &first_sets, ctx);
+    apply_empty_alt_admits(&mut classes, &empty_alt_admits);
+    let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &classes, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {
             variant_type: variant_type,

@@ -42,6 +42,7 @@ use {
     Diagnostic,
     DiagnosticKind,
     DiagnosticOwner,
+    alt_class_first_set,
 } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
@@ -347,11 +348,11 @@ test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
         if let Direct(d) = &m.dispatch {
             assert d.branches.len() == 3;
             assert d.branches[0].alt_index == 0;
-            assert d.branches[0].tokens[0] == "TK_INT";
+            assert alt_class_first_set(&d.branches[0].alt_class)[0] == "TK_INT";
             assert d.branches[1].alt_index == 1;
-            assert d.branches[1].tokens[0] == "TK_STRING";
+            assert alt_class_first_set(&d.branches[1].alt_class)[0] == "TK_STRING";
             assert d.branches[2].alt_index == 2;
-            assert d.branches[2].tokens[0] == "TK_ID";
+            assert alt_class_first_set(&d.branches[2].alt_class)[0] == "TK_ID";
         } else {
             panic("expected MultiAltDispatch::Direct");
         }
@@ -774,10 +775,10 @@ test "lower token-only Group produces TokenOnly shape with single field" {
             // Direct dispatch on each alt's single token kind.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert dd.branches[0].tokens.len() == 1;
-                assert dd.branches[0].tokens[0] == "TK_K_INSERT";
+                assert alt_class_first_set(&dd.branches[0].alt_class).len() == 1;
+                assert alt_class_first_set(&dd.branches[0].alt_class)[0] == "TK_K_INSERT";
                 assert dd.branches[0].alt_index == 0;
-                assert dd.branches[1].tokens[0] == "TK_K_REPLACE";
+                assert alt_class_first_set(&dd.branches[1].alt_class)[0] == "TK_K_REPLACE";
                 assert dd.branches[1].alt_index == 1;
             } else {
                 panic("expected MultiAltDispatch::Direct");
@@ -934,8 +935,8 @@ test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
             // Direct dispatch on each rule's first set.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert dd.branches[0].tokens[0] == "TK_ID";
-                assert dd.branches[1].tokens[0] == "TK_INT";
+                assert alt_class_first_set(&dd.branches[0].alt_class)[0] == "TK_ID";
+                assert alt_class_first_set(&dd.branches[1].alt_class)[0] == "TK_INT";
             } else {
                 panic("expected MultiAltDispatch::Direct");
             }
@@ -1054,8 +1055,8 @@ test "lower General Group with disjoint multi-shape alts produces General shape"
             // Direct dispatch on each alt's first set.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert dd.branches[0].tokens[0] == "TK_ID";
-                assert dd.branches[1].tokens[0] == "TK_INT";
+                assert alt_class_first_set(&dd.branches[0].alt_class)[0] == "TK_ID";
+                assert alt_class_first_set(&dd.branches[1].alt_class)[0] == "TK_INT";
             } else {
                 panic("expected MultiAltDispatch::Direct");
             }
@@ -3191,7 +3192,7 @@ test "a wildcard alt keeps the group off the Direct dispatch" {
         if let Group(go) = &s.body.ops[0] {
             if let Direct(dd) = &go.dispatch {
                 for let b of &dd.branches {
-                    assert !b.tokens.is_empty(), `alt ${b.alt_index} got an empty-token branch`;
+                    assert !alt_class_first_set(&b.alt_class).is_empty(), `alt ${b.alt_index} got an empty-token branch`;
                 }
                 panic("expected a scan Tournament for a group holding a wildcard alt");
             }

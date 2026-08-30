@@ -28,6 +28,7 @@ use {
     Op,
     RepeatOp,
     RepeatStrategy,
+    alt_class_first_set,
     rule_header,
 } from "./gir.wado";
 use { Grammar, ParserRule, Element, RepeatKind } from "./ir.wado";
@@ -119,7 +120,7 @@ fn render_multi_alt(out: &mut String, m: &MultiAltRule) {
                 out.push_str(&"  alt ");
                 out.push_str(&`${branch.alt_index}`);
                 out.push_str(&" first=");
-                push_token_set(out, &branch.tokens);
+                push_token_set(out, &alt_class_first_set(&branch.alt_class));
                 out.push('\n');
             }
         },
@@ -145,7 +146,7 @@ fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule) {
                 out.push_str(&"    alt ");
                 out.push_str(&`${branch.alt_index}`);
                 out.push_str(&" first=");
-                push_token_set(out, &branch.tokens);
+                push_token_set(out, &alt_class_first_set(&branch.alt_class));
                 out.push('\n');
             }
         },

@@ -1,40 +1,163 @@
-//! Alt overlap-grouping and sorting heuristics for multi-alternative
-//! dispatch.
+//! The lookahead decision over a set of alternatives, and the sorting
+//! heuristics that order what it picks between.
 //!
-//! Given the FIRST sets of a set of alternatives, this module decides:
-//!  * which alts overlap (`compute_overlap_groups`), so they must be
-//!    dispatched against each other rather than in isolation; and
-//!  * within each overlap group, in what order to try them
-//!    (`sort_group_by_specificity`, `sort_group_by_mandatory_count_desc`,
-//!    `sort_group_by_element_count`).
+//! One decision, produced here and elsewhere only rendered:
+//!  * `alt_class` says what each alternative matches;
+//!  * `compute_overlap_groups_of` partitions them into branches;
+//!  * `group_branch_admits` says what each branch admits, and `fallback_last`
+//!    puts the branch no lookahead decides at the end of the chain.
 //!
-//! The priority tier constants (`ALT_PRIORITY_*`) and the per-alt
-//! priority key (`alt_sort_priority`) are the contract that the parse-
-//! side dispatch and the scan-side dispatch share. See the CLAUDE.md
-//! "Failed Approaches" section for why the bands are split the way they
-//! are.
+//! Every decision site goes through those four. The lowerer interning the kind
+//! sets, the surface emit walker and the op-only walker are three readers of
+//! one answer, so none can partition a group differently from the others
+//! (soundness invariant 9). Only the rendering — the `if` chain, the scan
+//! cursor vs `p.peek_kind()` — belongs to the caller.
+//!
+//! Within a branch, order is `sort_group_by_specificity`,
+//! `sort_group_by_mandatory_count_desc`, `sort_group_by_element_count`. The
+//! priority tier constants (`ALT_PRIORITY_*`) and the per-alt priority key
+//! (`alt_sort_priority`) are the contract the parse-side and scan-side
+//! dispatch share. See the CLAUDE.md "Failed Approaches" section for why the
+//! bands are split the way they are.
 
 use { Alternative, Element } from "./ir.wado";
-use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
+use {
+    GenContext,
+    Admits,
+    admits_is_untestable,
+    admits_or_untestable,
+    is_nullable,
+    sets_overlap,
+} from "./gen_context.wado";
+use {
+    AltClass,
+    DirectDispatch,
+    MultiAltDispatch,
+    ScanGroupElement,
+    alt_class_first_set,
+    alt_class_is_open_ended,
+} from "./gir.wado";
+use { dedup_append_arr } from "./gen_util.wado";
 
-/// What an alternative matches, as one answer rather than a question each
-/// decision site works out from whatever it has in hand. Six predicates over
-/// eighteen call sites asked it separately — "is there a wildcard in the
-/// elements", "is the first set empty", "is it nullable", "has it no elements"
-/// — and every one of them was right for the spelling its author had in front
-/// of them and wrong for another. Sharing a function was not enough: each
-/// caller still supplied its own inputs and its own index space. So the
-/// classification is produced here and elsewhere only read.
-pub variant AltClass {
-    /// Matches at least one token, of any kind: `.` or `~X`, written in the
-    /// alternative or reached through a nullable prefix or a rule. No first
-    /// set names what it admits, and it admits everything.
-    OpenEnded,
-    /// Derives only the empty string. No lookahead selects it; what may follow
-    /// the decision does.
-    Epsilon,
-    /// Selected by exactly these tokens. Never empty.
-    Selects(List<String>),
+/// One branch of a decision: the lookahead that admits it, the
+/// alternative-initial predicate it is further gated by, and the alternatives
+/// it holds. `alts` are slots in whatever index space the partition was built
+/// in, never assumed to be the rule's alternative indices.
+pub struct DecisionBranch {
+    pub test: Admits,
+    /// Rendered `&& (…)` suffix, empty where the branch has no predicate.
+    pub gate: String,
+    pub alts: List<i32>,
+}
+
+/// A branch the lookahead cannot decide, gated by nothing, decides nothing the
+/// branches after it could still decide, so it is the chain's `else`. Moving it
+/// there is what keeps a later alternative from being emitted behind a test
+/// that can never fail. A gated one can decline, so it stays where it is.
+pub fn is_decision_fallback(b: &DecisionBranch) -> bool {
+    return admits_is_untestable(&b.test) && b.gate.is_empty();
+}
+
+/// Branches the lookahead cannot decide are one branch, not a chain of arms
+/// only the first of which is reachable. Their alternatives share it and the
+/// scan lengths pick between them, which is what a branch holding several
+/// always meant. An open-ended branch is not among them: it admits every token
+/// by decision, so it keeps its place and the partition has already merged
+/// every alternative into it.
+pub fn fallback_last(branches: &List<DecisionBranch>) -> List<DecisionBranch> {
+    let mut out: List<DecisionBranch> = [];
+    let mut fallback_alts: List<i32> = [];
+    for let b of branches {
+        if is_decision_fallback(b) {
+            for let a of &b.alts {
+                fallback_alts.push(*a);
+            }
+        } else {
+            out.push(*b);
+        }
+    }
+    if !fallback_alts.is_empty() {
+        out.push(DecisionBranch { test: Admits::Untestable, gate: "", alts: fallback_alts.sorted() });
+    }
+    return out;
+}
+
+/// The union of the first sets of one branch's alternatives — what its
+/// lookahead test admits.
+pub fn group_first_union(group: &List<i32>, classes: &List<AltClass>) -> List<String> {
+    let mut union_first: List<String> = [];
+    for let idx of group {
+        dedup_append_arr(&mut union_first, &alt_class_first_set(&classes[*idx]));
+    }
+    return union_first;
+}
+
+/// The union over every alternative a partition covers — the expected set a
+/// no-viable-alternative report names.
+pub fn classes_union(classes: &List<AltClass>) -> List<String> {
+    return group_first_union(&identity_slots(classes.len()), classes);
+}
+
+/// What a branch admits. An open-ended alternative admits every token and says
+/// so exactly, which is why it keeps its place; a union that comes out empty
+/// is an alternative the lookahead cannot decide, which does not.
+pub fn group_branch_admits(group: &List<i32>, classes: &List<AltClass>) -> Admits {
+    if group.iter_ref().any(|slot: &i32| alt_class_is_open_ended(&classes[*slot])) {
+        return Admits::Everything;
+    }
+    return admits_or_untestable(&group_first_union(group, classes));
+}
+
+/// The whole decision over a classified alternative list: the partition, what
+/// each branch admits, and the untestable branch moved last. Gates are the
+/// caller's to add — they are a surface-alternative property the classification
+/// does not carry.
+pub fn class_decision_branches(classes: &List<AltClass>) -> List<DecisionBranch> {
+    let mut branches: List<DecisionBranch> = [];
+    for let group of &compute_overlap_groups_of(classes) {
+        branches.push(DecisionBranch {
+            test: group_branch_admits(group, classes),
+            gate: "",
+            alts: *group,
+        });
+    }
+    return fallback_last(&branches);
+}
+
+/// The branches a scan group takes, off the classification lower baked. Emit
+/// renders them against the scan cursor's lookahead and the lowerer interns
+/// the kind sets they test; both read this list, so the set interned is the
+/// set rendered.
+pub fn scan_decision_branches(ge: &ScanGroupElement) -> List<DecisionBranch> {
+    return class_decision_branches(&ge.alt_classes);
+}
+
+/// The branches a baked `Direct` dispatch takes. Each holds one alternative,
+/// and what it admits goes through `group_branch_admits` like every other
+/// branch — so a `Direct` chain and the surface chain cannot disagree about
+/// which branch is the fallback.
+pub fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
+    let mut branches: List<DecisionBranch> = [];
+    for let br of &dd.branches {
+        branches.push(DecisionBranch {
+            test: group_branch_admits(&[0], &[br.alt_class]),
+            gate: "",
+            alts: [br.alt_index],
+        });
+    }
+    return fallback_last(&branches);
+}
+
+/// The branches a baked dispatch takes, for a reader that has not yet split on
+/// its kind. A `Tournament` tests nothing: every alternative is a candidate
+/// and the scan lengths decide.
+pub fn dispatch_branches(d: &MultiAltDispatch) -> List<DecisionBranch> {
+    return match d {
+        Direct(dd) => direct_dispatch_branches(dd),
+        Tournament(td) => [
+            DecisionBranch { test: Admits::Everything, gate: "", alts: td.alts },
+        ],
+    };
 }
 
 /// The one classifier. `first_set` is the alternative's own, already computed
@@ -54,14 +177,6 @@ pub fn alt_class_of(alt: &Alternative, ctx: &mut GenContext) -> AltClass {
     let mut visiting: List<String> = [];
     let first = ctx.first_of_alt(alt, &mut visiting);
     return alt_class(alt, &first, ctx);
-}
-
-pub fn alt_class_is_open_ended(c: &AltClass) -> bool {
-    return *c matches { OpenEnded };
-}
-
-pub fn alt_class_is_epsilon(c: &AltClass) -> bool {
-    return *c matches { Epsilon };
 }
 
 /// True when `alt` admits every token: it has no first set to be selected by,
@@ -148,34 +263,6 @@ fn rule_reaches_open_end(name: &String, ctx: &mut GenContext, visiting: &mut Lis
     return any;
 }
 
-/// `compute_overlap_groups` augmented with wildcard awareness. A
-/// wildcard-led alt's effective first set is the universal token set,
-/// so it must overlap with every alt whose first set is non-empty (and
-/// with every other wildcard alt). Without this merge, the parse-side
-/// dispatch emits a chain of `if peek_kind == TK_X ... else { wildcard
-/// }` branches that commit to `TK_X`'s alt whenever the lookahead
-/// matches, even if that alt's deeper structure cannot succeed —
-/// `(assign | .)` over an `ID` not followed by `=` is the canonical
-/// example.
-pub fn compute_overlap_groups_with_wildcard(
-    alts: &List<Alternative>,
-    first_sets: &List<List<String>>,
-    ctx: &mut GenContext,
-) -> List<List<i32>> {
-    return compute_overlap_groups_with_wildcard_indices(first_sets, &open_ended_indices(alts, ctx));
-}
-
-/// Which alternatives admit every token.
-pub fn open_ended_indices(alts: &List<Alternative>, ctx: &mut GenContext) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let mut i = 0; i < alts.len(); i += 1 {
-        if alt_class_is_open_ended(&alt_class_of(&alts[i], ctx)) {
-            out.push(i);
-        }
-    }
-    return out;
-}
-
 /// The classification of each alternative a partition covers, in the index
 /// space its first sets are in. `alt_of` maps a slot to its alternative, so a
 /// partition over a subset supplies its own mapping instead of assuming the
@@ -194,6 +281,16 @@ pub fn alt_classes(
     return out;
 }
 
+/// `alt_classes` over a whole alternative list, for a caller with no first
+/// sets to hand and no subset to map.
+pub fn alt_classes_of(alts: &List<Alternative>, ctx: &mut GenContext) -> List<AltClass> {
+    let mut out: List<AltClass> = [];
+    for let alt of alts {
+        out.push(alt_class_of(alt, ctx));
+    }
+    return out;
+}
+
 /// The identity mapping, for a partition over `alts` itself.
 pub fn identity_slots(n: i32) -> List<i32> {
     let mut out: List<i32> = [];
@@ -203,35 +300,32 @@ pub fn identity_slots(n: i32) -> List<i32> {
     return out;
 }
 
-/// True when `alt_index` is one of the wildcard-led alternatives.
-pub fn is_wildcard_alt(indices: &List<i32>, alt_index: i32) -> bool {
-    return indices.iter_ref().any(|idx| *idx == alt_index);
-}
-
-/// The same merge over wildcard alternatives already identified — what the
-/// scan side has, where lower bakes the indices rather than the surface
-/// alternatives. The surface form delegates here, so both sides partition a
-/// group the same way.
-pub fn compute_overlap_groups_with_wildcard_indices(
-    first_sets: &List<List<String>>,
-    wildcard_indices: &List<i32>,
-) -> List<List<i32>> {
-    let n = first_sets.len();
-    // One branch over every alternative. A wildcard admits every token, so no
-    // lookahead test separates any alternative from it — including one whose
-    // first set is empty because it matches nothing, which left out of the
-    // merge became a branch of its own that the wildcard's unconditional one
-    // shadowed. Inside, it is ranked as epsilon and wins where nothing longer
-    // scans (`( A | . | )` on no input). Nothing here reads the first-set
-    // partition, so it is not computed.
-    if !wildcard_indices.is_empty() && n >= 2 {
-        let mut merged: List<i32> = [];
-        for let mut i = 0; i < n; i += 1 {
-            merged.push(i);
-        }
-        return [merged];
+/// The partition every decision site branches on, from the classification and
+/// nothing else. Both emit walkers call this — the surface one over the
+/// classes it computes, the op-only one over the classes lower baked — so a
+/// group cannot come out partitioned one way in one and another way in the
+/// other (invariant 9).
+///
+/// An open-ended alternative's effective first set is the universal token set,
+/// so no lookahead test separates any alternative from it and they all merge
+/// into one branch. Without the merge the dispatch emits `if peek_kind == TK_X
+/// … else { open-ended }` and commits to `TK_X`'s alt whenever the lookahead
+/// matches, even where that alt's deeper structure cannot succeed —
+/// `(assign | .)` over an `ID` not followed by `=` is the canonical example.
+/// An epsilon alternative joins the merge too: left out of it, it became a
+/// branch of its own that the open-ended alternative's unconditional branch
+/// shadowed. Inside, it is ranked as epsilon and wins where nothing longer
+/// scans (`( A | . | )` on no input).
+pub fn compute_overlap_groups_of(classes: &List<AltClass>) -> List<List<i32>> {
+    let n = classes.len();
+    if n >= 2 && classes.iter_ref().any(|c: &AltClass| alt_class_is_open_ended(c)) {
+        return [identity_slots(n)];
     }
-    return compute_overlap_groups(first_sets);
+    let mut first_sets: List<List<String>> = [];
+    for let c of classes {
+        first_sets.push(alt_class_first_set(c));
+    }
+    return compute_overlap_groups(&first_sets);
 }
 
 pub fn compute_overlap_groups(first_sets: &List<List<String>>) -> List<List<i32>> {

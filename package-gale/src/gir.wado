@@ -458,24 +458,59 @@ pub variant MultiAltDispatch {
     Tournament(TournamentDispatch),
 }
 
+/// What an alternative matches, as one value rather than a question each
+/// decision site works out from whatever it has in hand. Six predicates over
+/// eighteen call sites asked it separately — "is there a wildcard in the
+/// elements", "is the first set empty", "is it nullable", "has it no elements"
+/// — and every one was right for the spelling its author had in front of them
+/// and wrong for another.
+///
+/// A first set beside a flag saying how to read it is the same defect one
+/// indirection out: the two travel as separate values and can be paired
+/// wrongly. So they do not travel separately. `alt_class` in `alt_grouping`
+/// produces this; everything else reads it.
+pub variant AltClass {
+    /// Matches at least one token, of any kind: `.` or `~X`, written in the
+    /// alternative or reached through a nullable prefix or a rule. No first
+    /// set names what it admits, and it admits everything.
+    OpenEnded,
+    /// Derives only the empty string. No lookahead selects it; what may follow
+    /// the decision does.
+    Epsilon,
+    /// Selected by exactly these tokens. Never empty.
+    Selects(List<String>),
+}
+
+pub fn alt_class_is_open_ended(c: &AltClass) -> bool {
+    return *c matches { OpenEnded };
+}
+
+pub fn alt_class_is_epsilon(c: &AltClass) -> bool {
+    return *c matches { Epsilon };
+}
+
+/// The tokens that select the alternative, empty for the two classes no token
+/// set describes. A caller that needs to tell those two apart asks the class,
+/// never the emptiness of this.
+pub fn alt_class_first_set(c: &AltClass) -> List<String> {
+    return match c {
+        Selects(tokens) => *tokens,
+        _ => [] as List<String>,
+    };
+}
+
 /// Token-led dispatch for non-overlapping alts.
 pub struct DirectDispatch {
     /// One branch per alt, in the order emit should test them.
-    /// `tokens` is the alt's first-set; `alt_index` is the original
-    /// alt position. Branches with overlapping `tokens` are not
+    /// `alt_class` says what selects the alt; `alt_index` is the original
+    /// alt position. Branches with overlapping first sets are not
     /// permitted — those land in `Tournament` instead.
     pub branches: List<DispatchBranch>,
 }
 
 pub struct DispatchBranch {
-    pub tokens: List<String>,
+    pub alt_class: AltClass,
     pub alt_index: i32,
-    /// What the alternative matches, decided once by `alt_class` where the
-    /// surface alternatives are still in hand. An empty `tokens` means either
-    /// "no lookahead selects this" or "it admits every token", and the op
-    /// walker has no elements left to tell them apart — asking it there is
-    /// what made the two walkers answer differently.
-    pub epsilon: bool,
 }
 
 /// Scan tournament dispatch.
@@ -1123,20 +1158,11 @@ pub struct ScanGroupElement {
     /// True for "lenient" groups whose dispatch may bail out
     /// without advancing on no match (used for `?`-over-group).
     pub lenient: bool,
-    /// Per-alt first set (parallel to `alts`). Cached at lower time so
-    /// emit's `gen_scan_op_group` doesn't re-call `ctx.first_of_alt`; with
-    /// `wildcard_alt_indices` it is the whole input to the partition the
-    /// scan branches on — the same one the parse-side dispatch takes.
-    pub alt_first_sets: List<List<String>>,
-    /// Indices into `alts` of every wildcard-led alt (its first
-    /// non-nullable element is `.`). A wildcard alt matches any
-    /// non-EOF token, so it is merged into one branch with every
-    /// alt whose first set is non-empty and that branch tests
-    /// nothing — otherwise the scan would never try the wildcard
-    /// alt on a lookahead outside the explicit first-set union
-    /// (the `(assign | .)` pattern from the ANTLR4
-    /// `ParserExec/Wildcard` descriptor).
-    pub wildcard_alt_indices: List<i32>,
+    /// What each alt matches (parallel to `alts`), classified at lower time
+    /// where the surface alternatives are still in hand. It is the whole input
+    /// to the partition the scan branches on — the same partition, computed by
+    /// the same function, that the parse-side dispatch takes (invariant 9).
+    pub alt_classes: List<AltClass>,
 }
 
 pub struct ScanOptionalLookaheadElement {
