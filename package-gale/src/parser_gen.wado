@@ -2654,11 +2654,13 @@ fn gen_multi_alt_body(
         let alt = &rule.alternatives[non_lr_indices[i]];
         // `alt_has_gate` asks without registering; `alt_initial_gate_conditions`
         // marks the predicate gated, which is the arm loop's to do once.
-        // A wildcard-led alternative has no condition either, and is not
-        // untestable: it admits every token exactly, so shadowing the
-        // alternatives after it is the lowest-viable-alternative rule.
+        // An open-ended alternative has no condition either, and is not
+        // untestable: it admits every token, so shadowing the alternatives
+        // after it is the lowest-viable-alternative rule. Which one this is,
+        // is whether it matches anything — asking for a wildcard in the
+        // surface elements misses one reached through a rule reference.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
-        untestable.push(no_cond && !alt_is_wildcard_led(alt) && !alt_gates_branch(alt, ctx));
+        untestable.push(no_cond && alt_matches_nothing(alt) && !alt_gates_branch(alt, ctx));
     }
 
     for let slot of &arms_fallback_last(&untestable) {
@@ -6346,11 +6348,11 @@ fn decision_branches(
 ) -> List<DecisionBranch> {
     // A group's partition is over `alts` itself here, so slot and alternative
     // index are the same thing.
-    let wildcard = wildcard_flags(alts);
+    let epsilon = epsilon_flags(alts);
     let mut branches: List<DecisionBranch> = [];
     for let group of groups {
         branches.push(DecisionBranch {
-            test: group_branch_admits(group, first_sets, &wildcard),
+            test: group_branch_admits(group, first_sets, &epsilon),
             gate: group_gate(group, alts, ctx),
             alts: *group,
         });
@@ -6724,24 +6726,37 @@ fn group_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List
 /// What a branch admits. A wildcard-led alternative admits every token and
 /// says so exactly, which is why it keeps its place; a union that comes out
 /// empty is an alternative the lookahead cannot decide, which does not.
-/// `wildcard` is parallel to `first_sets`, not to the rule's alternatives. A
+/// `epsilon` is parallel to `first_sets`, not to the rule's alternatives. A
 /// group holds slots into whatever index space its partition was built in, and
 /// a left-recursive rule partitions only its non-LR alternatives — so reading
 /// the alternative list directly read a different alternative than the first
 /// set beside it.
-fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, wildcard: &List<bool>) -> Admits {
-    assert wildcard.len() == first_sets.len(), "one wildcard verdict per partitioned alternative";
-    if group.iter_ref().any(|slot: &i32| wildcard[*slot]) {
+///
+/// An empty first set says nothing about the element that produced it: `.` and
+/// `~X` have one because no set can enumerate every token, and an empty
+/// alternative has one because it matches none. Only the second is untestable.
+/// Which it is, is whether the alternative matches anything — not whether a
+/// wildcard is written in it, which misses one reached through a rule.
+fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, epsilon: &List<bool>) -> Admits {
+    assert epsilon.len() == first_sets.len(), "one verdict per partitioned alternative";
+    if group.iter_ref().any(|slot: &i32| first_sets[*slot].is_empty() && !epsilon[*slot]) {
         return Admits::Everything;
     }
     return admits_or_untestable(&group_first_union(group, first_sets));
 }
 
-/// The wildcard verdicts for a partition over `alts` itself.
-fn wildcard_flags(alts: &List<Alternative>) -> List<bool> {
+/// Whether an alternative matches nothing at all — the canonical form of "no
+/// lookahead can decide this", and what an empty first set means where the
+/// alternative is not open-ended.
+fn alt_matches_nothing(alt: &Alternative) -> bool {
+    return alt.elements.is_empty();
+}
+
+/// The epsilon verdicts for a partition over `alts` itself.
+fn epsilon_flags(alts: &List<Alternative>) -> List<bool> {
     let mut out: List<bool> = [];
     for let alt of alts {
-        out.push(alt_is_wildcard_led(alt));
+        out.push(alt_matches_nothing(alt));
     }
     return out;
 }
@@ -7484,18 +7499,19 @@ fn gen_multi_alt_body_alt(
 
     // Same rule as the token-led sibling: the arms are independent `if`s that
     // return, so one the lookahead cannot decide is what every later
-    // alternative would be dead behind. A wildcard-led group decides — it
-    // admits every token exactly — and keeps its place.
+    // alternative would be dead behind. An open-ended group decides — it
+    // admits every token — and keeps its place.
+    //
     // The partition is over the non-LR alternatives, so a group's members are
-    // slots into `non_lr_indices` — the wildcard verdicts have to be too.
-    let mut wildcard: List<bool> = [];
+    // slots into `non_lr_indices` and the verdicts have to be too.
+    let mut epsilon: List<bool> = [];
     for let idx of non_lr_indices {
-        wildcard.push(alt_is_wildcard_led(&rule.alternatives[*idx]));
+        epsilon.push(alt_matches_nothing(&rule.alternatives[*idx]));
     }
     let mut untestable: List<bool> = [];
     for let group of groups {
         let ungated = group.len() != 1 || !alt_gates_branch(&rule.alternatives[non_lr_indices[group[0]]], ctx);
-        let admits = group_branch_admits(group, first_sets, &wildcard);
+        let admits = group_branch_admits(group, first_sets, &epsilon);
         untestable.push(admits_is_untestable(&admits) && ungated);
     }
 
