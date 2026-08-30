@@ -4220,7 +4220,7 @@ fn gen_op_opt_scan_guard_for_group(
             let alt = &g_elem.alternatives[ai];
             let mut visiting: List<String> = [];
             let alt_first = ctx.first_of_alt(alt, &mut visiting);
-            if alt_is_open_ended(alt, &alt_first, ctx) {
+            if alt_is_open_ended(alt, ctx) {
                 wildcard_indices.push(ai);
             }
             alt_first_sets.push(alt_first);
@@ -6792,7 +6792,7 @@ fn open_ended_flags(
     assert alt_of.len() == first_sets.len(), "one alternative per first set";
     let mut out: List<bool> = [];
     for let mut slot = 0; slot < alt_of.len(); slot += 1 {
-        out.push(alt_is_open_ended(&alts[alt_of[slot]], &first_sets[slot], ctx));
+        out.push(alt_is_open_ended(&alts[alt_of[slot]], ctx));
     }
     return out;
 }

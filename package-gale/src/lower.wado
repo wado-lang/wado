@@ -1721,7 +1721,7 @@ fn any_open_ended_alt(
     ctx: &mut GenContext,
 ) -> bool {
     for let mut k = 0; k < indices.len(); k += 1 {
-        if alt_is_open_ended(&alts[indices[k]], &first_sets[k], ctx) {
+        if alt_is_open_ended(&alts[indices[k]], ctx) {
             return true;
         }
     }
@@ -2008,7 +2008,7 @@ fn lower_scan_group(
             let mut visiting: List<String> = [];
             let alt_first = ctx.first_of_alt(alt, &mut visiting);
             let mut wildcard_indices: List<i32> = [];
-            if alt_is_open_ended(alt, &alt_first, ctx) {
+            if alt_is_open_ended(alt, ctx) {
                 wildcard_indices.push(0);
             }
             return ScanElement::Group(ScanGroupElement {
@@ -2071,7 +2071,7 @@ fn lower_general_scan_group(
         bodies.push(ScanBody { elements });
         let mut visiting: List<String> = [];
         let alt_first = ctx.first_of_alt(alt, &mut visiting);
-        if alt_is_open_ended(alt, &alt_first, ctx) {
+        if alt_is_open_ended(alt, ctx) {
             wildcard_indices.push(ai);
         }
         first_sets.push(alt_first);
@@ -3252,7 +3252,7 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -
     // A SimpleCst alternative is one rule call, and the rule it calls can be
     // open-ended — asserting that none is here is what let the scan partition
     // this group differently from the parse.
-    let open_ended = open_ended_indices(alts, &first_sets, ctx);
+    let open_ended = open_ended_indices(alts, ctx);
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),

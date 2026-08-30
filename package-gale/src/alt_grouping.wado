@@ -34,17 +34,71 @@ use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 /// and the two must not be told apart by looking at the surface elements: that
 /// answers for a wildcard written in place and not for one behind a rule ref,
 /// so the walkers that ask differently partition differently.
-pub fn alt_is_open_ended(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> bool {
-    if !first_set.is_empty() {
-        return false;
-    }
+pub fn alt_is_open_ended(alt: &Alternative, ctx: &mut GenContext) -> bool {
+    let mut visiting: List<String> = [];
+    return alt_reaches_open_end(alt, ctx, &mut visiting);
+}
+
+/// Whether a position the alternative can reach — every element before it
+/// nullable — matches a token no first set names. Having a first set settles
+/// nothing: `A? .` is selected by `a` and by every other token too, and
+/// reading the first set alone called it narrow.
+fn alt_reaches_open_end(alt: &Alternative, ctx: &mut GenContext, visiting: &mut List<String>) -> bool {
     for let elem of &alt.elements {
-        let mut visiting: List<String> = [];
-        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+        if element_reaches_open_end(elem, ctx, visiting) {
             return true;
+        }
+        let mut nullable_visiting: List<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut nullable_visiting) {
+            return false;
         }
     }
     return false;
+}
+
+/// `.` and `~X` carry the empty static FIRST set, and neither a label, a
+/// `( … )`, a repeat nor a rule reference changes what is behind them — so
+/// `w=.`, `(~X)`, `(.)+` and a call to `w : . ;` are all as open-ended as the
+/// bare form. `visiting` breaks the recursion on a left-recursive rule.
+fn element_reaches_open_end(elem: &Element, ctx: &mut GenContext, visiting: &mut List<String>) -> bool {
+    return match elem {
+        Wildcard(_) | Not(_) => true,
+        Label(lab) => element_reaches_open_end(&lab.element, ctx, visiting),
+        Repeat(rep) => element_reaches_open_end(&rep.element, ctx, visiting),
+        Group(g) => {
+            let mut any = false;
+            for let alt of &g.alternatives {
+                if alt_reaches_open_end(alt, ctx, visiting) {
+                    any = true;
+                    break;
+                }
+            }
+            any;
+        },
+        RuleRef(r) => rule_reaches_open_end(&r.name, ctx, visiting),
+        TokenRef(_) | Literal(_) => false,
+    };
+}
+
+fn rule_reaches_open_end(name: &String, ctx: &mut GenContext, visiting: &mut List<String>) -> bool {
+    if visiting.iter_ref().any(|v| *v == *name) {
+        return false;
+    }
+    let idx = ctx.rule_index_of(name);
+    if idx < 0 {
+        return false;
+    }
+    visiting.push(*name);
+    let alts = ctx.parser_rules()[idx].alternatives;
+    let mut any = false;
+    for let alt of &alts {
+        if alt_reaches_open_end(alt, ctx, visiting) {
+            any = true;
+            break;
+        }
+    }
+    visiting.pop();
+    return any;
 }
 
 /// `compute_overlap_groups` augmented with wildcard awareness. A
@@ -61,15 +115,14 @@ pub fn compute_overlap_groups_with_wildcard(
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> List<List<i32>> {
-    return compute_overlap_groups_with_wildcard_indices(first_sets, &open_ended_indices(alts, first_sets, ctx));
+    return compute_overlap_groups_with_wildcard_indices(first_sets, &open_ended_indices(alts, ctx));
 }
 
-/// Which alternatives admit every token, in the index space `first_sets` is in.
-pub fn open_ended_indices(alts: &List<Alternative>, first_sets: &List<List<String>>, ctx: &mut GenContext) -> List<i32> {
-    assert alts.len() == first_sets.len(), "one first set per alternative";
+/// Which alternatives admit every token.
+pub fn open_ended_indices(alts: &List<Alternative>, ctx: &mut GenContext) -> List<i32> {
     let mut out: List<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
-        if alt_is_open_ended(&alts[i], &first_sets[i], ctx) {
+        if alt_is_open_ended(&alts[i], ctx) {
             out.push(i);
         }
     }

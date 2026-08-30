@@ -1490,6 +1490,16 @@ A : 'a' ;
 B : 'b' ;
 ";
 
+// The `.` sits behind a nullable prefix, so the alternative has a first set
+// (`{A}`) and is still open-ended: `c` reaches the wildcard.
+global PREFIXED_WILDCARD_ALT_G4: String = "
+grammar T;
+s : ( A? . | B ) EOF ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+
 // `x` derives only epsilon, but through a rule reference — the mirror of an
 // open-ended alternative reached the same way.
 global INDIRECT_EPSILON_ALT_G4: String = "
@@ -1608,6 +1618,16 @@ test "a nullable alternative with a first set keeps its index" {
     let b_arm = find_index(&body, &"kind == TK_B");
     assert opt_arm >= 0, `the nullable alternative lost its arm: ${body}`;
     assert b_arm < 0 || opt_arm < b_arm, `a nullable alternative is not the trailing arm: ${body}`;
+}
+
+test "a wildcard behind a nullable prefix still makes its alternative open-ended" {
+    // Having a first set does not settle it: `A? .` is selected by `a` and also
+    // by every other token. Reading the first set alone said "narrow", and the
+    // group was then partitioned by `{A}` with `c` reaching no alternative.
+    let mut g = parse(PREFIXED_WILDCARD_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert count_substr(&body, &"no_viable") == 0, `a token the wildcard matches must reach it: ${body}`;
 }
 
 test "an alternative that derives only epsilon through a rule is untestable" {
