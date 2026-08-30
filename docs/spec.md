@@ -1161,7 +1161,7 @@ let low = a.low();
 let high = a.high();
 ```
 
-WebAssembly has no native 128-bit integer type, so Wado represents them as pairs of 64-bit values. Addition and subtraction use Wasm Wide Arithmetic instructions (`i64.add128`, `i64.sub128`) for efficiency. Other operations (division, bitwise, etc.) use software implementations.
+WebAssembly has no native 128-bit integer type, so Wado represents them as pairs of 64-bit values. Addition, subtraction and multiplication use Wasm Wide Arithmetic instructions (`i64.add128`, `i64.sub128`, `i64.mul_wide_u`). Wasm has no 128-bit divide, so division and the bitwise operations are software implementations.
 
 Available operations:
 

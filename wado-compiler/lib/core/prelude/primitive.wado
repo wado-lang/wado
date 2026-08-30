@@ -226,13 +226,10 @@ fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bo
     f.apply_padding(mark);
 }
 
-/// The magnitude of a signed value, `MIN` included — `-MIN` does not fit the
-/// signed type, so it is stepped through `MIN + 1`.
+/// The magnitude of a signed value, `MIN` included — negating `MIN` overflows,
+/// but its magnitude is an ordinary u64.
 fn abs_to_u64(val: i64) -> u64 {
-    if val >= 0 {
-        return val as u64;
-    }
-    return -(val + 1) as u64 + 1;
+    return if val < 0 { 0 - val } else { val } as u64;
 }
 
 /// Count digits of a u64 value (as raw i64 bits) in the given power-of-2 base.
@@ -892,7 +889,7 @@ impl i32 {
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let is_negative = *self < 0;
-        let abs_val: u64 = if is_negative { 0 - *self as i64 } else { *self as i64 } as u64;
+        let abs_val = abs_to_u64(*self as i64);
         let digit_count = count_digits_u64(abs_val);
         let offset = f.prepare_int_write(is_negative, "", digit_count);
         write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);
@@ -1049,8 +1046,7 @@ impl i64 {
     fn fmt_decimal(&self, f: &mut Formatter) {
         let value = *self;
         let is_negative = value < 0;
-        // Negating i64::MIN overflows, but its magnitude is an ordinary u64.
-        let abs_val: u64 = if is_negative { 0 - value } else { value } as u64;
+        let abs_val = abs_to_u64(value);
         let digit_count = count_digits_u64(abs_val);
         let offset = f.prepare_int_write(is_negative, "", digit_count);
         write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);

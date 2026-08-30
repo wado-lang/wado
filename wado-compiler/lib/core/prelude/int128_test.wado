@@ -891,9 +891,11 @@ test "u128 div_rem satisfies q * d + r == n with r < d" {
         s = next_rand(s);
         let d_lo = s;
         // Sweep both operand widths so every path — native, 128÷64, 128÷128 —
-        // and every normalization shift is exercised.
+        // and every normalization shift is exercised. Only a zero divisor is
+        // substituted, leaving even ones and zero limbs in the sample.
         let n = u128::from_pair(n_lo, n_hi) >> (i % 129) as u32;
-        let d = u128::from_pair(d_lo, d_hi) >> (i * 7 % 128) as u32 | u128::one();
+        let shifted = u128::from_pair(d_lo, d_hi) >> (i * 7 % 128) as u32;
+        let d = if shifted == 0 { u128::one() } else { shifted };
         let [q, r] = n.div_rem(&d);
         assert r < d;
         assert q * d + r == n;
