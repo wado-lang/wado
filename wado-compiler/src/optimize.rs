@@ -178,13 +178,14 @@ pub fn optimize(
             let config = OptConfig {
                 // Every source in the tree settles by 8, so 15 is slack.
                 iterations: opt_iterations.unwrap_or(15),
-                // Threshold 13 is the sweet spot for -O2/-Os: on
-                // syntax-highlight (Gale-generated SQLite highlighter)
-                // throughput is ~30% better than 14 because at 14 a
-                // specific Gale parser action function chain-inlines
-                // and the resulting code regresses (13.5ms/iter -> 18ms).
-                // Sizes at 13 and 14 differ by only ~4KB.
-                inline_threshold: inline_threshold.unwrap_or(13),
+                // Threshold 16, best of six alternating runs against 13 over
+                // the serde and parsing rows: cbor-twitter ser +11.4%,
+                // cbor-catalog ser +8.5%, cbor-canada ser +6.6%, json-catalog
+                // de +6.4%, json-twitter ser +6.0%, syntax-highlight +3.4%,
+                // sqlite-parse +2.6%, and json-canada de -1.7%. Above it the
+                // gains keep coming and json-catalog ser turns: -8.2% at 20,
+                // -35.3% at 26. Below it 10 is worse than 13 on every row.
+                inline_threshold: inline_threshold.unwrap_or(16),
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
@@ -198,11 +199,17 @@ pub fn optimize(
         OptLevel::O3 => {
             // The heaviest source in the tree — the Gale-generated SQLite parser
             // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack.
-            // Threshold 32 sits just under a size cliff at 33 on
-            // syntax-highlight (859KB → 1049KB), for no speed gain.
+            //
+            // Threshold 26 is the top of what shakes NIR into new shapes for
+            // its cost. On the Gale CSS3 parser 28, 30 and 32 all emit ~959KB
+            // in ~13.5s — the same candidate set, so nothing above 28 varies
+            // the shape at all — while 26 emits 719KB in 10.7s. The whole
+            // corpus barely reads the knob (24 → 32 moves its compile CPU
+            // 4.6%), so what the level costs is felt compiling one heavy file
+            // by hand, which is the 25% this leaves on the table.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),
-                inline_threshold: inline_threshold.unwrap_or(32),
+                inline_threshold: inline_threshold.unwrap_or(26),
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };

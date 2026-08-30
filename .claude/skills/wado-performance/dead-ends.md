@@ -232,3 +232,25 @@ Each measured flat or negative, each with an obvious-sounding motivation:
 The generalization: stop when the floor is the representation. A store-bound
 loop over an `Array<T>`-backed `String` is near-optimal short of leaving GC
 arrays, and no scheme that keeps the array beats it.
+
+## Splitting `encode_char` at the ASCII boundary (2026-08-30)
+
+`encode_char` carries `#[inline]`, which raises the budget 5x, so the whole
+four-way UTF-8 width dispatch and its nine stores land at every write site. The
+obvious reading — one byte is the common case, so keep that and call out for the
+rest — is what the manual-split advice in `SKILL.md` prescribes, and it lost
+everywhere it was measured. At the shipping threshold: json-canada ser -2.3%,
+de -2.4%, cbor-canada ser -3.6%, cbor-catalog ser -2.5%, json-catalog de -1.7%,
+with nothing gained. The row it was aimed at, json-catalog ser, stayed down.
+
+What the split adds is a call in the middle of a byte-writing loop, and the
+callee it calls takes `&mut Array<u8>` — so the loop reloads the array and the
+position across it. The dispatch it removed was three compares the branch
+predictor gets right on ASCII text. A width dispatch is not a heavy sub-case;
+it is a compare cascade, and `SKILL.md` already says a compare cascade is not
+the thing to restructure.
+
+Generalizes to: the manual-split advice is for a sub-case whose _body_ is heavy
+(an allocation, a grow, a formatter), not for one that is merely branchy. Before
+splitting, ask what the caller copies instead — if the answer is "a compare",
+there was nothing to move.

@@ -105,6 +105,26 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
     buf.push('"');
 }
 
+/// Write the plain run ending at `i`, then the escape `b` needs. Out of line
+/// because its caller is a byte scan whose escape arm is taken rarely: a
+/// `push_str_range_unchecked` and a six-arm match, one of them a format, are
+/// what the scan would otherwise carry inline.
+#[inline(never)]
+fn flush_run_and_escape(buf: &mut String, s: &String, run_start: i32, i: i32, b: u8) {
+    buf.push_str_range_unchecked(s, run_start, i);
+    match b {
+        0x22 => buf.push_str(&"\\\""),
+        0x5C => buf.push_str(&"\\\\"),
+        0x0A => buf.push_str(&"\\n"),
+        0x0D => buf.push_str(&"\\r"),
+        0x09 => buf.push_str(&"\\t"),
+        _ => {
+            let code = b as i32;
+            buf.push_str(&`\\u${code:04x}`);
+        },
+    }
+}
+
 /// Escaping tail of `write_escaped_string`, entered once the scan reaches
 /// `first`, the index of the first byte JSON must escape.
 fn write_escaped_string_from(buf: &mut String, s: &String, first: i32) {
@@ -116,18 +136,8 @@ fn write_escaped_string_from(buf: &mut String, s: &String, first: i32) {
         if json_plain_byte(b) {
             continue;
         }
-        buf.push_str_range_unchecked(s, run_start, i);
-        match b {
-            0x22 => buf.push_str(&"\\\""),
-            0x5C => buf.push_str(&"\\\\"),
-            0x0A => buf.push_str(&"\\n"),
-            0x0D => buf.push_str(&"\\r"),
-            0x09 => buf.push_str(&"\\t"),
-            _ => {
-                let code = b as i32;
-                buf.push_str(&`\\u${code:04x}`);
-            },
-        }
+        builtin::cold_path();
+        flush_run_and_escape(buf, s, run_start, i, b);
         run_start = i + 1;
     }
     buf.push_str_range_unchecked(s, run_start, n);
