@@ -156,9 +156,8 @@ pub struct CmImportViolation {
 impl CmImportViolation {
     #[must_use]
     pub fn message(&self) -> String {
-        // `write_raw` hands over the backing array as it stands, which lines up
-        // with the CM buffer only for bytes — the one canonical a program can
-        // reach unbound while a bundled interface does declare it.
+        // The one canonical a program reaches unbound while an interface does
+        // declare it: the raw write lines up with the CM buffer only for bytes.
         let reason = if self.cm_name == "stream-write-raw" {
             "which only a `u8` stream can bind: the raw write hands the backing \
              array to the canonical unlowered. Use `write` or `write_all`"
