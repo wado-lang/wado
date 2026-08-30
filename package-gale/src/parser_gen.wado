@@ -2655,14 +2655,17 @@ fn gen_multi_alt_body(
         let alt = &rule.alternatives[non_lr_indices[i]];
         // `alt_has_gate` asks without registering; `alt_initial_gate_conditions`
         // marks the predicate gated, which is the arm loop's to do once.
-        // An open-ended alternative has no condition either, and is not
-        // untestable: it admits every token, so shadowing the alternatives
-        // after it is the lowest-viable-alternative rule. Which one this is,
-        // is whether it matches anything — asking for a wildcard in the
-        // surface elements misses one reached through a rule reference.
+        //
+        // An arm with no emitted condition is not the same as one no lookahead
+        // can select: `position_first_sets_from` also comes back empty for a
+        // deep-nullable tail, which `A?` has while its first set picks it out
+        // perfectly well. `alt_is_untestable` asks the first set, as the group
+        // partition does.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
+        let mut visiting: List<String> = [];
+        let first_set = ctx.first_of_alt(alt, &mut visiting);
         let gated = alt_gates_branch(alt, ctx);
-        untestable.push(no_cond && alt_matches_nothing(alt, ctx) && !gated);
+        untestable.push(no_cond && alt_is_untestable(alt, &first_set, ctx) && !gated);
     }
 
     for let slot of &arms_fallback_last(&untestable) {
@@ -6753,11 +6756,10 @@ fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, epsil
     return admits_or_untestable(&group_first_union(group, first_sets));
 }
 
-/// Whether an alternative derives only the empty string — the canonical form
-/// of "no lookahead can decide this", and what an empty first set means where
-/// the alternative is not open-ended. Written empty is one way; reaching a
-/// rule that is, is another, and counting elements sees only the first.
-fn alt_matches_nothing(alt: &Alternative, ctx: &mut GenContext) -> bool {
+/// Whether an alternative can match the empty string. Written empty is one
+/// way; reaching a rule that is, is another, and counting elements sees only
+/// the first.
+fn alt_is_nullable(alt: &Alternative, ctx: &mut GenContext) -> bool {
     for let elem of &alt.elements {
         let mut visiting: List<String> = [];
         if !ctx.element_is_nullable_deep(elem, &mut visiting) {
@@ -6767,11 +6769,20 @@ fn alt_matches_nothing(alt: &Alternative, ctx: &mut GenContext) -> bool {
     return true;
 }
 
-/// The epsilon verdicts for a partition over `alts` itself.
+/// Whether no lookahead can select this alternative: it has no first set to be
+/// selected by, and what it derives is the empty string alone. Both halves are
+/// needed, and each alone names a different alternative — an open-ended one
+/// has no first set and is not nullable, and `A?` is nullable with a perfectly
+/// good first set that a lookahead of `a` picks.
+fn alt_is_untestable(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> bool {
+    return first_set.is_empty() && alt_is_nullable(alt, ctx);
+}
+
+/// The nullability verdicts for a partition over `alts` itself.
 fn epsilon_flags(alts: &List<Alternative>, ctx: &mut GenContext) -> List<bool> {
     let mut out: List<bool> = [];
     for let alt of alts {
-        out.push(alt_matches_nothing(alt, ctx));
+        out.push(alt_is_nullable(alt, ctx));
     }
     return out;
 }
@@ -7521,7 +7532,7 @@ fn gen_multi_alt_body_alt(
     // slots into `non_lr_indices` and the verdicts have to be too.
     let mut epsilon: List<bool> = [];
     for let idx of non_lr_indices {
-        epsilon.push(alt_matches_nothing(&rule.alternatives[*idx], ctx));
+        epsilon.push(alt_is_nullable(&rule.alternatives[*idx], ctx));
     }
     let mut untestable: List<bool> = [];
     for let group of groups {
