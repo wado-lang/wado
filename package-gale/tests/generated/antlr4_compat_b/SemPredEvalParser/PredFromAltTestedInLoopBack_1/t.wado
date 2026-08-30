@@ -1689,51 +1689,66 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if p.recovering { break; }
         if !_plus_first {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                let gp_2 = pos;
-                let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(sgk_2) {
-                    sg_2: {
-                        pos = gp_2;
-                        sg_2_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_S { break sg_2_0; }
-                            pos += 1;
-                            break sg_2;
-                        }
-                        pos = gp_2;
-                        sg_2_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_X { break sg_2_1; }
-                            pos += 1;
-                            break sg_2;
-                        }
-                        pos = gp_2;
-                        sg_2_2: {
-                            if pos >= tokens.len() || tokens[pos] != TK_NL { break sg_2_2; }
-                            pos += 1;
-                            break sg_2;
-                        }
-                        pos = gp_2;
-                    }
-                }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 { break; }
         }
-        if !_plus_first && !((p.peek_kind() == TK_LIT_S) || (p.peek_kind() == TK_X) || (p.peek_kind() == TK_NL && (p.la(2) != TK_NL))) { break; }
+        let mut gd_winner: i32 = -1;
+        let mut gd_best: i32 = p.pos;
+        if p.peek_kind() == TK_LIT_S {
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_S { break gd_scan; }
+                    pos += 1;
+                    gd_end = pos;
+                }
+                if gd_end > gd_best {
+                    gd_best = gd_end;
+                    gd_winner = 0;
+                }
+            }
+        } else if p.peek_kind() == TK_X {
+            gd_tourney_2: {
+                let mut gd_end_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_X { break gd_scan_2; }
+                    pos += 1;
+                    gd_end_2 = pos;
+                }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 1;
+                }
+            }
+        } else if p.peek_kind() == TK_NL && (p.la(2) != TK_NL) {
+            gd_tourney_3: {
+                let mut gd_end_3: i32 = -1;
+                gd_scan_3: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_NL { break gd_scan_3; }
+                    pos += 1;
+                    gd_end_3 = pos;
+                }
+                if gd_end_3 > gd_best {
+                    gd_best = gd_end_3;
+                    gd_winner = 2;
+                }
+            }
+        }
+        if gd_winner < 0 {
+            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_1); }
+            break;
+        }
         _plus_first = false;
-        let grp_kind = p.peek_kind();
-        if grp_kind == TK_LIT_S {
+        if gd_winner == 0 {
             let lit_s = p.expect(TK_LIT_S, &EMPTY_SYNC);
-        } else if grp_kind == TK_X {
+        } else if gd_winner == 1 {
             let x = p.expect(TK_X, &EMPTY_SYNC);
-        } else if grp_kind == TK_NL && (p.la(2) != TK_NL) {
-            let nl = p.expect(TK_NL, &EMPTY_SYNC);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_1);
+            let nl = p.expect(TK_NL, &EMPTY_SYNC);
         }
     }
     return;

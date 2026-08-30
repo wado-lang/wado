@@ -1594,75 +1594,46 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
-        if !_plus_first {
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
+        let mut gd_winner: i32 = -1;
+        let mut gd_best: i32 = p.pos;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                let gp_4 = pos;
-                sg_4: {
-                    pos = gp_4;
-                    sg_4_0: {
-                        pos = scan_assign(tokens, pos);
-                        if pos < 0 { break sg_4_0; }
-                        break sg_4;
-                    }
-                    pos = gp_4;
-                    sg_4_1: {
-                        if pos >= tokens.len() || tokens[pos] == TK_EOF || tokens[pos] == TK_SEMI { break sg_4_1; }
-                        pos += 1;
-                        break sg_4;
-                    }
-                    pos = gp_4;
-                }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
+                pos = scan_assign(tokens, pos);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] == TK_EOF || tokens[pos] == TK_SEMI { break gd_scan_2; }
+                pos += 1;
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
         }
-        if _plus_first && !((true)) {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+        if gd_winner < 0 {
+            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_0); }
             break;
         }
         _plus_first = false;
-        let grp_kind = p.peek_kind();
-        if true {
-            let mut gd_winner: i32 = -1;
-            let mut gd_best: i32 = -1;
-            gd_tourney: {
-                let mut gd_end: i32 = -1;
-                gd_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_assign(tokens, pos);
-                    if pos < 0 { break gd_scan; }
-                    gd_end = pos;
-                }
-                if gd_end > gd_best {
-                    gd_best = gd_end;
-                    gd_winner = 0;
-                }
-                if gd_best >= p.kinds.len() {
-                    break gd_tourney;
-                }
-                let mut gd_end_2: i32 = -1;
-                gd_scan_2: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] == TK_EOF || tokens[pos] == TK_SEMI { break gd_scan_2; }
-                    pos += 1;
-                    gd_end_2 = pos;
-                }
-                if gd_end_2 > gd_best {
-                    gd_best = gd_end_2;
-                    gd_winner = 1;
-                }
-            }
-            if gd_winner == 0 {
-                _parse_assign(p);
-            } else {
-                p.expect_not(&SYNC_1);
-            }
+        if gd_winner == 0 {
+            _parse_assign(p);
+        } else {
+            p.expect_not(&SYNC_1);
         }
     }
     p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1684,75 +1655,46 @@ fn _parse_b__inner(p: &mut Parser) -> () {
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
-        if !_plus_first {
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
+        let mut gd_winner: i32 = -1;
+        let mut gd_best: i32 = p.pos;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                let gp_5 = pos;
-                sg_5: {
-                    pos = gp_5;
-                    sg_5_0: {
-                        pos = scan_assign(tokens, pos);
-                        if pos < 0 { break sg_5_0; }
-                        break sg_5;
-                    }
-                    pos = gp_5;
-                    sg_5_1: {
-                        if pos >= tokens.len() || tokens[pos] == TK_EOF { break sg_5_1; }
-                        pos += 1;
-                        break sg_5;
-                    }
-                    pos = gp_5;
-                }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
+                pos = scan_assign(tokens, pos);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] == TK_EOF { break gd_scan_2; }
+                pos += 1;
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
         }
-        if _plus_first && !((true)) {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+        if gd_winner < 0 {
+            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_0); }
             break;
         }
         _plus_first = false;
-        let grp_kind = p.peek_kind();
-        if true {
-            let mut gd_winner: i32 = -1;
-            let mut gd_best: i32 = -1;
-            gd_tourney: {
-                let mut gd_end: i32 = -1;
-                gd_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_assign(tokens, pos);
-                    if pos < 0 { break gd_scan; }
-                    gd_end = pos;
-                }
-                if gd_end > gd_best {
-                    gd_best = gd_end;
-                    gd_winner = 0;
-                }
-                if gd_best >= p.kinds.len() {
-                    break gd_tourney;
-                }
-                let mut gd_end_2: i32 = -1;
-                gd_scan_2: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] == TK_EOF { break gd_scan_2; }
-                    pos += 1;
-                    gd_end_2 = pos;
-                }
-                if gd_end_2 > gd_best {
-                    gd_best = gd_end_2;
-                    gd_winner = 1;
-                }
-            }
-            if gd_winner == 0 {
-                _parse_assign(p);
-            } else {
-                p.any();
-            }
+        if gd_winner == 0 {
+            _parse_assign(p);
+        } else {
+            p.any();
         }
     }
     p.expect(TK_EOF, &EMPTY_SYNC);

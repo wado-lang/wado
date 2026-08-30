@@ -1675,47 +1675,52 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            let gp_1 = pos;
-            let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_1) {
-                sg_1: {
-                    pos = gp_1;
-                    sg_1_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_1_0; }
-                        pos += 1;
-                        pos = scan_expr(tokens, pos, follow);
-                        if pos < 0 { break sg_1_0; }
-                        break sg_1;
-                    }
-                    pos = gp_1;
-                    sg_1_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_1_1; }
-                        pos += 1;
-                        pos = scan_expr(tokens, pos, follow);
-                        if pos < 0 { break sg_1_1; }
-                        break sg_1;
-                    }
-                    pos = gp_1;
+        let mut gd_winner: i32 = -1;
+        let mut gd_best: i32 = p.pos;
+        if p.peek_kind() == TK_LIT_STAR && (5 >= vals._p) {
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break gd_scan; }
+                    pos += 1;
+                    pos = scan_expr(tokens, pos, follow);
+                    if pos < 0 { break gd_scan; }
+                    gd_end = pos;
+                }
+                if gd_end > gd_best {
+                    gd_best = gd_end;
+                    gd_winner = 0;
                 }
             }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
+        } else if p.peek_kind() == TK_LIT_PLUS && (4 >= vals._p) {
+            gd_tourney_2: {
+                let mut gd_end_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break gd_scan_2; }
+                    pos += 1;
+                    pos = scan_expr(tokens, pos, follow);
+                    if pos < 0 { break gd_scan_2; }
+                    gd_end_2 = pos;
+                }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 1;
+                }
+            }
         }
-        if rep_scan_pos < 0 { break; }
-        if !((p.peek_kind() == TK_LIT_STAR && (5 >= vals._p)) || (p.peek_kind() == TK_LIT_PLUS && (4 >= vals._p))) { break; }
-        let grp_kind = p.peek_kind();
-        if grp_kind == TK_LIT_STAR && (5 >= vals._p) {
+        if gd_winner < 0 {
+            break;
+        }
+        if gd_winner == 0 {
             let star = p.expect(TK_LIT_STAR, &SYNC_1);
             let expr = _parse_expr(p, follow, 6);
-        } else if grp_kind == TK_LIT_PLUS && (4 >= vals._p) {
+        } else {
             let plus = p.expect(TK_LIT_PLUS, &SYNC_1);
             let expr = _parse_expr(p, follow, 5);
-        } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
         }
     }
     return vals;

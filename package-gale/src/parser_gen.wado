@@ -3791,6 +3791,18 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             if ctx.emit_follow() && r.gate_caller_follow {
                 w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
             }
+            // The iteration's guard is its body's own decision where the body
+            // has alternatives: what it fails to find ends the loop, and the
+            // dispatch commits to what it found.
+            if let Group(g) = &r.body {
+                if let Some(branches) = op_group_alt_decision(g, ctx) {
+                    let winner = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, false, true);
+                    w.line(&`if ${winner} < 0 \{ break; \}`);
+                    gen_group_body(w, g, ctx, nc, Option::Some(winner));
+                    w.end();
+                    return;
+                }
+            }
             let scan_pos = gen_rep_scan_guard(w, &r.scan_body, ctx, nc);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             gen_op(w, &r.body, ctx, nc);
@@ -4591,17 +4603,33 @@ fn gen_mandatory_first_report(
     ctx: &mut GenContext,
     plus_flag: &String,
 ) {
-    let Some(admits) = group_admits(inner, kind, ctx) else {
+    let Some(admits) = mandatory_first_admits(inner, kind, ctx, true) else {
         return;
     };
-    if admits.gated || repeat_body_reports_itself(inner, ctx) {
-        return;
-    }
     let expected_ref = sync_set_ref(ctx, &admits.expected);
     w.begin(&`if ${*plus_flag} && !(${admits.condition})`);
     w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     w.line(&"break;");
     w.end();
+}
+
+/// What the mandatory first iteration reports over, or `null` where something
+/// else already reports there: a single-alternative body reports at its first
+/// mandatory element, and a gated group at the dispatch that has an arm the
+/// predicate excludes. `dispatch_reports` is false where the iteration's
+/// decision already picked the alternative — there the dispatch commits
+/// instead of reporting, so nothing else answers the excluded position.
+fn mandatory_first_admits(
+    inner: &Element,
+    kind: GroupBranchKind,
+    ctx: &mut GenContext,
+    dispatch_reports: bool,
+) -> Option<GroupAdmits> {
+    let admits = group_admits(inner, kind, ctx)?;
+    if repeat_body_reports_itself(inner, ctx) || dispatch_reports && admits.gated {
+        return null;
+    }
+    return Option::Some(admits);
 }
 
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s
@@ -4905,6 +4933,7 @@ fn gen_op_group(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     entry: GroupEntry,
+    decided: Option<String> = null,
 ) {
     // Scalar `name=(a | b | …)` lowers via `rebind_op_field` so the
     // resulting op is `Op::Group` even though the surface element is
@@ -4934,6 +4963,7 @@ fn gen_op_group(
                 entry,
                 ctx,
                 name_counts,
+                decided,
             ),
             General(gs) => gen_general_group(
                 w,
@@ -4944,6 +4974,7 @@ fn gen_op_group(
                 entry,
                 ctx,
                 name_counts,
+                decided,
             ),
             Transparent => {
                 // Transparent groups inline their inner alt; walk
@@ -5538,6 +5569,21 @@ fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
     }
 }
 
+/// The same gate where a `+`'s mandatory first iteration shares the loop body:
+/// that iteration is required, so it cannot yield to the caller.
+fn gen_iter_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, plus_flag: &String) {
+    if !rep_op.gate_caller_follow {
+        return;
+    }
+    if plus_flag.is_empty() {
+        gen_caller_follow_gate(w, rep_op);
+        return;
+    }
+    w.begin(&`if !${*plus_flag}`);
+    gen_caller_follow_gate(w, rep_op);
+    w.end();
+}
+
 /// Render the runtime FOLLOW argument expression for a
 /// `RuleCall` per its `FollowArg`. Passed as the callee's `follow`
 /// parameter (parse and scan share the spelling — both bind `follow`).
@@ -5605,14 +5651,10 @@ fn gen_op_repeat_star_plus_non_storable_group(
         if rep_op.body_scannable {
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
-            // Mirror `gen_op_repeat_star_plus_storable`'s Star arm: yield
-            // to the caller on K-prefix match before the scan guard.
-            // No-op for empty mask.
-            gen_caller_follow_gate(w, rep_op);
-            let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(&`if ${scan_pos} < 0 \{ break; \}`);
+            let no_flag = String::new();
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag, &loop_first);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+            gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &no_flag), decided);
             w.end();
         } else {
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
@@ -5629,15 +5671,9 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.line(&`let mut ${plus_flag} = true;`);
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
-            w.begin(&`if !${plus_flag}`);
-            // Mandatory first iter is unconditional; subsequent iters
-            // get the K-prefix yield gate before the scan guard.
-            gen_caller_follow_gate(w, rep_op);
-            let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(&`if ${scan_pos} < 0 \{ break; \}`);
-            w.end();
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag, &loop_first);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Looped(plus_flag));
+            gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &plus_flag), decided);
             w.end();
         } else {
             // Plus + non-scannable + no-field: emit the first iteration
@@ -5761,15 +5797,19 @@ fn gen_op_repeat_star_plus_storable(
         if rep_op.body_scannable {
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
-            // Caller-FOLLOW yield gate: when the upcoming tokens match
-            // the caller's continuation at iter entry, exit the loop so
-            // the caller can consume them. Inert when the runtime
-            // `follow` is empty.
-            gen_caller_follow_gate(w, rep_op);
-            let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
+            let no_flag = String::new();
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag, &loop_first);
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, looped());
+            gen_op_inner_for_storable_repeat(
+                w,
+                rep_op,
+                inner,
+                ctx,
+                &mut nc,
+                &iter_follow,
+                decided_entry(&decided, &no_flag),
+                decided,
+            );
             w.end();
         } else {
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
@@ -5788,13 +5828,7 @@ fn gen_op_repeat_star_plus_storable(
             w.line(&`let mut ${plus_flag} = true;`);
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
-            w.begin(&`if !${plus_flag}`);
-            // Yield to the caller when the upcoming tokens match its
-            // continuation. Inert when the runtime `follow` is empty.
-            gen_caller_follow_gate(w, rep_op);
-            let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
-            w.end();
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag, &loop_first);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(
                 w,
@@ -5803,22 +5837,15 @@ fn gen_op_repeat_star_plus_storable(
                 ctx,
                 &mut nc,
                 &iter_follow,
-                GroupEntry::Looped(plus_flag),
+                decided_entry(&decided, &plus_flag),
+                decided,
             );
             w.end();
         } else {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(&`let mut ${plus_flag} = true;`);
             w.begin(&`while !p.recovering && (${plus_flag} || ${ctx.first_check_str(&inner_first)})`);
-            // K-prefix yield gate fires AFTER the mandatory first iter:
-            // skip emission while `plus_flag` is still true so the
-            // mandatory iter cannot be suppressed. Empty mask emits
-            // nothing (the if-block is dead-stripped at codegen).
-            if rep_op.gate_caller_follow {
-                w.begin(&`if !${plus_flag}`);
-                gen_caller_follow_gate(w, rep_op);
-                w.end();
-            }
+            gen_iter_caller_follow_gate(w, rep_op, &plus_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(
                 w,
@@ -5849,6 +5876,94 @@ fn gen_rep_break(
     loop_first: &List<String>,
 ) {
     gen_rep_break_with_recovery(w, scan_pos, rep_op, ctx, loop_first);
+}
+
+/// What a scan-guarded iteration clears before its body: the caller-FOLLOW
+/// yield gate, then either the body group's own decision or the plain scan
+/// guard. Returns the winning alternative the body's dispatch commits to, or
+/// `null` where the body has no alternatives to decide.
+///
+/// A decided iteration is guarded by that decision — what it fails to find is
+/// what ends the loop, and on a `+`'s mandatory first iteration what it
+/// reports — so it discharges `Looped` here and its body enters `Guaranteed`.
+fn gen_rep_iteration_entry(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    inner: &Element,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+    plus_flag: &String,
+    loop_first: &List<String>,
+) -> Option<String> {
+    if let Group(g_op) = &rep_op.body {
+        if let Group(g_elem) = peel_scalar_label(inner) {
+            if let Some(branches) = group_alt_decision(g_op, g_elem, ctx) {
+                return Option::Some(gen_rep_decided_entry(
+                    w,
+                    rep_op,
+                    inner,
+                    g_op,
+                    &branches,
+                    ctx,
+                    name_counts,
+                    plus_flag,
+                ));
+            }
+        }
+    }
+    let guarded_only = !plus_flag.is_empty();
+    if guarded_only {
+        w.begin(&`if !${*plus_flag}`);
+    }
+    gen_caller_follow_gate(w, rep_op);
+    let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
+    gen_rep_break(w, &scan_pos, rep_op, ctx, loop_first);
+    if guarded_only {
+        w.end();
+    }
+    return null;
+}
+
+fn gen_rep_decided_entry(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    inner: &Element,
+    g_op: &GroupOp,
+    branches: &List<DecisionBranch>,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+    plus_flag: &String,
+) -> String {
+    gen_iter_caller_follow_gate(w, rep_op, plus_flag);
+    let kind = shape_branch_kind(&g_op.shape);
+    // No gate break: every branch of the decision carries the gate the loop
+    // would test, so a predicate the decision already answered is not asked
+    // a second time.
+    let winner = gen_group_decide(w, branches, &g_op.scan_alts, ctx, name_counts, false, true);
+    w.begin(&`if ${winner} < 0`);
+    if !plus_flag.is_empty() {
+        if let Some(admits) = mandatory_first_admits(inner, kind, ctx, false) {
+            let expected_ref = sync_set_ref(ctx, &admits.expected);
+            w.line(
+                &`if ${*plus_flag} \{ p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); \}`,
+            );
+        }
+    }
+    w.line(&"break;");
+    w.end();
+    if !plus_flag.is_empty() {
+        w.line(&`${*plus_flag} = false;`);
+    }
+    return winner;
+}
+
+/// What a decided iteration owes its body: nothing, since the entry already
+/// discharged the loop's obligations.
+fn decided_entry(decided: &Option<String>, plus_flag: &String) -> GroupEntry {
+    if decided matches { Some(_) } {
+        return GroupEntry::Guaranteed;
+    }
+    return GroupEntry::Looped(*plus_flag);
 }
 
 fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &List<String>) -> String {
@@ -6191,6 +6306,10 @@ fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<Decis
 ///
 /// `follow_gate` wraps the scans in the caller-FOLLOW yield test, so a
 /// tail-position group that must yield never pays for them.
+///
+/// `require_advance` starts the running best at the entry position instead of
+/// `-1`, so an alternative that matches zero tokens wins nothing: a loop
+/// iteration that consumed nothing would come round again forever.
 fn gen_group_decide(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
@@ -6198,12 +6317,13 @@ fn gen_group_decide(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     follow_gate: bool,
+    require_advance: bool = false,
 ) -> String {
     assert !branches.is_empty(), "gen_group_decide: a group's partition has at least one branch";
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let best_var = dedup_name(&"gd_best", name_counts);
     w.line(&`let mut ${winner_var}: i32 = -1;`);
-    w.line(&`let mut ${best_var}: i32 = -1;`);
+    w.line(&`let mut ${best_var}: i32 = ${if require_advance { "p.pos" } else { "-1" }};`);
     if follow_gate {
         w.begin(&`if !(${CALLER_FOLLOW_YIELDS})`);
     }
