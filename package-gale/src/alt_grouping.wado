@@ -17,6 +17,53 @@
 use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 
+/// What an alternative matches, as one answer rather than a question each
+/// decision site works out from whatever it has in hand. Six predicates over
+/// eighteen call sites asked it separately — "is there a wildcard in the
+/// elements", "is the first set empty", "is it nullable", "has it no elements"
+/// — and every one of them was right for the spelling its author had in front
+/// of them and wrong for another. Sharing a function was not enough: each
+/// caller still supplied its own inputs and its own index space. So the
+/// classification is produced here and elsewhere only read.
+pub variant AltClass {
+    /// Matches at least one token, of any kind: `.` or `~X`, written in the
+    /// alternative or reached through a nullable prefix or a rule. No first
+    /// set names what it admits, and it admits everything.
+    OpenEnded,
+    /// Derives only the empty string. No lookahead selects it; what may follow
+    /// the decision does.
+    Epsilon,
+    /// Selected by exactly these tokens. Never empty.
+    Selects(List<String>),
+}
+
+/// The one classifier. `first_set` is the alternative's own, already computed
+/// by the caller that needs it anyway.
+pub fn alt_class(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> AltClass {
+    if alt_is_open_ended(alt, ctx) {
+        return AltClass::OpenEnded;
+    }
+    if first_set.is_empty() {
+        return AltClass::Epsilon;
+    }
+    return AltClass::Selects(*first_set);
+}
+
+/// `alt_class` for a caller that has no first set to hand.
+pub fn alt_class_of(alt: &Alternative, ctx: &mut GenContext) -> AltClass {
+    let mut visiting: List<String> = [];
+    let first = ctx.first_of_alt(alt, &mut visiting);
+    return alt_class(alt, &first, ctx);
+}
+
+pub fn alt_class_is_open_ended(c: &AltClass) -> bool {
+    return *c matches { OpenEnded };
+}
+
+pub fn alt_class_is_epsilon(c: &AltClass) -> bool {
+    return *c matches { Epsilon };
+}
+
 /// True when `alt` admits every token: it has no first set to be selected by,
 /// and it consumes at least one token, so what it matches is a token of any
 /// kind. `.` and `~X` are why a first set comes out empty — `first_of_element`
@@ -122,9 +169,36 @@ pub fn compute_overlap_groups_with_wildcard(
 pub fn open_ended_indices(alts: &List<Alternative>, ctx: &mut GenContext) -> List<i32> {
     let mut out: List<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
-        if alt_is_open_ended(&alts[i], ctx) {
+        if alt_class_is_open_ended(&alt_class_of(&alts[i], ctx)) {
             out.push(i);
         }
+    }
+    return out;
+}
+
+/// The classification of each alternative a partition covers, in the index
+/// space its first sets are in. `alt_of` maps a slot to its alternative, so a
+/// partition over a subset supplies its own mapping instead of assuming the
+/// two spaces coincide.
+pub fn alt_classes(
+    alt_of: &List<i32>,
+    alts: &List<Alternative>,
+    first_sets: &List<List<String>>,
+    ctx: &mut GenContext,
+) -> List<AltClass> {
+    assert alt_of.len() == first_sets.len(), "one alternative per first set";
+    let mut out: List<AltClass> = [];
+    for let mut slot = 0; slot < alt_of.len(); slot += 1 {
+        out.push(alt_class(&alts[alt_of[slot]], &first_sets[slot], ctx));
+    }
+    return out;
+}
+
+/// The identity mapping, for a partition over `alts` itself.
+pub fn identity_slots(n: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        out.push(i);
     }
     return out;
 }

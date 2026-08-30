@@ -62,7 +62,14 @@ use {
     MAX_LOOKAHEAD_DEPTH,
 } from "./prediction.wado";
 use {
-    alt_is_open_ended,
+    AltClass,
+    alt_class,
+    alt_class_is_epsilon,
+    alt_class_is_open_ended,
+    alt_class_of,
+    alt_classes,
+    identity_slots,
+    open_ended_indices,
     compute_overlap_groups,
     compute_overlap_groups_with_wildcard,
     compute_overlap_groups_with_wildcard_indices,
@@ -164,7 +171,6 @@ use {
     sync_set_ref,
 } from "./kind_set_gen.wado";
 use {
-    alt_body_matches_nothing,
     apply_empty_alt_admits,
     non_greedy_static_undecided,
     peel_repeat_body_label,
@@ -2659,13 +2665,12 @@ fn gen_multi_alt_body(
         // An arm with no emitted condition is not the same as one no lookahead
         // can select: `position_first_sets_from` also comes back empty for a
         // deep-nullable tail, which `A?` has while its first set picks it out
-        // perfectly well. `alt_is_untestable` asks the first set, as the group
-        // partition does.
+        // perfectly well. What the alternative matches is `alt_class`'s to say,
+        // not this site's to infer from the condition it happens to have.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
-        let mut visiting: List<String> = [];
-        let first_set = ctx.first_of_alt(alt, &mut visiting);
+        let epsilon = alt_class_is_epsilon(&alt_class_of(alt, ctx));
         let gated = alt_gates_branch(alt, ctx);
-        untestable.push(no_cond && alt_is_untestable(alt, &first_set, ctx) && !gated);
+        untestable.push(no_cond && epsilon && !gated);
     }
 
     for let slot of &arms_fallback_last(&untestable) {
@@ -3171,7 +3176,7 @@ fn gen_alt_dispatch(
             all_first.push(*t);
         }
     }
-    let branches = direct_dispatch_branches(&dd, alts, ctx);
+    let branches = direct_dispatch_branches(&dd);
     assert !branches.is_empty(), "a Direct dispatch decides between alternatives, so it has branches";
     if decision_reads_lookahead(&branches) {
         w.line(&"let _gk = p.peek_kind();");
@@ -3198,14 +3203,15 @@ fn gen_alt_dispatch(
 /// The branches a baked `Direct` dispatch takes, as the one branch type every
 /// chain renders. Lower bakes an empty token set both for an alternative no
 /// lookahead selects and for one that is open-ended, and only the first is the
-/// chain's fallback — the alternatives are what tell them apart, which is why
-/// they are a parameter here rather than an assumption about `Direct`.
-fn direct_dispatch_branches(dd: &DirectDispatch, alts: &List<AltBody>, ctx: &mut GenContext) -> List<DecisionBranch> {
+/// chain's fallback. Lower says which, from the surface alternatives this side
+/// no longer has — working it out from the ops instead is what made the two
+/// walkers answer differently.
+fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
     let mut branches: List<DecisionBranch> = [];
     for let br of &dd.branches {
         let test = if !br.tokens.is_empty() {
             Admits::Kinds(br.tokens);
-        } else if alt_body_matches_nothing(alt_by_index(alts, br.alt_index), ctx) {
+        } else if br.epsilon {
             Admits::Untestable;
         } else {
             Admits::Everything;
@@ -4215,21 +4221,15 @@ fn gen_op_opt_scan_guard_for_group(
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
     } else {
         let mut alt_first_sets: List<List<String>> = [];
-        let mut wildcard_indices: List<i32> = [];
-        for let mut ai = 0; ai < g_elem.alternatives.len(); ai += 1 {
-            let alt = &g_elem.alternatives[ai];
+        for let alt of &g_elem.alternatives {
             let mut visiting: List<String> = [];
-            let alt_first = ctx.first_of_alt(alt, &mut visiting);
-            if alt_is_open_ended(alt, ctx) {
-                wildcard_indices.push(ai);
-            }
-            alt_first_sets.push(alt_first);
+            alt_first_sets.push(ctx.first_of_alt(alt, &mut visiting));
         }
         let scan_elem = ScanGroupElement {
             alts: g_op.scan_alts,
             lenient: false,
             alt_first_sets,
-            wildcard_alt_indices: wildcard_indices,
+            wildcard_alt_indices: open_ended_indices(&g_elem.alternatives, ctx),
         };
         gen_scan_op_group(w, &scan_elem, ctx, &fail, false);
     }
@@ -6352,11 +6352,11 @@ fn decision_branches(
 ) -> List<DecisionBranch> {
     // A group's partition is over `alts` itself here, so slot and alternative
     // index are the same thing.
-    let open_ended = open_ended_flags(&identity_slots(alts.len()), alts, first_sets, ctx);
+    let classes = alt_classes(&identity_slots(alts.len()), alts, first_sets, ctx);
     let mut branches: List<DecisionBranch> = [];
     for let group of groups {
         branches.push(DecisionBranch {
-            test: group_branch_admits(group, first_sets, &open_ended),
+            test: group_branch_admits(group, first_sets, &classes),
             gate: group_gate(group, alts, ctx),
             alts: *group,
         });
@@ -6426,7 +6426,7 @@ fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<Decis
         return null;
     }
     return match &g.dispatch {
-        Direct(dd) => Option::Some(direct_dispatch_branches(dd, &g.alts, ctx)),
+        Direct(dd) => Option::Some(direct_dispatch_branches(dd)),
         // The tournament has no lookahead gate of its own: every alternative
         // is a candidate, and the scan lengths decide.
         Tournament(td) => Option::Some([
@@ -6739,75 +6739,23 @@ fn group_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List
     return union_first;
 }
 
-/// What a branch admits. A wildcard-led alternative admits every token and
-/// says so exactly, which is why it keeps its place; a union that comes out
-/// empty is an alternative the lookahead cannot decide, which does not.
-/// `open_ended` is parallel to `first_sets`, not to the rule's alternatives. A
+/// What a branch admits. An open-ended alternative admits every token and says
+/// so exactly, which is why it keeps its place; a union that comes out empty
+/// is an alternative the lookahead cannot decide, which does not.
+///
+/// `classes` is parallel to `first_sets`, not to the rule's alternatives. A
 /// group holds slots into whatever index space its partition was built in, and
 /// a left-recursive rule partitions only its non-LR alternatives — so reading
 /// the alternative list directly read a different alternative than the first
-/// set beside it.
-///
-/// An empty first set says nothing about the element that produced it: `.` and
-/// `~X` have one because no set can enumerate every token, and an empty
-/// alternative has one because it matches none. Only the second is untestable,
-/// and `alt_is_open_ended` is the one place that tells them apart — the scan
-/// side and the partition ask it too, so all three agree.
-fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, open_ended: &List<bool>) -> Admits {
-    assert open_ended.len() == first_sets.len(), "one verdict per partitioned alternative";
-    if group.iter_ref().any(|slot: &i32| open_ended[*slot]) {
+/// set beside it. Taking the classification as a parameter is what keeps the
+/// two spaces from being confused here: whoever built the partition supplies
+/// the classes in the same space.
+fn group_branch_admits(group: &List<i32>, first_sets: &List<List<String>>, classes: &List<AltClass>) -> Admits {
+    assert classes.len() == first_sets.len(), "one class per partitioned alternative";
+    if group.iter_ref().any(|slot: &i32| alt_class_is_open_ended(&classes[*slot])) {
         return Admits::Everything;
     }
     return admits_or_untestable(&group_first_union(group, first_sets));
-}
-
-/// Whether an alternative can match the empty string. Written empty is one
-/// way; reaching a rule that is, is another, and counting elements sees only
-/// the first.
-fn alt_is_nullable(alt: &Alternative, ctx: &mut GenContext) -> bool {
-    for let elem of &alt.elements {
-        let mut visiting: List<String> = [];
-        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
-            return false;
-        }
-    }
-    return true;
-}
-
-/// Whether no lookahead can select this alternative: it has no first set to be
-/// selected by, and what it derives is the empty string alone. Both halves are
-/// needed, and each alone names a different alternative — an open-ended one
-/// has no first set and is not nullable, and `A?` is nullable with a perfectly
-/// good first set that a lookahead of `a` picks.
-fn alt_is_untestable(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> bool {
-    return first_set.is_empty() && alt_is_nullable(alt, ctx);
-}
-
-/// The open-ended verdicts for a partition, in the index space `first_sets` is
-/// in. `alt_of` maps a slot to its alternative, so a partition over a subset
-/// of the rule's alternatives supplies its own mapping rather than assuming
-/// the two spaces coincide.
-fn open_ended_flags(
-    alt_of: &List<i32>,
-    alts: &List<Alternative>,
-    first_sets: &List<List<String>>,
-    ctx: &mut GenContext,
-) -> List<bool> {
-    assert alt_of.len() == first_sets.len(), "one alternative per first set";
-    let mut out: List<bool> = [];
-    for let mut slot = 0; slot < alt_of.len(); slot += 1 {
-        out.push(alt_is_open_ended(&alts[alt_of[slot]], ctx));
-    }
-    return out;
-}
-
-/// The identity mapping, for a partition over `alts` itself.
-fn identity_slots(n: i32) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let mut i = 0; i < n; i += 1 {
-        out.push(i);
-    }
-    return out;
 }
 
 /// The gate a lone alternative's alt-initial predicates contribute, registered
@@ -7551,11 +7499,11 @@ fn gen_multi_alt_body_alt(
     //
     // The partition is over the non-LR alternatives, so a group's members are
     // slots into `non_lr_indices` and the verdicts have to be too.
-    let open_ended = open_ended_flags(non_lr_indices, &rule.alternatives, first_sets, ctx);
+    let classes = alt_classes(non_lr_indices, &rule.alternatives, first_sets, ctx);
     let mut untestable: List<bool> = [];
     for let group of groups {
         let ungated = group.len() != 1 || !alt_gates_branch(&rule.alternatives[non_lr_indices[group[0]]], ctx);
-        let admits = group_branch_admits(group, first_sets, &open_ended);
+        let admits = group_branch_admits(group, first_sets, &classes);
         untestable.push(admits_is_untestable(&admits) && ungated);
     }
 

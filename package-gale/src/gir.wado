@@ -470,6 +470,12 @@ pub struct DirectDispatch {
 pub struct DispatchBranch {
     pub tokens: List<String>,
     pub alt_index: i32,
+    /// What the alternative matches, decided once by `alt_class` where the
+    /// surface alternatives are still in hand. An empty `tokens` means either
+    /// "no lookahead selects this" or "it admits every token", and the op
+    /// walker has no elements left to tell them apart — asking it there is
+    /// what made the two walkers answer differently.
+    pub epsilon: bool,
 }
 
 /// Scan tournament dispatch.

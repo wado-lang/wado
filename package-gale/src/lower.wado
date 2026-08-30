@@ -45,6 +45,8 @@ use {
     GroupElement,
 } from "./ir.wado";
 use {
+    alt_class,
+    alt_class_is_epsilon,
     alt_is_open_ended,
     open_ended_indices,
     compute_overlap_groups,
@@ -1045,47 +1047,6 @@ fn op_nullable(op: &Op) -> bool {
     };
 }
 
-/// Whether a lowered alternative derives only the empty string, so no
-/// lookahead selects it. The op-side twin of `alt_is_nullable`, and it has to
-/// agree with it: `op_nullable` alone answers `false` for every `RuleCall`, so
-/// an alternative that reaches a rule deriving only epsilon came out
-/// selectable on this side and not on the other.
-pub fn alt_body_matches_nothing(body: &AltBody, ctx: &mut GenContext) -> bool {
-    for let op of &body.ops {
-        if !op_nullable_deep(op, ctx) {
-            return false;
-        }
-    }
-    return true;
-}
-
-/// `op_nullable`, resolving a rule call to the rule's own nullability.
-fn op_nullable_deep(op: &Op, ctx: &mut GenContext) -> bool {
-    return match op {
-        RuleCall(rc) => {
-            let mut visiting: List<String> = [];
-            ctx.rule_is_nullable(&rc.target_name, &mut visiting);
-        },
-        Repeat(r) => match r.kind {
-            RepeatKind::Star => true,
-            RepeatKind::Optional => true,
-            RepeatKind::Plus => op_nullable_deep(&r.body, ctx),
-        },
-        Group(g) => {
-            let mut any = false;
-            for let alt of &g.alts {
-                if alt_body_matches_nothing(alt, ctx) {
-                    any = true;
-                    break;
-                }
-            }
-            any;
-        },
-        ListLabel(ll) => op_nullable_deep(&ll.inner, ctx),
-        _ => op_nullable(op),
-    };
-}
-
 fn seq_all_nullable(ops: &List<Op>) -> bool {
     for let op of ops {
         if !op_nullable(op) {
@@ -1700,12 +1661,18 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatc
 /// Build a `Direct` dispatch from disjoint first sets. Each branch
 /// matches one alt's first set; emit translates the branch list into
 /// an `if / else if` chain followed by an error fallback.
-fn build_direct_dispatch(first_sets: &List<List<String>>) -> MultiAltDispatch {
+fn build_direct_dispatch(
+    alts: &List<Alternative>,
+    first_sets: &List<List<String>>,
+    ctx: &mut GenContext,
+) -> MultiAltDispatch {
+    assert alts.len() == first_sets.len(), "one first set per alternative";
     let mut branches: List<DispatchBranch> = [];
     for let mut i = 0; i < first_sets.len(); i += 1 {
         branches.push(DispatchBranch {
             tokens: first_sets[i],
             alt_index: i,
+            epsilon: alt_class_is_epsilon(&alt_class(&alts[i], &first_sets[i], ctx)),
         });
     }
     return MultiAltDispatch::Direct(DirectDispatch { branches });
@@ -1755,6 +1722,7 @@ fn build_overlap_dispatch(
             branches.push(DispatchBranch {
                 tokens: first_sets[k],
                 alt_index: indices[k],
+                epsilon: alt_class_is_epsilon(&alt_class(&alts[indices[k]], &first_sets[k], ctx)),
             });
         }
         return MultiAltDispatch::Direct(DirectDispatch { branches });
@@ -3111,7 +3079,7 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         });
         first_sets.push([token_only_kind(elem)]);
     }
-    let dispatch = build_direct_dispatch(&first_sets);
+    let dispatch = build_direct_dispatch(alts, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::TokenOnly(TokenOnlyShape { field: field }),
         alts: bodies,
