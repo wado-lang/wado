@@ -27,7 +27,7 @@ export fn run() with (Preopens, Stdout) {
     ).wait().unwrap();
     let [wrx, wtx] = Stream::<u8>::new();
     let wsub = wfile.write_via_stream(wrx, 0 as Filesize);
-    wtx.write([65 as u8, 66 as u8, 67 as u8]);
+    wtx.write_all([65 as u8, 66 as u8, 67 as u8]);
     wtx.drop();
     match wsub.read() {
         Some(Ok(_)) => {
@@ -72,7 +72,7 @@ export fn run() with (Preopens, Stdout) {
     ).wait().unwrap();
     let [erx, etx] = Stream::<u8>::new();
     let esub = rofile.write_via_stream(erx, 0 as Filesize);
-    etx.write([88 as u8]);
+    etx.write_all([88 as u8]);
     etx.drop();
     match esub.read() {
         Some(Ok(_)) => {

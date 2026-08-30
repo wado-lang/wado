@@ -71,7 +71,7 @@ fn send_post<B: AsByteSlice>(api_key: String, body: B) -> Response with Client {
     // calls rendezvous with it and the whole body flows out without
     // deadlock.
     let subtask = Client::send(req);
-    body_tx.write(body.as_byte_slice().to_list());
+    body_tx.write_raw_all(body.as_byte_slice());
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 

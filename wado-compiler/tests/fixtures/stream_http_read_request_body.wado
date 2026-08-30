@@ -24,7 +24,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // For "Hello" (5 bytes), write "5"
     let len_byte = (total_len + 48) as u8;  // ASCII digit
     let body_data: List<u8> = [len_byte];
-    resp_body_tx.write(body_data);
+    resp_body_tx.write_all(body_data);
     resp_body_tx.drop();
 
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

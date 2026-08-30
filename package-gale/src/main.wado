@@ -143,7 +143,7 @@ fn write_output(path: &String, source: &String) with (Stderr, Preopens, Exit) {
     let bytes: List<u8> = source.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
-    tx.write(bytes);
+    tx.write_all(bytes);
     tx.drop();
     // Await the completion future so a partial or failed write is reported
     // rather than silently treated as success.

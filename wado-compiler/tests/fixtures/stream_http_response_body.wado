@@ -15,7 +15,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Write body data through the typed StreamWritable API
     let data: List<u8> = [72, 101, 108, 108, 111];  // "Hello"
-    body_tx.write(data);
+    body_tx.write_all(data);
     body_tx.drop();
 
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

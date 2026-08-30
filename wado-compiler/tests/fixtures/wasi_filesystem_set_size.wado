@@ -14,7 +14,7 @@ use { ErrorCode } from "wasi:filesystem/types.wado";
 fn write_bytes(file: &Descriptor, data: List<u8>) with Descriptor {
     let [write_rx, write_tx] = Stream::<u8>::new();
     let subtask = file.write_via_stream(write_rx, 0 as Filesize);
-    write_tx.write(data);
+    write_tx.write_all(data);
     write_tx.drop();
         let __f = subtask as Future<Result<(), ErrorCode>>; __f.drop();
 }
