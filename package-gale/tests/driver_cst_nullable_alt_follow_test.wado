@@ -1,0 +1,38 @@
+//! A nullable alternative is selected by its own first set AND by what may
+//! follow the group, because it can also match nothing. Those are two facts
+//! about one alternative, and writing the follow set over the first set —
+//! instead of joining them — dropped the first: `( A? | B ) C` stopped
+//! admitting `a`.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use naf from "./grammars/nullable_alt_follow.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_nullable_alt_follow" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = naf::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = naf::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "nullable-alt: its own first set still selects it" {
+    assert_tree(&"k a c", &"(s k a c)");
+}
+
+test "nullable-alt: the group's follow set selects it too" {
+    assert_tree(&"k c", &"(s k c)");
+}
+
+test "nullable-alt: a later alternative is still reachable" {
+    assert_tree(&"k b c", &"(s k b c)");
+}
+
+test "nullable-alt: nullable through a rule reads the same" {
+    assert_tree(&"m a c", &"(s m (x a) c)");
+    assert_tree(&"m c", &"(s m x c)");
+    assert_tree(&"m b c", &"(s m b c)");
+}

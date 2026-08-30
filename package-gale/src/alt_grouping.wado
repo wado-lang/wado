@@ -162,14 +162,33 @@ pub fn dispatch_branches(d: &MultiAltDispatch) -> List<DecisionBranch> {
 
 /// The one classifier. `first_set` is the alternative's own, already computed
 /// by the caller that needs it anyway.
+///
+/// Nullability is asked here and only here. An alternative that can match
+/// nothing is selected by what follows the decision *as well as* by its own
+/// first set — two facts about one alternative, which is why the class carries
+/// both rather than leaving a second predicate to pair them up later.
 pub fn alt_class(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> AltClass {
     if alt_is_open_ended(alt, ctx) {
         return AltClass::OpenEnded;
     }
-    if first_set.is_empty() {
-        return AltClass::Epsilon;
+    if alt_is_nullable(alt, ctx) {
+        return AltClass::Nullable(*first_set);
     }
+    assert !first_set.is_empty(), "an alternative that must match a token has a first set, unless it is open-ended";
     return AltClass::Selects(*first_set);
+}
+
+/// Whether the alternative can derive the empty string. Every element nullable
+/// through the rules it reaches, not just the ones written in place: `x : A? ;`
+/// makes `( x | B )`'s first alternative as skippable as `( A? | B )`'s.
+fn alt_is_nullable(alt: &Alternative, ctx: &mut GenContext) -> bool {
+    for let elem of &alt.elements {
+        let mut visiting: List<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// `alt_class` for a caller that has no first set to hand.

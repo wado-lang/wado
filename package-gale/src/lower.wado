@@ -81,7 +81,7 @@ use {
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext, is_nullable, union_kind_arrays, sets_overlap, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
-use { strip_suffix } from "./gen_util.wado";
+use { dedup_append_arr, strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use {
     LoweredGrammar,
@@ -135,7 +135,7 @@ use {
     DiagnosticSite,
     AltClass,
     alt_class_first_set,
-    alt_class_is_epsilon,
+    alt_class_is_nullable,
     alt_class_is_open_ended,
 } from "./gir.wado";
 
@@ -3198,11 +3198,11 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
 }
 
-/// An alternative deriving only the empty string, which the lookahead selects
-/// by what follows the group. Written empty is one spelling and reaching a
-/// rule that is, is another — counting elements sees only the first, and
-/// `( A | x | B )` with `x : ;` then lost the branch and the report that
-/// `( A | | B )` gets.
+/// An alternative that can match nothing, so what follows the group selects
+/// it. Whether it can is `alt_class`'s answer, not a nullability walk of this
+/// site's own: written empty is one spelling, `A?` is another and reaching a
+/// rule that is nullable is a third, and a site that recognised only some of
+/// them disagreed with the classification the dispatch was built from.
 ///
 /// One carrying a gateable alt-initial predicate is selected by that predicate
 /// instead, so it keeps the unconditional branch the gate hangs on. The gate
@@ -3210,17 +3210,11 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
 /// `alt_gate_and_suffix` produces nothing, and an alternative held back from
 /// its follow set here would then be the dispatch's unconditional `else`,
 /// swallowing a lookahead the group cannot match.
-fn alt_is_bare_empty(alt: &Alternative, ctx: &mut GenContext) -> bool {
+fn alt_earns_group_follow(alt: &Alternative, ctx: &mut GenContext) -> bool {
     if ctx.emit_actions() && alt_has_gate(alt, ctx) {
         return false;
     }
-    for let elem of &alt.elements {
-        let mut visiting: List<String> = [];
-        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
-            return false;
-        }
-    }
-    return true;
+    return alt_class_is_nullable(&alt_class_of(alt, ctx));
 }
 
 /// The admit set of a group's empty alternative, or `null` where there is
@@ -3244,16 +3238,21 @@ pub fn group_empty_alt_admits(
         return null;
     }
     for let mut i = 0; i < alts.len(); i += 1 {
-        if alt_is_bare_empty(&alts[i], ctx) {
+        if alt_earns_group_follow(&alts[i], ctx) {
             return Option::Some(EmptyAltAdmits { alt_index: i, admits: *outer_follow });
         }
     }
     return null;
 }
 
-/// Reclassify the empty alternative as selected by what may follow the group,
-/// which lower computed at its position. Both walkers call it with what lower
-/// decided, so neither works out again which alternative earns the set.
+/// Resolve the nullable alternative against what may follow the group, which
+/// lower computed at its position: the follow set joins its own first set, it
+/// does not replace it. `( A? | B ) C` is selected by `a` because the
+/// alternative starts with one, and by `c` because it can also match nothing —
+/// writing only the second in dropped the first.
+///
+/// Both walkers call this with what lower decided, so neither works out again
+/// which alternative earns the set.
 pub fn apply_empty_alt_admits(classes: &mut List<AltClass>, admits: &Option<EmptyAltAdmits>) {
     let e = if let Some(x) = admits {
         x;
@@ -3261,8 +3260,10 @@ pub fn apply_empty_alt_admits(classes: &mut List<AltClass>, admits: &Option<Empt
         return;
     };
     assert !e.admits.is_empty(), "an admit set that admits nothing is `null`, not an empty set";
-    assert alt_class_is_epsilon(&classes[e.alt_index]), "only the alternative deriving epsilon earns the group's follow set";
-    classes[e.alt_index] = AltClass::Selects(e.admits);
+    assert alt_class_is_nullable(&classes[e.alt_index]), "only a nullable alternative earns the group's follow set";
+    let mut admitted = alt_class_first_set(&classes[e.alt_index]);
+    dedup_append_arr(&mut admitted, &e.admits);
+    classes[e.alt_index] = AltClass::Selects(admitted);
 }
 
 /// Multi-alt group not covered by `SimpleCst` / `TokenOnly` /

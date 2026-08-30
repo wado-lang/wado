@@ -474,28 +474,45 @@ pub variant AltClass {
     /// alternative or reached through a nullable prefix or a rule. No first
     /// set names what it admits, and it admits everything.
     OpenEnded,
-    /// Derives only the empty string. No lookahead selects it; what may follow
-    /// the decision does.
-    Epsilon,
-    /// Selected by exactly these tokens. Never empty.
+    /// Selected by exactly these tokens and nothing else. Never empty.
     Selects(List<String>),
+    /// Can also match nothing, so what may follow the decision selects it too,
+    /// on top of these tokens — of which it may have none (`( A | | B )`) or
+    /// several (`( A? | B )`). Both are one alternative that is nullable; the
+    /// empty first set is not what makes it so, and telling the two apart is
+    /// what dropped `A?`'s own first set when the follow set arrived.
+    ///
+    /// `apply_empty_alt_admits` resolves it to `Selects(tokens ∪ follow)` once
+    /// lower knows what follows the group.
+    Nullable(List<String>),
 }
 
 pub fn alt_class_is_open_ended(c: &AltClass) -> bool {
     return *c matches { OpenEnded };
 }
 
-pub fn alt_class_is_epsilon(c: &AltClass) -> bool {
-    return *c matches { Epsilon };
+pub fn alt_class_is_nullable(c: &AltClass) -> bool {
+    return *c matches { Nullable(_) };
 }
 
-/// The tokens that select the alternative, empty for the two classes no token
-/// set describes. A caller that needs to tell those two apart asks the class,
-/// never the emptiness of this.
+/// True where no token at all selects the alternative — it is nullable and has
+/// no first set of its own, so only what follows the decision can pick it.
+pub fn alt_class_tests_nothing(c: &AltClass) -> bool {
+    return match c {
+        Nullable(tokens) => tokens.is_empty(),
+        _ => false,
+    };
+}
+
+/// The tokens that select the alternative by lookahead alone. Empty for
+/// `OpenEnded`, which no token set describes, and for a nullable alternative
+/// with no first set of its own — a caller that needs to tell those apart asks
+/// the class, never the emptiness of this.
 pub fn alt_class_first_set(c: &AltClass) -> List<String> {
     return match c {
         Selects(tokens) => *tokens,
-        _ => [] as List<String>,
+        Nullable(tokens) => *tokens,
+        OpenEnded => [] as List<String>,
     };
 }
 

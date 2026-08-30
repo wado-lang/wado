@@ -84,7 +84,7 @@ use {
 use {
     AltClass,
     alt_class_first_set,
-    alt_class_is_epsilon,
+    alt_class_tests_nothing,
     LoweredGrammar,
     Rule,
     LrAlt,
@@ -2653,9 +2653,9 @@ fn gen_multi_alt_body(
         // perfectly well. What the alternative matches is `alt_class`'s to say,
         // not this site's to infer from the condition it happens to have.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
-        let epsilon = alt_class_is_epsilon(&alt_class_of(alt, ctx));
+        let selected_by_nothing = alt_class_tests_nothing(&alt_class_of(alt, ctx));
         let gated = alt_gates_branch(alt, ctx);
-        untestable.push(no_cond && epsilon && !gated);
+        untestable.push(no_cond && selected_by_nothing && !gated);
     }
 
     for let slot of &arms_fallback_last(&untestable) {
