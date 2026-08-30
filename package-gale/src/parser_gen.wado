@@ -1825,7 +1825,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     let kind_var = `sgk_${gc}`;
     let branches = scan_decision_branches(ge, &kind_var, ctx);
     w.line(&`let ${gp_var} = pos;`);
-    if !decision_is_unconditional(&branches) {
+    if decision_reads_lookahead(&branches) {
         w.line(&`let ${kind_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
     }
     w.line(&`let mut ${best_var} = -1;`);
@@ -6322,6 +6322,13 @@ fn gen_group_decide(
 fn decision_is_unconditional(branches: &List<DecisionBranch>) -> bool {
     assert !branches.is_empty(), "a group's partition has at least one branch";
     return branches.len() == 1 && branches[0].cond == "true";
+}
+
+/// Whether any branch's test reads the lookahead. A chain whose every branch
+/// admits everything still emits its arms, but binding the token they never
+/// look at is dead work.
+fn decision_reads_lookahead(branches: &List<DecisionBranch>) -> bool {
+    return branches.iter_ref().any(|b: &DecisionBranch| b.cond != "true");
 }
 
 fn open_decision_branch(w: &mut CodeWriter, branches: &List<DecisionBranch>, i: i32) {

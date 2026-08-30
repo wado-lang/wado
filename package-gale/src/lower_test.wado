@@ -28,7 +28,7 @@ use {
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
 use { GenContext } from "./gen_context.wado";
-use { assign_atn_call_sites, unwrap_labeled_transparent_groups } from "./ir.wado";
+use { assign_atn_call_sites, canonicalize_empty_alt_groups, unwrap_labeled_transparent_groups } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use {
     Rule,
@@ -2855,6 +2855,27 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
             } else {
                 panic("expected RepeatStrategy::OptionalScanGuard");
             }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "canonicalizing a labelled empty-alt group leaves no Repeat under the label" {
+    // `x=(A|)?` is two optionals with a label between them. The collapse keeps
+    // the label on the body it binds (`x=(A)?`); leaving it where it stood
+    // nests a Repeat under it, which `classify_repeat_body_shape` rejects.
+    let mut g = parse("grammar S;\nr : x=(A|)? B ;\nA : 'a' ;\nB : 'b' ;\n").unwrap();
+    canonicalize_empty_alt_groups(&mut g);
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            assert !rep.body matches { Repeat(_) }, "the optional's body must not be another Repeat";
         } else {
             panic("expected Op::Repeat");
         }

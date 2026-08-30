@@ -1803,17 +1803,47 @@ fn canon_empty_alt_element(elem: &Element) -> Element {
 /// rejects the grammar first.
 fn canon_repeat(kind: RepeatKind, element: &Element, non_greedy: bool) -> Element {
     if kind matches { Optional } {
-        if let Repeat(inner) = element {
-            if inner.kind matches { Optional } {
-                return Element::Repeat(RepeatElement {
-                    kind: RepeatKind::Optional,
-                    element: inner.element,
-                    non_greedy: non_greedy || inner.non_greedy,
-                });
-            }
+        if let Some(inner) = peel_nested_optional(element) {
+            return Element::Repeat(RepeatElement {
+                kind: RepeatKind::Optional,
+                element: inner.element,
+                non_greedy: non_greedy || inner.non_greedy,
+            });
         }
     }
     return Element::Repeat(RepeatElement { kind, element: *element, non_greedy });
+}
+
+/// The inner Optional of an Optional whose body is one, or `null` where the
+/// body is anything else. A label sits between the two whenever the surface
+/// spelled one (`x=(A|)?`), and it belongs to what the collapse keeps: the
+/// label binds the body, not the choice to take it, so `x=(A|)?` is `x=(A)?`.
+/// Leaving it where it stood is what nests the Repeat under it instead.
+fn peel_nested_optional(element: &Element) -> Option<RepeatElement> {
+    return match element {
+        Repeat(inner) => {
+            if inner.kind matches { Optional } {
+                Option::Some(*inner);
+            } else {
+                null;
+            }
+        },
+        Label(lab) => {
+            let inner = peel_nested_optional(&lab.element)?;
+            Option::Some(RepeatElement {
+                kind: RepeatKind::Optional,
+                element: Element::Label(LabelElement {
+                    name: lab.name,
+                    list: lab.list,
+                    element: inner.element,
+                    snake_name: lab.snake_name,
+                    field_name: lab.field_name,
+                }),
+                non_greedy: inner.non_greedy,
+            });
+        },
+        _ => null,
+    };
 }
 
 /// Returns the Optional-repeat equivalent of a two-alt group with exactly

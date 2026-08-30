@@ -1991,6 +1991,7 @@ fn lower_general_scan_group(
 ) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     let mut first_sets: List<List<String>> = [];
+    let mut wildcard_indices: List<i32> = [];
     for let mut ai = 0; ai < alts.len(); ai += 1 {
         let alt = &alts[ai];
         let mut elements: List<ScanElement> = [];
@@ -2006,10 +2007,7 @@ fn lower_general_scan_group(
         bodies.push(ScanBody { elements });
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-    }
-    let mut wildcard_indices: List<i32> = [];
-    for let mut ai = 0; ai < alts.len(); ai += 1 {
-        if alt_is_wildcard_led(&alts[ai]) {
+        if alt_is_wildcard_led(alt) {
             wildcard_indices.push(ai);
         }
     }
