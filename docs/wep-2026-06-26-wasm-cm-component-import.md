@@ -104,7 +104,12 @@ the two components' host imports without hand-written forwarding.
       ([`core:icu`](./wep-2026-08-09-core-icu.md)) rests on the token alone.
 - [ ] Async value types (`stream<T>` / `future<T>`) in an imported signature.
       This is the async import surface of
-      [Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md).
+      [Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md). Such a
+      function is left out of the bindings — one unsupported export costs only
+      itself, not the component — and a `use` clause naming it reports the
+      shape. Until it lands, a stream crosses a Wado boundary in the export
+      direction only: a peer hands the readable end to a Wado export, or takes
+      one back from it.
 - [ ] World-level type exports. A component exporting a type directly from its
       world, rather than from an interface, is rejected.
 - [ ] Component-defined named types in a world-level function signature. That

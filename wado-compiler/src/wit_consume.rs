@@ -24,6 +24,11 @@ use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, World
 /// alone (see [Effect Reconstruction from CM Component Imports]).
 pub const CM_HOST_IMPORTS_ATTR: &str = "cm_host_imports";
 
+/// Inner-attribute name carrying `"function: kind"` for every export left out
+/// of the bindings because its signature has an async value type the import
+/// path does not support yet.
+pub const CM_UNSUPPORTED_EXPORTS_ATTR: &str = "cm_unsupported_exports";
+
 /// The Wado bindings synthesized from one decoded imported component.
 pub struct ComponentBindings {
     /// The AST module declaring the component's exported interfaces and types.
@@ -66,6 +71,22 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The async value type that kept `name` out of a component-binding module, if
+/// one did. Drives the diagnostic for a `use` clause naming such an export.
+pub fn module_unsupported_export(module: &Module, name: &str) -> Option<String> {
+    let prefix = format!("{name}: ");
+    module
+        .inner_attributes
+        .iter()
+        .find(|a| a.name == CM_UNSUPPORTED_EXPORTS_ATTR)?
+        .args
+        .iter()
+        .find_map(|arg| match arg {
+            AttrArg::Str(s) => s.strip_prefix(&prefix).map(str::to_string),
+            _ => None,
+        })
+}
+
 /// Build a Wado AST module from a component's decoded `Resolve` + target world.
 ///
 /// # Errors
@@ -85,8 +106,9 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
                 interface_fqs.push(fq);
             }
             WorldItem::Function(f) => {
-                b.emit_world_function(resolve, f);
-                world_func_names.push(f.name.clone());
+                if b.emit_world_function(resolve, f) {
+                    world_func_names.push(f.name.clone());
+                }
             }
             WorldItem::Type { .. } => {
                 return Err(
@@ -124,15 +146,19 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
     }
 
     if !b.errors.is_empty() {
-        return Err(b.errors.join("; "));
+        // One unsupported shape reaches the collector once per signature
+        // position it occupies; the reader needs it once.
+        let unique: crate::hashmap::IndexSet<String> = b.errors.into_iter().collect();
+        return Err(unique.into_iter().collect::<Vec<_>>().join("; "));
     }
 
     // Carry the host-leaf set on the synthesized module so the registration
-    // path (`fold_component_interfaces`) recovers it from the AST alone.
-    let inner_attributes = if host_leaf_imports.is_empty() {
-        Vec::new()
-    } else {
-        vec![InnerAttribute {
+    // path (`fold_component_interfaces`) recovers it from the AST alone. The
+    // skipped exports ride along for the same reason: the import-resolution
+    // diagnostic reads them back from the module.
+    let mut inner_attributes = Vec::new();
+    if !host_leaf_imports.is_empty() {
+        inner_attributes.push(InnerAttribute {
             name: CM_HOST_IMPORTS_ATTR.to_string(),
             args: host_leaf_imports
                 .iter()
@@ -140,8 +166,15 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
                 .map(AttrArg::Str)
                 .collect(),
             span: syn(),
-        }]
-    };
+        });
+    }
+    if !b.unsupported.is_empty() {
+        inner_attributes.push(InnerAttribute {
+            name: CM_UNSUPPORTED_EXPORTS_ATTR.to_string(),
+            args: b.unsupported.iter().cloned().map(AttrArg::Str).collect(),
+            span: syn(),
+        });
+    }
 
     let source_interfaces = b.source_interfaces;
     let module = Module::with_metadata(
@@ -169,6 +202,8 @@ struct Builder {
     count: u32,
     items: Vec<Item>,
     errors: Vec<String>,
+    /// `"name: kind"` per function skipped for an async value type.
+    unsupported: Vec<String>,
     source_interfaces: crate::component_model::SourceInterfaceBatch,
 }
 
@@ -179,6 +214,7 @@ impl Builder {
             count: 0,
             items: Vec::new(),
             errors: Vec::new(),
+            unsupported: Vec::new(),
             source_interfaces: crate::component_model::SourceInterfaceBatch::default(),
         }
     }
@@ -229,8 +265,21 @@ impl Builder {
             self.emit_type_def(resolve, *type_id, fq);
         }
 
+        let iface_name = iface
+            .name
+            .as_deref()
+            .unwrap_or_default()
+            .to_upper_camel_case();
+
         let mut methods = Vec::new();
         for (fname, func) in &iface.functions {
+            if let Some(kind) = async_value_kind(resolve, func) {
+                self.skip_async_value_func(
+                    &format!("{iface_name}::{}", fname.to_snake_case()),
+                    kind,
+                );
+                continue;
+            }
             let cm_params: Vec<AttrArg> = func
                 .params
                 .iter()
@@ -282,16 +331,11 @@ impl Builder {
             });
         }
 
-        let name = iface
-            .name
-            .as_deref()
-            .unwrap_or_default()
-            .to_upper_camel_case();
         let attrs = vec![self.cm_import_attr(fq, None)];
         let id = self.id();
         self.items.push(Item::Interface(InterfaceDecl {
             id,
-            name,
+            name: iface_name,
             name_span: syn(),
             visibility: Visibility::Public,
             attrs,
@@ -303,7 +347,14 @@ impl Builder {
     /// Emit a bodyless free `Item::Function` for a world-level function export
     /// (Phase 9); the consumer calls it as a free function and codegen
     /// synthesizes the CM import trampoline from the `#[cm]` boundary.
-    fn emit_world_function(&mut self, resolve: &Resolve, func: &wit_parser::Function) {
+    ///
+    /// `false` when the signature carries an async value type, which the import
+    /// path does not support: the function is left out of the bindings.
+    fn emit_world_function(&mut self, resolve: &Resolve, func: &wit_parser::Function) -> bool {
+        if let Some(kind) = async_value_kind(resolve, func) {
+            self.skip_async_value_func(&func.name.to_snake_case(), kind);
+            return false;
+        }
         let cm_params: Vec<AttrArg> = func
             .params
             .iter()
@@ -354,6 +405,13 @@ impl Builder {
             body: None,
             span: syn(),
         }));
+        true
+    }
+
+    /// Record a function left out of the bindings, so naming it in a `use`
+    /// clause reports why instead of "symbol not found".
+    fn skip_async_value_func(&mut self, name: &str, kind: &'static str) {
+        self.unsupported.push(format!("{name}: {kind}"));
     }
 
     fn emit_type_def(&mut self, resolve: &Resolve, type_id: TypeId, fq: &str) {
@@ -616,6 +674,51 @@ fn classify_wit(resolve: &Resolve, ty: WitType) -> CmShape<WitType> {
         TypeDefKind::Stream(t) => CmShape::Stream(*t),
         TypeDefKind::Type(inner) => classify_wit(resolve, *inner),
         _ => CmShape::Leaf,
+    }
+}
+
+/// The async value type this signature carries, if any. `stream` and `future`
+/// have no import lowering yet, anywhere in a parameter or result — see the
+/// "Not yet supported" list in
+/// `docs/wep-2026-06-26-wasm-cm-component-import.md`.
+fn async_value_kind(resolve: &Resolve, func: &wit_parser::Function) -> Option<&'static str> {
+    let mut seen = crate::hashmap::IndexSet::default();
+    func.params
+        .iter()
+        .map(|p| p.ty)
+        .chain(func.result)
+        .find_map(|ty| async_value_kind_of(resolve, ty, &mut seen))
+}
+
+fn async_value_kind_of(
+    resolve: &Resolve,
+    ty: WitType,
+    seen: &mut crate::hashmap::IndexSet<TypeId>,
+) -> Option<&'static str> {
+    let WitType::Id(id) = ty else {
+        return None; // primitive
+    };
+    if !seen.insert(id) {
+        return None; // recursive type: already walked
+    }
+    let mut walk = |t: WitType| async_value_kind_of(resolve, t, seen);
+    match &resolve.types[id].kind {
+        TypeDefKind::Future(_) => Some("future"),
+        TypeDefKind::Stream(_) => Some("stream"),
+        TypeDefKind::Option(t)
+        | TypeDefKind::List(t)
+        | TypeDefKind::FixedLengthList(t, _)
+        | TypeDefKind::Type(t) => walk(*t),
+        TypeDefKind::Map(k, v) => walk(*k).or_else(|| walk(*v)),
+        TypeDefKind::Tuple(t) => t.types.iter().find_map(|t| walk(*t)),
+        TypeDefKind::Result(r) => r.ok.into_iter().chain(r.err).find_map(walk),
+        TypeDefKind::Record(r) => r.fields.iter().find_map(|f| walk(f.ty)),
+        TypeDefKind::Variant(v) => v.cases.iter().filter_map(|c| c.ty).find_map(walk),
+        TypeDefKind::Enum(_)
+        | TypeDefKind::Flags(_)
+        | TypeDefKind::Resource
+        | TypeDefKind::Handle(_)
+        | TypeDefKind::Unknown => None,
     }
 }
 
