@@ -975,11 +975,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // representation. Reject it here rather than shifting
                         // past the word width.
                         if flags_decl.flags.len() > 32 {
-                            logger.error(TypeError::FlagsTooManyMembers {
-                                name: flags_decl.name.clone(),
-                                count: flags_decl.flags.len(),
-                                span: flags_decl.name_span,
-                            })?;
+                            logger.error_in(
+                                module_source,
+                                TypeError::FlagsTooManyMembers {
+                                    name: flags_decl.name.clone(),
+                                    count: flags_decl.flags.len(),
+                                    span: flags_decl.name_span,
+                                },
+                            )?;
                             // Skip registering the malformed decl; building its
                             // `1 << i` bitmasks would overflow the word width.
                             continue;

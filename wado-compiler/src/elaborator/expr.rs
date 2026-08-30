@@ -1068,14 +1068,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (a) Turbofish on the identifier: `name::<T, ...>`.
         if !ident.type_args.is_empty() {
             if ident.type_args.len() != real_type_param_count {
-                let _ = self
-                    .logger
-                    .error(TypeError::GenericFunctionRefArgCountMismatch {
-                        name: ident.name.clone(),
-                        expected: real_type_param_count,
-                        found: ident.type_args.len(),
-                        span: ident.span,
-                    });
+                let _ = self.emit(TypeError::GenericFunctionRefArgCountMismatch {
+                    name: ident.name.clone(),
+                    expected: real_type_param_count,
+                    found: ident.type_args.len(),
+                    span: ident.span,
+                });
                 return TypeTable::ERROR;
             }
             let resolved_args: Vec<TypeId> = ident
@@ -1116,14 +1114,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expected_params,
                     found_params,
                 } => {
-                    let _ = self
-                        .logger
-                        .error(TypeError::GenericFunctionRefArityMismatch {
-                            name: ident.name.clone(),
-                            expected_params,
-                            found_params,
-                            span: ident.span,
-                        });
+                    let _ = self.emit(TypeError::GenericFunctionRefArityMismatch {
+                        name: ident.name.clone(),
+                        expected_params,
+                        found_params,
+                        span: ident.span,
+                    });
                     return TypeTable::ERROR;
                 }
                 FuncRefInference::NotApplicable => {}

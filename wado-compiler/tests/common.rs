@@ -38,6 +38,25 @@ use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
 };
 
+/// A located diagnostic names the file it is in. Enforced at the host, so
+/// every fixture that raises one checks it — the file is what a per-document
+/// consumer (the LSP, which publishes per URI) selects on, and one emitted
+/// without it is dropped rather than shown. A span-less diagnostic is about the
+/// compilation rather than a place in it, and is exempt.
+fn assert_diagnostic_is_attributed(diagnostic: &Diagnostic) {
+    if let Some(span) = diagnostic.span.as_ref() {
+        assert!(
+            !span.file.is_empty(),
+            "diagnostic carries a span but no file: {} ({:?}) at {}:{}\n\
+             emit it through `Elaborator::emit` / `Logger::error_in`, not `Logger::error`",
+            diagnostic.message,
+            diagnostic.code,
+            span.line,
+            span.column,
+        );
+    }
+}
+
 /// A filesystem-based `CompilerHost` for tests that need to load files
 pub struct FilesystemHost {
     base_path: PathBuf,
@@ -91,6 +110,7 @@ impl CompilerHost for FilesystemHost {
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        assert_diagnostic_is_attributed(&diagnostic);
         self.diagnostics.lock().unwrap().push(diagnostic);
     }
 
@@ -898,7 +918,7 @@ pub fn compile_source_with_compiler_options_and_filename(
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    compile_capturing_warnings(
+    compile_capturing_diagnostics(
         path,
         source,
         options,
@@ -906,29 +926,31 @@ pub fn compile_source_with_compiler_options_and_filename(
         indexmap::IndexMap::new(),
         indexmap::IndexMap::new(),
     )
-    .0
+    .result
 }
 
-/// Compile and return both the result and the captured compile-time *warning*
-/// messages.
+/// One compile and every diagnostic it raised, by severity.
 ///
-/// Warnings (e.g. `DeadFunction` / `DeadGlobal`) are emitted to the host during
-/// elaboration; the other helpers surface host diagnostics only on failure.
-/// This variant returns the `Severity::Warning` messages on both success and
-/// failure so fixtures can assert them (`warnings_contains` /
-/// `warnings_not_contains`). Only the message text is returned — matching is
-/// message-based.
-pub fn compile_capturing_warnings(
+/// `CompileError` carries only the first error, so the rest — a diagnostic that
+/// must survive an earlier one rather than be masked by it — are reachable only
+/// here. Message text only: matching is substring-based.
+pub struct CapturedCompile {
+    pub result: Result<wado_compiler::CompileResult, CompileError>,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+/// Compile and return the result alongside every diagnostic message the host
+/// received, on both success and failure — what `warnings_contains` /
+/// `warnings_not_contains` / `compile_errors_contains` assert against.
+pub fn compile_capturing_diagnostics(
     path: &std::path::Path,
     source: &str,
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
     env: indexmap::IndexMap<String, String>,
     dependencies: indexmap::IndexMap<String, String>,
-) -> (
-    Result<wado_compiler::CompileResult, CompileError>,
-    Vec<String>,
-) {
+) -> CapturedCompile {
     use wado_compiler::Severity;
     let base_path = path
         .parent()
@@ -950,14 +972,21 @@ pub fn compile_capturing_warnings(
         ))
         .map_err(|_| bail_to_compile_error(&host.diagnostics(), Some(&filename)));
 
-    let warnings = host
-        .diagnostics()
-        .into_iter()
-        .filter(|d| matches!(d.severity, Severity::Warning))
-        .map(|d| d.message)
-        .collect();
+    let diagnostics = host.diagnostics();
+    let messages = |keep: fn(Severity) -> bool| -> Vec<String> {
+        diagnostics
+            .iter()
+            .filter(|d| keep(d.severity))
+            .map(|d| d.message.clone())
+            .collect()
+    };
 
-    (result, warnings)
+    CapturedCompile {
+        result,
+        warnings: messages(|s| s == Severity::Warning),
+        // The same set `bail_to_compile_error` picks `compile_error` from.
+        errors: messages(|s| matches!(s, Severity::Error | Severity::Fatal)),
+    }
 }
 
 /// Compile a file asynchronously (for use within async context)

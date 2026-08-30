@@ -1,0 +1,15 @@
+// Liveness roots reach through an import: a fully-used program draws no
+// dead-code warning, and the stdlib items its `use` pulls in are not reported
+// either — they are another module's declarations, not this one's.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "warnings_not_contains": ["is never used", "is only used by tests"]
+}
