@@ -450,19 +450,30 @@ Where nothing wins that tournament the emit leaves the `else` instead of
 committing, so the rule's own error path still names the rule rather than one
 alternative's next token.
 
-A caller that may decline the group asks no second question. An optional runs
-that same partition and tournament (`gen_group_decide`), enters on a winner
-existing, and hands the winning alternative index to the dispatch, which
-commits to it. Deciding twice is what the two sides used to do, by rules that
-were never the same: the entry guard argmaxed over the ambiguous alternatives
-only, visiting concrete before wildcard ones and first-matching the rest,
-while the tournament argmaxed over every alternative in grammar order. Only
-the tournament's answer was ever observable, so it is the one rule now — and
-the guard's concrete-before-wildcard order went with it, since a wildcard
-alternative in the tournament loses to a concrete one by scan length rather
-than by iteration order (invariant 4's merge is what puts the two in one
-branch). Testing the branch before scanning also drops the scans of
-alternatives the lookahead cannot reach.
+**A group is decided once, wherever the decision is needed.** That partition
+and tournament is one emitter (`gen_group_decide`), and everything that has to
+know which alternative a group takes here reads it:
+
+- **A caller that may decline the group** — an optional, or a scan-guarded
+  loop iteration — runs it, enters or iterates on a winner existing, and hands
+  the winning alternative index to the dispatch, which commits to it. What the
+  decision fails to find is what skips the optional or ends the loop, and on a
+  `+`'s mandatory first iteration, what reports.
+- **A group scanned inside a longer scan** runs it to measure itself, and
+  leaves the winner's end in the scan cursor. Measuring by any other rule
+  reports a length the parse will not consume, so the decision that reads the
+  measurement is taken on a path that does not exist.
+
+Deciding twice is what these sites used to do, by rules that were never the
+same: the entry guard argmaxed over the ambiguous alternatives only, visiting
+concrete before wildcard ones and first-matching the rest, while the
+tournament argmaxed over every alternative in grammar order. Only the
+tournament's answer was ever observable, so it is the one rule now — and the
+guard's concrete-before-wildcard order went with it, since a wildcard
+alternative loses to a concrete one by scan length rather than by iteration
+order (invariant 4's merge is what puts the two in one branch). Testing the
+branch before scanning also drops the scans of alternatives the lookahead
+cannot reach.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
@@ -503,24 +514,30 @@ policy, stated once per call site, and it has three values:
 
 - **Required** — the group must match here, so a token no alternative admits is
   a no-viable-alternative, over the union of the alternatives' first sets.
-- **Guaranteed** — the caller scanned before entering, so there is no report to
-  make. What that scan proved decides how much of the dispatch is left. An
-  optional's entry check is the dispatch's own decision, so it names the
-  winning alternative and the dispatch commits to it, testing nothing else: an
-  optional group needs no policy of its own, its own decision is what skips it.
-  A repeat's loop guard proves only that the iteration is viable, so its
-  dispatch still picks by lookahead and the last branch needs no condition of
-  its own — and there a gated alternative forces Guaranteed back to Required,
-  since a false predicate must not land in an unconditional `else` meant for
-  the alternative it excludes.
+- **Guaranteed** — the caller decided before entering, so there is no report to
+  make. What it decided says how much of the dispatch is left. Where the caller
+  ran the group's own decision — an optional's entry check, a scan-guarded
+  loop's iteration — it names the winning alternative and the dispatch commits
+  to it, testing nothing else: such a group needs no policy of its own, the
+  decision that admitted it is what would have skipped it. Where the caller
+  only proved the position viable — a loop over a body with no alternatives to
+  decide — the dispatch still picks by lookahead and the last branch needs no
+  condition of its own; there a gated alternative forces Guaranteed back to
+  Required, since a false predicate must not land in an unconditional `else`
+  meant for the alternative it excludes.
 - **Looped** — a loop iteration, carrying the mandatory-first-iteration flag or
-  none. It is what a repeat states, and `open_group_entry` discharges it into
-  one of the two above: the loop's own obligations are emitted there, and the
-  dispatch is left the answer for the position they do not cover.
+  none. It is what a repeat states where its body has no decision of its own,
+  and `open_group_entry` discharges it into one of the two above: the loop's
+  own obligations are emitted there, and the dispatch is left the answer for
+  the position they do not cover.
 
-Guaranteed rests on that scan, and a `+`'s first iteration is the one position
-no scan covers — it is mandatory, so the loop enters it unguarded. Both answers
-it needs are emitted where the flag still reads true, before the body:
+A `+`'s mandatory first iteration is the position no guard covers — it is
+required, so the loop enters it unguarded. A decided body's decision runs
+there anyway and answers it: a winner is what the dispatch commits to, and no
+winner is the `no viable alternative` the dispatch's own `else` used to give,
+including where a false predicate is what excluded every alternative. An
+undecided body still needs both answers emitted where the flag reads true,
+before the body:
 
 - Gated, single-alternative body — no dispatch to force Guaranteed back, so the
   gate reports. Without it the gate registers the predicate, the body drops its
@@ -607,13 +624,13 @@ relevant sites.
 3. (Retired.) The old "variant emit reproduces the callee body
    faithfully" invariant is moot under the runtime-FOLLOW design: each
    rule is emitted exactly once.
-4. Wildcard alts collapse the overlap group and sort last. A wildcard alt
-   has empty FIRST yet effectively overlaps every token-consuming alt, so
-   it is merged into a single overlap group with the non-empty-FIRST
-   alts, the outer kind-check gate is suppressed, and wildcard alts are
-   scanned last — that last half only where a scan commits on first match; a
-   tournament over the merged group resolves by scan length and needs no
-   order. Without this, the parse side commits to the more specific
+4. Wildcard alts collapse the overlap group. A wildcard alt has empty FIRST
+   yet effectively overlaps every token-consuming alt, so it is merged into a
+   single overlap group with the non-empty-FIRST alts, and that branch's
+   kind-check tests nothing. The alternatives inside it are then separated by
+   scan length, which is why the merge needs no iteration order to go with it
+   (it once did: where a scan committed on first match, wildcard alts had to be
+   visited last). Without this, the parse side commits to the more specific
    alt on a lookahead match even when its deeper structure cannot succeed
    (`ParserExec/Wildcard`: `(assign | .)+ EOF` on `x=10; abc;`). Fixture
    `tests/grammars/ll_wildcard_alt.g4`.
