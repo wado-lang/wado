@@ -2186,7 +2186,41 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             stmts.extend(self.reify_stmt(s, ctx));
         }
-        stmts
+        self.mark_diverging_stmts(stmts)
+    }
+
+    /// Put a `cold_path()` marker in front of every statement that cannot
+    /// return.
+    ///
+    /// A call to a `-> !` function ends the path it sits on, so no execution
+    /// that leaves the block pays for it — which is the claim the marker makes.
+    /// `inline` reads it to stop pricing the arm and `cold_outline` to move the
+    /// arm out, and stating it here rather than at each synthesis site is what
+    /// gives a `panic(…)` written in source the same treatment as the ones this
+    /// file builds. A `return` / `break` is left alone: those end a path too,
+    /// but a normal exit is not a cold one.
+    fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
+        use crate::tir::{TirStmtKind, TypeTable};
+        let diverges =
+            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if e.type_id == TypeTable::NEVER);
+        if !stmts.iter().any(diverges) {
+            return stmts;
+        }
+        let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
+        for s in stmts {
+            // A synthesis site that already placed one keeps it, rather than
+            // gaining a second.
+            let marked = out.last().is_some_and(|p: &TirStmt| {
+                matches!(&p.kind, TirStmtKind::Expr(e)
+                    if matches!(&e.kind, crate::tir::TirExprKind::Call { func, .. }
+                        if func.name == "cold_path"))
+            });
+            if diverges(&s) && !marked {
+                out.push(self.make_cold_path_stmt(s.span));
+            }
+            out.push(s);
+        }
+        out
     }
 
     /// Desugar `let PAT = EXPR else { ELSE };` followed by `rest` into a
