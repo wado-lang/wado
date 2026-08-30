@@ -882,11 +882,15 @@ Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
 
 Create a new stream pair: [Stream<T>, StreamWritable<T>].
 
-#### `fn read(&self, max: i32) -> List<T>`
+#### `fn read(&self, max: i32) -> StreamChunk<T>`
 
-Read up to `max` elements from the stream.
-Blocks until data is available or the writer drops.
-Returns an empty array on end-of-stream.
+Copy up to `max` elements out of the stream, blocking until at least one
+arrives or the writable end drops.
+
+One Component Model copy: it can return fewer elements than asked for,
+and a `Dropped` result can carry elements of its own. Reading an end
+whose result was `Dropped` traps, so a loop breaks on the result, not on
+an empty chunk. `read_to_end` is that loop.
 
 #### `fn cancel_read(&self)`
 
@@ -896,16 +900,25 @@ Cancel an in-progress read. Blocks until cancellation completes.
 
 Drop the readable end of the stream.
 
+#### `pub fn read_to_end(&self) -> List<T>`
+
+Read until the writable end drops, and return everything it wrote.
+
 ### `pub resource StreamWritable<T>`
 
 Writable end of an async sequence (WASI Component Model stream).
 Opaque i32 handle managed by the runtime.
 
-#### `fn write(&self, data: List<T>)`
+#### `fn write(&self, data: List<T>) -> StreamWrite`
 
-Write a chunk of data to the stream.
+Copy `data` into the stream, blocking until the reader takes at least
+one element or drops.
 
-#### `fn write_raw(&self, data: Slice<T>)`
+One Component Model copy: the reader may take a prefix, so the returned
+count can be short of `data.len()`. Writing to an end whose result was
+`Dropped` traps. `write_all` is the loop that finishes the buffer.
+
+#### `fn write_raw(&self, data: Slice<T>) -> StreamWrite`
 
 Write a byte view directly to the stream, without the deep copy that
 value-semantics `write` makes. The slice references its backing array
@@ -919,6 +932,21 @@ Cancel an in-progress write. Blocks until cancellation completes.
 #### `fn drop(self)`
 
 Drop the writable end, signaling end-of-stream.
+
+#### `pub fn write_all(&self, data: List<T>) -> CopyResult`
+
+Write every element, or stop early when the readable end drops.
+Returns the result of the copy that ended the loop.
+
+#### `pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
+
+Write every element the slice views, or stop when the readable end
+drops. Keeps `write_all`'s value-semantics copy out of the paths that
+already hold their elements in one array.
+
+The tail view is built from the backing array rather than through
+`Slice::slice`, whose clamp these offsets cannot need — and which every
+program that prints would otherwise pay for.
 
 ### `pub resource WaitableSet`
 
@@ -3125,6 +3153,27 @@ Convert i128 to String (for template string interpolation)
 
 ##### `fn next_step(&self) -> Option<i128>`
 
+### `pub struct StreamChunk<T>`
+
+What one `Stream::read` copied, and how that copy ended.
+
+A copy can carry elements and the peer's drop together, so `items` being
+non-empty does not mean more will follow: read `result` to know.
+
+#### `items: List<T>`
+
+#### `result: CopyResult`
+
+### `pub struct StreamWrite`
+
+What one `StreamWritable::write` copied, and how that copy ended.
+
+A reader may take a prefix, so `count` can be short of what was offered.
+
+#### `count: i32`
+
+#### `result: CopyResult`
+
 ### `pub struct WaitEvent`
 
 Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
@@ -4217,6 +4266,26 @@ Center-aligned: `${x:^5}` -> " 42 "
 #### `Right`
 
 Right-aligned (default for numbers): `${x:>5}` -> " 42"
+
+### `pub enum CopyResult`
+
+How one Component Model copy ended (`CanonicalABI.md`, `CopyResult`).
+
+It describes the copy that just happened, not the stream: `Completed` says
+nothing about whether the peer is still there, and only `Dropped` ends the
+stream.
+
+#### `Completed`
+
+The copy finished.
+
+#### `Dropped`
+
+The peer end is gone; no further copy is possible on this end.
+
+#### `Cancelled`
+
+A cancel finished and returned the buffer; the end stays usable.
 
 ### `pub enum IntErrorKind`
 

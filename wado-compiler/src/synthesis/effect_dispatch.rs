@@ -2465,7 +2465,7 @@ fn rewrite_call_sites_to_wrappers(
 ) {
     let entry_source = project.entry_module_source.clone();
     let (user_to_wrapper, cm_to_wrappers) = build_wrapper_indexes(project, plans);
-    project.resource_wrappers = cm_to_wrappers.clone();
+    project.resource_wrappers.clone_from(&cm_to_wrappers);
 
     for module in project.tir_modules.values_mut() {
         let type_table_rc = module.type_table.clone();

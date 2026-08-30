@@ -12,6 +12,8 @@ pub global PARSE_EXP_MAX: i32 = 350;
 
 pub global PARSE_EXP_MIN: i32 = -351;
 
+global STREAM_CHUNK_ELEMENTS: i32 = 4096;
+
 global CM_EVENT_SUBTASK: i32 = 1;
 
 global CM_SUBTASK_STARTED: u32 = 1;
@@ -113,6 +115,11 @@ struct StrLinesIter {
     finished: bool,
 }
 
+pub struct StreamWrite {
+    pub count: i32,
+    pub result: CopyResult,
+}
+
 pub struct WaitEvent {
     pub code: i32,
     pub handle: i32,
@@ -194,6 +201,13 @@ pub struct "EnumCase<core:prelude/format.wado/Alignment>" {
 pub struct "EnumCase<wasi:cli/types.wado/ErrorCode>" {
     discriminant: i32,
     value: ErrorCode,
+    case_name: String,
+    wire_override: Option<String>,
+}
+
+pub struct "EnumCase<core:prelude/types.wado/CopyResult>" {
+    discriminant: i32,
+    value: CopyResult,
     case_name: String,
     wire_override: Option<String>,
 }
@@ -345,6 +359,22 @@ pub struct "StructField<core:prelude/types.wado/WaitEvent,core:prelude/types.wad
 }
 
 pub struct "StructField<core:prelude/types.wado/WaitEvent,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/types.wado/StreamWrite,i32>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -813,6 +843,11 @@ pub struct "Slice<i32>" {
     end: i32,
 }
 
+pub struct "StreamChunk<u8>" {
+    pub items: List<u8>,
+    pub result: CopyResult,
+}
+
 pub struct "RangeInclusive<i32>" {
     pub start: i32,
     pub end: i32,
@@ -863,6 +898,22 @@ pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,bool>" {
 }
 
 pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/types.wado/CopyResult>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/list.wado/List<u8>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1540,6 +1591,10 @@ pub struct "Box<core:prelude/intparse.wado/FloatErrorKind>" {
     value: FloatErrorKind,
 }
 
+pub struct "Box<core:prelude/types.wado/CopyResult>" {
+    value: CopyResult,
+}
+
 pub struct "Box<wasi:cli/types.wado/ErrorCode>" {
     value: ErrorCode,
 }
@@ -1876,6 +1931,10 @@ pub struct "Box<core:prelude/types.wado/Option<&Array<u8>>>" {
     value: Option<&Array<u8>>,
 }
 
+pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>" {
+    value: Option<CopyResult>,
+}
+
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>>" {
     value: Option<Alignment>,
 }
@@ -1964,6 +2023,10 @@ pub struct "Box<core:prelude/types.wado/Option<&Array<i32>>>" {
     value: Option<&Array<i32>>,
 }
 
+pub struct "Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>" {
+    value: Option<List<u8>>,
+}
+
 pub enum SpecialKind {
     NotSpecial,
     Zero,
@@ -1981,6 +2044,12 @@ pub enum IntErrorKind {
 pub enum FloatErrorKind {
     Empty,
     Invalid,
+}
+
+pub enum CopyResult {
+    Completed,
+    Dropped,
+    Cancelled,
 }
 
 pub enum ErrorCode {
@@ -2986,9 +3055,9 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
         let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
         "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len);
         core::builtin::array_set_u8(&mut new_repr, len, 10);
-        core::rt::cm_stream_write_raw_u8(&tx as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&new_repr, 0, (len + 1)));
+        tx."core:prelude/types.wado/StreamWritable<u8>::write_raw_all"("core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&new_repr, 0, (len + 1)));
     } else {
-        core::rt::cm_stream_write_raw_u8(&tx as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len));
+        tx."core:prelude/types.wado/StreamWritable<u8>::write_raw_all"("core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len));
     }
     cm_raw_call stream-drop-writable(tx as i32);
 }
@@ -3034,7 +3103,7 @@ pub fn print_bytes(data: List<u8>) with Stdout {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = "mess_dirty.wado::__cm_binding__Stdout_write_via_stream"(rx as i32);
-    core::rt::cm_stream_write_u8(&tx as i32, data);
+    let written: CopyResult = tx."core:prelude/types.wado/StreamWritable<u8>::write_all"(data);
     cm_raw_call stream-drop-writable(tx as i32);
     core::rt::drop_cli_write_future(handle);
 }
@@ -10054,6 +10123,45 @@ pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<
 
 pub fn "fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(i32)->i32>, f: &mut Formatter);
 
+pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::type_name"() -> String {
+    return String { repr: packed"StreamWrite", used: 11 };
+}
+
+pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/types.wado/StreamWrite,i32>, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>] {
+    return [StructField<core:prelude/types.wado/StreamWrite,i32> { index: 0, field_name: String { repr: packed"count", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult> { index: 1, field_name: String { repr: packed"result", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+}
+
+pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [i32, CopyResult]) -> StreamWrite {
+    return StreamWrite { count: fields.0, result: fields.1 };
+}
+
+#[inline(always)]
+pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::defaults"() -> [Option<i32>, Option<CopyResult>] {
+    return [Option<i32>::None, Option<CopyResult>::None];
+}
+
+pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::empty_slots"() -> [Option<i32>, Option<CopyResult>] {
+    return [Option<i32>::None, Option<CopyResult>::None];
+}
+
+pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+    return CaseStyle::Identity;
+}
+
+pub fn "$field_get$core:prelude/types.wado/StreamWrite$i32"(v: &StreamWrite, index: i32) -> i32 {
+    return match index {
+        0 => v.count,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/types.wado/StreamWrite$core:prelude/types.wado/CopyResult"(v: &StreamWrite, index: i32) -> CopyResult {
+    return match index {
+        1 => v.result,
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "core:prelude/types.wado/WaitEvent^core:prelude/traits.wado/ReflectStruct::type_name"() -> String {
     return String { repr: packed"WaitEvent", used: 9 };
 }
@@ -10094,22 +10202,51 @@ pub fn "$field_get$core:prelude/types.wado/WaitEvent$u32"(v: &WaitEvent, index: 
     };
 }
 
+pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::type_name"() -> String {
+    return String { repr: packed"CopyResult", used: 10 };
+}
+
+pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::discriminant"(self: Box<core:prelude/types.wado/CopyResult>) -> i32 {
+    return self.value as i32;
+}
+
+pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::from_discriminant"(disc: i32) -> Option<CopyResult> {
+    if (disc == 0) {
+        return Option<CopyResult>::Some(CopyResult::Completed);
+    }
+    if (disc == 1) {
+        return Option<CopyResult>::Some(CopyResult::Dropped);
+    }
+    if (disc == 2) {
+        return Option<CopyResult>::Some(CopyResult::Cancelled);
+    }
+    return Option<CopyResult>::None;
+}
+
+pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::members"() -> [EnumCase<core:prelude/types.wado/CopyResult>, EnumCase<core:prelude/types.wado/CopyResult>, EnumCase<core:prelude/types.wado/CopyResult>] {
+    return [EnumCase<core:prelude/types.wado/CopyResult> { discriminant: 0, value: CopyResult::Completed, case_name: String { repr: packed"Completed", used: 9 }, wire_override: Option<String>::None }, EnumCase<core:prelude/types.wado/CopyResult> { discriminant: 1, value: CopyResult::Dropped, case_name: String { repr: packed"Dropped", used: 7 }, wire_override: Option<String>::None }, EnumCase<core:prelude/types.wado/CopyResult> { discriminant: 2, value: CopyResult::Cancelled, case_name: String { repr: packed"Cancelled", used: 9 }, wire_override: Option<String>::None }];
+}
+
+pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+    return CaseStyle::Identity;
+}
+
 pub fn "core:prelude/types.wado/Waitable^core:prelude/traits.wado/Inspect::inspect"(self: Box<i32>, f: &mut Formatter) {
     Box<i32> { value: self.value as i32 }."i32^core:prelude/traits.wado/Inspect::inspect"(f);
     f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as Waitable", used: 12 });
 }
 
-pub fn "StreamWritable<u8><u8>^core:prelude/traits.wado/Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+pub fn "core:prelude/types.wado/StreamWritable<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(f);
 }
 
-pub fn "Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>><core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>^core:prelude/traits.wado/Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>^core:prelude/traits.wado/Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"Future<Result<(), ErrorCode>>#0x", used: 32 });
     Box<i32> { value: *self as i32 }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(f);
 }
 
-pub fn "Stream<u8><u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+pub fn "core:prelude/types.wado/Stream<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"Stream<u8>#0x", used: 13 });
     Box<i32> { value: *self as i32 }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(f);
 }
@@ -10182,6 +10319,20 @@ pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<
 
 pub fn "fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(i32)->i32>, f: &mut Formatter);
 
+pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Display::fmt"(self: Box<core:prelude/types.wado/CopyResult>, f: &mut Formatter) {
+    if (self.value == %0) {
+        f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"Completed", used: 9 });
+    } else {
+        if (self.value == %3) {
+            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"Dropped", used: 7 });
+        } else {
+            if (self.value == %6) {
+                f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"Cancelled", used: 9 });
+            };
+        };
+    };
+}
+
 fn i32_min(a: i32, b: i32) -> i32 {
     return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
 }
@@ -10203,7 +10354,7 @@ fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:rt", used: 7 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 60 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 63 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed": ", used: 2 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"i32_clamp: lo must be <= hi", used: 27 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: lo <= hi\n", used: 21 });
@@ -10261,9 +10412,9 @@ fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: 
         let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
         "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len);
         core::builtin::array_set_u8(&mut new_repr, len, 10);
-        core::rt::cm_stream_write_raw_u8(&tx as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&new_repr, 0, (len + 1)));
+        tx."core:prelude/types.wado/StreamWritable<u8>::write_raw_all"("core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&new_repr, 0, (len + 1)));
     } else {
-        core::rt::cm_stream_write_raw_u8(&tx as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len));
+        tx."core:prelude/types.wado/StreamWritable<u8>::write_raw_all"("core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len));
     }
     cm_raw_call stream-drop-writable(tx as i32);
 }
@@ -10334,7 +10485,18 @@ fn cm_await_blocked(handle: i32) -> i32 {
     return status;
 }
 
-fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
+fn cm_copy_result(packed: i32) -> CopyResult {
+    let status: i32 = (packed & 15);
+    if (status == 0) {
+        return CopyResult::Completed;
+    }
+    if (status == 1) {
+        return CopyResult::Dropped;
+    }
+    return CopyResult::Cancelled;
+}
+
+fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
     let ptr: i32 = core::builtin::realloc(0, 0, 1, max);
     let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
     if (result == -1) {
@@ -10343,43 +10505,34 @@ fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
     let count: i32 = (result >> 4);
     let arr: Array<u8> = core::rt::memory_to_gc_array(ptr, count);
     let freed: i32 = core::builtin::realloc(ptr, max, 1, 0);
-    return "core::prelude/list.wado::core:prelude/list.wado/List<u8>::internal_from_raw"(arr, count);
+    return StreamChunk<u8> { items: "core::prelude/list.wado::core:prelude/list.wado/List<u8>::internal_from_raw"(arr, count), result: core::rt::cm_copy_result(result) };
 }
 
-fn cm_stream_write_u8(handle: i32, data: List<u8>) {
+fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
     let packed: i64 = core::rt::cm_lower_array_u8(data);
     let ptr: i32 = packed as i32;
     let len: i32 = (packed >> 32) as i32;
-    core::rt::cm_stream_write_drain(handle, ptr, len, 1);
+    let written: StreamWrite = core::rt::cm_stream_write_once(handle, ptr, len);
     let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
+    return written;
 }
 
-fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: i32) {
-    let mut offset: i32 = 0;
-    loop {
-        if !(offset < count) {
-            break;
-        }
-        __for_0_body: {
-            let mut result: i32 = core::builtin::stream_write(handle, (ptr + (offset * elem_size)), (count - offset));
-            if (result == -1) {
-                result = core::rt::cm_await_blocked(handle);
-            }
-            offset = (offset + (result >> 4));
-            if (((result >> 4) == 0) || ((result & 15) != 0)) {
-                break;
-            }
-        }
+fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
+    let mut result: i32 = core::builtin::stream_write(handle, ptr, count);
+    if (result == -1) {
+        result = core::rt::cm_await_blocked(handle);
     }
+    return StreamWrite { count: (result >> 4), result: core::rt::cm_copy_result(result) };
 }
 
 #[inline(always)]
-fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) {
+fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) -> StreamWrite {
     let packed: i64 = core::rt::cm_lower_list_u8(data."core:prelude/slice.wado/Slice<u8>::internal_repr"(), data."core:prelude/slice.wado/Slice<u8>::internal_start"(), data."core:prelude/slice.wado/Slice<u8>::len"());
     let ptr: i32 = packed as i32;
     let raw_len: i32 = (packed >> 32) as i32;
-    core::rt::cm_stream_write_drain(handle, ptr, raw_len, 1);
+    let written: StreamWrite = core::rt::cm_stream_write_once(handle, ptr, raw_len);
     let freed: i32 = core::builtin::realloc(ptr, raw_len, 1, 0);
+    return written;
 }
 
 fn cm_error_context_new(msg: String) -> i32 {
@@ -12476,6 +12629,19 @@ pub fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelud
     return self.used;
 }
 
+pub fn "core:prelude/types.wado/StreamWritable<u8>::write_all"(self: &StreamWritable<u8>, data: List<u8>) -> CopyResult {
+    let mut rest: List<u8> = data;
+    loop {
+        let written: StreamWrite = core::rt::cm_stream_write_u8(self as i32, rest);
+        if ((written.result != CopyResult::Completed) || (written.count >= rest."core:prelude/list.wado/List<u8>::len"())) {
+            return written.result;
+        }
+        let mut remainder: List<u8> = "core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"([]);
+        remainder."core:prelude/list.wado/List<u8>::extend_from_slice"(rest."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"()."core:prelude/slice.wado/Slice<u8>::slice"(written.count, rest."core:prelude/list.wado/List<u8>::len"()));
+        rest = remainder;
+    }
+}
+
 fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>] {
     let rx: i32 = packed as i32;
     let tx: i32 = (packed >> 32) as i32;
@@ -12484,6 +12650,19 @@ fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>]
 
 fn "core:prelude/slice.wado/Slice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> Slice<u8> with stores[repr] {
     return Slice<u8> { repr: repr, start: start, end: end };
+}
+
+pub fn "core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
+    let repr: &Array<u8> = data."core:prelude/slice.wado/Slice<u8>::internal_repr"();
+    let end: i32 = (data."core:prelude/slice.wado/Slice<u8>::internal_start"() + data."core:prelude/slice.wado/Slice<u8>::len"());
+    let mut offset: i32 = data."core:prelude/slice.wado/Slice<u8>::internal_start"();
+    loop {
+        let written: StreamWrite = core::rt::cm_stream_write_raw_u8(self as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(repr, offset, end));
+        offset = (offset + written.count);
+        if ((written.result != CopyResult::Completed) || (offset >= end)) {
+            return written.result;
+        }
+    }
 }
 
 pub fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Array<u8>, src_offset: i32, len: i32);
@@ -12505,6 +12684,27 @@ fn "core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/tr
 
 fn "core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>::internal_new"(repr: &Array<String>, index: i32, end: i32) -> SliceValueIter<core:prelude/string.wado/String> with stores[repr] {
     return SliceValueIter<core:prelude/string.wado/String> { repr: repr, index: index, end: end };
+}
+
+pub fn "core:prelude/slice.wado/Slice<u8>::slice"(self: &Slice<u8>, start: i32, end: i32) -> Slice<u8> {
+    let len: i32 = (self.end - self.start);
+    let s: i32 = core::rt::i32_clamp(start, 0, len);
+    let e: i32 = core::rt::i32_clamp(end, s, len);
+    return Slice<u8> { repr: self.repr, start: (self.start + s), end: (self.start + e) };
+}
+
+pub fn "core:prelude/list.wado/List<u8>::extend_from_slice"(self: &mut List<u8>, other: Slice<u8>) {
+    let other_len: i32 = other."core:prelude/slice.wado/Slice<u8>::len"();
+    if (other_len == 0) {
+        return;
+    }
+    let new_used: i32 = (self.used + other_len);
+    if (new_used > self.repr."Array<u8>::len"()) {
+        core::builtin::cold_path();
+        self."core:prelude/list.wado/List<u8>::grow_to"(new_used);
+    }
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, other."core:prelude/slice.wado/Slice<u8>::internal_repr"(), other."core:prelude/slice.wado/Slice<u8>::internal_start"(), other_len);
+    self.used = new_used;
 }
 
 fn "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
@@ -12795,6 +12995,17 @@ fn "core/prelude/array.wado/write_seq_inspect_alt<i32>"(repr: &Array<i32>, start
         f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"...", used: 3 });
     }
     f."core:prelude/format.wado/Formatter::close_brace"(String { repr: packed"]", used: 1 });
+}
+
+fn "core:prelude/list.wado/List<u8>::grow_to"(self: &mut List<u8>, min_capacity: i32) {
+    let capacity: i32 = self.repr."Array<u8>::len"();
+    if (min_capacity <= capacity) {
+        return;
+    }
+    let new_capacity: i32 = core::rt::i32_max(core::rt::i32_max((capacity * 2), min_capacity), 4);
+    let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
+    "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 pub fn "core:prelude/list.wado/List<u8>::push"(self: &mut List<u8>, value: u8) with stores[value] {
@@ -13350,6 +13561,20 @@ pub fn "$field_get$core:prelude/slice.wado/Slice<i32>$i32"(v: &Slice<i32>, index
     return match index {
         1 => v.start,
         2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/types.wado/StreamChunk<u8>$core:prelude/list.wado/List<u8>"(v: &StreamChunk<u8>, index: i32) -> List<u8> {
+    return match index {
+        0 => v.items,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/types.wado/StreamChunk<u8>$core:prelude/types.wado/CopyResult"(v: &StreamChunk<u8>, index: i32) -> CopyResult {
+    return match index {
+        1 => v.result,
         _ => core::builtin::unreachable(),
     };
 }
@@ -16254,6 +16479,44 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<u8>>"(self: Box<core:
     return __variant_tag(self.value);
 }
 
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$core:prelude/types.wado/CopyResult"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>, index: i32) -> CopyResult {
+    if (__variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => __variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$core:prelude/types.wado/CopyResult"(payload: CopyResult, index: i32) -> Option<CopyResult> {
+    return match index {
+        0 => Option<CopyResult>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>, index: i32) {
+    if (__variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => __variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$()"(payload: (), index: i32) -> Option<CopyResult> {
+    return match index {
+        1 => Option<CopyResult>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>"(self: Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>) -> i32 {
+    return __variant_tag(self.value);
+}
+
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$core:prelude/format.wado/Alignment"(v: Box<core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>>, index: i32) -> Alignment {
     if (__variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -17090,6 +17353,44 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<i32>>"(self: Box<core
     return __variant_tag(self.value);
 }
 
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>"(v: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>, index: i32) -> List<u8> {
+    if (__variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => __variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>"(payload: List<u8>, index: i32) -> Option<List<u8>> {
+    return match index {
+        0 => Option<List<u8>>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>, index: i32) {
+    if (__variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => __variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$()"(payload: (), index: i32) -> Option<List<u8>> {
+    return match index {
+        1 => Option<List<u8>>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>"(self: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>) -> i32 {
+    return __variant_tag(self.value);
+}
+
 pub fn __initialize_module() {
     core::prelude/fpfmt.wado::POW10 = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"([1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000, 1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000]);
     core::prelude/fpfmt.wado::POW10_FINE = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"([9223372036854775808, 11529215046068469760, 14411518807585587200, 18014398509481984000, 11258999068426240000, 14073748835532800000, 17592186044416000000, 10995116277760000000, 13743895347200000000, 17179869184000000000, 10737418240000000000, 13421772800000000000, 16777216000000000000, 10485760000000000000, 13107200000000000000, 16384000000000000000, 10240000000000000000, 12800000000000000000, 16000000000000000000, 10000000000000000000, 12500000000000000000, 15625000000000000000, 9765625000000000000, 12207031250000000000, 15258789062500000000, 9536743164062500000, 11920928955078125000]);
@@ -17154,6 +17455,10 @@ fn "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"(v:
 
 fn "$value_copy$[f64,f64]"(v: [f64, f64]) -> [f64, f64] {
     return [f64,f64] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/types.wado/StreamWrite"(v: StreamWrite) -> StreamWrite {
+    return StreamWrite { count: v.count, result: v.result };
 }
 
 fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
