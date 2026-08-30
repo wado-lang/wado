@@ -312,7 +312,6 @@ impl StreamWritable<T> {
         }
         let mut rest = data;
         loop {
-            assert !rest.is_empty();
             let written = self.write(rest);
             if write_copy_is_final(&written) || written.count >= rest.len() {
                 return written.result;
@@ -334,7 +333,6 @@ impl StreamWritable<T> {
         let end = data.internal_start() + data.len();
         let mut offset = data.internal_start();
         loop {
-            assert offset < end;
             let written = self.write_raw(Slice::internal_new(repr, offset, end));
             offset += written.count;
             if write_copy_is_final(&written) || offset >= end {
