@@ -293,19 +293,19 @@ One worker — a 1-core container scaled out horizontally:
 
 | Request                         | Rust (Axum) | JavaScript (Hono on Bun) | **Wado** (wado serve) | JavaScript (Hono on Node) |
 | ------------------------------- | ----------: | -----------------------: | --------------------: | ------------------------: |
-| `GET /user`                     |      41,385 |                   49,308 |                17,218 |                    17,016 |
-| `GET /user/lookup/username/hey` |      39,774 |                   52,998 |                16,533 |                    16,891 |
-| `POST /event/abcd1234/comment`  |      41,161 |                   35,702 |                16,612 |                    15,250 |
-| `GET /static/index.html`        |      41,357 |                   36,222 |                16,795 |                    16,164 |
+| `GET /user`                     |      43,360 |                   49,949 |                17,514 |                    17,896 |
+| `GET /user/lookup/username/hey` |      42,225 |                   43,375 |                17,496 |                    17,153 |
+| `POST /event/abcd1234/comment`  |      43,176 |                   39,379 |                17,937 |                    15,763 |
+| `GET /static/index.html`        |      43,220 |                   39,372 |                18,288 |                    17,197 |
 
 Four workers — a small VM running one instance:
 
 | Request                         | Rust (Axum) | JavaScript (Hono on Bun) | **Wado** (wado serve) | JavaScript (Hono on Node) |
 | ------------------------------- | ----------: | -----------------------: | --------------------: | ------------------------: |
-| `GET /user`                     |     368,607 |                  258,493 |                94,949 |                    77,850 |
-| `GET /user/lookup/username/hey` |     367,154 |                  217,003 |                87,058 |                    78,130 |
-| `POST /event/abcd1234/comment`  |     364,166 |                  231,570 |                87,044 |                    65,547 |
-| `GET /static/index.html`        |     366,822 |                  223,427 |                87,477 |                    73,312 |
+| `GET /user`                     |     378,792 |                  268,175 |                98,322 |                    79,612 |
+| `GET /user/lookup/username/hey` |     378,037 |                  222,830 |                92,334 |                    76,802 |
+| `POST /event/abcd1234/comment`  |     372,773 |                  220,616 |                92,669 |                    66,981 |
+| `GET /static/index.html`        |     372,651 |                  235,271 |                93,442 |                    76,202 |
 
 `wado serve` places third: level with Hono on Node at one worker, clear of it at
 four. The allocation behind its `content-length` header value costs it a few
