@@ -110,11 +110,13 @@ for `Array<T>`-backed `String` / `List`).
 
 wasmtime/Cranelift call small Wasm functions cheaply, so forcing inlining rarely
 moves wall-time and raising the threshold bloats hot loops (measured slower). The
-exception is a tight iteration-bound loop with a trivial body. When a hot leaf
-has a rare heavy sub-case, split it: a tiny wrapper on the common path
-(`if width > 0 { apply_padding_slow(…) }`) plus an out-of-line `#[inline(never)]`
-helper — preferred over a `cold_path()` marker, which lies about branch
-likelihood when the slow path is always taken once reached.
+exception is a tight iteration-bound loop with a trivial body.
+
+A rare heavy sub-case behind a `cold_path()` marker needs no hand-splitting:
+`nir/cold_outline` moves what the marker opens into a function of its own, so the
+leaf inlines at its hot-path size. Split by hand only when the slow path is not
+rare — a `width > 0` branch that runs every time a width is set is hot when
+taken, which no marker should claim otherwise.
 
 ## 5. Measurement
 
