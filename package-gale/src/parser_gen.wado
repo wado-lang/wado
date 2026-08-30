@@ -105,7 +105,6 @@ use {
     add_parser_super_effect,
     add_seeded_vals_param,
     alt_gate_and_suffix,
-    alt_has_gate,
     alt_initial_gate_conditions,
     alt_vals_arg,
     ambiguous_group_predicate_gated,
@@ -3147,6 +3146,7 @@ fn gen_alt_dispatch(
         }
     }
     let branches = direct_dispatch_branches(&dd);
+    assert !branches.is_empty(), "a Direct dispatch decides between alternatives, so it has branches";
     w.line(&"let _gk = p.peek_kind();");
     for let mut i = 0; i < branches.len(); i += 1 {
         open_decision_branch(w, &branches, i, &"_gk", ctx);
@@ -3811,8 +3811,8 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             // has alternatives: what it fails to find ends the loop, and the
             // dispatch commits to what it found.
             if let Group(g) = &r.body {
-                if let Some(decision) = op_group_alt_decision(g, ctx) {
-                    let [winner, best] = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, false);
+                if let Some(branches) = op_group_alt_decision(g) {
+                    let [winner, best] = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, false);
                     w.line(&`if ${best} <= p.pos \{ break; \}`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
                     w.end();
@@ -3874,12 +3874,12 @@ fn gen_op_optional(
     }
     if r.strategy matches { OptionalScanGuard } {
         if let Group(g) = &r.body {
-            if let Some(decision) = op_group_alt_decision(g, ctx) {
+            if let Some(branches) = op_group_alt_decision(g) {
                 // The scan that decides entry is the scan the dispatch
                 // decides on: one answer, one set of scans. The caller-FOLLOW
                 // yield gate wraps them, so an optional that must yield does
                 // not pay for a decision it will not use.
-                let [winner, best] = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, follow_gate);
+                let [winner, best] = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, follow_gate);
                 w.begin(&`if ${best} >= 0`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
@@ -6381,29 +6381,20 @@ fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContex
 
 /// `group_alt_decision` for the op-only walker, which reads the dispatch lower
 /// baked rather than the surface alternatives (invariant 9). `Direct` is one
-/// branch per alternative, `Tournament` one branch holding them all.
-fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<GroupDecision> {
+/// branch per alternative, `Tournament` one branch holding them all. Its
+/// callers commit to what the decision picks and never report, so there is no
+/// expected set to carry.
+fn op_group_alt_decision(g: &GroupOp) -> Option<List<DecisionBranch>> {
     if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } {
         return null;
     }
     return match &g.dispatch {
-        Direct(dd) => {
-            let mut branches: List<DecisionBranch> = [];
-            let mut expected: List<String> = [];
-            for let branch of &dd.branches {
-                dedup_append_arr(&mut expected, &branch.tokens);
-            }
-            branches = direct_dispatch_branches(dd);
-            Option::Some(GroupDecision { branches, expected });
-        },
+        Direct(dd) => Option::Some(direct_dispatch_branches(dd)),
         // The tournament has no lookahead gate of its own: every alternative
         // is a candidate, and the scan lengths decide.
-        Tournament(td) => Option::Some(GroupDecision {
-            branches: [
-                DecisionBranch { test: BranchTest::Always, gate: "", alts: td.alts },
-            ],
-            expected: [],
-        }),
+        Tournament(td) => Option::Some([
+            DecisionBranch { test: BranchTest::Always, gate: "", alts: td.alts },
+        ]),
     };
 }
 
@@ -6642,13 +6633,19 @@ fn gen_group_dispatch(
         gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &order, kind, ctx, name_counts, decided);
         return;
     }
+    // A decision that tests nothing has no chain to emit: no lookahead to bind,
+    // no arm for a report to reach.
+    if decision_is_unconditional(branches) {
+        gen_group_branch_body(w, &branches[0].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
+        return;
+    }
     // A trailing branch that admits everything is the `else`, and there is
     // nothing left for a report to answer: the group matches here whatever the
     // lookahead is. A gated alternative needs a condition of its own, so it
     // takes the last branch's `else` away and brings the report back with it —
     // a false predicate must not land in the arm meant for the alternative it
     // excludes.
-    let ends_in_fallback = branches.len() > 1 && is_decision_fallback(&branches[branches.len() - 1]);
+    let ends_in_fallback = is_decision_fallback(&branches[branches.len() - 1]);
     let report = !ends_in_fallback && (any_alt_gated(branches, ctx) || entry matches { Required });
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let ${grp_var} = p.peek_kind();`);
@@ -6858,7 +6855,7 @@ fn group_partition(
     }
     // An empty alternative has no first set of its own; what selects it is
     // what may follow the group, which lower computed at its position.
-    apply_empty_alt_admits(&mut first_sets, alts, empty_alt_admits);
+    apply_empty_alt_admits(&mut first_sets, alts, empty_alt_admits, ctx);
     // Only a General group can hold a wildcard-led alternative; a rule-ref one
     // is a single call per alternative.
     let groups = match kind {

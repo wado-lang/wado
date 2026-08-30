@@ -51,6 +51,7 @@ use {
     is_wildcard_alt,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
+use { alt_has_gate } from "./action_gen.wado";
 use {
     rule_type_name,
     literal_const_name,
@@ -2011,7 +2012,7 @@ fn lower_general_scan_group(
             wildcard_indices.push(ai);
         }
     }
-    apply_empty_alt_admits(&mut first_sets, alts, &group_empty_alt_admits(alts, outer_follow));
+    apply_empty_alt_admits(&mut first_sets, alts, &group_empty_alt_admits(alts, outer_follow, ctx), ctx);
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
@@ -3195,11 +3196,14 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
 }
 
-/// An empty alternative the lookahead selects. One carrying an alt-initial
-/// predicate is selected by that predicate instead, so it keeps the
-/// unconditional branch the gate hangs on rather than a follow-set test.
-fn alt_is_bare_empty(alt: &Alternative) -> bool {
-    return alt.elements.is_empty() && alt.actions.is_empty();
+/// An empty alternative the lookahead selects. One carrying a gateable
+/// alt-initial predicate is selected by that predicate instead, so it keeps the
+/// unconditional branch the gate hangs on rather than a follow-set test. The
+/// gate is what `alt_has_gate` already answers — asking "does it carry any
+/// action" instead also catches a plain `{x();}`, which gates nothing and
+/// still needs its follow set.
+fn alt_is_bare_empty(alt: &Alternative, ctx: &GenContext) -> bool {
+    return alt.elements.is_empty() && !alt_has_gate(alt, ctx);
 }
 
 /// The admit set of a group's empty alternative, or `null` where no
@@ -3207,9 +3211,13 @@ fn alt_is_bare_empty(alt: &Alternative) -> bool {
 /// by; what selects it is what may follow the group, which is `outer_follow`
 /// — itself empty exactly where the suffix is nullable and the answer belongs
 /// to the caller.
-pub fn group_empty_alt_admits(alts: &List<Alternative>, outer_follow: &List<String>) -> Option<List<String>> {
+pub fn group_empty_alt_admits(
+    alts: &List<Alternative>,
+    outer_follow: &List<String>,
+    ctx: &GenContext,
+) -> Option<List<String>> {
     for let alt of alts {
-        if alt_is_bare_empty(alt) {
+        if alt_is_bare_empty(alt, ctx) {
             return Option::<List<String>>::Some(*outer_follow);
         }
     }
@@ -3223,6 +3231,7 @@ pub fn apply_empty_alt_admits(
     first_sets: &mut List<List<String>>,
     alts: &List<Alternative>,
     admits: &Option<List<String>>,
+    ctx: &GenContext,
 ) {
     let set = if let Some(s) = admits {
         s;
@@ -3230,7 +3239,7 @@ pub fn apply_empty_alt_admits(
         return;
     };
     for let mut i = 0; i < alts.len(); i += 1 {
-        if alt_is_bare_empty(&alts[i]) {
+        if alt_is_bare_empty(&alts[i], ctx) {
             first_sets[i] = *set;
         }
     }
@@ -3360,8 +3369,8 @@ fn lower_general_group(
         rule: *rule_name,
         site: DiagnosticSite::GeneralGroup(group_index),
     };
-    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow);
-    apply_empty_alt_admits(&mut first_sets, alts, &empty_alt_admits);
+    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, ctx);
+    apply_empty_alt_admits(&mut first_sets, alts, &empty_alt_admits, ctx);
     let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {
