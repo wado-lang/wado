@@ -255,9 +255,8 @@ enum Crossing {
 }
 
 impl Crossing {
-    /// Whether the enclosing frame keeps the storage. A write inside the region
-    /// is then one no call carries back, which is what stops the split — and it
-    /// is one question, so a crossing added later has to answer it.
+    /// Whether the enclosing frame keeps the storage, so a write inside the
+    /// region is one no call carries back.
     fn leaves_storage_behind(self) -> bool {
         match self {
             Crossing::Inherited | Crossing::Argument => true,
@@ -287,8 +286,6 @@ fn free_vars(
         region.iter().map(|&s| NodeRef::Stmt(s)).collect(),
         &[],
     );
-    // A declaration counts as a mention here: an owner outside is what makes a
-    // local the enclosing function's rather than the region's.
     let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root)], region);
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
@@ -296,7 +293,7 @@ fn free_vars(
             Crossing::Inherited
         } else if inside.declared.contains(&idx) {
             Crossing::Owned
-        } else if !outer.declared.contains(&idx) && !outer.mentioned.contains(&idx) && !under_loop {
+        } else if !outer.touches(idx) && !under_loop {
             Crossing::MovesWith
         } else {
             Crossing::Argument
@@ -340,6 +337,12 @@ struct LocalRefs {
 }
 
 impl LocalRefs {
+    /// Whether the walk named `idx` at all. A declaration counts: an owner in
+    /// the walked region is what makes a local that region's.
+    fn touches(&self, idx: u32) -> bool {
+        self.declared.contains(&idx) || self.mentioned.contains(&idx)
+    }
+
     /// Walk from `roots`, skipping each statement in `skip` and its subtree.
     fn collect(body: &Body, roots: Vec<NodeRef>, skip: &[StmtId]) -> Self {
         let mut refs = Self::default();
@@ -541,30 +544,26 @@ fn build_helper(
     let carried = parent.body.take();
     let mut helper = parent.clone();
     parent.body = carried;
-    helper
-        .params
-        .extend(region.args.iter().enumerate().map(|(k, &idx)| {
-            let local = &parent.locals[idx as usize];
-            NirParam {
-                name: local.name.clone(),
-                type_id: local.type_id,
-                local_index: inherited + k as u32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: parent.span,
-            }
-        }));
-    // The inherited slots verbatim — a parameter's slot is the enclosing frame's
-    // entry, not a re-derivation from its `NirParam` — then one slot per lifted
-    // local, then the rest of the frame shifted past them.
-    let lifted_slots: Vec<NirLocal> = region
-        .args
-        .iter()
-        .map(|&idx| NirLocal {
+    // A lifted local's parameter and its frame slot are built together, since
+    // the two have to agree on name and type.
+    let mut lifted_slots: Vec<NirLocal> = Vec::with_capacity(region.args.len());
+    for (k, &idx) in region.args.iter().enumerate() {
+        let local = &parent.locals[idx as usize];
+        helper.params.push(NirParam {
+            name: local.name.clone(),
+            type_id: local.type_id,
+            local_index: inherited + k as u32,
             is_mut: false,
-            ..parent.locals[idx as usize].clone()
-        })
-        .collect();
+            is_mut_ref: false,
+            span: parent.span,
+        });
+        lifted_slots.push(NirLocal {
+            is_mut: false,
+            ..local.clone()
+        });
+    }
+    // The enclosing frame's own slots, verbatim: an inherited parameter's slot
+    // is that entry, not a re-derivation from its `NirParam`.
     helper.locals = parent.locals[..inherited as usize]
         .iter()
         .cloned()

@@ -2356,12 +2356,10 @@ impl FunctionTranslator<'_, '_> {
         args: &'b [CallArg],
     ) -> Vec<(&'b TirExpr, bool)> {
         // Either source saying the callee writes the caller's storage through
-        // this slot settles it. The argument's syntax alone is not enough: TIR
-        // leaves a receiver's `is_mut` unset (see `TirExprKind::method_call`),
-        // and boxing erases the `&mut` from an argument whose parameter it
-        // rehomes into a `Box<T>` the callee still writes through. The callee's
-        // declared modes alone are not enough either — a builtin, or a callee
-        // this table has no row for, is described only by the syntax.
+        // this slot settles it. The syntax alone misses a receiver, whose
+        // `is_mut` TIR leaves unset, and a `&mut` boxing rehomed into a `Box<T>`
+        // the callee still writes through. The declared modes alone miss a
+        // builtin, which has no row in this table.
         let mut_ref_params = self
             .base
             .value_copy

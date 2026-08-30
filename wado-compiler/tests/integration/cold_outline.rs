@@ -87,22 +87,35 @@ export fn run() {
 }
 "#;
 
-fn compile(source: &str, opt_level: OptLevel) -> wado_compiler::CompileResult {
-    let options = CompilerOptions {
-        opt_level,
-        retain_wir: true,
-        ..Default::default()
-    };
-    crate::common::compile_source_with_compiler_options(
-        Path::new("cold_outline_test.wado"),
-        source,
-        options,
-    )
-    .expect("compilation should succeed")
-}
+const PATH: &str = "cold_outline_test.wado";
 
 fn wir_of(source: &str, opt_level: OptLevel) -> String {
-    crate::common::wir_text(Path::new("cold_outline_test.wado"), source, opt_level)
+    crate::common::wir_text(Path::new(PATH), source, opt_level)
+}
+
+/// The assertions inside `source` hold at every level, split or not — which is
+/// what makes the helper a real function rather than a renaming.
+fn runs_at_every_level(source: &str) {
+    for opt_level in [OptLevel::O0, OptLevel::O1, OptLevel::O2, OptLevel::O3] {
+        let options = CompilerOptions {
+            opt_level,
+            ..Default::default()
+        };
+        let wasm =
+            crate::common::compile_source_with_compiler_options(Path::new(PATH), source, options)
+                .expect("compilation should succeed")
+                .wasm;
+        crate::common::run_wasm(wasm).unwrap_or_else(|e| panic!("{opt_level:?} should run: {e}"));
+    }
+}
+
+/// A region the preconditions turn down leaves no helper behind.
+fn stays_put(source: &str, enclosing: &str) {
+    let wir = wir_of(source, OptLevel::O2);
+    assert!(
+        !wir.contains(&format!("{enclosing}$cold")),
+        "`{enclosing}`'s region must not be moved:\n{wir}"
+    );
 }
 
 #[test]
@@ -121,41 +134,22 @@ fn cold_region_moves_out_of_its_enclosing_function() {
     );
 }
 
-/// The helper is a real function, not a renaming: the program still grows the
-/// columns and still passes the assertion that lives inside the moved region —
-/// at every level, split or not.
 #[test]
 fn the_split_program_still_runs() {
-    for level in [OptLevel::O0, OptLevel::O1, OptLevel::O2, OptLevel::O3] {
-        crate::common::run_wasm(compile(SOURCE, level).wasm)
-            .unwrap_or_else(|e| panic!("{level:?} should run: {e}"));
-    }
+    runs_at_every_level(SOURCE);
 }
 
 #[test]
 fn a_region_that_returns_stays_put() {
-    let wir = wir_of(RETURNING_REGION, OptLevel::O2);
-    assert!(
-        !wir.contains("find$cold"),
-        "a region containing `return` must not be moved"
-    );
+    stays_put(RETURNING_REGION, "find");
 }
 
 #[test]
 fn a_region_that_writes_a_parameter_stays_put() {
-    let wir = wir_of(WRITTEN_PARAM, OptLevel::O2);
-    assert!(
-        !wir.contains("scale$cold"),
-        "a region assigning a parameter must not be moved"
-    );
+    stays_put(WRITTEN_PARAM, "scale");
 }
 
-/// What the split may not change: the value the enclosing function goes on to
-/// read. Every level, not just the one the shape check runs at.
 #[test]
 fn a_written_parameter_keeps_its_value() {
-    for level in [OptLevel::O0, OptLevel::O1, OptLevel::O2, OptLevel::O3] {
-        crate::common::run_wasm(compile(WRITTEN_PARAM, level).wasm)
-            .unwrap_or_else(|e| panic!("{level:?} should run: {e}"));
-    }
+    runs_at_every_level(WRITTEN_PARAM);
 }

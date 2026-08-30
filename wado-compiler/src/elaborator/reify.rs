@@ -2189,16 +2189,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.mark_diverging_stmts(stmts)
     }
 
-    /// Put a `cold_path()` marker in front of every statement that cannot
-    /// return.
+    /// Open the cold tail of a block at its first statement that cannot return.
     ///
-    /// A call to a `-> !` function ends the path it sits on, so no execution
-    /// that leaves the block pays for it — which is the claim the marker makes.
-    /// `inline` reads it to stop pricing the arm and `cold_outline` to move the
-    /// arm out, and stating it here rather than at each synthesis site is what
-    /// gives a `panic(…)` written in source the same treatment as the ones this
-    /// file builds. A `return` / `break` is left alone: those end a path too,
-    /// but a normal exit is not a cold one.
+    /// Marking here rather than at each synthesis site is what gives a
+    /// `panic(…)` written in source the same treatment as the ones this file
+    /// builds. A `return` / `break` ends a path too, but a normal exit is not a
+    /// cold one, so it is left alone.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
         let diverges =
             |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if e.type_id == TypeTable::NEVER);
