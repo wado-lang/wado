@@ -140,6 +140,23 @@ convergence once it is small.
 4. `--optimize-inline-growth <pct>` caps unit growth, and `--log-level debug`
    then names what the cap turned down, with both of the callee's prices.
 
+## Workflow for an optimization that stopped firing
+
+A `wir_expect` that disappears when an unrelated knob moves is a precision hole
+somewhere else: one pass reshaped the IR into a form the second pass does not
+recognise, and the second pass is the one to fix.
+
+1. Bisect on the knob, not the source — `--optimize-inline-threshold` one step
+   at a time until the expectation flips. One step is one callee, so the
+   before/after `dump --nir` diff is small enough to read.
+2. `WADO_TRACE=<pass>` for the pass that stopped firing. `const_object_globalization`
+   names each function it walks and, per `let`, either the hoist or the check
+   that declined it.
+3. Read the declined shape in the NIR. A shape that is accepted in one syntactic
+   position and rejected in another — `&x` as a call argument versus `&x` bound
+   by a `let` — is the hole; the inliner just moved it from the first to the
+   second.
+
 ## Workflow for a "WIR pipeline generated invalid core Wasm module" ICE
 
 The codegen-time validator catches type mismatches the optimizer
