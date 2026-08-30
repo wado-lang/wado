@@ -3106,7 +3106,9 @@ fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
 }
 
 /// Group-alt dispatch under the GIR walker (used for LR-suffix
-/// group bodies). `Direct` emits a token-led `if/else if` chain; `Tournament`
+/// group bodies). A caller that already decided (`decided`) names the winning
+/// alternative and the dispatch commits to it, whichever plan lower baked.
+/// Undecided, `Direct` emits a token-led `if/else if` chain and `Tournament`
 /// reuses the longest-match scan tournament (`gen_scan_winner_tournament`
 /// over the group's `scan_alts`) and emits the winning alt's appending body.
 fn gen_alt_dispatch(
@@ -3118,26 +3120,15 @@ fn gen_alt_dispatch(
     nc: &mut List<[String, i32]>,
     decided: Option<String> = null,
 ) {
+    if let Some(var) = decided {
+        gen_alt_commit(w, alts, &dispatch_alt_order(dispatch), &var, ctx, nc);
+        return;
+    }
     let dd = match *dispatch {
         Direct(d) => d,
         Tournament(td) => {
-            let winner = if let Some(var) = decided {
-                var;
-            } else {
-                gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc);
-            };
-            let last = td.alts.len() - 1;
-            for let mut k = 0; k < td.alts.len(); k += 1 {
-                if k == 0 && k != last {
-                    w.begin(&`if ${winner} == ${td.alts[k]}`);
-                } else if k == last {
-                    w.else_begin(&"else");
-                } else {
-                    w.else_begin(&`else if ${winner} == ${td.alts[k]}`);
-                }
-                gen_ops(w, &alt_by_index(alts, td.alts[k]).ops, ctx, nc);
-            }
-            w.end();
+            let winner = gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc);
+            gen_alt_commit(w, alts, &td.alts, &winner, ctx, nc);
             return;
         },
     };
@@ -3158,6 +3149,46 @@ fn gen_alt_dispatch(
     }
     w.else_begin(&"else");
     w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
+    w.end();
+}
+
+/// The alternatives a baked dispatch decides between, in the order it emits
+/// them. What a caller running the decision itself has to commit over.
+fn dispatch_alt_order(dispatch: &MultiAltDispatch) -> List<i32> {
+    return match dispatch {
+        Direct(dd) => {
+            let mut order: List<i32> = [];
+            for let br of &dd.branches {
+                order.push(br.alt_index);
+            }
+            order;
+        },
+        Tournament(td) => td.alts,
+    };
+}
+
+/// Commit to the alternative `winner` names: one arm per candidate, the last
+/// unconditional. The decision is already taken, so nothing here re-tests it.
+fn gen_alt_commit(
+    w: &mut CodeWriter,
+    alts: &List<AltBody>,
+    order: &List<i32>,
+    winner: &String,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    assert order.len() > 1, "gen_alt_commit: a dispatch decides between two alternatives or more";
+    let last = order.len() - 1;
+    for let mut k = 0; k < order.len(); k += 1 {
+        if k == 0 {
+            w.begin(&`if ${*winner} == ${order[k]}`);
+        } else if k == last {
+            w.else_begin(&"else");
+        } else {
+            w.else_begin(&`else if ${*winner} == ${order[k]}`);
+        }
+        gen_ops(w, &alt_by_index(alts, order[k]).ops, ctx, nc);
+    }
     w.end();
 }
 
@@ -3812,9 +3843,11 @@ fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
         if let Group(g) = &r.body {
             if let Some(branches) = op_group_alt_decision(g, ctx) {
                 // The scan that decides entry is the scan the dispatch
-                // decides on: one answer, one set of scans.
-                let winner = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, false);
-                w.begin(&`if ${winner} >= 0${*gate}`);
+                // decides on: one answer, one set of scans. The caller-FOLLOW
+                // yield gate wraps them, so an optional that must yield does
+                // not pay for a decision it will not use.
+                let winner = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, !gate.is_empty());
+                w.begin(&`if ${winner} >= 0`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
                 return;
@@ -6416,6 +6449,7 @@ fn gen_group_dispatch(
     decided: Option<String> = null,
 ) {
     if decided matches { Some(_) } {
+        assert entry matches { Guaranteed }, "gen_group_dispatch: a decided dispatch commits, so it has no arm left to report or break in";
         let mut order: List<i32> = [];
         for let group of groups {
             for let idx of branch_emit_order(group, alts, ctx) {
