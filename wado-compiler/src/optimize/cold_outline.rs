@@ -239,16 +239,36 @@ fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
     matches!(&body.exprs[expr].kind, ExprKind::Call { func_id, .. } if *func_id == cold)
 }
 
-/// How the region's free variables cross the new boundary, or `None` when one
-/// of them cannot.
+/// How one local the region mentions gets to the helper.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Crossing {
+    /// The region declares it, so the helper's frame owns it outright.
+    Owned,
+    /// A parameter: the helper takes the same list and the call passes it back.
+    Inherited,
+    /// Nothing outside the region touches it, so the slot travels with it.
+    MovesWith,
+    /// The enclosing frame keeps it and the call hands the value over.
+    Argument,
+}
+
+impl Crossing {
+    /// Whether the enclosing frame keeps the storage. A write inside the region
+    /// is then one no call carries back, which is what stops the split — and it
+    /// is one question, so a crossing added later has to answer it.
+    fn leaves_storage_behind(self) -> bool {
+        match self {
+            Crossing::Inherited | Crossing::Argument => true,
+            Crossing::Owned | Crossing::MovesWith => false,
+        }
+    }
+}
+
+/// The locals the call must hand over, or `None` when one of them cannot cross.
 ///
 /// Control must not leave the region, since a `return` in a function of its own
-/// returns from the wrong frame. Beyond that, each local the region touches has
-/// to be one the call can hand over. A parameter, or a local the region
-/// declares, needs nothing. A local of the enclosing frame is one of three
-/// cases: nothing outside reads it, so it moves with the region; the region only
-/// reads it, so it rides in as an argument; or the region writes one the
-/// enclosing function still reads, which no call can carry back.
+/// returns from the wrong frame. Beyond that every local is classified by its
+/// [`Crossing`], and the ones that leave their storage behind must be read-only.
 fn free_vars(
     body: &Body,
     region: &[StmtId],
@@ -270,22 +290,25 @@ fn free_vars(
     let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root)], region);
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
-        if idx < param_count || inside.declared.contains(&idx) {
-            continue;
-        }
-        // A slot nothing outside touches moves with the region: the helper
-        // inherits the frame, so the index still denotes the same local and no
-        // one is left behind to read it. Under a loop that differs — a second
-        // entry would find the slot fresh instead of holding what the first left
-        // — so it has to cross as an argument like any other.
-        if !outer.declared.contains(&idx) && !outer.mentioned.contains(&idx) && !under_loop {
-            continue;
-        }
-        // Reading it is what an argument can carry; a write the enclosing
-        // function still reads is not.
-        if inside.written.contains(&idx) || func.address_taken_locals.contains(&idx) {
+        let crossing = if idx < param_count {
+            Crossing::Inherited
+        } else if inside.declared.contains(&idx) {
+            Crossing::Owned
+        } else if !outer.declared.contains(&idx) && !outer.mentioned.contains(&idx) && !under_loop {
+            Crossing::MovesWith
+        } else {
+            Crossing::Argument
+        };
+        // One question, asked of every crossing that leaves the storage behind:
+        // a write inside the region is one no call carries back.
+        if crossing.leaves_storage_behind()
+            && (inside.written.contains(&idx) || func.address_taken_locals.contains(&idx))
+        {
             crate::compiler_trace!("cold_outline", "  local {idx} is written across the split");
             return None;
+        }
+        if crossing != Crossing::Argument {
+            continue;
         }
         // An argument is read at the call, where the region read it under
         // whatever guard stands in front of it. For a primitive that is the same
@@ -415,8 +438,8 @@ fn escapes_from<'a>(
 fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
     let id = project.next_func_id();
     let helper = {
-        let parent = project.functions[fi].borrow();
-        build_helper(&parent, &region, id, ordinal)
+        let mut parent = project.functions[fi].borrow_mut();
+        build_helper(&mut parent, &region, id, ordinal)
     };
     let key = FunctionRef::from_resolved(&helper, helper.module_source.clone()).function_id();
     project.func_index.insert(key, id);
@@ -477,8 +500,12 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
 /// The function a region becomes: the enclosing function's frame, and the
 /// region as its whole body. Cloned from the enclosing record so a field added
 /// to [`NirFunction`] is inherited, leaving only what must differ written here.
-fn build_helper(parent: &NirFunction, region: &Region, id: FuncId, ordinal: u32) -> NirFunction {
-    let parent_body = parent.body.as_ref().expect("a region implies a body");
+fn build_helper(
+    parent: &mut NirFunction,
+    region: &Region,
+    id: FuncId,
+    ordinal: u32,
+) -> NirFunction {
     let inherited = parent.params.len() as u32;
     // The helper's frame is the enclosing one with the region's read-only
     // locals lifted to parameters: each takes the next slot past the inherited
@@ -493,17 +520,25 @@ fn build_helper(parent: &NirFunction, region: &Region, id: FuncId, ordinal: u32)
     let ctx = InlineCtx::lifting(inherited, &lifted, &no_labels);
 
     let mut body = Body::empty();
-    let stmts: Vec<StmtId> = region
-        .stmts
-        .iter()
-        .map(|&s| splice_stmt(&mut body, parent_body, s, &ctx))
-        .collect();
-    body.root = body.blocks.push(BlockNode {
-        stmts,
-        span: parent_body.blocks[region.block].span,
-    });
+    {
+        let parent_body = parent.body.as_ref().expect("a region implies a body");
+        let stmts: Vec<StmtId> = region
+            .stmts
+            .iter()
+            .map(|&s| splice_stmt(&mut body, parent_body, s, &ctx))
+            .collect();
+        body.root = body.blocks.push(BlockNode {
+            stmts,
+            span: parent_body.blocks[region.block].span,
+        });
+    }
 
+    // The enclosing body is lifted out over the clone: the helper carries the
+    // region alone, so cloning the arena only to drop it would cost the
+    // enclosing function's whole size once per region.
+    let carried = parent.body.take();
     let mut helper = parent.clone();
+    parent.body = carried;
     helper
         .params
         .extend(region.args.iter().enumerate().map(|(k, &idx)| {

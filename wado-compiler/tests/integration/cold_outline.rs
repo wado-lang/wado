@@ -64,6 +64,29 @@ export fn run() {
 }
 "#;
 
+/// A parameter rides in as itself, so a write to its slot is one no call carries
+/// back: the helper would assign its own frame and the enclosing function keep
+/// the value it was called with.
+const WRITTEN_PARAM: &str = r#"
+#[inline(never)]
+fn work(x: i32) -> i32 {
+    return x * 3;
+}
+
+fn scale(mut n: i32, cond: bool) -> i32 {
+    if cond {
+        builtin::cold_path();
+        n = work(n) + work(n + 1) + work(n + 2);
+    }
+    return n;
+}
+
+export fn run() {
+    assert scale(2, true) == 27;
+    assert scale(2, false) == 2;
+}
+"#;
+
 fn compile(source: &str, opt_level: OptLevel) -> wado_compiler::CompileResult {
     let options = CompilerOptions {
         opt_level,
@@ -116,4 +139,23 @@ fn a_region_that_returns_stays_put() {
         !wir.contains("find$cold"),
         "a region containing `return` must not be moved"
     );
+}
+
+#[test]
+fn a_region_that_writes_a_parameter_stays_put() {
+    let wir = wir_of(WRITTEN_PARAM, OptLevel::O2);
+    assert!(
+        !wir.contains("scale$cold"),
+        "a region assigning a parameter must not be moved"
+    );
+}
+
+/// What the split may not change: the value the enclosing function goes on to
+/// read. Every level, not just the one the shape check runs at.
+#[test]
+fn a_written_parameter_keeps_its_value() {
+    for level in [OptLevel::O0, OptLevel::O1, OptLevel::O2, OptLevel::O3] {
+        crate::common::run_wasm(compile(WRITTEN_PARAM, level).wasm)
+            .unwrap_or_else(|e| panic!("{level:?} should run: {e}"));
+    }
 }
