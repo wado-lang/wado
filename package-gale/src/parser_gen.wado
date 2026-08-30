@@ -55,7 +55,9 @@ use {
     alt_is_wildcard_led,
     compute_overlap_groups,
     compute_overlap_groups_with_wildcard,
+    compute_overlap_groups_with_wildcard_indices,
     has_multi_alt_groups,
+    is_wildcard_alt,
     sort_group_by_specificity,
     sort_group_by_mandatory_count_desc,
     sort_group_by_element_count,
@@ -1785,14 +1787,12 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     }
 }
 
-/// Op-driven scan emitter for `ScanElement::Group`. Mirrors surface
-/// `gen_scan_group` semantics: ambiguity detection (alts sharing a
-/// first token enter longest-match commit), lenient gate, and the
-/// `sg_<gc>_done` / `sg_<gc>` block structure.
-fn is_wildcard_alt(indices: &List<i32>, alt_index: i32) -> bool {
-    return indices.iter_ref().any(|idx| *idx == alt_index);
-}
-
+/// Op-driven scan emitter for `ScanElement::Group`: the group's decision,
+/// measured rather than committed to. It takes the same partition the parse
+/// side dispatches on — the branch the lookahead admits, then the longest
+/// scan among the alternatives it holds — so the length this leaves in `pos`
+/// is the length of the alternative the parse will take. A `lenient` group
+/// rewinds to its entry position on no match; a strict one fails.
 fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
     if ge.alts.len() == 1 {
         // Single alt: outer `done` wraps inner `body`.
@@ -1819,107 +1819,62 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         w.end();
         return;
     }
-    // Multi-alternative group: try each alternative, fall through to fail.
     let gc = ctx.next_scan_group();
-    let outer = `sg_${gc}`;
     let gp_var = `gp_${gc}`;
     let best_var = `sg_${gc}_best`;
+    let kind_var = `sgk_${gc}`;
+    let branches = scan_decision_branches(ge, &kind_var, ctx);
     w.line(&`let ${gp_var} = pos;`);
-
-    let n = ge.alts.len();
-    let first_sets = &ge.alt_first_sets;
-
-    let mut is_ambiguous: List<bool> = [];
-    for let mut i = 0; i < n; i += 1 {
-        is_ambiguous.push(false);
+    if !decision_is_unconditional(&branches) {
+        w.line(&`let ${kind_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
     }
-    for let mut i = 0; i < n; i += 1 {
-        for let mut j = 0; j < n; j += 1 {
-            if i == j {
-                continue;
-            }
-            if sets_overlap(&first_sets[i], &first_sets[j]) {
-                is_ambiguous[i] = true;
-                is_ambiguous[j] = true;
-            }
-        }
-    }
-    let mut any_ambiguous = false;
-    for let mut i = 0; i < n; i += 1 {
-        if is_ambiguous[i] {
-            any_ambiguous = true;
-        }
-    }
-
-    // First-set gate, emitted unless a wildcard alt (which matches any token)
-    // suppresses it. On a gate miss a lenient group matches zero and falls
-    // through; a strict group fails, since a mandatory group must be started.
-    let has_wildcard = !ge.wildcard_alt_indices.is_empty();
-    let union_first: List<String> = if has_wildcard { [] } else { first_sets_union(first_sets) };
-    let gate_emitted = !union_first.is_empty();
-    if gate_emitted {
-        let sgk_var = `sgk_${gc}`;
-        w.line(&`let ${sgk_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
-        let gate = ctx.kind_check_str(&union_first, &sgk_var);
-        w.begin(&`if ${gate}`);
-    }
-
-    if any_ambiguous {
-        w.line(&`let mut ${best_var} = -1;`);
-    }
-
-    // Iteration order: visit concrete alts before wildcard alts. A
-    // wildcard alt matches any non-EOF token (its scan body is just
-    // `pos += 1`), so trying it before a more specific concrete alt
-    // would always commit to the wildcard and shadow the concrete
-    // alt — independent of source order. Pushing wildcard alts to
-    // the end mirrors `gen_general_group_dispatch`'s
-    // `sort_group_by_mandatory_count_desc` ordering on the parse
-    // side, so scan and parse agree on the winner.
-    let mut iter_order: List<i32> = [];
-    for let mut i = 0; i < n; i += 1 {
-        if !is_wildcard_alt(&ge.wildcard_alt_indices, i) {
-            iter_order.push(i);
-        }
-    }
-    for let mut i = 0; i < n; i += 1 {
-        if is_wildcard_alt(&ge.wildcard_alt_indices, i) {
-            iter_order.push(i);
-        }
-    }
-
-    w.begin(&`${outer}:`);
-    for let i of iter_order {
-        let inner = `sg_${gc}_${i}`;
-        w.line(&`pos = ${gp_var};`);
-        w.begin(&`${inner}:`);
-        gen_scan_op_elements_in_block(w, &ge.alts[i].elements, 0, ge.alts[i].elements.len(), ctx, &inner);
-        if is_ambiguous[i] {
+    w.line(&`let mut ${best_var} = -1;`);
+    for let mut i = 0; i < branches.len(); i += 1 {
+        open_decision_branch(w, &branches, i);
+        for let ai of &branches[i].alts {
+            let inner = `sg_${gc}_${*ai}`;
+            w.line(&`pos = ${gp_var};`);
+            w.begin(&`${inner}:`);
+            gen_scan_op_elements_in_block(w, &ge.alts[*ai].elements, 0, ge.alts[*ai].elements.len(), ctx, &inner);
             w.line(&`if pos > ${best_var} \{ ${best_var} = pos; \}`);
-        } else {
-            w.line(&`break ${outer};`);
+            w.end();
         }
-        w.end();
     }
-    if any_ambiguous {
-        w.line(&`if ${best_var} >= 0 \{ pos = ${best_var}; break ${outer}; \}`);
-    }
+    close_decision_chain(w, &branches);
+    w.begin(&`if ${best_var} >= 0`);
+    w.line(&`pos = ${best_var};`);
+    w.else_begin(&"else");
     if lenient {
         w.line(&`pos = ${gp_var};`);
     } else {
         w.line(fail_stmt);
     }
-    w.end();  // close outer labeled block
+    w.end();
+}
 
-    if gate_emitted {
-        if lenient {
-            w.end();
+/// The branches the scan takes over a group's alternatives: the partition the
+/// parse side dispatches on, off the first sets and wildcard alternatives
+/// lower baked. `kind_expr` is the scan cursor's lookahead, not the parser's.
+fn scan_decision_branches(ge: &ScanGroupElement, kind_expr: &String, ctx: &mut GenContext) -> List<DecisionBranch> {
+    let groups = compute_overlap_groups_with_wildcard_indices(&ge.alt_first_sets, &ge.wildcard_alt_indices);
+    let mut branches: List<DecisionBranch> = [];
+    for let group of &groups {
+        // A wildcard alternative matches any token, so its branch tests
+        // nothing and the scan lengths decide inside it.
+        let union_first: List<String> = if group.iter_ref().any(|idx: &i32| is_wildcard_alt(
+            &ge.wildcard_alt_indices,
+            *idx,
+        )) {
+            [];
         } else {
-            w.else_begin(&"else");
-            w.line(fail_stmt);
-            w.end();
-        }
+            group_first_union(group, &ge.alt_first_sets);
+        };
+        branches.push(DecisionBranch {
+            cond: ctx.kind_check_str(&union_first, kind_expr),
+            alts: *group,
+        });
     }
+    return branches;
 }
 
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —
@@ -4128,16 +4083,15 @@ fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
     return op;
 }
 
-/// Op-driven scan-guard for a `Group`-shaped Optional inner. Mirrors
-/// `gen_rep_scan_guard` but walks the scan side via op-driven
-/// helpers (`gen_scan_op_elements_in_block` / `gen_scan_op_group`)
-/// using `g_op.scan_alts` / `g_op.dispatch` directly, instead
-/// of the surface `gen_scan_elements_in_block` / `gen_scan_group`
-/// graph. `g_elem` is the surface `Group` matching `g_op`; it is
-/// consulted only to compute per-alt first sets for the multi-alt
-/// dispatch (lower bakes these on `ScanGroupElement.alt_first_sets` but
-/// the `GroupOp` itself does not surface them — recomputing matches
-/// what `lower_scan_group` does).
+/// Op-driven scan-guard for a `Group`-shaped Optional inner whose
+/// alternatives the caller does not decide between — a token-only group, or
+/// a lone alternative. Walks the scan side via op-driven helpers
+/// (`gen_scan_op_elements_in_block` / `gen_scan_op_group`) using
+/// `g_op.scan_alts` directly. `g_elem` is the surface `Group` matching
+/// `g_op`; it is consulted only to compute the per-alt first sets the scan
+/// partitions on (lower bakes these on `ScanGroupElement.alt_first_sets` but
+/// the `GroupOp` itself does not surface them — recomputing matches what
+/// `lower_scan_group` does).
 fn gen_op_opt_scan_guard_for_group(
     w: &mut CodeWriter,
     g_op: &GroupOp,
@@ -4168,7 +4122,6 @@ fn gen_op_opt_scan_guard_for_group(
         }
         let scan_elem = ScanGroupElement {
             alts: g_op.scan_alts,
-            dispatch: g_op.dispatch,
             lenient: false,
             alt_first_sets,
             wildcard_alt_indices: wildcard_indices,
@@ -6319,7 +6272,6 @@ fn gen_group_decide(
     follow_gate: bool,
     require_advance: bool = false,
 ) -> String {
-    assert !branches.is_empty(), "gen_group_decide: a group's partition has at least one branch";
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let best_var = dedup_name(&"gd_best", name_counts);
     w.line(&`let mut ${winner_var}: i32 = -1;`);
@@ -6327,27 +6279,39 @@ fn gen_group_decide(
     if follow_gate {
         w.begin(&`if !(${CALLER_FOLLOW_YIELDS})`);
     }
-    // A lone branch admitting every lookahead has nothing to test: the scan
-    // lengths are the whole decision.
-    let unconditional = branches.len() == 1 && branches[0].cond == "true";
     for let mut i = 0; i < branches.len(); i += 1 {
-        let branch = &branches[i];
-        if !unconditional {
-            if i == 0 {
-                w.begin(&`if ${branch.cond}`);
-            } else {
-                w.else_begin(&`else if ${branch.cond}`);
-            }
-        }
-        gen_scan_winner_round(w, &branch.alts, scan_alts, ctx, name_counts, &winner_var, &best_var);
+        open_decision_branch(w, branches, i);
+        gen_scan_winner_round(w, &branches[i].alts, scan_alts, ctx, name_counts, &winner_var, &best_var);
     }
-    if !unconditional {
-        w.end();
-    }
+    close_decision_chain(w, branches);
     if follow_gate {
         w.end();
     }
     return winner_var;
+}
+
+/// A lone branch admitting every lookahead has nothing to test: the scan
+/// lengths are the whole decision.
+fn decision_is_unconditional(branches: &List<DecisionBranch>) -> bool {
+    assert !branches.is_empty(), "a group's partition has at least one branch";
+    return branches.len() == 1 && branches[0].cond == "true";
+}
+
+fn open_decision_branch(w: &mut CodeWriter, branches: &List<DecisionBranch>, i: i32) {
+    if decision_is_unconditional(branches) {
+        return;
+    }
+    if i == 0 {
+        w.begin(&`if ${branches[i].cond}`);
+    } else {
+        w.else_begin(&`else if ${branches[i].cond}`);
+    }
+}
+
+fn close_decision_chain(w: &mut CodeWriter, branches: &List<DecisionBranch>) {
+    if !decision_is_unconditional(branches) {
+        w.end();
+    }
 }
 
 fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext) {

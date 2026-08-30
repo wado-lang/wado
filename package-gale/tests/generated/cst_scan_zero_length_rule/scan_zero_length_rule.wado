@@ -1497,22 +1497,26 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     }
     let gp_1 = pos;
     let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(sgk_1) {
-        sg_1: {
-            pos = gp_1;
-            sg_1_0: {
-                pos = scan_sa(tokens, pos);
-                if pos < 0 { break sg_1_0; }
-                break sg_1;
-            }
-            pos = gp_1;
-            sg_1_1: {
-                pos = scan_sb(tokens, pos);
-                if pos < 0 { break sg_1_1; }
-                break sg_1;
-            }
-            pos = gp_1;
+    let mut sg_1_best = -1;
+    if sgk_1 == TK_LIT_A {
+        pos = gp_1;
+        sg_1_0: {
+            pos = scan_sa(tokens, pos);
+            if pos < 0 { break sg_1_0; }
+            if pos > sg_1_best { sg_1_best = pos; }
         }
+    } else if sgk_1 == TK_LIT_B {
+        pos = gp_1;
+        sg_1_1: {
+            pos = scan_sb(tokens, pos);
+            if pos < 0 { break sg_1_1; }
+            if pos > sg_1_best { sg_1_best = pos; }
+        }
+    }
+    if sg_1_best >= 0 {
+        pos = sg_1_best;
+    } else {
+        pos = gp_1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -1741,10 +1745,6 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());
     }
     return String::new();
-}
-
-fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_A | TK_LIT_B };
 }
 
 global EMPTY_SYNC: List<i32> = [];

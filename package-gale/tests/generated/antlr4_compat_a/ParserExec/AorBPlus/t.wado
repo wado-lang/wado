@@ -1600,43 +1600,49 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(sgk_0) {
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_0; }
-                pos += 1;
-                break sg_0;
-            }
-            pos = gp_0;
-            sg_0_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_0_1; }
-                pos += 1;
-                break sg_0;
-            }
-            pos = gp_0;
+    let mut sg_0_best = -1;
+    if sgk_0 == TK_ID {
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_0; }
+            pos += 1;
+            if pos > sg_0_best { sg_0_best = pos; }
         }
+    } else if sgk_0 == TK_INT {
+        pos = gp_0;
+        sg_0_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_0_1; }
+            pos += 1;
+            if pos > sg_0_best { sg_0_best = pos; }
+        }
+    }
+    if sg_0_best >= 0 {
+        pos = sg_0_best;
+    } else {
+        pos = gp_0;
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_1 = pos;
         let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_0(sgk_1) {
-            sg_1: {
-                pos = gp_1;
-                sg_1_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_0; }
-                    pos += 1;
-                    break sg_1;
-                }
-                pos = gp_1;
-                sg_1_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_1_1; }
-                    pos += 1;
-                    break sg_1;
-                }
-                pos = -1;
+        let mut sg_1_best = -1;
+        if sgk_1 == TK_ID {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_0; }
+                pos += 1;
+                if pos > sg_1_best { sg_1_best = pos; }
             }
+        } else if sgk_1 == TK_INT {
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_1_1; }
+                pos += 1;
+                if pos > sg_1_best { sg_1_best = pos; }
+            }
+        }
+        if sg_1_best >= 0 {
+            pos = sg_1_best;
         } else {
             pos = -1;
         }

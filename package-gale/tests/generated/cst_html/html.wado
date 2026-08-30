@@ -2756,42 +2756,46 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 }
                 let gp_0 = pos;
                 let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_4(sgk_0) {
-                    sg_0: {
-                        pos = gp_0;
-                        sg_0_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_0_0; }
-                            pos += 1;
-                            if pos < tokens.len() && _kind_set_3(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                                let sp = pos;
-                                sg_1_done: {
-                                    sg_1: {
-                                        pos = scan_html_content(tokens, pos, &FOLLOW_MASK_1);
-                                        if pos < 0 { break sg_1; }
-                                        if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break sg_1; }
-                                        pos += 1;
-                                        if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH { break sg_1; }
-                                        pos += 1;
-                                        if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { break sg_1; }
-                                        pos += 1;
-                                        if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_1; }
-                                        pos += 1;
-                                        break sg_1_done;
-                                    }
-                                    pos = -1;
+                let mut sg_0_best = -1;
+                if sgk_0 == TK_TAG_CLOSE {
+                    pos = gp_0;
+                    sg_0_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_0_0; }
+                        pos += 1;
+                        if pos < tokens.len() && _kind_set_3(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            let sp = pos;
+                            sg_1_done: {
+                                sg_1: {
+                                    pos = scan_html_content(tokens, pos, &FOLLOW_MASK_1);
+                                    if pos < 0 { break sg_1; }
+                                    if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break sg_1; }
+                                    pos += 1;
+                                    if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH { break sg_1; }
+                                    pos += 1;
+                                    if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { break sg_1; }
+                                    pos += 1;
+                                    if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_1; }
+                                    pos += 1;
+                                    break sg_1_done;
                                 }
-                                if pos < 0 { pos = sp; }
+                                pos = -1;
                             }
-                            break sg_0;
+                            if pos < 0 { pos = sp; }
                         }
-                        pos = gp_0;
-                        sg_0_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH_CLOSE { break sg_0_1; }
-                            pos += 1;
-                            break sg_0;
-                        }
-                        pos = gp_0;
+                        if pos > sg_0_best { sg_0_best = pos; }
                     }
+                } else if sgk_0 == TK_TAG_SLASH_CLOSE {
+                    pos = gp_0;
+                    sg_0_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH_CLOSE { break sg_0_1; }
+                        pos += 1;
+                        if pos > sg_0_best { sg_0_best = pos; }
+                    }
+                }
+                if sg_0_best >= 0 {
+                    pos = sg_0_best;
+                } else {
+                    pos = gp_0;
                 }
                 break scan_alts;
             }
@@ -2829,7 +2833,7 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
 
 fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW);
         if pos < 0 { pos = sp; }
@@ -2840,30 +2844,35 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
             sg_2: {
                 let gp_3 = pos;
                 let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_7(sgk_3) {
-                    sg_3: {
-                        pos = gp_3;
-                        sg_3_0: {
-                            pos = scan_html_element(tokens, pos, follow);
-                            if pos < 0 { break sg_3_0; }
-                            break sg_3;
-                        }
-                        pos = gp_3;
-                        sg_3_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_CDATA { break sg_3_1; }
-                            pos += 1;
-                            break sg_3;
-                        }
-                        pos = gp_3;
-                        sg_3_2: {
-                            pos = scan_html_comment(tokens, pos, follow);
-                            if pos < 0 { break sg_3_2; }
-                            break sg_3;
-                        }
-                        pos = gp_3;
+                let mut sg_3_best = -1;
+                if _kind_set_4(sgk_3) {
+                    pos = gp_3;
+                    sg_3_0: {
+                        pos = scan_html_element(tokens, pos, follow);
+                        if pos < 0 { break sg_3_0; }
+                        if pos > sg_3_best { sg_3_best = pos; }
+                    }
+                } else if sgk_3 == TK_CDATA {
+                    pos = gp_3;
+                    sg_3_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_CDATA { break sg_3_1; }
+                        pos += 1;
+                        if pos > sg_3_best { sg_3_best = pos; }
+                    }
+                } else if _kind_set_5(sgk_3) {
+                    pos = gp_3;
+                    sg_3_2: {
+                        pos = scan_html_comment(tokens, pos, follow);
+                        if pos < 0 { break sg_3_2; }
+                        if pos > sg_3_best { sg_3_best = pos; }
                     }
                 }
-                if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if sg_3_best >= 0 {
+                    pos = sg_3_best;
+                } else {
+                    pos = gp_3;
+                }
+                if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW);
                     if pos < 0 { pos = sp; }
@@ -2900,7 +2909,7 @@ fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_html_chardata(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    if pos < tokens.len() && _kind_set_8(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_6(tokens[pos]) {
         return pos + 1;
     }
     return -1;
@@ -2911,7 +2920,7 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_6(alt_kind) {
+        if _kind_set_5(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_html_comment(tokens, pos, follow);
@@ -2935,7 +2944,7 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
 }
 
 fn scan_html_comment(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    if pos < tokens.len() && _kind_set_6(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_5(tokens[pos]) {
         return pos + 1;
     }
     return -1;
@@ -2947,22 +2956,24 @@ fn scan_script(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     pos += 1;
     let gp_5 = pos;
     let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_9(sgk_5) {
-        sg_5: {
-            pos = gp_5;
-            sg_5_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_BODY { break sg_5_0; }
-                pos += 1;
-                break sg_5;
-            }
-            pos = gp_5;
-            sg_5_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_SHORT_BODY { break sg_5_1; }
-                pos += 1;
-                break sg_5;
-            }
-            return -1;
+    let mut sg_5_best = -1;
+    if sgk_5 == TK_SCRIPT_BODY {
+        pos = gp_5;
+        sg_5_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_BODY { break sg_5_0; }
+            pos += 1;
+            if pos > sg_5_best { sg_5_best = pos; }
         }
+    } else if sgk_5 == TK_SCRIPT_SHORT_BODY {
+        pos = gp_5;
+        sg_5_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_SHORT_BODY { break sg_5_1; }
+            pos += 1;
+            if pos > sg_5_best { sg_5_best = pos; }
+        }
+    }
+    if sg_5_best >= 0 {
+        pos = sg_5_best;
     } else {
         return -1;
     }
@@ -2975,22 +2986,24 @@ fn scan_style(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     pos += 1;
     let gp_6 = pos;
     let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_10(sgk_6) {
-        sg_6: {
-            pos = gp_6;
-            sg_6_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_STYLE_BODY { break sg_6_0; }
-                pos += 1;
-                break sg_6;
-            }
-            pos = gp_6;
-            sg_6_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_STYLE_SHORT_BODY { break sg_6_1; }
-                pos += 1;
-                break sg_6;
-            }
-            return -1;
+    let mut sg_6_best = -1;
+    if sgk_6 == TK_STYLE_BODY {
+        pos = gp_6;
+        sg_6_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_STYLE_BODY { break sg_6_0; }
+            pos += 1;
+            if pos > sg_6_best { sg_6_best = pos; }
         }
+    } else if sgk_6 == TK_STYLE_SHORT_BODY {
+        pos = gp_6;
+        sg_6_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_STYLE_SHORT_BODY { break sg_6_1; }
+            pos += 1;
+            if pos > sg_6_best { sg_6_best = pos; }
+        }
+    }
+    if sg_6_best >= 0 {
+        pos = sg_6_best;
     } else {
         return -1;
     }
@@ -3330,7 +3343,7 @@ fn _parse_html_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_6(p.peek_kind())) {
         _parse_html_chardata(p, &EMPTY_FOLLOW);
     }
     loop {
@@ -3344,30 +3357,35 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 sg_7: {
                     let gp_8 = pos;
                     let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_7(sgk_8) {
-                        sg_8: {
-                            pos = gp_8;
-                            sg_8_0: {
-                                pos = scan_html_element(tokens, pos, follow);
-                                if pos < 0 { break sg_8_0; }
-                                break sg_8;
-                            }
-                            pos = gp_8;
-                            sg_8_1: {
-                                if pos >= tokens.len() || tokens[pos] != TK_CDATA { break sg_8_1; }
-                                pos += 1;
-                                break sg_8;
-                            }
-                            pos = gp_8;
-                            sg_8_2: {
-                                pos = scan_html_comment(tokens, pos, follow);
-                                if pos < 0 { break sg_8_2; }
-                                break sg_8;
-                            }
-                            pos = gp_8;
+                    let mut sg_8_best = -1;
+                    if _kind_set_4(sgk_8) {
+                        pos = gp_8;
+                        sg_8_0: {
+                            pos = scan_html_element(tokens, pos, follow);
+                            if pos < 0 { break sg_8_0; }
+                            if pos > sg_8_best { sg_8_best = pos; }
+                        }
+                    } else if sgk_8 == TK_CDATA {
+                        pos = gp_8;
+                        sg_8_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_CDATA { break sg_8_1; }
+                            pos += 1;
+                            if pos > sg_8_best { sg_8_best = pos; }
+                        }
+                    } else if _kind_set_5(sgk_8) {
+                        pos = gp_8;
+                        sg_8_2: {
+                            pos = scan_html_comment(tokens, pos, follow);
+                            if pos < 0 { break sg_8_2; }
+                            if pos > sg_8_best { sg_8_best = pos; }
                         }
                     }
-                    if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if sg_8_best >= 0 {
+                        pos = sg_8_best;
+                    } else {
+                        pos = gp_8;
+                    }
+                    if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                         let sp = pos;
                         pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW);
                         if pos < 0 { pos = sp; }
@@ -3381,16 +3399,16 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         if rep_scan_pos < 0 { break; }
         let grp_kind = p.peek_kind();
-        if _kind_set_5(grp_kind) {
+        if _kind_set_4(grp_kind) {
             _parse_html_element(p, follow);
         } else if grp_kind == TK_CDATA {
             p.expect(TK_CDATA, &EMPTY_SYNC);
-        } else if _kind_set_6(grp_kind) {
+        } else if _kind_set_5(grp_kind) {
             _parse_html_comment(p, follow);
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &SYNC_8);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_6(p.peek_kind())) {
             _parse_html_chardata(p, &EMPTY_FOLLOW);
         }
     }
@@ -3430,7 +3448,7 @@ fn _parse_html_attribute(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_html_chardata__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
-    if _kind_set_8(kind) {
+    if _kind_set_6(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
@@ -3455,7 +3473,7 @@ fn _parse_html_chardata(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_html_misc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
-    if _kind_set_6(kind) {
+    if _kind_set_5(kind) {
         _parse_html_comment(p, follow);
         return;
     }
@@ -3484,7 +3502,7 @@ fn _parse_html_misc(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 
 fn _parse_html_comment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
-    if _kind_set_6(kind) {
+    if _kind_set_5(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
@@ -3651,31 +3669,19 @@ fn _kind_set_3(k: i32) -> bool {
 }
 
 fn _kind_set_4(k: i32) -> bool {
-    return k matches { TK_TAG_CLOSE | TK_TAG_SLASH_CLOSE };
-}
-
-fn _kind_set_5(k: i32) -> bool {
     return k matches { TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 
-fn _kind_set_6(k: i32) -> bool {
+fn _kind_set_5(k: i32) -> bool {
     return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
+}
+
+fn _kind_set_6(k: i32) -> bool {
+    return k matches { TK_HTML_TEXT | TK_SEA_WS };
 }
 
 fn _kind_set_7(k: i32) -> bool {
     return k matches { TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_TAG_OPEN };
-}
-
-fn _kind_set_8(k: i32) -> bool {
-    return k matches { TK_HTML_TEXT | TK_SEA_WS };
-}
-
-fn _kind_set_9(k: i32) -> bool {
-    return k matches { TK_SCRIPT_BODY | TK_SCRIPT_SHORT_BODY };
-}
-
-fn _kind_set_10(k: i32) -> bool {
-    return k matches { TK_STYLE_BODY | TK_STYLE_SHORT_BODY };
 }
 
 global EMPTY_SYNC: List<i32> = [];

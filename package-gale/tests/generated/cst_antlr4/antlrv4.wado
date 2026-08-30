@@ -4954,7 +4954,7 @@ fn scan_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_20(alt_kind) {
+        if _kind_set_16(alt_kind) {
             pos = scan_rule_spec_alt_0(tokens, start, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
@@ -5415,7 +5415,7 @@ fn scan_lexer_command(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_21(alt_kind) {
+        if _kind_set_17(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
             try_1: {
@@ -5598,7 +5598,7 @@ fn scan_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
-        } else if _kind_set_22(alt_kind) {
+        } else if _kind_set_18(alt_kind) {
             pos = scan_element_alt_1(tokens, start, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
@@ -5680,28 +5680,33 @@ fn scan_predicate_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
                 pos += 1;
                 let gp_12 = pos;
                 let sgk_12 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_13(sgk_12) {
-                    sg_12: {
-                        pos = gp_12;
-                        sg_12_0: {
-                            pos = scan_action_block(tokens, pos, follow);
-                            if pos < 0 { break sg_12_0; }
-                            break sg_12;
-                        }
-                        pos = gp_12;
-                        sg_12_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_12_1; }
-                            pos += 1;
-                            break sg_12;
-                        }
-                        pos = gp_12;
-                        sg_12_2: {
-                            if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_12_2; }
-                            pos += 1;
-                            break sg_12;
-                        }
-                        pos = gp_12;
+                let mut sg_12_best = -1;
+                if sgk_12 == TK_ACTION {
+                    pos = gp_12;
+                    sg_12_0: {
+                        pos = scan_action_block(tokens, pos, follow);
+                        if pos < 0 { break sg_12_0; }
+                        if pos > sg_12_best { sg_12_best = pos; }
                     }
+                } else if sgk_12 == TK_INT {
+                    pos = gp_12;
+                    sg_12_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_12_1; }
+                        pos += 1;
+                        if pos > sg_12_best { sg_12_best = pos; }
+                    }
+                } else if sgk_12 == TK_STRING_LITERAL {
+                    pos = gp_12;
+                    sg_12_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_12_2; }
+                        pos += 1;
+                        if pos > sg_12_best { sg_12_best = pos; }
+                    }
+                }
+                if sg_12_best >= 0 {
+                    pos = sg_12_best;
+                } else {
+                    pos = gp_12;
                 }
                 if pos > best { best = pos; }
             }
@@ -5720,43 +5725,49 @@ fn scan_labeled_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
     if pos < 0 { return -1; }
     let gp_13 = pos;
     let sgk_13 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_15(sgk_13) {
-        sg_13: {
-            pos = gp_13;
-            sg_13_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_13_0; }
-                pos += 1;
-                break sg_13;
-            }
-            pos = gp_13;
-            sg_13_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_PLUS_ASSIGN { break sg_13_1; }
-                pos += 1;
-                break sg_13;
-            }
-            return -1;
+    let mut sg_13_best = -1;
+    if sgk_13 == TK_ASSIGN {
+        pos = gp_13;
+        sg_13_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_13_0; }
+            pos += 1;
+            if pos > sg_13_best { sg_13_best = pos; }
         }
+    } else if sgk_13 == TK_PLUS_ASSIGN {
+        pos = gp_13;
+        sg_13_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_PLUS_ASSIGN { break sg_13_1; }
+            pos += 1;
+            if pos > sg_13_best { sg_13_best = pos; }
+        }
+    }
+    if sg_13_best >= 0 {
+        pos = sg_13_best;
     } else {
         return -1;
     }
     let gp_14 = pos;
     let sgk_14 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_16(sgk_14) {
-        sg_14: {
-            pos = gp_14;
-            sg_14_0: {
-                pos = scan_atom(tokens, pos, &EMPTY_FOLLOW);
-                if pos < 0 { break sg_14_0; }
-                break sg_14;
-            }
-            pos = gp_14;
-            sg_14_1: {
-                pos = scan_block(tokens, pos, &EMPTY_FOLLOW);
-                if pos < 0 { break sg_14_1; }
-                break sg_14;
-            }
-            pos = gp_14;
+    let mut sg_14_best = -1;
+    if _kind_set_13(sgk_14) {
+        pos = gp_14;
+        sg_14_0: {
+            pos = scan_atom(tokens, pos, &EMPTY_FOLLOW);
+            if pos < 0 { break sg_14_0; }
+            if pos > sg_14_best { sg_14_best = pos; }
         }
+    } else if sgk_14 == TK_LPAREN {
+        pos = gp_14;
+        sg_14_1: {
+            pos = scan_block(tokens, pos, &EMPTY_FOLLOW);
+            if pos < 0 { break sg_14_1; }
+            if pos > sg_14_best { sg_14_best = pos; }
+        }
+    }
+    if sg_14_best >= 0 {
+        pos = sg_14_best;
+    } else {
+        pos = gp_14;
     }
     return pos;
 }
@@ -5893,7 +5904,7 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_17(alt_kind) {
+        if _kind_set_14(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_terminal_def(tokens, pos, follow);
@@ -6060,7 +6071,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _kind_set_18(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_15(tokens[pos]) {
         let sp = pos;
         sg_16_done: {
             sg_16: {
@@ -6203,28 +6214,33 @@ fn scan_element_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
                 pos += 1;
                 let gp_18 = pos;
                 let sgk_18 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_19(sgk_18) {
-                    sg_18: {
-                        pos = gp_18;
-                        sg_18_0: {
-                            pos = scan_qualified_identifier(tokens, pos, follow);
-                            if pos < 0 { break sg_18_0; }
-                            break sg_18;
-                        }
-                        pos = gp_18;
-                        sg_18_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_18_1; }
-                            pos += 1;
-                            break sg_18;
-                        }
-                        pos = gp_18;
-                        sg_18_2: {
-                            if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_18_2; }
-                            pos += 1;
-                            break sg_18;
-                        }
-                        pos = gp_18;
+                let mut sg_18_best = -1;
+                if _kind_set_1(sgk_18) {
+                    pos = gp_18;
+                    sg_18_0: {
+                        pos = scan_qualified_identifier(tokens, pos, follow);
+                        if pos < 0 { break sg_18_0; }
+                        if pos > sg_18_best { sg_18_best = pos; }
                     }
+                } else if sgk_18 == TK_STRING_LITERAL {
+                    pos = gp_18;
+                    sg_18_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_18_1; }
+                        pos += 1;
+                        if pos > sg_18_best { sg_18_best = pos; }
+                    }
+                } else if sgk_18 == TK_INT {
+                    pos = gp_18;
+                    sg_18_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_18_2; }
+                        pos += 1;
+                        if pos > sg_18_best { sg_18_best = pos; }
+                    }
+                }
+                if sg_18_best >= 0 {
+                    pos = sg_18_best;
+                } else {
+                    pos = gp_18;
                 }
                 if pos > best { best = pos; }
             }
@@ -7000,7 +7016,7 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             }
         } else if kind == TK_TOKEN_REF {
             return _parse_rule_spec__inner_alt_1(p, follow);
-        } else if _kind_set_20(kind) {
+        } else if _kind_set_16(kind) {
             return _parse_rule_spec__inner_alt_0(p, follow);
         }
     }
@@ -7747,8 +7763,8 @@ fn _parse_lexer_command__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &Li
 
 fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
-    if _kind_set_21(kind) {
-        if _kind_set_21(kind) {
+    if _kind_set_17(kind) {
+        if _kind_set_17(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = _parse_lexer_command__inner_scan_1(_sd_tokens, _sd_pos, follow);
@@ -8007,7 +8023,7 @@ fn _parse_element__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 
 fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
-    if _kind_set_14(kind) {
+    if _kind_set_13(kind) {
         if _kind_set_1(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -8027,7 +8043,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
                 return _parse_element__inner_alt_0(p, follow);
             }
             return _parse_element__inner_alt_1(p, follow);
-        } else if _kind_set_22(kind) {
+        } else if _kind_set_18(kind) {
             return _parse_element__inner_alt_1(p, follow);
         }
     }
@@ -8141,28 +8157,33 @@ fn _parse_predicate_option__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: 
     pos += 1;
     let gp_30 = pos;
     let sgk_30 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_13(sgk_30) {
-        sg_30: {
-            pos = gp_30;
-            sg_30_0: {
-                pos = scan_action_block(tokens, pos, follow);
-                if pos < 0 { break sg_30_0; }
-                break sg_30;
-            }
-            pos = gp_30;
-            sg_30_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_30_1; }
-                pos += 1;
-                break sg_30;
-            }
-            pos = gp_30;
-            sg_30_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_30_2; }
-                pos += 1;
-                break sg_30;
-            }
-            pos = gp_30;
+    let mut sg_30_best = -1;
+    if sgk_30 == TK_ACTION {
+        pos = gp_30;
+        sg_30_0: {
+            pos = scan_action_block(tokens, pos, follow);
+            if pos < 0 { break sg_30_0; }
+            if pos > sg_30_best { sg_30_best = pos; }
         }
+    } else if sgk_30 == TK_INT {
+        pos = gp_30;
+        sg_30_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_30_1; }
+            pos += 1;
+            if pos > sg_30_best { sg_30_best = pos; }
+        }
+    } else if sgk_30 == TK_STRING_LITERAL {
+        pos = gp_30;
+        sg_30_2: {
+            if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_30_2; }
+            pos += 1;
+            if pos > sg_30_best { sg_30_best = pos; }
+        }
+    }
+    if sg_30_best >= 0 {
+        pos = sg_30_best;
+    } else {
+        pos = gp_30;
     }
     return pos;
 }
@@ -8214,7 +8235,7 @@ fn _parse_labeled_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     _parse_identifier(p, &FOLLOW_MASK_8);
     p.expect_set(&SYNC_28);
     let grp_kind = p.peek_kind();
-    if _kind_set_14(grp_kind) {
+    if _kind_set_13(grp_kind) {
         _parse_atom(p, &EMPTY_FOLLOW);
     } else if grp_kind == TK_LPAREN {
         _parse_block(p, &EMPTY_FOLLOW);
@@ -8338,7 +8359,7 @@ fn _parse_lexer_atom__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<
 
 fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
-    if _kind_set_17(kind) {
+    if _kind_set_14(kind) {
         if kind == TK_STRING_LITERAL {
             if p.peek_at(1) == TK_RANGE {
                 return _parse_lexer_atom__inner_alt_0(p, follow);
@@ -8403,7 +8424,7 @@ fn _parse_lexer_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
-    if _kind_set_17(kind) {
+    if _kind_set_14(kind) {
         _parse_terminal_def(p, follow);
         return;
     }
@@ -8473,7 +8494,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     let kind = p.peek_kind();
     if kind == TK_NOT {
         p.pos += 1;
-        if _kind_set_23(p.peek_kind()) {
+        if _kind_set_19(p.peek_kind()) {
             p.pos -= 1;
             return _parse_not_set__inner_alt_0(p, follow);
         } else if p.peek_kind() == TK_LPAREN {
@@ -8850,28 +8871,33 @@ fn _parse_element_option__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &L
     pos += 1;
     let gp_33 = pos;
     let sgk_33 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_19(sgk_33) {
-        sg_33: {
-            pos = gp_33;
-            sg_33_0: {
-                pos = scan_qualified_identifier(tokens, pos, follow);
-                if pos < 0 { break sg_33_0; }
-                break sg_33;
-            }
-            pos = gp_33;
-            sg_33_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_33_1; }
-                pos += 1;
-                break sg_33;
-            }
-            pos = gp_33;
-            sg_33_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_33_2; }
-                pos += 1;
-                break sg_33;
-            }
-            pos = gp_33;
+    let mut sg_33_best = -1;
+    if _kind_set_1(sgk_33) {
+        pos = gp_33;
+        sg_33_0: {
+            pos = scan_qualified_identifier(tokens, pos, follow);
+            if pos < 0 { break sg_33_0; }
+            if pos > sg_33_best { sg_33_best = pos; }
         }
+    } else if sgk_33 == TK_STRING_LITERAL {
+        pos = gp_33;
+        sg_33_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_33_1; }
+            pos += 1;
+            if pos > sg_33_best { sg_33_best = pos; }
+        }
+    } else if sgk_33 == TK_INT {
+        pos = gp_33;
+        sg_33_2: {
+            if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_33_2; }
+            pos += 1;
+            if pos > sg_33_best { sg_33_best = pos; }
+        }
+    }
+    if sg_33_best >= 0 {
+        pos = sg_33_best;
+    } else {
+        pos = gp_33;
     }
     return pos;
 }
@@ -9350,46 +9376,30 @@ fn _kind_set_12(k: i32) -> bool {
 }
 
 fn _kind_set_13(k: i32) -> bool {
-    return k matches { TK_ACTION | TK_INT | TK_STRING_LITERAL };
-}
-
-fn _kind_set_14(k: i32) -> bool {
     return k matches { TK_DOT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_15(k: i32) -> bool {
-    return k matches { TK_ASSIGN | TK_PLUS_ASSIGN };
-}
-
-fn _kind_set_16(k: i32) -> bool {
-    return k matches { TK_DOT | TK_LPAREN | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
-}
-
-fn _kind_set_17(k: i32) -> bool {
+fn _kind_set_14(k: i32) -> bool {
     return k matches { TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_18(k: i32) -> bool {
+fn _kind_set_15(k: i32) -> bool {
     return k matches { TK_AT | TK_COLON | TK_OPTIONS };
 }
 
-fn _kind_set_19(k: i32) -> bool {
-    return k matches { TK_INT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
-}
-
-fn _kind_set_20(k: i32) -> bool {
+fn _kind_set_16(k: i32) -> bool {
     return k matches { TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF };
 }
 
-fn _kind_set_21(k: i32) -> bool {
+fn _kind_set_17(k: i32) -> bool {
     return k matches { TK_MODE | TK_RULE_REF | TK_TOKEN_REF };
 }
 
-fn _kind_set_22(k: i32) -> bool {
+fn _kind_set_18(k: i32) -> bool {
     return k matches { TK_DOT | TK_NOT | TK_STRING_LITERAL };
 }
 
-fn _kind_set_23(k: i32) -> bool {
+fn _kind_set_19(k: i32) -> bool {
     return k matches { TK_LEXER_CHAR_SET | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 

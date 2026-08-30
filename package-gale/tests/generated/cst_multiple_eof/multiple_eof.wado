@@ -1405,26 +1405,27 @@ fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    let mut sg_0_best = -1;
     if sgk_0 == TK_LIT_X {
-        let mut sg_0_best = -1;
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break sg_0_0; }
-                pos += 1;
-                if pos > sg_0_best { sg_0_best = pos; }
-            }
-            pos = gp_0;
-            sg_0_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break sg_0_1; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_Y { break sg_0_1; }
-                pos += 1;
-                if pos > sg_0_best { sg_0_best = pos; }
-            }
-            if sg_0_best >= 0 { pos = sg_0_best; break sg_0; }
-            pos = gp_0;
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break sg_0_0; }
+            pos += 1;
+            if pos > sg_0_best { sg_0_best = pos; }
         }
+        pos = gp_0;
+        sg_0_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break sg_0_1; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_Y { break sg_0_1; }
+            pos += 1;
+            if pos > sg_0_best { sg_0_best = pos; }
+        }
+    }
+    if sg_0_best >= 0 {
+        pos = sg_0_best;
+    } else {
+        pos = gp_0;
     }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;

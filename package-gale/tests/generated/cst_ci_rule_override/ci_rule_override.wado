@@ -1484,28 +1484,31 @@ fn scan_line(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(sgk_0) {
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_KEYWORD { break sg_0_0; }
-                pos += 1;
-                break sg_0;
-            }
-            pos = gp_0;
-            sg_0_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_0_1; }
-                pos += 1;
-                break sg_0;
-            }
-            pos = gp_0;
-            sg_0_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_EXACT { break sg_0_2; }
-                pos += 1;
-                break sg_0;
-            }
-            return -1;
+    let mut sg_0_best = -1;
+    if sgk_0 == TK_KEYWORD {
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_KEYWORD { break sg_0_0; }
+            pos += 1;
+            if pos > sg_0_best { sg_0_best = pos; }
         }
+    } else if sgk_0 == TK_IDENT {
+        pos = gp_0;
+        sg_0_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_0_1; }
+            pos += 1;
+            if pos > sg_0_best { sg_0_best = pos; }
+        }
+    } else if sgk_0 == TK_EXACT {
+        pos = gp_0;
+        sg_0_2: {
+            if pos >= tokens.len() || tokens[pos] != TK_EXACT { break sg_0_2; }
+            pos += 1;
+            if pos > sg_0_best { sg_0_best = pos; }
+        }
+    }
+    if sg_0_best >= 0 {
+        pos = sg_0_best;
     } else {
         return -1;
     }
@@ -1513,28 +1516,31 @@ fn scan_line(tokens: &Array<i32>, pos: i32) -> i32 {
         let sp = pos;
         let gp_1 = pos;
         let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_0(sgk_1) {
-            sg_1: {
-                pos = gp_1;
-                sg_1_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_KEYWORD { break sg_1_0; }
-                    pos += 1;
-                    break sg_1;
-                }
-                pos = gp_1;
-                sg_1_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_1_1; }
-                    pos += 1;
-                    break sg_1;
-                }
-                pos = gp_1;
-                sg_1_2: {
-                    if pos >= tokens.len() || tokens[pos] != TK_EXACT { break sg_1_2; }
-                    pos += 1;
-                    break sg_1;
-                }
-                pos = -1;
+        let mut sg_1_best = -1;
+        if sgk_1 == TK_KEYWORD {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_KEYWORD { break sg_1_0; }
+                pos += 1;
+                if pos > sg_1_best { sg_1_best = pos; }
             }
+        } else if sgk_1 == TK_IDENT {
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_1_1; }
+                pos += 1;
+                if pos > sg_1_best { sg_1_best = pos; }
+            }
+        } else if sgk_1 == TK_EXACT {
+            pos = gp_1;
+            sg_1_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_EXACT { break sg_1_2; }
+                pos += 1;
+                if pos > sg_1_best { sg_1_best = pos; }
+            }
+        }
+        if sg_1_best >= 0 {
+            pos = sg_1_best;
         } else {
             pos = -1;
         }
@@ -1557,28 +1563,31 @@ fn _parse_line__inner(p: &mut Parser) -> () {
                 let mut pos: i32 = p.pos;
                 let gp_2 = pos;
                 let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(sgk_2) {
-                    sg_2: {
-                        pos = gp_2;
-                        sg_2_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_KEYWORD { break sg_2_0; }
-                            pos += 1;
-                            break sg_2;
-                        }
-                        pos = gp_2;
-                        sg_2_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_2_1; }
-                            pos += 1;
-                            break sg_2;
-                        }
-                        pos = gp_2;
-                        sg_2_2: {
-                            if pos >= tokens.len() || tokens[pos] != TK_EXACT { break sg_2_2; }
-                            pos += 1;
-                            break sg_2;
-                        }
-                        break rep_scan;
+                let mut sg_2_best = -1;
+                if sgk_2 == TK_KEYWORD {
+                    pos = gp_2;
+                    sg_2_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_KEYWORD { break sg_2_0; }
+                        pos += 1;
+                        if pos > sg_2_best { sg_2_best = pos; }
                     }
+                } else if sgk_2 == TK_IDENT {
+                    pos = gp_2;
+                    sg_2_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_2_1; }
+                        pos += 1;
+                        if pos > sg_2_best { sg_2_best = pos; }
+                    }
+                } else if sgk_2 == TK_EXACT {
+                    pos = gp_2;
+                    sg_2_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_EXACT { break sg_2_2; }
+                        pos += 1;
+                        if pos > sg_2_best { sg_2_best = pos; }
+                    }
+                }
+                if sg_2_best >= 0 {
+                    pos = sg_2_best;
                 } else {
                     break rep_scan;
                 }

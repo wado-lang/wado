@@ -64,23 +64,36 @@ pub fn compute_overlap_groups_with_wildcard(
     alts: &List<Alternative>,
     first_sets: &List<List<String>>,
 ) -> List<List<i32>> {
-    let n = alts.len();
-    let mut is_wild: List<bool> = [];
-    let mut any_wild = false;
-    for let alt of alts {
-        let w = alt_is_wildcard_led(alt);
-        is_wild.push(w);
-        if w {
-            any_wild = true;
+    let mut wildcard_indices: List<i32> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if alt_is_wildcard_led(&alts[i]) {
+            wildcard_indices.push(i);
         }
     }
-    let mut groups = compute_overlap_groups(first_sets);
-    if !any_wild {
+    return compute_overlap_groups_with_wildcard_indices(first_sets, &wildcard_indices);
+}
+
+/// True when `alt_index` is one of the wildcard-led alternatives.
+pub fn is_wildcard_alt(indices: &List<i32>, alt_index: i32) -> bool {
+    return indices.iter_ref().any(|idx| *idx == alt_index);
+}
+
+/// The same merge over wildcard alternatives already identified — what the
+/// scan side has, where lower bakes the indices rather than the surface
+/// alternatives. The surface form delegates here, so both sides partition a
+/// group the same way.
+pub fn compute_overlap_groups_with_wildcard_indices(
+    first_sets: &List<List<String>>,
+    wildcard_indices: &List<i32>,
+) -> List<List<i32>> {
+    let n = first_sets.len();
+    let groups = compute_overlap_groups(first_sets);
+    if wildcard_indices.is_empty() {
         return groups;
     }
     let mut merge_set: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
-        if is_wild[i] || !first_sets[i].is_empty() {
+        if is_wildcard_alt(wildcard_indices, i) || !first_sets[i].is_empty() {
             merge_set.push(i);
         }
     }

@@ -44,7 +44,13 @@ use {
     RepeatKind,
     GroupElement,
 } from "./ir.wado";
-use { alt_is_wildcard_led, compute_overlap_groups, sort_group_by_element_count } from "./alt_grouping.wado";
+use {
+    alt_is_wildcard_led,
+    compute_overlap_groups,
+    compute_overlap_groups_with_wildcard_indices,
+    is_wildcard_alt,
+    sort_group_by_element_count,
+} from "./alt_grouping.wado";
 use {
     rule_type_name,
     literal_const_name,
@@ -415,23 +421,16 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             walk_scan_element_for_kind_sets(&r.body, ctx);
         },
         Group(g) => {
-            walk_dispatch_for_kind_sets(&g.dispatch, ctx);
-            // Per-alt first sets feed the ambiguity check inside
-            // `gen_scan_op_group` (which calls `kind_check_str` on
-            // each `alt_first_sets[i]` indirectly via the lenient gate).
-            for let fs of &g.alt_first_sets {
-                if fs.len() >= 2 {
-                    ctx.intern_kind_set(fs);
+            // The branch lookaheads `gen_scan_op_group` tests, over the same
+            // partition it takes. A branch holding a wildcard alternative
+            // tests nothing, so it interns nothing.
+            for let group of &compute_overlap_groups_with_wildcard_indices(&g.alt_first_sets, &g.wildcard_alt_indices) {
+                if group.iter_ref().any(|idx: &i32| is_wildcard_alt(&g.wildcard_alt_indices, *idx)) {
+                    continue;
                 }
-            }
-            // Intern the first-set gate union `gen_scan_op_group` checks before
-            // the dispatch. A lenient group always interned it; a strict group
-            // now needs it too, but only when no wildcard alt suppresses the
-            // gate — so non-cyclic grammars keep their exact prior intern set.
-            if g.lenient || g.wildcard_alt_indices.is_empty() {
                 let mut union_first: List<String> = [];
-                for let fs of &g.alt_first_sets {
-                    for let tk of fs {
+                for let idx of &group {
+                    for let tk of &g.alt_first_sets[*idx] {
                         if !first_contains(&union_first, tk) {
                             union_first.push(*tk);
                         }
@@ -574,7 +573,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
     }
 
     let owner = DiagnosticOwner::rule_dispatch(&rule.name);
-    let dispatch = build_overlap_dispatch(&owner, false, &rule.alternatives, &all_indices, &first_sets, ctx);
+    let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, &all_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -1359,7 +1358,7 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     }
 
     let owner = DiagnosticOwner { rule: rule.name, site: DiagnosticSite::LrAtomDispatch };
-    let dispatch = build_overlap_dispatch(&owner, false, &rule.alternatives, non_lr_indices, &first_sets, ctx);
+    let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, non_lr_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -1679,22 +1678,19 @@ fn any_wildcard_alt(alts: &List<Alternative>, indices: &List<i32>) -> bool {
 /// longest match. ANTLR4's longest-match LL choice, no backtracking.
 ///
 /// `owner` identifies the decision site: it names the owner in the panic
-/// message for unscannable alts and keys the advisory diagnostic. `is_scan`
-/// marks the scan-side pass, which mirrors a parse-side decision and so
-/// reports nothing. `alts` is the underlying surface alternative list;
-/// `indices` selects which alts participate in this dispatch.
+/// message for unscannable alts and keys the advisory diagnostic. `alts` is
+/// the underlying surface alternative list; `indices` selects which alts
+/// participate in this dispatch.
 fn build_overlap_dispatch(
     owner: &DiagnosticOwner,
-    is_scan: bool,
     alts: &List<Alternative>,
     indices: &List<i32>,
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> MultiAltDispatch {
-    let pass = if is_scan { " (scan)" } else { "" };
     let n_sets = first_sets.len();
     let n_indices = indices.len();
-    assert n_sets == n_indices, `${owner.label()}${pass}: first_sets is parallel to indices, not to alts (${n_sets} vs ${n_indices})`;
+    assert n_sets == n_indices, `${owner.label()}: first_sets is parallel to indices, not to alts (${n_sets} vs ${n_indices})`;
 
     // An open-ended alt's static first set is empty, so `any_overlap` reads it
     // as disjoint and the Direct chain would give it an unreachable
@@ -1713,26 +1709,22 @@ fn build_overlap_dispatch(
 
     for let idx of indices {
         let mut visiting: List<String> = [];
-        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `${owner.label()}${pass}: alt ${*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
+        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `${owner.label()}: alt ${*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
     }
 
-    // Surface the overlap as an advisory diagnostic. The scan pass mirrors a
-    // decision the parse pass already reported against the same owner, so it
-    // stays silent rather than relying on `warn`'s dedup.
-    if !is_scan {
-        let shared = shared_overlap_tokens(first_sets);
-        // Reporting the shared set for an open-ended alt would read as `{}`.
-        let cause = if shared.is_empty() {
-            "an open-ended alternative (`.` / `~X`) overlaps every lookahead";
-        } else {
-            `share lookahead ${join_kind_set(&shared)}`;
-        };
-        ctx.warn(
-            owner,
-            DiagnosticKind::OverlapTournament,
-            `alts ${join_kind_list(indices)} ${cause}; resolved by longest-match scan tournament, not a token-led branch`,
-        );
-    }
+    // Surface the overlap as an advisory diagnostic.
+    let shared = shared_overlap_tokens(first_sets);
+    // Reporting the shared set for an open-ended alt would read as `{}`.
+    let cause = if shared.is_empty() {
+        "an open-ended alternative (`.` / `~X`) overlaps every lookahead";
+    } else {
+        `share lookahead ${join_kind_set(&shared)}`;
+    };
+    ctx.warn(
+        owner,
+        DiagnosticKind::OverlapTournament,
+        `alts ${join_kind_list(indices)} ${cause}; resolved by longest-match scan tournament, not a token-led branch`,
+    );
 
     let mut sorted: List<i32> = [];
     for let idx of indices {
@@ -1960,7 +1952,6 @@ fn lower_scan_group(
                 alts: [
                     ScanBody { elements },
                 ],
-                dispatch: empty_direct_dispatch(),
                 lenient: false,
                 alt_first_sets: [alt_first],
                 wildcard_alt_indices: wildcard_indices,
@@ -1978,7 +1969,6 @@ fn lower_scan_group(
             }
             return ScanElement::Group(ScanGroupElement {
                 alts: bodies,
-                dispatch: build_direct_dispatch(&first_sets),
                 lenient: false,
                 alt_first_sets: first_sets,
                 wildcard_alt_indices: [] as List<i32>,
@@ -2001,7 +1991,6 @@ fn lower_general_scan_group(
 ) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     let mut first_sets: List<List<String>> = [];
-    let mut all_indices: List<i32> = [];
     for let mut ai = 0; ai < alts.len(); ai += 1 {
         let alt = &alts[ai];
         let mut elements: List<ScanElement> = [];
@@ -2017,13 +2006,7 @@ fn lower_general_scan_group(
         bodies.push(ScanBody { elements });
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-        all_indices.push(ai);
     }
-    let owner = DiagnosticOwner {
-        rule: ctx.current_rule_name(),
-        site: DiagnosticSite::GeneralGroup(-1),
-    };
-    let dispatch = build_overlap_dispatch(&owner, true, alts, &all_indices, &first_sets, ctx);
     let mut wildcard_indices: List<i32> = [];
     for let mut ai = 0; ai < alts.len(); ai += 1 {
         if alt_is_wildcard_led(&alts[ai]) {
@@ -2032,7 +2015,6 @@ fn lower_general_scan_group(
     }
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
-        dispatch: dispatch,
         lenient: scan_group_lenient(alts, ctx),
         alt_first_sets: first_sets,
         wildcard_alt_indices: wildcard_indices,
@@ -3145,7 +3127,7 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         rule: ctx.current_rule_name(),
         site: DiagnosticSite::SimpleCstGroup,
     };
-    let dispatch = build_overlap_dispatch(&owner, false, alts, &all_indices, &first_sets, ctx);
+    let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::SimpleCst(SimpleCstShape {
             type_name: type_name,
@@ -3167,7 +3149,6 @@ global SIMPLE_CST_NO_FOLLOW: List<String> = [];
 fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     let mut first_sets: List<List<String>> = [];
-    let mut all_indices: List<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
         let elem = &alt.elements[0];
@@ -3184,16 +3165,9 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -
         });
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-        all_indices.push(i);
     }
-    let owner = DiagnosticOwner {
-        rule: ctx.current_rule_name(),
-        site: DiagnosticSite::SimpleCstGroup,
-    };
-    let dispatch = build_overlap_dispatch(&owner, true, alts, &all_indices, &first_sets, ctx);
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
-        dispatch: dispatch,
         lenient: scan_group_lenient(alts, ctx),
         alt_first_sets: first_sets,
         wildcard_alt_indices: [] as List<i32>,
@@ -3338,7 +3312,7 @@ fn lower_general_group(
         rule: *rule_name,
         site: DiagnosticSite::GeneralGroup(group_index),
     };
-    let dispatch = build_overlap_dispatch(&owner, false, alts, &all_indices, &first_sets, ctx);
+    let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {
             variant_type: variant_type,

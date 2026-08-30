@@ -1531,39 +1531,40 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     pos += 1;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    let mut sg_0_best = -1;
     if sgk_0 == TK_ID {
-        let mut sg_0_best = -1;
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                pos = scan_item(tokens, pos, follow);
-                if pos < 0 { break sg_0_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                    let sp = pos;
-                    sg_1_done: {
-                        sg_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
-                            pos += 1;
-                            pos = scan_item(tokens, pos, follow);
-                            if pos < 0 { break sg_1; }
-                            break sg_1_done;
-                        }
-                        pos = -1;
+        pos = gp_0;
+        sg_0_0: {
+            pos = scan_item(tokens, pos, follow);
+            if pos < 0 { break sg_0_0; }
+            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+                let sp = pos;
+                sg_1_done: {
+                    sg_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
+                        pos += 1;
+                        pos = scan_item(tokens, pos, follow);
+                        if pos < 0 { break sg_1; }
+                        break sg_1_done;
                     }
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
+                    pos = -1;
                 }
-                if pos > sg_0_best { sg_0_best = pos; }
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
             }
-            pos = gp_0;
-            sg_0_1: {
-                pos = scan_pair(tokens, pos, follow);
-                if pos < 0 { break sg_0_1; }
-                if pos > sg_0_best { sg_0_best = pos; }
-            }
-            if sg_0_best >= 0 { pos = sg_0_best; break sg_0; }
-            pos = gp_0;
+            if pos > sg_0_best { sg_0_best = pos; }
         }
+        pos = gp_0;
+        sg_0_1: {
+            pos = scan_pair(tokens, pos, follow);
+            if pos < 0 { break sg_0_1; }
+            if pos > sg_0_best { sg_0_best = pos; }
+        }
+    }
+    if sg_0_best >= 0 {
+        pos = sg_0_best;
+    } else {
+        pos = gp_0;
     }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
