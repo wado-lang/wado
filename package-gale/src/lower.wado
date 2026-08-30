@@ -3270,19 +3270,29 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
 }
 
-/// An empty alternative the lookahead selects. One carrying a gateable
-/// alt-initial predicate is selected by that predicate instead, so it keeps the
-/// unconditional branch the gate hangs on rather than a follow-set test. The
-/// gate is what `alt_has_gate` already answers — asking "does it carry any
-/// action" instead also catches a plain `{x();}`, which gates nothing and
-/// still needs its follow set.
-fn alt_is_bare_empty(alt: &Alternative, ctx: &GenContext) -> bool {
-    // The gate has to be one emit will render: with actions retained but not
-    // emitted `alt_gate_and_suffix` produces nothing, and an alternative held
-    // back from its follow set here would then be the dispatch's unconditional
-    // `else`, swallowing a lookahead the group cannot match.
-    let gated = ctx.emit_actions() && alt_has_gate(alt, ctx);
-    return alt.elements.is_empty() && !gated;
+/// An alternative deriving only the empty string, which the lookahead selects
+/// by what follows the group. Written empty is one spelling and reaching a
+/// rule that is, is another — counting elements sees only the first, and
+/// `( A | x | B )` with `x : ;` then lost the branch and the report that
+/// `( A | | B )` gets.
+///
+/// One carrying a gateable alt-initial predicate is selected by that predicate
+/// instead, so it keeps the unconditional branch the gate hangs on. The gate
+/// has to be one emit will render: with actions retained but not emitted
+/// `alt_gate_and_suffix` produces nothing, and an alternative held back from
+/// its follow set here would then be the dispatch's unconditional `else`,
+/// swallowing a lookahead the group cannot match.
+fn alt_is_bare_empty(alt: &Alternative, ctx: &mut GenContext) -> bool {
+    if ctx.emit_actions() && alt_has_gate(alt, ctx) {
+        return false;
+    }
+    for let elem of &alt.elements {
+        let mut visiting: List<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// The admit set of a group's empty alternative, or `null` where there is
@@ -3295,7 +3305,7 @@ pub fn group_empty_alt_admits(
     alts: &List<Alternative>,
     outer_follow: &List<String>,
     follow_is_exact: bool,
-    ctx: &GenContext,
+    ctx: &mut GenContext,
 ) -> Option<EmptyAltAdmits> {
     // A follow set the caller's FOLLOW still extends names only part of what
     // may select the empty alternative. Writing that part in as the whole set

@@ -33529,7 +33529,8 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut gd_winner_2: i32 = -1;
             let mut gd_best_2: i32 = -1;
-            if p.peek_kind() == TK_Hash {
+            let gd_kind = p.peek_kind();
+            if gd_kind == TK_Hash {
                 gd_winner_2 = 0;
                 gd_scan_3: {
                     let tokens = &p.kinds;
@@ -33538,7 +33539,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                     pos += 1;
                     gd_best_2 = pos;
                 }
-            } else if p.peek_kind() == TK_Dot {
+            } else if gd_kind == TK_Dot {
                 gd_winner_2 = 1;
                 gd_scan_4: {
                     let tokens = &p.kinds;
@@ -33547,7 +33548,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                     if pos < 0 { break gd_scan_4; }
                     gd_best_2 = pos;
                 }
-            } else if p.peek_kind() == TK_OpenBracket {
+            } else if gd_kind == TK_OpenBracket {
                 gd_winner_2 = 2;
                 gd_scan_5: {
                     let tokens = &p.kinds;
@@ -33556,7 +33557,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                     if pos < 0 { break gd_scan_5; }
                     gd_best_2 = pos;
                 }
-            } else if p.peek_kind() == TK_Colon {
+            } else if gd_kind == TK_Colon {
                 gd_winner_2 = 3;
                 gd_scan_6: {
                     let tokens = &p.kinds;
@@ -33565,7 +33566,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                     if pos < 0 { break gd_scan_6; }
                     gd_best_2 = pos;
                 }
-            } else if p.peek_kind() == TK_PseudoNot {
+            } else if gd_kind == TK_PseudoNot {
                 gd_winner_2 = 4;
                 gd_scan_7: {
                     let tokens = &p.kinds;
@@ -33599,7 +33600,8 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             }
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            if p.peek_kind() == TK_Hash {
+            let gd_kind = p.peek_kind();
+            if gd_kind == TK_Hash {
                 gd_winner = 0;
                 gd_scan: {
                     let tokens = &p.kinds;
@@ -33608,7 +33610,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                     pos += 1;
                     gd_best = pos;
                 }
-            } else if p.peek_kind() == TK_Dot {
+            } else if gd_kind == TK_Dot {
                 gd_winner = 1;
                 gd_scan_2: {
                     let tokens = &p.kinds;
@@ -33617,7 +33619,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                     if pos < 0 { break gd_scan_2; }
                     gd_best = pos;
                 }
-            } else if p.peek_kind() == TK_OpenBracket {
+            } else if gd_kind == TK_OpenBracket {
                 gd_winner = 2;
                 gd_scan_3: {
                     let tokens = &p.kinds;
@@ -33626,7 +33628,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                     if pos < 0 { break gd_scan_3; }
                     gd_best = pos;
                 }
-            } else if p.peek_kind() == TK_Colon {
+            } else if gd_kind == TK_Colon {
                 gd_winner = 3;
                 gd_scan_4: {
                     let tokens = &p.kinds;
@@ -33635,7 +33637,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                     if pos < 0 { break gd_scan_4; }
                     gd_best = pos;
                 }
-            } else if p.peek_kind() == TK_PseudoNot {
+            } else if gd_kind == TK_PseudoNot {
                 gd_winner = 4;
                 gd_scan_5: {
                     let tokens = &p.kinds;
@@ -33719,7 +33721,8 @@ fn _parse_type_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
-    if _kind_set_3(p.peek_kind()) {
+    let gd_kind = p.peek_kind();
+    if _kind_set_3(gd_kind) {
         gd_winner = 0;
         gd_scan: {
             let tokens = &p.kinds;
@@ -33728,7 +33731,7 @@ fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> 
             if pos < 0 { break gd_scan; }
             gd_best = pos;
         }
-    } else if p.peek_kind() == TK_Multiply {
+    } else if gd_kind == TK_Multiply {
         gd_winner = 1;
         gd_scan_2: {
             let tokens = &p.kinds;
@@ -34769,7 +34772,8 @@ fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        if _kind_set_17(p.peek_kind()) {
+        let gd_kind = p.peek_kind();
+        if _kind_set_17(gd_kind) {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -34778,7 +34782,7 @@ fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_OpenBrace {
+        } else if gd_kind == TK_OpenBrace {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -34787,7 +34791,7 @@ fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 if pos < 0 { break gd_scan_2; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_AtKeyword {
+        } else if gd_kind == TK_AtKeyword {
             gd_winner = 2;
             gd_scan_3: {
                 let tokens = &p.kinds;
@@ -35365,7 +35369,8 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             if p.recovering { break; }
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            if _kind_set_17(p.peek_kind()) {
+            let gd_kind = p.peek_kind();
+            if _kind_set_17(gd_kind) {
                 gd_winner = 0;
                 gd_scan: {
                     let tokens = &p.kinds;
@@ -35374,7 +35379,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     if pos < 0 { break gd_scan; }
                     gd_best = pos;
                 }
-            } else if _kind_set_22(p.peek_kind()) {
+            } else if _kind_set_22(gd_kind) {
                 gd_winner = 1;
                 gd_scan_2: {
                     let tokens = &p.kinds;
@@ -35402,7 +35407,8 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             if p.recovering { break; }
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            if _kind_set_17(p.peek_kind()) {
+            let gd_kind = p.peek_kind();
+            if _kind_set_17(gd_kind) {
                 gd_winner = 0;
                 gd_scan: {
                     let tokens = &p.kinds;
@@ -35411,7 +35417,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     if pos < 0 { break gd_scan; }
                     gd_best = pos;
                 }
-            } else if _kind_set_22(p.peek_kind()) {
+            } else if _kind_set_22(gd_kind) {
                 gd_winner = 1;
                 gd_scan_2: {
                     let tokens = &p.kinds;
@@ -35439,7 +35445,8 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             if p.recovering { break; }
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            if _kind_set_17(p.peek_kind()) {
+            let gd_kind = p.peek_kind();
+            if _kind_set_17(gd_kind) {
                 gd_winner = 0;
                 gd_scan: {
                     let tokens = &p.kinds;
@@ -35448,7 +35455,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     if pos < 0 { break gd_scan; }
                     gd_best = pos;
                 }
-            } else if _kind_set_22(p.peek_kind()) {
+            } else if _kind_set_22(gd_kind) {
                 gd_winner = 1;
                 gd_scan_2: {
                     let tokens = &p.kinds;
@@ -35595,7 +35602,8 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        if _kind_set_24(p.peek_kind()) {
+        let gd_kind = p.peek_kind();
+        if _kind_set_24(gd_kind) {
             gd_tourney: {
                 let mut gd_end: i32 = -1;
                 gd_scan: {
@@ -36212,7 +36220,8 @@ fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        if _kind_set_17(p.peek_kind()) {
+        let gd_kind = p.peek_kind();
+        if _kind_set_17(gd_kind) {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -36221,7 +36230,7 @@ fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if _kind_set_22(p.peek_kind()) {
+        } else if _kind_set_22(gd_kind) {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -36410,7 +36419,8 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        if p.peek_kind() == TK_Multiply {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_Multiply {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -36423,7 +36433,7 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_Divide {
+        } else if gd_kind == TK_Divide {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;

@@ -17521,7 +17521,8 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if p.peek_kind() == TK_LPAREN {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_LPAREN {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -17530,7 +17531,7 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_LCURLYBRACE {
+        } else if gd_kind == TK_LCURLYBRACE {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -17539,7 +17540,7 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 if pos < 0 { break gd_scan_2; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_EQ {
+        } else if gd_kind == TK_EQ {
             gd_winner = 2;
             gd_scan_3: {
                 let tokens = &p.kinds;
@@ -20738,7 +20739,8 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: &List<List<i32>> = &
     }
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
-    if _kind_set_34(p.peek_kind()) {
+    let gd_kind = p.peek_kind();
+    if _kind_set_34(gd_kind) {
         gd_winner = 0;
         gd_scan: {
             let tokens = &p.kinds;
@@ -20747,7 +20749,7 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: &List<List<i32>> = &
             if pos < 0 { break gd_scan; }
             gd_best = pos;
         }
-    } else if p.peek_kind() == TK_DOTDOT {
+    } else if gd_kind == TK_DOTDOT {
         gd_winner = 1;
         gd_scan_2: {
             let tokens = &p.kinds;
@@ -25683,7 +25685,8 @@ fn _parse_type_path_segment__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if p.peek_kind() == TK_LT {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_LT {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -25692,7 +25695,7 @@ fn _parse_type_path_segment__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_LPAREN {
+        } else if gd_kind == TK_LPAREN {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;

@@ -9339,7 +9339,8 @@ fn _parse_parse__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        if _kind_set_0(p.peek_kind()) {
+        let gd_kind = p.peek_kind();
+        if _kind_set_0(gd_kind) {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -9348,7 +9349,7 @@ fn _parse_parse__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_UNEXPECTED_CHAR {
+        } else if gd_kind == TK_UNEXPECTED_CHAR {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -9901,7 +9902,8 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if _kind_set_4(p.peek_kind()) {
+        let gd_kind = p.peek_kind();
+        if _kind_set_4(gd_kind) {
             gd_tourney: {
                 let mut gd_end: i32 = -1;
                 gd_scan: {
@@ -10386,7 +10388,8 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
     _parse_trigger_name(p, &EMPTY_FOLLOW);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
-    if p.peek_kind() == TK_K_BEFORE {
+    let gd_kind = p.peek_kind();
+    if gd_kind == TK_K_BEFORE {
         gd_winner = 0;
         gd_scan: {
             let tokens = &p.kinds;
@@ -10395,7 +10398,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
             pos += 1;
             gd_best = pos;
         }
-    } else if p.peek_kind() == TK_K_AFTER {
+    } else if gd_kind == TK_K_AFTER {
         gd_winner = 1;
         gd_scan_2: {
             let tokens = &p.kinds;
@@ -10404,7 +10407,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
             pos += 1;
             gd_best = pos;
         }
-    } else if p.peek_kind() == TK_K_INSTEAD {
+    } else if gd_kind == TK_K_INSTEAD {
         gd_winner = 2;
         gd_scan_3: {
             let tokens = &p.kinds;
@@ -11631,7 +11634,8 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if p.peek_kind() == TK_ASSIGN {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_ASSIGN {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -11642,7 +11646,7 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_OPEN_PAR {
+        } else if gd_kind == TK_OPEN_PAR {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -11686,7 +11690,8 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if _kind_set_4(p.peek_kind()) {
+        let gd_kind = p.peek_kind();
+        if _kind_set_4(gd_kind) {
             gd_tourney: {
                 let mut gd_end: i32 = -1;
                 gd_scan: {
@@ -12369,7 +12374,8 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.expect(TK_K_UPDATE, &SYNC_4);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
-    if p.peek_kind() == TK_K_OR {
+    let gd_kind = p.peek_kind();
+    if gd_kind == TK_K_OR {
         gd_tourney: {
             let mut gd_end: i32 = -1;
             gd_scan: {
@@ -12533,7 +12539,8 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
     p.expect(TK_K_UPDATE, &SYNC_4);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
-    if p.peek_kind() == TK_K_OR {
+    let gd_kind = p.peek_kind();
+    if gd_kind == TK_K_OR {
         gd_tourney: {
             let mut gd_end: i32 = -1;
             gd_scan: {
@@ -12972,7 +12979,8 @@ fn _parse_type_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if p.peek_kind() == TK_OPEN_PAR {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_OPEN_PAR {
             gd_tourney: {
                 let mut gd_end: i32 = -1;
                 gd_scan: {
@@ -13393,7 +13401,8 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.expect(TK_OPEN_PAR, &SYNC_63);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
-    if _kind_set_8(p.peek_kind()) {
+    let gd_kind = p.peek_kind();
+    if _kind_set_8(gd_kind) {
         gd_winner = 0;
         gd_scan: {
             let tokens = &p.kinds;
@@ -13420,7 +13429,7 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             }
             gd_best = pos;
         }
-    } else if p.peek_kind() == TK_STAR {
+    } else if gd_kind == TK_STAR {
         gd_winner = 1;
         gd_scan_2: {
             let tokens = &p.kinds;
@@ -14881,7 +14890,8 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-            if p.peek_kind() == TK_K_INITIALLY {
+            let gd_kind = p.peek_kind();
+            if gd_kind == TK_K_INITIALLY {
                 gd_tourney: {
                     let mut gd_end: i32 = -1;
                     gd_scan: {
@@ -14931,7 +14941,8 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-            if p.peek_kind() == TK_K_INITIALLY {
+            let gd_kind = p.peek_kind();
+            if gd_kind == TK_K_INITIALLY {
                 gd_tourney: {
                     let mut gd_end: i32 = -1;
                     gd_scan: {
@@ -15207,7 +15218,8 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: &List<List<i32>> =
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if p.peek_kind() == TK_K_INDEXED {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_K_INDEXED {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -15220,7 +15232,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: &List<List<i32>> =
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_K_NOT {
+        } else if gd_kind == TK_K_NOT {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -15874,7 +15886,8 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: &List<List<i32>
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if p.peek_kind() == TK_K_INDEXED {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_K_INDEXED {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -15887,7 +15900,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: &List<List<i32>
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_K_NOT {
+        } else if gd_kind == TK_K_NOT {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -16124,7 +16137,8 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        if p.peek_kind() == TK_K_LEFT {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_K_LEFT {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -16136,7 +16150,7 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_K_INNER {
+        } else if gd_kind == TK_K_INNER {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -16145,7 +16159,7 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 pos += 1;
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_K_CROSS {
+        } else if gd_kind == TK_K_CROSS {
             gd_winner = 2;
             gd_scan_3: {
                 let tokens = &p.kinds;
@@ -16193,7 +16207,8 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if p.peek_kind() == TK_K_ON {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_K_ON {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -16204,7 +16219,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_K_USING {
+        } else if gd_kind == TK_K_USING {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;

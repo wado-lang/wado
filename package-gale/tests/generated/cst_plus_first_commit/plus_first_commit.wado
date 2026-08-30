@@ -1648,7 +1648,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
             if p.recovering { break; }
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            if p.peek_kind() == TK_A {
+            let gd_kind = p.peek_kind();
+            if gd_kind == TK_A {
                 gd_winner = 0;
                 gd_scan: {
                     let tokens = &p.kinds;
@@ -1659,7 +1660,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                     if pos < 0 { break gd_scan; }
                     gd_best = pos;
                 }
-            } else if p.peek_kind() == TK_B {
+            } else if gd_kind == TK_B {
                 gd_winner = 1;
                 gd_scan_2: {
                     let tokens = &p.kinds;
@@ -1695,7 +1696,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
             if p.recovering { break; }
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            if p.peek_kind() == TK_A {
+            let gd_kind = p.peek_kind();
+            if gd_kind == TK_A {
                 gd_tourney: {
                     let mut gd_end: i32 = -1;
                     gd_scan: {

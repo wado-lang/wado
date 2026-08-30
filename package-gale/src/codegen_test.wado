@@ -1500,6 +1500,16 @@ B : 'b' ;
 C : 'c' ;
 ";
 
+// The epsilon alternative reached through a rule must earn the same follow-set
+// branch a written-empty one does.
+global INDIRECT_EPSILON_ADMITS_G4: String = "
+grammar T;
+s : 'k' ( A | x | B ) EOF ;
+x : ;
+A : 'a' ;
+B : 'b' ;
+";
+
 // `x` derives only epsilon, but through a rule reference — the mirror of an
 // open-ended alternative reached the same way.
 global INDIRECT_EPSILON_ALT_G4: String = "
@@ -1630,19 +1640,29 @@ test "a wildcard behind a nullable prefix still makes its alternative open-ended
     assert count_substr(&body, &"no_viable") == 0, `a token the wildcard matches must reach it: ${body}`;
 }
 
-test "an alternative that derives only epsilon through a rule is untestable" {
-    // The mirror of the open-ended case: `x` matches nothing, so no lookahead
-    // selects it and it belongs after the arm that one can. Reading the
-    // surface elements calls it non-empty and leaves it first, where the `A`
-    // arm behind it is dead.
+test "an epsilon alternative earns its follow set however it is spelled" {
+    // Lower decided which alternative gets the group's follow set by counting
+    // elements while everything else on this path asks nullability, so
+    // `( A | x | B )` lost the branch and the report that `( A | | B )` gets.
+    let mut g = parse(INDIRECT_EPSILON_ADMITS_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert count_substr(&body, &"grp_kind == TK_EOF") > 0, `the epsilon alternative must test the follow set: ${body}`;
+    assert count_substr(&body, &"no viable alternative") > 0, `a lookahead no alternative admits must report: ${body}`;
+}
+
+test "an alternative that derives only epsilon through a rule is selected by its follow" {
+    // `x` matches nothing, so what selects it is what follows the group — the
+    // same answer a written-empty alternative gets, and it earns it however it
+    // is spelled. Reading the surface elements called `x` non-empty, so it
+    // took neither the follow set nor the trailing arm and the `A` arm behind
+    // it was dead. ANTLR4 parses `b` as `(s x b)` and `a b` as `(s a b)`.
     let mut g = parse(INDIRECT_EPSILON_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
     assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
-    let a_arm = find_index(&body, &"grp_kind == TK_A");
-    let eps_arm = find_index(&body, &"_parse_x(p)");
-    assert a_arm >= 0, `the A alternative lost its test: ${body}`;
-    assert eps_arm > a_arm, `the epsilon alternative must trail the arm a lookahead can pick: ${body}`;
+    assert count_substr(&body, &"grp_kind == TK_A") > 0, `the A alternative lost its test: ${body}`;
+    assert count_substr(&body, &"grp_kind == TK_B") > 0, `the epsilon alternative must test the follow set: ${body}`;
 }
 
 test "the op walker keeps an alternative open-ended through a rule in place" {

@@ -1700,7 +1700,8 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        if p.peek_kind() == TK_LIT_S {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_LIT_S {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -1709,7 +1710,7 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 pos += 1;
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_X {
+        } else if gd_kind == TK_X {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
@@ -1718,7 +1719,7 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 pos += 1;
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_NL && (p.la(2) != TK_NL) {
+        } else if gd_kind == TK_NL && (p.la(2) != TK_NL) {
             gd_winner = 2;
             gd_scan_3: {
                 let tokens = &p.kinds;

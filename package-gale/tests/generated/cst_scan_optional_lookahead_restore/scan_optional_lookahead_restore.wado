@@ -1907,7 +1907,8 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
-        if p.peek_kind() == TK_LIT_IDX {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_LIT_IDX {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -1918,7 +1919,7 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_LIT_NO {
+        } else if gd_kind == TK_LIT_NO {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;

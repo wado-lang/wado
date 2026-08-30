@@ -5935,16 +5935,6 @@ fn gen_op_repeat_star_plus_storable(
 /// checkpoint/truncate (the speculation drives the real `TreeBuilder`, so the
 /// throwaway subtree is rolled back along with the cursor — only the recorded
 /// deep error survives).
-fn gen_rep_break(
-    w: &mut CodeWriter,
-    scan_pos: &String,
-    rep_op: &RepeatOp,
-    ctx: &mut GenContext,
-    loop_first: &List<String>,
-) {
-    gen_rep_break_with_recovery(w, scan_pos, rep_op, ctx, loop_first);
-}
-
 /// What a scan-guarded iteration clears before its body: the caller-FOLLOW
 /// yield gate, then either the body group's own decision or the plain scan
 /// guard. Returns the winning alternative the body's dispatch commits to, or
@@ -5975,7 +5965,7 @@ fn gen_rep_iteration_entry(
     }
     gen_caller_follow_gate(w, rep_op);
     let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-    gen_rep_break(w, &scan_pos, rep_op, ctx, loop_first);
+    gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, loop_first);
     if guarded_only {
         w.end();
     }
@@ -6327,10 +6317,12 @@ fn arms_fallback_last(admits_everything: &List<bool>) -> List<i32> {
     return out;
 }
 
-/// Branches that all admit everything are one branch, not a chain of arms only
-/// the first of which is reachable — a wildcard-led alternative and an empty
-/// one both do. Their alternatives share the branch and the scan lengths pick
-/// between them, which is what a branch holding several always meant.
+/// Branches the lookahead cannot decide are one branch, not a chain of arms
+/// only the first of which is reachable. Their alternatives share it and the
+/// scan lengths pick between them, which is what a branch holding several
+/// always meant. A wildcard's branch is not among them: it admits every token
+/// by decision, so it keeps its place and the partition has already merged
+/// every alternative into it.
 fn fallback_last(branches: &List<DecisionBranch>) -> List<DecisionBranch> {
     let mut out: List<DecisionBranch> = [];
     let mut fallback_alts: List<i32> = [];
@@ -6477,8 +6469,17 @@ fn gen_group_decide(
     if follow_gate {
         w.begin(&`if !(${CALLER_FOLLOW_YIELDS})`);
     }
+    // One read of the lookahead for the whole chain, where the chain tests it
+    // at all — inlining `p.peek_kind()` per arm reads the token once per test.
+    let kind_expr = if decision_reads_lookahead(branches) {
+        let var = dedup_name(&"gd_kind", name_counts);
+        w.line(&`let ${var} = p.peek_kind();`);
+        var;
+    } else {
+        "p.peek_kind()";
+    };
     for let mut i = 0; i < branches.len(); i += 1 {
-        open_decision_branch(w, branches, i, &"p.peek_kind()", ctx);
+        open_decision_branch(w, branches, i, &kind_expr, ctx);
         let alts = &branches[i].alts;
         if alts.len() == 1 {
             gen_decision_measure(w, alts[0], scan_alts, ctx, name_counts, &winner_var, &best_var);
@@ -6543,7 +6544,10 @@ fn open_decision_branch(
     if decision_is_unconditional(branches) {
         return;
     }
-    assert !is_decision_fallback(&branches[i]) || i == branches.len() - 1, "a branch admitting everything is the chain's last, or the ones after it are dead";
+    // Only an untestable branch: a wildcard's `Everything` admits every token
+    // by decision, and shadowing what follows it is the lowest-alternative
+    // rule, so it is allowed mid-chain.
+    assert !is_decision_fallback(&branches[i]) || i == branches.len() - 1, "a branch the lookahead cannot decide is the chain's last, or the ones after it are dead";
     // The trailing fallback is the `else` it means, not a test that always
     // passes: one spelling, so the chain reads the way the decision does.
     if i > 0 && is_decision_fallback(&branches[i]) {
@@ -6738,7 +6742,7 @@ fn group_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List
 /// What a branch admits. A wildcard-led alternative admits every token and
 /// says so exactly, which is why it keeps its place; a union that comes out
 /// empty is an alternative the lookahead cannot decide, which does not.
-/// `epsilon` is parallel to `first_sets`, not to the rule's alternatives. A
+/// `open_ended` is parallel to `first_sets`, not to the rule's alternatives. A
 /// group holds slots into whatever index space its partition was built in, and
 /// a left-recursive rule partitions only its non-LR alternatives — so reading
 /// the alternative list directly read a different alternative than the first

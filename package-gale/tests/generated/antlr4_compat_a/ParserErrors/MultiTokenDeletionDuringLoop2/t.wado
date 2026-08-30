@@ -1558,7 +1558,8 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        if p.peek_kind() == TK_LIT_B {
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_LIT_B {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -1567,7 +1568,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
                 pos += 1;
                 gd_best = pos;
             }
-        } else if p.peek_kind() == TK_LIT_Z {
+        } else if gd_kind == TK_LIT_Z {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;

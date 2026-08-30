@@ -143,24 +143,21 @@ pub fn compute_overlap_groups_with_wildcard_indices(
     wildcard_indices: &List<i32>,
 ) -> List<List<i32>> {
     let n = first_sets.len();
-    let groups = compute_overlap_groups(first_sets);
-    if wildcard_indices.is_empty() {
-        return groups;
-    }
     // One branch over every alternative. A wildcard admits every token, so no
     // lookahead test separates any alternative from it — including one whose
     // first set is empty because it matches nothing, which left out of the
     // merge became a branch of its own that the wildcard's unconditional one
     // shadowed. Inside, it is ranked as epsilon and wins where nothing longer
-    // scans (`( A | . | )` on no input).
-    if n < 2 {
-        return groups;
+    // scans (`( A | . | )` on no input). Nothing here reads the first-set
+    // partition, so it is not computed.
+    if !wildcard_indices.is_empty() && n >= 2 {
+        let mut merged: List<i32> = [];
+        for let mut i = 0; i < n; i += 1 {
+            merged.push(i);
+        }
+        return [merged];
     }
-    let mut merged: List<i32> = [];
-    for let mut i = 0; i < n; i += 1 {
-        merged.push(i);
-    }
-    return [merged];
+    return compute_overlap_groups(first_sets);
 }
 
 pub fn compute_overlap_groups(first_sets: &List<List<String>>) -> List<List<i32>> {
