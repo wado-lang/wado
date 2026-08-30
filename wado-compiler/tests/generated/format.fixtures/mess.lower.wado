@@ -3050,16 +3050,7 @@ fn __test_0() {
 }
 
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
-    let len: i32 = message."core:prelude/string.wado/String::len"();
-    if add_newline {
-        let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
-        "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len);
-        core::builtin::array_set_u8(&mut new_repr, len, 10);
-        tx."core:prelude/types.wado/StreamWritable<u8>::write_raw_all"("core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&new_repr, 0, (len + 1)));
-    } else {
-        tx."core:prelude/types.wado/StreamWritable<u8>::write_raw_all"("core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len));
-    }
-    cm_raw_call stream-drop-writable(tx as i32);
+    core::rt::write_string_to_stream(tx, message, add_newline);
 }
 
 pub fn println(message: String) with Stdout {
@@ -3103,7 +3094,7 @@ pub fn print_bytes(data: List<u8>) with Stdout {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = "mess_dirty.wado::__cm_binding__Stdout_write_via_stream"(rx as i32);
-    let written: CopyResult = tx."core:prelude/types.wado/StreamWritable<u8>::write_all"(data);
+    tx."core:prelude/types.wado/StreamWritable<u8>::write_all"(data);
     cm_raw_call stream-drop-writable(tx as i32);
     core::rt::drop_cli_write_future(handle);
 }
@@ -3346,7 +3337,7 @@ fn __test_0() {
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude", used: 12 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 81 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 84 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: greeting == \"Hello, Wado!\"\n", used: 39 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"greeting: ", used: 10 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -3370,7 +3361,7 @@ fn __test_0() {
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude", used: 12 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 84 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 87 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: primes.len() == 4\n", used: 30 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"primes: ", used: 8 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -3399,7 +3390,7 @@ fn __test_0() {
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude", used: 12 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 85 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 88 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: primes.get(1) matches { Some(v) && v == 3 }\n", used: 56 });
                 break __tmpl: __r;
             });
@@ -3420,7 +3411,7 @@ fn __test_0() {
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude", used: 12 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 86 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 89 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: primes.get(9) matches { None }\n", used: 43 });
                 break __tmpl: __r;
             });
@@ -3442,7 +3433,7 @@ fn __test_0() {
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude", used: 12 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 89 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 92 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: decoded matches { Ok(s) && s == \"Wado\" }\n", used: 53 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"decoded: ", used: 9 });
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
@@ -10123,6 +10114,10 @@ pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<
 
 pub fn "fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(i32)->i32>, f: &mut Formatter);
 
+fn write_copy_is_final(written: &StreamWrite) -> bool {
+    return ((written.result != CopyResult::Completed) || (written.count <= 0));
+}
+
 pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::type_name"() -> String {
     return String { repr: packed"StreamWrite", used: 11 };
 }
@@ -12431,6 +12426,52 @@ pub fn "core:prelude/list.wado/List<u8>::len"(self: &List<u8>) -> i32 {
     return self.used;
 }
 
+fn "core:prelude/slice.wado/Slice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> Slice<u8> with stores[repr] {
+    return Slice<u8> { repr: repr, start: start, end: end };
+}
+
+pub fn "core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
+    if data."core:prelude/slice.wado/Slice<u8>^core:prelude/slice.wado/Sequence::is_empty"() {
+        return CopyResult::Completed;
+    }
+    let repr: &Array<u8> = data."core:prelude/slice.wado/Slice<u8>::internal_repr"();
+    let end: i32 = (data."core:prelude/slice.wado/Slice<u8>::internal_start"() + data."core:prelude/slice.wado/Slice<u8>::len"());
+    let mut offset: i32 = data."core:prelude/slice.wado/Slice<u8>::internal_start"();
+    loop {
+        __assert_0: {
+            let __cond: bool = (offset < end);
+            if !__cond {
+                core::builtin::cold_path();
+                core::rt::panic(__tmpl: {
+                    let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(145);
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"StreamWritable::write_raw_all", used: 29 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/types.wado", used: 23 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
+                    let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                    Box<i32> { value: 336 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: offset < end\n", used: 25 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"offset: ", used: 8 });
+                    __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                    Box<i32> { value: offset }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"end: ", used: 5 });
+                    __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                    Box<i32> { value: end }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                    break __tmpl: __r;
+                });
+            }
+        }
+        let written: StreamWrite = core::rt::cm_stream_write_raw_u8(self as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(repr, offset, end));
+        offset = (offset + written.count);
+        if ("core::prelude/types.wado::write_copy_is_final"(&written) || (offset >= end)) {
+            return written.result;
+        }
+    }
+}
+
 pub fn "core:prelude/slice.wado/Slice<u8>::get_unchecked"(self: &Slice<u8>, index: i32) -> u8 {
     return core::builtin::array_get_value::<u8>(self.repr, (self.start + index));
 }
@@ -12452,6 +12493,8 @@ pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
     return core::builtin::array_len::<u8>(self);
 }
 
+pub fn "core/builtin/array_new<u8>"(len: i32) -> Array<u8>;
+
 fn "Array<u8>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self: &mut Array<u8>, index: i32, value: u8) with stores[value] {
     core::builtin::array_set::<u8>(self, index, value);
 }
@@ -12468,6 +12511,8 @@ pub fn "core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKi
         Err(e) => "core::prelude/types.wado::core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/IntErrorKind>"(String { repr: packed"called Result::unwrap() on an Err value", used: 39 }, e),
     };
 }
+
+pub fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Array<u8>, src_offset: i32, len: i32);
 
 pub fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
 
@@ -12630,10 +12675,40 @@ pub fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelud
 }
 
 pub fn "core:prelude/types.wado/StreamWritable<u8>::write_all"(self: &StreamWritable<u8>, data: List<u8>) -> CopyResult {
+    if data."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/Sequence::is_empty"() {
+        return CopyResult::Completed;
+    }
     let mut rest: List<u8> = data;
     loop {
+        __assert_0: {
+            let __v1: bool = rest."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/Sequence::is_empty"();
+            let __cond: bool = !__v1;
+            if !__cond {
+                core::builtin::cold_path();
+                core::rt::panic(__tmpl: {
+                    let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(159);
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"StreamWritable::write_all", used: 25 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/types.wado", used: 23 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
+                    let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                    Box<i32> { value: 314 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: !rest.is_empty()\n", used: 29 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"rest: ", used: 6 });
+                    __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                    rest."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"rest.is_empty(): ", used: 17 });
+                    __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                    Box<bool> { value: __v1 }."bool^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                    break __tmpl: __r;
+                });
+            }
+        }
         let written: StreamWrite = core::rt::cm_stream_write_u8(self as i32, rest);
-        if ((written.result != CopyResult::Completed) || (written.count >= rest."core:prelude/list.wado/List<u8>::len"())) {
+        if ("core::prelude/types.wado::write_copy_is_final"(&written) || (written.count >= rest."core:prelude/list.wado/List<u8>::len"())) {
             return written.result;
         }
         let mut remainder: List<u8> = "core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"([]);
@@ -12647,27 +12722,6 @@ fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>]
     let tx: i32 = (packed >> 32) as i32;
     return [rx as Stream<u8>, tx as StreamWritable<u8>];
 }
-
-fn "core:prelude/slice.wado/Slice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> Slice<u8> with stores[repr] {
-    return Slice<u8> { repr: repr, start: start, end: end };
-}
-
-pub fn "core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
-    let repr: &Array<u8> = data."core:prelude/slice.wado/Slice<u8>::internal_repr"();
-    let end: i32 = (data."core:prelude/slice.wado/Slice<u8>::internal_start"() + data."core:prelude/slice.wado/Slice<u8>::len"());
-    let mut offset: i32 = data."core:prelude/slice.wado/Slice<u8>::internal_start"();
-    loop {
-        let written: StreamWrite = core::rt::cm_stream_write_raw_u8(self as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(repr, offset, end));
-        offset = (offset + written.count);
-        if ((written.result != CopyResult::Completed) || (offset >= end)) {
-            return written.result;
-        }
-    }
-}
-
-pub fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Array<u8>, src_offset: i32, len: i32);
-
-pub fn "core/builtin/array_new<u8>"(len: i32) -> Array<u8>;
 
 fn "core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>^core:prelude/traits.wado/Iterator::next"(self: &mut SliceValueIter<core:prelude/string.wado/String>) -> Option<String> {
     if (self.index >= self.end) {
@@ -12705,6 +12759,10 @@ pub fn "core:prelude/list.wado/List<u8>::extend_from_slice"(self: &mut List<u8>,
     }
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, other."core:prelude/slice.wado/Slice<u8>::internal_repr"(), other."core:prelude/slice.wado/Slice<u8>::internal_start"(), other_len);
     self.used = new_used;
+}
+
+pub fn "core:prelude/list.wado/List<u8>^core:prelude/slice.wado/Sequence::is_empty"(self: &List<u8>) -> bool {
+    return (self."core:prelude/list.wado/List<u8>::len"() == 0);
 }
 
 fn "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
@@ -12837,6 +12895,10 @@ fn "core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/IntErrorKin
         Box<core:prelude/intparse.wado/IntErrorKind> { value: value }."core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
+}
+
+pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/slice.wado/Sequence::is_empty"(self: &Slice<u8>) -> bool {
+    return (self."core:prelude/slice.wado/Slice<u8>::len"() == 0);
 }
 
 fn "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self: &mut Array<[String, String]>, index: i32, value: [String, String]) with stores[value] {

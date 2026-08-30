@@ -903,6 +903,8 @@ Drop the readable end of the stream.
 #### `pub fn read_to_end(&self) -> List<T>`
 
 Read until the writable end drops, and return everything it wrote.
+Only the result stops it: an empty `Completed` copy is the writer
+offering nothing this time, and more can still follow.
 
 ### `pub resource StreamWritable<T>`
 
@@ -916,7 +918,9 @@ one element or drops.
 
 One Component Model copy: the reader may take a prefix, so the returned
 count can be short of `data.len()`. Writing to an end whose result was
-`Dropped` traps. `write_all` is the loop that finishes the buffer.
+`Dropped` traps, and an empty `data` is the CM's readiness signal, which
+blocks until a reader rendezvouses rather than writing nothing.
+`write_all` is the loop that finishes the buffer.
 
 #### `fn write_raw(&self, data: Slice<T>) -> StreamWrite`
 
@@ -940,13 +944,9 @@ Returns the result of the copy that ended the loop.
 
 #### `pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
 
-Write every element the slice views, or stop when the readable end
-drops. Keeps `write_all`'s value-semantics copy out of the paths that
-already hold their elements in one array.
-
-The tail view is built from the backing array rather than through
-`Slice::slice`, whose clamp these offsets cannot need — and which every
-program that prints would otherwise pay for.
+`write_all` for elements already held in one array, without its
+value-semantics copy. The tail view skips `Slice::slice`, whose clamp
+these offsets cannot need and every program that prints would pay for.
 
 ### `pub resource WaitableSet`
 
@@ -3155,10 +3155,8 @@ Convert i128 to String (for template string interpolation)
 
 ### `pub struct StreamChunk<T>`
 
-What one `Stream::read` copied, and how that copy ended.
-
-A copy can carry elements and the peer's drop together, so `items` being
-non-empty does not mean more will follow: read `result` to know.
+What one `Stream::read` copied, and how that copy ended. A copy carries
+elements and the peer's drop together, so `result` is what says more follows.
 
 #### `items: List<T>`
 
@@ -3166,9 +3164,8 @@ non-empty does not mean more will follow: read `result` to know.
 
 ### `pub struct StreamWrite`
 
-What one `StreamWritable::write` copied, and how that copy ended.
-
-A reader may take a prefix, so `count` can be short of what was offered.
+What one `StreamWritable::write` copied, and how that copy ended. A reader
+may take a prefix, so `count` can be short of what was offered.
 
 #### `count: i32`
 
@@ -4270,10 +4267,7 @@ Right-aligned (default for numbers): `${x:>5}` -> " 42"
 ### `pub enum CopyResult`
 
 How one Component Model copy ended (`CanonicalABI.md`, `CopyResult`).
-
-It describes the copy that just happened, not the stream: `Completed` says
-nothing about whether the peer is still there, and only `Dropped` ends the
-stream.
+It describes that copy, not the stream: only `Dropped` ends the stream.
 
 #### `Completed`
 

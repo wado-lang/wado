@@ -29,9 +29,9 @@ type "functype//opt_empty_if_pruned.wado/__cm_export__run" = fn();  // TypeId(10
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(11)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(12)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(13)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(14)
 
@@ -44,8 +44,8 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
+import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:opt_empty_if_pruned.wado::__modules_initialized: bool = 0;
