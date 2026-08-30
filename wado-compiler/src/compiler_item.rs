@@ -578,7 +578,7 @@ pub enum CompilerItem {
     CmLowerArrayU8,
     /// `core:rt::cm_await_blocked`.
     CmAwaitBlocked,
-    /// `core:prelude/types::CopyResult`, and its three cases.
+    /// `core:prelude/types::CopyResult`, how a CM copy ended.
     CopyResult,
     /// `core:prelude/types::StreamChunk`, what one `Stream::read` copied.
     StreamChunk,

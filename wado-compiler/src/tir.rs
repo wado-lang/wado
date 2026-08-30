@@ -4240,7 +4240,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::GenericResource { def, type_args } => {
-                FqTypeName::builtin(self.def_name(*def)).with_args(args_of(type_args))
+                FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
             ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME)
                 .with_args(vec![self.fq_type_name_spelled(*elem, unboxed)]),

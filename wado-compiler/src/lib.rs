@@ -179,6 +179,21 @@ pub struct CompileResult {
     pub kiln_options_descriptor: Option<kiln::OptionsDescriptor>,
 }
 
+/// Report a synthesis rejection — a shape the Component Model cannot express —
+/// and bail. Synthesis names the offending type; it has no span to attach.
+fn bail_unsupported<H: compiler_host::CompilerHost>(
+    logger: &Logger<'_, H>,
+    message: String,
+) -> Bail {
+    let _ = logger.error(compiler_host::Diagnostic {
+        severity: compiler_host::Severity::Error,
+        code: compiler_host::Code::UnsupportedFeature,
+        message,
+        span: None,
+    });
+    Bail
+}
+
 /// Compilation failure with metadata from the successfully-parsed AST.
 ///
 /// Internal `Bail` carries no data (errors are already emitted to the host).
@@ -1450,15 +1465,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
-        synthesis::synthesize(package).map_err(|message| {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::UnsupportedFeature,
-                message,
-                span: None,
-            });
-            Bail
-        })?
+        synthesis::synthesize(package).map_err(|message| bail_unsupported(logger, message))?
     };
 
     // === Phase 8c: Effect Dispatch Synthesis ===
@@ -1533,6 +1540,10 @@ fn compile_after_load<H: CompilerHost>(
         // An installed handler claims the call before the CM binding does, and
         // the helpers that binding mints call generics of their own — hence the
         // resume.
+        // Ahead of the rewrites, as pre-monomorphize: both consume the pristine
+        // `#[cm]` call shape the scan matches.
+        synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
+            .map_err(|message| bail_unsupported(logger, message))?;
         synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
         synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
         mono.resume(&mut flat);
@@ -1919,15 +1930,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Synthesis (must run before monomorphize)
             let package = {
                 let _span = logger.span("synthesis");
-                synthesis::synthesize(package).map_err(|message| {
-                    let _ = logger.error(compiler_host::Diagnostic {
-                        severity: compiler_host::Severity::Error,
-                        code: compiler_host::Code::UnsupportedFeature,
-                        message,
-                        span: None,
-                    });
-                    Bail
-                })?
+                synthesis::synthesize(package).map_err(|message| bail_unsupported(&logger, message))?
             };
 
             // Effect dispatch synthesis (lowers WithHandler / Resume).
@@ -1965,6 +1968,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             {
                 let _span = logger.span("monomorphize");
                 let mut mono = monomorphize(&mut flat);
+                synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
+                    .map_err(|message| bail_unsupported(&logger, message))?;
                 synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
                 synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
                 mono.resume(&mut flat);

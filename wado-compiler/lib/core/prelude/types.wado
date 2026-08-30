@@ -280,10 +280,11 @@ pub resource StreamWritable<T> {
     #[cm("stream-write")]
     fn write(&self, data: List<T>) -> StreamWrite;
 
-    /// Write a byte view directly to the stream, without the deep copy that
+    /// Write a view directly to the stream, without the deep copy that
     /// value-semantics `write` makes. The slice references its backing array
     /// (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`), so
-    /// only the CM lowering copy remains.
+    /// only the CM lowering copy remains. `T` must be a byte: any other element
+    /// type is a compile error, and `write` is what carries it.
     #[cm("stream-write-raw")]
     fn write_raw(&self, data: Slice<T>) -> StreamWrite;
 

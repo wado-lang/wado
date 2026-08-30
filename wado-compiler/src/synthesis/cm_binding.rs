@@ -159,19 +159,53 @@ type FunctionKey = (ModuleSource, String);
 /// a module-qualified `FunctionRef` — so any function the world drops is
 /// excluded.
 fn reachable_from_export_bindings(project: &Package) -> IndexSet<FunctionKey> {
+    let functions = project
+        .tir_modules
+        .iter()
+        .flat_map(|(module_source, module)| {
+            module
+                .functions
+                .iter()
+                .map(move |f| (module_source.clone(), f))
+        });
+    reachable_from(
+        functions,
+        &project.entry_module_source,
+        &project.export_binding_names,
+    )
+}
+
+/// The same walk over the flattened, monomorphized functions, where each
+/// carries its own module source.
+fn reachable_from_export_bindings_flat(
+    flat: &crate::flat_package::FlatPackage,
+) -> IndexSet<FunctionKey> {
+    let functions = flat
+        .functions
+        .iter()
+        .map(|f| (f.borrow().module_source.clone(), f));
+    reachable_from(
+        functions,
+        &flat.entry_module_source,
+        &flat.export_binding_names,
+    )
+}
+
+fn reachable_from<'a>(
+    functions: impl Iterator<Item = (ModuleSource, &'a Rc<RefCell<TirFunction>>)>,
+    entry_module_source: &ModuleSource,
+    export_binding_names: &IndexMap<String, String>,
+) -> IndexSet<FunctionKey> {
     let mut by_key: IndexMap<FunctionKey, Vec<Rc<RefCell<TirFunction>>>> = IndexMap::default();
-    for (module_source, module) in &project.tir_modules {
-        for func_rc in &module.functions {
-            let key = (module_source.clone(), func_rc.borrow().name.clone());
-            by_key.entry(key).or_default().push(func_rc.clone());
-        }
+    for (module_source, func_rc) in functions {
+        let key = (module_source, func_rc.borrow().name.clone());
+        by_key.entry(key).or_default().push(func_rc.clone());
     }
 
     let mut visited: IndexSet<FunctionKey> = IndexSet::default();
-    let mut work: Vec<FunctionKey> = project
-        .export_binding_names
+    let mut work: Vec<FunctionKey> = export_binding_names
         .values()
-        .map(|binding_name| (project.entry_module_source.clone(), binding_name.clone()))
+        .map(|binding_name| (entry_module_source.clone(), binding_name.clone()))
         .collect();
     while let Some(key) = work.pop() {
         if !visited.insert(key.clone()) {
@@ -262,7 +296,8 @@ fn unresolvable_future_stream_payload(
 ) -> Option<String> {
     let (payload, is_future) = future_stream_payload_site(tt, expr)?;
     // A generic body names its payload with a type parameter; what it lowers to
-    // is decided per instance. The post-monomorphize half judges those.
+    // is decided per instance, so
+    // [`reject_unresolvable_payloads_monomorphized`] judges those.
     if !tt.is_concrete(payload) {
         return None;
     }
@@ -279,6 +314,32 @@ fn unresolvable_future_stream_payload(
         return None;
     }
     crate::component_model::stream_payload_rejection(tt, payload)
+}
+
+/// Post-monomorphize half of [`reject_unresolvable_record_payloads`]: the sites
+/// its `is_concrete` guard deferred, judged now that each instance names a
+/// concrete payload. Without it the same program written through a generic
+/// helper reaches WIR build with no binding to call, and panics.
+pub fn reject_unresolvable_payloads_monomorphized(
+    flat: &crate::flat_package::FlatPackage,
+) -> Result<(), String> {
+    let reachable = reachable_from_export_bindings_flat(flat);
+    let tt = flat.type_table.borrow();
+    for func_rc in &flat.functions {
+        let func = func_rc.borrow();
+        let Some(body) = &func.body else { continue };
+        let mut finder = NamedPayloadFinder {
+            tt: &tt,
+            registry: &flat.cm_interface_registry,
+            check_records: reachable.contains(&(func.module_source.clone(), func.name.clone())),
+            found: None,
+        };
+        finder.visit_block(body);
+        if let Some(reason) = finder.found {
+            return Err(reason);
+        }
+    }
+    Ok(())
 }
 
 /// Two shapes name a payload: a `new()` static call, and a CM method on a

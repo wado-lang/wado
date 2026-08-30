@@ -27,7 +27,7 @@ A copy can report elements _and_ `DROPPED` together — a peer that writes its l
 chunk and drops produces exactly that. The reader gets a non-empty list, loops,
 reads again, and the canonical traps:
 
-```
+```text
 cannot read after being notified that the writable end dropped
 ```
 
@@ -148,7 +148,7 @@ A generic `impl Stream<T>` body cannot hold a `#[cm]` call today: binding
 synthesis runs before monomorphize (`synthesis.rs`, `lib.rs`), so the payload is
 still a type parameter and classification fails with
 
-```
+```text
 `T` has no Component Model representation as a `stream` element
 ```
 

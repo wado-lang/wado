@@ -68,15 +68,17 @@ fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
 /// copy moved, paired with how it ended. Field order follows the declaration.
 fn copy_report_literal(
     type_id: TypeId,
-    struct_name: &str,
+    item: crate::compiler_item::CompilerItem,
     moved_field: &str,
     moved: TirExpr,
     result: TirExpr,
+    type_table: &RefCell<TypeTable>,
 ) -> TirExpr {
+    let struct_name = type_table.borrow().compiler_struct_name(item).to_string();
     TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type: type_id,
-            struct_name: struct_name.to_string(),
+            struct_name,
             fields: vec![
                 crate::tir::TirStructField {
                     name: moved_field.to_string(),
@@ -95,12 +97,36 @@ fn copy_report_literal(
     )
 }
 
-fn stream_chunk_literal(chunk_type_id: TypeId, items: TirExpr, result: TirExpr) -> TirExpr {
-    copy_report_literal(chunk_type_id, "StreamChunk", "items", items, result)
+fn stream_chunk_literal(
+    chunk_type_id: TypeId,
+    items: TirExpr,
+    result: TirExpr,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    copy_report_literal(
+        chunk_type_id,
+        crate::compiler_item::CompilerItem::StreamChunk,
+        "items",
+        items,
+        result,
+        type_table,
+    )
 }
 
-fn stream_write_literal(write_type_id: TypeId, count: TirExpr, result: TirExpr) -> TirExpr {
-    copy_report_literal(write_type_id, "StreamWrite", "count", count, result)
+fn stream_write_literal(
+    write_type_id: TypeId,
+    count: TirExpr,
+    result: TirExpr,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    copy_report_literal(
+        write_type_id,
+        crate::compiler_item::CompilerItem::StreamWrite,
+        "count",
+        count,
+        result,
+        type_table,
+    )
 }
 
 /// `result == -1`: the BLOCKED sentinel of a CM async built-in.
@@ -653,6 +679,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         write_type_id,
         packed_count(result_ref()),
         copy_result_of(result_ref(), type_table),
+        type_table,
     ))));
 
     TirFunction {
@@ -1521,6 +1548,7 @@ fn synthesize_stream_read_func(
         chunk_type_id,
         local_ref(arr_idx, "arr", array_type_id),
         copy_result_of(local_ref(result_idx, "result", TypeTable::I32), type_table),
+        type_table,
     ))));
 
     TirFunction {
@@ -1958,8 +1986,10 @@ fn parameterize_stream_cm_name(
         _ => return None,
     };
     if let Some(elem) = stream_receiver_element(tt, expr) {
-        let elem_name = tt.base_type_name(elem);
-        if elem_name != "u8" {
+        // The same predicate the payload classification uses: a `type MyByte =
+        // u8` stream must not drop under one canonical and read under another.
+        if !crate::component_model::is_u8_stream_element(tt, elem) {
+            let elem_name = tt.base_type_name(elem);
             if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
                 return Some(make(CmStreamPayload::Value(payload)));
             }

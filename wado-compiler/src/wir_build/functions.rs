@@ -223,8 +223,8 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
         }
     }
 
-    // World-level function imports (Phase 9): register the raw core import like
-    // a sync interface method so the synthesized adapter's `CmRawCall` resolves.
+    // World-level function imports: register the raw core import under the same
+    // lowered type as an interface method, so the adapter's `CmRawCall` resolves.
     let world_funcs: Vec<crate::component_model::CmFunctionInfo> = cm_interface_registry
         .world_import_functions()
         .map(|(_, f)| f.clone())
