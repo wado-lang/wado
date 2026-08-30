@@ -76,6 +76,7 @@ use {
     ExcludedOp,
     RepeatOp,
     OptionalShapeLookaheadStrategy,
+    EmptyAltAdmits,
     GroupOp,
     GroupShape,
     TokenOnlyShape,
@@ -105,6 +106,7 @@ use {
     add_parser_super_effect,
     add_seeded_vals_param,
     alt_gate_and_suffix,
+    alt_has_gate,
     alt_initial_gate_conditions,
     alt_vals_arg,
     ambiguous_group_predicate_gated,
@@ -2646,9 +2648,10 @@ fn gen_multi_alt_body(
     let mut admits_everything: List<bool> = [];
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt = &rule.alternatives[non_lr_indices[i]];
+        // `alt_has_gate` asks without registering; `alt_initial_gate_conditions`
+        // marks the predicate gated, which is the arm loop's to do once.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
-        let ungated = !ctx.emit_actions() || alt_initial_gate_conditions(alt, ctx).is_empty();
-        admits_everything.push(no_cond && ungated);
+        admits_everything.push(no_cond && !alt_has_gate(alt, ctx));
     }
 
     for let slot of &arms_fallback_last(non_lr_indices, &admits_everything) {
@@ -6382,7 +6385,7 @@ struct GroupDecision {
 fn group_decision(
     alts: &List<Alternative>,
     kind: GroupBranchKind,
-    empty_alt_admits: &Option<List<String>>,
+    empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut GenContext,
 ) -> GroupDecision {
     let [first_sets, groups] = group_partition(alts, kind, empty_alt_admits, ctx);
@@ -6723,9 +6726,6 @@ fn group_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List
     return union_first;
 }
 
-/// The lookahead test admitting an overlap group. A wildcard-led alternative
-/// matches any non-EOF token while its first set reads empty, so a group
-/// holding one tests nothing and lets the scan dispatch inside decide.
 /// The token kinds a branch admits. Empty for a wildcard-led alternative,
 /// which admits every one of them — `branch_test_of` is what reads that.
 fn group_branch_kinds(group: &List<i32>, first_sets: &List<List<String>>, alts: &List<Alternative>) -> List<String> {
@@ -6820,7 +6820,7 @@ fn gen_general_group(
     entry: GroupEntry,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
-    empty_alt_admits: &Option<List<String>>,
+    empty_alt_admits: &Option<EmptyAltAdmits>,
     decided: Option<String> = null,
 ) {
     let _ = dedup_name(&general_group_field_name(gs.group_index), name_counts);
@@ -6878,7 +6878,7 @@ fn gen_rule_ref_group(
 fn group_partition(
     alts: &List<Alternative>,
     kind: GroupBranchKind,
-    empty_alt_admits: &Option<List<String>>,
+    empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut GenContext,
 ) -> [List<List<String>>, List<List<i32>>] {
     let mut first_sets: List<List<String>> = [];
@@ -6888,7 +6888,7 @@ fn group_partition(
     }
     // An empty alternative has no first set of its own; what selects it is
     // what may follow the group, which lower computed at its position.
-    apply_empty_alt_admits(&mut first_sets, alts, empty_alt_admits, ctx);
+    apply_empty_alt_admits(&mut first_sets, empty_alt_admits);
     // Only a General group can hold a wildcard-led alternative; a rule-ref one
     // is a single call per alternative.
     let groups = match kind {

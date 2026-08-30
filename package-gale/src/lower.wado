@@ -114,6 +114,7 @@ use {
     OptionalLookaheadStrategy,
     OptionalShapeLookaheadStrategy,
     OptionalLookaheadShape,
+    EmptyAltAdmits,
     GroupOp,
     GroupShape,
     SingleAltShape,
@@ -2012,7 +2013,7 @@ fn lower_general_scan_group(
             wildcard_indices.push(ai);
         }
     }
-    apply_empty_alt_admits(&mut first_sets, alts, &group_empty_alt_admits(alts, outer_follow, ctx), ctx);
+    apply_empty_alt_admits(&mut first_sets, &group_empty_alt_admits(alts, outer_follow, ctx));
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
@@ -3216,38 +3217,30 @@ pub fn group_empty_alt_admits(
     alts: &List<Alternative>,
     outer_follow: &List<String>,
     ctx: &GenContext,
-) -> Option<List<String>> {
+) -> Option<EmptyAltAdmits> {
     if outer_follow.is_empty() {
         return null;
     }
-    for let alt of alts {
-        if alt_is_bare_empty(alt, ctx) {
-            return Option::<List<String>>::Some(*outer_follow);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if alt_is_bare_empty(&alts[i], ctx) {
+            return Option::Some(EmptyAltAdmits { alt_index: i, admits: *outer_follow });
         }
     }
     return null;
 }
 
 /// Write the empty alternative's admit set into the first sets the dispatch
-/// partitions on. Both walkers call it, so neither can read that alternative's
-/// absent first set as an absence of its own.
-pub fn apply_empty_alt_admits(
-    first_sets: &mut List<List<String>>,
-    alts: &List<Alternative>,
-    admits: &Option<List<String>>,
-    ctx: &GenContext,
-) {
-    let set = if let Some(s) = admits {
-        s;
+/// partitions on. Both walkers call it with what lower decided, so neither
+/// works out again which alternative earns the set and neither can read that
+/// alternative's absent first set as an absence of its own.
+pub fn apply_empty_alt_admits(first_sets: &mut List<List<String>>, admits: &Option<EmptyAltAdmits>) {
+    let e = if let Some(x) = admits {
+        x;
     } else {
         return;
     };
-    assert !set.is_empty(), "an admit set that admits nothing is `null`, not an empty set";
-    for let mut i = 0; i < alts.len(); i += 1 {
-        if alt_is_bare_empty(&alts[i], ctx) {
-            first_sets[i] = *set;
-        }
-    }
+    assert !e.admits.is_empty(), "an admit set that admits nothing is `null`, not an empty set";
+    first_sets[e.alt_index] = e.admits;
 }
 
 /// Multi-alt group not covered by `SimpleCst` / `TokenOnly` /
@@ -3375,7 +3368,7 @@ fn lower_general_group(
         site: DiagnosticSite::GeneralGroup(group_index),
     };
     let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, ctx);
-    apply_empty_alt_admits(&mut first_sets, alts, &empty_alt_admits, ctx);
+    apply_empty_alt_admits(&mut first_sets, &empty_alt_admits);
     let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {

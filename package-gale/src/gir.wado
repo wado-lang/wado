@@ -825,6 +825,13 @@ pub struct RepeatOp {
     pub atn_decision: i32 = -1,
 }
 
+/// The empty alternative of a group and the lookahead that selects it.
+pub struct EmptyAltAdmits {
+    pub alt_index: i32,
+    /// Never empty — nothing to write is `null`, not an empty set.
+    pub admits: List<String>,
+}
+
 pub struct GroupOp {
     pub shape: GroupShape,
     /// Alts inside the group, lowered in their own AltBody form.
@@ -837,13 +844,17 @@ pub struct GroupOp {
     /// it. For single-alt groups this is `MultiAltDispatch::Direct` with
     /// one branch.
     pub dispatch: MultiAltDispatch,
-    /// What admits an empty alternative — what may follow the group inside its
-    /// own alternative, since an empty alternative has no first set of its own
-    /// to be selected by. `Some(set)` is never empty; `null` is every case
-    /// with nothing to write: no alternative is empty, or the suffix is
-    /// nullable and the answer is the caller's FOLLOW, where the alternative
-    /// admits whatever the branches before it did not.
-    pub empty_alt_admits: Option<List<String>>,
+    /// Which alternative is the empty one and what admits it — what may follow
+    /// the group inside its own alternative, since an empty alternative has no
+    /// first set of its own to be selected by. Lower names the alternative so
+    /// emit writes the set rather than working out again which alternative
+    /// earns it: the answer depends on emit-time context an earlier pass reads
+    /// differently, and the two walkers must partition alike (invariant 9).
+    ///
+    /// `null` is every case with nothing to write: no alternative is empty, or
+    /// the suffix is nullable and the answer is the caller's FOLLOW, where the
+    /// alternative admits whatever the branches before it did not.
+    pub empty_alt_admits: Option<EmptyAltAdmits>,
 }
 
 /// Lower-side classification of a Repeat's body op shape. Drives
