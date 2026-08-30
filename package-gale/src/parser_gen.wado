@@ -3194,10 +3194,11 @@ fn gen_alt_dispatch(
 fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
     let mut branches: List<DecisionBranch> = [];
     for let br of &dd.branches {
+        // Disjoint first sets, so no branch here is a wildcard's: an empty
+        // token set is an alternative the lookahead cannot decide.
+        let test = admits_or_untestable(&br.tokens);
         branches.push(DecisionBranch {
-            // Disjoint first sets, so no branch here is a wildcard's: an empty
-            // token set is an alternative the lookahead cannot decide.
-            test: admits_or_untestable(&br.tokens),
+            test,
             gate: "",
             alts: [br.alt_index],
         });
