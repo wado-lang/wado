@@ -317,12 +317,18 @@ impl StreamWritable<T> {
     /// Write every element the slice views, or stop when the readable end
     /// drops. Keeps `write_all`'s value-semantics copy out of the paths that
     /// already hold their elements in one array.
+    ///
+    /// The tail view is built from the backing array rather than through
+    /// `Slice::slice`, whose clamp these offsets cannot need — and which every
+    /// program that prints would otherwise pay for.
     pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult {
-        let mut offset = 0;
+        let repr = data.internal_repr();
+        let end = data.internal_start() + data.len();
+        let mut offset = data.internal_start();
         loop {
-            let written = self.write_raw(data.slice(offset, data.len()));
+            let written = self.write_raw(Slice::internal_new(repr, offset, end));
             offset += written.count;
-            if written.result != CopyResult::Completed || offset >= data.len() {
+            if written.result != CopyResult::Completed || offset >= end {
                 return written.result;
             }
         }
