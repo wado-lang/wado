@@ -45,7 +45,7 @@ use {
     GroupElement,
 } from "./ir.wado";
 use {
-    alt_is_wildcard_led,
+    alt_is_open_ended,
     compute_overlap_groups,
     compute_overlap_groups_with_wildcard_indices,
     is_wildcard_alt,
@@ -1678,8 +1678,21 @@ fn build_direct_dispatch(first_sets: &List<List<String>>) -> MultiAltDispatch {
     return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
 
-fn any_wildcard_alt(alts: &List<Alternative>, indices: &List<i32>) -> bool {
-    return indices.into_iter().any(|idx: &i32| alt_is_wildcard_led(&alts[*idx]));
+/// `first_sets` is parallel to `indices`, `alts` is not — the pairing is what
+/// `alt_is_open_ended` needs, and getting it from the surface elements alone
+/// is what missed an alternative open-ended behind a rule reference.
+fn any_open_ended_alt(
+    alts: &List<Alternative>,
+    indices: &List<i32>,
+    first_sets: &List<List<String>>,
+    ctx: &mut GenContext,
+) -> bool {
+    for let mut k = 0; k < indices.len(); k += 1 {
+        if alt_is_open_ended(&alts[indices[k]], &first_sets[k], ctx) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// Choose a dispatch for a set of alternatives. When the per-alt
@@ -1709,7 +1722,7 @@ fn build_overlap_dispatch(
     // as disjoint and the Direct chain would give it an unreachable
     // empty-token branch. Its real first set is universal — the same invariant
     // `compute_overlap_groups_with_wildcard` applies on the surface IR.
-    if !any_overlap(first_sets) && !any_wildcard_alt(alts, indices) {
+    if !any_overlap(first_sets) && !any_open_ended_alt(alts, indices, first_sets, ctx) {
         let mut branches: List<DispatchBranch> = [];
         for let mut k = 0; k < indices.len(); k += 1 {
             branches.push(DispatchBranch {
@@ -1962,7 +1975,7 @@ fn lower_scan_group(
             let mut visiting: List<String> = [];
             let alt_first = ctx.first_of_alt(alt, &mut visiting);
             let mut wildcard_indices: List<i32> = [];
-            if alt_is_wildcard_led(alt) {
+            if alt_is_open_ended(alt, &alt_first, ctx) {
                 wildcard_indices.push(0);
             }
             return ScanElement::Group(ScanGroupElement {
@@ -2024,10 +2037,11 @@ fn lower_general_scan_group(
         }
         bodies.push(ScanBody { elements });
         let mut visiting: List<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-        if alt_is_wildcard_led(alt) {
+        let alt_first = ctx.first_of_alt(alt, &mut visiting);
+        if alt_is_open_ended(alt, &alt_first, ctx) {
             wildcard_indices.push(ai);
         }
+        first_sets.push(alt_first);
     }
     apply_empty_alt_admits(&mut first_sets, &group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx));
     return ScanElement::Group(ScanGroupElement {

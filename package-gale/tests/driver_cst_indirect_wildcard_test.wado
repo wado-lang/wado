@@ -1,0 +1,27 @@
+//! An alternative open-ended through a rule reference. Both walkers have to
+//! read it the same way (invariant 9): the parse side and the scan side each
+//! decide what the group admits, and they only agree if "open-ended" is one
+//! question rather than one asked of the surface elements and one of the
+//! first set.
+//!
+//! Trees from the published ANTLR4 jar (`scripts/antlr4-oracle.sh`).
+
+use iw from "./grammars/indirect_wildcard.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_indirect_wildcard" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = iw::parse(input);
+    assert result.ok(), `unexpected diagnostics for "${*input}"`;
+    let actual = iw::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    "${*input}"\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "indirect wildcard: the open-ended alternative takes what it can" {
+    assert_tree(&"a b", &"(s (r a b))");
+}
+
+test "indirect wildcard: where it cannot complete, the narrower one does" {
+    assert_tree(&"a", &"(s a)");
+}

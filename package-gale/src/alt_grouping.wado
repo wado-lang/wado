@@ -17,38 +17,34 @@
 use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 
-/// True when `alt` opens on an open-ended token set — `.` or `~X`, the two
-/// elements `first_of_element` returns an empty set for because we cannot
-/// enumerate "every token kind". Such an alt effectively overlaps with every
-/// other alt that consumes at least one token. We use this flag to merge it
-/// into the surrounding overlap group so the parse-side dispatch routes
-/// through scan-based first-success-wins (which correctly falls back to it
-/// when the more specific alt's scan fails) instead of a kind-check that
-/// commits to the first alt whose FIRST set covers the lookahead.
-pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
+/// True when `alt` admits every token: it has no first set to be selected by,
+/// and it consumes at least one token, so what it matches is a token of any
+/// kind. `.` and `~X` are why a first set comes out empty — `first_of_element`
+/// cannot enumerate "every token kind" — whether they are written in the
+/// alternative or reached through a rule that is.
+///
+/// Such an alt overlaps every other alt that consumes a token, so it is merged
+/// into the surrounding overlap group: the dispatch routes through the scan
+/// tournament, which falls back to it when a more specific alt's scan fails,
+/// instead of a kind-check that commits to the first alt whose FIRST set
+/// covers the lookahead.
+///
+/// The other reason a first set comes out empty is an alternative that derives
+/// only the empty string. That one is selected by nothing, not by everything,
+/// and the two must not be told apart by looking at the surface elements: that
+/// answers for a wildcard written in place and not for one behind a rule ref,
+/// so the walkers that ask differently partition differently.
+pub fn alt_is_open_ended(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> bool {
+    if !first_set.is_empty() {
+        return false;
+    }
     for let elem of &alt.elements {
-        if element_is_wildcard(elem) {
+        let mut visiting: List<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
             return true;
-        }
-        if !is_nullable(elem) {
-            return false;
         }
     }
     return false;
-}
-
-/// `.` and `~X` both carry the empty static FIRST set. Neither a label nor a
-/// `( … )` wrapper changes what an element matches, so `w=.` and `x=(~X)` are
-/// as open-ended as the bare forms.
-fn element_is_wildcard(elem: &Element) -> bool {
-    return match elem {
-        Wildcard(_) | Not(_) => true,
-        Label(lab) => element_is_wildcard(&lab.element),
-        Group(g) => g.alternatives.len() == 1
-            && g.alternatives[0].elements.len() == 1
-            && element_is_wildcard(&g.alternatives[0].elements[0]),
-        TokenRef(_) | Literal(_) | RuleRef(_) | Repeat(_) => false,
-    };
 }
 
 /// `compute_overlap_groups` augmented with wildcard awareness. A
@@ -63,14 +59,21 @@ fn element_is_wildcard(elem: &Element) -> bool {
 pub fn compute_overlap_groups_with_wildcard(
     alts: &List<Alternative>,
     first_sets: &List<List<String>>,
+    ctx: &mut GenContext,
 ) -> List<List<i32>> {
-    let mut wildcard_indices: List<i32> = [];
+    return compute_overlap_groups_with_wildcard_indices(first_sets, &open_ended_indices(alts, first_sets, ctx));
+}
+
+/// Which alternatives admit every token, in the index space `first_sets` is in.
+pub fn open_ended_indices(alts: &List<Alternative>, first_sets: &List<List<String>>, ctx: &mut GenContext) -> List<i32> {
+    assert alts.len() == first_sets.len(), "one first set per alternative";
+    let mut out: List<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
-        if alt_is_wildcard_led(&alts[i]) {
-            wildcard_indices.push(i);
+        if alt_is_open_ended(&alts[i], &first_sets[i], ctx) {
+            out.push(i);
         }
     }
-    return compute_overlap_groups_with_wildcard_indices(first_sets, &wildcard_indices);
+    return out;
 }
 
 /// True when `alt_index` is one of the wildcard-led alternatives.
