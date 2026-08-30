@@ -1955,11 +1955,16 @@ impl CmInterfaceRegistry {
                         (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
                     })
                     .collect();
+                // As for an interface method, the CM-ABI return type drops the
+                // `AsyncCall<T>` wrapper user code keeps seeing.
+                let return_type =
+                    unwrap_async_call_if_async(func.is_async, &func.return_type);
                 self.register_world_import(
                     &func.name,
                     cm_func_name,
+                    func.is_async,
                     params,
-                    func.return_type.clone(),
+                    return_type,
                 );
             }
         }
@@ -3127,6 +3132,7 @@ impl CmInterfaceRegistry {
         &mut self,
         func_name: &str,
         cm_func_name: &str,
+        is_async: bool,
         params: Vec<(String, String, Type)>,
         return_type: Option<Type>,
     ) {
@@ -3143,7 +3149,7 @@ impl CmInterfaceRegistry {
             wasi_func_name: cm_func_name.to_string(),
             interface_path: String::new(),
             package: String::new(),
-            is_async: false,
+            is_async,
             params: resolved_params,
             return_type,
         };

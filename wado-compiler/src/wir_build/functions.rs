@@ -118,6 +118,68 @@ fn register_imports(ctx: &mut WirContext<'_>) {
     }
 }
 
+/// The core signature of one lowered CM import: what `canon lower` produces for
+/// this function, which the core module must import by exactly that type.
+/// Interface methods and world-level functions share it — a `func` is a `func`
+/// whichever level of the world declares it.
+fn cm_import_core_func_type(
+    func: &crate::component_model::CmFunctionInfo,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+) -> (Vec<WirType>, Vec<WirType>) {
+    // WASI P3 async functions with > MAX_FLAT_ASYNC_PARAMS (4) flat params use
+    // indirect calling: all params are passed via a single params_ptr (i32) plus
+    // a results_ptr (i32). This matches what `canon lower async` produces.
+    const MAX_FLAT_ASYNC_PARAMS: usize = 4;
+
+    let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
+    for (_, _, ty) in &func.params {
+        let resolved_ty = cm_interface_registry.resolve_type(ty);
+        crate::component_model::flatten_cm_param_type(
+            &resolved_ty,
+            &mut param_vts,
+            cm_interface_registry,
+        );
+    }
+
+    // Per CM spec `flatten_functype('lower')`, an async lowering appends the
+    // outptr only when there are flat results; an async void function
+    // (`wait_for`, `wait_until`) has neither results nor outptr.
+    if func.is_async {
+        let has_results = func.return_type.is_some();
+        if param_vts.len() > MAX_FLAT_ASYNC_PARAMS {
+            param_vts = if has_results {
+                vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32]
+            } else {
+                vec![wasm_encoder::ValType::I32]
+            };
+        } else if has_results {
+            param_vts.push(wasm_encoder::ValType::I32);
+        }
+        let params = param_vts.into_iter().map(valtype_to_wir_type).collect();
+        // The subtask handle.
+        return (params, vec![WirType::I32]);
+    }
+
+    let mut results: Vec<WirType> = Vec::new();
+    if let Some(ret_ty) = &func.return_type {
+        let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
+        if crate::component_model::cm_return_needs_outptr(&resolved_ret_ty, cm_interface_registry) {
+            // Complex return via outptr — the function itself returns nothing.
+            param_vts.push(wasm_encoder::ValType::I32);
+        } else {
+            let mut out = Vec::new();
+            crate::component_model::flatten_cm_param_type(
+                &resolved_ret_ty,
+                &mut out,
+                cm_interface_registry,
+            );
+            results = out.into_iter().map(valtype_to_wir_type).collect();
+        }
+    }
+    let params = param_vts.into_iter().map(valtype_to_wir_type).collect();
+    (params, results)
+}
+
 /// Register WASI function imports.
 ///
 /// WASI functions are already lowered at the component level;
@@ -148,79 +210,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // The adapter handles them by calling the lowered function, waiting for the subtask,
             // and freeing the async results buffer.
 
-            // Build param types using CM ABI type flattening.
-            // WASI P3 async functions with > MAX_FLAT_ASYNC_PARAMS (4) flat params use
-            // indirect calling: all params are passed via a single params_ptr (i32) plus
-            // a results_ptr (i32). This matches what `canon lower async` produces.
-            const MAX_FLAT_ASYNC_PARAMS: usize = 4;
-            let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
-            for (_, _, ty) in &func.params {
-                let resolved_ty = cm_interface_registry.resolve_type(ty);
-                crate::component_model::flatten_cm_param_type(
-                    &resolved_ty,
-                    &mut param_vts,
-                    cm_interface_registry,
-                );
-            }
-
-            // Async functions: per CM spec flatten_functype('lower'), the outptr (i32) is
-            // only appended when len(flat_results) > 0 (i.e., when there is a return type).
-            // Async void functions (e.g., wait_for, wait_until) have no results and no outptr.
-            // Only truly async imports use canon lower async.
-            let needs_async_lower = func.is_async;
-            if needs_async_lower {
-                let has_results = func.return_type.is_some();
-                if param_vts.len() > MAX_FLAT_ASYNC_PARAMS {
-                    // Indirect convention: collapse all params to a single params_ptr.
-                    // Add outptr only if there are results.
-                    if has_results {
-                        param_vts = vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32];
-                    } else {
-                        param_vts = vec![wasm_encoder::ValType::I32];
-                    }
-                } else if has_results {
-                    // Direct convention: params passed directly + outptr.
-                    param_vts.push(wasm_encoder::ValType::I32);
-                }
-            }
-            // Sync functions with complex return types also need an outptr
-            else if let Some(ret_ty) = &func.return_type {
-                let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
-                if crate::component_model::cm_return_needs_outptr(
-                    &resolved_ret_ty,
-                    cm_interface_registry,
-                ) {
-                    param_vts.push(wasm_encoder::ValType::I32);
-                }
-            }
-
-            let params: Vec<WirType> = param_vts.into_iter().map(valtype_to_wir_type).collect();
-
-            // Build result types using CM ABI type flattening
-            let results: Vec<WirType> = if needs_async_lower {
-                // Async/streaming functions always return i32 (subtask handle)
-                vec![WirType::I32]
-            } else if let Some(ret_ty) = &func.return_type {
-                let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
-                if crate::component_model::cm_return_needs_outptr(
-                    &resolved_ret_ty,
-                    cm_interface_registry,
-                ) {
-                    // Complex return via outptr — function returns nothing
-                    Vec::new()
-                } else {
-                    // Simple return — flatten the return type
-                    let mut out = Vec::new();
-                    crate::component_model::flatten_cm_param_type(
-                        &resolved_ret_ty,
-                        &mut out,
-                        cm_interface_registry,
-                    );
-                    out.into_iter().map(valtype_to_wir_type).collect()
-                }
-            } else {
-                Vec::new()
-            };
+            let (params, results) = cm_import_core_func_type(func, cm_interface_registry);
 
             let type_fq = format!("functype//wasi/{local_name}");
             let type_id = ctx.register_func_type(type_fq, params, results);
@@ -244,37 +234,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
     for func in &world_funcs {
         let local_name = func.local_alias_name();
 
-        let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
-        for (_, _, ty) in &func.params {
-            let resolved_ty = cm_interface_registry.resolve_type(ty);
-            crate::component_model::flatten_cm_param_type(
-                &resolved_ty,
-                &mut param_vts,
-                cm_interface_registry,
-            );
-        }
-        let results: Vec<WirType> = if let Some(ret_ty) = &func.return_type {
-            let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
-            if crate::component_model::cm_return_needs_outptr(
-                &resolved_ret_ty,
-                cm_interface_registry,
-            ) {
-                param_vts.push(wasm_encoder::ValType::I32);
-                Vec::new()
-            } else {
-                let mut out = Vec::new();
-                crate::component_model::flatten_cm_param_type(
-                    &resolved_ret_ty,
-                    &mut out,
-                    cm_interface_registry,
-                );
-                out.into_iter().map(valtype_to_wir_type).collect()
-            }
-        } else {
-            Vec::new()
-        };
-
-        let params: Vec<WirType> = param_vts.into_iter().map(valtype_to_wir_type).collect();
+        let (params, results) = cm_import_core_func_type(func, cm_interface_registry);
         let type_fq = format!("functype//wasi/{local_name}");
         let type_id = ctx.register_func_type(type_fq, params, results);
         let name = WirName {

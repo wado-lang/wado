@@ -4162,7 +4162,9 @@ fn compose_dependency_components(
 
 /// Emit a top-level `func` component import for each world-level function in
 /// the plan (Phase 9) — bare, not inside an instance, matching the dependency's
-/// world-level export. v1 covers the primitive/string value surface; a
+/// world-level export. The signature's value types go through the same engine
+/// as the export side, so a structural shape — `stream<T>` and `future<T>`
+/// included — is defined top-level before the func type references it. A
 /// component-defined named type in the signature is rejected.
 fn generate_cm_world_func_imports(
     builder: &mut ComponentBuilder,
@@ -4171,12 +4173,13 @@ fn generate_cm_world_func_imports(
     import_plan: &[crate::wir::ImportEntry],
 ) {
     use crate::wir::ImportKind;
-    let empty: IndexMap<String, u32> = IndexMap::default();
+    let no_resources: IndexMap<&str, u32> = IndexMap::default();
     let world_funcs: Vec<crate::component_model::CmFunctionInfo> = project
         .cm_interface_registry
         .world_import_functions()
         .map(|(_, f)| f.clone())
         .collect();
+    let mut type_gen = crate::component_model::CmTypeGen::new();
     for func in &world_funcs {
         if !import_plan
             .iter()
@@ -4184,23 +4187,43 @@ fn generate_cm_world_func_imports(
         {
             continue;
         }
-        let val_type = |ty: &Type| wado_type_to_cm_val_type(ty, None, None, &empty, &empty, &empty);
         let local_name = func.local_alias_name();
         let func_type_name = format!("world-func-type-{}", func.wasi_func_name);
 
-        let param_vals: Vec<(String, ComponentValType)> = func
-            .params
-            .iter()
-            .map(|(_, cm_name, ty)| (cm_name.clone(), val_type(ty)))
-            .collect();
-        let result_val = func.return_type.as_ref().map(val_type);
+        let mut val_type = |builder: &mut ComponentBuilder,
+                            ctx: &mut ComponentModelContext,
+                            ty: &Type| {
+            let resolved = project
+                .cm_interface_registry
+                .resolve_type_preserving_local_newtypes(ty);
+            let mut sink = TopLevelSink { builder, ctx };
+            type_gen.ast_type_to_cm(
+                &mut sink,
+                &resolved,
+                &project.cm_interface_registry,
+                &no_resources,
+            )
+        };
+
+        let mut param_vals: Vec<(String, ComponentValType)> = Vec::new();
+        for (_, cm_name, ty) in &func.params {
+            let val = val_type(builder, ctx, ty);
+            param_vals.push((cm_name.clone(), val));
+        }
+        let result_val = func
+            .return_type
+            .as_ref()
+            .map(|ty| val_type(builder, ctx, ty));
 
         let func_type = ctx.register_type(&func_type_name);
         {
             let (_, enc) = builder.ty(Some(&func_type_name));
             let param_refs: Vec<(&str, ComponentValType)> =
                 param_vals.iter().map(|(n, v)| (n.as_str(), *v)).collect();
-            enc.function().params(param_refs).result(result_val);
+            enc.function()
+                .async_(func.is_async)
+                .params(param_refs)
+                .result(result_val);
         }
 
         ctx.register_comp_func(&local_name);
@@ -4216,7 +4239,9 @@ fn lower_wasi_functions(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
-    // World functions (Phase 9): canon-lower each like a sync interface method.
+    // World functions (Phase 9): canon-lower each like an interface method —
+    // asynchronously when the dependency exports an `async func`, so the caller
+    // drives the subtask through its `AsyncCall<T>`.
     let world_funcs: Vec<crate::component_model::CmFunctionInfo> = project
         .cm_interface_registry
         .world_import_functions()
@@ -4238,6 +4263,9 @@ fn lower_wasi_functions(
         let needs_memory =
             func.needs_memory_with_registry(&project.cm_interface_registry) || returns_via_outptr;
         let mut options: Vec<CanonicalOption> = Vec::new();
+        if func.is_async {
+            options.push(CanonicalOption::Async);
+        }
         if needs_memory {
             options.push(CanonicalOption::Memory(ctx.memory_idx()));
             options.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));

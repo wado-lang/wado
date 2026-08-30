@@ -12,7 +12,7 @@ mod assert_capture_plan;
 mod box_local_unwrap;
 mod closure_confinement;
 mod closure_frame_moves;
-mod cm_async_value_import_rejected;
+mod cm_async_value_import;
 mod cm_catalog;
 mod cm_donut_canary;
 mod cm_interface_export_decodes;

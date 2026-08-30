@@ -69,14 +69,6 @@ pub enum AnalyzeError {
         name: String,
         span: Span,
     },
-    /// A `use` clause names an export an imported component does export, but
-    /// whose signature carries a shape the CM import path cannot bind yet.
-    UnsupportedComponentExport {
-        module_source: ModuleSource,
-        name: String,
-        kind: String,
-        span: Span,
-    },
     /// Duplicate top-level definition within a single module.
     ///
     /// `span` is the location of the duplicate; `first` is the location of
@@ -148,20 +140,6 @@ impl std::fmt::Display for AnalyzeError {
                     f,
                     "{}:{}: symbol '{}' not found in module '{}'",
                     span.line, span.column, name, module_source
-                )
-            }
-            AnalyzeError::UnsupportedComponentExport {
-                module_source,
-                name,
-                kind,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: {}",
-                    span.line,
-                    span.column,
-                    unsupported_component_export_message(module_source, name, kind)
                 )
             }
             AnalyzeError::DuplicateDefinition { name, span, first } => {
@@ -264,43 +242,6 @@ fn reexport_widens_message(
     )
 }
 
-/// A name missing from a component-binding module because the decoder skipped
-/// its export reports that reason; anything else is a plain not-found.
-fn import_not_found(
-    all_modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
-    module_source: &ModuleSource,
-    name: String,
-    span: Span,
-) -> AnalyzeError {
-    match all_modules
-        .get(module_source)
-        .and_then(|module| crate::wit_consume::module_unsupported_export(module, &name))
-    {
-        Some(kind) => AnalyzeError::UnsupportedComponentExport {
-            module_source: module_source.clone(),
-            name,
-            kind,
-            span,
-        },
-        None => AnalyzeError::ImportNotFound {
-            module_source: module_source.clone(),
-            name,
-            span,
-        },
-    }
-}
-
-pub(crate) fn unsupported_component_export_message(
-    module_source: &ModuleSource,
-    name: &str,
-    kind: &str,
-) -> String {
-    format!(
-        "'{name}' cannot be imported from '{module_source}': its signature carries `{kind}`, \
-         which the Component Model import path does not support yet"
-    )
-}
-
 pub(crate) fn symbol_not_visible_message(
     name: &str,
     module_source: &ModuleSource,
@@ -340,16 +281,6 @@ impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::UndefinedVariable,
                 format!("symbol '{name}' not found in module '{module_source}'"),
-                *span,
-            ),
-            AnalyzeError::UnsupportedComponentExport {
-                module_source,
-                name,
-                kind,
-                span,
-            } => (
-                Code::UnsupportedFeature,
-                unsupported_component_export_message(module_source, name, kind),
                 *span,
             ),
             AnalyzeError::DuplicateDefinition { name, span, first } => (
@@ -1194,12 +1125,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             } else {
                                 self.logger.error_in(
                                     from_module_source,
-                                    import_not_found(
-                                        all_modules,
-                                        &module_source,
-                                        name.clone(),
-                                        use_decl.span,
-                                    ),
+                                    AnalyzeError::ImportNotFound {
+                                        module_source: module_source.clone(),
+                                        name: name.clone(),
+                                        span: use_decl.span,
+                                    },
                                 )?;
                             }
                         }
@@ -1244,12 +1174,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 } else {
                                     self.logger.error_in(
                                         from_module_source,
-                                        import_not_found(
-                                            all_modules,
-                                            &module_source,
-                                            lookup_name,
-                                            use_decl.span,
-                                        ),
+                                        AnalyzeError::ImportNotFound {
+                                            module_source: module_source.clone(),
+                                            name: lookup_name,
+                                            span: use_decl.span,
+                                        },
                                     )?;
                                 }
                             }
