@@ -1711,15 +1711,9 @@ fn build_direct_dispatch(first_sets: &List<List<String>>) -> MultiAltDispatch {
     return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
 
-/// `first_sets` is parallel to `indices`, `alts` is not — the pairing is what
-/// `alt_is_open_ended` needs, and getting it from the surface elements alone
-/// is what missed an alternative open-ended behind a rule reference.
-fn any_open_ended_alt(
-    alts: &List<Alternative>,
-    indices: &List<i32>,
-    first_sets: &List<List<String>>,
-    ctx: &mut GenContext,
-) -> bool {
+/// `indices` selects which of `alts` take part; the two index spaces differ,
+/// which is why the selection is applied here rather than assumed.
+fn any_open_ended_alt(alts: &List<Alternative>, indices: &List<i32>, ctx: &mut GenContext) -> bool {
     for let mut k = 0; k < indices.len(); k += 1 {
         if alt_is_open_ended(&alts[indices[k]], ctx) {
             return true;
@@ -1755,7 +1749,7 @@ fn build_overlap_dispatch(
     // as disjoint and the Direct chain would give it an unreachable
     // empty-token branch. Its real first set is universal — the same invariant
     // `compute_overlap_groups_with_wildcard` applies on the surface IR.
-    if !any_overlap(first_sets) && !any_open_ended_alt(alts, indices, first_sets, ctx) {
+    if !any_overlap(first_sets) && !any_open_ended_alt(alts, indices, ctx) {
         let mut branches: List<DispatchBranch> = [];
         for let mut k = 0; k < indices.len(); k += 1 {
             branches.push(DispatchBranch {
@@ -3283,7 +3277,12 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
 /// action" instead also catches a plain `{x();}`, which gates nothing and
 /// still needs its follow set.
 fn alt_is_bare_empty(alt: &Alternative, ctx: &GenContext) -> bool {
-    return alt.elements.is_empty() && !alt_has_gate(alt, ctx);
+    // The gate has to be one emit will render: with actions retained but not
+    // emitted `alt_gate_and_suffix` produces nothing, and an alternative held
+    // back from its follow set here would then be the dispatch's unconditional
+    // `else`, swallowing a lookahead the group cannot match.
+    let gated = ctx.emit_actions() && alt_has_gate(alt, ctx);
+    return alt.elements.is_empty() && !gated;
 }
 
 /// The admit set of a group's empty alternative, or `null` where there is
