@@ -145,18 +145,22 @@ A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it
 
 ### A/B-ing a compiler change
 
-A change to the compiler needs two compilers, so build the baseline beside you
-and alternate whole-suite runs between them:
+A change to the compiler needs two compilers. `benchmark-baseline` builds
+`origin/main`'s once and caches it under that commit, so every later A/B in the
+session — and after it, until main moves — costs nothing:
 
 ```sh
-git worktree add /tmp/wado-base origin/main
-(cd /tmp/wado-base && cargo build --release -p wado-cli)
-cargo build --release -p wado-cli
+base=$(mise run benchmark-baseline)   # ~5 min the first time, 2 s after
 # alternate, so neither arm always goes second
-mise run benchmark-all > h1.log 2>&1
-(cd /tmp/wado-base/benchmark && mise run all) > b1.log 2>&1  # …and so on, 3 each
+WADO_BIN=$base mise run benchmark-all > b1.log 2>&1
+mise run benchmark-all > h1.log 2>&1  # …and so on, 3 each
 node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
 ```
+
+`WADO_BIN` points the harness at a prebuilt compiler, so both arms run the same
+benchmark sources over the same data and only the compiler differs. Running the
+baseline's own `benchmark/` instead would put every change the branch made to
+the harness inside the comparison.
 
 `ab.ts` decides each row by whether the two arms' `[min, max]` overlap, not by
 the delta: on a 5 ms benchmark a 6% gap between bests is routine inside one arm's
@@ -165,9 +169,15 @@ same binary in both arms, so a `SLOWER` among them means the host drifted betwee
 the arms and no Wado row can be read either.
 
 A row that survives that is still worth one targeted confirmation before you
-believe it, because the whole-suite runs are hours apart: loop the single
-benchmark alternating the two binaries directly (`../target/release/wado run -O2
-sieve/sieve.wado`), five pairs, and check the ranking holds pair by pair.
+believe it, because the whole-suite runs are minutes apart and the reference
+rows only catch drift big enough to cross a range. Loop that one benchmark,
+alternating the binaries back to back, and check the ranking holds pair by pair:
+
+```sh
+for i in 1 2 3 4 5; do
+  "$base" run -O2 sieve/sieve.wado; ../target/release/wado run -O2 sieve/sieve.wado
+done
+```
 
 `WADO_SKIP_PASS=<pass>` gives a third arm for free, off the same binary — which
 is how a regression gets attributed to one pass without a third build. Only a

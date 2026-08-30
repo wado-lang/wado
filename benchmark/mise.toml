@@ -10,10 +10,14 @@
 # libclang-rt-18-dev-wasm32`), and the zlib task skips the C Wasm step when
 # neither is available.
 #
-# `WADO_BENCH_FLAGS` is appended to every `wado compile` / `wado run` here, so a
-# compiler knob can be swept without rebuilding the compiler per arm:
+# Two env vars pick an A/B arm without a second checkout. `WADO_BENCH_FLAGS` is
+# appended to every `wado compile` / `wado run` here, so a knob is swept without
+# rebuilding the compiler; `WADO_BIN` (see `wado.sh`) names a prebuilt compiler
+# to run instead of this tree's, which is how a branch is measured against the
+# `mise run benchmark-baseline` build of `origin/main`.
 #
 #   WADO_BENCH_FLAGS="--optimize-inline-threshold 20" mise run all
+#   WADO_BIN="$(mise run benchmark-baseline)" mise run all
 
 [settings]
 lockfile = true
@@ -28,9 +32,10 @@ description = "Run count_prime benchmark (integer arithmetic)"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 $WADO_BENCH_FLAGS -o count_prime/count_prime.wasm count_prime/count_prime.wado
+wado compile -O2 $WADO_BENCH_FLAGS -o count_prime/count_prime.wasm count_prime/count_prime.wado
 
 echo "=== Compiling C benchmark ==="
 cc -O3 -o count_prime/count_prime_c count_prime/count_prime.c
@@ -42,7 +47,7 @@ echo "=== JavaScript ==="
 node count_prime/count_prime.js
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS count_prime/count_prime.wado
+wado run -O2 $WADO_BENCH_FLAGS count_prime/count_prime.wado
 """
 
 [tasks.mandelbrot]
@@ -50,9 +55,10 @@ description = "Run mandelbrot benchmark (float arithmetic)"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 $WADO_BENCH_FLAGS -o mandelbrot/mandelbrot.wasm mandelbrot/mandelbrot.wado
+wado compile -O2 $WADO_BENCH_FLAGS -o mandelbrot/mandelbrot.wasm mandelbrot/mandelbrot.wado
 
 echo "=== Compiling C benchmark ==="
 cc -O3 -ffp-contract=off -o mandelbrot/mandelbrot_c mandelbrot/mandelbrot.c
@@ -64,7 +70,7 @@ echo "=== JavaScript ==="
 node mandelbrot/mandelbrot.js
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS mandelbrot/mandelbrot.wado
+wado run -O2 $WADO_BENCH_FLAGS mandelbrot/mandelbrot.wado
 """
 
 [tasks.sieve]
@@ -72,9 +78,10 @@ description = "Run sieve benchmark (array operations)"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 $WADO_BENCH_FLAGS -o sieve/sieve.wasm sieve/sieve.wado
+wado compile -O2 $WADO_BENCH_FLAGS -o sieve/sieve.wasm sieve/sieve.wado
 
 echo "=== Compiling C benchmark ==="
 cc -O3 -o sieve/sieve_c sieve/sieve.c
@@ -86,7 +93,7 @@ echo "=== JavaScript ==="
 node sieve/sieve.js
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS sieve/sieve.wado
+wado run -O2 $WADO_BENCH_FLAGS sieve/sieve.wado
 """
 
 [tasks.zlib]
@@ -94,6 +101,7 @@ description = "Run zlib benchmark (compression)"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling zlib-rs benchmark ==="
 cargo build --release --manifest-path zlib/Cargo.toml --quiet
@@ -144,7 +152,7 @@ echo "=== JavaScript (Node) ==="
 node zlib/zlib.js
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS zlib/zlib_bench.wado
+wado run -O2 $WADO_BENCH_FLAGS zlib/zlib_bench.wado
 """
 
 [tasks.fts]
@@ -152,6 +160,7 @@ description = "Run fts benchmark (float-to-string conversion)"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling C benchmark ==="
 cc -O3 -o fts/fts_c fts/fts.c
@@ -166,7 +175,7 @@ echo "=== Rust ==="
 ./fts/fts_rs
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS fts/fts.wado
+wado run -O2 $WADO_BENCH_FLAGS fts/fts.wado
 """
 
 [tasks.json-twitter]
@@ -174,6 +183,7 @@ description = "Run json-twitter benchmark (JSON ser/de)"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling Rust serde_json benchmark ==="
 cargo build --release --manifest-path json_twitter/Cargo.toml --quiet
@@ -185,7 +195,7 @@ echo "=== JavaScript ==="
 node json_twitter/json_twitter.js
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS json_twitter/json_twitter.wado
+wado run -O2 $WADO_BENCH_FLAGS json_twitter/json_twitter.wado
 """
 
 [tasks.cbor]
@@ -193,6 +203,7 @@ description = "Run cbor ser/de benchmark (serde_cbor vs Wado core:cbor) over twi
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling Rust serde_cbor benchmarks ==="
 cargo build --release --manifest-path cbor/Cargo.toml --quiet
@@ -202,7 +213,7 @@ for ds in twitter canada catalog; do
     ./cbor/target/release/cbor_${ds}_bench
 
     echo "=== Wado core:cbor ($ds) ==="
-    cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS cbor/cbor_${ds}.wado
+    wado run -O2 $WADO_BENCH_FLAGS cbor/cbor_${ds}.wado
 done
 """
 
@@ -211,6 +222,7 @@ description = "Run json-canada benchmark (JSON ser/de)"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling Rust serde_json benchmark ==="
 cargo build --release --manifest-path json_canada/Cargo.toml --quiet
@@ -222,7 +234,7 @@ echo "=== JavaScript ==="
 node json_canada/json_canada.js
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS json_canada/json_canada.wado
+wado run -O2 $WADO_BENCH_FLAGS json_canada/json_canada.wado
 """
 
 [tasks.json-catalog]
@@ -230,6 +242,7 @@ description = "Run json-catalog benchmark (JSON ser/de)"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling Rust serde_json benchmark ==="
 cargo build --release --manifest-path json_catalog/Cargo.toml --quiet
@@ -241,10 +254,10 @@ echo "=== JavaScript ==="
 node json_catalog/json_catalog.js
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS json_catalog/json_catalog.wado
+wado run -O2 $WADO_BENCH_FLAGS json_catalog/json_catalog.wado
 
 echo "=== Wado v2 (PoC, hand-rolled parser) ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS json_catalog/json_catalog_v2.wado
+wado run -O2 $WADO_BENCH_FLAGS json_catalog/json_catalog_v2.wado
 """
 
 [tasks.sqlite-parse]
@@ -252,6 +265,7 @@ description = "Run sqlite-parse benchmark (Gale parser vs sqlparser-rs vs ANTLR4
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling Rust sqlparser-rs benchmark ==="
 cargo build --release --manifest-path sqlite_parse/Cargo.toml --quiet
@@ -263,7 +277,7 @@ echo "=== ANTLR4 (Java, generated from the same SQLite.g4) ==="
 node sqlite_parse/antlr4_java_bench.mjs
 
 echo "=== Wado (Gale) ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS sqlite_parse/sqlite_parse.wado
+wado run -O2 $WADO_BENCH_FLAGS sqlite_parse/sqlite_parse.wado
 """
 
 [tasks.syntax-highlight]
@@ -271,6 +285,7 @@ description = "Run syntax-highlight benchmark (Gale vs tree-sitter native + JS h
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== Compiling tree-sitter benchmark ==="
 cargo build --release --manifest-path syntax_highlight/Cargo.toml --quiet
@@ -285,7 +300,7 @@ echo "=== JavaScript highlighters (Node.js) ==="
 node syntax_highlight/syntax_highlight.js
 
 echo "=== Wado (Gale) ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS syntax_highlight/syntax_highlight.wado
+wado run -O2 $WADO_BENCH_FLAGS syntax_highlight/syntax_highlight.wado
 """
 
 [tasks.gale-gen]
@@ -293,12 +308,13 @@ description = "Run gale-gen benchmark (Gale generator vs ANTLR4 over the same .g
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 
 echo "=== ANTLR4 (generate, same RustLexer.g4 + RustParser.g4) ==="
 node gale_gen/antlr4_gen.mjs
 
 echo "=== Wado (Gale generator, Rust grammar) ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 $WADO_BENCH_FLAGS gale_gen/gale_gen.wado
+wado run -O2 $WADO_BENCH_FLAGS gale_gen/gale_gen.wado
 """
 
 [tasks.http-routing]
@@ -310,6 +326,7 @@ description = "Run all benchmarks serially"
 run = """
 #!/usr/bin/env bash
 set -e
+source ./wado.sh
 # pure computation
 MISE_JOBS=1 mise run count-prime
 MISE_JOBS=1 mise run mandelbrot

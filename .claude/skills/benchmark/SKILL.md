@@ -60,9 +60,14 @@ node benchmark/pick.ts thr13.log thr20.log thr32.log
 
 Read the sweep with `pick.ts` the same way as a best-of-three: it keys rows by
 (task, implementation, phase), so the "best" column names the winning arm per
-row. The knob a sweep settles on is a default in `optimize.rs`, not a flag the
-README's numbers were taken under — re-run the suite unflagged before updating
-the tables.
+row. Only a knob every compiling subcommand accepts can be swept this way — the
+harness spends the flags on `wado run`, so one added to `compile` alone is one
+the sweep cannot reach. The knob a sweep settles on is a default in
+`optimize.rs`, not a flag the README's numbers were taken under — re-run the
+suite unflagged before updating the tables.
+
+Comparing the settled default against `origin/main` is a different measurement,
+and `WADO_BIN` plus `ab.ts` is how: see the `wado-performance` skill.
 
 ## Reading output
 

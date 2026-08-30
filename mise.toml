@@ -483,6 +483,38 @@ grep -lE '^#!?\\[TODO\\]' wado-compiler/tests/fixtures/*.wado 2>/dev/null | sort
 description = "Run all benchmarks"
 run = "mise run -C benchmark all"
 
+# The arm an A/B compares against: `origin/main`'s compiler, kept as the one
+# binary, since the worktree and target dir it was built from are gigabytes and
+# nothing reads them afterwards. Cached under the commit, so a moved main
+# rebuilds rather than quietly comparing against a stale compiler. Prints the
+# binary's path, which is what `WADO_BIN` takes.
+[tasks.benchmark-baseline]
+description = "Build (once) the origin/main compiler that `benchmark/ab.ts` compares against"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+git fetch -q origin main
+want="$(git rev-parse origin/main)"
+cache="${WADO_BASELINE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/wado/baseline}"
+bin="$cache/$want/wado"
+
+if [ ! -x "$bin" ]; then
+    echo "building the ${want:0:12} baseline (once, ~5 min)" >&2
+    build="$(mktemp -d)/tree"
+    # A wiped temp dir leaves the registration behind, failing the add.
+    git worktree prune
+    git worktree add -q --detach "$build" "$want"
+    (cd "$build" && cargo build --release -q -p wado-cli)
+    mkdir -p "$(dirname "$bin")"
+    cp "$build/target/release/wado" "$bin"
+    git worktree remove --force "$build"
+    # One baseline is enough; the rest are compilers no A/B will ask for again.
+    find "$cache" -mindepth 1 -maxdepth 1 -not -name "$want" -exec rm -rf {} +
+fi
+echo "$bin"
+"""
+
 [tasks.benchmark-count-prime]
 description = "Run count_prime benchmark"
 run = "mise run -C benchmark count-prime"
