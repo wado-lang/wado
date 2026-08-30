@@ -105,11 +105,9 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
     buf.push('"');
 }
 
-/// Write the plain run ending at `i`, then the escape `b` needs. Out of line
-/// because its caller is a byte scan whose escape arm is taken rarely: a
-/// `push_str_range_unchecked` and a six-arm match, one of them a format, are
-/// what the scan would otherwise carry inline.
-#[inline(never)]
+/// Write the plain run ending at `i`, then the escape `b` needs. Separate from
+/// its caller, a byte scan whose escape arm is taken rarely, so the scan carries
+/// a call instead of a range append and a six-arm match with a format in it.
 fn flush_run_and_escape(buf: &mut String, s: &String, run_start: i32, i: i32, b: u8) {
     buf.push_str_range_unchecked(s, run_start, i);
     match b {

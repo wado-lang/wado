@@ -112,11 +112,23 @@ wasmtime/Cranelift call small Wasm functions cheaply, so forcing inlining rarely
 moves wall-time and raising the threshold bloats hot loops (measured slower). The
 exception is a tight iteration-bound loop with a trivial body.
 
-A rare heavy sub-case behind a `cold_path()` marker needs no hand-splitting:
-`nir/cold_outline` moves what the marker opens into a function of its own, so the
-leaf inlines at its hot-path size. Split by hand only when the slow path is not
-rare — a `width > 0` branch that runs every time a width is set is hot when
-taken, which no marker should claim otherwise.
+A rare heavy sub-case behind a `cold_path()` marker usually needs no
+hand-splitting: `nir/cold_outline` moves what the marker opens into a function of
+its own, so the leaf inlines at its hot-path size. Its region runs from the
+marker to the end of the enclosing block, so a marker in the middle of a loop
+body — with the loop's own bookkeeping after it — is one it cannot take
+(`docs/optimizer.md`); that shape still needs the split written out. Split by
+hand also when the slow path is not rare: a `width > 0` branch that runs every
+time a width is set is hot when taken, which no marker should claim otherwise.
+
+**Write the stdlib to be fast without inline hints.** A `#[inline]` /
+`#[inline(never)]` in `wado-compiler/lib/` is a claim the cost model got it
+wrong, and it silently outlives whatever measurement justified it — the split
+that `#[inline(never)]` was added for is usually one the inliner already
+declines on size. Prefer changing the shape (a separate function, a smaller hot
+path) and leave the decision to the threshold; reach for a hint only after
+measuring that the shape alone does not get there, and say in a comment what it
+buys.
 
 ## 5. Measurement
 
