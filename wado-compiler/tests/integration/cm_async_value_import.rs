@@ -4,10 +4,9 @@
 //! between two components. See
 //! `docs/wep-2026-06-26-wasm-cm-component-import.md`.
 //!
-//! Every end here reads once. A peer that loops until end-of-stream needs the
-//! copy status a read reports, which `Stream::read` does not carry yet — see
-//! "Known gap: a read cannot report the end" in
-//! `docs/wep-2026-07-25-async-stream-canonical.md`.
+//! A read reports how its copy ended, so a peer can drain to end-of-stream
+//! rather than reading once and guessing — see
+//! `docs/wep-2026-08-30-stream-copy-result.md`.
 
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
@@ -19,12 +18,11 @@ const DOUBLE_STREAM: &str = r#"
 export async fn double_stream(v: Stream<u32>) -> Stream<u32> {
     let [rx, tx] = Stream::<u32>::new();
     task return rx;
-    let chunk = v.read(16);
     let mut out: List<u32> = [];
-    for let x of chunk {
+    for let x of v.read_to_end() {
         out.push(x * 2);
     }
-    tx.write(out);
+    tx.write_all(out);
     v.drop();
     tx.drop();
 }
@@ -88,10 +86,10 @@ use { println, Stdout } from "core:cli";
 export fn run() with Stdout {
     let [rx, tx] = Stream::<u32>::new();
     let call = Dep::double_stream(rx);
-    tx.write([1, 2, 3]);
+    tx.write_all([1, 2, 3]);
     tx.drop();
     let out = call.wait();
-    let got = out.read(16);
+    let got = out.read_to_end();
     out.drop();
     println(`${got:?}`);
 }
@@ -113,10 +111,10 @@ use { println, Stdout } from "core:cli";
 export fn run() with Stdout {
     let [rx, tx] = Stream::<u32>::new();
     let call = double_stream(rx);
-    tx.write([5, 6]);
+    tx.write_all([5, 6]);
     tx.drop();
     let out = call.wait();
-    let got = out.read(16);
+    let got = out.read_to_end();
     out.drop();
     println(`${got:?}`);
 }
@@ -137,17 +135,17 @@ fn a_generic_body_binds_its_stream_read_per_instance() {
 use { double_stream } from "./dep.wasm" with { type: "wasm" };
 use { println, Stdout } from "core:cli";
 
-fn read_once<T>(s: &Stream<T>) -> List<T> {
+fn read_once<T>(s: &Stream<T>) -> StreamChunk<T> {
     return s.read(16);
 }
 
 export fn run() with Stdout {
     let [rx, tx] = Stream::<u32>::new();
     let call = double_stream(rx);
-    tx.write([4, 5]);
+    tx.write_all([4, 5]);
     tx.drop();
     let out = call.wait();
-    let got = read_once::<u32>(&out);
+    let got = read_once::<u32>(&out).items;
     out.drop();
     println(`${got:?}`);
 }
