@@ -45,16 +45,14 @@ paths stay green only because their writes and drops arrive separately.
 ### Writes have the same shape
 
 `stream.write` reports `(count, status)` too: a reader may take a prefix, and the
-peer may have dropped. `StreamWritable::write` returns `()` and loops internally
-until the buffer drains or the status turns non-zero
-(`rt.wado::cm_stream_write_drain`), so the caller learns neither how much was
-taken nor that the reader is gone — and its next `write` traps
-(`futures_and_streams.rs:3507`).
+peer may have dropped. `StreamWritable::write` returns `()` and drains inside the
+adapter, so the caller learns neither how much was taken nor that the reader is
+gone — and its next `write` traps (`futures_and_streams.rs:3507`).
 
 ### Futures already do it
 
 `Future::read` consults the status and maps a non-`COMPLETED` copy to
-`Option::None` (`resource_rewrite.rs:1054`). Streams are the odd one out.
+`Option::None` (`synthesize_future_read_func`). Streams are the odd one out.
 
 ## Decision
 
@@ -126,6 +124,12 @@ impl StreamWritable<T> {
 These are ordinary Wado, generic over the element type, and are what most call
 sites use. A call site that streams — bounded memory, incremental work — writes
 the loop over `read` itself.
+
+`write_raw` and `write_raw_all` hand the backing array to the canonical as it
+stands, which lines up with the CM buffer only for bytes. A wider element is a
+diagnostic naming `write_all`, not a lowering: `cm_binding_function`'s stream
+arms are the hand-written `u8` path, and the rewriter checks the element rather
+than trusting that everything else was parameterized above it.
 
 ### A generic resource dispatches like any other declaration
 
@@ -205,7 +209,11 @@ Neutral:
 - `BLOCKED` stays absorbed inside the adapters and `Stream` is still not joinable
   to a `WaitableSet`, so `select` over several streams and `cancel_read` /
   `cancel_write` remain unreachable — see
-  [Async Canonical Options](./wep-2026-07-25-async-stream-canonical.md).
+  [Async Canonical Options](./wep-2026-07-25-async-stream-canonical.md). This is
+  what a Go-style channel needs and does not have yet.
+- A non-byte `write_raw` has no lowering. Giving it one means a slice-sourced
+  counterpart to `synthesize_lower_list_to_buffer`, which reads its length and
+  elements through `List` alone today.
 
 ## Related WEPs
 

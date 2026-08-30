@@ -64,16 +64,23 @@ fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
     internal_call("cm_copy_result", vec![packed], copy_result)
 }
 
-/// `StreamChunk { items, result }` — field order mirrors the declaration.
-fn stream_chunk_literal(chunk_type_id: TypeId, items: TirExpr, result: TirExpr) -> TirExpr {
+/// `StreamChunk { items, result }` / `StreamWrite { count, result }` — what a
+/// copy moved, paired with how it ended. Field order follows the declaration.
+fn copy_report_literal(
+    type_id: TypeId,
+    struct_name: &str,
+    moved_field: &str,
+    moved: TirExpr,
+    result: TirExpr,
+) -> TirExpr {
     TirExpr::new(
         TirExprKind::StructLiteral {
-            struct_type: chunk_type_id,
-            struct_name: "StreamChunk".to_string(),
+            struct_type: type_id,
+            struct_name: struct_name.to_string(),
             fields: vec![
                 crate::tir::TirStructField {
-                    name: "items".to_string(),
-                    value: items,
+                    name: moved_field.to_string(),
+                    value: moved,
                     field_index: 0,
                 },
                 crate::tir::TirStructField {
@@ -83,33 +90,17 @@ fn stream_chunk_literal(chunk_type_id: TypeId, items: TirExpr, result: TirExpr) 
                 },
             ],
         },
-        chunk_type_id,
+        type_id,
         synth_span(),
     )
 }
 
-/// `StreamWrite { count, result }` — field order mirrors the declaration.
+fn stream_chunk_literal(chunk_type_id: TypeId, items: TirExpr, result: TirExpr) -> TirExpr {
+    copy_report_literal(chunk_type_id, "StreamChunk", "items", items, result)
+}
+
 fn stream_write_literal(write_type_id: TypeId, count: TirExpr, result: TirExpr) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: write_type_id,
-            struct_name: "StreamWrite".to_string(),
-            fields: vec![
-                crate::tir::TirStructField {
-                    name: "count".to_string(),
-                    value: count,
-                    field_index: 0,
-                },
-                crate::tir::TirStructField {
-                    name: "result".to_string(),
-                    value: result,
-                    field_index: 1,
-                },
-            ],
-        },
-        write_type_id,
-        synth_span(),
-    )
+    copy_report_literal(write_type_id, "StreamWrite", "count", count, result)
 }
 
 /// `result == -1`: the BLOCKED sentinel of a CM async built-in.
@@ -156,10 +147,8 @@ impl<K, F: Fn(&TypeTable, &TirExpr) -> Option<(String, K)>> TirRefVisitor
     }
 }
 
-/// The bodies a binding pass walks and the state it synthesizes against.
-/// A `Package` (before monomorphize) and a `FlatPackage` (after it) both
-/// present this, so the payload-driven passes run over either — see
-/// [WEP: Stream Copy Results](../../../docs/wep-2026-08-30-stream-copy-result.md).
+/// The bodies a binding pass walks and the state it synthesizes against. A
+/// `Package` and a `FlatPackage` both present it, so the passes run over either.
 pub(super) struct BindingSites<'a> {
     /// Every function whose body may hold an unrewritten `#[cm]` call.
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
@@ -168,13 +157,8 @@ pub(super) struct BindingSites<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
     pub interner: &'a RefCell<ModuleSourceInterner>,
     pub entry_module_source: ModuleSource,
-    /// The helper names the entry module already holds — the same key
-    /// `(module_source, name)` that identifies a function downstream, narrowed
-    /// to the one module every helper lands in.
-    ///
-    /// A payload concrete before monomorphize took its helper from the first
-    /// half; reaching that payload again from an instantiated generic body must
-    /// call that helper, not mint a second one under its name.
+    /// The names the entry module — where every helper lands — already holds.
+    /// Reaching a payload a second time calls its helper, never mints another.
     existing: IndexSet<String>,
 }
 
@@ -448,7 +432,8 @@ fn payload_ast_type(
 /// Asked directly rather than through `classify_stream_payload`, which panics
 /// instead of answering `false`.
 fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
-    !is_u8(tt, elem) && crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
+    !crate::component_model::is_u8_stream_element(tt, elem)
+        && crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
 }
 
 /// The stream-write element type for a scalar / structural `stream-write`, or
@@ -661,7 +646,6 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         ),
     ));
 
-    // return StreamWrite { count: <copied>, result: cm_copy_result(result) }
     let write_type_id = type_table
         .borrow_mut()
         .make_compiler_struct(crate::compiler_item::CompilerItem::StreamWrite);
@@ -1203,12 +1187,8 @@ fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
     (!has_value_payload(tt, elem_type_id)).then_some(elem_type_id)
 }
 
-/// What the receiver of a stream `#[cm]` method streams — the one answer to
-/// that question, since every caller here needs the same peel.
-///
-/// Read off the receiver, never off what the call returns: `Stream::read`
-/// yields a `StreamChunk<T>` instance that monomorphize replaces with a
-/// concrete struct, while the receiver names `T` on both sides of the phase.
+/// What the receiver of a stream `#[cm]` method streams. Never read off what
+/// the call returns: monomorphize replaces a `StreamChunk<T>` with a struct.
 fn stream_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     let (receiver, _, _) = expr.kind.as_method_call()?;
     let mut recv = receiver.type_id;
@@ -1233,7 +1213,7 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
         return None;
     }
     let elem = stream_receiver_element(tt, expr)?;
-    (!is_u8(tt, elem)).then_some(elem)
+    (!crate::component_model::is_u8_stream_element(tt, elem)).then_some(elem)
 }
 
 /// The `__cm_stream_read_<record>` helper name for a WASI record element.
@@ -1534,7 +1514,6 @@ fn synthesize_stream_read_func(
     );
     stmts.push(let_stmt("__freed", freed_idx, TypeTable::I32, free_call));
 
-    // return StreamChunk { items: arr, result: cm_copy_result(result) }
     stmts.push(return_stmt(Some(stream_chunk_literal(
         chunk_type_id,
         local_ref(arr_idx, "arr", array_type_id),
@@ -1650,11 +1629,8 @@ enum BindingTarget {
     Entry(String),
 }
 
-/// The stream entries of [`cm_binding_function`] — the `core:rt` adapters and
-/// canonical indices written for a `u8` element. A wider element is
-/// parameterized before it reaches them, and the rewriter checks that here
-/// rather than assuming it: an element that slipped through lowered into a
-/// signature meant for bytes, which fails Wasm validation several phases later.
+/// The [`cm_binding_function`] entries written for a `u8` element. The rewriter
+/// checks the element rather than trusting that a wider one was parameterized.
 const U8_STREAM_BINDINGS: &[&str] = &[
     "stream-drop-readable",
     "stream-drop-writable",
@@ -1839,13 +1815,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             rewrite_cm_call(expr, BindingTarget::Canonical(intrinsic), self.entry_source);
             return;
         }
-        // What is left of the stream surface is the hand-written `u8` path.
-        // Everything above is what parameterizes a wider element; an element
-        // that reached here unparameterized has no lowering, so it stays
-        // unbound and is reported rather than going through a signature that
-        // was written for bytes.
+        // Everything above is what parameterizes a wider element, so what is
+        // left of the stream surface is the hand-written `u8` path: an element
+        // that got here unparameterized stays unbound and is reported.
         if U8_STREAM_BINDINGS.contains(&cm_name.as_str())
-            && !stream_receiver_element(self.tt, expr).is_some_and(|e| is_u8(self.tt, e))
+            && !stream_receiver_element(self.tt, expr)
+                .is_some_and(|e| crate::component_model::is_u8_stream_element(self.tt, e))
         {
             return;
         }
@@ -2029,11 +2004,4 @@ fn pascal_to_kebab(name: &str) -> String {
         s.push(c.to_ascii_lowercase());
         s
     })
-}
-
-fn is_u8(tt: &TypeTable, elem: TypeId) -> bool {
-    matches!(
-        tt.get(elem),
-        ResolvedType::Primitive(crate::tir::PrimitiveType::U8)
-    )
 }

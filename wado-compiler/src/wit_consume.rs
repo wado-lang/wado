@@ -263,12 +263,7 @@ impl Builder {
                 })
                 .collect();
             let is_async = is_async_func(func);
-            let result = func.result.map(|r| self.map_type(resolve, r, fq));
-            let return_type = if is_async {
-                Some(self.generic("AsyncCall", vec![result.unwrap_or_else(unit)]))
-            } else {
-                result
-            };
+            let return_type = self.func_return_type(resolve, func, fq);
             let attrs = vec![
                 self.cm_import_attr(fq, Some(fname)),
                 Attribute {
@@ -310,10 +305,24 @@ impl Builder {
         }));
     }
 
+    /// A WIT result, wrapped in `AsyncCall<T>` for an `async func` — the shape
+    /// the consumer drives the subtask through.
+    fn func_return_type(
+        &mut self,
+        resolve: &Resolve,
+        func: &wit_parser::Function,
+        fq: &str,
+    ) -> Option<Type> {
+        let result = func.result.map(|r| self.map_type(resolve, r, fq));
+        if is_async_func(func) {
+            return Some(self.generic("AsyncCall", vec![result.unwrap_or_else(unit)]));
+        }
+        result
+    }
+
     /// Emit a bodyless free `Item::Function` for a world-level function export
     /// (Phase 9); the consumer calls it as a free function and codegen
     /// synthesizes the CM import trampoline from the `#[cm]` boundary.
-    ///
     fn emit_world_function(&mut self, resolve: &Resolve, func: &wit_parser::Function) {
         let cm_params: Vec<AttrArg> = func
             .params
@@ -338,12 +347,7 @@ impl Builder {
             })
             .collect();
         let is_async = is_async_func(func);
-        let result = func.result.map(|r| self.map_type(resolve, r, ""));
-        let return_type = if is_async {
-            Some(self.generic("AsyncCall", vec![result.unwrap_or_else(unit)]))
-        } else {
-            result
-        };
+        let return_type = self.func_return_type(resolve, func, "");
         let attrs = vec![
             self.cm_world_import_attr(&func.name),
             Attribute {

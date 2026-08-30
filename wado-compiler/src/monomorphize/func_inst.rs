@@ -771,12 +771,8 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
 }
 
 impl Monomorphizer {
-    /// Collect function instantiation sites from call expressions
-    ///
-    /// `scanned` is how many leading functions a previous run already read,
-    /// and left rewritten to mangled instance names. Reading one of those again
-    /// would queue an instance from a call that no longer spells its method
-    /// type arguments.
+    /// Collect function instantiation sites from call expressions, skipping the
+    /// `scanned` leading functions a previous run left rewritten.
     pub fn collect_function_instantiation_sites(
         &mut self,
         module: &TirModule,
@@ -804,9 +800,8 @@ impl Monomorphizer {
             }
         }
 
-        // Also scan global variable initializers for function instantiation
-        // sites. A resumed run adds no globals, and the first run's pass over
-        // them left the same rewritten calls a re-read must not queue from.
+        // Global initializers, on the first run only: a resume adds no globals,
+        // and the first run left these rewritten too.
         if scanned == 0 {
             for global in &module.globals {
                 collector.visit_expr(global.init.slot_expr());

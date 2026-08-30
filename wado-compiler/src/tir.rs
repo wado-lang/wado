@@ -1998,22 +1998,10 @@ impl TypeTable {
         })
     }
 
-    /// Create the `StreamChunk<T>` a `Stream<T>::read` returns: the elements it
-    /// copied paired with the copy's `CopyResult`.
+    /// The `StreamChunk<T>` a `Stream<T>::read` returns.
     pub fn make_stream_chunk(&mut self, elem: TypeId) -> TypeId {
         let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::StreamChunk);
         self.make_generic_instance(def, vec![elem])
-    }
-
-    /// If `type_id` is a `StreamChunk<T>` `GenericInstance`, return `T`.
-    pub fn as_stream_chunk(&self, type_id: TypeId) -> Option<TypeId> {
-        if let ResolvedType::GenericInstance { def, type_args } = self.get(type_id)
-            && self.def_name(*def) == "StreamChunk"
-            && type_args.len() == 1
-        {
-            return Some(type_args[0]);
-        }
-        None
     }
 
     /// Create a `AsyncCall<T>` generic struct instance type.
@@ -4025,11 +4013,9 @@ impl TypeTable {
     #[must_use]
     pub fn base_type_name(&self, id: TypeId) -> String {
         match self.get(id) {
-            // A generic resource heads its own methods the way a generic struct
-            // does: `Stream<u8>::read` is `Stream`'s method at `u8`, so the head
-            // is bare and the argument travels as a type argument. Spelling it
-            // into the head applies the argument twice
-            // (`StreamWritable<u8><u8>::write_all`), which resolves to nothing.
+            // A generic resource heads its methods bare, like a generic struct:
+            // spelling the argument into the head applies it twice
+            // (`StreamWritable<u8><u8>::write_all`) and resolves to nothing.
             ResolvedType::GenericInstance { def, .. }
             | ResolvedType::GenericResource { def, .. } => self.def_name(*def).to_string(),
             ResolvedType::Struct { def, .. } => self.struct_head_name(*def),
@@ -4087,12 +4073,10 @@ impl TypeTable {
                     .map_or_else(|| builtin(""), Receiver::Ref)
             }
             ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
-            // A newtype's head is its declaration, arguments never spelled into
-            // it — an `impl` header writes `MyArray`, not `MyArray<i32>`.
-            // A generic resource is declared like the rest: an `impl Stream<T>`
-            // header names that declaration, and the receiver key must be the
-            // same one, or the impl's methods and the calls to them mangle
-            // under two different heads and never meet.
+            // The head is the declaration, arguments never spelled into it — an
+            // `impl` header writes `MyArray`, not `MyArray<i32>`, and
+            // `impl Stream<T>`, not `Stream<u8>`. A call keyed the other way
+            // mangles under a second head and never meets the impl's methods.
             ResolvedType::Enum { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Flags { def }

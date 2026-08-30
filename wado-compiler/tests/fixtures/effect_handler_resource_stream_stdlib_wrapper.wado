@@ -1,10 +1,8 @@
-// A handler must claim the primitive even when the stdlib's generic wrapper is
-// what calls it. `Stream::read_to_end`, `StreamWritable::write_all` and
-// `write_raw_all` are `impl` bodies over a type parameter, so their `#[cm]`
-// calls name no concrete receiver until monomorphize mints
-// `Stream<u8>::read_to_end`. Effect-dispatch rewriting therefore has to run
-// again over the instances — otherwise the call binds straight to the CM
-// canonical and traps past the installed handler.
+// A handler claims the primitive even when a stdlib wrapper is what calls it.
+// `read_to_end`, `write_all` and `write_raw_all` are impl bodies over a type
+// parameter, so their `#[cm]` calls name no concrete receiver until monomorphize
+// mints the instance — effect-dispatch rewriting has to run again over those, or
+// the call reaches the canonical past the installed handler.
 //
 // The direct-call form is effect_handler_resource_stream.wado.
 

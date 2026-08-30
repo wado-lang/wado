@@ -106,9 +106,7 @@ pub struct Package {
     >,
 
     /// The resource half of the wrapper index the same early pass built, kept
-    /// past link: a `#[cm]` call inside a generic body names a concrete
-    /// receiver only once monomorphize mints the instance, and it must still
-    /// route through the handler's wrapper rather than the canonical.
+    /// past link for the calls monomorphize has yet to make concrete.
     pub resource_wrappers: crate::synthesis::effect_dispatch::ResourceWrapperIndex,
 
     /// `ModuleSource` interner shared with the elaborator. Synthesis

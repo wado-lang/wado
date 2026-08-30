@@ -4160,12 +4160,10 @@ fn compose_dependency_components(
     }
 }
 
-/// Emit a top-level `func` component import for each world-level function in
-/// the plan (Phase 9) — bare, not inside an instance, matching the dependency's
-/// world-level export. The signature's value types go through the same engine
-/// as the export side, so a structural shape — `stream<T>` and `future<T>`
-/// included — is defined top-level before the func type references it. A
-/// component-defined named type in the signature is rejected.
+/// A bare top-level `func` import per world-level function in the plan, matching
+/// the dependency's world-level export. Value types go through the export side's
+/// engine, so `stream<T>` and `future<T>` are defined before the func type
+/// references them; a component-defined named type is rejected.
 fn generate_cm_world_func_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,

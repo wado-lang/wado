@@ -1,19 +1,12 @@
-//! Importing a component whose exported signature carries an async value type
-//! (`stream<T>` / `future<T>`): the consumer creates the pair, hands the
-//! readable end to the dependency, and reads what comes back — a channel
-//! between two components. See
-//! `docs/wep-2026-06-26-wasm-cm-component-import.md`.
-//!
-//! A read reports how its copy ended, so a peer can drain to end-of-stream
-//! rather than reading once and guessing — see
-//! `docs/wep-2026-08-30-stream-copy-result.md`.
+//! A `stream<T>` / `future<T>` across an import: the consumer creates the pair,
+//! hands the readable end over, and drains what comes back — a channel between
+//! two components. See `docs/wep-2026-06-26-wasm-cm-component-import.md`.
 
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
-/// The dependency's `async func(stream<u32>) -> stream<u32>`: it returns the
-/// readable end first and then copies, so the caller's writes rendezvous with
-/// this read instead of deadlocking.
+/// The dependency's `async func(stream<u32>) -> stream<u32>`. It `task return`s
+/// before copying, so the caller's writes rendezvous instead of deadlocking.
 const DOUBLE_STREAM: &str = r#"
 export async fn double_stream(v: Stream<u32>) -> Stream<u32> {
     let [rx, tx] = Stream::<u32>::new();

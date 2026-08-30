@@ -37,8 +37,7 @@ pub struct FlatPackage {
     pub interner: Rc<RefCell<crate::module_source::ModuleSourceInterner>>,
 
     /// The effect-dispatch wrappers a resource `#[cm]` call routes through,
-    /// carried past link for the calls that were still generic when the early
-    /// pass rewrote the concrete ones.
+    /// for the calls that were still generic when the early pass ran.
     pub resource_wrappers: crate::synthesis::effect_dispatch::ResourceWrapperIndex,
 
     /// All functions from all modules. Each `TirFunction` carries its own `module_source`.

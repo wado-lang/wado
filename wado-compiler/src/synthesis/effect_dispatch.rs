@@ -2468,38 +2468,38 @@ fn rewrite_call_sites_to_wrappers(
     project.resource_wrappers.clone_from(&cm_to_wrappers);
 
     for module in project.tir_modules.values_mut() {
-        let type_table_rc = module.type_table.clone();
         let ctx = RewriteCtx {
             user_to_wrapper: &user_to_wrapper,
             cm_to_wrappers: &cm_to_wrappers,
-            type_table: type_table_rc,
+            type_table: module.type_table.clone(),
             entry_source: &entry_source,
         };
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if func.is_dispatch_wrapper {
-                continue;
-            }
-            if let Some(body) = &mut func.body {
-                rewrite_calls_in_block(body, &ctx);
-            }
+        rewrite_calls_in_functions(&module.functions, &ctx);
+    }
+}
+
+fn rewrite_calls_in_functions(
+    functions: &[std::rc::Rc<std::cell::RefCell<TirFunction>>],
+    ctx: &RewriteCtx<'_>,
+) {
+    for func_rc in functions {
+        let mut func = func_rc.borrow_mut();
+        if func.is_dispatch_wrapper {
+            continue;
+        }
+        if let Some(body) = &mut func.body {
+            rewrite_calls_in_block(body, ctx);
         }
     }
 }
 
-/// `(resource_module, base_name, cm_name) → [(type_args, wrapper_name)]`, the
-/// half of the wrapper index a resource call needs. Outlives the pre-cm-binding
-/// pass: a `#[cm]` call in a generic body only names a concrete receiver once
-/// monomorphize mints the instance, and the wrappers it must route through were
-/// already synthesized from the handler impls.
+/// `(resource_module, base_name, cm_name) → [(type_args, wrapper_name)]`.
+/// Outlives its pass: an instance minted later routes through the same wrappers.
 pub type ResourceWrapperIndex =
     IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>>;
 
-/// Pre-build one lookup map per call shape. An effect op resolves to a
-/// `Local { path: "<EffectName>" }` call even when it carries `#[cm(…)]`, so
-/// `user_to_wrapper` keys on `(interface_name, op_name)`. A resource method
-/// resolves against its declaring module with `method_info.cm_name` set, so
-/// `cm_to_wrappers` keys on `(decl_module, base_name, cm_name)` plus type args.
+/// One lookup map per call shape: an effect op keys on `(interface, op)`, a
+/// resource method on `(decl_module, base_name, cm_name)` plus its type args.
 fn build_wrapper_indexes(
     project: &Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
@@ -2539,31 +2539,21 @@ fn build_wrapper_indexes(
     (user_to_wrapper, cm_to_wrappers)
 }
 
-/// Post-monomorphize half: route the `#[cm]` calls that were in a generic body
-/// when [`rewrite_call_sites_to_wrappers`] ran. Their receiver named a type
-/// parameter then, so no instantiation matched and they would otherwise bind
-/// straight to the canonical, past a handler that is installed for them.
+/// Post-monomorphize half of [`rewrite_call_sites_to_wrappers`]: a `#[cm]` call
+/// whose receiver was a type parameter matched no instantiation until now.
 pub fn rewrite_resource_calls_monomorphized(flat: &mut crate::flat_package::FlatPackage) {
     if flat.resource_wrappers.is_empty() {
         return;
     }
     let entry_source = flat.entry_module_source.clone();
-    let user_to_wrapper: IndexMap<(String, String), String> = IndexMap::default();
+    let no_user_effect_calls = IndexMap::default();
     let ctx = RewriteCtx {
-        user_to_wrapper: &user_to_wrapper,
+        user_to_wrapper: &no_user_effect_calls,
         cm_to_wrappers: &flat.resource_wrappers,
         type_table: flat.type_table.clone(),
         entry_source: &entry_source,
     };
-    for func_rc in &flat.functions {
-        let mut func = func_rc.borrow_mut();
-        if func.is_dispatch_wrapper {
-            continue;
-        }
-        if let Some(body) = &mut func.body {
-            rewrite_calls_in_block(body, &ctx);
-        }
-    }
+    rewrite_calls_in_functions(&flat.functions, &ctx);
 }
 
 /// Read-only context threaded through the call-site rewriter. Bundles

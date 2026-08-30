@@ -51,14 +51,20 @@ pub fn is_cm_record_stream_element(type_table: &TypeTable, element: TypeId) -> b
     )
 }
 
-pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Option<String> {
-    let element = peel_newtypes(type_table, element);
-    if matches!(
-        type_table.get(element),
+/// The byte stream, which the hand-written `core:rt` adapters bind. A newtype
+/// over `u8` is one: the payload classification peels before it decides.
+pub fn is_u8_stream_element(type_table: &TypeTable, element: TypeId) -> bool {
+    matches!(
+        type_table.get(peel_newtypes(type_table, element)),
         ResolvedType::Primitive(PrimitiveType::U8)
-    ) {
+    )
+}
+
+pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Option<String> {
+    if is_u8_stream_element(type_table, element) {
         return None;
     }
+    let element = peel_newtypes(type_table, element);
     cm_payload_type_from_type_id(type_table, element)
         .is_none()
         .then(|| {
@@ -140,13 +146,10 @@ pub fn classify_stream_payload(
     element: TypeId,
 ) -> crate::canonical::CmStreamPayload {
     use crate::canonical::CmStreamPayload;
-    let element = peel_newtypes(type_table, element);
-    if matches!(
-        type_table.get(element),
-        ResolvedType::Primitive(PrimitiveType::U8)
-    ) {
+    if is_u8_stream_element(type_table, element) {
         return CmStreamPayload::U8;
     }
+    let element = peel_newtypes(type_table, element);
     match cm_payload_type_from_type_id(type_table, element) {
         Some(payload) => CmStreamPayload::Value(payload),
         None => panic!(

@@ -63,19 +63,10 @@ use crate::tir::{ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTa
 
 use state::Monomorphizer;
 
-/// Monomorphize a `FlatPackage` (`FlatPackage` -> `FlatPackage`)
-///
-/// This is the main entry point for the monomorphize phase. All per-module data
-/// has already been linked into flat lists by the link phase. This function:
-/// 1. Collects all generic struct/function definitions (with shadowing)
-/// 2. Creates a temporary `TirModule` with the flat data
-/// 3. Runs monomorphization to instantiate generics
-/// 4. Writes results back to `FlatPackage`
-/// 5. Strips effect params (validated by prior effect checker)
+/// Instantiate every generic the linked package reaches, and hand back the
+/// session so a pass that adds bodies later can resume it.
 pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
     let mut session = Monomorphization {
-        // Collect all generic functions from the flat list.
-        // Link has already set module_source on each function.
         generic_functions: flat
             .functions
             .iter()
@@ -90,8 +81,8 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
                 }
             })
             .collect(),
-        // Collect all generic structs keyed by (name, module_source).
-        // This allows same-named generic structs from different modules to coexist.
+        // Keyed by `(name, module_source)`, so same-named generic structs from
+        // different modules coexist.
         generic_structs: flat
             .structs
             .iter()
@@ -105,38 +96,27 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
     session
 }
 
-/// One monomorphization of a package, resumable.
-///
-/// The templates a run consumes leave the package (a generic function is
-/// dropped from the function list once its instances exist), and the instances
-/// it minted are remembered only here. A later pass that adds bodies — CM
-/// binding synthesis over a generic body's instances — therefore resumes this
-/// session rather than starting a new one, which would re-mint every instance
-/// under a name that already exists.
+/// One resumable monomorphization. A run consumes the templates it instantiates
+/// and remembers its instances here, so a second run must resume rather than start.
 pub struct Monomorphization {
     monomorphizer: Monomorphizer,
     generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>>,
     generic_structs: IndexMap<(String, ModuleSource), TirStruct>,
-    /// How many of `flat.functions` a previous run already read call sites
-    /// from. A run leaves every body it scanned rewritten to the mangled
-    /// instance names, and a rewritten call no longer spells its method type
-    /// arguments — reading one again queues an instance keyed by the receiver
-    /// alone, whose body keeps the method's own type parameters. Only the
-    /// bodies appended since the last run are new sites; the resumed run's own
-    /// instantiation loop covers what those reach.
+    /// How many leading `flat.functions` a previous run already read call sites
+    /// from. It left them rewritten to mangled instance names, and such a call
+    /// no longer spells its method type arguments — reading one again queues an
+    /// instance keyed by the receiver alone, whose body keeps the method's own
+    /// type parameters.
     scanned_functions: usize,
 }
 
 impl Monomorphization {
-    /// Instantiate every generic the bodies added since the last run reach and
-    /// this session has not already minted.
+    /// Instantiate what the bodies added since the last run reach.
     pub fn resume(&mut self, flat: &mut FlatPackage) {
         self.run(flat);
     }
 
     fn run(&mut self, flat: &mut FlatPackage) {
-        // Create a temporary TirModule with all flat data for monomorphization.
-        // This reuses the existing Monomorphizer infrastructure without rewriting it.
         let mut temp_module = TirModule::new(flat.entry_module_source.clone());
         temp_module.type_table = flat.type_table.clone();
         temp_module.functions = std::mem::take(&mut flat.functions);
@@ -156,7 +136,6 @@ impl Monomorphization {
 }
 
 fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
-    // Write results back to FlatPackage
     flat.functions = temp_module.functions;
     flat.structs = temp_module.structs;
     flat.globals = temp_module.globals;

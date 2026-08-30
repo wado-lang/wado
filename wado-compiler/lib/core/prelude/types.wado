@@ -189,10 +189,7 @@ pub resource FutureWritable<T> {
 }
 
 /// How one Component Model copy ended (`CanonicalABI.md`, `CopyResult`).
-///
-/// It describes the copy that just happened, not the stream: `Completed` says
-/// nothing about whether the peer is still there, and only `Dropped` ends the
-/// stream.
+/// It describes that copy, not the stream: only `Dropped` ends the stream.
 #[compiler_item("copy_result")]
 pub enum CopyResult {
     /// The copy finished.
@@ -203,19 +200,16 @@ pub enum CopyResult {
     Cancelled,
 }
 
-/// What one `Stream::read` copied, and how that copy ended.
-///
-/// A copy can carry elements and the peer's drop together, so `items` being
-/// non-empty does not mean more will follow: read `result` to know.
+/// What one `Stream::read` copied, and how that copy ended. A copy carries
+/// elements and the peer's drop together, so `result` is what says more follows.
 #[compiler_item("stream_chunk")]
 pub struct StreamChunk<T> {
     pub items: List<T>,
     pub result: CopyResult,
 }
 
-/// What one `StreamWritable::write` copied, and how that copy ended.
-///
-/// A reader may take a prefix, so `count` can be short of what was offered.
+/// What one `StreamWritable::write` copied, and how that copy ended. A reader
+/// may take a prefix, so `count` can be short of what was offered.
 #[compiler_item("stream_write")]
 pub struct StreamWrite {
     pub count: i32,
@@ -253,10 +247,8 @@ pub resource Stream<T> {
 
 impl Stream<T> {
     /// Read until the writable end drops, and return everything it wrote.
-    ///
-    /// Unlike the write loops, an empty `Completed` copy is not a stop: it is
-    /// the peer offering nothing this time, and more can still follow. What
-    /// ends the read is the result, which is the whole point of carrying it.
+    /// Only the result stops it: an empty `Completed` copy is the writer
+    /// offering nothing this time, and more can still follow.
     pub fn read_to_end(&self) -> List<T> {
         let mut all: List<T> = [];
         loop {
@@ -302,17 +294,20 @@ pub resource StreamWritable<T> {
     fn drop(self);
 }
 
+/// Whether a copy ends a write loop: the peer stopped, or it moved nothing and
+/// retrying the same buffer would be a hang rather than a write.
+internal fn write_copy_is_final(written: &StreamWrite) -> bool {
+    return written.result != CopyResult::Completed || written.count <= 0;
+}
+
 impl StreamWritable<T> {
     /// Write every element, or stop early when the readable end drops.
     /// Returns the result of the copy that ended the loop.
-    ///
-    /// A copy that takes nothing and reports `Completed` ends the loop too: it
-    /// is the peer making no progress, and retrying it is a hang, not a write.
     pub fn write_all(&self, data: List<T>) -> CopyResult {
         let mut rest = data;
         loop {
             let written = self.write(rest);
-            if written.result != CopyResult::Completed || written.count <= 0 || written.count >= rest.len() {
+            if write_copy_is_final(&written) || written.count >= rest.len() {
                 return written.result;
             }
             let mut remainder: List<T> = [];
@@ -321,13 +316,9 @@ impl StreamWritable<T> {
         }
     }
 
-    /// Write every element the slice views, or stop when the readable end
-    /// drops. Keeps `write_all`'s value-semantics copy out of the paths that
-    /// already hold their elements in one array.
-    ///
-    /// The tail view is built from the backing array rather than through
-    /// `Slice::slice`, whose clamp these offsets cannot need — and which every
-    /// program that prints would otherwise pay for.
+    /// `write_all` for elements already held in one array, without its
+    /// value-semantics copy. The tail view skips `Slice::slice`, whose clamp
+    /// these offsets cannot need and every program that prints would pay for.
     pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult {
         let repr = data.internal_repr();
         let end = data.internal_start() + data.len();
@@ -335,7 +326,7 @@ impl StreamWritable<T> {
         loop {
             let written = self.write_raw(Slice::internal_new(repr, offset, end));
             offset += written.count;
-            if written.result != CopyResult::Completed || written.count <= 0 || offset >= end {
+            if write_copy_is_final(&written) || offset >= end {
                 return written.result;
             }
         }

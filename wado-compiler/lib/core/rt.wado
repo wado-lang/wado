@@ -264,9 +264,7 @@ internal fn cm_copy_result(packed: i32) -> CopyResult {
     return CopyResult::Cancelled;
 }
 
-/// CM adapter for stream.read(max) on Stream<u8>.
-/// Allocates linear memory, calls stream-read, handles BLOCKED,
-/// lifts bytes to GC array, and reports what the copy carried.
+/// CM adapter for stream.read(max) on Stream<u8>, awaiting a BLOCKED copy.
 #[compiler_item("cm_stream_read_u8")]
 internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
     let ptr = builtin::realloc(0, 0, 1, max);
@@ -283,9 +281,8 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
     };
 }
 
-/// CM adapter for stream.write(data) on Stream<u8>.
-/// Lowers List<u8> to linear memory and copies once, reporting what the reader
-/// took. `StreamWritable::write_all` is the loop that finishes a buffer.
+/// CM adapter for stream.write(data) on Stream<u8>: one copy, reporting what
+/// the reader took. `StreamWritable::write_all` is the loop over it.
 #[compiler_item("cm_stream_write_u8")]
 internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
     let packed = cm_lower_array_u8(data);

@@ -1529,12 +1529,10 @@ fn compile_after_load<H: CompilerHost>(
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
 
-        // A `#[cm]` async primitive called from a generic body only learns its
-        // payload here, where the instance carries a concrete element type. An
-        // installed handler claims the call first — binding it to the canonical
-        // would route past the handler — and the helpers the binding mints call
-        // generic stdlib functions in turn, so the session resumes to
-        // instantiate them.
+        // A `#[cm]` primitive in a generic body learns its payload only here.
+        // An installed handler claims the call before the CM binding does, and
+        // the helpers that binding mints call generics of their own — hence the
+        // resume.
         synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
         synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
         mono.resume(&mut flat);
@@ -1632,16 +1630,10 @@ fn compile_after_load<H: CompilerHost>(
         logger,
         &entry_filename,
         compiler_host::Code::UnsupportedFeature,
-        wir_package.cm_import_violations.iter().map(|v| {
-            let reason = if v.cm_name == "stream-write-raw" {
-                // `write_raw` hands over the backing array as it stands, which
-                // only lines up with the CM buffer for bytes.
-                "which only a `u8` stream can bind: the raw write hands the backing array to the canonical unlowered. Use `write` or `write_all`".to_string()
-            } else {
-                "which no bundled interface declares; a `#[cm(...)]` member is only callable from the stdlib and from component dependencies".to_string()
-            };
-            (v.span, format!("`{}` binds `{}`, {reason}", v.call_display, v.cm_name))
-        }),
+        wir_package
+            .cm_import_violations
+            .iter()
+            .map(|v| (v.span, v.message())),
     )?;
 
     // === Phase 13: Optimize WIR ===

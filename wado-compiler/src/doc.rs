@@ -535,9 +535,8 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
     }
 }
 
-/// A resource carries its declared members and, like a struct, whatever an
-/// `impl` block adds — `Stream<T>`'s `read_to_end` is not in the `resource`
-/// body, and a reader who never sees it is left with the raw canonical.
+/// A resource's declared members plus, like a struct, whatever an `impl` adds —
+/// `Stream<T>::read_to_end` is not in the `resource` body.
 fn build_doc_resource(
     r: &crate::ast::ResourceDecl,
     impls: &[&ImplBlock],

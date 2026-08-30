@@ -118,10 +118,8 @@ fn register_imports(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// The core signature of one lowered CM import: what `canon lower` produces for
-/// this function, which the core module must import by exactly that type.
-/// Interface methods and world-level functions share it — a `func` is a `func`
-/// whichever level of the world declares it.
+/// What `canon lower` produces for this function, which the core module must
+/// import by exactly that type. Interface methods and world functions share it.
 fn cm_import_core_func_type(
     func: &crate::component_model::CmFunctionInfo,
     cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
