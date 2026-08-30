@@ -3836,6 +3836,8 @@ fn pick_greedy_strategy(specialised: Option<RepeatStrategy>) -> RepeatStrategy {
 /// Returns `null` for:
 /// * leaf inners (Token / Literal / Wildcard / Not — `Plain`
 ///   handles them without a scan probe);
+/// * token-only Groups, whose scan is the first-set check `Plain`
+///   already emits (`optional_body_decided_by_first`);
 /// * unscannable inners (no save-and-rewind path; emit will panic
 ///   with the "no backtracking" message);
 /// * RuleRef inners that are unscannable (same reason).
@@ -3847,11 +3849,37 @@ fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<Repe
     if !needs_guard {
         return null;
     }
+    if optional_body_decided_by_first(inner) {
+        return null;
+    }
     let mut visiting: List<String> = [];
     if !ctx.is_element_scannable(inner, &mut visiting) {
         return null;
     }
     return Option::Some(RepeatStrategy::OptionalScanGuard);
+}
+
+/// Whether scanning the optional's body answers exactly what its first-set
+/// check answers: a token-only group, where every alternative is one token.
+/// `EOF` is the exception — `p.peek_kind()` reports it past the end of the
+/// stream, where a scan fails.
+fn optional_body_decided_by_first(inner: &Element) -> bool {
+    let alts = if let Group(g) = inner {
+        &g.alternatives;
+    } else {
+        return false;
+    };
+    if !classify_group(alts) matches { TokenOnly } {
+        return false;
+    }
+    return !alts.iter_ref().any(|alt: &Alternative| alt_is_eof_token(alt));
+}
+
+fn alt_is_eof_token(alt: &Alternative) -> bool {
+    if let TokenRef(t) = &alt.elements[0] {
+        return t.name == "EOF";
+    }
+    return false;
 }
 
 /// Compute the `NonGreedy` strategy for a non-greedy Repeat (`e*?` /

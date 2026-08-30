@@ -2863,6 +2863,50 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
     }
 }
 
+test "lower Optional Repeat over a token-only Group inner stays Plain" {
+    // `r : (X | Y | Z)? W ;` — every alternative is one token, so scanning
+    // the body is the same test as peeking one token. The scan guard would
+    // emit three one-token scans to answer what `first_check_str` answers
+    // with a single kind check.
+    let mut g = parse("grammar S;\nr : (X | Y | Z)? W ;\nX : 'x' ;\nY : 'y' ;\nZ : 'z' ;\nW : 'w' ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            assert rep.strategy matches { Plain }, "expected RepeatStrategy::Plain for a token-only Group inner";
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+    for let d of &lowered.diagnostics {
+        assert !d.kind matches { OptionalScanGuardFallback }, `unexpected warning: ${d.message}`;
+    }
+}
+
+test "lower Optional Repeat over a token-only Group containing EOF keeps the scan guard" {
+    // `r : (X | EOF)? ;` — `p.peek_kind()` reports `TK_EOF` past the end of
+    // the stream while a scan fails there, so the peek is not the scan's
+    // answer and the guard has to stay.
+    let mut g = parse("grammar S;\nr : (X | EOF)? ;\nX : 'x' ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            assert rep.strategy matches { OptionalScanGuard }, "expected the EOF alternative to keep RepeatStrategy::OptionalScanGuard";
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower Optional Repeat with many optionals does not enumerate 2^n shapes" {
     // A single-alt group with many nested Optionals would make
     // `try_optional_shape_lookahead` enumerate 2^n shapes (and `1 << n`

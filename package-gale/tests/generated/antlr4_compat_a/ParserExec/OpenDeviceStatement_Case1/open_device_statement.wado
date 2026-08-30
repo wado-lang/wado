@@ -1882,40 +1882,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
         _plus_first = false;
         let lit_device = p.expect(TK_LIT_DEVICE, &SYNC_1);
-        let mut opt_scan_pos: i32 = -1;
-        opt_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            let gp_6 = pos;
-            let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_6) {
-                sg_6: {
-                    pos = gp_6;
-                    sg_6_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break sg_6_0; }
-                        pos += 1;
-                        break sg_6;
-                    }
-                    pos = gp_6;
-                    sg_6_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break sg_6_1; }
-                        pos += 1;
-                        break sg_6;
-                    }
-                    pos = gp_6;
-                    sg_6_2: {
-                        if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break sg_6_2; }
-                        pos += 1;
-                        break sg_6;
-                    }
-                    break opt_scan;
-                }
-            } else {
-                break opt_scan;
-            }
-            opt_scan_pos = pos;
-        }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_0(p.peek_kind())) {
             let opt1_or_opt2_or_opt3 = p.expect_set(&SYNC_1);
         }
     }
