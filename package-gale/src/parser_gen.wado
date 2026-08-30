@@ -3781,8 +3781,8 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             // has alternatives: what it fails to find ends the loop, and the
             // dispatch commits to what it found.
             if let Group(g) = &r.body {
-                if let Some(branches) = op_group_alt_decision(g, ctx) {
-                    let winner = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, false, true);
+                if let Some(decision) = op_group_alt_decision(g, ctx) {
+                    let winner = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, false, true);
                     w.line(&`if ${winner} < 0 \{ break; \}`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
                     w.end();
@@ -3841,12 +3841,12 @@ fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     }
     if r.strategy matches { OptionalScanGuard } {
         if let Group(g) = &r.body {
-            if let Some(branches) = op_group_alt_decision(g, ctx) {
+            if let Some(decision) = op_group_alt_decision(g, ctx) {
                 // The scan that decides entry is the scan the dispatch
                 // decides on: one answer, one set of scans. The caller-FOLLOW
                 // yield gate wraps them, so an optional that must yield does
                 // not pay for a decision it will not use.
-                let winner = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, !gate.is_empty());
+                let winner = gen_group_decide(w, &decision.branches, &g.scan_alts, ctx, nc, !gate.is_empty());
                 w.begin(&`if ${winner} >= 0`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
@@ -4220,12 +4220,12 @@ fn gen_op_storable_optional(
             rep_op.gate_caller_follow,
         ),
         OptionalScanGuard => {
-            if let Some(branches) = group_alt_decision(g_op, g_elem, ctx) {
+            if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
                 // The scan that decides entry is the scan the dispatch
                 // decides on: one answer, one set of scans.
                 let winner = gen_group_decide(
                     w,
-                    &branches,
+                    &decision.branches,
                     &g_op.scan_alts,
                     ctx,
                     name_counts,
@@ -4589,7 +4589,7 @@ fn gen_mandatory_first_report(
     ctx: &mut GenContext,
     plus_flag: &String,
 ) {
-    let Some(admits) = mandatory_first_admits(inner, kind, ctx, true) else {
+    let Some(admits) = mandatory_first_admits(inner, kind, ctx) else {
         return;
     };
     let expected_ref = sync_set_ref(ctx, &admits.expected);
@@ -4599,20 +4599,15 @@ fn gen_mandatory_first_report(
     w.end();
 }
 
-/// What the mandatory first iteration reports over, or `null` where something
-/// else already reports there: a single-alternative body reports at its first
-/// mandatory element, and a gated group at the dispatch that has an arm the
-/// predicate excludes. `dispatch_reports` is false where the iteration's
-/// decision already picked the alternative — there the dispatch commits
-/// instead of reporting, so nothing else answers the excluded position.
-fn mandatory_first_admits(
-    inner: &Element,
-    kind: GroupBranchKind,
-    ctx: &mut GenContext,
-    dispatch_reports: bool,
-) -> Option<GroupAdmits> {
+/// What the mandatory first iteration of an undecided loop reports over, or
+/// `null` where something else already reports there: a single-alternative
+/// body reports at its first mandatory element, and a gated group at the
+/// dispatch that has an arm the predicate excludes. A decided iteration
+/// answers that position from its own decision (`gen_rep_decided_entry`),
+/// where the dispatch commits rather than reports and neither refusal holds.
+fn mandatory_first_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> Option<GroupAdmits> {
     let admits = group_admits(inner, kind, ctx)?;
-    if repeat_body_reports_itself(inner, ctx) || dispatch_reports && admits.gated {
+    if admits.gated || repeat_body_reports_itself(inner, ctx) {
         return null;
     }
     return Option::Some(admits);
@@ -5883,17 +5878,8 @@ fn gen_rep_iteration_entry(
 ) -> Option<String> {
     if let Group(g_op) = &rep_op.body {
         if let Group(g_elem) = peel_scalar_label(inner) {
-            if let Some(branches) = group_alt_decision(g_op, g_elem, ctx) {
-                return Option::Some(gen_rep_decided_entry(
-                    w,
-                    rep_op,
-                    inner,
-                    g_op,
-                    &branches,
-                    ctx,
-                    name_counts,
-                    plus_flag,
-                ));
+            if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
+                return Option::Some(gen_rep_decided_entry(w, rep_op, g_op, &decision, ctx, name_counts, plus_flag));
             }
         }
     }
@@ -5913,27 +5899,24 @@ fn gen_rep_iteration_entry(
 fn gen_rep_decided_entry(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
-    inner: &Element,
     g_op: &GroupOp,
-    branches: &List<DecisionBranch>,
+    decision: &GroupDecision,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     plus_flag: &String,
 ) -> String {
     gen_iter_caller_follow_gate(w, rep_op, plus_flag);
-    let kind = shape_branch_kind(&g_op.shape);
     // No gate break: every branch of the decision carries the gate the loop
     // would test, so a predicate the decision already answered is not asked
     // a second time.
-    let winner = gen_group_decide(w, branches, &g_op.scan_alts, ctx, name_counts, false, true);
+    let winner = gen_group_decide(w, &decision.branches, &g_op.scan_alts, ctx, name_counts, false, true);
     w.begin(&`if ${winner} < 0`);
     if !plus_flag.is_empty() {
-        if let Some(admits) = mandatory_first_admits(inner, kind, ctx, false) {
-            let expected_ref = sync_set_ref(ctx, &admits.expected);
-            w.line(
-                &`if ${*plus_flag} \{ p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); \}`,
-            );
-        }
+        // The mandatory first iteration has no exit to take, and the dispatch
+        // it would have reached commits rather than reports — so this is the
+        // only answer that position gets, whatever excluded the alternatives.
+        let expected_ref = sync_set_ref(ctx, &decision.expected);
+        w.line(&`if ${*plus_flag} \{ p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); \}`);
     }
     w.line(&"break;");
     w.end();
@@ -6219,15 +6202,22 @@ struct DecisionBranch {
     alts: List<i32>,
 }
 
-/// The branches a group's dispatch takes, in dispatch order, off the one
-/// partition (`group_partition`). A caller deciding whether to enter the
-/// group reads these, so it cannot disagree with the dispatch about which
-/// alternative a lookahead selects.
-fn group_decision_branches(
-    alts: &List<Alternative>,
-    kind: GroupBranchKind,
-    ctx: &mut GenContext,
-) -> List<DecisionBranch> {
+/// A group's decision, taken once and read by everything that has to know
+/// which alternative the group takes here.
+struct GroupDecision {
+    /// In dispatch order.
+    branches: List<DecisionBranch>,
+    /// What a caller reports where the decision finds nothing at a position
+    /// the group must match. Empty where the branches admit every lookahead
+    /// and there is nothing to name.
+    expected: List<String>,
+}
+
+/// The decision a group's dispatch takes, off the one partition
+/// (`group_partition`). A caller deciding whether to enter the group reads
+/// it, so it cannot disagree with the dispatch about which alternative a
+/// lookahead selects.
+fn group_decision(alts: &List<Alternative>, kind: GroupBranchKind, ctx: &mut GenContext) -> GroupDecision {
     let [first_sets, groups] = group_partition(alts, kind, ctx);
     let mut branches: List<DecisionBranch> = [];
     for let group of &groups {
@@ -6236,14 +6226,14 @@ fn group_decision_branches(
             alts: *group,
         });
     }
-    return branches;
+    return GroupDecision { branches, expected: first_sets_union(&first_sets) };
 }
 
-/// The dispatch branches of a group that decides between alternatives, or
-/// `null` for one that does not: a lone alternative, or a token-only group
-/// whose whole body is a single `expect_set`. Only the first has a decision
-/// for a caller's scan guard to share.
-fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext) -> Option<List<DecisionBranch>> {
+/// The decision of a group that decides between alternatives, or `null` for
+/// one that does not: a lone alternative, or a token-only group whose whole
+/// body is a single `expect_set`. Only the first has a decision for a
+/// caller's scan guard to share.
+fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext) -> Option<GroupDecision> {
     let dispatches = match &g_op.shape {
         SimpleCst(_) | General(_) => g_op.alts.len() > 1,
         TokenOnly(_) | SingleAlt(_) | Transparent => false,
@@ -6251,36 +6241,37 @@ fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContex
     if !dispatches {
         return null;
     }
-    return Option::Some(group_decision_branches(
-        &g_elem.alternatives,
-        shape_branch_kind(&g_op.shape),
-        ctx,
-    ));
+    return Option::Some(group_decision(&g_elem.alternatives, shape_branch_kind(&g_op.shape), ctx));
 }
 
 /// `group_alt_decision` for the op-only walker, which reads the dispatch lower
 /// baked rather than the surface alternatives (invariant 9). `Direct` is one
 /// branch per alternative, `Tournament` one branch holding them all.
-fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<DecisionBranch>> {
+fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<GroupDecision> {
     if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } {
         return null;
     }
     return match &g.dispatch {
         Direct(dd) => {
             let mut branches: List<DecisionBranch> = [];
+            let mut expected: List<String> = [];
             for let branch of &dd.branches {
                 branches.push(DecisionBranch {
                     cond: ctx.kind_check_str(&branch.tokens, &"p.peek_kind()"),
                     alts: [branch.alt_index],
                 });
+                dedup_append_arr(&mut expected, &branch.tokens);
             }
-            Option::Some(branches);
+            Option::Some(GroupDecision { branches, expected });
         },
         // The tournament has no lookahead gate of its own: every alternative
         // is a candidate, and the scan lengths decide.
-        Tournament(td) => Option::Some([
-            DecisionBranch { cond: "true", alts: td.alts },
-        ]),
+        Tournament(td) => Option::Some(GroupDecision {
+            branches: [
+                DecisionBranch { cond: "true", alts: td.alts },
+            ],
+            expected: [],
+        }),
     };
 }
 
@@ -6452,7 +6443,9 @@ fn gen_group_dispatch(
         assert entry matches { Guaranteed }, "gen_group_dispatch: a decided dispatch commits, so it has no arm left to report or break in";
         let mut order: List<i32> = [];
         for let group of groups {
-            for let idx of branch_emit_order(group, alts, ctx) {
+            let branch_order = branch_emit_order(group, alts, ctx);
+            assert group.len() == 1 || group_all_scannable(&branch_order, alts, kind, ctx), UNSCANNABLE_ALT;
+            for let idx of branch_order {
                 order.push(idx);
             }
         }
@@ -6586,9 +6579,11 @@ fn gen_group_branch_body(
     // Alternatives sharing a first token are decided by the longest-match
     // tournament, mandatory-heavy first.
     let sorted_group = branch_emit_order(group, alts, ctx);
-    assert group_all_scannable(&sorted_group, alts, kind, ctx), "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
+    assert group_all_scannable(&sorted_group, alts, kind, ctx), UNSCANNABLE_ALT;
     gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts);
 }
+
+global UNSCANNABLE_ALT: String = "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
 
 fn group_all_scannable(
     sorted_group: &List<i32>,
