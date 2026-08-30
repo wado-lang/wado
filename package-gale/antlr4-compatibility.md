@@ -450,6 +450,20 @@ Where nothing wins that tournament the emit leaves the `else` instead of
 committing, so the rule's own error path still names the rule rather than one
 alternative's next token.
 
+A caller that may decline the group asks no second question. An optional runs
+that same partition and tournament (`gen_group_decide`), enters on a winner
+existing, and hands the winning alternative index to the dispatch, which
+commits to it. Deciding twice is what the two sides used to do, by rules that
+were never the same: the entry guard argmaxed over the ambiguous alternatives
+only, visiting concrete before wildcard ones and first-matching the rest,
+while the tournament argmaxed over every alternative in grammar order. Only
+the tournament's answer was ever observable, so it is the one rule now — and
+the guard's concrete-before-wildcard order went with it, since a wildcard
+alternative in the tournament loses to a concrete one by scan length rather
+than by iteration order (invariant 4's merge is what puts the two in one
+branch). Testing the branch before scanning also drops the scans of
+alternatives the lookahead cannot reach.
+
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
 greedy `+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`),
@@ -489,13 +503,16 @@ policy, stated once per call site, and it has three values:
 
 - **Required** — the group must match here, so a token no alternative admits is
   a no-viable-alternative, over the union of the alternatives' first sets.
-- **Guaranteed** — the caller has already proved a match is viable, so the last
-  branch needs no condition of its own and there is no report to make. Both
-  callers scan before entering: a repeat's loop guard, and an optional's entry
-  check. An optional group therefore never needs a policy of its own — its own
-  guard is what skips it. A gated alternative forces Guaranteed back to
-  Required: a false predicate must not land in an unconditional `else` meant
-  for the alternative it excludes.
+- **Guaranteed** — the caller scanned before entering, so there is no report to
+  make. What that scan proved decides how much of the dispatch is left. An
+  optional's entry check is the dispatch's own decision, so it names the
+  winning alternative and the dispatch commits to it, testing nothing else: an
+  optional group needs no policy of its own, its own decision is what skips it.
+  A repeat's loop guard proves only that the iteration is viable, so its
+  dispatch still picks by lookahead and the last branch needs no condition of
+  its own — and there a gated alternative forces Guaranteed back to Required,
+  since a false predicate must not land in an unconditional `else` meant for
+  the alternative it excludes.
 - **Looped** — a loop iteration, carrying the mandatory-first-iteration flag or
   none. It is what a repeat states, and `open_group_entry` discharges it into
   one of the two above: the loop's own obligations are emitted there, and the
@@ -527,6 +544,8 @@ a group's alternatives:
 - **A group inside a left-recursive suffix** is walked by the GIR walker off
   the dispatch plan lower baked (`MultiAltDispatch`), not off first sets, and
   closes with `expect_set` over the union — a report, but not the same one.
+  Its optional's decision is built from that plan for the same reason
+  (invariant 9), so the two walkers still each decide once.
 
 ### Static LL prediction — the runtime FOLLOW gate
 
@@ -592,7 +611,9 @@ relevant sites.
    has empty FIRST yet effectively overlaps every token-consuming alt, so
    it is merged into a single overlap group with the non-empty-FIRST
    alts, the outer kind-check gate is suppressed, and wildcard alts are
-   scanned last. Without this, the parse side commits to the more specific
+   scanned last — that last half only where a scan commits on first match; a
+   tournament over the merged group resolves by scan length and needs no
+   order. Without this, the parse side commits to the more specific
    alt on a lookahead match even when its deeper structure cannot succeed
    (`ParserExec/Wildcard`: `(assign | .)+ EOF` on `x=10; abc;`). Fixture
    `tests/grammars/ll_wildcard_alt.g4`.
