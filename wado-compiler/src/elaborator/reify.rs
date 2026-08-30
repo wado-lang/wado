@@ -2200,7 +2200,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// file builds. A `return` / `break` is left alone: those end a path too,
     /// but a normal exit is not a cold one.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
-        use crate::tir::{TirStmtKind, TypeTable};
         let diverges =
             |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if e.type_id == TypeTable::NEVER);
         if !stmts.iter().any(diverges) {
@@ -2212,7 +2211,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // gaining a second.
             let marked = out.last().is_some_and(|p: &TirStmt| {
                 matches!(&p.kind, TirStmtKind::Expr(e)
-                    if matches!(&e.kind, crate::tir::TirExprKind::Call { func, .. }
+                    if matches!(&e.kind, TirExprKind::Call { func, .. }
                         if func.name == "cold_path"))
             });
             if diverges(&s) && !marked {

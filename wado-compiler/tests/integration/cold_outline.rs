@@ -79,8 +79,7 @@ fn compile(source: &str, opt_level: OptLevel) -> wado_compiler::CompileResult {
 }
 
 fn wir_of(source: &str, opt_level: OptLevel) -> String {
-    let result = compile(source, opt_level);
-    wado_compiler::wir_unparse::unparse_wir(result.wir_package.as_ref().expect("wir retained"))
+    crate::common::wir_text(Path::new("cold_outline_test.wado"), source, opt_level)
 }
 
 #[test]

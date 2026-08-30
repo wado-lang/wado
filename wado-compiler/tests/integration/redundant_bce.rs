@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::OptLevel;
 
 const SOURCE: &str = r#"
 #[inline(never)]
@@ -39,24 +39,12 @@ export fn run() {
 /// shape the optimizer left them in, and counting the callee name alone would
 /// read the split shape as no check at all.
 fn panic_count(opt_level: OptLevel, file: &str, source: &str, func: &str) -> usize {
-    let options = CompilerOptions {
+    let body = crate::common::wir_function_body(
+        Path::new(file),
+        source,
         opt_level,
-        retain_wir: true,
-        ..Default::default()
-    };
-    let result =
-        crate::common::compile_source_with_compiler_options(Path::new(file), source, options)
-            .expect("compilation should succeed");
-    let wir_package = result.wir_package.as_ref().expect("wir retained");
-    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
-
-    let start = wir_text
-        .find(&format!("fn \"{file}/{func}\""))
-        .unwrap_or_else(|| panic!("{func} function in WIR"));
-    let rest = &wir_text[start..];
-    // The next top-level `\nfn ` marks the end of the body.
-    let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());
-    let body = &rest[..end];
+        &format!("fn \"{file}/{func}\""),
+    );
     body.matches("core:rt/panic").count() + body.matches("$cold").count()
 }
 

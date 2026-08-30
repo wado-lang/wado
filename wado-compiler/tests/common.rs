@@ -878,23 +878,31 @@ pub fn compile_source_with_opts(
         .map_err(|_: CompileFailure| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
-/// Compile `source` at `-O2` and return the unparsed WIR of the one function
-/// whose header starts with `fn_header`, up to the next top-level `fn`.
-pub fn wir_function_body(path: &std::path::Path, source: &str, fn_header: &str) -> String {
+/// Compile `source` and unparse the WIR it retained.
+pub fn wir_text(path: &std::path::Path, source: &str, opt_level: OptLevel) -> String {
     let options = wado_compiler::CompilerOptions {
-        opt_level: OptLevel::O2,
+        opt_level,
         retain_wir: true,
         ..Default::default()
     };
     let result = compile_source_with_compiler_options(path, source, options)
         .expect("compilation should succeed");
-    let wir_package = result.wir_package.as_ref().expect("wir retained");
-    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
+    wado_compiler::wir_unparse::unparse_wir(result.wir_package.as_ref().expect("wir retained"))
+}
 
-    let start = wir_text
+/// [`wir_text`], cut to the one function whose header starts with `fn_header`
+/// and ending at the next top-level `fn`.
+pub fn wir_function_body(
+    path: &std::path::Path,
+    source: &str,
+    opt_level: OptLevel,
+    fn_header: &str,
+) -> String {
+    let wir = wir_text(path, source, opt_level);
+    let start = wir
         .find(fn_header)
         .unwrap_or_else(|| panic!("{fn_header} in WIR"));
-    let rest = &wir_text[start..];
+    let rest = &wir[start..];
     let end = rest[1..].find("\nfn ").map_or(rest.len(), |i| i + 1);
     rest[..end].to_string()
 }

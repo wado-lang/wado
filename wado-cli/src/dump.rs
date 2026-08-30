@@ -354,11 +354,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         knobs.opt_level.to_compiler(),
         opts.target_world.as_deref(),
         knobs.allocator.as_deref(),
-        wado_compiler::OptOverrides {
-            inline_threshold: knobs.inline_threshold,
-            inline_growth: knobs.inline_growth,
-            iterations: knobs.opt_iterations,
-        },
+        knobs.opt,
         &knobs.codegen_flags,
         &knobs.params.overrides,
         knobs.params.policy,

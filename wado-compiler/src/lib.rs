@@ -267,15 +267,9 @@ pub struct CompilerOptions {
     /// When true, retain the WIR module in [`CompileResult::wir_package`].
     /// Used by test infrastructure to inspect WIR without a second compilation pass.
     pub retain_wir: bool,
-    /// Override the inline threshold for the optimization pass.
-    /// When `None`, the default for the `opt_level` is used.
-    pub inline_threshold: Option<usize>,
-    /// Override the percent the inliner may grow the unit by.
-    /// When `None`, the default for the `opt_level` is used.
-    pub inline_growth: Option<u32>,
-    /// Override the number of fixed-point optimization iterations.
-    /// When `None`, the default for the `opt_level` is used.
-    pub opt_iterations: Option<u32>,
+    /// What to override in the optimizer instead of taking `opt_level`'s
+    /// defaults.
+    pub opt: OptOverrides,
     /// Log level for compiler diagnostics.
     /// When `None`, uses the default (`Info`).
     pub log_level: Option<LogLevel>,
@@ -337,9 +331,7 @@ impl Default for CompilerOptions {
             target_world: None,
             skip_validation: false,
             retain_wir: false,
-            inline_threshold: None,
-            inline_growth: None,
-            opt_iterations: None,
+            opt: OptOverrides::default(),
             log_level: None,
             allocator: None,
             invocations: kiln::InvocationIndex::default(),
@@ -1572,16 +1564,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 11: Optimize (NirPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("optimize");
-        optimize(
-            nir,
-            options.opt_level,
-            OptOverrides {
-                inline_threshold: options.inline_threshold,
-                inline_growth: options.inline_growth,
-                iterations: options.opt_iterations,
-            },
-            logger,
-        )
+        optimize(nir, options.opt_level, options.opt, logger)
     };
 
     // Emit optimizer remarks for residual value-semantic copies that survived

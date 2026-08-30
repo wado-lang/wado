@@ -181,7 +181,33 @@ pub(super) struct ConstView<'a> {
 /// Promoted values already charged by one walk.
 type SeenValues = IndexSet<ValueId>;
 
-impl CostWalk<'_> {
+impl<'a> CostWalk<'a> {
+    fn new(
+        body: &'a Body,
+        type_table: &'a TypeTable,
+        descriptors: &'a [FunctionRef],
+        price: Price,
+    ) -> Self {
+        Self {
+            body,
+            type_table,
+            descriptors,
+            price,
+            consts: None,
+        }
+    }
+
+    /// Price the body under the constants `view` says arrive at every call site.
+    fn under(mut self, view: &'a ConstView<'a>) -> Self {
+        self.consts = Some(view);
+        self
+    }
+
+    /// What the whole body costs at this walk's price.
+    fn whole_body(&self) -> usize {
+        self.block(self.body.root, &mut SeenValues::default())
+    }
+
     /// Whether `op` is a constant once the caller's constant arguments are
     /// substituted, so constant folding decides whatever reads it. Only the
     /// shapes `const_folding` itself folds are admitted.
@@ -575,14 +601,7 @@ const FREE_ARITY: usize = 2;
 
 /// The inline cost of a function body, in the unit [`weight`] defines.
 fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
-    let walk = CostWalk {
-        body,
-        type_table,
-        descriptors,
-        price: Price::Hot,
-        consts: None,
-    };
-    walk.block(body.root, &mut SeenValues::default())
+    CostWalk::new(body, type_table, descriptors, Price::Hot).whole_body()
 }
 
 /// What one copy of `body` occupies, cold paths included — the quantity the
@@ -591,14 +610,7 @@ fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef])
 /// keeps a rare heavy arm: `TreeBuilder::push_row` in the Gale runtime prices at
 /// 27 hot and 166 by size.
 fn inline_size(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
-    let walk = CostWalk {
-        body,
-        type_table,
-        descriptors,
-        price: Price::Size,
-        consts: None,
-    };
-    walk.block(body.root, &mut SeenValues::default())
+    CostWalk::new(body, type_table, descriptors, Price::Size).whole_body()
 }
 
 /// What a run of statements occupies, on the same terms as [`inline_size`].
@@ -611,13 +623,7 @@ pub(super) fn region_size(
     descriptors: &[FunctionRef],
     stmts: &[StmtId],
 ) -> usize {
-    let walk = CostWalk {
-        body,
-        type_table,
-        descriptors,
-        price: Price::Size,
-        consts: None,
-    };
+    let walk = CostWalk::new(body, type_table, descriptors, Price::Size);
     let mut seen = SeenValues::default();
     stmts.iter().map(|&s| walk.stmt(s, &mut seen)).sum()
 }
@@ -638,14 +644,9 @@ fn inline_cost_folded(
     descriptors: &[FunctionRef],
     view: &ConstView<'_>,
 ) -> usize {
-    let walk = CostWalk {
-        body,
-        type_table,
-        descriptors,
-        price: Price::Hot,
-        consts: Some(view),
-    };
-    walk.block(body.root, &mut SeenValues::default())
+    CostWalk::new(body, type_table, descriptors, Price::Hot)
+        .under(view)
+        .whole_body()
 }
 
 fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<String>) {
@@ -1000,13 +1001,7 @@ fn classify_callee(
         if folded > effective_threshold {
             return (false, false);
         }
-        let walk = CostWalk {
-            body,
-            type_table,
-            descriptors,
-            price: Price::Hot,
-            consts: Some(view),
-        };
+        let walk = CostWalk::new(body, type_table, descriptors, Price::Hot).under(view);
         // Fitting folded is not enough on its own — admitting every marginal
         // fold measured -9% on cbor-twitter. It must also delete a loop, or
         // halve the body.

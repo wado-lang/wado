@@ -5,6 +5,8 @@
 
 use std::path::Path;
 
+use wado_compiler::OptLevel;
+
 const SOURCE: &str = r#"
 struct Simple { name: String, ids: List<i32> }
 struct Multi { name: String, alts: List<String> }
@@ -32,6 +34,7 @@ fn walk_body() -> String {
     crate::common::wir_function_body(
         Path::new("match_place_scrutinee_test.wado"),
         SOURCE,
+        OptLevel::O2,
         "fn \"match_place_scrutinee_test.wado/walk",
     )
 }

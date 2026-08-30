@@ -1,9 +1,5 @@
-//! Move what a `cold_path()` marker opens into a function of its own.
-//!
-//! The inline cost model stops counting at the marker, so a body whose bulk is
-//! a rare arm prices at its hot path. Nothing made that true: the whole body
-//! was still copied at every call site. This pass performs the split the price
-//! already assumed — the caller keeps the branch, the cold arm becomes a call.
+//! Move what a `cold_path()` marker opens into a function of its own, so that
+//! `inline`'s cold discount describes the callee instead of promising a split.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -264,48 +260,17 @@ fn free_vars(
     if control_escapes(body, region) {
         return None;
     }
-    let mut declared: IndexSet<u32> = IndexSet::default();
-    let mut mentioned: IndexSet<u32> = IndexSet::default();
-    let mut written: IndexSet<u32> = IndexSet::default();
-    let mut seen: IndexSet<ValueId> = IndexSet::default();
-    let mut stack: Vec<NodeRef> = region.iter().map(|&s| NodeRef::Stmt(s)).collect();
-    while let Some(node) = stack.pop() {
-        match node {
-            NodeRef::Stmt(s) => {
-                if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
-                    declared.insert(*local_index);
-                }
-            }
-            NodeRef::Pat(p) => {
-                if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
-                    declared.insert(*local_index);
-                }
-            }
-            NodeRef::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::Local { index, .. } => {
-                    mentioned.insert(*index);
-                }
-                ExprKind::Assign { target, .. } => {
-                    if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
-                        written.insert(*index);
-                    }
-                }
-                _ => {}
-            },
-            NodeRef::Block(_) => {}
-        }
-        body.for_each_operand(node, |op| {
-            if let Some(v) = op.as_value() {
-                body.values
-                    .collect_opaque_locals_seen(v, &mut seen, &mut mentioned);
-            }
-        });
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    let outside = mentions_outside(body, region);
+    let inside = LocalRefs::collect(
+        body,
+        region.iter().map(|&s| NodeRef::Stmt(s)).collect(),
+        &[],
+    );
+    // A declaration counts as a mention here: an owner outside is what makes a
+    // local the enclosing function's rather than the region's.
+    let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root)], region);
     let mut args = Vec::new();
-    for idx in mentioned.iter().copied() {
-        if idx < param_count || declared.contains(&idx) {
+    for idx in inside.mentioned.iter().copied() {
+        if idx < param_count || inside.declared.contains(&idx) {
             continue;
         }
         // A slot nothing outside touches moves with the region: the helper
@@ -313,12 +278,12 @@ fn free_vars(
         // one is left behind to read it. Under a loop that differs — a second
         // entry would find the slot fresh instead of holding what the first left
         // — so it has to cross as an argument like any other.
-        if !outside.contains(&idx) && !under_loop {
+        if !outer.declared.contains(&idx) && !outer.mentioned.contains(&idx) && !under_loop {
             continue;
         }
         // Reading it is what an argument can carry; a write the enclosing
         // function still reads is not.
-        if written.contains(&idx) || func.address_taken_locals.contains(&idx) {
+        if inside.written.contains(&idx) || func.address_taken_locals.contains(&idx) {
             crate::compiler_trace!("cold_outline", "  local {idx} is written across the split");
             return None;
         }
@@ -341,41 +306,58 @@ fn free_vars(
     Some(args)
 }
 
-/// Every local mentioned in the body *outside* `region`, a declaration counting
-/// as a mention: an owner outside is what makes a local the enclosing
-/// function's rather than the region's.
-fn mentions_outside(body: &Body, region: &[StmtId]) -> IndexSet<u32> {
-    let mut out = IndexSet::default();
-    let mut seen: IndexSet<ValueId> = IndexSet::default();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Stmt(s) = node {
-            if region.contains(&s) {
-                continue;
+/// The locals a walk touched.
+#[derive(Default)]
+struct LocalRefs {
+    declared: IndexSet<u32>,
+    mentioned: IndexSet<u32>,
+    written: IndexSet<u32>,
+}
+
+impl LocalRefs {
+    /// Walk from `roots`, skipping each statement in `skip` and its subtree.
+    fn collect(body: &Body, roots: Vec<NodeRef>, skip: &[StmtId]) -> Self {
+        let mut refs = Self::default();
+        let mut seen: IndexSet<ValueId> = IndexSet::default();
+        let mut stack = roots;
+        while let Some(node) = stack.pop() {
+            match node {
+                NodeRef::Stmt(s) => {
+                    if skip.contains(&s) {
+                        continue;
+                    }
+                    if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
+                        refs.declared.insert(*local_index);
+                    }
+                }
+                NodeRef::Pat(p) => {
+                    if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                        refs.declared.insert(*local_index);
+                    }
+                }
+                NodeRef::Expr(e) => match &body.exprs[e].kind {
+                    ExprKind::Local { index, .. } => {
+                        refs.mentioned.insert(*index);
+                    }
+                    ExprKind::Assign { target, .. } => {
+                        if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
+                            refs.written.insert(*index);
+                        }
+                    }
+                    _ => {}
+                },
+                NodeRef::Block(_) => {}
             }
-            if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
-                out.insert(*local_index);
-            }
+            body.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    body.values
+                        .collect_opaque_locals_seen(v, &mut seen, &mut refs.mentioned);
+                }
+            });
+            body.for_each_child(node, |c| stack.push(c));
         }
-        if let NodeRef::Pat(p) = node
-            && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
-        {
-            out.insert(*local_index);
-        }
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
-        {
-            out.insert(*index);
-        }
-        body.for_each_operand(node, |op| {
-            if let Some(v) = op.as_value() {
-                body.values
-                    .collect_opaque_locals_seen(v, &mut seen, &mut out);
-            }
-        });
-        body.for_each_child(node, |c| stack.push(c));
+        refs
     }
-    out
 }
 
 /// Whether control can leave the region. A `return` always can. A `break` or
@@ -493,9 +475,8 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
 }
 
 /// The function a region becomes: the enclosing function's frame, and the
-/// region as its whole body. Cloning the enclosing record rather than building
-/// one field by field is what keeps the two in step — a field added to
-/// [`NirFunction`] is inherited, and only what must differ is written here.
+/// region as its whole body. Cloned from the enclosing record so a field added
+/// to [`NirFunction`] is inherited, leaving only what must differ written here.
 fn build_helper(parent: &NirFunction, region: &Region, id: FuncId, ordinal: u32) -> NirFunction {
     let parent_body = parent.body.as_ref().expect("a region implies a body");
     let inherited = parent.params.len() as u32;

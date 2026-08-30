@@ -35,6 +35,7 @@ fn a_scalar_read_leaves_the_whole_value_moving() {
     let body = crate::common::wir_function_body(
         Path::new("scalar_read_move_test.wado"),
         SOURCE,
+        wado_compiler::OptLevel::O2,
         "fn \"scalar_read_move_test.wado/keep\"",
     );
     crate::common::assert_pushes_by_move(&body, "out");

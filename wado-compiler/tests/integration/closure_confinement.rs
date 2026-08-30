@@ -5,6 +5,8 @@
 
 use std::path::Path;
 
+use wado_compiler::OptLevel;
+
 const SOURCE: &str = r#"
 #[inline(never)]
 fn total(xs: List<i32>, tag: i32) -> i32 {
@@ -26,6 +28,7 @@ fn caller_body() -> String {
     crate::common::wir_function_body(
         Path::new("closure_confinement_test.wado"),
         SOURCE,
+        OptLevel::O2,
         "fn \"closure_confinement_test.wado/caller\"",
     )
 }

@@ -6,6 +6,8 @@
 
 use std::path::Path;
 
+use wado_compiler::OptLevel;
+
 const SOURCE: &str = r#"
 struct Inner { name: String, ids: List<i32> }
 variant Node { Leaf(Inner), Pair([Inner, Inner]) }
@@ -32,6 +34,7 @@ fn count_body() -> String {
     crate::common::wir_function_body(
         Path::new("box_local_unwrap_test.wado"),
         SOURCE,
+        OptLevel::O2,
         "fn \"box_local_unwrap_test.wado/count\"",
     )
 }

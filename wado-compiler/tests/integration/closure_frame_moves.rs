@@ -45,6 +45,7 @@ fn a_closure_leaves_the_rest_of_the_frame_moving() {
     let body = crate::common::wir_function_body(
         Path::new("closure_frame_moves_test.wado"),
         SOURCE,
+        wado_compiler::OptLevel::O2,
         "fn \"closure_frame_moves_test.wado/build\"",
     );
     crate::common::assert_pushes_by_move(&body, "next");

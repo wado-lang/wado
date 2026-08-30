@@ -49,6 +49,7 @@ impl Opt {
         KnobOpt::NoCache,
         KnobOpt::OptLevel,
         KnobOpt::InlineThreshold,
+        KnobOpt::InlineGrowth,
         KnobOpt::OptIterations,
         KnobOpt::LogLevel,
         KnobOpt::Allocator,

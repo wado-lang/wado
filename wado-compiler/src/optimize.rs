@@ -178,13 +178,15 @@ pub fn optimize(
             let config = OptConfig {
                 // Every source in the tree settles by 8, so 15 is slack.
                 iterations: opt_iterations.unwrap_or(15),
-                // Threshold 16, best of six alternating runs against 13 over
-                // the serde and parsing rows: cbor-twitter ser +11.4%,
-                // cbor-catalog ser +8.5%, cbor-canada ser +6.6%, json-catalog
-                // de +6.4%, json-twitter ser +6.0%, syntax-highlight +3.4%,
-                // sqlite-parse +2.6%, and json-canada de -1.7%. Above it the
-                // gains keep coming and json-catalog ser turns: -8.2% at 20,
-                // -35.3% at 26. Below it 10 is worse than 13 on every row.
+                // Threshold 16, best of three alternating whole-suite runs
+                // against 13: cbor-twitter ser +13.3%, cbor-catalog ser +12.7%,
+                // cbor-canada ser +11.2%, json-canada de +6.7%, fts +5.0%,
+                // json-canada ser +4.3%, count-prime +3.9%, syntax-highlight
+                // +3.4%, sqlite-parse +3.1%, against json-catalog ser -3%.
+                // That row is what turns first as the threshold climbs — -8.2%
+                // at 20, -35.3% at 26 — and 16 is where it costs the least that
+                // still buys the serde rows. Below it 10 is worse than 13 on
+                // every row.
                 inline_threshold: inline_threshold.unwrap_or(16),
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
