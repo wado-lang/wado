@@ -1783,7 +1783,7 @@ impl FunctionTranslator<'_, '_> {
         {
             return rewritten;
         }
-        let ordered = self.call_args_in_param_order(func, has_receiver, args);
+        let ordered = self.call_args_in_param_order(func, args);
         let mut_roots = self.call_mut_roots(func, &ordered);
         let nir_func = convert_function_ref(func);
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
@@ -2353,30 +2353,28 @@ impl FunctionTranslator<'_, '_> {
     fn call_args_in_param_order<'b>(
         &self,
         callee: &FunctionRef,
-        has_receiver: bool,
         args: &'b [CallArg],
     ) -> Vec<(&'b TirExpr, bool)> {
-        // TIR leaves a receiver's `is_mut` unset (see `TirExprKind::method_call`);
-        // the callee's declared `self` mode is the authority, and this is its
-        // only consumer.
-        let self_is_mut_ref = has_receiver
-            && self
-                .base
-                .value_copy
-                .mut_ref_params
-                .get(&callee.module_source, &callee.name)
-                .and_then(|v| v.first())
-                .copied()
-                .unwrap_or(false);
+        // Either source saying the callee writes the caller's storage through
+        // this slot settles it. The argument's syntax alone is not enough: TIR
+        // leaves a receiver's `is_mut` unset (see `TirExprKind::method_call`),
+        // and boxing erases the `&mut` from an argument whose parameter it
+        // rehomes into a `Box<T>` the callee still writes through. The callee's
+        // declared modes alone are not enough either — a builtin, or a callee
+        // this table has no row for, is described only by the syntax.
+        let mut_ref_params = self
+            .base
+            .value_copy
+            .mut_ref_params
+            .get(&callee.module_source, &callee.name);
         args.iter()
             .enumerate()
             .map(|(i, a)| {
-                let is_mut = if has_receiver && i == 0 {
-                    self_is_mut_ref
-                } else {
-                    a.is_mut
-                };
-                (&a.expr, is_mut)
+                let declared = mut_ref_params
+                    .and_then(|v| v.get(i))
+                    .copied()
+                    .unwrap_or(false);
+                (&a.expr, a.is_mut || declared)
             })
             .collect()
     }
