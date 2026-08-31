@@ -38,7 +38,7 @@ use {
     DEFAULT_CHANNEL,
     HIDDEN_CHANNEL,
     check_references,
-    check_left_recursion,
+    check_rule_shapes,
     synthesize_implicit_tokens,
     merge_grammars,
     superclass_bases,
@@ -1931,7 +1931,7 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
 fn finish_grammar(grammar: &mut Grammar) -> Result<(), ParseError> {
     synthesize_implicit_tokens(grammar);
     check_references(grammar)?;
-    check_left_recursion(grammar)?;
+    check_rule_shapes(grammar)?;
     return Result::Ok(());
 }
 

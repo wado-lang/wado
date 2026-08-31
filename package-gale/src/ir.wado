@@ -387,6 +387,15 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
     return Result::Ok(());
 }
 
+/// Reject the rule shapes that have no terminating parse. Both walks read one
+/// left-corner fixpoint, built here.
+pub fn check_rule_shapes(grammar: &Grammar) -> Result<(), ParseError> {
+    let ctx = build_left_corner_ctx(&grammar.parser_rules, false);
+    check_left_recursion(grammar, &ctx)?;
+    check_epsilon_closure(grammar, &ctx)?;
+    return Result::Ok(());
+}
+
 /// Reject hidden / indirect left recursion. Gale, like ANTLR4, supports only
 /// *direct* left recursion — a self-reference as an alternative's leading
 /// element, lowered by precedence climbing. Hidden (`a : x? a`, a nullable
@@ -394,14 +403,13 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
 /// would generate a recursive-descent scan/parse that re-enters a rule without
 /// consuming input and never terminates (issue #1671), so reject them here
 /// instead of emitting looping code.
-pub fn check_left_recursion(grammar: &Grammar) -> Result<(), ParseError> {
+fn check_left_recursion(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), ParseError> {
     if grammar.kind matches { Lexer } {
         return Result::Ok(());
     }
-    let ctx = build_left_corner_ctx(&grammar.parser_rules, false);
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         // A left-corner path back to the rule is a hidden / indirect cycle.
-        if left_corners_reach_self(&ctx, i) {
+        if left_corners_reach_self(ctx, i) {
             return Result::Err(
                 ParseError::new(
                     `rule "${grammar.parser_rules[i].name}" is indirectly or hidden left-recursive (reachable from itself through a nullable prefix); only direct left recursion is supported`,
@@ -412,6 +420,127 @@ pub fn check_left_recursion(grammar: &Grammar) -> Result<(), ParseError> {
         }
     }
     return Result::Ok(());
+}
+
+/// Reject a closure — `*` or `+` — whose body can match the empty string: the
+/// loop would never leave the position. ANTLR4 rejects it too (error 153). An
+/// optional over the same body is not a closure and stays accepted.
+fn check_epsilon_closure(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), ParseError> {
+    for let rule of &grammar.parser_rules {
+        for let alt of &rule.alternatives {
+            if elements_hold_epsilon_closure(&alt.elements, ctx) {
+                return Result::Err(epsilon_closure_error(&rule.name));
+            }
+        }
+    }
+    let lexer_nullable = lexer_nullable_table(&grammar.lexer_rules);
+    for let rule of &grammar.lexer_rules {
+        for let alt of &rule.body {
+            if lexer_elements_hold_epsilon_closure(&alt.elements, &lexer_nullable) {
+                return Result::Err(epsilon_closure_error(&rule.name));
+            }
+        }
+    }
+    return Result::Ok(());
+}
+
+fn epsilon_closure_error(rule_name: &String) -> ParseError {
+    return ParseError::new(
+        `rule "${*rule_name}" contains a closure with at least one alternative that can match an empty string`,
+        Span::new(0, 0),
+        ["a closure whose body always consumes at least one token"],
+    );
+}
+
+fn elements_hold_epsilon_closure(elements: &List<Element>, ctx: &LeftCornerCtx) -> bool {
+    return elements.iter_ref().any(|e: &Element| element_holds_epsilon_closure(e, ctx));
+}
+
+fn element_holds_epsilon_closure(elem: &Element, ctx: &LeftCornerCtx) -> bool {
+    return match elem {
+        TokenRef(_) | Literal(_) | Wildcard(_) | RuleRef(_) => false,
+        Not(n) => element_holds_epsilon_closure(&n.element, ctx),
+        Label(l) => element_holds_epsilon_closure(&l.element, ctx),
+        Group(g) => g.alternatives.iter_ref().any(|a: &Alternative| elements_hold_epsilon_closure(&a.elements, ctx)),
+        Repeat(rep) => {
+            if rep.kind matches { Star | Plus } && element_nullable(&rep.element, &ctx.index, &ctx.nullable, false) {
+                true;
+            } else {
+                element_holds_epsilon_closure(&rep.element, ctx);
+            }
+        },
+    };
+}
+
+/// Least-fixed-point nullability over the lexer rules, so a closure over an
+/// empty-matching fragment is caught as on the parser side. A cycle is false.
+fn lexer_nullable_table(rules: &List<LexerRule>) -> TreeMap<String, bool> {
+    let mut nullable = TreeMap::<String, bool>::new();
+    loop {
+        let mut changed = false;
+        for let rule of rules {
+            if lexer_rule_nullable(&rule.name, &nullable) {
+                continue;
+            }
+            for let alt of &rule.body {
+                if lexer_elements_all_nullable(&alt.elements, &nullable) {
+                    nullable[rule.name] = true;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    return nullable;
+}
+
+fn lexer_rule_nullable(name: &String, nullable: &TreeMap<String, bool>) -> bool {
+    return match nullable.get(*name) {
+        Some(n) => n,
+        None => false,
+    };
+}
+
+fn lexer_elements_all_nullable(elements: &List<LexerElement>, nullable: &TreeMap<String, bool>) -> bool {
+    return elements.iter_ref().all(|e: &LexerElement| lexer_element_nullable(e, nullable));
+}
+
+fn lexer_element_nullable(elem: &LexerElement, nullable: &TreeMap<String, bool>) -> bool {
+    return match elem {
+        Literal(text) => text.is_empty(),
+        CharRange(_) | CharClass(_) | AnyChar | Not(_) => false,
+        RuleRef(name) => lexer_rule_nullable(name, nullable),
+        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_elements_all_nullable(&a.elements, nullable)),
+        Repeat(rep) => match rep.kind {
+            Star | Optional => true,
+            Plus => lexer_element_nullable(&rep.element, nullable),
+        },
+    };
+}
+
+fn lexer_elements_hold_epsilon_closure(elements: &List<LexerElement>, nullable: &TreeMap<String, bool>) -> bool {
+    return elements.iter_ref().any(|e: &LexerElement| lexer_element_holds_epsilon_closure(e, nullable));
+}
+
+fn lexer_element_holds_epsilon_closure(elem: &LexerElement, nullable: &TreeMap<String, bool>) -> bool {
+    return match elem {
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar | RuleRef(_) => false,
+        Not(n) => lexer_element_holds_epsilon_closure(&n.element, nullable),
+        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_elements_hold_epsilon_closure(
+            &a.elements,
+            nullable,
+        )),
+        Repeat(rep) => {
+            if rep.kind matches { Star | Plus } && lexer_element_nullable(&rep.element, nullable) {
+                true;
+            } else {
+                lexer_element_holds_epsilon_closure(&rep.element, nullable);
+            }
+        },
+    };
 }
 
 /// Shared left-corner machinery for [`check_left_recursion`] (grammatical
@@ -1649,11 +1778,7 @@ fn canon_empty_alt_element(elem: &Element) -> Element {
             snake_name: lab.snake_name,
             field_name: lab.field_name,
         }),
-        Repeat(rep) => Element::Repeat(RepeatElement {
-            kind: rep.kind,
-            element: canon_empty_alt_element(&rep.element),
-            non_greedy: rep.non_greedy,
-        }),
+        Repeat(rep) => canon_repeat(rep.kind, &canon_empty_alt_element(&rep.element), rep.non_greedy),
         Not(n) => Element::Not(NotElement {
             element: canon_empty_alt_element(&n.element),
         }),
@@ -1670,6 +1795,110 @@ fn canon_empty_alt_element(elem: &Element) -> Element {
         }
     }
     return rebuilt;
+}
+
+/// Mint a Repeat, collapsing a Repeat over a Repeat — a shape no consumer of
+/// the IR accepts, arising from `(X*)?` and from `empty_alt_group_as_optional`
+/// folding `( X | )` over a repeat body. Every Repeat canonicalization mints
+/// comes through here, so the invariant holds by construction.
+///
+/// The collapse reads off what the pair can match: nothing, unless both sides
+/// demand a repetition; many, unless both cap at one. So `(X?)? = X?`,
+/// `(X+)+ = X+`, and `X*` for the rest.
+///
+/// The greediness kept is the surviving loop's. An outer `*` / `+` loops and
+/// re-enters what the inner one stopped short of, so the outer's preference is
+/// the whole of it (`('x'+?)+ 'x'` accepts what `('x'+)+ 'x'` does). An outer
+/// `?` does not loop, so the inner's carries — and the outer's preference to
+/// skip points the same way.
+fn canon_repeat(kind: RepeatKind, element: &Element, non_greedy: bool) -> Element {
+    if let Some(inner) = peel_nested_repeat(element) {
+        assert !repeat_admits_empty(inner.kind) || kind matches { Optional }, "a closure over a nullable body is rejected by check_epsilon_closure before canonicalization";
+        let outer_loops = !kind matches { Optional };
+        let capped = kind matches { Optional } && inner.kind matches { Optional };
+        let demands_one = kind matches { Plus } && inner.kind matches { Plus };
+        let collapsed = if capped {
+            RepeatKind::Optional;
+        } else if demands_one {
+            RepeatKind::Plus;
+        } else {
+            RepeatKind::Star;
+        };
+        return Element::Repeat(RepeatElement {
+            kind: collapsed,
+            element: inner.element,
+            non_greedy: if outer_loops { non_greedy } else { non_greedy || inner.non_greedy },
+        });
+    }
+    return Element::Repeat(RepeatElement { kind, element: *element, non_greedy });
+}
+
+/// The shape lowering requires of a canonical grammar, checked at the pass
+/// boundary. Reaching one of these is a defect in canonicalization, not in the
+/// grammar, so it asserts and names the pass that owed the shape.
+pub fn assert_canonical_shape(grammar: &Grammar) {
+    for let rule of &grammar.parser_rules {
+        for let alt of &rule.alternatives {
+            for let e of &alt.elements {
+                assert_canonical_element(e, &rule.name);
+            }
+        }
+    }
+}
+
+fn assert_canonical_element(elem: &Element, rule: &String) {
+    match elem {
+        Repeat(rep) => {
+            assert !peel_nested_repeat(&rep.element) matches { Some(_) }, `rule "${*rule}": a repeat over a repeat reached lowering — every Repeat canonicalization mints must go through canon_repeat, which collapses the pair`;
+            assert_canonical_element(&rep.element, rule);
+        },
+        Group(g) => {
+            for let a of &g.alternatives {
+                for let e of &a.elements {
+                    assert_canonical_element(e, rule);
+                }
+            }
+        },
+        Label(lab) => assert_canonical_element(&lab.element, rule),
+        Not(n) => assert_canonical_element(&n.element, rule),
+        _ => {
+        },
+    }
+}
+
+/// Whether a repeat of this kind can match nothing.
+fn repeat_admits_empty(kind: RepeatKind) -> bool {
+    return match kind {
+        Optional => true,
+        Star => true,
+        Plus => false,
+    };
+}
+
+/// The inner Repeat of a Repeat whose body is one, or `null` otherwise. A bare
+/// `( … )` between them is peeled by `strip_transparent_wrappers` — lowering's
+/// own answer, so the two cannot disagree about what the body is — and a label
+/// is kept, since it binds the body and not the choice to take it.
+fn peel_nested_repeat(element: &Element) -> Option<RepeatElement> {
+    let bare = strip_transparent_wrappers(element);
+    return match &bare {
+        Repeat(inner) => Option::Some(*inner),
+        Label(lab) => {
+            let inner = peel_nested_repeat(&lab.element)?;
+            Option::Some(RepeatElement {
+                kind: inner.kind,
+                element: Element::Label(LabelElement {
+                    name: lab.name,
+                    list: lab.list,
+                    element: inner.element,
+                    snake_name: lab.snake_name,
+                    field_name: lab.field_name,
+                }),
+                non_greedy: inner.non_greedy,
+            });
+        },
+        _ => null,
+    };
 }
 
 /// Returns the Optional-repeat equivalent of a two-alt group with exactly
@@ -1717,11 +1946,9 @@ fn empty_alt_group_as_optional(g: &GroupElement) -> Option<Element> {
             actions: body_alt.actions,
         },
     ]));
-    return Option::<Element>::Some(Element::Repeat(RepeatElement {
-        kind: RepeatKind::Optional,
-        element: inner,
-        non_greedy,
-    }));
+    // Through `canon_repeat`, not around it: a body that is already a repeat
+    // (`( A* | )`) would otherwise leave a repeat over a repeat here.
+    return Option::<Element>::Some(canon_repeat(RepeatKind::Optional, &inner, non_greedy));
 }
 
 fn normalize_element(elem: &mut Element) {

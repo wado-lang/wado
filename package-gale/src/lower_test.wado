@@ -1,10 +1,5 @@
-//! Smoke tests for `lower(Grammar) -> LoweredGrammar`.
-//!
-//! Phase 2.1 covers single-alternative rules with leaf elements
-//! (TokenRef / Literal / RuleRef / Wildcard / Not). Tests build a
-//! minimal `Grammar` directly via struct-literal syntax (no g4
-//! parser) so the lowering invariants are exercised in isolation
-//! from the front end.
+//! Smoke tests for `lower(Grammar) -> LoweredGrammar`. Each builds a minimal
+//! `Grammar` by struct literal, exercising lowering apart from the g4 parser.
 
 use {
     Grammar,
@@ -28,7 +23,12 @@ use {
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
 use { GenContext } from "./gen_context.wado";
-use { assign_atn_call_sites, unwrap_labeled_transparent_groups } from "./ir.wado";
+use {
+    assert_canonical_shape,
+    assign_atn_call_sites,
+    canonicalize_empty_alt_groups,
+    unwrap_labeled_transparent_groups,
+} from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use {
     Rule,
@@ -42,6 +42,9 @@ use {
     Diagnostic,
     DiagnosticKind,
     DiagnosticOwner,
+    admits_enumerated,
+    admits_is_everything,
+    alt_class_first_set,
 } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
@@ -347,11 +350,11 @@ test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
         if let Direct(d) = &m.dispatch {
             assert d.branches.len() == 3;
             assert d.branches[0].alt_index == 0;
-            assert d.branches[0].tokens[0] == "TK_INT";
+            assert alt_class_first_set(&d.branches[0].alt_class)[0] == "TK_INT";
             assert d.branches[1].alt_index == 1;
-            assert d.branches[1].tokens[0] == "TK_STRING";
+            assert alt_class_first_set(&d.branches[1].alt_class)[0] == "TK_STRING";
             assert d.branches[2].alt_index == 2;
-            assert d.branches[2].tokens[0] == "TK_ID";
+            assert alt_class_first_set(&d.branches[2].alt_class)[0] == "TK_ID";
         } else {
             panic("expected MultiAltDispatch::Direct");
         }
@@ -528,9 +531,9 @@ test "lower transparent Group wraps single leaf element" {
             } else {
                 panic("expected inner Token");
             }
-            assert go.scan_alts.len() == 1;
-            assert go.scan_alts[0].elements.len() == 1;
-            if let Token(t) = &go.scan_alts[0].elements[0] {
+            assert go.scan_group.alts.len() == 1;
+            assert go.scan_group.alts[0].elements.len() == 1;
+            if let Token(t) = &go.scan_group.alts[0].elements[0] {
                 assert t.kind == "TK_INT";
             } else {
                 panic("expected scan-side inner Token");
@@ -627,8 +630,8 @@ test "lower single-alt Group with two leaves produces SingleAlt shape" {
             assert go.alts.len() == 1;
             assert go.alts[0].ops.len() == 3;
             assert go.alts[0].struct_name == "IdEqIntItem";
-            assert go.scan_alts.len() == 1;
-            assert go.scan_alts[0].elements.len() == 3;
+            assert go.scan_group.alts.len() == 1;
+            assert go.scan_group.alts[0].elements.len() == 3;
         } else {
             panic("expected Op::Group");
         }
@@ -774,15 +777,15 @@ test "lower token-only Group produces TokenOnly shape with single field" {
             // Direct dispatch on each alt's single token kind.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert dd.branches[0].tokens.len() == 1;
-                assert dd.branches[0].tokens[0] == "TK_K_INSERT";
+                assert alt_class_first_set(&dd.branches[0].alt_class).len() == 1;
+                assert alt_class_first_set(&dd.branches[0].alt_class)[0] == "TK_K_INSERT";
                 assert dd.branches[0].alt_index == 0;
-                assert dd.branches[1].tokens[0] == "TK_K_REPLACE";
+                assert alt_class_first_set(&dd.branches[1].alt_class)[0] == "TK_K_REPLACE";
                 assert dd.branches[1].alt_index == 1;
             } else {
                 panic("expected MultiAltDispatch::Direct");
             }
-            assert go.scan_alts.len() == 2;
+            assert go.scan_group.alts.len() == 2;
         } else {
             panic("expected Op::Group");
         }
@@ -934,8 +937,8 @@ test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
             // Direct dispatch on each rule's first set.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert dd.branches[0].tokens[0] == "TK_ID";
-                assert dd.branches[1].tokens[0] == "TK_INT";
+                assert alt_class_first_set(&dd.branches[0].alt_class)[0] == "TK_ID";
+                assert alt_class_first_set(&dd.branches[1].alt_class)[0] == "TK_INT";
             } else {
                 panic("expected MultiAltDispatch::Direct");
             }
@@ -1054,8 +1057,8 @@ test "lower General Group with disjoint multi-shape alts produces General shape"
             // Direct dispatch on each alt's first set.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert dd.branches[0].tokens[0] == "TK_ID";
-                assert dd.branches[1].tokens[0] == "TK_INT";
+                assert alt_class_first_set(&dd.branches[0].alt_class)[0] == "TK_ID";
+                assert alt_class_first_set(&dd.branches[1].alt_class)[0] == "TK_INT";
             } else {
                 panic("expected MultiAltDispatch::Direct");
             }
@@ -2332,7 +2335,11 @@ test "lower non-greedy single-element Group Repeat lowers body to TransparentGro
             } else {
                 panic("expected RepeatBodyShape::TransparentGroup");
             }
-            assert rep.body_first_set.is_empty(), `expected empty body_first_set, got len=${rep.body_first_set.len()}`;
+            // `( . )*?` admits every token and the first-set walk enumerates
+            // none of them — the two facts the class carries at once.
+            assert admits_is_everything(&rep.body_admits), "expected the wildcard body to admit everything";
+            let enumerated = admits_enumerated(&rep.body_admits);
+            assert enumerated.is_empty(), `expected no enumerated kinds, got len=${enumerated.len()}`;
             if let NonGreedy(ng) = &rep.strategy {
                 assert ng.exit_first.len() == 1;
                 assert ng.exit_first[0] == "TK_LIT_EQ", ng.exit_first[0];
@@ -2863,6 +2870,122 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
     }
 }
 
+test "canonicalizing a labelled empty-alt group leaves no Repeat under the label" {
+    // `x=(A|)?` is two optionals with a label between them. The collapse keeps
+    // the label on the body it binds (`x=(A)?`); leaving it where it stood
+    // nests a Repeat under it, which `classify_repeat_body_shape` rejects.
+    let mut g = parse("grammar S;\nr : x=(A|)? B ;\nA : 'a' ;\nB : 'b' ;\n").unwrap();
+    canonicalize_empty_alt_groups(&mut g);
+    unwrap_labeled_transparent_groups(&mut g);
+    assert_canonical_shape(&g);
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            assert !rep.body matches { Repeat(_) }, "the optional's body must not be another Repeat";
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "canonicalizing collapses nested optionals through a bare wrapper" {
+    // The parentheses around an already-optional body add a group that carries
+    // nothing, and `(X?)?` is `X?` whether or not one stands between the two.
+    let sources = [
+        "grammar S;\nr : ((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : x=((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : (A?)? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ((A?))? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        // The fold mints an Optional itself, so it has to normalise like any
+        // other: `( X | )` where `X` is already a repeat is a repeat over a
+        // repeat, the shape lowering cannot name.
+        "grammar S;\nr : ( A? | ) B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ( | A? ) B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ( A* | ) B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : ( A+ | ) B ;\nA : 'a' ;\nB : 'b' ;\n",
+        // Spelled directly, with no fold involved.
+        "grammar S;\nr : (A*)? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : (A+)? B ;\nA : 'a' ;\nB : 'b' ;\n",
+        // A closure over a repeat body reaches here whenever that body is
+        // non-nullable, which is exactly what the epsilon-closure check lets
+        // through — so the collapse cannot assume the outer one is an Optional.
+        "grammar S;\nr : (A+)* B ;\nA : 'a' ;\nB : 'b' ;\n",
+        "grammar S;\nr : (A+)+ B ;\nA : 'a' ;\nB : 'b' ;\n",
+    ];
+    for let src of &sources {
+        let mut g = parse(*src).unwrap();
+        // The order `codegen.wado` runs them in. Reversed, the test proves
+        // nothing about the pass that runs second in production: a repeat over
+        // a repeat that `unwrap_labeled_transparent_groups` reintroduces would
+        // abort inside `assert_canonical_shape` with this still green.
+        canonicalize_empty_alt_groups(&mut g);
+        unwrap_labeled_transparent_groups(&mut g);
+        assert_canonical_shape(&g);
+        assign_atn_call_sites(&mut g);
+        let lit = collect_literal_tokens(&g.parser_rules);
+        let lowered = lower(&g, &lit);
+
+        if let Simple(s) = &lowered.parser_rules[0] {
+            if let Repeat(rep) = &s.body.ops[0] {
+                assert !rep.body matches { Repeat(_) }, `nested Repeat survived: ${*src}`;
+            } else {
+                panic(`expected Op::Repeat for: ${*src}`);
+            }
+        } else {
+            panic("expected Rule::Simple");
+        }
+    }
+}
+
+test "lower Optional Repeat over a token-only Group inner stays Plain" {
+    // `r : (X | Y | Z)? W ;` — every alternative is one token, so scanning
+    // the body is the same test as peeking one token. The scan guard would
+    // emit three one-token scans to answer what `first_check_str` answers
+    // with a single kind check.
+    let mut g = parse("grammar S;\nr : (X | Y | Z)? W ;\nX : 'x' ;\nY : 'y' ;\nZ : 'z' ;\nW : 'w' ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            assert rep.strategy matches { Plain }, "expected RepeatStrategy::Plain for a token-only Group inner";
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+    for let d of &lowered.diagnostics {
+        assert !d.kind matches { OptionalScanGuardFallback }, `unexpected warning: ${d.message}`;
+    }
+}
+
+test "lower Optional Repeat over a token-only Group containing EOF keeps the scan guard" {
+    // `r : (X | EOF)? ;` — `p.peek_kind()` reports `TK_EOF` past the end of
+    // the stream while a scan fails there, so the peek is not the scan's
+    // answer and the guard has to stay.
+    let mut g = parse("grammar S;\nr : (X | EOF)? ;\nX : 'x' ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            assert rep.strategy matches { OptionalScanGuard }, "expected the EOF alternative to keep RepeatStrategy::OptionalScanGuard";
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower Optional Repeat with many optionals does not enumerate 2^n shapes" {
     // A single-alt group with many nested Optionals would make
     // `try_optional_shape_lookahead` enumerate 2^n shapes (and `1 << n`
@@ -3080,7 +3203,7 @@ test "a wildcard alt keeps the group off the Direct dispatch" {
         if let Group(go) = &s.body.ops[0] {
             if let Direct(dd) = &go.dispatch {
                 for let b of &dd.branches {
-                    assert !b.tokens.is_empty(), `alt ${b.alt_index} got an empty-token branch`;
+                    assert !alt_class_first_set(&b.alt_class).is_empty(), `alt ${b.alt_index} got an empty-token branch`;
                 }
                 panic("expected a scan Tournament for a group holding a wildcard alt");
             }

@@ -43,6 +43,21 @@ trees, token streams, and semantics must match ANTLR4; an incidental
 rendering difference that carries no structural meaning is allowed to
 diverge.
 
+### Rejections Gale shares with ANTLR4
+
+Being a superset does not mean accepting everything. A grammar whose meaning
+is not determined is rejected loudly, at the same points ANTLR4 rejects it.
+Both checks read one left-corner fixpoint, built once per grammar by
+`check_rule_shapes` in `finish_grammar`, over the merged grammar and for lexer
+rules as well as parser rules. Like its sibling whole-grammar checks neither
+diagnostic carries a span.
+
+- **Left recursion** that precedence climbing cannot resolve —
+  `check_left_recursion`, ANTLR4 error 119.
+- **An epsilon closure** — a `*` or `+` over a body that can match nothing
+  (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
+  error 153.
+
 ### The Unicode version is Gale's, not the jar's
 
 `\p{...}` resolves against the latest UCD — 17.0.0 today — and tracking a
@@ -450,6 +465,96 @@ Where nothing wins that tournament the emit leaves the `else` instead of
 committing, so the rule's own error path still names the rule rather than one
 alternative's next token.
 
+**A group is decided once, wherever the decision is needed.** That partition
+and tournament is one emitter (`gen_group_decide`), answering the two
+questions its callers ask: **which alternative** (prediction — the lookahead
+alone where a branch holds one alternative, the longest scan where it holds
+several) and **how far that alternative validated**. Each caller reads the
+half that matches its position:
+
+- **A caller that may decline the group** — an optional, or a loop iteration
+  after the first — reads how far the alternative validated: what did not
+  validate is what skips the optional or ends the loop.
+- **A caller at a required position** — a `+`'s mandatory first iteration —
+  reads which alternative, and commits to it. It has no exit to take, so
+  declining is not among its answers.
+- **The dispatch** reads which alternative and commits, instead of testing
+  anything again.
+- **A group scanned inside a longer scan** runs it to measure itself, and
+  leaves the winner's end in the scan cursor. Measuring by any other rule
+  reports a length the parse will not consume, so the decision that reads the
+  measurement is taken on a path that does not exist.
+
+The tournament's rule is the only one: a wildcard alternative loses to a
+concrete one by scan length, not by iteration order (invariant 4's merge is
+what puts the two in one branch). Testing the branch before scanning also
+drops the scans of alternatives the lookahead cannot reach.
+
+**A nullable alternative is admitted by what follows the group, as well as by
+its own first set.** It can match nothing, so the group's local FOLLOW selects
+it too; lower computes that at the group's position and bakes it as
+`GroupOp.empty_alt_admits` — one value both walkers read, rather than an
+absence each interprets. It has three states, because a bare list would fold
+two of them together: no alternative is nullable; a nullable one whose suffix
+is nullable in turn, so the answer is the caller's FOLLOW and is not
+statically known; or one admitted by exactly this set. The follow set **joins**
+the alternative's first set rather than replacing it: `( A? | B ) C` is
+selected by `a` because the alternative starts with one and by `c` because it
+can also be skipped.
+
+**What an alternative matches is one value, `AltClass`, produced once.**
+Deriving it per site — is there a wildcard in the elements, is the first set
+empty, is it nullable, has it no elements — gets a different answer per
+spelling, so the two emit walkers partition the same group differently
+(invariant 9). `alt_class` in `alt_grouping` is the only producer:
+
+- `OpenEnded(first)` — `.` or `~X`, written in the alternative or reached
+  through a nullable prefix or a rule. Admits every token, so no set describes
+  it; `first` is the subset the walk did enumerate (`A? .` starts with `a`).
+- `Selects(first)` — selected by exactly these tokens, never empty.
+- `Nullable(first)` — can also match nothing, so the follow set joins `first`,
+  which may itself be empty (`( A | | B )`) or not (`( A? | B )`).
+
+`alt_grouping` owns the whole decision —
+`compute_overlap_groups_of` partitions, `group_branch_admits` says what a
+branch admits, `fallback_last` orders — and the surface walker, the op-only
+walker, the scan and lower's kind-set interning are four readers of that one
+answer rather than four derivations of it. Lower bakes the classification into
+`DispatchBranch.alt_class` and `ScanGroupElement.alt_classes`, and `GroupOp`
+carries the built `ScanGroupElement` rather than bare scan bodies, so emit has
+nothing left to assemble a second classification into.
+
+A branch of the decision therefore carries what it admits — `Admits`, one of
+`Everything`, `Untestable`, or `Kinds` (never empty) — instead of a rendered
+test, and `kind_check_str` refuses an empty set rather than choosing for the
+caller. An empty token list means both "admits every lookahead" (a wildcard
+alternative) and "has no first set of its own" (an empty alternative), and
+rendering either as `true` puts an unconditional arm mid-chain with every
+later alternative behind a test that can never fail — `( A | | B )` that never
+reaches `B`.
+
+`Admits` lives in the IR, not in the emitter, because lower has to bake one:
+`ScanRepeatElement.inner_admits` is what a scan iteration tests. The same
+empty set means opposite things there — `.?` and `~X?` have no first set
+because none enumerates every token and fire on every token there is, while a
+body deriving only epsilon has none to fire on.
+
+`Everything` and `Untestable` still render the same `true` and are still not
+the same answer: they differ in whether the arm may keep its place. A wildcard
+admits every token exactly, so the alternatives it shadows are ANTLR4's
+lowest-viable-alternative rule working — `. EOF | A EOF` takes the wildcard on
+`a`. An untestable arm shadows by default rather than by decision, so it is
+the chain's `else` and is emitted last (`fallback_last`), which
+`open_decision_branch` asserts.
+
+Where the follow set overlaps another alternative's first set the lookahead
+cannot separate them and they share a tournament branch, an empty alternative
+included — it scans as epsilon, so it wins only where nothing longer does.
+That is where Gale still parts from ANTLR4, which picks the lowest-indexed
+alternative that lets the rule complete rather than the longest scan: the
+`#[TODO]` in `driver_cst_empty_alt_mid_test.wado`, resolvable only by the
+follow-aware decision the ATN simulator makes.
+
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
 greedy `+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`),
@@ -489,21 +594,33 @@ policy, stated once per call site, and it has three values:
 
 - **Required** — the group must match here, so a token no alternative admits is
   a no-viable-alternative, over the union of the alternatives' first sets.
-- **Guaranteed** — the caller has already proved a match is viable, so the last
-  branch needs no condition of its own and there is no report to make. Both
-  callers scan before entering: a repeat's loop guard, and an optional's entry
-  check. An optional group therefore never needs a policy of its own — its own
-  guard is what skips it. A gated alternative forces Guaranteed back to
-  Required: a false predicate must not land in an unconditional `else` meant
-  for the alternative it excludes.
+- **Guaranteed** — the caller decided before entering, so there is no report to
+  make, and what it decided says how much of the dispatch is left. Where it ran
+  the group's own decision — an optional's entry check, a scan-guarded loop's
+  iteration — it names the winning alternative and the dispatch commits to it,
+  testing nothing else. Where it only proved the position viable — a loop over
+  a body with no alternatives to decide — the dispatch still picks by lookahead
+  and the last branch needs no condition of its own; there a gated alternative
+  forces Guaranteed back to Required, since a false predicate must not land in
+  an unconditional `else` meant for the alternative it excludes.
 - **Looped** — a loop iteration, carrying the mandatory-first-iteration flag or
-  none. It is what a repeat states, and `open_group_entry` discharges it into
-  one of the two above: the loop's own obligations are emitted there, and the
-  dispatch is left the answer for the position they do not cover.
+  none. It is what a repeat states where its body has no decision of its own,
+  and `open_group_entry` discharges it into one of the two above: the loop's
+  own obligations are emitted there, and the dispatch is left the answer for
+  the position they do not cover.
 
-Guaranteed rests on that scan, and a `+`'s first iteration is the one position
-no scan covers — it is mandatory, so the loop enters it unguarded. Both answers
-it needs are emitted where the flag still reads true, before the body:
+A `+`'s mandatory first iteration is the position no guard covers — it is
+required, so the loop enters it unguarded, and reads the half of a decided
+body's decision that cannot decline: the alternative prediction picked. Where
+the lookahead admits a branch holding one alternative, that is the answer
+whether or not its scan reached the end — the iteration commits and the body
+reports what it cannot match, as ANTLR4 does (`( A t | B t )+` on `a` is
+`missing ';'`). Only where prediction picked nothing — no branch admits the
+lookahead, or a branch of several admits it and none of them scans — is the
+position a `no viable alternative`, again ANTLR4's answer (`( A B | A C )+` on
+`a a`). Fixture `plus_first_commit.g4`, both trees taken from the published
+jar. An undecided body still needs both answers emitted where the flag reads
+true, before the body:
 
 - Gated, single-alternative body — no dispatch to force Guaranteed back, so the
   gate reports. Without it the gate registers the predicate, the body drops its
@@ -527,6 +644,8 @@ a group's alternatives:
 - **A group inside a left-recursive suffix** is walked by the GIR walker off
   the dispatch plan lower baked (`MultiAltDispatch`), not off first sets, and
   closes with `expect_set` over the union — a report, but not the same one.
+  Its optional's decision is built from that plan for the same reason
+  (invariant 9), so the two walkers still each decide once.
 
 ### Static LL prediction — the runtime FOLLOW gate
 
@@ -588,12 +707,13 @@ relevant sites.
 3. (Retired.) The old "variant emit reproduces the callee body
    faithfully" invariant is moot under the runtime-FOLLOW design: each
    rule is emitted exactly once.
-4. Wildcard alts collapse the overlap group and sort last. A wildcard alt
-   has empty FIRST yet effectively overlaps every token-consuming alt, so
-   it is merged into a single overlap group with the non-empty-FIRST
-   alts, the outer kind-check gate is suppressed, and wildcard alts are
-   scanned last. Without this, the parse side commits to the more specific
-   alt on a lookahead match even when its deeper structure cannot succeed
+4. Wildcard alts collapse the overlap group. A wildcard alt has empty FIRST
+   yet effectively overlaps every token-consuming alt, so it is merged into a
+   single overlap group with the non-empty-FIRST alts, and that branch's
+   kind-check tests nothing. Scan length separates the alternatives inside it,
+   so the merge needs no iteration order. Without this, the parse side commits
+   to the more specific alt on a lookahead match even when its deeper structure
+   cannot succeed
    (`ParserExec/Wildcard`: `(assign | .)+ EOF` on `x=10; abc;`). Fixture
    `tests/grammars/ll_wildcard_alt.g4`.
 5. A scan group's `lenient` fallthrough (bail out at the entry position
@@ -651,6 +771,17 @@ relevant sites.
    surface element. Fixtures `lr_opt_two_token.g4`, `lr_suffix_opt_shape.g4`,
    `lr_suffix_non_greedy_opt.g4` — pair any new decision input with one like
    them.
+
+   One known exception is unclosable at this layer: a branch that no lookahead
+   selects and that an alt-initial predicate gates (`( {p}? | A ) B`) keeps its
+   place in the parse chain, because the predicate can decline it — while the
+   scan, which does not evaluate predicates, reads it as testing nothing and
+   moves it last (`fallback_last`). Each reading is right for its own side, so
+   where the predicate holds the scan measures a length the parse will not
+   consume. Correcting either needs the predicate evaluated at prediction time,
+   the gap `warn_unsupported_prediction_predicate` names for the rule-level
+   case. Not diagnosed: the same shape parses correctly wherever the group is
+   not scanned, which `nested_action_gate_test.wado` pins.
 10. A viability probe is stamped only where the walk reaches the rule's tail.
     The probe scans the continuation and, when that runs out, conjoins the
     rule's FOLLOW — an answer that is only about the caller if nothing else

@@ -5,6 +5,7 @@ use {
     ParserRule,
     Element,
     normalize_caches,
+    assert_canonical_shape,
     canonicalize_empty_alt_groups,
     unwrap_labeled_transparent_groups,
     alias_parser_literals,
@@ -119,6 +120,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     canonicalize_empty_alt_groups(grammar);
     // Before the stamping passes, so lower and emit see the same shape.
     unwrap_labeled_transparent_groups(grammar);
+    // Canonicalization is done; everything downstream may assume its shape.
+    assert_canonical_shape(grammar);
     // Number every surface `RuleRef` call site so `build_atn`'s
     // `call_site_returns` correspondence (read by codegen to push exact ATN
     // return states) is keyed consistently. Runs after canonicalization (the

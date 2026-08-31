@@ -1613,22 +1613,26 @@ fn scan_if_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    let mut sg_0_best = -1;
     if sgk_0 == TK_ELSE {
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ELSE { break sg_0_0; }
-                pos += 1;
-                pos = scan_stmt(tokens, pos);
-                if pos < 0 { break sg_0_0; }
-                break sg_0;
-            }
-            pos = gp_0;
-            sg_0_1: {
-                break sg_0;
-            }
-            pos = gp_0;
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_ELSE { break sg_0_0; }
+            pos += 1;
+            pos = scan_stmt(tokens, pos);
+            if pos < 0 { break sg_0_0; }
+            if pos > sg_0_best { sg_0_best = pos; }
         }
+    } else {
+        pos = gp_0;
+        sg_0_1: {
+            if pos > sg_0_best { sg_0_best = pos; }
+        }
+    }
+    if sg_0_best >= 0 {
+        pos = sg_0_best;
+    } else {
+        pos = gp_0;
     }
     return pos;
 }

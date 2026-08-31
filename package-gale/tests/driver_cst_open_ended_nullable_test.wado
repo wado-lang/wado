@@ -1,0 +1,39 @@
+//! An alternative can be open-ended and nullable at once: `x : .? ;` admits
+//! every token and also admits none. Classifying it as one or the other loses
+//! whichever fact the classification dropped.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use oen from "./grammars/open_ended_nullable.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_open_ended_nullable" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = oen::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = oen::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "open-ended nullable: a token is there to take" {
+    assert_tree(&"a c", &"(s (x a) c)");
+    assert_tree(&"b c", &"(s (x b) c)");
+}
+
+#[TODO]
+test "open-ended nullable: taking the token would leave C nothing" {
+    // ANTLR4 predicts the `?` with the whole remaining input and declines to
+    // take the `c` that `C` then needs. Gale's `.?` is greedy against nothing:
+    // the caller-FOLLOW gate carries the *rule's* continuation, and a group's
+    // own suffix (`C EOF` here) never enters it — `compute_follow_arg` reads
+    // the alternative's elements, which inside a group stop at the group.
+    // Inlining the rule (`( .? | B ) C`) fails the same way, so it is the
+    // group suffix that is missing, not the call.
+    //
+    // Widening the mask is the LL(*) repair `CLAUDE.md` records as twice
+    // over-broad, so it wants its own rejection-case fixtures rather than a
+    // fix folded into this branch.
+    assert_tree(&"c", &"(s x c)");
+}

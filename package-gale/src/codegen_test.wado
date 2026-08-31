@@ -1184,6 +1184,19 @@ C : 'c' ;
     }
 }
 
+test "one alternative overlaps nothing, whatever it admits" {
+    // `e : e '+' A | . ;` — the atom has a single open-ended alternative.
+    // Admitting every token puts it in one branch with the alternatives it
+    // overlaps, and there are none, so there is no tournament to report.
+    let input = "grammar Test;
+e : e '+' A | . ;
+A : 'a' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let generated = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert generated.diagnostics.is_empty(), `a lone alternative has nothing to overlap: ${generated.diagnostics[0].message}`;
+}
+
 test "both error paths name tokens through one vocabulary" {
     // `expect` and the no-viable fallback both report through
     // `token_kind_name`, so one token never reads `A` on one path and `TK_A`
@@ -1231,6 +1244,28 @@ B : 'b' ;
     let generated = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert generated.source.len() > 0;
     assert generated.diagnostics.is_empty(), `expected no diagnostics, got ${generated.diagnostics.len()}`;
+}
+
+test "an optional group's entry guard is the scan its dispatch decides on" {
+    // `stmt : 'k' ( a | b | a '.' b )? ;` — alts 0 and 2 share FIRST, so the
+    // group needs a longest-match decision. Deciding entry and deciding the
+    // alternative is one question: each alternative is scanned once, and the
+    // dispatch reads the winner the entry guard already found.
+    let input = "grammar Test;
+stmt : 'k' ( a | b | a '.' b )? ;
+a : A ;
+b : B ;
+A : 'a' ;
+B : 'b' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_stmt__inner(");
+    assert body.len() > 0, "expected a _parse_stmt__inner body";
+    let scans_a = count_substr(&body, &"scan_a(");
+    let scans_b = count_substr(&body, &"scan_b(");
+    assert scans_a == 2, `alts 0 and 2 name 'a' once each; scanned it ${scans_a} times`;
+    assert scans_b == 2, `alts 1 and 2 name 'b' once each; scanned it ${scans_b} times`;
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {
@@ -1403,6 +1438,330 @@ B : 'b' ;
 C : 'c' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ";
+
+// A group whose empty alternative is admitted by nothing statically known:
+// `r` is the whole rule, so what follows the group is the caller's FOLLOW.
+global UNDECIDED_EMPTY_ALT_G4: String = "
+grammar T;
+r : ( A | | B ) ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// Both a wildcard-led alternative and an empty one admit every lookahead.
+global WILDCARD_AND_EMPTY_ALT_G4: String = "
+grammar T;
+r : ( A | . | ) ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// `C?` leaves the group's suffix nullable, so what may follow it reaches past
+// the rule into the caller's FOLLOW. The local part (`C`) is a prefix of the
+// answer, not the answer.
+global INEXACT_FOLLOW_EMPTY_ALT_G4: String = "
+grammar T;
+s : r SEMI EOF ;
+r : ( A | | B ) C? ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+SEMI : ';' ;
+";
+
+// `A` and `A B` overlap, so the rule takes the overlap dispatch rather than
+// the token-led one — a second rule-level emitter, with its own arms.
+global RULE_OVERLAP_EMPTY_ALT_G4: String = "
+grammar T;
+x : | A | A B ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// A wildcard body has no first set to narrow the guard by — nothing is
+// excluded, so the optional is entered on any token. The same is true of `~X`.
+global WILDCARD_OPTIONAL_G4: String = "
+grammar T;
+s : .? B EOF ;
+B : 'b' ;
+";
+
+// `A?` is nullable and has a perfectly good first set: a lookahead selects it,
+// so it is not the arm that belongs last.
+global NULLABLE_BUT_SELECTABLE_ALT_G4: String = "
+grammar T;
+s : r B EOF ;
+r : A? | B ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// The `.` sits behind a nullable prefix, so the alternative has a first set
+// (`{A}`) and is still open-ended: `c` reaches the wildcard.
+global PREFIXED_WILDCARD_ALT_G4: String = "
+grammar T;
+s : ( A? . | B ) EOF ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+
+// The epsilon alternative reached through a rule must earn the same follow-set
+// branch a written-empty one does.
+global INDIRECT_EPSILON_ADMITS_G4: String = "
+grammar T;
+s : 'k' ( A | x | B ) EOF ;
+x : ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// `x` derives only epsilon, but through a rule reference — the mirror of an
+// open-ended alternative reached the same way.
+global INDIRECT_EPSILON_ALT_G4: String = "
+grammar T;
+s : ( x | A ) B EOF ;
+x : ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// The op walker's `Direct` chain sees only baked token sets, and an
+// alternative open-ended through a rule keeps a Direct branch.
+global OP_INDIRECT_WILDCARD_G4: String = "
+grammar T;
+e : e ( w | A ) | C ;
+w : . ;
+A : 'a' ;
+C : 'c' ;
+";
+
+// `w` is open-ended, but through a rule reference: its first set is empty for
+// the same reason a surface `.`'s is, and it is not the empty alternative.
+global INDIRECT_WILDCARD_ALT_G4: String = "
+grammar T;
+s : w EOF # Wild
+  | A EOF # Named
+  ;
+w : . ;
+A : 'a' ;
+";
+
+// A wildcard-led alternative admits every token *exactly*, and its index still
+// competes: ANTLR4 takes the lowest viable alternative, so `. EOF` wins over
+// `A EOF` on `a`. Unlike an empty alternative, it must not be reordered.
+global WILDCARD_FIRST_ALT_G4: String = "
+grammar T;
+s : . EOF # Wild
+  | A EOF # Named
+  ;
+A : 'a' ;
+";
+
+// A rule's own alternatives are a decision too, and an empty one among them is
+// selected by no lookahead.
+global RULE_LEVEL_EMPTY_ALT_G4: String = "
+grammar T;
+x : A | | B ;
+A : 'a' ;
+B : 'b' ;
+";
+
+// An LR suffix's group body is walked by the op-only walker, which reads the
+// dispatch lower baked rather than the surface alternatives.
+global OP_WALKER_EMPTY_ALT_G4: String = "
+grammar T;
+e : e ( A x | | B x ) | C ;
+x : C ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+
+test "an undecided dispatch keeps every alternative reachable" {
+    // The chain that is not handed a decision builds its own conditions, and
+    // owes the empty alternative's absent first set the same reading.
+    let mut g = parse(UNDECIDED_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
+    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+}
+
+test "an empty alternative keeps its fallback where the follow set is a prefix" {
+    // A follow set the caller's FOLLOW still extends names only part of what
+    // selects the empty alternative. Written in as the whole set, it rejects
+    // every lookahead the caller could supply — here `;`, a legal parse where
+    // `r` derives nothing.
+    let mut g = parse(INEXACT_FOLLOW_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
+    assert count_substr(&body, &"grp_kind == TK_C") == 0, `a prefix of the follow set became the whole test: ${body}`;
+    assert count_substr(&body, &"no_viable") == 0, `the group can match nothing, so it cannot report: ${body}`;
+    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+}
+
+test "the overlap rule dispatch orders its fallback last too" {
+    let mut g = parse(RULE_OVERLAP_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    let empty_arm = find_substr(&body, &"if true");
+    let a_arm = find_substr(&body, &"if kind == TK_A");
+    assert a_arm >= 0, `the A-led alternatives lost their arm: ${body}`;
+    assert empty_arm >= 0, `the empty alternative lost its arm: ${body}`;
+    assert empty_arm > a_arm, `the empty alternative runs before A can be tested: ${body}`;
+}
+
+test "an optional over a wildcard has no first set to guard on" {
+    // A guard is a site where an empty set means "nothing is excluded", and
+    // the renderer does not answer that for its callers, so the guard says so.
+    let mut g = parse(WILDCARD_OPTIONAL_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert count_substr(&body, &"p.any()") > 0, `the wildcard body must still be emitted: ${body}`;
+}
+
+test "a nullable alternative with a first set keeps its index" {
+    // Nullable is not the same as untestable. `A?` can match nothing, but a
+    // lookahead of `a` selects it, so it is not the arm that goes last —
+    // demoting it lets `B` take the `b` that the rule's caller needs.
+    let mut g = parse(NULLABLE_BUT_SELECTABLE_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
+    let opt_arm = find_substr(&body, &"scope:");
+    let b_arm = find_substr(&body, &"kind == TK_B");
+    assert opt_arm >= 0, `the nullable alternative lost its arm: ${body}`;
+    assert b_arm < 0 || opt_arm < b_arm, `a nullable alternative is not the trailing arm: ${body}`;
+}
+
+test "a wildcard behind a nullable prefix still makes its alternative open-ended" {
+    // Having a first set does not settle it: `A? .` is selected by `a` and also
+    // by every other token, so partitioning by `{A}` leaves `c` no alternative.
+    let mut g = parse(PREFIXED_WILDCARD_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert count_substr(&body, &"no_viable") == 0, `a token the wildcard matches must reach it: ${body}`;
+}
+
+test "an epsilon alternative earns its follow set however it is spelled" {
+    // Which alternative earns the follow set is nullability's answer, not an
+    // element count: `( A | x | B )` gets the branch `( A | | B )` gets.
+    let mut g = parse(INDIRECT_EPSILON_ADMITS_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert count_substr(&body, &"grp_kind == TK_EOF") > 0, `the epsilon alternative must test the follow set: ${body}`;
+    assert count_substr(&body, &"no viable alternative") > 0, `a lookahead no alternative admits must report: ${body}`;
+}
+
+test "an alternative that derives only epsilon through a rule is selected by its follow" {
+    // `x` matches nothing, so what selects it is what follows the group — the
+    // answer a written-empty alternative gets, earned however it is spelled.
+    // ANTLR4 parses `b` as `(s x b)` and `a b` as `(s a b)`.
+    let mut g = parse(INDIRECT_EPSILON_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, &"grp_kind == TK_A") > 0, `the A alternative lost its test: ${body}`;
+    assert count_substr(&body, &"grp_kind == TK_B") > 0, `the epsilon alternative must test the follow set: ${body}`;
+}
+
+test "the op walker keeps an alternative open-ended through a rule in place" {
+    let mut g = parse(OP_INDIRECT_WILDCARD_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_e__inner(");
+    let wild_arm = find_substr(&body, &"_parse_w(p)");
+    let named_arm = find_substr(&body, &"_gk == TK_A");
+    assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
+    assert named_arm < 0 || wild_arm < named_arm, `it was demoted behind a later alternative: ${body}`;
+}
+
+test "an alternative open-ended through a rule keeps its index too" {
+    // An empty first set says nothing about the surface element that produced
+    // it, so reading the elements answers for a `.` written in place and not
+    // for one reached through `w`.
+    let mut g = parse(INDIRECT_WILDCARD_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    let wild_arm = find_substr(&body, &"scope:");
+    let named_arm = find_substr(&body, &"TK_A");
+    assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
+    assert named_arm < 0 || wild_arm < named_arm, `it was moved past a later alternative: ${body}`;
+}
+
+test "a wildcard alternative keeps its index against a narrower one" {
+    // It admits everything and shadowing what follows is the correct answer
+    // here — lowest viable alternative wins. Only an alternative no lookahead
+    // can test belongs at the end.
+    let mut g = parse(WILDCARD_FIRST_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    // A rule's unconditional arm is a bare `scope:` block, not `if true`.
+    let wild_arm = find_substr(&body, &"scope:");
+    let named_arm = find_substr(&body, &"TK_A");
+    assert wild_arm >= 0, `the wildcard alternative lost its arm: ${body}`;
+    assert named_arm < 0 || wild_arm < named_arm, `the wildcard alternative was moved past a later one: ${body}`;
+}
+
+// An open-ended alternative can still have an enumerated first set: `A? .`
+// admits every token *and* starts with `a`. What it admits is not a set, but
+// what the walk found is, and the unions built from these classes want it.
+global OPEN_ENDED_WITH_FIRST_G4: String = "
+grammar T;
+s : r EOF ;
+r : ( A? . | B )+ ;
+A : 'a' ;
+B : 'b' ;
+";
+
+test "an open-ended alternative still contributes the first set it does have" {
+    // The expected list a `no viable alternative` names, and the SYNC set it
+    // recovers on, are unions over the group's classes, so an open-ended
+    // alternative's own tokens have to reach both.
+    let mut g = parse(OPEN_ENDED_WITH_FIRST_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let both = "global SYNC_0: List<i32> = [TK_A, TK_B];";
+    assert find_substr(&output, &both) >= 0, `expected ${both}, got: ${output}`;
+}
+
+test "a rule's empty alternative does not shadow the ones after it" {
+    // A rule's arms are guarded `if`s that return, so an unconditional one is
+    // the same dead-code hazard as an `else if true` in a group's chain: it
+    // belongs after every arm a lookahead can select.
+    let mut g = parse(RULE_LEVEL_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    let empty_arm = find_substr(&body, &"scope:");
+    let b_arm = find_substr(&body, &"TK_B");
+    assert b_arm >= 0, `alt B is missing: ${body}`;
+    assert empty_arm >= 0, `the empty alternative lost its arm: ${body}`;
+    assert empty_arm > b_arm, `the empty alternative runs before B can be tested: ${body}`;
+}
+
+test "the op walker's undecided chain keeps every alternative reachable" {
+    // The op walker reads lower's baked branches, where an alternative no
+    // lookahead selects carries an empty token set — the same absence, and the
+    // same `true`, one emitter further out.
+    let mut g = parse(OP_WALKER_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_e__inner(");
+    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+}
+
+test "a wildcard puts every alternative in one branch, epsilon included" {
+    // `( A | . | )`: the wildcard admits every token, so no lookahead test
+    // separates any alternative from it — all three share the tournament and
+    // the scan lengths decide, with the empty alternative ranked as epsilon.
+    // Partitioned apart it is an arm behind the wildcard's unconditional one,
+    // which no input reaches.
+    let mut g = parse(WILDCARD_AND_EMPTY_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
+    assert count_substr(&body, &"if true") == 0, `one branch over every alternative needs no chain: ${body}`;
+    assert count_substr(&body, &"gd_tourney") > 0, `the three alternatives must share a tournament: ${body}`;
+    // Epsilon is `p.pos` — the empty alternative measured without scanning.
+    assert count_substr(&body, &"= p.pos;") > 0, `the empty alternative must be ranked, not dropped: ${body}`;
+}
 
 test "dispatch branches sharing a sub-dispatch are emitted once" {
     let mut g = parse(SHARED_SUBDISPATCH_G4).unwrap();

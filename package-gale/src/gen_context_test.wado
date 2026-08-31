@@ -11,7 +11,14 @@ use {
     Visibility,
 } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
-use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
+use {
+    DiagnosticKind,
+    DiagnosticOwner,
+    DiagnosticSite,
+    admits_is_untestable,
+    admits_or_everything,
+    admits_or_untestable,
+} from "./gir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
 fn mk_ctx() -> GenContext {
@@ -54,11 +61,28 @@ fn mk_ctx_with(rules: List<ParserRule>) -> GenContext {
 }
 
 
-test "kind_check_str: empty set returns 'true'" {
+test "an empty set is not a condition until the site says what it admits" {
+    // The set does not carry the answer; the site does.
     let mut ctx = mk_ctx();
     let empty: List<String> = [];
-    let s = ctx.kind_check_str(&empty, &"k");
-    assert s == "true", `expected "true" got "${s}"`;
+    // Both render `true`; they are still not the same answer. One admits every
+    // token and may keep its place among the arms, the other cannot be decided
+    // and belongs after every arm that can.
+    let exact = admits_or_everything(&empty);
+    let undecidable = admits_or_untestable(&empty);
+    assert ctx.admits_check_str(&exact, &"k") == "true", "a wildcard admits every token";
+    assert ctx.admits_check_str(&undecidable, &"k") == "true", "an untestable arm has no test to render";
+    assert !admits_is_untestable(&exact), "a wildcard decides; ordering it last loses the lowest-alternative rule";
+    assert admits_is_untestable(&undecidable), "an arm with no first set does not decide";
+}
+
+test "a non-empty set renders the same either way" {
+    let mut ctx = mk_ctx();
+    let toks: List<String> = ["TK_FOO"];
+    let narrows = ctx.admits_check_str(&admits_or_everything(&toks), &"k");
+    let selects = ctx.admits_check_str(&admits_or_untestable(&toks), &"k");
+    assert narrows == "k == TK_FOO", `expected "k == TK_FOO", got "${narrows}"`;
+    assert selects == narrows, "which reading an empty set takes cannot change a non-empty one";
 }
 
 test "kind_check_str: single token uses '==' not 'matches'" {
@@ -169,12 +193,6 @@ test "kind_sets: returns entries in insertion order" {
     assert ctx.token_name(entries[2].tokens[0]) == "TK_M";
 }
 
-
-test "kind_negate_check_str: empty set returns 'false'" {
-    let mut ctx = mk_ctx();
-    let empty: List<String> = [];
-    assert ctx.kind_negate_check_str(&empty, &"k") == "false";
-}
 
 test "kind_negate_check_str: single token uses '!='" {
     let mut ctx = mk_ctx();

@@ -2,7 +2,7 @@ use { ParserRule, Alternative, Element, RepeatElement, ActionLanguage, compute_s
 use { SuperOp } from "./superclass.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { literal_const_name, is_single_alt_group, single_alt_group_type_name, dedup_append_arr } from "./gen_util.wado";
-use { Diagnostic, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
+use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything } from "./gir.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
@@ -90,6 +90,7 @@ pub struct GenContext {
     single_token_cache: List<Option<bool>>,
     nullable_cache: List<Option<bool>>,
     scannable_cache: List<Option<bool>>,
+    open_end_cache: List<Option<bool>>,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -265,6 +266,7 @@ impl GenContext {
             single_token_cache: none_bool_cache(rule_count),
             nullable_cache: none_bool_cache(rule_count),
             scannable_cache: none_bool_cache(rule_count),
+            open_end_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: TreeMap::new(),
             kind_set_used: [],
@@ -1322,6 +1324,100 @@ impl GenContext {
         return result;
     }
 
+    /// Whether a position the alternative can reach — every element before it
+    /// nullable — matches a token no first set names. Having a first set
+    /// settles nothing: `A? .` is selected by `a` and by every other token too.
+    pub fn alt_reaches_open_end(&mut self, alt: &Alternative, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.alt_reaches_open_end_at(alt, visiting, &mut min_cycle);
+    }
+
+    fn alt_reaches_open_end_at(&mut self, alt: &Alternative, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        for let elem of &alt.elements {
+            if self.element_reaches_open_end_at(elem, visiting, min_cycle) {
+                return true;
+            }
+            let mut nullable_visiting: List<String> = [];
+            if !self.element_is_nullable_deep(elem, &mut nullable_visiting) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /// Whether the element matches a token of any kind. A label, a `( … )`, a
+    /// repeat and a rule reference all pass through to what is behind them.
+    pub fn element_reaches_open_end(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.element_reaches_open_end_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn element_reaches_open_end_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        return match elem {
+            Wildcard(_) | Not(_) => true,
+            Label(lab) => self.element_reaches_open_end_at(&lab.element, visiting, min_cycle),
+            Repeat(rep) => self.element_reaches_open_end_at(&rep.element, visiting, min_cycle),
+            Group(g) => {
+                let mut any = false;
+                for let alt of &g.alternatives {
+                    if self.alt_reaches_open_end_at(alt, visiting, min_cycle) {
+                        any = true;
+                        break;
+                    }
+                }
+                any;
+            },
+            RuleRef(r) => self.rule_reaches_open_end_at(&r.name, visiting, min_cycle),
+            TokenRef(_) | Literal(_) => false,
+        };
+    }
+
+    /// Open-endedness of a rule, with `rule_is_nullable_at`'s SCC-aware memo:
+    /// every decision site asks, and the rule graph is transitive.
+    fn rule_reaches_open_end_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            if let Some(val) = self.open_end_cache[rid] {
+                return val;
+            }
+        }
+
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
+            return false;
+        }
+
+        let p = visiting.len();
+        visiting.push(*name);
+
+        let mut local_min = i32::MAX;
+        let mut result = false;
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
+            for let alt of &rule.alternatives {
+                if self.alt_reaches_open_end_at(alt, visiting, &mut local_min) {
+                    result = true;
+                    break;
+                }
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if local_min >= p {
+            if rid >= 0 {
+                self.open_end_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
+        }
+
+        return result;
+    }
+
     /// True if the element always consumes exactly 1 input token on match.
     /// Used to keep `alt_position_first_sets` element-to-input-position aligned.
     pub fn element_is_single_token(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
@@ -1407,6 +1503,9 @@ impl GenContext {
     ///   first and return empty. This is the "first-exact deep-nullable
     ///   suffix" soundness invariant — see `CLAUDE.md` "Failed
     ///   Approaches" #3 for the rationale.
+    ///
+    /// Only the first case is the whole answer; ask
+    /// `call_site_follow_is_exact` which one this is.
     pub fn compute_call_site_follow(&mut self, elements: &List<Element>, i: i32) -> List<String> {
         let first = self.first_of_elements_from(elements, i + 1);
         if !self.tail_is_nullable_deep(elements, i + 1) {
@@ -1416,6 +1515,14 @@ impl GenContext {
             return first;
         }
         return [] as List<String>;
+    }
+
+    /// Whether `compute_call_site_follow` at `i` is the whole answer: a
+    /// nullable suffix lets the caller's FOLLOW extend it, so what comes back
+    /// there is a prefix, and a decision reading it as the answer rejects
+    /// every lookahead the caller could still supply.
+    pub fn call_site_follow_is_exact(&mut self, elements: &List<Element>, i: i32) -> bool {
+        return !self.tail_is_nullable_deep(elements, i + 1);
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut List<String>) -> bool {
@@ -1833,18 +1940,17 @@ impl GenContext {
 
     /// Render a token-set membership check on `expr`.
     ///
-    ///   - 0 tokens → `"true"` (the empty set never excludes anything in
-    ///     practice; callers that build up first-sets use this).
     ///   - 1 token  → `<expr> == TK_X` (no `matches` overhead).
     ///   - ≥2 tokens → `_kind_set_<id>(<expr>)` after interning.
     ///
     /// Multi-element sets always go through the helper indirection so
     /// duplicate sets across the grammar share a single function body
     /// in the generated wasm.
+    ///
+    /// An empty set is not a condition: which of the two it means is `Admits`'s
+    /// to say at the site that knows, so pass a real set here.
     pub fn kind_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
-        if tokens.is_empty() {
-            return "true";
-        }
+        assert !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
             return `${*expr} == ${tokens[0]}`;
         }
@@ -1853,9 +1959,24 @@ impl GenContext {
         return `_kind_set_${id}(${*expr})`;
     }
 
-    /// Sugar for `kind_check_str` against `p.peek_kind()`.
+    /// Render a guard: enter, or go round again, while the lookahead is in
+    /// `first_set`. Its own entry point because a guard has one reading of an
+    /// absent first set — nothing excludes it — where callers differ.
     pub fn first_check_str(&mut self, first_set: &List<String>) -> String {
-        return self.kind_check_str(first_set, &"p.peek_kind()");
+        return self.admits_first_check_str(&admits_or_everything(first_set));
+    }
+
+    /// Render what an `Admits` admits, as a condition on `expr`.
+    pub fn admits_check_str(&mut self, admits: &Admits, expr: &String) -> String {
+        return match admits {
+            Everything(_) | Untestable => "true",
+            Kinds(kinds) => self.kind_check_str(kinds, expr),
+        };
+    }
+
+    /// Sugar for `admits_check_str` against `p.peek_kind()`.
+    pub fn admits_first_check_str(&mut self, admits: &Admits) -> String {
+        return self.admits_check_str(admits, &"p.peek_kind()");
     }
 
     /// Returns the set of token kinds that the rule's body may greedily
@@ -1998,9 +2119,7 @@ impl GenContext {
     /// `!_kind_set_<id>(<expr>)` for ≥2 tokens, else
     /// `<expr> != TK_X`. Used by non-greedy emit sites.
     pub fn kind_negate_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
-        if tokens.is_empty() {
-            return "false";
-        }
+        assert !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
             return `${*expr} != ${tokens[0]}`;
         }

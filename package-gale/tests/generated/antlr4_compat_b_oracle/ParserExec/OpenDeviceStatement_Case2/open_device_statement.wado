@@ -1698,28 +1698,31 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                 let sp = pos;
                 let gp_1 = pos;
                 let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(sgk_1) {
-                    sg_1: {
-                        pos = gp_1;
-                        sg_1_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break sg_1_0; }
-                            pos += 1;
-                            break sg_1;
-                        }
-                        pos = gp_1;
-                        sg_1_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break sg_1_1; }
-                            pos += 1;
-                            break sg_1;
-                        }
-                        pos = gp_1;
-                        sg_1_2: {
-                            if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break sg_1_2; }
-                            pos += 1;
-                            break sg_1;
-                        }
-                        pos = -1;
+                let mut sg_1_best = -1;
+                if sgk_1 == TK_OPT1 {
+                    pos = gp_1;
+                    sg_1_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break sg_1_0; }
+                        pos += 1;
+                        if pos > sg_1_best { sg_1_best = pos; }
                     }
+                } else if sgk_1 == TK_OPT2 {
+                    pos = gp_1;
+                    sg_1_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break sg_1_1; }
+                        pos += 1;
+                        if pos > sg_1_best { sg_1_best = pos; }
+                    }
+                } else if sgk_1 == TK_OPT3 {
+                    pos = gp_1;
+                    sg_1_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break sg_1_2; }
+                        pos += 1;
+                        if pos > sg_1_best { sg_1_best = pos; }
+                    }
+                }
+                if sg_1_best >= 0 {
+                    pos = sg_1_best;
                 } else {
                     pos = -1;
                 }
@@ -1739,28 +1742,31 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                     let sp = pos;
                     let gp_3 = pos;
                     let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_0(sgk_3) {
-                        sg_3: {
-                            pos = gp_3;
-                            sg_3_0: {
-                                if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break sg_3_0; }
-                                pos += 1;
-                                break sg_3;
-                            }
-                            pos = gp_3;
-                            sg_3_1: {
-                                if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break sg_3_1; }
-                                pos += 1;
-                                break sg_3;
-                            }
-                            pos = gp_3;
-                            sg_3_2: {
-                                if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break sg_3_2; }
-                                pos += 1;
-                                break sg_3;
-                            }
-                            pos = -1;
+                    let mut sg_3_best = -1;
+                    if sgk_3 == TK_OPT1 {
+                        pos = gp_3;
+                        sg_3_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break sg_3_0; }
+                            pos += 1;
+                            if pos > sg_3_best { sg_3_best = pos; }
                         }
+                    } else if sgk_3 == TK_OPT2 {
+                        pos = gp_3;
+                        sg_3_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break sg_3_1; }
+                            pos += 1;
+                            if pos > sg_3_best { sg_3_best = pos; }
+                        }
+                    } else if sgk_3 == TK_OPT3 {
+                        pos = gp_3;
+                        sg_3_2: {
+                            if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break sg_3_2; }
+                            pos += 1;
+                            if pos > sg_3_best { sg_3_best = pos; }
+                        }
+                    }
+                    if sg_3_best >= 0 {
+                        pos = sg_3_best;
                     } else {
                         pos = -1;
                     }
@@ -1844,28 +1850,31 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                             let sp = pos;
                             let gp_5 = pos;
                             let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                            if _kind_set_0(sgk_5) {
-                                sg_5: {
-                                    pos = gp_5;
-                                    sg_5_0: {
-                                        if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break sg_5_0; }
-                                        pos += 1;
-                                        break sg_5;
-                                    }
-                                    pos = gp_5;
-                                    sg_5_1: {
-                                        if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break sg_5_1; }
-                                        pos += 1;
-                                        break sg_5;
-                                    }
-                                    pos = gp_5;
-                                    sg_5_2: {
-                                        if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break sg_5_2; }
-                                        pos += 1;
-                                        break sg_5;
-                                    }
-                                    pos = -1;
+                            let mut sg_5_best = -1;
+                            if sgk_5 == TK_OPT1 {
+                                pos = gp_5;
+                                sg_5_0: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break sg_5_0; }
+                                    pos += 1;
+                                    if pos > sg_5_best { sg_5_best = pos; }
                                 }
+                            } else if sgk_5 == TK_OPT2 {
+                                pos = gp_5;
+                                sg_5_1: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break sg_5_1; }
+                                    pos += 1;
+                                    if pos > sg_5_best { sg_5_best = pos; }
+                                }
+                            } else if sgk_5 == TK_OPT3 {
+                                pos = gp_5;
+                                sg_5_2: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break sg_5_2; }
+                                    pos += 1;
+                                    if pos > sg_5_best { sg_5_best = pos; }
+                                }
+                            }
+                            if sg_5_best >= 0 {
+                                pos = sg_5_best;
                             } else {
                                 pos = -1;
                             }
@@ -1882,44 +1891,43 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
         _plus_first = false;
         let lit_device = p.expect(TK_LIT_DEVICE, &SYNC_1);
-        let mut opt_scan_pos: i32 = -1;
-        opt_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            let gp_6 = pos;
-            let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_6) {
-                sg_6: {
-                    pos = gp_6;
-                    sg_6_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break sg_6_0; }
-                        pos += 1;
-                        break sg_6;
-                    }
-                    pos = gp_6;
-                    sg_6_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break sg_6_1; }
-                        pos += 1;
-                        break sg_6;
-                    }
-                    pos = gp_6;
-                    sg_6_2: {
-                        if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break sg_6_2; }
-                        pos += 1;
-                        break sg_6;
-                    }
-                    break opt_scan;
+        let mut gd_winner: i32 = -1;
+        let mut gd_best: i32 = -1;
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
+            let gd_kind = p.peek_kind();
+            if gd_kind == TK_OPT1 {
+                gd_winner = 0;
+                gd_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_OPT1 { break gd_scan; }
+                    pos += 1;
+                    gd_best = pos;
                 }
-            } else {
-                break opt_scan;
+            } else if gd_kind == TK_OPT2 {
+                gd_winner = 1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_OPT2 { break gd_scan_2; }
+                    pos += 1;
+                    gd_best = pos;
+                }
+            } else if gd_kind == TK_OPT3 {
+                gd_winner = 2;
+                gd_scan_3: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_OPT3 { break gd_scan_3; }
+                    pos += 1;
+                    gd_best = pos;
+                }
             }
-            opt_scan_pos = pos;
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            let grp_kind = p.peek_kind();
-            if grp_kind == TK_OPT1 {
+        if gd_best >= 0 {
+            if gd_winner == 0 {
                 let opt1 = p.expect(TK_OPT1, &EMPTY_SYNC);
-            } else if grp_kind == TK_OPT2 {
+            } else if gd_winner == 1 {
                 let opt2 = p.expect(TK_OPT2, &EMPTY_SYNC);
             } else {
                 let opt3 = p.expect(TK_OPT3, &EMPTY_SYNC);

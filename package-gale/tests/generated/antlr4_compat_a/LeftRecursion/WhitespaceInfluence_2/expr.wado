@@ -2491,22 +2491,24 @@ fn scan_expression_lr_18(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_3 = pos;
     let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(sgk_3) {
-        sg_3: {
-            pos = gp_3;
-            sg_3_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_AMP { break sg_3_0; }
-                pos += 1;
-                break sg_3;
-            }
-            pos = gp_3;
-            sg_3_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_AND { break sg_3_1; }
-                pos += 1;
-                break sg_3;
-            }
-            return -1;
+    let mut sg_3_best = -1;
+    if sgk_3 == TK_LIT_AMP {
+        pos = gp_3;
+        sg_3_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_AMP { break sg_3_0; }
+            pos += 1;
+            if pos > sg_3_best { sg_3_best = pos; }
         }
+    } else if sgk_3 == TK_K_AND {
+        pos = gp_3;
+        sg_3_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_K_AND { break sg_3_1; }
+            pos += 1;
+            if pos > sg_3_best { sg_3_best = pos; }
+        }
+    }
+    if sg_3_best >= 0 {
+        pos = sg_3_best;
     } else {
         return -1;
     }
@@ -2519,22 +2521,24 @@ fn scan_expression_lr_19(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_4 = pos;
     let sgk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_1(sgk_4) {
-        sg_4: {
-            pos = gp_4;
-            sg_4_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPE { break sg_4_0; }
-                pos += 1;
-                break sg_4;
-            }
-            pos = gp_4;
-            sg_4_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_OR { break sg_4_1; }
-                pos += 1;
-                break sg_4;
-            }
-            return -1;
+    let mut sg_4_best = -1;
+    if sgk_4 == TK_LIT_PIPE {
+        pos = gp_4;
+        sg_4_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPE { break sg_4_0; }
+            pos += 1;
+            if pos > sg_4_best { sg_4_best = pos; }
         }
+    } else if sgk_4 == TK_K_OR {
+        pos = gp_4;
+        sg_4_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_K_OR { break sg_4_1; }
+            pos += 1;
+            if pos > sg_4_best { sg_4_best = pos; }
+        }
+    }
+    if sg_4_best >= 0 {
+        pos = sg_4_best;
     } else {
         return -1;
     }

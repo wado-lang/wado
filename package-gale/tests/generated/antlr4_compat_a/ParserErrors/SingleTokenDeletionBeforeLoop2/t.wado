@@ -1512,22 +1512,24 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
         let sp = pos;
         let gp_0 = pos;
         let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_0(sgk_0) {
-            sg_0: {
-                pos = gp_0;
-                sg_0_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break sg_0_0; }
-                    pos += 1;
-                    break sg_0;
-                }
-                pos = gp_0;
-                sg_0_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_Z { break sg_0_1; }
-                    pos += 1;
-                    break sg_0;
-                }
-                pos = -1;
+        let mut sg_0_best = -1;
+        if sgk_0 == TK_LIT_B {
+            pos = gp_0;
+            sg_0_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break sg_0_0; }
+                pos += 1;
+                if pos > sg_0_best { sg_0_best = pos; }
             }
+        } else if sgk_0 == TK_LIT_Z {
+            pos = gp_0;
+            sg_0_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_Z { break sg_0_1; }
+                pos += 1;
+                if pos > sg_0_best { sg_0_best = pos; }
+            }
+        }
+        if sg_0_best >= 0 {
+            pos = sg_0_best;
         } else {
             pos = -1;
         }
@@ -1543,35 +1545,30 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     let lit_a = p.expect(TK_LIT_A, &SYNC_0);
     loop {
         if p.recovering { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            let gp_1 = pos;
-            let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_1) {
-                sg_1: {
-                    pos = gp_1;
-                    sg_1_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break sg_1_0; }
-                        pos += 1;
-                        break sg_1;
-                    }
-                    pos = gp_1;
-                    sg_1_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_Z { break sg_1_1; }
-                        pos += 1;
-                        break sg_1;
-                    }
-                    pos = gp_1;
-                }
+        let mut gd_winner: i32 = -1;
+        let mut gd_best: i32 = -1;
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_LIT_B {
+            gd_winner = 0;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break gd_scan; }
+                pos += 1;
+                gd_best = pos;
             }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
+        } else if gd_kind == TK_LIT_Z {
+            gd_winner = 1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_Z { break gd_scan_2; }
+                pos += 1;
+                gd_best = pos;
+            }
         }
-        if rep_scan_pos < 0 { break; }
-        let grp_kind = p.peek_kind();
-        if grp_kind == TK_LIT_B {
+        if gd_best <= p.pos { break; }
+        if gd_winner == 0 {
             let lit_b = p.expect(TK_LIT_B, &EMPTY_SYNC);
         } else {
             let lit_z = p.expect(TK_LIT_Z, &EMPTY_SYNC);

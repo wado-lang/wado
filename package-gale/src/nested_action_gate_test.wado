@@ -84,3 +84,19 @@ WS : ' ' -> skip ;
 ");
     assert src.contains("zzq"), "a predicate nested in a lexer group must be emitted, not silently dropped";
 }
+
+test "a plain action on an empty alternative does not cost it its follow set" {
+    // Only a gateable alt-initial predicate makes an alternative decide by
+    // something other than the lookahead, so a plain action leaves the empty
+    // alternative the follow set that selects it.
+    let src = &"grammar T;
+options { language = Wado; }
+s : 'k' ( A | {x();} | B ) EOF ;
+A : 'a' ;
+B : 'b' ;
+";
+    assert !has_unsupported_action(&gen_diagnostics(src)), "a plain action on an empty alternative must not warn";
+    let out = gen_source(src);
+    assert out.contains("grp_kind == TK_EOF"), `the empty alternative must test the follow set: ${out}`;
+    assert out.contains("no viable alternative"), `a lookahead no alternative admits must report: ${out}`;
+}

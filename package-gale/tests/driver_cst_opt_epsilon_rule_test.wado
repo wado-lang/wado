@@ -1,0 +1,28 @@
+//! `x : ;` derives only the empty string, so no token selects `x?` — and it
+//! matches anyway, because matching nothing is what it does. The
+//! left-recursive spelling reaches a different emitter, which owes the same
+//! answer.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use oer from "./grammars/opt_epsilon_rule.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_opt_epsilon_rule" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = oer::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = oer::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "optional over an epsilon rule: it is entered and produces its node" {
+    assert_tree(&"k a", &"(s k x a)");
+}
+
+test "optional over an epsilon rule: the left-recursive spelling generates" {
+    assert_tree(&"a", &"(s (e a))");
+    assert_tree(&"a + a", &"(s (e (e a) + x a))");
+}

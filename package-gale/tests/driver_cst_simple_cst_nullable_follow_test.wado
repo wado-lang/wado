@@ -1,0 +1,27 @@
+//! A nullable alternative in a SimpleCst group is selected by what follows the
+//! group as well as by its own first set — the rule a General group's nullable
+//! alternative gets, and the same one here.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use scnf from "./grammars/simple_cst_nullable_follow.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_simple_cst_nullable_follow" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = scnf::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = scnf::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "simple-cst nullable: each alternative's own first set selects it" {
+    assert_tree(&"a c", &"(s (x a) c)");
+    assert_tree(&"b c", &"(s (y b) c)");
+}
+
+test "simple-cst nullable: the follow set selects the alternative that matches empty" {
+    assert_tree(&"c", &"(s x c)");
+}

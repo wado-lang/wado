@@ -1,0 +1,41 @@
+//! A `+`'s mandatory first iteration is decided by prediction, not by
+//! validation: where the lookahead alone picks an alternative the parser
+//! commits to it and reports what its body could not match, and only where
+//! prediction cannot pick is the position a no-viable-alternative. The scan
+//! guarding the later iterations answers "may I go round again" — a different
+//! question, which must not decline the first one.
+//!
+//! ANTLR4, on the same inputs (`scripts/antlr4-oracle.sh`):
+//!
+//!   `p a`   → `line 1:3 missing ';' at '<EOF>'`, tree `(s p a (t <missing ';'>))`
+//!   `q a a` → `line 1:4 no viable alternative at input 'aa'`
+
+use pfc from "./grammars/plus_first_commit.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_plus_first_commit" },
+    };
+
+test "the first iteration commits to the alternative the lookahead picks" {
+    let ok = pfc::parse(&"p a ;");
+    assert ok.ok(), `unexpected diagnostics: ${ok.diagnostics.len()}`;
+    assert pfc::to_string_tree(&ok) == "(s p a (t ;))", `actual: ${pfc::to_string_tree(&ok)}`;
+}
+
+test "a body that cannot match reports from inside the committed alternative" {
+    // ANTLR4 enters `A t` and reports the `;` the body wants. Declining the
+    // position instead would leave the required iteration unparsed.
+    let bad = pfc::parse(&"p a");
+    assert bad.has_errors(), "the missing `;` is an error";
+    let tree = pfc::to_string_tree(&bad);
+    assert tree == "(s p a t)", `the first iteration must be entered, got: ${tree}`;
+}
+
+test "prediction that cannot pick reports a no-viable-alternative" {
+    let ok = pfc::parse(&"q a b");
+    assert ok.ok(), `unexpected diagnostics: ${ok.diagnostics.len()}`;
+
+    let bad = pfc::parse(&"q a a");
+    assert bad.has_errors(), "neither alternative can match `a a`";
+    let code = bad.diagnostics[0].code;
+    assert code matches { NoViableAlternative }, `prediction picked nothing, so no alternative is viable: ${code.name()}`;
+}

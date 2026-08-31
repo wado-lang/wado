@@ -2057,22 +2057,24 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
             sg_0: {
                 let gp_1 = pos;
                 let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(sgk_1) {
-                    sg_1: {
-                        pos = gp_1;
-                        sg_1_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_1_0; }
-                            pos += 1;
-                            break sg_1;
-                        }
-                        pos = gp_1;
-                        sg_1_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_1_1; }
-                            pos += 1;
-                            break sg_1;
-                        }
-                        break sg_0;
+                let mut sg_1_best = -1;
+                if sgk_1 == TK_PLUS {
+                    pos = gp_1;
+                    sg_1_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_1_0; }
+                        pos += 1;
+                        if pos > sg_1_best { sg_1_best = pos; }
                     }
+                } else if sgk_1 == TK_MINUS {
+                    pos = gp_1;
+                    sg_1_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_1_1; }
+                        pos += 1;
+                        if pos > sg_1_best { sg_1_best = pos; }
+                    }
+                }
+                if sg_1_best >= 0 {
+                    pos = sg_1_best;
                 } else {
                     break sg_0;
                 }
@@ -2100,22 +2102,24 @@ fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: &List<List
             sg_2: {
                 let gp_3 = pos;
                 let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_1(sgk_3) {
-                    sg_3: {
-                        pos = gp_3;
-                        sg_3_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_3_0; }
-                            pos += 1;
-                            break sg_3;
-                        }
-                        pos = gp_3;
-                        sg_3_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_3_1; }
-                            pos += 1;
-                            break sg_3;
-                        }
-                        break sg_2;
+                let mut sg_3_best = -1;
+                if sgk_3 == TK_TIMES {
+                    pos = gp_3;
+                    sg_3_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_3_0; }
+                        pos += 1;
+                        if pos > sg_3_best { sg_3_best = pos; }
                     }
+                } else if sgk_3 == TK_DIV {
+                    pos = gp_3;
+                    sg_3_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_3_1; }
+                        pos += 1;
+                        if pos > sg_3_best { sg_3_best = pos; }
+                    }
+                }
+                if sg_3_best >= 0 {
+                    pos = sg_3_best;
                 } else {
                     break sg_2;
                 }
@@ -2347,22 +2351,24 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 sg_6: {
                     let gp_7 = pos;
                     let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_0(sgk_7) {
-                        sg_7: {
-                            pos = gp_7;
-                            sg_7_0: {
-                                if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_7_0; }
-                                pos += 1;
-                                break sg_7;
-                            }
-                            pos = gp_7;
-                            sg_7_1: {
-                                if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_7_1; }
-                                pos += 1;
-                                break sg_7;
-                            }
-                            break sg_6;
+                    let mut sg_7_best = -1;
+                    if sgk_7 == TK_PLUS {
+                        pos = gp_7;
+                        sg_7_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_7_0; }
+                            pos += 1;
+                            if pos > sg_7_best { sg_7_best = pos; }
                         }
+                    } else if sgk_7 == TK_MINUS {
+                        pos = gp_7;
+                        sg_7_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_7_1; }
+                            pos += 1;
+                            if pos > sg_7_best { sg_7_best = pos; }
+                        }
+                    }
+                    if sg_7_best >= 0 {
+                        pos = sg_7_best;
                     } else {
                         break sg_6;
                     }
@@ -2406,22 +2412,24 @@ fn _parse_multiplying_expression__inner(p: &mut Parser, follow: &List<List<i32>>
                 sg_8: {
                     let gp_9 = pos;
                     let sgk_9 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_1(sgk_9) {
-                        sg_9: {
-                            pos = gp_9;
-                            sg_9_0: {
-                                if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_9_0; }
-                                pos += 1;
-                                break sg_9;
-                            }
-                            pos = gp_9;
-                            sg_9_1: {
-                                if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_9_1; }
-                                pos += 1;
-                                break sg_9;
-                            }
-                            break sg_8;
+                    let mut sg_9_best = -1;
+                    if sgk_9 == TK_TIMES {
+                        pos = gp_9;
+                        sg_9_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_9_0; }
+                            pos += 1;
+                            if pos > sg_9_best { sg_9_best = pos; }
                         }
+                    } else if sgk_9 == TK_DIV {
+                        pos = gp_9;
+                        sg_9_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_9_1; }
+                            pos += 1;
+                            if pos > sg_9_best { sg_9_best = pos; }
+                        }
+                    }
+                    if sg_9_best >= 0 {
+                        pos = sg_9_best;
                     } else {
                         break sg_8;
                     }

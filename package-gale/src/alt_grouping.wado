@@ -1,119 +1,225 @@
-//! Alt overlap-grouping and sorting heuristics for multi-alternative
-//! dispatch.
-//!
-//! Given the FIRST sets of a set of alternatives, this module decides:
-//!  * which alts overlap (`compute_overlap_groups`), so they must be
-//!    dispatched against each other rather than in isolation; and
-//!  * within each overlap group, in what order to try them
-//!    (`sort_group_by_specificity`, `sort_group_by_mandatory_count_desc`,
-//!    `sort_group_by_element_count`).
-//!
-//! The priority tier constants (`ALT_PRIORITY_*`) and the per-alt
-//! priority key (`alt_sort_priority`) are the contract that the parse-
-//! side dispatch and the scan-side dispatch share. See the CLAUDE.md
-//! "Failed Approaches" section for why the bands are split the way they
-//! are.
+//! The lookahead decision over a set of alternatives, and the heuristics that
+//! order what it picks between. Every site goes through `alt_class` →
+//! `compute_overlap_groups_of` → `group_branch_admits` → `fallback_last`, so
+//! none can partition a group differently (soundness invariant 9); only the
+//! rendering belongs to the caller.
 
 use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
+use {
+    Admits,
+    admits_everything,
+    admits_is_untestable,
+    admits_or_untestable,
+    AltClass,
+    DirectDispatch,
+    MultiAltDispatch,
+    ScanGroupElement,
+    alt_class_first_set,
+    alt_class_is_open_ended,
+} from "./gir.wado";
+use { dedup_append_arr } from "./gen_util.wado";
 
-/// True when `alt` opens on an open-ended token set — `.` or `~X`, the two
-/// elements `first_of_element` returns an empty set for because we cannot
-/// enumerate "every token kind". Such an alt effectively overlaps with every
-/// other alt that consumes at least one token. We use this flag to merge it
-/// into the surrounding overlap group so the parse-side dispatch routes
-/// through scan-based first-success-wins (which correctly falls back to it
-/// when the more specific alt's scan fails) instead of a kind-check that
-/// commits to the first alt whose FIRST set covers the lookahead.
-pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
-    for let elem of &alt.elements {
-        if element_is_wildcard(elem) {
-            return true;
-        }
-        if !is_nullable(elem) {
-            return false;
-        }
-    }
-    return false;
+/// One branch of a decision: what admits it, the predicate gating it, and the
+/// alternatives it holds. `alts` are in the index space of whatever the
+/// branches were built over — partition slots from `class_decision_branches`,
+/// and `DispatchBranch.alt_index` from `direct_dispatch_branches`, which an LR
+/// atom's dispatch numbers by the rule's own alternatives.
+pub struct DecisionBranch {
+    pub test: Admits,
+    /// Rendered `&& (…)` suffix, empty where the branch has no predicate.
+    pub gate: String,
+    pub alts: List<i32>,
 }
 
-/// `.` and `~X` both carry the empty static FIRST set. Neither a label nor a
-/// `( … )` wrapper changes what an element matches, so `w=.` and `x=(~X)` are
-/// as open-ended as the bare forms.
-fn element_is_wildcard(elem: &Element) -> bool {
-    return match elem {
-        Wildcard(_) | Not(_) => true,
-        Label(lab) => element_is_wildcard(&lab.element),
-        Group(g) => g.alternatives.len() == 1
-            && g.alternatives[0].elements.len() == 1
-            && element_is_wildcard(&g.alternatives[0].elements[0]),
-        TokenRef(_) | Literal(_) | RuleRef(_) | Repeat(_) => false,
+/// Whether the branch is the chain's `else`: undecidable by lookahead and
+/// ungated, so it can never decline. A gated one can, and stays where it is.
+pub fn is_decision_fallback(b: &DecisionBranch) -> bool {
+    return admits_is_untestable(&b.test) && b.gate.is_empty();
+}
+
+/// Merge the undecidable branches into a single last one, so the scan lengths
+/// pick between their alternatives instead of only the first arm being reachable.
+pub fn fallback_last(branches: &List<DecisionBranch>) -> List<DecisionBranch> {
+    let mut out: List<DecisionBranch> = [];
+    let mut fallback_alts: List<i32> = [];
+    for let b of branches {
+        if is_decision_fallback(b) {
+            for let a of &b.alts {
+                fallback_alts.push(*a);
+            }
+        } else {
+            out.push(*b);
+        }
+    }
+    if !fallback_alts.is_empty() {
+        out.push(DecisionBranch { test: Admits::Untestable, gate: "", alts: fallback_alts.sorted() });
+    }
+    return out;
+}
+
+/// The union of the first sets of one branch's alternatives — what its
+/// lookahead test admits.
+pub fn group_first_union(group: &List<i32>, classes: &List<AltClass>) -> List<String> {
+    let mut union_first: List<String> = [];
+    for let idx of group {
+        dedup_append_arr(&mut union_first, &alt_class_first_set(&classes[*idx]));
+    }
+    return union_first;
+}
+
+/// The union over every alternative a partition covers — the expected set a
+/// no-viable-alternative report names.
+pub fn classes_union(classes: &List<AltClass>) -> List<String> {
+    return group_first_union(&identity_slots(classes.len()), classes);
+}
+
+/// What a branch admits: everything if any of its alternatives is open-ended,
+/// otherwise the union of their first sets.
+pub fn group_branch_admits(group: &List<i32>, classes: &List<AltClass>) -> Admits {
+    if group.iter_ref().any(|slot: &i32| alt_class_is_open_ended(&classes[*slot])) {
+        return Admits::Everything(group_first_union(group, classes));
+    }
+    return admits_or_untestable(&group_first_union(group, classes));
+}
+
+/// The whole decision over a classified alternative list. Gates are the
+/// caller's to add: the classification does not carry them.
+pub fn class_decision_branches(classes: &List<AltClass>) -> List<DecisionBranch> {
+    let mut branches: List<DecisionBranch> = [];
+    for let group of &compute_overlap_groups_of(classes) {
+        branches.push(DecisionBranch {
+            test: group_branch_admits(group, classes),
+            gate: "",
+            alts: *group,
+        });
+    }
+    return fallback_last(&branches);
+}
+
+/// The branches a scan group takes, off the classification lower baked. Both
+/// the interning and the rendering read this list, so they cannot disagree.
+pub fn scan_decision_branches(ge: &ScanGroupElement) -> List<DecisionBranch> {
+    return class_decision_branches(&ge.alt_classes);
+}
+
+/// The branches a baked `Direct` dispatch takes, one alternative each.
+pub fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
+    let mut branches: List<DecisionBranch> = [];
+    for let br of &dd.branches {
+        branches.push(DecisionBranch {
+            test: group_branch_admits(&[0], &[br.alt_class]),
+            gate: "",
+            alts: [br.alt_index],
+        });
+    }
+    return fallback_last(&branches);
+}
+
+/// The branches a baked dispatch takes, whichever kind it is. A `Tournament`
+/// is one branch admitting everything: the scan lengths decide.
+pub fn dispatch_branches(d: &MultiAltDispatch) -> List<DecisionBranch> {
+    return match d {
+        Direct(dd) => direct_dispatch_branches(dd),
+        Tournament(td) => [
+            DecisionBranch { test: admits_everything(), gate: "", alts: td.alts },
+        ],
     };
 }
 
-/// `compute_overlap_groups` augmented with wildcard awareness. A
-/// wildcard-led alt's effective first set is the universal token set,
-/// so it must overlap with every alt whose first set is non-empty (and
-/// with every other wildcard alt). Without this merge, the parse-side
-/// dispatch emits a chain of `if peek_kind == TK_X ... else { wildcard
-/// }` branches that commit to `TK_X`'s alt whenever the lookahead
-/// matches, even if that alt's deeper structure cannot succeed —
-/// `(assign | .)` over an `ID` not followed by `=` is the canonical
-/// example.
-pub fn compute_overlap_groups_with_wildcard(
+/// The one classifier. Nullability and open-endedness are asked here and only
+/// here; `first_set` is the alternative's own, computed by the caller.
+pub fn alt_class(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> AltClass {
+    if alt_is_open_ended(alt, ctx) {
+        // `A? .` admits every token and still starts with `a`.
+        return AltClass::OpenEnded(*first_set);
+    }
+    if alt_is_nullable(alt, ctx) {
+        return AltClass::Nullable(*first_set);
+    }
+    assert !first_set.is_empty(), "an alternative that must match a token has a first set, unless it is open-ended";
+    return AltClass::Selects(*first_set);
+}
+
+/// Whether the alternative can derive the empty string, through the rules it
+/// reaches as well as the elements written in place.
+fn alt_is_nullable(alt: &Alternative, ctx: &mut GenContext) -> bool {
+    for let elem of &alt.elements {
+        let mut visiting: List<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `alt_class` for a caller that has no first set to hand.
+pub fn alt_class_of(alt: &Alternative, ctx: &mut GenContext) -> AltClass {
+    let mut visiting: List<String> = [];
+    let first = ctx.first_of_alt(alt, &mut visiting);
+    return alt_class(alt, &first, ctx);
+}
+
+/// True when `alt` consumes a token of any kind — a `.` or `~X` written in it
+/// or reached through a rule ref — and so is selected by every lookahead.
+/// The other way a first set comes out empty is an alternative that derives
+/// only epsilon, selected by nothing; the walk is `GenContext`'s so that both
+/// cases are answered the same way behind a rule ref as in place.
+pub fn alt_is_open_ended(alt: &Alternative, ctx: &mut GenContext) -> bool {
+    let mut visiting: List<String> = [];
+    return ctx.alt_reaches_open_end(alt, &mut visiting);
+}
+
+/// The classification of each alternative a partition covers, in the index
+/// space its first sets are in; `alt_of` maps a slot to its alternative.
+pub fn alt_classes(
+    alt_of: &List<i32>,
     alts: &List<Alternative>,
     first_sets: &List<List<String>>,
-) -> List<List<i32>> {
-    let n = alts.len();
-    let mut is_wild: List<bool> = [];
-    let mut any_wild = false;
+    ctx: &mut GenContext,
+) -> List<AltClass> {
+    assert alt_of.len() == first_sets.len(), "one alternative per first set";
+    let mut out: List<AltClass> = [];
+    for let mut slot = 0; slot < alt_of.len(); slot += 1 {
+        out.push(alt_class(&alts[alt_of[slot]], &first_sets[slot], ctx));
+    }
+    return out;
+}
+
+/// `alt_classes` over a whole alternative list, for a caller with no first
+/// sets to hand and no subset to map.
+pub fn alt_classes_of(alts: &List<Alternative>, ctx: &mut GenContext) -> List<AltClass> {
+    let mut out: List<AltClass> = [];
     for let alt of alts {
-        let w = alt_is_wildcard_led(alt);
-        is_wild.push(w);
-        if w {
-            any_wild = true;
-        }
+        out.push(alt_class_of(alt, ctx));
     }
-    let mut groups = compute_overlap_groups(first_sets);
-    if !any_wild {
-        return groups;
-    }
-    let mut merge_set: List<i32> = [];
+    return out;
+}
+
+/// The identity mapping, for a partition over `alts` itself.
+pub fn identity_slots(n: i32) -> List<i32> {
+    let mut out: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
-        if is_wild[i] || !first_sets[i].is_empty() {
-            merge_set.push(i);
-        }
+        out.push(i);
     }
-    if merge_set.len() < 2 {
-        return groups;
+    return out;
+}
+
+/// The partition every decision site branches on, from the classification and
+/// nothing else (invariant 9). An open-ended alternative admits every token,
+/// so no lookahead test separates the others from it and all of them merge
+/// into one branch for the scan tournament to decide — `(assign | .)` over an
+/// `ID` not followed by `=` is why committing on the kind check is wrong.
+pub fn compute_overlap_groups_of(classes: &List<AltClass>) -> List<List<i32>> {
+    let n = classes.len();
+    if n >= 2 && classes.iter_ref().any(|c: &AltClass| alt_class_is_open_ended(c)) {
+        return [identity_slots(n)];
     }
-    let mut new_groups: List<List<i32>> = [];
-    let mut merged: List<i32> = [];
-    for let g of groups {
-        let mut absorbed = false;
-        for let idx of &g {
-            for let m of &merge_set {
-                if *idx == *m {
-                    absorbed = true;
-                    break;
-                }
-            }
-            if absorbed {
-                break;
-            }
-        }
-        if absorbed {
-            for let idx of g {
-                merged.push(idx);
-            }
-        } else {
-            new_groups.push(g);
-        }
+    let mut first_sets: List<List<String>> = [];
+    for let c of classes {
+        first_sets.push(alt_class_first_set(c));
     }
-    if !merged.is_empty() {
-        new_groups.push(merged);
-    }
-    return new_groups;
+    return compute_overlap_groups(&first_sets);
 }
 
 pub fn compute_overlap_groups(first_sets: &List<List<String>>) -> List<List<i32>> {
@@ -175,29 +281,10 @@ pub fn sort_group_by_specificity(group: &mut List<i32>, first_sets: &List<List<S
     });
 }
 
-// Priority bands consumed by `alt_sort_priority` and friends. Higher
-// = try first.
-//
-// `MultiTokenLed` (4) is most specific: a multi-element alt whose
-// first non-nullable element is a fixed token (e.g. `K_CAST '(' expr
-// K_AS type_name ')'`). The leading token uniquely identifies the
-// alt, so committing on first match is safe.
-//
-// `BareRuleRef` (3) is the catch-all rank: a single-RuleRef alt
-// whose body can match complex internal patterns (`join_clause`,
-// `expr`). Ordered before `MultiRuleRefLed` so the scan cascade
-// tries the catch-all early; this is a tie-break for emission order
-// only — the runtime tournament decides the winner by scan length,
-// with ties resolved to the first grammar alt (ANTLR4's ambiguity
-// resolution), so the band ordering does not decide correctness.
-//
-// `MultiRuleRefLed` (2) is a multi-element alt whose first non-
-// nullable element is itself a RuleRef. Less specific than
-// `BareRuleRef` because the RuleRef prefix is shared with the
-// catch-all sibling.
-//
-// `BareToken` (1) is a single Token/Literal alt — the cheapest
-// fallback (e.g. `K_INSERT` alone).
+// Emission-order bands, most specific first: a token-led multi-element alt,
+// then a bare RuleRef catch-all, then a RuleRef-led multi-element alt sharing
+// that catch-all's prefix, then a bare token. A tie-break only — the runtime
+// tournament picks by scan length, ties to the first grammar alt.
 pub global ALT_PRIORITY_MULTI_TOKEN_LED: i32 = 4;
 pub global ALT_PRIORITY_BARE_RULE_REF: i32 = 3;
 pub global ALT_PRIORITY_MULTI_RULE_REF_LED: i32 = 2;
@@ -224,19 +311,11 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
     return ALT_PRIORITY_MULTI_RULE_REF_LED;
 }
 
-/// Sort `group` so the alt with the most MANDATORY (non-deeply-
-/// nullable) elements comes first, breaking ties by `alt_sort_priority`
-/// (single-RuleRef catch-alls win against multi-element-RuleRef
-/// siblings) and finally source order. Used by the prediction tree's
-/// `Ambiguous` case (and the matching parse-side group dispatches) to
-/// pick the longer MANDATORY match between alts that share a prefix.
-///
-/// Counting mandatory elements only is the LL distinguisher:
-/// `( a b | a )` (where `b` is mandatory) sorts the 2-elem alt first,
-/// while `( a b? | a )` (where `b?` is optional) ties on mandatory
-/// length and falls through to priority. The order affects only which
-/// scan is emitted first — the runtime tournament picks the longest
-/// scan, resolving ties to the first grammar alt.
+/// Sort `group` by `ll_match_length`, then `alt_sort_priority`, then source
+/// order, so the longer LL match among alts sharing a prefix is tried first.
+/// `( a b | a )` sorts the two-element alt ahead on its mandatory `b`, and so
+/// does `( a b? | a )` where `b?` is first-exact; a nullable that is not falls
+/// to priority instead.
 pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) {
     let mut keyed: List<[i32, i32, i32]> = [];
     for let mut i = 0; i < group.len(); i += 1 {
@@ -258,32 +337,10 @@ pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alt
     }
 }
 
-/// LL-aware "match length" for `alt`, used to sort group alternatives so
-/// the more specific LL alt wins on overlap-prefix ties. Counts every
-/// mandatory top-level element plus every *trailing* deep-nullable
-/// element that is first-exact (single-token-derived; see
-/// `GenContext::element_is_first_exact`).
-///
-/// Why this is the right key: a first-exact nullable trailing element
-/// like `b?` (where `b : Y`) is "1 token whose presence is decisive" —
-/// when `Y` is in the input, alt 0 of `(a b? | a)` is the LL-correct
-/// pick because `b?` will fire and consume `Y`. Counting it as a
-/// pseudo-mandatory token sorts alt 0 ahead of the bare-RuleRef
-/// catch-all alt 1, mirroring ANTLR4's full-context LL preference for
-/// the longer meaningful match. Multi-element nullable structures
-/// (SQLite's `(',' tor)*` Star) stay at the original count because
-/// their first set is not first-exact, preserving the join-clause
-/// catch-all behaviour their grammars depend on.
-///
-/// The `seen_mandatory` gate restricts the trailing-nullable bonus to
-/// nullables that follow a committed token. A *leading* nullable like
-/// `b?` in `( b? a c | a c )` cannot disambiguate length: the runtime
-/// has not yet committed to either alt at that position, so claiming
-/// "alt 0 has 3 tokens" is no better signal than "alt 1 has 2" —
-/// either alt's `a c` will match. Counting only post-mandatory
-/// nullables means the bonus fires exactly when it can shorten the
-/// LL decision: after a shared prefix has committed, a tail-position
-/// `b?` whose presence is decisive elects the longer alt.
+/// LL-aware match length: every mandatory top-level element, plus every
+/// first-exact nullable one after a mandatory element, whose single token is
+/// decisive (`(a b? | a)` on `Y` wants alt 0). A *leading* nullable earns no
+/// bonus — nothing has committed there yet, so its length says nothing.
 pub fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
     let mut count: i32 = 0;
     let mut seen_mandatory: bool = false;

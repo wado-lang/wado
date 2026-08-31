@@ -847,8 +847,28 @@ fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
 /// repeat it, and a condition naming `pred_<id>` needs that fn emitted.
 fn mark_gate_predicate(a: &AltAction, ctx: &mut GenContext) {
     ctx.mark_predicate_gated(a.source.action_id);
+    need_predicate_fn(a, ctx);
+}
+
+/// The half every renderer owes: a condition naming `pred_<id>` needs the fn
+/// emitted, whether or not that condition answers the predicate.
+fn need_predicate_fn(a: &AltAction, ctx: &mut GenContext) {
     if body_needs_no_translator(&a.source.text, ctx) {
         ctx.register_predicate_fn(a.source.action_id, &a.source.text);
+    }
+}
+
+/// Record that `alt`'s alt-initial predicates are answered by a condition the
+/// caller has emitted — for one that can only tell after rendering it
+/// (`group_admits`).
+pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut GenContext) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    for let a of &alt.actions {
+        if gate_condition_for(a, ctx) matches { Some(_) } {
+            ctx.mark_predicate_gated(a.source.action_id);
+        }
     }
 }
 
@@ -856,10 +876,29 @@ fn mark_gate_predicate(a: &AltAction, ctx: &mut GenContext) {
 /// token-led dispatch condition, or "" when off (keeping non-Wado grammars
 /// byte-identical) or the alt has none.
 pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut GenContext) -> String {
+    let suffix = alt_gate_suffix_unanswered(alt, ctx);
+    if suffix.is_empty() {
+        return suffix;
+    }
+    // This suffix is rendered into the caller's own test, so emitting it is
+    // what answers the predicate — one collector, two bookkeepings.
+    mark_alt_gate_answered(alt, ctx);
+    return suffix;
+}
+
+/// The same suffix and `pred_<id>` fn without claiming the predicate answered;
+/// the caller marks it with `mark_alt_gate_answered` once it can tell.
+pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut GenContext) -> String {
     if !ctx.emit_actions() {
         return String::new();
     }
-    let conds = alt_initial_gate_conditions(alt, ctx);
+    let mut conds: List<String> = [];
+    for let a of &alt.actions {
+        if let Some(c) = gate_condition_for(a, ctx) {
+            need_predicate_fn(a, ctx);
+            conds.push(c);
+        }
+    }
     if conds.is_empty() {
         return String::new();
     }
