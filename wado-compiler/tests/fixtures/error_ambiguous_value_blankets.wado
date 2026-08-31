@@ -1,0 +1,46 @@
+// Two value blankets of one trait whose bounds a single type satisfies overlap:
+// `Point` impls `Limit` and, as a struct, satisfies `ReflectStruct`. Nothing
+// ranks them, so selection falls through to declaration order and picks one
+// silently — `limit:7` as written, `struct:Point` with the two impls swapped.
+// Like the two-trait case (`error_ambiguous_cross_trait_method.wado`), an
+// unranked choice must be a diagnostic, not an internal order. Issue #1932
+// ("Related, and not the same defect"); WEP 2026-03-14 §5 covers overlap only
+// for `[..T]` targets, not for bound-keyed blankets over a bare `T`.
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+impl<T: ReflectStruct> Describe for T {
+    fn describe(&self) -> String {
+        return `struct:${ReflectStruct::<T>::type_name()}`;
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "limit:7";
+}
+
+__DATA__
+{"compile_error": "ambiguous blanket impls of 'Describe' for 'Point'"}

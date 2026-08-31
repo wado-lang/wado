@@ -1,0 +1,83 @@
+// A newtype must take the value blanket whose bound *it* satisfies, not one its
+// base satisfies. `Wrapped` carries `impl Limit for Wrapped`; its base `Inner`
+// is a struct and so satisfies `ReflectStruct`, which `Wrapped` does not
+// (`ReflectStruct::<Wrapped>::type_name()` is not a function). Blanket
+// selection peels the receiver to its base before checking bounds, so the
+// `ReflectStruct` blanket wins and `T` binds to `Inner`.
+//
+// Trait Derivation Policy (WEP 2026-06-25): "A hand-written impl always wins
+// over a derived one — a newtype most of all, since it exists to be a type
+// distinct from its base." Issue #1932.
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+struct Inner {
+    x: i32,
+}
+
+type Wrapped = Inner;
+
+impl Limit for Wrapped {
+    fn limit() -> i32 {
+        return 3;
+    }
+}
+
+// The base's blanket is declared first.
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl<T: ReflectStruct> Describe for T {
+    fn describe(&self) -> String {
+        return `struct:${ReflectStruct::<T>::type_name()}`;
+    }
+}
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+// The newtype's blanket is declared first — declaration order is not the axis.
+trait Report {
+    fn report(&self) -> String;
+}
+
+impl<T: Limit> Report for T {
+    fn report(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+impl<T: ReflectStruct> Report for T {
+    fn report(&self) -> String {
+        return `struct:${ReflectStruct::<T>::type_name()}`;
+    }
+}
+
+fn limit_of<T: Limit>() -> i32 {
+    return T::limit();
+}
+
+test "the newtype satisfies the bound its own blanket is keyed by" {
+    assert limit_of::<Wrapped>() == 3;
+}
+
+test "the newtype takes its own blanket over the base's" {
+    let w = Inner { x: 1 } as Wrapped;
+    assert w.describe() == "limit:3";
+    assert w.report() == "limit:3";
+}
+
+test "the base still takes the blanket its own bound selects" {
+    let i = Inner { x: 1 };
+    assert i.describe() == "struct:Inner";
+    assert i.report() == "struct:Inner";
+}
+
+__DATA__
+{"test": {}}
