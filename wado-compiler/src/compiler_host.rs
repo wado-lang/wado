@@ -282,6 +282,10 @@ pub struct DiagnosticSpan {
     /// Optional end position for ranges
     pub end_line: Option<usize>,
     pub end_column: Option<usize>,
+    /// The parse these coordinates index, carried from the [`Span`].
+    /// [`crate::logger::Logger`] renders `file` from it, so the location stays
+    /// whole however far the diagnostic travels from the walk that raised it.
+    pub space: crate::ast::AstIdSpace,
 }
 
 impl DiagnosticSpan {
@@ -293,6 +297,7 @@ impl DiagnosticSpan {
             column: span.column,
             end_line: Some(span.end_line),
             end_column: Some(span.end_column),
+            space: span.space,
         }
     }
 }
@@ -690,6 +695,7 @@ mod tests {
                 column: 5,
                 end_line: None,
                 end_column: None,
+                space: crate::ast::AstIdSpace::FRESH,
             }),
         };
 

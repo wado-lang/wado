@@ -1011,6 +1011,7 @@ pub fn parse_error_diagnostic(
             column: err.span.column,
             end_line: Some(err.span.end_line),
             end_column: Some(err.span.end_column),
+            space: err.span.space,
         }),
     }
 }
@@ -1035,6 +1036,7 @@ pub fn lex_error_diagnostic(
             column: err.span.column,
             end_line: Some(err.span.end_line),
             end_column: Some(err.span.end_column),
+            space: err.span.space,
         }),
     }
 }
@@ -1083,6 +1085,15 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     logger: &Logger<'_, H>,
     build_tir: bool,
 ) -> Semantics {
+    // Before any phase reports: a diagnostic's span names the file it indexes
+    // by looking its parse up here.
+    logger.register_parses(
+        load_result
+            .modules
+            .iter()
+            .map(|(source, module)| (module.ast_id_space(), source.clone())),
+    );
+
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module elaborators can each `borrow_mut()` it from `&self`
     // contexts. Single-threaded sharing matches the rest of the

@@ -48,6 +48,9 @@ pub struct Logger<'a, H: CompilerHost> {
     /// one phase, and the same message at the same place is the same fault —
     /// saying it twice gives the reader nothing to act on.
     reported: std::cell::RefCell<crate::hashmap::IndexSet<String>>,
+    /// Which module's parse minted each id space, over the loaded set. What
+    /// turns a span's [`crate::ast::AstIdSpace`] into the file it indexes.
+    parses: std::cell::RefCell<crate::hashmap::IndexMap<crate::ast::AstIdSpace, ModuleSource>>,
 }
 
 /// Drops error diagnostics for as long as it lives. See [`Logger::quiet`].
@@ -70,7 +73,23 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             error_count: Cell::new(0),
             quiet_depth: Cell::new(0),
             reported: std::cell::RefCell::default(),
+            parses: std::cell::RefCell::default(),
         }
+    }
+
+    /// Record which module each loaded parse belongs to, so a diagnostic's span
+    /// can name its own file. Called once the loader has the set; a span from a
+    /// parse not in it falls back to the reporting caller's module.
+    pub fn register_parses(
+        &self,
+        parses: impl IntoIterator<Item = (crate::ast::AstIdSpace, ModuleSource)>,
+    ) {
+        self.parses.borrow_mut().extend(parses);
+    }
+
+    /// The file a span's own parse indexes, if that parse is a loaded module.
+    fn file_of_parse(&self, space: crate::ast::AstIdSpace) -> Option<String> {
+        Some(self.parses.borrow().get(&space)?.source_path())
     }
 
     /// Access the underlying `CompilerHost` for callers that need to
@@ -100,6 +119,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 
     /// Count the diagnostic, emit it, and signal `Bail` at `MAX_ERRORS`.
     fn emit_error(&self, diag: Diagnostic) -> Result<(), Bail> {
+        let diag = self.attributed(diag);
         if self.quiet_depth.get() > 0 {
             return Ok(());
         }
@@ -129,8 +149,25 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         ))
     }
 
-    /// Stamp `file` onto a diagnostic's span when the span carries no file of
-    /// its own, so a caller that knows its module wins over a bare `Span`.
+    /// Name the file a located diagnostic's coordinates index, taking it from
+    /// the span's own parse.
+    ///
+    /// This overrides what a caller supplied: the reporting walk's module is
+    /// the ambient answer, and a body walked away from home — a trait's default
+    /// synthesized into an impl — is exactly where ambient is wrong. It also
+    /// reaches a diagnostic raised after that walk moved on, which nothing
+    /// ambient can.
+    fn attributed(&self, mut diag: Diagnostic) -> Diagnostic {
+        if let Some(span) = diag.span.as_mut()
+            && let Some(file) = self.file_of_parse(span.space)
+        {
+            span.file = file;
+        }
+        diag
+    }
+
+    /// Stamp `file` onto a diagnostic's span when neither the span's parse nor
+    /// an earlier caller named one.
     fn with_file(mut diag: Diagnostic, file: &str) -> Diagnostic {
         if let Some(span) = diag.span.as_mut()
             && span.file.is_empty()
@@ -556,6 +593,7 @@ mod tests {
                     column: 5,
                     end_line: None,
                     end_column: None,
+                    space: crate::ast::AstIdSpace::FRESH,
                 }),
             },
         );
@@ -581,6 +619,7 @@ mod tests {
                     column: 5,
                     end_line: None,
                     end_column: None,
+                    space: crate::ast::AstIdSpace::FRESH,
                 }),
             },
         );

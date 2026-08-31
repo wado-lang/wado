@@ -424,6 +424,7 @@ pub(crate) fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: Generat
         column: 0,
         end_line: None,
         end_column: None,
+        space: wado_compiler::ast::AstIdSpace::FRESH,
     });
     host.emit_diagnostic(Diagnostic {
         severity,
