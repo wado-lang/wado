@@ -43,13 +43,11 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-- `sed`, `awk`, `perl`, `python`, `python3`, `nohup`, `setsid` and `disown` are denied in `.claude/`.
-- **Every edit goes through the editing tools. Editing a file by script is forbidden** — Node.js included, however wide the change and however mechanical it looks. A wide rename is many editing-tool calls, not one script. This is not a matter to agree an exception for: there is none. Node.js is for scripts that are not edits (measuring, extracting, generating data to read).
-- The reason is that the editing tools fail where a script silently succeeds: they refuse a match that is not unique instead of replacing every occurrence, they refuse a file the session has not read, and the harness tracks what they wrote. A script bypasses all three, and the first sign of trouble is a file that changed under you.
-- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, each in its own invocation — the harness's own backgrounding, which is why `nohup` / `setsid` / `disown` are denied. A detached job is one nothing announces the end of, leaving you to poll for it. Chaining one behind a slow step (`{ mise run format; mise run test; }`) puts both under one timeout, and the kill takes the job with it.
-- Redirect a job's output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards what you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
-- Have the job record its own completion — `cmd > run.log 2>&1; echo "exit=$?" >> run.log` — and wait on `grep -q "^exit=" run.log`. Nothing else tells you it finished: `pgrep` matches the watcher's own command line, a wrapper's exit code is its last command (`grep -c failures` exits 1 on a clean run), and a log left by a timeout-killed command reads like a run still in progress.
-- Don't edit sources while a `wado test` run is in flight. It pins each Kiln generator at its first resolve and fails at the end naming every source that changed under it; that verdict describes neither tree, so re-run instead of reading it.
+- Make every edit with the editing tools. They refuse a match that is not unique and a file the session has not read, and the harness tracks what they wrote, so each edit is checkable. Scripts — Node.js included — measure, extract, and generate data to read.
+- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation: the harness announces the end of a job it owns. Chaining one behind a slow step puts both under a single timeout.
+- Redirect a job's output to a file and read the file, so what you did not anticipate is still there.
+- Have the job record its own completion — `cmd > run.log 2>&1; echo "exit=$?" >> run.log` — and wait on `grep -q "^exit=" run.log`.
+- Let a `wado test` run finish before editing sources: it pins each Kiln generator at its first resolve, and its verdict then describes neither tree.
 
 ## General Rules
 
