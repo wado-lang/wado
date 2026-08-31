@@ -123,8 +123,10 @@ use {
     add_parser_super_effect,
     add_seeded_vals_param,
     alt_gate_and_suffix,
+    alt_gate_suffix_unanswered,
     alt_has_gate,
     alt_initial_gate_conditions,
+    mark_alt_gate_answered,
     alt_vals_arg,
     ambiguous_group_predicate_gated,
     call_arg_suffix,
@@ -4642,10 +4644,24 @@ fn group_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) ->
     // A guard, not a dispatch chain: an empty alternative widens it to admit
     // everything, which is the safe direction and creates no dead branch.
     let [classes, groups] = group_partition(alts, kind, &null, ctx);
-    let branches = decision_branches(alts, &groups, &classes, ctx);
+    let branches = guard_branches(alts, &groups, &classes, ctx);
     let mut parts: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
         parts.push(`(${render_branch_cond(&branches[i], &"p.peek_kind()", ctx)})`);
+    }
+    // A disjunction is only as weak as its weakest term, and an unconditional
+    // branch makes the whole of it `true`: the gates beside it are rendered and
+    // then absorbed. Only a condition that really requires a predicate may
+    // claim to answer it — claiming per alternative while the condition was
+    // still being built is what would drop the body's inline guard for a
+    // predicate nothing then checks.
+    let absorbed = branches.iter_ref().any(|b: &DecisionBranch| admits_tests_nothing(&b.test) && b.gate.is_empty());
+    if !absorbed {
+        for let b of &branches {
+            if b.alts.len() == 1 && !b.gate.is_empty() {
+                mark_alt_gate_answered(&alts[b.alts[0]], ctx);
+            }
+        }
     }
     return Option::Some(GroupAdmits {
         condition: parts.join(" || "),
@@ -6392,12 +6408,35 @@ fn decision_branches(
     classes: &List<AltClass>,
     ctx: &mut GenContext,
 ) -> List<DecisionBranch> {
+    return build_decision_branches(alts, groups, classes, ctx, true);
+}
+
+/// The same branches for a caller that renders them into a disjunction, where
+/// an unconditional term can absorb a gate. It cannot claim a predicate is
+/// answered until the whole condition exists, so building the branches claims
+/// nothing and `group_admits` decides after.
+fn guard_branches(
+    alts: &List<Alternative>,
+    groups: &List<List<i32>>,
+    classes: &List<AltClass>,
+    ctx: &mut GenContext,
+) -> List<DecisionBranch> {
+    return build_decision_branches(alts, groups, classes, ctx, false);
+}
+
+fn build_decision_branches(
+    alts: &List<Alternative>,
+    groups: &List<List<i32>>,
+    classes: &List<AltClass>,
+    ctx: &mut GenContext,
+    answers_gates: bool,
+) -> List<DecisionBranch> {
     assert classes.len() == alts.len(), "a group is partitioned over its own alternatives, so slot and alt index coincide";
     let mut branches: List<DecisionBranch> = [];
     for let group of groups {
         branches.push(DecisionBranch {
             test: group_branch_admits(group, classes),
-            gate: group_gate(group, alts, ctx),
+            gate: group_gate(group, alts, ctx, answers_gates),
             alts: *group,
         });
     }
@@ -6765,15 +6804,23 @@ fn slot_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<
     return union_first;
 }
 
-/// The gate a lone alternative's alt-initial predicates contribute, registered
-/// as gated so the body does not repeat them as an inline guard. A group of
+/// The gate a lone alternative's alt-initial predicates contribute. A group of
 /// several has no single alternative to gate on — the scan dispatch inside
 /// picks between them.
-fn group_gate(group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> String {
+///
+/// `answers_gates` says whether emitting this branch's condition is by itself
+/// enough to answer the predicate, so the body may drop its inline guard. A
+/// chain arm answers it; a term of a disjunction does not until the caller has
+/// checked that no unconditional term absorbs it.
+fn group_gate(group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext, answers_gates: bool) -> String {
     if group.len() != 1 {
         return String::new();
     }
-    return alt_gate_and_suffix(&alts[group[0]], ctx);
+    let alt = &alts[group[0]];
+    if answers_gates {
+        return alt_gate_and_suffix(alt, ctx);
+    }
+    return alt_gate_suffix_unanswered(alt, ctx);
 }
 
 /// The order a branch emits its alternatives in: mandatory-heavy first, so the
