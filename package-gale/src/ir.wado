@@ -1811,16 +1811,22 @@ fn canon_empty_alt_element(elem: &Element) -> Element {
 /// `(X?)? = X?`, `(X+)+ = X+`, and `X*` for the rest — `(X*)?`, `(X+)? = X*`
 /// (zero-or-one of one-or-more), `(X+)* = X*`.
 ///
-/// Greediness composes only where the collapse leaves no loop. Two skip
-/// decisions are one decision, and either side preferring to skip makes it
-/// prefer to skip: `((X | ))?` is `(X??)?`, and entering it still reaches a
-/// decision that skips. Two *loops* do not compose that way — the outer one
-/// re-enters whatever the inner stopped short of — so where the collapse
-/// yields a loop the greediness that survives is the outer one's. The jar
-/// agrees: `('x'+?)+ 'x'` accepts exactly what `('x'+)+ 'x'` does.
+/// The greediness that survives is the surviving loop's, and which side that
+/// is depends on whether the outer repeat loops at all.
+///
+/// An outer `*` / `+` loops, and re-enters whatever the inner one stopped
+/// short of, so the inner's preference is invisible in the collapsed form and
+/// the outer's is the whole of it. The jar agrees: `('x'+?)+ 'x'` accepts
+/// exactly what `('x'+)+ 'x'` does.
+///
+/// An outer `?` does not loop — it only decides whether to enter — so the loop
+/// that survives is the inner one and its preference carries. The outer's own
+/// preference is a preference to skip, which points the same way, so the two
+/// compose: `((X | ))?` is `(X??)?` and still prefers to skip.
 fn canon_repeat(kind: RepeatKind, element: &Element, non_greedy: bool) -> Element {
     if let Some(inner) = peel_nested_repeat(element) {
         assert !repeat_admits_empty(inner.kind) || kind matches { Optional }, "a closure over a nullable body is rejected by check_epsilon_closure before canonicalization";
+        let outer_loops = !kind matches { Optional };
         let capped = kind matches { Optional } && inner.kind matches { Optional };
         let demands_one = kind matches { Plus } && inner.kind matches { Plus };
         let collapsed = if capped {
@@ -1833,7 +1839,7 @@ fn canon_repeat(kind: RepeatKind, element: &Element, non_greedy: bool) -> Elemen
         return Element::Repeat(RepeatElement {
             kind: collapsed,
             element: inner.element,
-            non_greedy: if capped { non_greedy || inner.non_greedy } else { non_greedy },
+            non_greedy: if outer_loops { non_greedy } else { non_greedy || inner.non_greedy },
         });
     }
     return Element::Repeat(RepeatElement { kind, element: *element, non_greedy });

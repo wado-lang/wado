@@ -3,19 +3,23 @@
 // License: same as the Gale package.
 //
 // A repeat over a repeat collapses to one repeat, and the collapse has one
-// greediness flag to carry two loops'. They do not compose: the outer loop
-// re-enters whatever the inner one stopped short of, so the surviving loop's
-// greediness is the outer one's. The jar agrees — all three of `('x'+?)+ 'x'`,
-// `('x'+)+ 'x'` and the plain `'x'+ 'x'` accept the same inputs.
+// greediness flag to carry two. The one that survives is the surviving loop's:
 //
-// A preference to *skip* does compose, because two skip decisions are one
-// decision: the `'e'` arm keeps it, and `( X | )` mints exactly that shape.
+//   outer `*` / `+` loops and re-enters whatever the inner stopped short of,
+//   so the outer's preference is the whole of it — `('x'+?)+ 'x'` accepts what
+//   `('x'+)+ 'x'` accepts;
+//   outer `?` does not loop, so the inner loop's preference carries, and the
+//   outer's preference to skip points the same way and composes with it.
+//
+// The jar accepts every input below for every spelling.
 grammar NestedRepeatGreedy;
 
 s : 'a' ('x'+?)+ 'x' EOF
   | 'b' ('x'+)+ 'x' EOF
   | 'd' 'x'+ 'x' EOF
   | 'e' (('x' | ))? 'y' EOF
+  | 'f' ('x'+?)? 'x' EOF
+  | 'g' ('x'+)? 'x' EOF
   ;
 
 WS : [ \t\r\n]+ -> skip ;

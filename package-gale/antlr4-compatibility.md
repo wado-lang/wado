@@ -788,6 +788,20 @@ relevant sites.
    surface element. Fixtures `lr_opt_two_token.g4`, `lr_suffix_opt_shape.g4`,
    `lr_suffix_non_greedy_opt.g4` — pair any new decision input with one like
    them.
+
+   One known exception is unclosed, and it is unclosable at this layer: a
+   branch that no lookahead selects and that an alt-initial predicate gates
+   (`( {p}? | A ) B`) keeps its place in the parse chain, because the predicate
+   can decline it — while the scan, which does not evaluate predicates, reads
+   it as testing nothing and moves it last (`fallback_last`). Both readings are
+   right for their own side, and they order the chain differently, so where the
+   predicate holds the scan measures a length the parse will not consume.
+   Neither side can be corrected without evaluating the predicate at prediction
+   time, which is the gap `warn_unsupported_prediction_predicate` names for the
+   rule-level case. It predates the one-decision refactor (the scan side has
+   never carried gates) and is not diagnosed, because the same shape parses
+   correctly wherever the group is not scanned — which
+   `nested_action_gate_test.wado` pins.
 10. A viability probe is stamped only where the walk reaches the rule's tail.
     The probe scans the continuation and, when that runs out, conjoins the
     rule's FOLLOW — an answer that is only about the caller if nothing else

@@ -53,3 +53,19 @@ test "nested repeat: two skip decisions still prefer to skip" {
     assert_tree(&"e y", &"(s e y)");
     assert_tree(&"e x y", &"(s e x y)");
 }
+
+// An outer `?` is not a loop, so the inner loop's preference is the one that
+// survives — `('x'+?)?` stays non-greedy where `('x'+?)+` does not. The
+// greedy spelling collapses to the plain `'x'* 'x'` and so inherits the `'d'`
+// arm's defect; the non-greedy one stops short of the suffix and does not.
+
+test "nested repeat: an outer ? keeps the inner loop's preference" {
+    assert_tree(&"f x", &"(s f x)");
+    assert_tree(&"f x x", &"(s f x x)");
+}
+
+#[TODO]
+test "nested repeat: the greedy twin under an outer ? hits the suffix defect" {
+    assert_tree(&"g x", &"(s g x)");
+    assert_tree(&"g x x", &"(s g x x)");
+}

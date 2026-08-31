@@ -1084,6 +1084,8 @@ pub global TK_LIT_B: i32 = 5;
 pub global TK_LIT_D: i32 = 6;
 pub global TK_LIT_E: i32 = 7;
 pub global TK_LIT_Y: i32 = 8;
+pub global TK_LIT_F: i32 = 9;
+pub global TK_LIT_G: i32 = 10;
 
 struct Lexer {
     chars: List<char>,
@@ -1159,6 +1161,18 @@ fn try_lit_y(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
+fn try_lit_f(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'f' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_g(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'g' { return -1; }
+    return pos + 1;
+}
+
 pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1184,6 +1198,12 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { 'e' } {
             end = try_lit_e(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_E; }
+        } else if first_char matches { 'f' } {
+            end = try_lit_f(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_F; }
+        } else if first_char matches { 'g' } {
+            end = try_lit_g(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_G; }
         } else if first_char matches { 'x' } {
             end = try_lit_x(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_X; }
@@ -1222,6 +1242,8 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_LIT_D => "'d'",
         TK_LIT_E => "'e'",
         TK_LIT_Y => "'y'",
+        TK_LIT_F => "'f'",
+        TK_LIT_G => "'g'",
         _ => "Unknown",
     };
 }
@@ -1546,6 +1568,52 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
+        } else if alt_kind == TK_LIT_F {
+            pos = start;
+            try_4: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_F { break try_4; }
+                pos += 1;
+                loop {
+                    let ep = pos;
+                    let mut ng_exit: bool = false;
+                    ng_exit_scan: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break ng_exit_scan; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
+                        pos += 1;
+                        let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                        if probe_kind == TK_EOF { ng_exit = true; }
+                    }
+                    pos = ep;
+                    if ng_exit { break; }
+                    if !(pos < tokens.len() && tokens[pos] == TK_LIT_X) { break; }
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_4; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_4; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_LIT_G {
+            pos = start;
+            try_5: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_G { break try_5; }
+                pos += 1;
+                while pos < tokens.len() && tokens[pos] == TK_LIT_X {
+                    pos += 1;
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_5; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_5; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
         } else {
             return -1;
         }
@@ -1636,6 +1704,49 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         p.expect(TK_EOF, &EMPTY_SYNC);
         return;
     }
+    if kind == TK_LIT_F {
+        p.expect(TK_LIT_F, &SYNC_0);
+        loop {
+            if p.recovering { break; }
+            let mut ng_exit: bool = false;
+            ng_exit_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break ng_exit_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
+                pos += 1;
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if probe_kind == TK_EOF { ng_exit = true; }
+            }
+            if ng_exit { break; }
+            if !(p.peek_kind() == TK_LIT_X) { break; }
+            p.expect(TK_LIT_X, &EMPTY_SYNC);
+        }
+        p.expect(TK_LIT_X, &SYNC_1);
+        p.expect(TK_EOF, &EMPTY_SYNC);
+        return;
+    }
+    if kind == TK_LIT_G {
+        p.expect(TK_LIT_G, &SYNC_0);
+        loop {
+            if p.recovering { break; }
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_scan; }
+                pos += 1;
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+            p.expect(TK_LIT_X, &EMPTY_SYNC);
+        }
+        p.expect(TK_LIT_X, &SYNC_1);
+        p.expect(TK_EOF, &EMPTY_SYNC);
+        return;
+    }
     p.no_viable(
         "no alternative of s matches",
         p.peek_span(),
@@ -1681,8 +1792,8 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(9);
-    for let mut k = 0; k < 9; k += 1 {
+    let mut v: List<String> = List::with_capacity(11);
+    for let mut k = 0; k < 11; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;
@@ -1712,5 +1823,5 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LIT_X];
 global SYNC_1: List<i32> = [TK_EOF];
 global SYNC_2: List<i32> = [TK_LIT_X, TK_LIT_Y];
-global SYNC_3: List<i32> = [TK_LIT_A, TK_LIT_B, TK_LIT_D, TK_LIT_E];
+global SYNC_3: List<i32> = [TK_LIT_A, TK_LIT_B, TK_LIT_D, TK_LIT_E, TK_LIT_F, TK_LIT_G];
 
