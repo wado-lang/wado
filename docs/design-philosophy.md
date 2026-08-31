@@ -54,11 +54,13 @@ export fn run() with Stdout {
 }
 ```
 
-The `with Stdout` clause says exactly what this function can touch. That one idea buys three things:
+The `with Stdout` clause says what this function can touch. That one idea buys three things:
 
 - Security: a plugin runs with only the capabilities you grant it.
 - Testability: real effects can be swapped for mocks via handlers.
-- Clarity: there are no hidden side effects to discover.
+- Clarity: an effect is declared, not discovered.
+
+A few operations are exempt by design — ambient logging is the standing example — and an exemption is a decision with a name and a page, never a gap. What is being defended is that effects stay controllable, not that none escape.
 
 `Stdout` is not a Wado invention; it is `wasi:cli`'s standard-output interface. Effects surface as `interface` — a namespace of operations — and `resource` — a handle to something outside the program; the platform's capability boundaries and the language's effects are the same thing. One `interface` is at once a WASI interface, a Component Model import/export, and a user-defined effect, so effects are not only declared but handled: swap a real one for a mock, or interpret your own. See [`example/http_get.wado`](../example/http_get.wado) for a larger example that threads an outbound HTTP `Client` capability through the type.
 
