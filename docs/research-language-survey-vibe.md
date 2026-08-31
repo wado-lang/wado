@@ -101,6 +101,40 @@ way, into what the standard tutorial teaches and what is documented but left
 out of it — a statement of the subset a reader should generate from, distinct
 from the subset that is frozen.
 
+### Oracle documents
+
+The module system is specified in a genre neither Wado nor the survey's axes
+account for. `docs/module-system-oracle.md` declares itself the executable canon
+of its ADR: a Lean model under `formal/VibeFormal/Module/` decides package
+boundary, ownership, visibility and hash input, and the compiler's loader
+refines that judgement onto a filesystem. The prose is the readable form of the
+model, and it says so — every other document that touches the subject "links
+here and holds no explanation of its own", and where a generation of documents
+disagree, this section and the Lean model win.
+
+Its table is the shape worth having. One row per observable rule, three columns:
+the Lean definition that decides it, the implementation function that refines
+it, and the test that pins the pair. `Boundary` / `Workspace.ownerOf` against
+`nearest_vpkg_path_fs`; `AllowedImport` against `enforce_incoming_boundary_fs`;
+`automaticallyIncludedInPackageHash` against
+`collect_package_hash_source_closure_fs`.
+
+It closes with an `Epistemic status` section stating what the proof does not
+cover — filesystem path normalization, the parser, the cache, hash bytes and
+wasm codegen are not extracted from Lean — what holds those instead (regression
+tests and a fixpoint gate), and what would close the gap: a differential oracle
+turning fixture graphs into Lean inputs, and an inductive model of hash-closure
+reachability.
+
+One decision inside the model is worth taking on its own. Transparent types
+declared in a package contract are ambient within the package, and rather than
+special-case how a sibling resolves an enum constructor, the loader materializes
+them as a content-keyed real source module under `_build/`, ownerless, which the
+facade re-exports and siblings import through the ordinary mechanism. The
+special case is turned into an instance of the general rule. What it prevents is
+a second definition site: two same-named enums become separate identities and
+trap at run time.
+
 ## C. Spin-off value
 
 | Kind | What | Externality | Contender | Wins |
@@ -150,6 +184,36 @@ issue numbers where they landed. The `eval/msr/` README states the borrowing
 outright.
 
 ## For Wado
+
+Learned:
+
+- Both surveyed languages arrived independently at two documents Wado has
+  neither of, which is a stronger signal than either instance alone. The first
+  is a traceability table running claim → mechanism → evidence: vibe's oracle
+  maps each module rule to its Lean definition, its loader function and its
+  regression test; Almide's `edit-locality.md` §2 maps each language rule to the
+  role it plays in enforcing L1 and the `file:line` that implements it; its
+  contract ledger maps each promise to a specification section and a fixture,
+  gated in both directions. The second is a boundary map declaring where the
+  guarantee stops — vibe's `Epistemic status`, Almide's `proven-vs-trusted.md`.
+- Wado has the parts and not the map. Roughly forty optimizer passes, a
+  NIR/WIR pipeline, EMI mutation, fuzzing and golden fixtures, and no document
+  saying which claim each of those backs. The cost of not having it is already
+  recorded: a tree that passed 12,542 e2e tests was miscompiling under `-O3`,
+  and Gale caught it. A boundary map is what says out loud that the `-O3`
+  pipeline was backed by e2e tests and that e2e tests do not reach it.
+- A rule attached to the artifact it governs holds without a gate; a rule that
+  must be recalled somewhere else needs one. Almide's mandatory falsifier is a
+  heading in the template the author already has open and all twelve ADRs have
+  it; its "no synonyms" rule has to surface at an unrelated keystroke months
+  later and the standard library has synonyms. Neither is enforced. This is the
+  test to apply before writing a rule down and expecting it to hold.
+- Gates are placed where the previous gate is blind, and vibe does this three
+  times: doctest compiles code blocks, so a signature gate covers the tables it
+  cannot see; the deleted language tour was the surface where nothing covered
+  the prose; the eighth review dimension exists because the other seven observe
+  through modes that cannot see a missing diagnostic. The question that produces
+  the next gate is what the current one cannot observe.
 
 Take:
 

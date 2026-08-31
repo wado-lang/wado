@@ -107,6 +107,32 @@ keystroke, with nothing on screen to prompt it. A rule attached to the artifact
 it governs holds without a gate; a rule that must be recalled elsewhere needs
 one.
 
+### The boundary map, and what a certificate does not buy
+
+`docs/contracts/proven-vs-trusted.md` opens with the question it answers — the
+first thing an auditor asks about a compiler that ships proofs is which part is
+proven — and answers it before it sells anything:
+
+> An accepted certificate proves the function is memory-safe … It proves
+> **nothing** about whether the lowering picked the right semantics: a certified-
+> sound function can still print the wrong string.
+
+The table under it is one row per pipeline stage, marked proven, trusted, or
+unqualified tool, each with what backs it: lexer and parser trusted on
+differential fuzz; the type checker kernel proven in Coq; MIR ownership witness
+"proven to be re-checkable", the untrusted producer emitting a witness the
+kernel-proven checker re-verifies; wasmtime out of scope by construction. It
+names which row is the gap that matters and the issue tracking it, and it scopes
+itself to one of the two wasm legs, warning that no sentence in it describes
+bytes the other leg produced.
+
+The contract ledger is the same traceability in the other direction. Each of the
+327 entries is a named promise carrying the specification section it certifies
+and the fixture that executes it, and the gate makes the link mandatory in both
+directions: a specification heading cited by no contract fails, as does a
+contract citing no heading. The stated purpose is that "no claimed behaviour
+rests on prose alone".
+
 ## C. Spin-off value
 
 | Kind | What | Externality | Contender | Wins |
@@ -149,6 +175,31 @@ metric, its own injected faults. There is no measurement against an outside
 yardstick.
 
 ## For Wado
+
+Learned:
+
+- A proof's value is bounded by a sentence the project has to be willing to
+  write. Almide sells certificates and then states that an accepted one proves
+  memory safety and nothing about whether the lowering picked the right
+  semantics — a certified-sound function can still print the wrong string. The
+  discipline is not the proof; it is publishing what the proof does not cover,
+  per stage, with the gap named.
+- A promise nobody can trace to something executable is prose. The ledger's
+  bidirectional gate is the mechanism: a specification heading no contract cites
+  fails, and so does a contract citing no heading. Wado's golden fixtures carry
+  the same evidence and no index, so there is no way to ask which promise a
+  fixture locks, or which promises nothing locks.
+- The self-application cross-check is where a language's claims actually get
+  tested, and Almide is the case that shows why. Three surface claims — no raw
+  pointers, generics, no aliases — each hold in the documentation and each break
+  in the standard library, and no amount of reading the cheatsheet would have
+  found it. Applied to Wado the question is not whether the stdlib compiles but
+  which claim it would have had to break to be written.
+- Where the surveys disagree is where the design space actually is. Almide keeps
+  a rejected design forever because the reason is the asset; vibe deletes it
+  because a superseded entry becomes a false statement about the current build.
+  Both are reasoned, and Wado's existing rule sits with vibe. That is a choice to
+  make rather than a best practice to copy.
 
 Take:
 

@@ -4,8 +4,11 @@ A fixed set of axes for evaluating an emerging language, so each survey reuses
 the previous one's structure instead of starting from prose. Filled surveys are
 named `research-language-survey-<name>.md`.
 
-The goal is never a verdict on the other language. It is the last section of
-every survey: what Wado takes, what it refuses, and why.
+The goal is never a verdict on the other language. It is what Wado learns, of
+which adopting something is only the narrowest kind. Reading a row for whether
+it produces a decision is how a survey ends up skipping the part that would have
+changed how a problem is seen, so the closing section has a place for an
+understanding that carries no action.
 
 ## Rules
 
@@ -188,10 +191,16 @@ Examined: <what was read or run>. Not examined: <what was left>.
 
 ## For Wado
 
+- Learned:
 - Take:
 - Refuse (why):
 - Hold:
 ```
+
+Learned comes first because it is the largest of the four and the easiest to
+skip: what the survey changed about how a problem is seen, whether or not
+anything follows from it. A survey whose closing section is only a shopping list
+was read for procurement.
 
 Take carries open work and nothing else, so every box in it is unchecked.
 Anything settled the other way goes under Refuse with its reason — including
