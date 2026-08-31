@@ -526,9 +526,21 @@ pub fn admits_tests_nothing(admits: &Admits) -> bool {
     return !*admits matches { Kinds(_) };
 }
 
-/// The kinds an arm narrows by, empty for the two cases no set describes. A
-/// caller that needs to tell those apart asks `admits_is_untestable`, never
-/// the emptiness of this.
+/// The kinds an arm narrows by, empty for the two cases no set describes.
+///
+/// **Never render from this.** The list it hands back is the very
+/// `List<String>` whose emptiness means two opposite things — the thing
+/// `Admits` exists to replace — so feeding it to `first_check_str` or
+/// `admits_or_everything` puts the defect straight back. Every recurrence of
+/// that defect so far came through here: an `Everything` body came back as
+/// `[]`, was read as "nothing to narrow by", and rendered `true`.
+///
+/// Renderers take the `Admits`: `admits_check_str` for a decision branch,
+/// `repeat_guard_cond` for a repeat's entry or iteration. What is left for
+/// this accessor is the readers that do not render — a probe's gate, a
+/// set union, an overlap test — where an empty list costs nothing. A caller
+/// that needs to tell the two empty cases apart asks `admits_is_untestable`
+/// or `admits_is_everything`, never the emptiness of this.
 pub fn admits_kinds(admits: &Admits) -> List<String> {
     return match admits {
         Kinds(kinds) => *kinds,

@@ -5558,7 +5558,6 @@ fn gen_op_repeat_optional_rulecall(
     name_counts: &mut List<[String, i32]>,
     follow: &List<String>,
 ) {
-    let raw_first = admits_kinds(&rep_op.body_admits);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
 
@@ -5566,7 +5565,7 @@ fn gen_op_repeat_optional_rulecall(
     // to the continuation, but ANTLR4 resolves the ambiguity by entering
     // whenever entering leaves a viable parse. Ask the probe instead.
     if optional_probe_decides(rep_op, follow, ctx) {
-        gen_optional_probe_entry(w, rep_op, &raw_first, ctx, name_counts);
+        gen_optional_probe_entry(w, rep_op, ctx, name_counts);
         return;
     }
 
@@ -5634,13 +5633,7 @@ fn probe_decides(
 /// first-set check stays in front so a token that cannot start the body
 /// never pays for a scan, and the caller-FOLLOW yield gate still wins —
 /// where the repair already decided to yield the probe does not rule.
-fn gen_optional_probe_entry(
-    w: &mut CodeWriter,
-    r: &RepeatOp,
-    raw_first: &List<String>,
-    ctx: &mut GenContext,
-    nc: &mut List<[String, i32]>,
-) {
+fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let verdict = dedup_name(&"opt_enter", nc);
     let entry_gate = if ctx.emit_follow() && r.gate_caller_follow {
         `!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && `;
@@ -5648,7 +5641,10 @@ fn gen_optional_probe_entry(
         "";
     };
     w.line(&`let mut ${verdict}: bool = false;`);
-    w.begin(&`if ${entry_gate}${ctx.first_check_str(raw_first)}`);
+    // The body's own guard, through the one renderer: taking the set out of
+    // `body_admits` first and rendering that is how an open-ended body came
+    // back as `true` and entered at EOF.
+    w.begin(&`if ${entry_gate}${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}`);
     gen_viability_probe(
         w,
         &r.continuation_scan,
@@ -5688,7 +5684,6 @@ fn gen_op_repeat_optional_leaf(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let loop_first = admits_kinds(&rep_op.body_admits);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
 
@@ -5795,8 +5790,6 @@ fn gen_op_repeat_star_plus_non_storable_group(
     name_counts: &mut List<[String, i32]>,
 ) {
     let inner = &rep.element;
-    let inner_first = admits_kinds(&rep_op.body_admits);
-    let loop_first = inner_first;
     let _ = dedup_name(&rep_op.field, name_counts);
 
     if let Star = rep.kind {
@@ -5938,8 +5931,6 @@ fn gen_op_repeat_star_plus_storable(
     follow: &List<String>,
 ) {
     let inner = &rep.element;
-    let inner_first = admits_kinds(&rep_op.body_admits);
-    let loop_first = inner_first;
     // Per-iteration follow propagated into a nested non-greedy Repeat
     // inside a SingleAlt body — `first(inner) ∪ outer_follow`. What the walk
     // enumerated, not what the guard narrows by: an open-ended body admits
