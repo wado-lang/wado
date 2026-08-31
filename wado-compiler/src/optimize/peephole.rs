@@ -16,6 +16,7 @@ use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_m
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
+use super::if_chain_to_match::IfChainToMatchRule;
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
@@ -56,6 +57,7 @@ pub(super) fn run_peephole(
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let aggregate_forward_rule = AggregateForwardRule;
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
+    let if_chain_rule = IfChainToMatchRule::new(&type_table);
     let tuple_projection_rule = TupleProjectionRule;
 
     let len = project.functions.len();
@@ -123,6 +125,10 @@ pub(super) fn run_peephole(
         };
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);
         if pre_inline {
+            // Ordered before `match_rule`, which lowers the `Match` it plants.
+            // Both are pre-inline only: the unrolled chain is one function's own
+            // statements before the inliner starts copying bodies around it.
+            rules.push(&if_chain_rule);
             rules.push(&match_rule);
         }
         if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {

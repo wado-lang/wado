@@ -1,0 +1,34 @@
+// An arm that reassigns the scrutinee makes the guards no longer exclusive —
+// the chain runs every arm the new value reaches — so the run stays a chain.
+
+use { println, Stdout } from "core:cli";
+
+fn cascade(start: i32) -> i32 {
+    let mut x = start;
+    let mut steps = 0;
+    if 0 == x { steps += 1; x = 4 }
+    if 1 == x { steps += 10; x = 5 }
+    if 2 == x { steps += 100; x = 6 }
+    if 3 == x { steps += 1000; x = 7 }
+    if 4 == x { steps += 2; x = 8 }
+    if 5 == x { steps += 20; x = 9 }
+    if 6 == x { steps += 200; x = 10 }
+    if 7 == x { steps += 2000; x = 11 }
+    if 8 == x { steps += 3; x = 12 }
+    if 9 == x { steps += 30; x = 13 }
+    if 10 == x { steps += 300; x = 14 }
+    if 11 == x { steps += 3000; x = 15 }
+    return steps;
+}
+
+export fn run() with Stdout {
+    // 0 -> 4 -> 8 -> 12: three arms fire, which one `match` arm could not.
+    println(`${cascade(builtin::black_box(0))}`);
+    println(`${cascade(builtin::black_box(3))}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n6000\n",
+    "wir_not_expect:O2": ["br_table"]
+}
