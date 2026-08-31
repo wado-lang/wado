@@ -824,3 +824,142 @@ test "TryFrom<i128> for u128" {
     let neg: i128 = -1;
     assert u128::try_from(neg) matches { Err(_) };
 }
+
+test "u128 division by a 64-bit divisor" {
+    let max: u128 = 340282366920938463463374607431768211455;
+    let u64_max: u128 = 18446744073709551615;
+    let two64: u128 = 18446744073709551616;
+
+    assert max / u64_max == 18446744073709551617;
+    assert max % u64_max == 0;
+    assert max / 7 == 48611766702991209066196372490252601636;
+    assert max % 7 == 3;
+    assert max / 10000000000000000000 == 34028236692093846346;
+    assert max % 10000000000000000000 == 3374607431768211455;
+    assert two64 / 4294967297 == 4294967295;
+    assert two64 % 4294967297 == 1;
+
+    assert max / 1 == max;
+    assert max % 1 == 0;
+    assert two64 * 7 + 3 == 129127208515966861315;
+    assert (two64 * 7 + 3) / 7 == two64;
+    assert (two64 * 7 + 3) % 7 == 3;
+}
+
+test "u128 division by a divisor above 64 bits" {
+    let max: u128 = 340282366920938463463374607431768211455;
+    let two127: u128 = 170141183460469231731687303715884105728;
+    let two64: u128 = 18446744073709551616;
+
+    assert max / two64 == 18446744073709551615;
+    assert max % two64 == 18446744073709551615;
+    assert max / (max - 1) == 1;
+    assert max % (max - 1) == 1;
+    assert max / max == 1;
+    assert max % max == 0;
+    assert two127 / max == 0;
+    assert two127 % max == two127;
+    // Divisor just above the dividend, both with the top bit set.
+    assert two127 / (two127 + 1) == 0;
+    assert two127 % (two127 + 1) == two127;
+    assert (two127 + 1) / two127 == 1;
+    assert (two127 + 1) % two127 == 1;
+    // A divisor whose leading limb is 1: the normalization shift is maximal.
+    // 2^128-1 factors as (2^64-1)(2^64+1), so this one divides exactly.
+    assert max / (two64 + 1) == 18446744073709551615;
+    assert max % (two64 + 1) == 0;
+}
+
+/// xorshift64 — a deterministic operand stream for the division properties.
+fn next_rand(state: u64) -> u64 {
+    let mut x = state;
+    x = x ^ x << 13;
+    x = x ^ x >> 7;
+    x = x ^ x << 17;
+    return x;
+}
+
+test "u128 div_rem satisfies q * d + r == n with r < d" {
+    let mut s: u64 = 88172645463325252;
+    for let mut i = 0; i < 300; i += 1 {
+        s = next_rand(s);
+        let n_hi = s;
+        s = next_rand(s);
+        let n_lo = s;
+        s = next_rand(s);
+        let d_hi = s;
+        s = next_rand(s);
+        let d_lo = s;
+        // Sweep both operand widths so every path — native, 128÷64, 128÷128 —
+        // and every normalization shift is exercised. Only a zero divisor is
+        // substituted, leaving even ones and zero limbs in the sample.
+        let n = u128::from_pair(n_lo, n_hi) >> (i % 129) as u32;
+        let shifted = u128::from_pair(d_lo, d_hi) >> (i * 7 % 128) as u32;
+        let d = if shifted == 0 { u128::one() } else { shifted };
+        let [q, r] = n.div_rem(&d);
+        assert r < d;
+        assert q * d + r == n;
+    }
+}
+
+test "u128 division of a dividend with a zero low limb" {
+    // Limb-carry boundaries: the low 32- and 64-bit limbs of the dividend are
+    // zero while the divisor's are not, which is where a borrow goes missing.
+    let a = u128::from_pair(0, 18446744073709551615);
+    let b = u128::from_pair(4294967295, 4294967295);
+    let [q, r] = a.div_rem(&b);
+    assert q == 4294967296;
+    assert r == 79228162477370849450419814400;
+
+    // The same dividend shape against a 64-bit divisor, so the wide step runs
+    // on a leftover remainder over an all-zero low limb.
+    let c = u128::from_pair(0, 18446744069414584320);
+    let d = u128::from_u64(4294967297);
+    let [q2, r2] = c.div_rem(&d);
+    assert q2 == 79228162477370849454714781694;
+    assert r2 == 2;
+}
+
+test "i128 division at large magnitudes" {
+    let max: i128 = 170141183460469231731687303715884105727;
+    let min: i128 = -170141183460469231731687303715884105728;
+
+    assert max / 3 == 56713727820156410577229101238628035242;
+    assert max % 3 == 1;
+    assert min / 3 == -56713727820156410577229101238628035242;
+    assert min % 3 == -2;
+    assert min / max == -1;
+    assert min % max == -1;
+    assert max / -1 == min + 1;
+    assert min / 1 == min;
+}
+
+test "u128 to_string across the 19-digit chunk boundaries" {
+    let p19: u128 = 10000000000000000000;
+    assert (p19 - 1).to_string() == "9999999999999999999";
+    assert p19.to_string() == "10000000000000000000";
+    assert (p19 + 1).to_string() == "10000000000000000001";
+
+    let p38: u128 = 100000000000000000000000000000000000000;
+    assert (p38 - 1).to_string() == "99999999999999999999999999999999999999";
+    assert p38.to_string() == "100000000000000000000000000000000000000";
+    // A chunk of zeros in the middle keeps its leading zeros.
+    assert (p38 + 1234567890).to_string() == "100000000000000000000000000001234567890";
+    assert (p38 * 3 + p19 * 5 + 9).to_string() == "300000000000000000050000000000000000009";
+
+    let max: u128 = 340282366920938463463374607431768211455;
+    assert (max - 1).to_string() == "340282366920938463463374607431768211454";
+    assert u128::from_pair(0, 1).to_string() == "18446744073709551616";
+}
+
+test "u128 to_string round-trips through from_str" {
+    let mut s: u64 = 6364136223846793005;
+    for let mut i = 0; i < 120; i += 1 {
+        s = next_rand(s);
+        let hi = s;
+        s = next_rand(s);
+        let lo = s;
+        let v = u128::from_pair(lo, hi) >> (i % 129) as u32;
+        assert u128::from_str(&v.to_string()) matches { Ok(p) && p == v };
+    }
+}

@@ -8,6 +8,10 @@
 //
 // bool Display is fully inlined (Formatter::pad with constant string),
 // so no Box<bool> function call exists — only correctness is tested.
+//
+// `u32`, `i64` and `u64` share one decimal path small enough that O2 inlines
+// it away outright, so no call of theirs survives to name a signature on;
+// their absent `Box` is what says the parameter was scalarized.
 
 use { println, Stdout } from "core:cli";
 
@@ -181,12 +185,14 @@ __DATA__
     "stdout": "ok\n",
     "wir_expect:O2": [
         "i32::fmt_decimal$scalar\" = fn(i32, ",
-        "u32::fmt_decimal$scalar$spec0$scalar\" = fn(u32, ",
-        "i64::fmt_decimal$scalar$spec0$scalar\" = fn(i64, ",
-        "u64::fmt_decimal$scalar$spec0$scalar\" = fn(u64, ",
         "f32::fmt_into$scalar$spec0$scalar\" = fn(f32, ",
         "f64::fmt_into$scalar\" = fn(f64, ",
         "f64::fmt_fixed$scalar\" = fn(f64, i32, ",
         "f64::fmt_fixed$scalar\"(self, precision, f) {"
+    ],
+    "wir_not_expect:O2": [
+        "Box<u32>",
+        "Box<i64>",
+        "Box<u64>"
     ]
 }

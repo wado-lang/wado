@@ -156,7 +156,7 @@ type "functype//cbor_struct_decode.wado/__test_1_round_trip_a_derived_struct_thr
 
 type "functype//cbor_struct_decode.wado/__test_1_round_trip_a_derived_struct_through_cbor$cold1" = fn(i32);  // TypeId(41)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(42)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(42)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(43)
 
@@ -560,24 +560,23 @@ fn "cbor_struct_decode.wado/__test_1_round_trip_a_derived_struct_through_cbor$co
     unreachable;
 }
 
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let pos: i32;
-    let temp: i64;
+    let t: u64;
+    let i: i32;
     pos = offset + digit_count;
-    if abs_val == 0_i64 {
-        builtin::array_set_u8(arr, offset, 48);
-    } else {
-        temp = abs_val;
-        b27: block {
-            l28: loop {
-                break_if b27 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
-                temp = temp / 10_i64;
-                continue l28;
-            };
+    t = val;
+    i = 0;
+    b26: block {
+        l27: loop {
+            break_if b26 i >= digit_count;
+            pos = pos - 1;
+            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            t = t /u 10_i64;
+            i = i + 1;
+            continue l27;
         };
-    }
+    };
 }
 
 fn "core:rt/panic"(message) {
@@ -702,15 +701,15 @@ fn "core:cbor/push_be"(buf, value, nbytes) {
     }
     i = nbytes - 1;
     _licm_repr_14 = buf.repr;
-    b40: block {
-        l41: loop {
-            break_if b40 i < 0;
+    b39: block {
+        l40: loop {
+            break_if b39 i < 0;
             value_9 = builtin::i32_wrap_i64(value >>u builtin::i64_extend_i32_s(i * 8)) & 255;
             used = buf.used;
             builtin::array_set_u8(_licm_repr_14, used, value_9);
             buf.used = used + 1;
             i = i - 1;
-            continue l41;
+            continue l40;
         };
     };
 }
@@ -987,16 +986,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(b
     let out: ref Array<u8>;
     len_1 = bytes.end - bytes.start;
     i = 0;
-    b74: block {
-        l75: loop {
-            break_if b74 i >= len_1;
+    b73: block {
+        l74: loop {
+            break_if b73 i >= len_1;
             advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, i, len_1);
             if @unlikely(advance == 0) {
                 cold_path;
                 return 1, __local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(38); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:core:prelude/string.wado::__const_obj_4); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: i }, __local_5); __local_4;
             }
             i = i + advance;
-            continue l75;
+            continue l74;
         };
     };
     return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(len_8 = bytes.end - bytes.start; out = builtin::array_new<u8>(select i32(len_8 > 0, len_8, 0)); if len_8 > 0 {
@@ -1277,9 +1276,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_99 = self.buf;
         i_102 = 0;
-        b112: block {
-            l113: loop {
-                break_if b112 i_102 >= padding;
+        b111: block {
+            l112: loop {
+                break_if b111 i_102 >= padding;
                 new_used_264 = self_99.used + 1;
                 if @unlikely(new_used_264 > builtin::array_len(self_99.repr)) {
                     cold_path;
@@ -1289,7 +1288,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_99.used = new_used_264;
                 builtin::array_set_u8(self_99.repr, start_265, 48);
                 i_102 = i_102 + 1;
-                continue l113;
+                continue l112;
             };
         };
         return self_103 = self.buf, new_used_105 = self_103.used + digit_count, if @unlikely(new_used_105 > builtin::array_len(self_103.repr)) {
@@ -1346,12 +1345,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_153 = self.buf;
         c_154 = self.fill;
         i_156 = 0;
-        b124: block {
-            l125: loop {
-                break_if b124 i_156 >= padding;
+        b123: block {
+            l124: loop {
+                break_if b123 i_156 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_153, c_154);
                 i_156 = i_156 + 1;
-                continue l125;
+                continue l124;
             };
         };
         return start_151;
@@ -1361,12 +1360,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_157 = self.buf;
         c_158 = self.fill;
         i_160 = 0;
-        b127: block {
-            l128: loop {
-                break_if b127 i_160 >= left_pad;
+        b126: block {
+            l127: loop {
+                break_if b126 i_160 >= left_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_157, c_158);
                 i_160 = i_160 + 1;
-                continue l128;
+                continue l127;
             };
         };
         if is_negative {
@@ -1416,12 +1415,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_206 = self.buf;
         c_207 = self.fill;
         i_209 = 0;
-        b136: block {
-            l137: loop {
-                break_if b136 i_209 >= right_pad;
+        b135: block {
+            l136: loop {
+                break_if b135 i_209 >= right_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_206, c_207);
                 i_209 = i_209 + 1;
-                continue l137;
+                continue l136;
             };
         };
         return start_204;
@@ -1429,12 +1428,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_210 = self.buf;
         c_211 = self.fill;
         i_213 = 0;
-        b138: block {
-            l139: loop {
-                break_if b138 i_213 >= padding;
+        b137: block {
+            l138: loop {
+                break_if b137 i_213 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_210, c_211);
                 i_213 = i_213 + 1;
-                continue l139;
+                continue l138;
             };
         };
         if is_negative {
@@ -1512,12 +1511,12 @@ fn "core:cbor/core:cbor/CborDeserializer::read_be"(self, n) {
     _licm_input_8 = self.input;
     _licm_repr_9 = _licm_input_8.repr;
     _licm_start_10 = _licm_input_8.start;
-    b149: block {
-        l150: loop {
-            break_if b149 i >= n;
+    b148: block {
+        l149: loop {
+            break_if b148 i >= n;
             v = (v << 8_i64) | builtin::i64_extend_i32_u(builtin::array_get_value<u8>(_licm_repr_9, _licm_start_10 + (_licm_pos_7 + i)));
             i = i + 1;
-            continue l150;
+            continue l149;
         };
     };
     self.pos = _av_11 + n;
@@ -1569,20 +1568,20 @@ fn "core:cbor/core:cbor/CborDeserializer::read_head"(self) {
         unreachable;
     })) >>u 5) & 255;
     ai = ib & 31;
-    b159: block {
-        b160: block {
-            b161: block {
-                b162: block {
-                    b163: block {
-                        b164: block {
-                            b165: block {
-                                b166: block {
-                                    b167: block {
-                                        b168: block {
+    b158: block {
+        b159: block {
+            b160: block {
+                b161: block {
+                    b162: block {
+                        b163: block {
+                            b164: block {
+                                b165: block {
+                                    b166: block {
+                                        b167: block {
                                             br_table ai - 24 [1, 2, 3, 4, 5, 6, 7, 8] default=0;
                                         };
                                         return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: builtin::i64_extend_i32_u(ai), 3: 0 }, ref.null none;
-                                        break b159;
+                                        break b158;
                                     };
                                     let __vr_10_mv_0: i32;
                                     let __vr_10_mv_1: u64;
@@ -1598,7 +1597,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_head"(self) {
                                         unreachable;
                                     });
                                     return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
-                                    break b159;
+                                    break b158;
                                 };
                                 let __vr_11_mv_0: i32;
                                 let __vr_11_mv_1: u64;
@@ -1614,7 +1613,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_head"(self) {
                                     unreachable;
                                 });
                                 return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
-                                break b159;
+                                break b158;
                             };
                             let __vr_12_mv_0: i32;
                             let __vr_12_mv_1: u64;
@@ -1630,7 +1629,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_head"(self) {
                                 unreachable;
                             });
                             return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
-                            break b159;
+                            break b158;
                         };
                         let __vr_13_mv_0: i32;
                         let __vr_13_mv_1: u64;
@@ -1646,19 +1645,19 @@ fn "core:cbor/core:cbor/CborDeserializer::read_head"(self) {
                             unreachable;
                         });
                         return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
-                        break b159;
+                        break b158;
                     };
                     cold_path;
                     return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
-                    break b159;
+                    break b158;
                 };
                 cold_path;
                 return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
-                break b159;
+                break b158;
             };
             cold_path;
             return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
-            break b159;
+            break b158;
         };
         if @unlikely(select i32(select i32(major == 0, 1, major == 1), 1, major == 6)) {
             cold_path;
@@ -1749,7 +1748,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_text_body"(self, arg, indef) {
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __hfs_pos_37 = self.pos;
     block {
-        l185: loop {
+        l184: loop {
             if __sroa_slot_34 = 0; __sroa_slot_35 = 0; __sroa_slot_36 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_1: block {
                 if @unlikely(__hfs_pos_37 >= (self.input.end - self.input.start)) {
                     cold_path;
@@ -1824,7 +1823,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_text_body"(self, arg, indef) {
                 builtin::array_copy<u8>(s.repr, start_32, chunk.repr, 0, self_28);
             };
             __hfs_pos_37 = self.pos;
-            continue l185;
+            continue l184;
         };
     };
 }
@@ -1861,7 +1860,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body"(self, arg, indef) {
     }
     __hfs_pos_29 = self.pos;
     block {
-        l199: loop {
+        l198: loop {
             if __sroa_slot_26 = 0; __sroa_slot_27 = 0; __sroa_slot_28 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_1: block {
                 if @unlikely(__hfs_pos_29 >= (self.input.end - self.input.start)) {
                     cold_path;
@@ -1917,7 +1916,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body"(self, arg, indef) {
                 return 1, ref.null none, __qm_e_15;
             }
             __hfs_pos_29 = self.pos;
-            continue l199;
+            continue l198;
         };
     };
 }
@@ -2014,9 +2013,9 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag"(self) {
     i = 0;
     _licm_repr_29 = bytes.repr;
     _licm_arith_30 = n - 1;
-    b217: block {
-        l218: loop {
-            break_if b217 i >= n;
+    b216: block {
+        l217: loop {
+            break_if b216 i >= n;
             b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>(_licm_repr_29, i));
             pr = _licm_arith_30 - i;
             if pr < 8 {
@@ -2025,7 +2024,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag"(self) {
                 hi = hi | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
             }
             i = i + 1;
-            continue l218;
+            continue l217;
         };
     };
     return 0, struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi }, ref.null none;
@@ -2048,7 +2047,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_signed_i128"(self) {
     v = global:core:cbor::I128_MAX_AS_U128;
     i128_max = struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
     block {
-        l221: loop {
+        l220: loop {
             let __vr_15_mv_0: i32;
             let __vr_15_mv_1: ref null "tuple//[u8, u8, u64, bool]";
             let __vr_15_mv_2: ref null "core:serde//DeserializeError";
@@ -2070,7 +2069,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_signed_i128"(self) {
             } else if major == 1 {
                 return 0, struct.new "core:prelude/int128.wado//i128" { low: arg ^ -1_i64, high: -1_i64 }, ref.null none;
             } else if major == 6 {
-                continue_if l221 @likely(select i32(select i32(select i32(select i32(select i32(select i32(arg == 0_i64, 1, arg == 1_i64), 1, arg == 21_i64), 1, arg == 22_i64), 1, arg == 23_i64), 1, arg == 37_i64), 1, arg == 55799_i64));
+                continue_if l220 @likely(select i32(select i32(select i32(select i32(select i32(select i32(arg == 0_i64, 1, arg == 1_i64), 1, arg == 21_i64), 1, arg == 22_i64), 1, arg == 23_i64), 1, arg == 37_i64), 1, arg == 55799_i64));
                 if @unlikely(arg == 2_i64) {
                     let __vr_16_mv_0: i32;
                     let __vr_16_mv_1: ref null "core:prelude/int128.wado//u128";
@@ -2119,7 +2118,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_signed_i128"(self) {
                 cold_path;
                 return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer"), used: 16 }, builtin::i64_extend_i32_s(self.pos));
             }
-            continue l221;
+            continue l220;
         };
     };
 }
@@ -2273,33 +2272,33 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
     major = __pattern_temp_0.0;
     arg = __pattern_temp_0.2;
     indef = __pattern_temp_0.3;
-    b248: block {
-        b249: block {
-            b250: block {
-                b251: block {
-                    b252: block {
-                        b253: block {
-                            b254: block {
-                                b255: block {
-                                    b256: block {
-                                        b257: block {
+    b247: block {
+        b248: block {
+            b249: block {
+                b250: block {
+                    b251: block {
+                        b252: block {
+                            b253: block {
+                                b254: block {
+                                    b255: block {
+                                        b256: block {
                                             br_table major [1, 2, 3, 4, 5, 6, 7, 8] default=0;
                                         };
                                         cold_path;
                                         return ref.as_non_null("core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unskippable item"), used: 16 }, builtin::i64_extend_i32_s(self.pos)));
-                                        break b248;
+                                        break b247;
                                     };
                                     return ref.null none;
-                                    break b248;
+                                    break b247;
                                 };
                                 return ref.null none;
-                                break b248;
+                                break b247;
                             };
                             return "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, major);
-                            break b248;
+                            break b247;
                         };
                         return "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, major);
-                        break b248;
+                        break b247;
                     };
                     __sroa_slot_64 = 0;
                     __sroa_slot_65 = 0;
@@ -2332,8 +2331,8 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
                         unreachable;
                     });
                     if indef {
-                        b262: block {
-                            l263: loop {
+                        b261: block {
+                            l262: loop {
                                 if __sroa_slot_67 = 0; __sroa_slot_68 = 0; __sroa_slot_69 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_1: block {
                                     if @unlikely(self.pos >= (self.input.end - self.input.start)) {
                                         cold_path;
@@ -2356,7 +2355,7 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
                                     unreachable;
                                 }) == 255 {
                                     self.pos = self.pos + 1;
-                                    break b262;
+                                    break b261;
                                 }
                                 __local_33 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_10);
                                 if @likely(ref.is_null(__local_33)) {
@@ -2365,14 +2364,14 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
                                     cold_path;
                                     return __qm_e_14;
                                 }
-                                continue l263;
+                                continue l262;
                             };
                         };
                     } else {
                         i_15 = 0_i64;
-                        b269: block {
-                            l270: loop {
-                                break_if b269 i_15 >=u arg;
+                        b268: block {
+                            l269: loop {
+                                break_if b268 i_15 >=u arg;
                                 __local_34 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_10);
                                 if @likely(ref.is_null(__local_34)) {
                                 } else {
@@ -2381,12 +2380,12 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
                                     return __qm_e_17;
                                 }
                                 i_15 = i_15 + 1_i64;
-                                continue l270;
+                                continue l269;
                             };
                         };
                     }
                     return ref.null none;
-                    break b248;
+                    break b247;
                 };
                 __sroa_slot_70 = 0;
                 __sroa_slot_71 = 0;
@@ -2419,8 +2418,8 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
                     unreachable;
                 });
                 if indef {
-                    b276: block {
-                        l277: loop {
+                    b275: block {
+                        l276: loop {
                             if __sroa_slot_73 = 0; __sroa_slot_74 = 0; __sroa_slot_75 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_5: block {
                                 if @unlikely(self.pos >= (self.input.end - self.input.start)) {
                                     cold_path;
@@ -2443,7 +2442,7 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
                                 unreachable;
                             }) == 255 {
                                 self.pos = self.pos + 1;
-                                break b276;
+                                break b275;
                             }
                             __local_35 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
                             if @likely(ref.is_null(__local_35)) {
@@ -2459,14 +2458,14 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
                                 cold_path;
                                 return __qm_e_26;
                             }
-                            continue l277;
+                            continue l276;
                         };
                     };
                 } else {
                     i_27 = 0_i64;
-                    b284: block {
-                        l285: loop {
-                            break_if b284 i_27 >=u arg;
+                    b283: block {
+                        l284: loop {
+                            break_if b283 i_27 >=u arg;
                             __local_37 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
                             if @likely(ref.is_null(__local_37)) {
                             } else {
@@ -2482,15 +2481,15 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
                                 return __qm_e_31;
                             }
                             i_27 = i_27 + 1_i64;
-                            continue l285;
+                            continue l284;
                         };
                     };
                 }
                 return ref.null none;
-                break b248;
+                break b247;
             };
             return "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth);
-            break b248;
+            break b247;
         };
         if @unlikely(indef) {
             cold_path;
@@ -2526,7 +2525,7 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, maj
     }
     __hfs_pos_33 = self.pos;
     block {
-        l292: loop {
+        l291: loop {
             if __sroa_slot_30 = 0; __sroa_slot_31 = 0; __sroa_slot_32 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_2: block {
                 if @unlikely(__hfs_pos_33 >= (self.input.end - self.input.start)) {
                     cold_path;
@@ -2592,7 +2591,7 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, maj
                 return __hfs_call_34;
             }
             self.pos = __hfs_pos_33;
-            continue l292;
+            continue l291;
         };
     };
 }
@@ -2748,7 +2747,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
         return "core:cbor/core:cbor/CborDeserializer::read_definite_text"(self, len);
     }
     block {
-        l322: loop {
+        l321: loop {
             let __vr_17_mv_0: i32;
             let __vr_17_mv_1: ref null "tuple//[u8, u8, u64, bool]";
             let __vr_17_mv_2: ref null "core:serde//DeserializeError";
@@ -2773,12 +2772,12 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
             } else {
                 0;
             })) {
-                continue l322;
+                continue l321;
             } else {
                 cold_path;
                 return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected text string"), used: 20 }, builtin::i64_extend_i32_s(self.pos));
             }
-            continue l322;
+            continue l321;
         };
     };
 }
@@ -2802,7 +2801,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
     let __sroa_slot_24: i32;
     let __sroa_slot_25: ref null "core:serde//DeserializeError";
     block {
-        l329: loop {
+        l328: loop {
             let __vr_14_mv_0: i32;
             let __vr_14_mv_1: ref null "tuple//[u8, u8, u64, bool]";
             let __vr_14_mv_2: ref null "core:serde//DeserializeError";
@@ -2820,7 +2819,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
             major = __pattern_temp_0.0;
             arg = __pattern_temp_0.2;
             indef = __pattern_temp_0.3;
-            continue_if l329 select i32(major == 6, arg == 55799_i64, 0);
+            continue_if l328 select i32(major == 6, arg == 55799_i64, 0);
             if @unlikely(major != want_major) {
                 cold_path;
                 return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type"("cbor_struct_decode.wado/$value_copy$core:prelude/string.wado/String"(expected), builtin::i64_extend_i32_s(self.pos));
@@ -2857,7 +2856,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
                 unreachable;
             });
             return 0, struct.new "tuple//[i64, bool, i32]" { 0: select i64(indef, -1_i64, arg), 1: indef, 2: depth_11 }, ref.null none;
-            continue l329;
+            continue l328;
         };
     };
 }
@@ -2974,14 +2973,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_44 + (_av_45 - _av_44);
     offset = data.start;
     block {
-        l344: loop {
+        l343: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b345: block {
-                l346: loop {
-                    break_if b345 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b344: block {
+                l345: loop {
+                    break_if b344 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l346;
+                    continue l345;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -3004,7 +3003,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l344;
+            continue l343;
         };
     };
 }
@@ -3053,8 +3052,8 @@ fn "core:serde/cbor_struct_decode.wado/Point^core:serde/Deserialize::deserialize
     } else {
         unreachable;
     });
-    b353: block {
-        l354: loop {
+    b352: block {
+        l353: loop {
             let __vr_51_mv_0: i32;
             let __vr_51_mv_1: ref null "core:prelude/types.wado//Option<i32>";
             let __vr_51_mv_2: ref null "core:serde//DeserializeError";
@@ -3140,9 +3139,9 @@ fn "core:serde/cbor_struct_decode.wado/Point^core:serde/Deserialize::deserialize
                     }
                 }
             } else {
-                break b353;
+                break b352;
             }
-            continue l354;
+            continue l353;
         };
     };
     if @likely(ref.is_null(ref.null none)) {
@@ -3320,28 +3319,30 @@ fn "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_fiel
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
-    let abs_val: i64;
+    let abs_val: u64;
     let digit_count: i32;
     let offset: i32;
+    let val_6: i64;
     let n: i32;
-    let t: i64;
+    let t: u64;
     is_negative = self < 0;
-    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
-    digit_count = __inline_count_digits_i64_0: block -> i32 {
+    val_6 = builtin::i64_extend_i32_s(self);
+    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
+    digit_count = __inline_count_digits_u64_1: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_i64_0: 1;
+            break __inline_count_digits_u64_1: 1;
         }
         n = 0;
         t = abs_val;
-        b393: block {
-            l394: loop {
-                break_if b393 t <= 0_i64;
+        b392: block {
+            l393: loop {
+                break_if b392 t <=u 0_i64;
                 n = n + 1;
-                t = t / 10_i64;
-                continue l394;
+                t = t /u 10_i64;
+                continue l393;
             };
         };
-        break __inline_count_digits_i64_0: n;
+        break __inline_count_digits_u64_1: n;
     };
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_44, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, abs_val, digit_count);
