@@ -1,0 +1,34 @@
+//! `.` and `~X` admit every *token*, and EOF is not one. An optional or loop
+//! over such a body declines at EOF — which the scan side has always done and
+//! the parse side did not, because `Admits::Everything` rendered as the
+//! literal `true`. Reaching that rendering through `admits_kinds` is what hid
+//! it: the empty list it hands back for `Everything` reads as "nothing to
+//! narrow by", which is the other meaning the type exists to separate.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use oae from "./grammars/open_ended_at_eof.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_open_ended_at_eof" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = oae::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = oae::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "open-ended at EOF: an optional over an open-ended rule declines" {
+    assert_tree(&"k", &"(s k)");
+}
+
+test "open-ended at EOF: and takes a token where there is one" {
+    assert_tree(&"k a", &"(s k (x a))");
+}
+
+test "open-ended at EOF: written in place reads the same" {
+    assert_tree(&"m", &"(s m)");
+    assert_tree(&"m a", &"(s m a)");
+}

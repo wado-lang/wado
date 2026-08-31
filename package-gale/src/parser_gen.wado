@@ -73,6 +73,7 @@ use {
 use {
     Admits,
     admits_enumerated,
+    admits_is_everything,
     admits_is_untestable,
     admits_kinds,
     admits_or_everything,
@@ -1703,6 +1704,40 @@ fn scan_repeat_guard_excluding(
     }
     if !caller_follow_gate.is_empty() {
         parts.push(`!(${*caller_follow_gate})`);
+    }
+    return parts.join(" && ");
+}
+
+/// What a repeat's entry or iteration tests on the parse side: the body admits
+/// the lookahead, and there is a token here to admit.
+///
+/// `Everything` is every *token*, and EOF is not one. The scan side has always
+/// known that — its `pos < tokens.len()` bound and the wildcard's own
+/// `tokens[pos] == TK_EOF` check both fail there — so rendering it as `true`
+/// here made the two sides disagree about the same body: `a : x? ;` with
+/// `x : . ;` entered the optional at EOF and reported `expected any token`,
+/// while the scan measured zero. Going through `admits_kinds` first is what
+/// hid it: the empty list it hands back for `Everything` reads as "nothing to
+/// narrow by", which is the *other* meaning this type exists to separate.
+///
+/// Not the reading a rule's empty arm takes — there an absent set means the
+/// arm is not narrowed at all and must still hold at EOF, which is why
+/// `admits_or_everything` stays as it is.
+global NO_EXCLUSION: List<String> = [];
+global PEEK_KIND: String = "p.peek_kind()";
+
+fn repeat_guard_cond(admits: &Admits, excluded: &List<String>, expr: &String, ctx: &mut GenContext) -> String {
+    assert !admits_is_untestable(admits), "a repeat whose body matches nothing has no iteration to guard";
+    let mut parts: List<String> = [];
+    if admits_is_everything(admits) {
+        parts.push(`${*expr} != TK_EOF`);
+    }
+    let narrowed = admits_check_excluding(admits, excluded, expr, ctx);
+    if narrowed != "true" {
+        parts.push(narrowed);
+    }
+    if parts.is_empty() {
+        return "true";
     }
     return parts.join(" && ");
 }
@@ -3783,7 +3818,7 @@ fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCo
     w.line(&`let mut ${verdict}: bool = false;`);
     gen_viability_probe(w, &r.continuation_scan, &verdict, &"ng_exit_scan", ctx, nc, null, &r.probe_viable);
     w.line(&`if ${verdict} \{ break; \}`);
-    w.line(&`if !(${ctx.admits_first_check_str(&r.body_admits)}) \{ break; \}`);
+    w.line(&`if !(${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}) \{ break; \}`);
 }
 
 /// A labelled block that scans `continuation` from the parse position and,
@@ -3897,7 +3932,10 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
     let follow_gate = ctx.emit_follow() && r.gate_caller_follow;
-    let cond = gate_cond_with_caller_follow(&ctx.admits_first_check_str(&r.body_admits), follow_gate);
+    let cond = gate_cond_with_caller_follow(
+        &repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
+        follow_gate,
+    );
     match r.kind {
         Optional => gen_op_optional(w, r, ctx, nc, follow_gate),
         Star => {
@@ -3974,7 +4012,7 @@ fn gen_op_optional_entry_cond(
             let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, &"opt_scan_pos", &"opt_scan", false);
             `${scan_pos} >= 0`;
         },
-        Plain => ctx.admits_first_check_str(&r.body_admits),
+        Plain => repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
         OptionalShapeLookahead(_) => panic(
             "gen_op_optional_entry_cond: shape lookahead has one condition per shape, not one for the optional",
         ),
@@ -4334,7 +4372,10 @@ fn gen_op_storable_optional(
             rep_op,
             inner_elem,
             ctx,
-            &gate_cond_with_caller_follow(&ctx.admits_first_check_str(&rep_op.body_admits), rep_op.gate_caller_follow),
+            &gate_cond_with_caller_follow(
+                &repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
+                rep_op.gate_caller_follow,
+            ),
         ),
         // `NonGreedy` is caught upstream by `gen_op_repeat_non_greedy`;
         // reaching here is a lower-side bug.
@@ -4485,7 +4526,7 @@ fn gen_op_transparent_optional(
             &rep.element,
             ctx,
             &gate_cond_with_caller_follow(
-                &ctx.admits_first_check_str(&rep_op.body_admits),
+                &repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
                 rep_op.gate_caller_follow,
             ),
         ),
@@ -5525,7 +5566,7 @@ fn gen_op_repeat_optional_rulecall(
     // never match" is what dropped `x?` where `x : . ;` entirely: the
     // alternative was never emitted, so the rule could not parse `x` at all.
     let entry = match &rep_op.body_admits {
-        Everything(_) => admits_check_excluding(&rep_op.body_admits, follow, &"p.peek_kind()", ctx),
+        Everything(_) => repeat_guard_cond(&rep_op.body_admits, follow, &PEEK_KIND, ctx),
         Untestable => {
             return;
         },
@@ -5537,7 +5578,7 @@ fn gen_op_repeat_optional_rulecall(
                 // optional here, so emit nothing.
                 return;
             }
-            ctx.first_check_str(&first);
+            repeat_guard_cond(&Admits::Kinds(first), &NO_EXCLUSION, &PEEK_KIND, ctx);
         },
     };
 
@@ -5645,7 +5686,12 @@ fn gen_op_repeat_optional_leaf(
     } else {
         "";
     };
-    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&loop_first), ctx);
+    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &repeat_guard_cond(
+        &rep_op.body_admits,
+        &NO_EXCLUSION,
+        &PEEK_KIND,
+        ctx,
+    ), ctx);
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy Repeat's
@@ -5750,7 +5796,9 @@ fn gen_op_repeat_star_plus_non_storable_group(
             gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &no_flag), decided);
             w.end();
         } else {
-            w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
+            w.begin(
+                &`while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
+            );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
@@ -5776,7 +5824,9 @@ fn gen_op_repeat_star_plus_non_storable_group(
             begin_plus_first_iteration(w, name_counts);
             gen_op_group(w, g_op, inner, ctx, name_counts, GroupEntry::Required);
             w.end();
-            w.begin(&`while !p.recovering && (${ctx.first_check_str(&inner_first)})`);
+            w.begin(
+                &`while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
+            );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
@@ -5911,7 +5961,9 @@ fn gen_op_repeat_star_plus_storable(
             );
             w.end();
         } else {
-            w.begin(&`while !p.recovering && (${ctx.first_check_str(&loop_first)})`);
+            w.begin(
+                &`while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
+            );
             // Same caller-FOLLOW gate for the non-scannable while loop.
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
@@ -5943,7 +5995,12 @@ fn gen_op_repeat_star_plus_storable(
         } else {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(&`let mut ${plus_flag} = true;`);
-            w.begin(&`while !p.recovering && (${plus_flag} || ${ctx.first_check_str(&inner_first)})`);
+            w.begin(&`while !p.recovering && (${plus_flag} || ${repeat_guard_cond(
+                &rep_op.body_admits,
+                &NO_EXCLUSION,
+                &PEEK_KIND,
+                ctx,
+            )})`);
             gen_iter_caller_follow_gate(w, rep_op, &plus_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(
