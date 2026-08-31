@@ -478,6 +478,18 @@ pub(crate) struct BlanketImpl {
     pub(crate) bounds: Vec<BlanketBound>,
 }
 
+impl BlanketImpl {
+    /// The binder naming this blanket's receiver parameter.
+    ///
+    /// Every template name for a blanket must come from here. The `impl` block
+    /// owns the binder, so two blankets of one trait stay two templates
+    /// whatever letter each spells its parameter; a name built from the
+    /// spelling alone looks up a *different* template, silently (issue #1932).
+    pub(crate) fn receiver_binder(&self, defs: &crate::defs::DefTable) -> name::FqTypeName {
+        name::FqTypeName::impl_binder(&self.param, name::BinderOwner::new(defs, self.def))
+    }
+}
+
 /// Classify a blanket impl's receiver, or `None` for a concrete/shape impl
 /// (`impl Display for String`, `impl<T> IntoIterator for &List<T>`). A blanket
 /// receiver is a *bounded* type param (`impl<T: B> Trait for T`) or a reference

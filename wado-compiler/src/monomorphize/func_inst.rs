@@ -2282,7 +2282,12 @@ impl Monomorphizer {
                                                 )
                                             },
                                         )
-                                        .map(|b| (b.module.clone(), b.param.clone()))
+                                        .map(|b| {
+                                            (
+                                                b.module.clone(),
+                                                b.receiver_binder(type_table.defs()),
+                                            )
+                                        })
                                 })
                             } else {
                                 None
@@ -2320,7 +2325,7 @@ impl Monomorphizer {
                                 .zip(new_info.trait_name.clone())
                                 .map(|((_, param), tn)| {
                                     LocalMethodName::new(
-                                        FqTypeName::binder(param),
+                                        param.clone(),
                                         Some(tn),
                                         new_info.method_name.clone(),
                                     )
@@ -3370,7 +3375,7 @@ impl Monomorphizer {
                     .map(|b| {
                         (
                             b.module.clone(),
-                            b.param.clone(),
+                            b.receiver_binder(type_table.defs()),
                             self.functions.trait_env.pack_assocs_of_blanket(b),
                         )
                     })
@@ -3457,7 +3462,7 @@ impl Monomorphizer {
                 new_func_name.clone()
             } else if let Some(param) = blanket_param {
                 LocalMethodName::new(
-                    FqTypeName::binder(&param),
+                    param,
                     new_info.trait_name.clone(),
                     new_info.method_name.clone(),
                 )
