@@ -98,6 +98,15 @@ impl CandidateKind {
         }
     }
 
+    /// What the candidate hoists, for `WADO_TRACE`.
+    fn what(&self) -> String {
+        match self {
+            CandidateKind::LetBinding { local_index, .. } => format!("local {local_index}"),
+            CandidateKind::InlineRef { .. } => "an `&` literal".to_string(),
+            CandidateKind::ValueArg { .. } => "a by-value argument".to_string(),
+        }
+    }
+
     /// The `let` this candidate replaces, for the kind that has one.
     fn own_stmt(&self) -> Option<StmtId> {
         match self {
@@ -193,6 +202,12 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         let prefer_fixed_repr = kind.prefer_fixed_repr();
 
         let mut func = project.functions[func_idx].borrow_mut();
+        crate::compiler_trace!(
+            "const_object_globalization",
+            "  {} hoists {} as {name} (guarded={guarded})",
+            func.name,
+            kind.what(),
+        );
         let body = func.body.as_mut().expect("candidate function has a body");
         match kind {
             CandidateKind::LetBinding {
@@ -299,7 +314,6 @@ fn collect_candidates(
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let {
-                name,
                 local_index,
                 type_id,
                 ..
@@ -313,10 +327,6 @@ fn collect_candidates(
             let guarded = std::iter::once(s)
                 .chain(sibling_lets.iter().copied())
                 .any(|st| stmt_needs_lazy_guard(body, st, gate, false));
-            crate::compiler_trace!(
-                "const_object_globalization",
-                "  {name}#{local_index} hoisted (guarded={guarded})"
-            );
             let kind = CandidateKind::LetBinding {
                 stmt: s,
                 local_index: *local_index,
