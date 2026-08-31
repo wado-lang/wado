@@ -33,6 +33,19 @@ Every surface axis carries this column.
 Implementation maturity is not itself an axis. It appears once, as a context
 line in the header, and is never scored.
 
+### A survey is a snapshot
+
+It describes one commit on one day and is not maintained afterwards. Re-surveying
+rewrites the file whole; git keeps the one it replaced. The header's date is the
+part a later reader needs most.
+
+There is no document comparing the surveys to each other, and there should not
+be. A snapshot decays at one project's rate; a comparison decays at the sum of
+theirs, because any one of them moving invalidates a row — and the rows that
+compare are exactly the ones later quoted from memory. Everything a comparison
+would say belongs in the survey of the language whose evidence produced it,
+written so that it survives that evidence going stale.
+
 ### Say how you looked
 
 There are four ways to fill a row and they are not equally strong: a count from
@@ -219,6 +232,12 @@ Learned comes first because it is the largest of the four and the easiest to
 skip: what the survey changed about how a problem is seen, whether or not
 anything follows from it. A survey whose closing section is only a shopping list
 was read for procurement.
+
+Write each entry as the lesson, with the observation under it as dated evidence.
+The observation expires — the defect gets fixed, the backend lands, the gap
+closes — and an entry phrased as the observation expires with it, while the same
+entry phrased as the lesson survives being fixed. It is the only part of a
+snapshot meant to outlive its date.
 
 Take carries open work and nothing else, so every box in it is unchecked.
 Anything settled the other way goes under Refuse with its reason — including

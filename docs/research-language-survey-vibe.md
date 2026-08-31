@@ -252,26 +252,22 @@ outright.
 
 Learned:
 
-- Wado's effect-handler lowering is where vibe is migrating to, and it got there
-  by aiming at the platform. A handler whose `resume` is in tail position
-  compiles to `return`; only a handler with code after `resume` needs Wasm stack
-  switching. vibe has no tail-resumptive path at all, so every perform goes
-  through replay, and replay is what re-runs the body and corrupts the value.
-  ADR-0076's conclusion — that the checker's rejection of non-tail and
-  multi-shot resume already makes every handler tail-resumptive, so a direct
-  call suffices — is a description of what Wado already does. The lesson is not
-  that the design was lucky: refusing to build a mechanism the platform was
-  going to provide is what left the fast path as the only path.
-- Both surveyed languages run on reference counting over linear memory, and both
-  name wasm-gc as the long-term primary target without having it. vibe's gc
-  backend does not emit a single `struct.new`, is unreachable from its compile
-  CLI, and disagrees with the linear backend about what `Array::push` means.
-  Wado's founding bet — let the host own the collector, ship no runtime — is the
-  thing neither of them has managed, and their documents are a catalogue of what
-  is paid for not managing it: cycles leaking permanently, a self-build pinned
-  away from RC for a 1.7× cost, a language whose semantics differ per backend.
-  The bet looks better after reading what the alternative costs than it does
-  from inside.
+- Declining to build what the platform is going to provide leaves the fast path
+  as the only path. Wado lowers a tail-position `resume` to `return` and reaches
+  for Wasm stack switching only when code follows the `resume`, so no general
+  suspension machinery was ever written and none can be wrong. As of this
+  survey vibe has no tail-resumptive path at all, every perform goes through
+  replay, and ADR-0076 concludes that its checker's rejection of non-tail and
+  multi-shot resume already makes every handler tail-resumptive — arriving,
+  by a different route and later, at the lowering Wado has.
+- A bet is easier to price from outside it. Wado's founding one — let the host
+  own the collector, ship no runtime — reads as an obvious constraint from
+  within and as an escape from a long bill once the alternative is written down.
+  What both surveyed languages were paying at this date: reference counting over
+  linear memory, cycles leaking permanently as a stated limitation, a compiler
+  self-build pinned away from RC because it costs 1.7× wall and 2.9× size, a gc
+  backend that emits no `struct.new` and disagrees with the linear one about
+  what `Array::push` means. Neither had reached the target both name as primary.
 - Pin the defect before fixing it, at architecture scale. ADR-0076's phase 1 is
   a regression fixture for the corruption its phase 2 removes, written so that
   "fixed" becomes provable instead of asserted. This is the red/green rule
