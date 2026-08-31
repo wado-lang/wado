@@ -16,15 +16,19 @@ The timing matters too. With the Wasm Component Model and WASI 0.3 maturing, Wad
 
 No macros. The code you read is the code that runs, so the emitted WAT is something you can reason about by looking at the source.
 
-Code generation is not banned; it is kept outside the language. [Kiln](./wep-2026-04-12-kiln.md) runs a generator in a sandbox and writes plain `.wado` to disk, so generated code is code you can read too — a whole dialect of Wado can live outside the language without any tool having to learn it. What Wado refuses is the in-language kind: forms only the compiler can expand, whose expansion exists nowhere you can open.
+Generation is asked for one thing: what it produces must be ordinary source you can open. [Kiln](./wep-2026-04-12-kiln.md) runs a generator in a sandbox and writes plain `.wado` to disk, so a whole dialect of Wado can live outside the language without any tool having to learn it, and the result is read the same way as the rest. A macro fails that — not because expanding code is wrong, but because its expansion exists nowhere you can open.
 
 ### Readable without context switching
 
-Explicit over implicit: no hidden dependencies, and no conversion the source does not show. You should never have to jump to another file to know what a function does.
+Knowing what a call does should not require opening a file you were not already reading. The mechanisms that would break that are all present — overloading, coercion, derivation — so what carries the principle is a requirement on each of them: they should be predictable.
 
-Overloading is not banned — `a + b` has resolved through an `impl Add` since the beginning, and a method call resolves by the types of its arguments as well as its receiver. What is asked of it is that it be predictable: one spelling reaches one declaration, resolution follows a fixed ladder rather than a search over everything in scope, and no two candidates are separated by a preference a reader has to have memorised. Where that is not obvious from the source it is the diagnostic's job to say which candidate won and why the others lost, and the language service's to say it before the compiler is run.
+Overloading should be predictable. `a + b` has resolved through an `impl Add` since the beginning, and a method call resolves by the types of its arguments as well as its receiver. One spelling should reach one declaration, resolution should follow a fixed ladder rather than a search over everything in scope, and no two candidates should be separated by a preference a reader has to have memorised.
 
-This is the weakest principle on this page, because unlike the others it names a feeling rather than a rule and nothing measures it. It is kept because the failure it guards against — a call whose meaning changes when a distant file adds an implementation — is worth more than the tidiness of a claim that could be checked.
+Conversion should be predictable. A literal takes the type its context asks for, `&mut T` is accepted where `&T` is wanted, `?` converts an error through `From`, and `Eq` is derived where a use needs it. Each should be a rule written in the specification and settled by what the site already says, so that a distant file can at most make a call legal that was not — never change what a legal call meant.
+
+Where the source does not show which rule fired, saying so is the diagnostic's job, and the language service's before the compiler is run.
+
+This is the weakest principle on this page: unlike the others it names a property nothing measures. It is kept because what it guards against — a call whose meaning changes because somewhere else grew an implementation — costs more than a claim that could be checked is worth.
 
 ### Type-safe by design
 
