@@ -1703,6 +1703,28 @@ test "a wildcard alternative keeps its index against a narrower one" {
     assert named_arm < 0 || wild_arm < named_arm, `the wildcard alternative was moved past a later one: ${body}`;
 }
 
+// An open-ended alternative can still have an enumerated first set: `A? .`
+// admits every token *and* starts with `a`. What it admits is not a set, but
+// what the walk found is, and the unions built from these classes want it.
+global OPEN_ENDED_WITH_FIRST_G4: String = "
+grammar T;
+s : r EOF ;
+r : ( A? . | B )+ ;
+A : 'a' ;
+B : 'b' ;
+";
+
+test "an open-ended alternative still contributes the first set it does have" {
+    // The expected list a `no viable alternative` names, and the SYNC set it
+    // recovers on, are unions over the group's classes. Dropping the payload
+    // narrowed both to `{TK_B}`, so the `a` that really can start the group
+    // was neither reported nor recovered on.
+    let mut g = parse(OPEN_ENDED_WITH_FIRST_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let both = "global SYNC_0: List<i32> = [TK_A, TK_B];";
+    assert find_index(&output, &both) >= 0, `expected ${both}, got: ${output}`;
+}
+
 test "a rule's empty alternative does not shadow the ones after it" {
     // A rule's arms are guarded `if`s that return, so an unconditional one is
     // the same dead-code hazard as an `else if true` in a group's chain: it

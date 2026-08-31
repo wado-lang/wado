@@ -2739,6 +2739,7 @@ fn gen_multi_alt_body(
     w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     let mut untestable: List<bool> = [];
+    let mut all_gate_conds: List<List<String>> = [];
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt = &rule.alternatives[non_lr_indices[i]];
         // `alt_has_gate` asks without registering; `alt_initial_gate_conditions`
@@ -2751,8 +2752,14 @@ fn gen_multi_alt_body(
         // not this site's to infer from the condition it happens to have.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
         let selected_by_nothing = alt_class_tests_nothing(&alt_class_of(alt, ctx));
-        let gated = alt_gates_branch(alt, ctx);
-        untestable.push(no_cond && selected_by_nothing && !gated);
+        // Computed here and read by the arm loop, not asked again there. It is
+        // one question — does this arm carry a gate — and the two answers can
+        // differ: a Java predicate resolves through `ctx.alt_bindings()`, which
+        // `gen_alt_elements` overwrites for each arm it emits. An arm ordered
+        // as gated that then rendered no condition would be the unconditional
+        // arm this ordering exists to move.
+        all_gate_conds.push(if ctx.emit_actions() { alt_initial_gate_conditions(alt, ctx) } else { [] });
+        untestable.push(no_cond && selected_by_nothing && all_gate_conds[i].is_empty());
     }
 
     for let slot of &arms_fallback_last(&untestable) {
@@ -2763,7 +2770,7 @@ fn gen_multi_alt_body(
         let pos_sets = &all_pos_sets[i];
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
 
-        let gate_conds: List<String> = if ctx.emit_actions() { alt_initial_gate_conditions(alt, ctx) } else { [] };
+        let gate_conds = all_gate_conds[i];
         if cond_depth > 0 {
             let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
             let gate = if gate_conds.is_empty() { String::new() } else { ` && ${join_gate_conds(&gate_conds)}` };

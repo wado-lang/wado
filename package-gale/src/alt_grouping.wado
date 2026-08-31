@@ -166,7 +166,10 @@ pub fn dispatch_branches(d: &MultiAltDispatch) -> List<DecisionBranch> {
 /// both rather than leaving a second predicate to pair them up later.
 pub fn alt_class(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> AltClass {
     if alt_is_open_ended(alt, ctx) {
-        return AltClass::OpenEnded;
+        // The walk's set is kept, not discarded: `A? .` admits every token and
+        // still starts with `a`, and every union built from these classes wants
+        // that `a`.
+        return AltClass::OpenEnded(*first_set);
     }
     if alt_is_nullable(alt, ctx) {
         return AltClass::Nullable(*first_set);

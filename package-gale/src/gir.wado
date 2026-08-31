@@ -582,7 +582,14 @@ pub variant AltClass {
     /// Matches at least one token, of any kind: `.` or `~X`, written in the
     /// alternative or reached through a nullable prefix or a rule. No first
     /// set names what it admits, and it admits everything.
-    OpenEnded,
+    ///
+    /// The payload is what the first-set walk did enumerate — `A? .` is
+    /// open-ended *and* starts with `a` — a strict subset of what is admitted,
+    /// exactly as `Admits::Everything` carries. Dropping it narrowed every
+    /// union built from these classes: the expected list a `no viable
+    /// alternative` names and the SYNC set it recovers on both lost the
+    /// tokens, and the overlap advisory lost the shared ones it reports.
+    OpenEnded(List<String>),
     /// Selected by exactly these tokens and nothing else. Never empty.
     Selects(List<String>),
     /// Can also match nothing, so what may follow the decision selects it too,
@@ -597,7 +604,7 @@ pub variant AltClass {
 }
 
 pub fn alt_class_is_open_ended(c: &AltClass) -> bool {
-    return *c matches { OpenEnded };
+    return *c matches { OpenEnded(_) };
 }
 
 pub fn alt_class_is_nullable(c: &AltClass) -> bool {
@@ -621,7 +628,7 @@ pub fn alt_class_first_set(c: &AltClass) -> List<String> {
     return match c {
         Selects(tokens) => *tokens,
         Nullable(tokens) => *tokens,
-        OpenEnded => [] as List<String>,
+        OpenEnded(tokens) => *tokens,
     };
 }
 
