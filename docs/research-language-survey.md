@@ -43,7 +43,7 @@ What the language lets you write.
 | A3 Effects | One bit (pure/effectful), named in the type, or handler-dispatched? |
 | A4 Errors | Values or exceptions; propagation explicit or implicit; error type converted implicitly at propagation; is there a doctrine for when an error is branchable? |
 | A5 Concurrency | async/await, structured, or none. Deterministic across targets and machines? |
-| A6 Code generation | Macros are refused nearly everywhere. Where was generation pushed instead? |
+| A6 Boundary mechanisms | How does something outside the language get in? Code generation at build time, a serialization framework at run time, foreign interface import. Macros are refused nearly everywhere; ask where generation was pushed instead, and whether what it produces can be opened |
 | A7 Hidden operations | Is there an inventory of what the compiler does behind your back? |
 
 ### The self-application cross-check
@@ -129,6 +129,12 @@ from the first month. C should follow from B1 — a project that named a
 measurable arbiter tends to build measurement apparatus, one that named a
 platform tends to build applications on it. When C and B1 disagree, that is the
 finding.
+
+Read C1 against A6 before reading it against anything else. A language with no
+way for a foreign grammar, IDL, or wire format to enter it can only be used to
+build its own parts, so an empty C1 beside an absent A6 is one finding rather
+than two: nothing external could have been built, whatever the effort. The
+artifacts that fill C1 tend to be a boundary mechanism's first customer.
 
 ## Recording template
 

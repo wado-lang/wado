@@ -24,7 +24,7 @@ its tests after a series of AI-driven edits.
 | A3 Effects | `effect fn` marks I/O; a pure fn cannot call one (E006) | One bit. No effect names, no polymorphism, no handlers | Yes | Rejected — `REJECTED_PATTERNS.md` refuses algebraic effects, citing Gleam |
 | A4 Errors | `Result[T, E]` only; `T!` is `Result[T, String]`, `T!E` is `Result[T, E]`, `T?` is `Option[T]` | Propagation is `!` and always explicit (ADR-0008 abolished auto-`?`); `!` never converts `E`, a mismatch stays a type error (ADR-0003) | Yes | Rejected: exceptions, `null`, implicit conversion at propagation |
 | A5 Concurrency | `fan`, structured, no async/await | Deterministic by construction: `fan.race` picks the winner by least compute spent, ties by source order, same answer on every target and machine. `Compute` and `Duration` are separate types; a bare `Int` is not a time and there are no literal suffixes | Yes | Rejected: async/await (function colouring), goroutines, exposed `Future[T]` |
-| A6 Code generation | No macros, no reflection | Generation lives in TOML definitions plus `build.rs` | — | Rejected: macros, reflection, monkey patching |
+| A6 Boundary mechanisms | No macros, no reflection | None a user can invoke. The TOML and `build.rs` that `REJECTED_PATTERNS.md` names as the alternative to macros are the compiler's own build — `codegen/templates/rust.toml` is the Rust backend's syntax table, "pure formatting, no semantic logic". Values cross the boundary through `Codec`, derived by `: Codec` and producing `Value`, with JSON the only format on the far side | — | Rejected: macros, reflection, monkey patching, and executable build scripts — `almide.toml` is declarative TOML only, because `setup.py`-style executable configuration destroys reproducibility |
 | A7 Hidden operations | Zig's "no hidden control flow" cited, then deliberately departed from | `docs/design/HIDDEN_OPERATIONS.md` enumerates five, each with trigger condition, implementing file, and user impact: clone insertion, runtime embedding, Perceus RC insertion, `fan` threading, and one entry recording that auto-`?` was removed | — | — |
 
 A4 carries a doctrine the other axes do not. `E = String` is the reporting
@@ -103,6 +103,11 @@ C is thick in method and proof and empty in artifacts, which follows from B1: a
 project that named a measurable arbiter built measurement and verification
 apparatus. This is not a maturity effect — the Lean belts and the syntax A/B
 harness exist in a repository whose first commit is 2026-03-07.
+
+A6 bounds C1 from the other side. With no generation mechanism and no
+serialization framework, a foreign grammar or wire format has no route into an
+Almide program except by hand, so the programs that can be written are the
+language's own parts. Effort could not have produced a Gale here.
 
 `research/grammar-lab/REPORT.md` is the clearest instance. Short lambda
 `(x) => expr` was tested against the then-current `fn(x) => expr` by transpiling

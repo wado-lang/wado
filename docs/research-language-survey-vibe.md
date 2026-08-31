@@ -27,7 +27,7 @@ wrong above P1 = crashes.
 | A3 Effects | Row-polymorphic effect types with handlers; capabilities ride the row | `fn main with Console`, `with Exception + Fs`, `handle { … } with Exception[String] { … }`. Deno-style permissions cross Koka-style effects: authority is fixed once in the earliest phase and immutable while running; `--allow-*` const-folds and dead-code-eliminates ungranted capabilities, and the emitted binary declares the wasm feature level it needs | Yes | — |
 | A4 Errors | Failure travels in the effect row, not in a return-type wrapper | `fn safe_div(a: Int, b: Int) -> Int with Exception[String]` — the success value flows straight through, and `handle` discharges the row at one site instead of unwrapping per call. The checked Error policy is the adopted static rule and is formalized in Lean | Yes | Rejected: ambient Error, kept in the Lean model as a negative witness |
 | A5 Concurrency | Structured, shared-nothing | `TaskGroup` plus `Send`/region checks. Async syntax exists behind `--unstable-async`. Continuations designed against wasm-gc typed reference lanes, stack switching today, JSPI as an alternate backend | Yes | Real threads deferred, but the representation is chosen for them |
-| A6 Code generation | No macros | `derive(Eq, Show)` on declarations. Where generation was pushed instead was not examined | — | — |
+| A6 Boundary mechanisms | No macros | None a user can invoke: no generation command, no plugin, no build hook among the 25 user-facing CLI commands. `derive` is the only generation and its set is fixed — `Eq`, `Ord`, `Show`, `Hash`, `Default`, none of them serialization. Values cross the boundary through a dynamic `Json::` API (`stringify: (Any) -> String`), with no typed mapping either way. The compiler generates WIT from declarations | — | — |
 | A7 Hidden operations | Not claimed either way | Perceus reference counting is inserted, monomorphization runs, ungranted capabilities are eliminated. Each is documented in its own file; there is no single inventory. The cheatsheet's measured-pitfalls section covers part of the ground from the other side, recording observed behaviour rather than compiler steps | — | Gap, not a decision |
 
 ### The self-application cross-check
@@ -105,8 +105,11 @@ from the subset that is frozen.
 | C4 Corpus | 1,266 fixture and test files, 42,467 lines | Medium | — | — |
 
 C is thick in method and proof and empty in artifacts — the same shape as
-Almide, from a different arbiter. The self-hosted compiler is not counted here:
-it is worth nothing if the language stops, which is what makes it an A
+Almide, from a different arbiter, and bounded the same way by A6. A language
+whose only generation is a fixed `derive` set and whose only wire crossing is an
+untyped `Json::` API gives a foreign grammar or format no route in, so what can
+be built with it is what it is made of. The self-hosted compiler is not counted
+here: it is worth nothing if the language stops, which is what makes it an A
 cross-check rather than spin-off value.
 
 The measured-pitfalls section states its purpose as keeping anyone from
