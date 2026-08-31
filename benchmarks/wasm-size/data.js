@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788159535764,
+  "lastUpdate": 1788177322119,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52021,6 +52021,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c888b81f93e4776b8561e21ab8098f1767363b90"
         },
         "date": 1788159534876,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2026,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6425,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19611,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282194,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "22a8393dbfb4be334a57aa5d45b3dc526fee583e",
+          "message": "Merge pull request #1928 from wado-lang/worktree-issue-1922-variantcase-payload-inference\n\nfix(compiler): a VariantCase payload reaches a free generic function",
+          "timestamp": "2026-08-31T20:42:09+09:00",
+          "tree_id": "9600ed66ca3b834100141381372d97d38f804088",
+          "url": "https://github.com/wado-lang/wado/commit/22a8393dbfb4be334a57aa5d45b3dc526fee583e"
+        },
+        "date": 1788177321487,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
