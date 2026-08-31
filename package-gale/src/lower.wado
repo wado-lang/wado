@@ -2031,8 +2031,13 @@ fn group_op_scan_group(
     let mut classes = alt_classes_of(alts, ctx);
     apply_empty_alt_admits(&mut classes, empty_alt_admits);
     return ScanGroupElement {
+        // Strict, and not `scan_group_lenient`'s answer: this copy is scanned
+        // only by the optional's entry guard, which cannot rewind and call it
+        // a match. Computing the other answer beside a reader that overrides
+        // it is two values for one property — the shape this whole change
+        // removes — so the field says what is read.
+        lenient: false,
         alts: *bodies,
-        lenient: scan_group_lenient(alts, ctx),
         alt_classes: classes,
     };
 }
@@ -3790,7 +3795,7 @@ fn warn_optional_scan_guard(owner: &DiagnosticOwner, ctx: &mut GenContext) {
 /// `null` for non-Group inners. Bare leaf Optionals stay at
 /// `Plain` — the Optional+leaf arm of
 /// `gen_op_repeat_with_follow_override` emits the single-token
-/// guard directly from `body_first_set`, so the specialisation is
+/// guard directly from `body_admits`, so the specialisation is
 /// unnecessary there.
 fn try_optional_k_token_lookahead(inner: &Element) -> Option<RepeatStrategy> {
     let tokens = collect_optional_leading_tokens(inner);

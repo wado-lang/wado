@@ -1400,10 +1400,9 @@ impl GenContext {
         let mut local_min = i32::MAX;
         let mut result = false;
         if rid >= 0 {
-            let alt_count = self.parser_rules[rid].alternatives.len();
-            for let mut i = 0; i < alt_count; i += 1 {
-                let alt = self.parser_rules[rid].alternatives[i];
-                if self.alt_reaches_open_end_at(&alt, visiting, &mut local_min) {
+            let rule = &self.parser_rules[rid];
+            for let alt of &rule.alternatives {
+                if self.alt_reaches_open_end_at(alt, visiting, &mut local_min) {
                     result = true;
                     break;
                 }

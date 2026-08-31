@@ -3758,7 +3758,7 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
 }
 
 /// Whether the exit probe should decide this loop. Unlike the Optional the
-/// competing readings are the loop's own, so `body_first_set` stands in for
+/// competing readings are the loop's own, so `body_admits` stands in for
 /// the overlap; it also gates each iteration, hence non-empty.
 fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
     return r.static_exit_undecided
@@ -4243,7 +4243,7 @@ fn gen_op_opt_scan_guard_for_group(
         let body = &scan_group.alts[0];
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
     } else {
-        gen_scan_op_group(w, scan_group, ctx, &`break ${scan_label};`, false);
+        gen_scan_op_group(w, scan_group, ctx, &`break ${scan_label};`, scan_group.lenient);
     }
     w.line(&`${scan_pos_var} = pos;`);
     w.end();
@@ -4328,7 +4328,7 @@ fn gen_op_storable_optional(
             }
         },
         // `pick_optional_specialised` returned `null`: gate on
-        // `body_first_set` (`Plain`).
+        // `body_admits` (`Plain`).
         Plain => gen_op_storable_optional_with_first(
             w,
             rep_op,
@@ -4389,7 +4389,7 @@ global CALLER_FOLLOW_YIELDS: String = "follow_yields(&p.kinds, p.pos, follow, TK
 /// Shared body of every storable-Optional + Group arm: emit a single
 /// `let ${opt_field}: Option<T> = if ${cond} { parse; Some(...) } else
 /// { null };`. Caller computes the gate condition (`gen_lookahead_condition`,
-/// `body_first_set`, scan-pos check, etc.).
+/// `body_admits`, scan-pos check, etc.).
 fn gen_op_storable_optional_with_first(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
@@ -5626,7 +5626,7 @@ fn gen_optional_present(w: &mut CodeWriter, body: &Op, gate_expr: &String, cond:
 /// Greedy Optional whose body is a non-RuleCall leaf (Token / Literal /
 /// Wildcard / Excluded). The tail-position caller-FOLLOW repair is
 /// threaded at runtime (`gate_caller_follow` → `follow_yields`), so the
-/// loop guard is the plain `body_first_set` check.
+/// loop guard is the plain `body_admits` check.
 fn gen_op_repeat_optional_leaf(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -6298,16 +6298,18 @@ fn gen_scan_winner_round(
     w.end();
 }
 
-/// Reorder arms so the ones admitting everything come last, keeping the rest
-/// in their alternative order. `fallback_last` is this rule over a group's
-/// branches; a rule's own alternatives are a decision too, and its arms are
-/// guarded `if`s that return, so an unconditional one placed early is the same
-/// dead code as an `else if true` mid-chain.
-fn arms_fallback_last(admits_everything: &List<bool>) -> List<i32> {
+/// Reorder arms so the ones no lookahead can decide come last, keeping the
+/// rest in their alternative order. `fallback_last` is this rule over a
+/// group's branches; a rule's own alternatives are a decision too, and its
+/// arms are guarded `if`s that return, so an arm that decides nothing, placed
+/// early, is the same dead code as an `else if true` mid-chain. An arm that
+/// admits everything *by decision* is not among them and keeps its place —
+/// which is the distinction `is_decision_fallback` draws on the group side.
+fn arms_fallback_last(untestable: &List<bool>) -> List<i32> {
     let mut out: List<i32> = [];
     let mut fallbacks: List<i32> = [];
-    for let mut i = 0; i < admits_everything.len(); i += 1 {
-        if admits_everything[i] {
+    for let mut i = 0; i < untestable.len(); i += 1 {
+        if untestable[i] {
             fallbacks.push(i);
         } else {
             out.push(i);
