@@ -1199,6 +1199,7 @@ struct Candidate {
 
 /// A callee the budget turned down, for the post-loop report.
 pub(super) struct Declined {
+    name: String,
     hot: usize,
     size: usize,
     sites: usize,
@@ -1220,9 +1221,10 @@ pub(super) struct InlineBudget {
     /// size is what makes the budget finite: the loop runs many rounds, and a
     /// cap re-read from a grown unit would ratchet.
     baseline: Option<usize>,
-    /// Keyed by callee name, so a candidate turned down in several rounds is
-    /// reported once, at its latest price.
-    declined: IndexMap<String, Declined>,
+    /// Keyed by callee, so a candidate turned down in several rounds is reported
+    /// once, at its latest price. By `FuncId` rather than by name: two
+    /// same-named callees in different modules are two candidates, not one.
+    declined: IndexMap<FuncId, Declined>,
 }
 
 /// Below this the budget does not apply. A small package has no cliff to fall
@@ -1281,8 +1283,9 @@ impl InlineBudget {
             }
             over.insert(c.id);
             self.declined.insert(
-                c.name.clone(),
+                c.id,
                 Declined {
+                    name: c.name.clone(),
                     hot: c.hot,
                     size: c.size,
                     sites: c.sites,
@@ -1298,13 +1301,13 @@ impl InlineBudget {
     /// in full.
     pub(super) fn report(&self) -> Option<String> {
         let (growth, baseline) = (self.growth?, self.baseline?);
-        let (name, largest) = self.declined.iter().max_by_key(|(_, d)| d.size * d.sites)?;
+        let largest = self.declined.values().max_by_key(|d| d.size * d.sites)?;
         Some(format!(
             "inline: the {}% growth budget over {} declined {} candidate(s); largest `{}` (hot {}, size {} x {} sites)",
             growth,
             baseline,
             self.declined.len(),
-            name,
+            largest.name,
             largest.hot,
             largest.size,
             largest.sites,
