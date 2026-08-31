@@ -443,9 +443,7 @@ fn register_single_function(
             .filter(|t| !matches!(t, WirType::Unit))
             .collect(),
         crate::nir::ReturnAbi::Single => {
-            if type_table.is_stackless(tir_func.return_type)
-                || tir_func.return_type == TypeTable::NEVER
-            {
+            if type_table.is_stackless(tir_func.return_type) {
                 Vec::new()
             } else {
                 vec![ctx.type_id_to_wir_type(type_table, tir_func.return_type)]

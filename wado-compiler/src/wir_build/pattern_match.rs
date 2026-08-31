@@ -67,7 +67,7 @@ impl FunctionTranslator<'_, '_> {
         result_type: TypeId,
     ) -> WirInstr {
         let arena = self.body;
-        let has_result = !self.is_stackless_type(result_type) && result_type != TypeTable::NEVER;
+        let has_result = !self.is_stackless_type(result_type);
         let result_wir_type = if has_result {
             Some(self.ctx.type_id_to_wir_type(self.type_table, result_type))
         } else {
@@ -311,7 +311,7 @@ impl FunctionTranslator<'_, '_> {
         arms: &[ArmData],
         result_type: TypeId,
     ) -> WirInstr {
-        let has_result = !self.is_stackless_type(result_type) && result_type != TypeTable::NEVER;
+        let has_result = !self.is_stackless_type(result_type);
         let result_wir_type = if has_result {
             Some(self.ctx.type_id_to_wir_type(self.type_table, result_type))
         } else {

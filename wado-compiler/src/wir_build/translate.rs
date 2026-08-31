@@ -1649,7 +1649,7 @@ impl FunctionTranslator<'_, '_> {
             .and_then(|stmt_id| match &arena.stmts[*stmt_id].kind {
                 StmtKind::Expr(op) => {
                     let ty = self.operand_type_id(*op);
-                    if !self.is_stackless_type(ty) && ty != TypeTable::NEVER {
+                    if !self.is_stackless_type(ty) {
                         Some(self.ctx.type_id_to_wir_type(self.type_table, ty))
                     } else {
                         None
@@ -1777,7 +1777,7 @@ impl FunctionTranslator<'_, '_> {
                         ExprKind::Assign { .. } | ExprKind::GlobalVarSet { .. }
                     )
                 });
-                if !is_void_instr && !self.is_stackless_type(ty) && ty != TypeTable::NEVER {
+                if !is_void_instr && !self.is_stackless_type(ty) {
                     Some(WirInstr::Drop(Box::new(instr)))
                 } else {
                     Some(instr)
@@ -2047,7 +2047,7 @@ impl FunctionTranslator<'_, '_> {
             return call;
         }
         prelude.push(call);
-        if multi_value || self.is_stackless_type(result_type) || result_type == TypeTable::NEVER {
+        if multi_value || self.is_stackless_type(result_type) {
             WirInstr::Seq(prelude)
         } else {
             let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
@@ -2322,14 +2322,13 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::Dead => WirInstr::Nop,
 
             ExprKind::Local { index, .. } => {
-                // Unit and Never locals have no Wasm representation. For Unit
-                // there is nothing to push — `&()` included, matching the
-                // stackless rule the `let` side and the parameter list drop it
-                // by. For Never the local declaration was skipped (its
-                // initializer diverges); the surrounding `translate_expr`
-                // wrapper appends `Unreachable` so the local value never
-                // materializes — emit a placeholder `Nop`.
-                if self.is_stackless_type(expr.type_id) || expr.type_id == TypeTable::NEVER {
+                // A stackless local has no Wasm representation — `&()` and
+                // `&!` included — so the `let` side and the parameter list drop
+                // it and there is nothing to push. Where the type is never the
+                // declaration was skipped too (its initializer diverges) and
+                // the surrounding `translate_expr` wrapper appends
+                // `Unreachable`, so the value never materializes either way.
+                if self.is_stackless_type(expr.type_id) {
                     WirInstr::Nop
                 } else {
                     self.local_get(*index)
@@ -2589,12 +2588,11 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::Block(block) => {
-                let body =
-                    if self.is_stackless_type(expr.type_id) || expr.type_id == TypeTable::NEVER {
-                        self.translate_stmts(&arena.blocks[*block].stmts)
-                    } else {
-                        self.translate_stmts_as_value(&arena.blocks[*block].stmts)
-                    };
+                let body = if self.is_stackless_type(expr.type_id) {
+                    self.translate_stmts(&arena.blocks[*block].stmts)
+                } else {
+                    self.translate_stmts_as_value(&arena.blocks[*block].stmts)
+                };
                 WirInstr::Seq(body)
             }
 
