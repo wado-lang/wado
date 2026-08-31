@@ -9,8 +9,6 @@ every survey: what Wado takes, what it refuses, and why.
 
 ## Rules
 
-Three rules decide whether an axis belongs here.
-
 ### Measurable only
 
 Every axis names what to run or what file to open. An axis answered by reading
@@ -31,6 +29,18 @@ Every surface axis carries this column.
 
 Implementation maturity is not itself an axis. It appears once, as a context
 line in the header, and is never scored.
+
+### Say how you looked
+
+There are four ways to fill a row and they are not equally strong: a count from
+a command, a statement read out of a document, a reading of the implementation,
+and an absence found by searching. The first three carry their own evidence —
+the numbers, the quotation, the file. The fourth does not.
+
+"There is no rejection record" is unfalsifiable until it says what was searched,
+so say it. The header does the same at the scale of the pass, by naming what was
+examined and what was left alone. A survey that lists no gaps is claiming to
+have read everything.
 
 ## A. Surface
 
@@ -136,6 +146,23 @@ build its own parts, so an empty C1 beside an absent A6 is one finding rather
 than two: nothing external could have been built, whatever the effort. The
 artifacts that fill C1 tend to be a boundary mechanism's first customer.
 
+## What this rubric cannot see
+
+The instrument is document-driven. Most rows are filled by reading what a
+project wrote about itself, and the self-application cross-check is the only one
+that can contradict a document. In both surveys so far it produced the largest
+finding, which is one measurement standing against a dozen readings.
+
+Two failures follow. A project that documents itself poorly reads as absent
+where it is only quiet, and one that documents itself well reads as present on a
+mechanism nobody ran. Prefer an axis that can be counted, and where a row rests
+on a document alone, say so.
+
+There are no scores. A 1–5 ladder works for one language measured over time,
+where the arbiter is fixed and the question is which way the number moved.
+Across languages it prices a decision taken under one arbiter against another's,
+which is the comparison this rubric exists to avoid.
+
 ## Recording template
 
 ```markdown
@@ -144,6 +171,8 @@ artifacts that fill C1 tend to be a boundary mechanism's first customer.
 `<repo>` — <n> commits / first <date> / surveyed at <sha> <date>
 
 Arbiter: "<one sentence, quoted>" (opens / closes the philosophy document)
+
+Examined: <what was read or run>. Not examined: <what was left>.
 
 ## A. Surface
 

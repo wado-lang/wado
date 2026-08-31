@@ -18,6 +18,16 @@ The arbiter is not a maximized metric but a lexicographic order over three
 values, and it is carried into operations: issue triage ranks P0 = silently
 wrong above P1 = crashes.
 
+Examined: `README.md`, `AGENTS.md`, `docs/vibe.md`, roughly a fifth of the
+2,646-line cheatsheet, `docs/adr.md`, `docs/spec/decisions.md`,
+`docs/spec/stable-surface.md`, `docs/pl-survey-2026-07.md`,
+`eval/lang-review/rubric.md` and its latest findings, `formal/README.md`,
+`docs/cli-commands.md`, the `lib/` and `scripts/` trees by listing and count,
+and `lib/@vibe/builtin/` by reading. Not examined: the module system oracle and
+the content-addressed package and result-cache design, which is the most
+distinctive thing here and unread; the concurrency ADRs behind A5; the Perceus
+work; the two wasm backends; the Vibe Book.
+
 ## A. Surface
 
 | Axis | Claim | Reality | Holds in self-application | Unimplemented / Rejected |
@@ -28,7 +38,7 @@ wrong above P1 = crashes.
 | A4 Errors | Failure travels in the effect row, not in a return-type wrapper | `fn safe_div(a: Int, b: Int) -> Int with Exception[String]` — the success value flows straight through, and `handle` discharges the row at one site instead of unwrapping per call. The checked Error policy is the adopted static rule and is formalized in Lean | Yes | Rejected: ambient Error, kept in the Lean model as a negative witness |
 | A5 Concurrency | Structured, shared-nothing | `TaskGroup` plus `Send`/region checks. Async syntax exists behind `--unstable-async`. Continuations designed against wasm-gc typed reference lanes, stack switching today, JSPI as an alternate backend | Yes | Real threads deferred, but the representation is chosen for them |
 | A6 Boundary mechanisms | No macros | None a user can invoke: no generation command, no plugin, no build hook among the 25 user-facing CLI commands. `derive` is the only generation and its set is fixed — `Eq`, `Ord`, `Show`, `Hash`, `Default`, none of them serialization. Values cross the boundary through a dynamic `Json::` API (`stringify: (Any) -> String`), with no typed mapping either way. The compiler generates WIT from declarations | — | — |
-| A7 Hidden operations | Not claimed either way | Perceus reference counting is inserted, monomorphization runs, ungranted capabilities are eliminated. Each is documented in its own file; there is no single inventory. The cheatsheet's measured-pitfalls section covers part of the ground from the other side, recording observed behaviour rather than compiler steps | — | Gap, not a decision |
+| A7 Hidden operations | Not claimed either way | Perceus reference counting is inserted, monomorphization runs, ungranted capabilities are eliminated. Each is documented in its own file; nothing under `docs/` names an inventory of them. The cheatsheet's measured-pitfalls section covers part of the ground from the other side, recording observed behaviour rather than compiler steps | — | Gap, not a decision |
 
 ### The self-application cross-check
 
@@ -95,7 +105,7 @@ from the subset that is frozen.
 
 | Kind | What | Externality | Contender | Wins |
 | --- | --- | --- | --- | --- |
-| C1 Artifact | None outside the toolchain. Editor integrations (tree-sitter, VS Code, Zed), a JS/wasm embedding client, and the LSP all serve vibe itself | — | — | — |
+| C1 Artifact | None outside the toolchain, across `examples/`, `tools/`, `clients/` and `integrations/`: editor integrations (tree-sitter, VS Code, Zed), a JS/wasm embedding client, and the LSP all serve vibe itself | — | — | — |
 | C2 Method | `docs/pl-survey-2026-07.md` — a PL survey that reads primary sources, tabulates implications per topic, and turns them into prioritized adoption proposals carrying landed status | High | Reading papers without a decision trail | Yes |
 | C2 Method | `eval/` — five evaluation loops: `msr`, `lang-review` (rubric-based design review), `lang-bench`, `call-style`, `book-review` | High | — | — |
 | C2 Method | "Documents rot; delete them", the ADR log rules, and the gate registry with per-gate self-tests | High | Status banners and an append-only decision log | Yes |
