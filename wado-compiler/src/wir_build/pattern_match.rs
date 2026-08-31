@@ -7,7 +7,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::NirLiteralPattern;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
@@ -394,7 +394,6 @@ impl FunctionTranslator<'_, '_> {
                     // avoid emitting `drop` after instructions that produce no value
                     // (e.g. `Block{result: None}` from LabeledBlock fusion).
                     if !self.is_stackless_type(self.operand_type_id(arm.body))
-                        && self.operand_type_id(arm.body) != TypeTable::NEVER
                         && instr.produces_stack_value()
                     {
                         WirInstr::Drop(Box::new(instr))
