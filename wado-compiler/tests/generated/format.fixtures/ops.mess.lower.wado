@@ -5666,10 +5666,11 @@ fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bo
 }
 
 fn abs_to_u64(val: i64) -> u64 {
-    if (val >= 0) {
-        return val as u64;
-    }
-    return (-(val + 1) as u64 + 1);
+    return if (val < 0) {
+        (0 - val);
+    } else {
+        val;
+    } as u64;
 }
 
 fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
@@ -5879,11 +5880,7 @@ pub fn i32::min(a: i32, b: i32) -> i32 {
 
 fn i32::fmt_decimal(self: Box<i32>, f: &mut Formatter) {
     let is_negative: bool = (self.value < 0);
-    let abs_val: u64 = if is_negative {
-        (0 - self.value as i64);
-    } else {
-        self.value as i64;
-    } as u64;
+    let abs_val: u64 = "core::prelude/primitive.wado::abs_to_u64"(self.value as i64);
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(abs_val);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(is_negative, String { repr: packed"", used: 0 }, digit_count);
     "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, abs_val, digit_count);
@@ -5936,11 +5933,7 @@ pub fn "u32^core:prelude/traits.wado/FromStr::from_str"(s: &String) -> Result<u3
 fn i64::fmt_decimal(self: Box<i64>, f: &mut Formatter) {
     let value: i64 = self.value;
     let is_negative: bool = (value < 0);
-    let abs_val: u64 = if is_negative {
-        (0 - value);
-    } else {
-        value;
-    } as u64;
+    let abs_val: u64 = "core::prelude/primitive.wado::abs_to_u64"(value);
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(abs_val);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write"(is_negative, String { repr: packed"", used: 0 }, digit_count);
     "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, abs_val, digit_count);

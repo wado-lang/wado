@@ -1102,14 +1102,16 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let abs_val: u64;
     let digit_count: i32;
     let offset: i32;
+    let val_6: i64;
     let n: i32;
     let t: u64;
-    let _av_10: i32;
-    is_negative = local.tee _av_10(self.value) < 0;
-    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(_av_10), builtin::i64_extend_i32_s(_av_10));
-    digit_count = __inline_count_digits_u64_0: block -> i32 {
+    let _av_11: i32;
+    is_negative = local.tee _av_11(self.value) < 0;
+    val_6 = builtin::i64_extend_i32_s(_av_11);
+    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
+    digit_count = __inline_count_digits_u64_1: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_u64_0: 1;
+            break __inline_count_digits_u64_1: 1;
         }
         n = 0;
         t = abs_val;
@@ -1121,7 +1123,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
                 continue l50;
             };
         };
-        break __inline_count_digits_u64_0: n;
+        break __inline_count_digits_u64_1: n;
     };
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_4, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, abs_val, digit_count);
