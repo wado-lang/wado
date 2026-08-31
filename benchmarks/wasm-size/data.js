@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788209516890,
+  "lastUpdate": 1788210730037,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52173,6 +52173,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 281515,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99ceeffdf286f05a679deaf0fbb9c68399b9fbf5",
+          "message": "Merge pull request #1931 from wado-lang/claude/gale-scan-guard-duplication-8hqg4w\n\nfix(gale): decide a group once, from one classification",
+          "timestamp": "2026-09-01T05:39:35+09:00",
+          "tree_id": "f3d2cb6bac362286cf0e6a3d63c99e16848442a6",
+          "url": "https://github.com/wado-lang/wado/commit/99ceeffdf286f05a679deaf0fbb9c68399b9fbf5"
+        },
+        "date": 1788210729075,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2026,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6425,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19611,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 278038,
             "unit": "bytes"
           }
         ]
