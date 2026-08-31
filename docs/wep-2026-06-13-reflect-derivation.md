@@ -7,10 +7,11 @@ derivation — built-in `Inspect` / serde / `Default`, Jade's `JsonSchema`,
 user-written ones — is a generic library `impl`, static and monomorphized. No
 per-capability synthesizer, no macros, no dynamic reflection.
 
-The two are exposed separately, because they answer to different rules:
-structure through a sealed trait per kind, gated on every member being visible;
-identity through `TypeInfo`, gated on nothing, since naming a type reveals
-nothing about what is inside it.
+The two are exposed as one family in two layers, because they answer to
+different rules: identity through the root trait `Reflect`, which every nameable
+type satisfies; structure through a sealed sub-trait per kind, gated on every
+member being visible. Naming a type reveals nothing about what is inside it, so
+the gate belongs to the kinds alone.
 
 Two channels serve a derivation: a payload pack (`FieldTypes` / `CasePayloads`)
 binds the per-member type variables `..F` / `..P` and drives the value-free
@@ -30,12 +31,19 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: SomeTrait> SomeTrait for T {
 
 ## Reflection traits
 
-One sealed, `internal`, compiler-synthesized trait per type kind, reached only
-through the trait-qualified form (`ReflectStruct::<T>::…`, never `T::…`) so a type's own
-method namespace stays the author's. A user `impl` is a compile error, and the
-traits are callable only in monomorphized contexts (`T` a concrete type).
-Reflection stays split by kind: a type is exactly one kind, so blanket impls over
-different kinds are disjoint.
+One sealed, `internal`, compiler-synthesized root — `Reflect`, carrying a type's
+identity — and one sub-trait per type kind under it, carrying that kind's
+structure. All are reached through the trait-qualified form
+(`ReflectStruct::<T>::…`, never `T::…`) so a type's own method namespace stays
+the author's. A user `impl` is a compile error, and the traits are callable only
+in monomorphized contexts (`T` a concrete type). Structure stays split by kind: a
+type is exactly one kind, so blanket impls over different kinds are disjoint.
+
+A kind bound carries the root with it — [Super Traits](./wep-2026-07-27-super-traits.md) expands a declared bound to the
+transitive closure of its supertraits — so a derivation that binds
+`T: ReflectStruct` names its subject without asking for anything more, while a
+consumer that only names binds `T: Reflect` and admits every nameable type,
+reflected kind or not.
 
 Every kind that has members spells its member channel the same way: `type
 Members` plus `fn members()`. A kind that has payloads adds a payload pack
@@ -49,47 +57,47 @@ are the bidirectional `From` the compiler already generates for it ([Conversion 
 neither a member channel nor a bridge of its own.
 
 ```wado
-internal trait ReflectStruct {                    // struct
+internal trait Reflect {                         // identity — every nameable type
+    fn type_name() -> String;                    // the declaration's name
+    fn type_info() -> TypeInfo;                  // + module + this instantiation's args
+}
+
+internal trait ReflectStruct: Reflect {          // struct
     type FieldTypes;                             // payload pack [F_0, F_1, …]
     type FieldSlots;                             // [Option<F_0>, …]
     type Members;                                // [StructField<Self, F_0>, …]
     fn members() -> Self::Members;
     fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
     fn defaults() -> Self::FieldSlots;           // declared `f: T = expr` per field
-    fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
-internal trait ReflectVariant {                  // variant
+internal trait ReflectVariant: Reflect {         // variant
     type CasePayloads;                           // payload pack [P_0, …]; unit cases are ()
     type Members;                                // [VariantCase<Self, P_0>, …]
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
-    fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
 
-internal trait ReflectEnum {                     // enum
+internal trait ReflectEnum: Reflect {            // enum
     type Members;                                // [EnumCase<Self>, …]
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
     fn from_discriminant(disc: i32) -> Option<Self>;
-    fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
 
-internal trait ReflectFlags {                    // flags
+internal trait ReflectFlags: Reflect {           // flags
     type Members;                                // [FlagsBit<Self>, …]
     fn members() -> Self::Members;
     fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
-    fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
 
-internal trait ReflectNewtype {                  // newtype
+internal trait ReflectNewtype: Reflect {         // newtype
     type Base;                                   // `type UserName = String` → String
-    fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
 ```
@@ -195,12 +203,11 @@ declaration's name and module, plus the instantiation's type arguments, each
 itself a `TypeInfo`.
 
 ```wado
-/// Sealed: fields private, minted only by `of`, and not itself reflectable.
+/// Sealed: fields private, minted only by `type_info()`, and not itself
+/// reflectable.
 pub struct TypeInfo { … }
 
 impl TypeInfo {
-    pub fn of<T>() -> TypeInfo;                // the whole surface: no bound
-
     pub fn name(&self) -> String;              // "Pair"
     pub fn module(&self) -> String;            // "core:collections" / "./pair.wado"
     pub fn type_args(&self) -> List<TypeInfo>; // [String, i32] for Pair<String,i32>
@@ -208,16 +215,19 @@ impl TypeInfo {
 }
 ```
 
-`of` takes no bound, and that is the design: naming a type is not enumerating
-one. A `Reflect*` bound would gate a name behind [Visibility](#visibility) —
-every member visible — so a type whose fields are private (`TreeMap<String,i32>`)
-could not be named by the very library that must key it. It would also force a
-derivation to widen its own bound just to name its subject, which is what a
-schema library's `impl<T: Constrained> JsonSchema for T` cannot afford: adding
-`ReflectNewtype` there would shut out the struct wrapper a type reaches for when
-its invariant must hold against in-process construction. Kinds keep their
-`type_name()`, the allocation-free shorthand serde's `begin_struct` calls,
-defined as `TypeInfo::of::<T>().name()`.
+Identity sits on the root rather than on each kind, which is what lets a type be
+named without being opened. A kind bound would gate a name behind
+[Visibility](#visibility) — every member visible — so a type whose fields are
+private (`TreeMap<String,i32>`) could not be named by the very library that must
+key it; and it would force a derivation to widen its own bound to a kind just to
+name its subject, which a schema library's `impl<T: Constrained + Reflect>
+JsonSchema for T` must not do, since a constrained type may be a newtype or the
+struct wrapper a type reaches for when its invariant must hold against
+in-process construction. `Reflect` admits both.
+
+`type_name()` sits beside `type_info()` on the root: it is the allocation-free
+shorthand serde's `begin_struct` calls, and it answers exactly
+`type_info().name()`.
 
 The parts are the identity; `canonical_name()` renders them in the canonical
 register of [Symbol Notation](./wep-2026-06-14-symbol-notation.md) (`MODULE`
@@ -232,8 +242,9 @@ the compiler already renders internally, and a type with none is written bare.
 
 ### What can be named
 
-Every type that carries a name of its own: the five reflected kinds, and the
-tuple family.
+The types `Reflect` is synthesized for: the five kinds, and the tuple family.
+Naming an unnameable type is therefore an unsatisfied `T: Reflect`, reason-chained
+like any other bound, rather than a special case buried in an intrinsic.
 
 A tuple is anonymous but not homeless — the prelude declares `pub type [...T];`
 to own the family ([Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) §3), and that anchor is
@@ -244,9 +255,9 @@ sit between the brackets rather than after the name, so `canonical_name()` reads
 `core:prelude#[i32,String]`. Unit is that family at arity zero,
 `core:prelude#()`.
 
-Known gap: a resource, a function type, and a reference cannot be named, and
-naming one is a compile error at the call site rather than a name the design
-invents. A resource's identity is a Component Model coordinate
+A resource, a function type, and a reference carry no `Reflect` impl, rather
+than a name the design invents. A resource's identity is a Component Model
+coordinate
 (`wasi:io/streams.input-stream`), not a module symbol, so it waits on the CM
 naming rules; the two structural types have no owning declaration to anchor to at
 all. No consumer needs them yet — a schema library inlines a tuple's schema and
@@ -256,7 +267,8 @@ never keys a handle.
 
 `type_args()` hands back an owned `List`, not a view. A view would be `Slice<T>`,
 which holds an `&Array<T>` and so obliges its producer to name what it borrows in
-a `stores` clause — and `of` takes no argument to name. The copy a `List` would
+a `stores` clause — and what a constant tree borrows is a static global, which a
+`stores` clause has no way to name. The copy a `List` would
 seem to cost is the one [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md) already removes
 for `members()`: the whole tree is a closed constant expression, so the call is
 hoisted to a static global and read from there.
@@ -323,9 +335,10 @@ This is what keeps an abstraction like `TreeMap` out of a downstream
 `T: ReflectStruct` without naming it: its fields are private, so nothing outside
 its module can enumerate them.
 
-The gate is on enumeration alone. A type's name and module are public the moment
-the type is, so [`TypeInfo`](#type-identity) answers for `TreeMap<String,i32>`
-the same as for any other type — which is why it carries no reflection bound.
+The gate is on the kind traits alone, never on the root. A type's name and module
+are public the moment the type is, so `TreeMap<String,i32>` satisfies `Reflect`
+downstream and [answers for its identity](#type-identity) like any other type,
+while `ReflectStruct` still refuses to enumerate it.
 
 ## Generic types
 
@@ -345,7 +358,7 @@ monomorphizing, which is exactly when the instance appears.
 
 `type_name()` is the declared name (`"Pair"`, not `"Pair<String>"`), matching
 the plain-struct case and Rust's `{:?}`. The instantiation shows in
-`TypeInfo::of::<T>()` instead: one declaration name and module for every
+`Reflect::<T>::type_info()` instead: one declaration name and module for every
 `Pair<…>`, with `type_args()` substituted per instance, so a consumer keying
 `$defs` separates `Pair<String>` from `Pair<i32>` (see [Type identity](#type-identity)).
 
@@ -415,12 +428,13 @@ library reads and nothing else yet does.
   four kinds, so a newtype is seen as its base and a derivation that must treat
   it as itself has no handle. `Inspect` shows the fact is not missing from the
   compiler — it renders the `as Name` tag today — only the surface is.
-- `TypeInfo` is designed above and unimplemented. Nothing in the tree needs a new
-  mechanism — it is a sealed handle minted like a member, and the call form
-  (`TypeInfo::of::<T>()`) already resolves — but the body is per-instantiation,
-  so it follows `type_name()`'s synthesis path, where the resolved subject
-  already carries the three facts it needs (its base name, module, and type
-  arguments).
+- `Reflect` and `TypeInfo` are designed above and unimplemented. Nothing in the
+  tree needs a new mechanism — `TypeInfo` is a sealed handle minted like a
+  member, and the root trait resolves through the same `Trait::<T>::method()`
+  path the kinds already take — but the body is per-instantiation, so it follows
+  `type_name()`'s synthesis path, where the resolved subject already carries the
+  three facts it needs (its base name, module, and type arguments). Moving
+  `type_name()` from the five kinds to the root is part of the same change.
 - A derivation reached through a bound-keyed blanket does not fire for a newtype
   whose base has its own impl
   ([#1932](https://github.com/wado-lang/wado/issues/1932)). Both fixes are
