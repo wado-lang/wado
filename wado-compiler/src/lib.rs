@@ -95,7 +95,7 @@ pub use effect_check::{
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
-pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_with_line};
+pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
 pub use module_source::ModuleSource;

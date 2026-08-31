@@ -87,9 +87,12 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         self.parses.borrow_mut().extend(parses);
     }
 
-    /// The file a span's own parse indexes, if that parse is a loaded module.
+    /// The file a span's own parse indexes, if that parse is a loaded module
+    /// with a loadable path. A synthetic entry (`<stdin>`, `<entry>`) has none,
+    /// and answering with its empty path would blank a file the caller knew.
     fn file_of_parse(&self, space: crate::ast::AstIdSpace) -> Option<String> {
-        Some(self.parses.borrow().get(&space)?.source_path())
+        let file = self.parses.borrow().get(&space)?.source_path();
+        (!file.is_empty()).then_some(file)
     }
 
     /// Access the underlying `CompilerHost` for callers that need to

@@ -4,8 +4,8 @@
 // The lexer is *resilient*: malformed input never aborts tokenisation. Every
 // byte of the source is accounted for as a token, comment, whitespace,
 // shebang, or data-section content, and lex errors are surfaced alongside a
-// best-effort token stream via [`LexResult`]. The recommended entry points
-// are the free functions [`lex`] and [`lex_with_line`].
+// best-effort token stream via [`LexResult`]. The entry points are the free
+// functions [`lex`] and [`lex_in`].
 
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
@@ -32,12 +32,6 @@ pub fn lex(source: &str) -> LexResult {
 /// template interpolation is part of the file its template sits in.
 pub fn lex_in(source: &str, space: crate::ast::AstIdSpace) -> LexResult {
     Lexer::new(source).run().in_space(space)
-}
-
-/// Like [`lex_in`] but starts numbering lines at `start_line` — used by the
-/// parser when re-lexing the inside of a template-string interpolation.
-pub fn lex_with_line(source: &str, start_line: usize, space: crate::ast::AstIdSpace) -> LexResult {
-    Lexer::with_line(source, start_line).run().in_space(space)
 }
 
 /// Lex an interpolation's expression source, positioned on the file it came
@@ -280,22 +274,6 @@ impl<'a> Lexer<'a> {
             chars: input.char_indices().peekable(),
             pos: 0,
             line: 1,
-            column: 1,
-            data_section: None,
-            data_section_span: None,
-            comments: Vec::new(),
-            shebang: None,
-            errors: Vec::new(),
-        }
-    }
-
-    /// Like `new`, but starts numbering lines at `line`.
-    fn with_line(input: &'a str, line: usize) -> Self {
-        Self {
-            input,
-            chars: input.char_indices().peekable(),
-            pos: 0,
-            line,
             column: 1,
             data_section: None,
             data_section_span: None,
