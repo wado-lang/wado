@@ -874,23 +874,17 @@ Drop this writable end handle. Traps if no value has been written yet.
 ### `pub resource Stream<T>`
 
 Readable end of an async sequence (WASI Component Model stream).
-Opaque i32 handle managed by the runtime.
-
-Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
+`Stream::<T>::new()` creates the `[Stream<T>, StreamWritable<T>]` pair.
 
 #### `fn new() -> [Stream<T>, StreamWritable<T>]`
 
-Create a new stream pair: [Stream<T>, StreamWritable<T>].
-
 #### `fn read(&self, max: i32) -> StreamChunk<T>`
 
-Copy up to `max` elements out of the stream, blocking until at least one
-arrives or the writable end drops.
-
-One Component Model copy: it can return fewer elements than asked for,
-and a `Dropped` result can carry elements of its own. Reading an end
-whose result was `Dropped` traps, so a loop breaks on the result, not on
-an empty chunk. `read_to_end` is that loop.
+One Component Model copy of up to `max` elements, blocking until at
+least one arrives or the writable end drops. A `Dropped` result can
+carry elements of its own, and reading an end whose result was `Dropped`
+traps, so a loop breaks on the result, never on an empty chunk.
+`read_to_end` is that loop.
 
 #### `fn cancel_read(&self)`
 
@@ -909,15 +903,12 @@ offering nothing this time, and more can still follow.
 ### `pub resource StreamWritable<T>`
 
 Writable end of an async sequence (WASI Component Model stream).
-Opaque i32 handle managed by the runtime.
 
 #### `fn write(&self, data: List<T>) -> StreamWrite`
 
-Copy `data` into the stream, blocking until the reader takes at least
-one element or drops.
-
-One Component Model copy: the reader may take a prefix, so the returned
-count can be short of `data.len()`. Writing to an end whose result was
+One Component Model copy of `data`, blocking until the reader takes at
+least one element or drops. The reader may take a prefix, so the count
+can be short of `data.len()`. Writing to an end whose result was
 `Dropped` traps, and an empty `data` is the CM's readiness signal, which
 blocks until a reader rendezvouses rather than writing nothing.
 `write_all` is the loop that finishes the buffer.
