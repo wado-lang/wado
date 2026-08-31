@@ -95,6 +95,7 @@ s : 'k' ( A | {x();} | B ) EOF ;
 A : 'a' ;
 B : 'b' ;
 ";
+    assert !has_unsupported_action(&gen_diagnostics(src)), "a plain action on an empty alternative must not warn";
     let out = gen_source(src);
     assert out.contains("grp_kind == TK_EOF"), `the empty alternative must test the follow set: ${out}`;
     assert out.contains("no viable alternative"), `a lookahead no alternative admits must report: ${out}`;

@@ -11,7 +11,11 @@
 //   outer `?` does not loop, so the inner loop's preference carries, and the
 //   outer's preference to skip points the same way and composes with it.
 //
-// The jar accepts every input below for every spelling.
+// The `'e'` arm carries no greediness: `(('x' | ))?` is the nested
+// empty-alternative fold, and two skip preferences compose into one.
+//
+// The jar accepts every input in `driver_cst_nested_repeat_greedy_test.wado`,
+// for every spelling here.
 grammar NestedRepeatGreedy;
 
 s : 'a' ('x'+?)+ 'x' EOF

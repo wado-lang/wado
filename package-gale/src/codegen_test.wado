@@ -1401,13 +1401,6 @@ test "ATN-class LR grammar keeps the decoder's LR tables" {
     assert str_contains(&output, &"\", true);");
 }
 
-fn find_index(haystack: &String, needle: &String) -> i32 {
-    return match haystack.find(*needle) {
-        Some(idx) => idx,
-        None => -1,
-    };
-}
-
 fn count_substr(haystack: &String, needle: &String) -> i32 {
     let mut n = 0;
     let mut at = find_substr(haystack, needle);
@@ -1599,9 +1592,10 @@ test "the overlap rule dispatch orders its fallback last too" {
     let mut g = parse(RULE_OVERLAP_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_x__inner(");
-    let empty_arm = find_index(&body, &"if true");
-    let a_arm = find_index(&body, &"if kind == TK_A");
+    let empty_arm = find_substr(&body, &"if true");
+    let a_arm = find_substr(&body, &"if kind == TK_A");
     assert a_arm >= 0, `the A-led alternatives lost their arm: ${body}`;
+    assert empty_arm >= 0, `the empty alternative lost its arm: ${body}`;
     assert empty_arm > a_arm, `the empty alternative runs before A can be tested: ${body}`;
 }
 
@@ -1621,8 +1615,8 @@ test "a nullable alternative with a first set keeps its index" {
     let mut g = parse(NULLABLE_BUT_SELECTABLE_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_r__inner(");
-    let opt_arm = find_index(&body, &"scope:");
-    let b_arm = find_index(&body, &"kind == TK_B");
+    let opt_arm = find_substr(&body, &"scope:");
+    let b_arm = find_substr(&body, &"kind == TK_B");
     assert opt_arm >= 0, `the nullable alternative lost its arm: ${body}`;
     assert b_arm < 0 || opt_arm < b_arm, `a nullable alternative is not the trailing arm: ${body}`;
 }
@@ -1662,8 +1656,8 @@ test "the op walker keeps an alternative open-ended through a rule in place" {
     let mut g = parse(OP_INDIRECT_WILDCARD_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_e__inner(");
-    let wild_arm = find_index(&body, &"_parse_w(p)");
-    let named_arm = find_index(&body, &"_gk == TK_A");
+    let wild_arm = find_substr(&body, &"_parse_w(p)");
+    let named_arm = find_substr(&body, &"_gk == TK_A");
     assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
     assert named_arm < 0 || wild_arm < named_arm, `it was demoted behind a later alternative: ${body}`;
 }
@@ -1675,8 +1669,8 @@ test "an alternative open-ended through a rule keeps its index too" {
     let mut g = parse(INDIRECT_WILDCARD_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
-    let wild_arm = find_index(&body, &"scope:");
-    let named_arm = find_index(&body, &"TK_A");
+    let wild_arm = find_substr(&body, &"scope:");
+    let named_arm = find_substr(&body, &"TK_A");
     assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
     assert named_arm < 0 || wild_arm < named_arm, `it was moved past a later alternative: ${body}`;
 }
@@ -1689,8 +1683,8 @@ test "a wildcard alternative keeps its index against a narrower one" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
     // A rule's unconditional arm is a bare `scope:` block, not `if true`.
-    let wild_arm = find_index(&body, &"scope:");
-    let named_arm = find_index(&body, &"TK_A");
+    let wild_arm = find_substr(&body, &"scope:");
+    let named_arm = find_substr(&body, &"TK_A");
     assert wild_arm >= 0, `the wildcard alternative lost its arm: ${body}`;
     assert named_arm < 0 || wild_arm < named_arm, `the wildcard alternative was moved past a later one: ${body}`;
 }
@@ -1713,7 +1707,7 @@ test "an open-ended alternative still contributes the first set it does have" {
     let mut g = parse(OPEN_ENDED_WITH_FIRST_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let both = "global SYNC_0: List<i32> = [TK_A, TK_B];";
-    assert find_index(&output, &both) >= 0, `expected ${both}, got: ${output}`;
+    assert find_substr(&output, &both) >= 0, `expected ${both}, got: ${output}`;
 }
 
 test "a rule's empty alternative does not shadow the ones after it" {
@@ -1723,9 +1717,10 @@ test "a rule's empty alternative does not shadow the ones after it" {
     let mut g = parse(RULE_LEVEL_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_x__inner(");
-    let empty_arm = find_index(&body, &"scope:");
-    let b_arm = find_index(&body, &"TK_B");
+    let empty_arm = find_substr(&body, &"scope:");
+    let b_arm = find_substr(&body, &"TK_B");
     assert b_arm >= 0, `alt B is missing: ${body}`;
+    assert empty_arm >= 0, `the empty alternative lost its arm: ${body}`;
     assert empty_arm > b_arm, `the empty alternative runs before B can be tested: ${body}`;
 }
 

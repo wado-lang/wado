@@ -21,7 +21,10 @@ use {
 use { dedup_append_arr } from "./gen_util.wado";
 
 /// One branch of a decision: what admits it, the predicate gating it, and the
-/// alternatives it holds. `alts` are slots in the partition's index space.
+/// alternatives it holds. `alts` are in the index space of whatever the
+/// branches were built over — partition slots from `class_decision_branches`,
+/// and `DispatchBranch.alt_index` from `direct_dispatch_branches`, which an LR
+/// atom's dispatch numbers by the rule's own alternatives.
 pub struct DecisionBranch {
     pub test: Admits,
     /// Rendered `&& (…)` suffix, empty where the branch has no predicate.

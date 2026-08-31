@@ -36,4 +36,6 @@ test "prediction that cannot pick reports a no-viable-alternative" {
 
     let bad = pfc::parse(&"q a a");
     assert bad.has_errors(), "neither alternative can match `a a`";
+    let code = bad.diagnostics[0].code;
+    assert code matches { NoViableAlternative }, `prediction picked nothing, so no alternative is viable: ${code.name()}`;
 }
