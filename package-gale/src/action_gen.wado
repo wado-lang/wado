@@ -850,9 +850,8 @@ fn mark_gate_predicate(a: &AltAction, ctx: &mut GenContext) {
     need_predicate_fn(a, ctx);
 }
 
-/// The half of that a renderer owes whatever else is true: a condition naming
-/// `pred_<id>` needs the fn to exist. Separate from marking the predicate
-/// *answered*, which only a condition that really requires it may claim.
+/// The half every renderer owes: a condition naming `pred_<id>` needs the fn
+/// emitted, whether or not that condition answers the predicate.
 fn need_predicate_fn(a: &AltAction, ctx: &mut GenContext) {
     if body_needs_no_translator(&a.source.text, ctx) {
         ctx.register_predicate_fn(a.source.action_id, &a.source.text);
@@ -860,9 +859,8 @@ fn need_predicate_fn(a: &AltAction, ctx: &mut GenContext) {
 }
 
 /// Record that `alt`'s alt-initial predicates are answered by a condition the
-/// caller has emitted. Split out of `alt_gate_and_suffix` for the caller that
-/// must render the gate first and only then find out whether its condition
-/// requires it — see `group_admits`.
+/// caller has emitted — for one that can only tell after rendering it
+/// (`group_admits`).
 pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut GenContext) {
     if !ctx.emit_actions() {
         return;
@@ -888,10 +886,8 @@ pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut GenContext) -> String {
     return ` && ${join_gate_conds(&conds)}`;
 }
 
-/// The same suffix and the same `pred_<id>` fn, but without claiming the
-/// predicate is *answered* — for a caller that cannot know that until it has
-/// assembled the whole condition. It marks with `mark_alt_gate_answered` once
-/// it does.
+/// The same suffix and `pred_<id>` fn without claiming the predicate answered;
+/// the caller marks it with `mark_alt_gate_answered` once it can tell.
 pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut GenContext) -> String {
     if !ctx.emit_actions() {
         return String::new();

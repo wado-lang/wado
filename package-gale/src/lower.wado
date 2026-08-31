@@ -434,10 +434,8 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             walk_scan_element_for_kind_sets(&r.body, ctx);
         },
         Group(g) => {
-            // The very branches `gen_scan_op_group` renders, not a second
-            // derivation of them: a branch whose test emit renders from a kind
-            // set this walker did not intern references an id that does not
-            // exist.
+            // The very branches `gen_scan_op_group` renders: a test rendered
+            // from a set this walker did not intern references no id.
             for let b of &scan_decision_branches(&g) {
                 if let Kinds(tokens) = &b.test {
                     if tokens.len() >= 2 {
@@ -1702,15 +1700,11 @@ fn build_overlap_dispatch(
     let n_indices = indices.len();
     assert n_classes == n_indices, `${owner.label()}: classes is parallel to indices, not to alts (${n_classes} vs ${n_indices})`;
 
-    // Whether the alternatives overlap is `compute_overlap_groups_of`'s to
-    // answer, the same as for every emitted decision: a branch holding more
-    // than one alternative is exactly an overlap. Asking it separately here is
-    // what let a dispatch be Direct over alternatives the emit chain then
-    // partitioned together.
+    // Overlap is `compute_overlap_groups_of`'s answer, as at every emitted
+    // decision: a branch of more than one alternative is exactly an overlap.
     let disjoint = !compute_overlap_groups_of(classes).iter_ref().any(|g: &List<i32>| g.len() > 1);
-    // An open-ended alt's static first set is empty, so a pairwise test reads
-    // it as disjoint and the Direct chain would give it an unreachable
-    // empty-token branch. Its real first set is universal.
+    // An open-ended alt reads as disjoint by its static set, and a Direct
+    // chain would give it an unreachable empty-token branch.
     if disjoint && !any_open_ended(classes) {
         let mut branches: List<DispatchBranch> = [];
         for let mut k = 0; k < indices.len(); k += 1 {
@@ -2017,10 +2011,8 @@ fn lower_general_scan_group(
 }
 
 /// The scan group a `GroupOp` carries: the bodies lower built, paired here —
-/// and only here — with the classification lower made. Given the bodies alone,
-/// emit built its own `ScanGroupElement`, classified the alternatives a second
-/// time and dropped `empty_alt_admits`; a value it can only read is what makes
-/// that unwritable rather than merely wrong.
+/// and only here — with the classification lower made, so emit can only read
+/// it (invariant 9).
 fn group_op_scan_group(
     bodies: &List<ScanBody>,
     alts: &List<Alternative>,
@@ -2030,11 +2022,8 @@ fn group_op_scan_group(
     assert bodies.len() == alts.len(), "one scan body per alternative";
     let mut classes = alt_classes_of(alts, ctx);
     apply_empty_alt_admits(&mut classes, empty_alt_admits);
-    // Strict, and not `scan_group_lenient`'s answer: this copy is scanned only
-    // by the optional's entry guard, which cannot rewind and call it a match.
-    // Computing the other answer beside a reader that overrides it is two
-    // values for one property — the shape this whole change removes — so the
-    // field says what is read.
+    // Strict, not `scan_group_lenient`'s answer: this copy is scanned only by
+    // the optional's entry guard, which cannot rewind and call it a match.
     let lenient = false;
     return ScanGroupElement { alts: *bodies, lenient, alt_classes: classes };
 }
@@ -2072,16 +2061,12 @@ fn scan_group_is_nullable(alts: &List<Alternative>, ctx: &mut GenContext) -> boo
     return false;
 }
 
-/// What one iteration of a repeat's body admits. An empty first set means two
-/// opposite things and only the element says which: `.` and `~X` have none
-/// because no set enumerates every token, and they fire on any token there is;
-/// a body that derives only epsilon has none because nothing fires it. Emit
-/// used to read the emptiness, so `.?` scanned nothing while `A?` scanned one.
+/// What one iteration of a repeat's body admits: every token for a body
+/// reaching `.` or `~X`, nothing for one deriving only epsilon.
 fn repeat_inner_admits(inner: &Element, inner_first: &List<String>, ctx: &mut GenContext) -> Admits {
     let mut visiting: List<String> = [];
     if ctx.element_reaches_open_end(inner, &mut visiting) {
-        // The walk's set is kept, not discarded: it is a subset of what the
-        // body admits, and the repeat-exit probe needs a set to gate on.
+        // The enumerated subset is kept: the repeat-exit probe gates on it.
         return Admits::Everything(*inner_first);
     }
     return admits_or_untestable(inner_first);
@@ -3216,8 +3201,7 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -
         });
     }
     // A SimpleCst alternative is one rule call, and the rule it calls can be
-    // open-ended — asserting that none is here is what let the scan partition
-    // this group differently from the parse.
+    // open-ended, so the classification is asked for rather than assumed.
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
@@ -3240,18 +3224,10 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
 }
 
-/// An alternative that can match nothing, so what follows the group selects
-/// it. Whether it can is `alt_class`'s answer, not a nullability walk of this
-/// site's own: written empty is one spelling, `A?` is another and reaching a
-/// rule that is nullable is a third, and a site that recognised only some of
-/// them disagreed with the classification the dispatch was built from.
-///
-/// One carrying a gateable alt-initial predicate is selected by that predicate
-/// instead, so it keeps the unconditional branch the gate hangs on. The gate
-/// has to be one emit will render: with actions retained but not emitted
-/// `alt_gate_and_suffix` produces nothing, and an alternative held back from
-/// its follow set here would then be the dispatch's unconditional `else`,
-/// swallowing a lookahead the group cannot match.
+/// An alternative that can match nothing, so what follows the group selects it
+/// — `alt_class`'s answer, never a nullability walk of this site's own. One
+/// with a gateable alt-initial predicate is selected by the predicate instead,
+/// and keeps the unconditional branch the gate hangs on.
 fn alt_earns_group_follow(alt: &Alternative, ctx: &mut GenContext) -> bool {
     if ctx.emit_actions() && alt_has_gate(alt, ctx) {
         return false;
@@ -3259,23 +3235,16 @@ fn alt_earns_group_follow(alt: &Alternative, ctx: &mut GenContext) -> bool {
     return alt_class_is_nullable(&alt_class_of(alt, ctx));
 }
 
-/// The admit set of a group's empty alternative, or `null` where there is
-/// nothing to write: no alternative is empty, or the suffix is nullable and
-/// what may follow the group belongs to the caller. An empty alternative has
-/// no first set to be selected by; what selects it is `outer_follow`, and
-/// where that is unknown it admits whatever the branches before it did not —
-/// which is the empty first set it already has.
+/// The admit set of a group's nullable alternative — `outer_follow`, what
+/// selects it — or `null` where there is none to write.
 pub fn group_empty_alt_admits(
     alts: &List<Alternative>,
     outer_follow: &List<String>,
     follow_is_exact: bool,
     ctx: &mut GenContext,
 ) -> Option<EmptyAltAdmits> {
-    // A follow set the caller's FOLLOW still extends names only part of what
-    // may select the empty alternative. Writing that part in as the whole set
-    // makes the dispatch reject every lookahead the caller could supply, so an
-    // inexact answer is no answer: the alternative admits whatever the
-    // branches before it did not.
+    // An inexact follow set is no answer: written in as the whole set it makes
+    // the dispatch reject every lookahead the caller could still supply.
     if !follow_is_exact || outer_follow.is_empty() {
         return null;
     }
@@ -3287,14 +3256,9 @@ pub fn group_empty_alt_admits(
     return null;
 }
 
-/// Resolve the nullable alternative against what may follow the group, which
-/// lower computed at its position: the follow set joins its own first set, it
-/// does not replace it. `( A? | B ) C` is selected by `a` because the
-/// alternative starts with one, and by `c` because it can also match nothing —
-/// writing only the second in dropped the first.
-///
-/// Both walkers call this with what lower decided, so neither works out again
-/// which alternative earns the set.
+/// Union the group's follow set into the nullable alternative's class — it
+/// joins that alternative's own first set rather than replacing it: `( A? | B ) C`
+/// is selected by `a` and by `c` alike.
 pub fn apply_empty_alt_admits(classes: &mut List<AltClass>, admits: &Option<EmptyAltAdmits>) {
     let e = if let Some(x) = admits {
         x;

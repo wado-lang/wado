@@ -12,9 +12,6 @@
 //                                     viable and its lower index beats `B`.
 //   'm' ( A | | B ) x EOF on `a`    → `A` has a first set that matches and a
 //                                     lower index still, so it beats skipping.
-//
-// Rendering the empty alt's absent first set as an unconditional test is what
-// made every later alternative dead code.
 grammar EmptyAltMid;
 
 s : 'k' ( A | | B ) EOF

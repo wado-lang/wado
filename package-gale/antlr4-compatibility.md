@@ -52,11 +52,9 @@ is not determined is rejected loudly, at the same points ANTLR4 rejects it:
   `check_left_recursion`, ANTLR4 error 119.
 - **An epsilon closure** — a `*` or `+` over a body that can match nothing
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
-  error 153. The loop would never terminate on its own, and no reading of the
-  grammar says how many times it should run. Checked over the merged grammar
-  in `finish_grammar`, for lexer rules as well as parser rules, with the same
-  nullability fixpoint each uses elsewhere. Like its sibling whole-grammar
-  checks the diagnostic carries no span.
+  error 153. Checked over the merged grammar in `finish_grammar`, for lexer
+  rules as well as parser rules. Like its sibling whole-grammar checks the
+  diagnostic carries no span.
 
 ### The Unicode version is Gale's, not the jar's
 
@@ -486,19 +484,10 @@ reads the half that matches its position:
   reports a length the parse will not consume, so the decision that reads the
   measurement is taken on a path that does not exist.
 
-Answering both from one variable is what made the mandatory first iteration
-decline a position it had to take.
-
-Deciding twice is what these sites used to do, by rules that were never the
-same: the entry guard argmaxed over the ambiguous alternatives only, visiting
-concrete before wildcard ones and first-matching the rest, while the
-tournament argmaxed over every alternative in grammar order. Only the
-tournament's answer was ever observable, so it is the one rule now — and the
-guard's concrete-before-wildcard order went with it, since a wildcard
-alternative loses to a concrete one by scan length rather than by iteration
-order (invariant 4's merge is what puts the two in one branch). Testing the
-branch before scanning also drops the scans of alternatives the lookahead
-cannot reach.
+The tournament's rule is the only one: a wildcard alternative loses to a
+concrete one by scan length, not by iteration order (invariant 4's merge is
+what puts the two in one branch). Testing the branch before scanning also
+drops the scans of alternatives the lookahead cannot reach.
 
 **A nullable alternative is admitted by what follows the group, as well as by
 its own first set.** It can match nothing, so the group's local FOLLOW selects
@@ -510,14 +499,13 @@ is nullable in turn, so the answer is the caller's FOLLOW and is not
 statically known; or one admitted by exactly this set. The follow set **joins**
 the alternative's first set rather than replacing it: `( A? | B ) C` is
 selected by `a` because the alternative starts with one and by `c` because it
-can also be skipped, and writing only the second in cost it the first.
+can also be skipped.
 
-**What an alternative matches is one value, `AltClass`, produced once.** Six
-predicates over eighteen sites used to work it out separately — is there a
-wildcard in the elements, is the first set empty, is it nullable, has it no
-elements — and each was right for the spelling its author had in front of them
-and wrong for another, so the two emit walkers partitioned the same group
-differently (invariant 9). `alt_class` in `alt_grouping` is the only producer:
+**What an alternative matches is one value, `AltClass`, produced once.**
+Deriving it per site — is there a wildcard in the elements, is the first set
+empty, is it nullable, has it no elements — gets a different answer per
+spelling, so the two emit walkers partition the same group differently
+(invariant 9). `alt_class` in `alt_grouping` is the only producer:
 
 - `OpenEnded` — `.` or `~X`, written in the alternative or reached through a
   nullable prefix or a rule. Admits every token; no first set names it.
@@ -537,19 +525,17 @@ nothing left to assemble a second classification into.
 A branch of the decision therefore carries what it admits — `Admits`, one of
 `Everything`, `Untestable`, or `Kinds` (never empty) — instead of a rendered
 test, and `kind_check_str` refuses an empty set rather than choosing for the
-caller. An empty token list used to mean both "admits every lookahead" (a
-wildcard alternative) and "has no first set of its own" (an empty
-alternative), and both rendered as `true`: an unconditional arm in the middle
-of the chain, with every later alternative behind a test that can never fail.
-`( A | | B )` never reached `B`.
+caller. An empty token list means both "admits every lookahead" (a wildcard
+alternative) and "has no first set of its own" (an empty alternative), and
+rendering either as `true` puts an unconditional arm mid-chain with every
+later alternative behind a test that can never fail — `( A | | B )` that never
+reaches `B`.
 
 `Admits` lives in the IR, not in the emitter, because lower has to bake one:
 `ScanRepeatElement.inner_admits` is what a scan iteration tests. The same
 empty set means opposite things there — `.?` and `~X?` have no first set
 because none enumerates every token and fire on every token there is, while a
-body deriving only epsilon has none to fire on — so reading the emptiness made
-`.?` scan zero tokens where `A?` scanned one, and the alternative holding it
-lost every tournament its parse side then won.
+body deriving only epsilon has none to fire on.
 
 `Everything` and `Untestable` still render the same `true` and are still not
 the same answer: they differ in whether the arm may keep its place. A wildcard
@@ -557,8 +543,7 @@ admits every token exactly, so the alternatives it shadows are ANTLR4's
 lowest-viable-alternative rule working — `. EOF | A EOF` takes the wildcard on
 `a`. An untestable arm shadows by default rather than by decision, so it is
 the chain's `else` and is emitted last (`fallback_last`), which
-`open_decision_branch` asserts. Ordering the two alike is what briefly cost
-the wildcard its index.
+`open_decision_branch` asserts.
 
 Where the follow set overlaps another alternative's first set the lookahead
 cannot separate them and they share a tournament branch, an empty alternative
@@ -798,10 +783,8 @@ relevant sites.
    predicate holds the scan measures a length the parse will not consume.
    Neither side can be corrected without evaluating the predicate at prediction
    time, which is the gap `warn_unsupported_prediction_predicate` names for the
-   rule-level case. It predates the one-decision refactor (the scan side has
-   never carried gates) and is not diagnosed, because the same shape parses
-   correctly wherever the group is not scanned — which
-   `nested_action_gate_test.wado` pins.
+   rule-level case. Not diagnosed: the same shape parses correctly wherever the
+   group is not scanned, which `nested_action_gate_test.wado` pins.
 10. A viability probe is stamped only where the walk reaches the rule's tail.
     The probe scans the continuation and, when that runs out, conjoins the
     rule's FOLLOW — an answer that is only about the caller if nothing else

@@ -4,9 +4,7 @@
 //
 // `x : . ;` admits every token, so `x? B` has no first set to hold the
 // optional back with — what holds it back is what follows it. Taking the
-// follow set out of "everything" is a negative test, not a smaller set, and
-// subtracting only where the body had a real first set left the scan firing
-// `x?` on the `B` its own suffix needed.
+// follow set out of "everything" is a negative test, not a smaller set.
 //
 //   t : x? B ;   on `b`   → (s (t b))
 //                on `a b` → (s (t (x a) b))

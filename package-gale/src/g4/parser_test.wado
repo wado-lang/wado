@@ -1999,12 +1999,8 @@ test "a non-left-recursive grammar with nullable rules is accepted" {
 }
 
 // Epsilon-closure policy: a `*` / `+` whose body can match the empty string
-// comes round at the same position forever. ANTLR4 rejects it
-// (`error(153): rule r contains a closure with at least one alternative that
-// can match an empty string`), measured against the published jar, so
-// `check_epsilon_closure` rejects it at grammar-check time rather than
-// emitting a loop that cannot terminate. An optional over the same body is
-// not a closure and ANTLR4 accepts it.
+// never leaves the position, so `check_epsilon_closure` rejects it, as ANTLR4
+// does (error 153). An optional over the same body is not a closure.
 
 test "a closure over an empty alternative is rejected" {
     let g = "grammar EP;\nr : ( A B | )+ C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";

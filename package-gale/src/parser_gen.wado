@@ -95,7 +95,6 @@ use {
     OptionalShapeLookaheadStrategy,
     EmptyAltAdmits,
     GroupOp,
-    GroupShape,
     TokenOnlyShape,
     GeneralShape,
     ListLabelOp,
@@ -1682,10 +1681,8 @@ fn repeat_body_implied_by_guard(body: &ScanElement, admits: &Admits) -> bool {
     };
 }
 
-/// The condition one scan iteration tests: in bounds, admitted, and not yielded
-/// to the caller. `Everything` contributes no kind test — a body that matches
-/// any token fires on the token that is there — which is the case a raw first
-/// set could not tell from `Untestable` and so emitted nothing for.
+/// The condition one scan iteration tests: in bounds, admitted, and not
+/// yielded to the caller.
 fn scan_repeat_guard(admits: &Admits, caller_follow_gate: &String, ctx: &mut GenContext) -> String {
     let none: List<String> = [];
     return scan_repeat_guard_excluding(admits, &none, caller_follow_gate, ctx);
@@ -1710,36 +1707,14 @@ fn scan_repeat_guard_excluding(
     return parts.join(" && ");
 }
 
-/// What a repeat's entry or iteration tests on the parse side: the body admits
-/// the lookahead, and there is a token here to admit.
-///
-/// `Everything` is every *token*, and EOF is not one. The scan side has always
-/// known that — its `pos < tokens.len()` bound and the wildcard's own
-/// `tokens[pos] == TK_EOF` check both fail there — so rendering it as `true`
-/// here made the two sides disagree about the same body: `a : x? ;` with
-/// `x : . ;` entered the optional at EOF and reported `expected any token`,
-/// while the scan measured zero. Going through `admits_kinds` first is what
-/// hid it: the empty list it hands back for `Everything` reads as "nothing to
-/// narrow by", which is the *other* meaning this type exists to separate.
-///
-/// Not the reading a rule's empty arm takes — there an absent set means the
-/// arm is not narrowed at all and must still hold at EOF, which is why
-/// `admits_or_everything` stays as it is.
-///
-/// `Untestable` — a body deriving only the empty string, `x?` with `x : ;` —
-/// renders `true`: no token selects it, and an optional over it always matches
-/// because matching nothing is what it does. The jar agrees, entering and
-/// producing the empty node (`(s k x a)`).
-///
-/// Total on purpose. The first version asserted `Untestable` away, which reads
-/// as a contract and is really an obligation on eleven callers to remember a
-/// case; one did not, and a grammar that used to generate started aborting.
-/// A renderer that answers for every class cannot be forgotten — and pushing
-/// the answer back out to its callers, whether by assert or by `Option`, is
-/// the same shape as the emptiness this whole change removed.
 global NO_EXCLUSION: List<String> = [];
 global PEEK_KIND: String = "p.peek_kind()";
 
+/// What a repeat's entry or iteration tests on the parse side: the body admits
+/// the lookahead, and there is a token here to admit. `Everything` is every
+/// *token* and EOF is not one, so it tests `!= TK_EOF` — matching the scan
+/// side's bound. `Untestable` renders `true`: a body deriving only the empty
+/// string matches everywhere. Total on purpose, so no caller can forget a case.
 fn repeat_guard_cond(admits: &Admits, excluded: &List<String>, expr: &String, ctx: &mut GenContext) -> String {
     let mut parts: List<String> = [];
     if admits_is_everything(admits) {
@@ -1755,12 +1730,9 @@ fn repeat_guard_cond(admits: &Admits, excluded: &List<String>, expr: &String, ct
     return parts.join(" && ");
 }
 
-/// What `admits` admits, less `excluded`. A set taken out of `Everything` is a
-/// negative test and not a smaller set — everything *except* those tokens —
-/// which is why a caller holding a repeat back from its follow states the
-/// exclusion here rather than trying to shrink what the body admits. Both
-/// sides of the walk render their exclusion through this, so neither can
-/// silently drop one by subtracting from a set that has no members to lose.
+/// What `admits` admits, less `excluded`. Taking a set out of `Everything`
+/// leaves a negative test, not a smaller set, so the exclusion is stated here
+/// rather than by shrinking what the body admits.
 fn admits_check_excluding(admits: &Admits, excluded: &List<String>, expr: &String, ctx: &mut GenContext) -> String {
     let mut parts: List<String> = [];
     if let Kinds(kinds) = admits {
@@ -1778,26 +1750,13 @@ fn admits_check_excluding(admits: &Admits, excluded: &List<String>, expr: &Strin
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let loop_admits = re.inner_admits;
 
-    // Caller-FOLLOW yield gate: when the caller's continuation matches at
-    // this scan position, the scan must stop (mirroring the parse-side
-    // `gen_op_repeat_optional_*` / `gen_op_repeat_star_plus_storable`),
-    // otherwise the scan tournament that picks the calling rule's alt
-    // would over-count this Repeat and reject the alt that actually
-    // matches. Reads the runtime FOLLOW continuation (`follow` param) via
-    // `follow_yields`, exactly mirroring the parse side; inert when
-    // `follow` is empty.
+    // Stop the scan where the caller's continuation matches, or the tournament
+    // picking the calling rule's alt over-counts this Repeat. Inert when
+    // `follow` is empty; mirrors the parse side.
     let caller_follow_gate = if re.gate_caller_follow { "follow_yields(tokens, pos, follow, TK_EOF)" } else { "" };
 
-    // A body matching nothing has no iteration to scan. Once per function, not
-    // once per arm: the same guard written in all three arms is what
-    // `scan_repeat_guard_excluding`'s assert was really relying on, and an arm
-    // added without it would trip that assert instead of being caught here —
-    // the shape that cost the parse side a grammar that used to generate.
-    //
-    // Returning before the `Plus` arm's mandatory first iteration is safe
-    // because that arm cannot be reached with such a body at all: `X*` and
-    // `X+` over one that derives only the empty string are a closure over a
-    // nullable body, which `check_epsilon_closure` rejects.
+    // A body matching nothing has no iteration to scan — once here, not once
+    // per arm, so an arm added later cannot miss it.
     if admits_is_untestable(&loop_admits) {
         assert re.kind matches { Optional }, "a closure over a body matching nothing is rejected by check_epsilon_closure before emit";
         return;
@@ -1811,17 +1770,10 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);
             return;
         }
-        // Mirror the pre-Phase-2-F `gen_scan_repeat_optional_with_follow`
-        // contract: when the Optional's body is a RuleCall, hold the Optional
-        // back from the tokens that may appear right after it in the
-        // surrounding alt, so the scan does not eat one its own suffix needs.
-        // The `caller_follow_first` exclusion matches the surface emitter's
-        // `combined_follow = follow_first`.
+        // Hold a RuleCall body back from what may follow the Optional, so the
+        // scan does not eat a token its own suffix needs.
         let excludes_follow = body_is_rulecall && !re.caller_follow_first.is_empty();
-        // Taking a set out of `Everything` leaves everything *except* it,
-        // which no token set names — it is a negative test, not a smaller
-        // set. Subtracting only in the `Kinds` case left `.?` before a `B`
-        // firing on the `B`.
+        // `Everything` has no set to subtract from; it excludes below instead.
         let effective = if excludes_follow {
             if let Kinds(kinds) = &loop_admits {
                 admits_or_untestable(&subtract_sets(kinds, &re.caller_follow_first));
@@ -1839,8 +1791,6 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         } else {
             [] as List<String>;
         };
-        // Caller-FOLLOW gate wins: `if pos < len && peek matches first AND
-        // NOT caller_follow_gate { try iter }`.
         w.begin(&`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
         if repeat_body_implied_by_guard(&re.body, &effective) {
             w.line(&"pos += 1;");
@@ -1853,10 +1803,8 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         return;
     }
     if let Star = re.kind {
-        // A non-greedy repeat over a body admitting everything (`.*?`) stops
-        // at the exit set, not at a kind guard: every token passes the guard,
-        // so the loop below would run to EOF. Mirrors the parse-side
-        // `compute_non_greedy_condition`.
+        // `.*?` stops at the exit set: every token passes a kind guard, so the
+        // loop below would run to EOF. Mirrors `compute_non_greedy_condition`.
         if re.non_greedy && loop_admits matches { Everything } {
             gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
             return;
@@ -1880,8 +1828,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     if let Plus = re.kind {
         // First iteration is mandatory: failure goes through fail_stmt.
         gen_scan_op_element(w, &re.body, ctx, fail_stmt);
-        // `.+?`: mandatory iter ran above; the rest stops at the exit set
-        // rather than a kind guard (see the Star arm).
+        // `.+?`: the rest stops at the exit set (see the Star arm).
         if re.non_greedy && loop_admits matches { Everything } {
             gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
             return;
@@ -1906,12 +1853,10 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     }
 }
 
-/// Op-driven scan emitter for `ScanElement::Group`: the group's decision,
-/// measured rather than committed to. It takes the same partition the parse
-/// side dispatches on — the branch the lookahead admits, then the longest
-/// scan among the alternatives it holds — so the length this leaves in `pos`
-/// is the length of the alternative the parse will take. A `lenient` group
-/// rewinds to its entry position on no match; a strict one fails.
+/// Op-driven scan emitter for `ScanElement::Group`: the same partition the
+/// parse side dispatches on, measured rather than committed to, so the length
+/// left in `pos` is the alternative's the parse will take. A `lenient` group
+/// rewinds on no match; a strict one fails.
 fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
     if ge.alts.len() == 1 {
         // Single alt: outer `done` wraps inner `body`.
@@ -2073,20 +2018,13 @@ fn rule_overlap_groups(
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
-    // Raw first sets, not `compute_overlap_groups_of`, and this is the one
-    // partition that cannot yet be the shared one. A merged branch is decided
-    // by whatever runs inside it: a group's runs the scan tournament, which
-    // ranks an open-ended alternative by scan length, but a rule's runs
-    // `build_prediction`, which walks positions by their static first sets and
-    // so offers an open-ended alternative only for the tokens a nullable
-    // prefix names. Merging here hands it a decision it cannot make, and
-    // `. EOF | A EOF` loses its first alternative outright.
-    //
-    // The cost of not merging is the `#[TODO]` in
-    // `driver_cst_open_ended_rule_alt_test.wado`: an open-ended alternative
-    // sits in a branch of its own, and the arm built from it can shadow the
-    // alternatives after it. Closing that means teaching `build_prediction`
-    // what `AltClass` knows, which is its own change.
+    // Raw first sets, not `compute_overlap_groups_of` — the one partition that
+    // cannot yet be the shared one. A merged branch here is decided by
+    // `build_prediction`, which walks static first sets and so cannot rank an
+    // open-ended alternative; merging loses `. EOF | A EOF`'s first
+    // alternative. The cost is the `#[TODO]` in
+    // `driver_cst_open_ended_rule_alt_test.wado`, and closing it means
+    // teaching `build_prediction` what `AltClass` knows.
     let groups = compute_overlap_groups(&first_sets);
     return [non_lr_indices, first_sets, groups];
 }
@@ -2748,22 +2686,14 @@ fn gen_multi_alt_body(
     let mut all_gate_conds: List<List<String>> = [];
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt = &rule.alternatives[non_lr_indices[i]];
-        // `alt_has_gate` asks without registering; `alt_initial_gate_conditions`
-        // marks the predicate gated, which is the arm loop's to do once.
-        //
-        // An arm with no emitted condition is not the same as one no lookahead
-        // can select: `position_first_sets_from` also comes back empty for a
-        // deep-nullable tail, which `A?` has while its first set picks it out
-        // perfectly well. What the alternative matches is `alt_class`'s to say,
-        // not this site's to infer from the condition it happens to have.
+        // An arm with no emitted condition is not one no lookahead can select:
+        // `position_first_sets_from` also comes back empty for a deep-nullable
+        // tail. What the alternative matches is `alt_class`'s to say.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
         let selected_by_nothing = alt_class_tests_nothing(&alt_class_of(alt, ctx));
-        // Computed here and read by the arm loop, not asked again there. It is
-        // one question — does this arm carry a gate — and the two answers can
-        // differ: a Java predicate resolves through `ctx.alt_bindings()`, which
-        // `gen_alt_elements` overwrites for each arm it emits. An arm ordered
-        // as gated that then rendered no condition would be the unconditional
-        // arm this ordering exists to move.
+        // Asked once and read by the arm loop: a Java predicate resolves
+        // through `ctx.alt_bindings()`, which `gen_alt_elements` overwrites per
+        // arm, so asking twice can order an arm as gated that renders nothing.
         all_gate_conds.push(if ctx.emit_actions() { alt_initial_gate_conditions(alt, ctx) } else { [] });
         untestable.push(no_cond && selected_by_nothing && all_gate_conds[i].is_empty());
     }
@@ -3238,12 +3168,9 @@ fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
     panic(`gen_group_body: no alt with index ${idx}`);
 }
 
-/// Group-alt dispatch under the GIR walker (used for LR-suffix
-/// group bodies). A caller that already decided (`decided`) names the winning
-/// alternative and the dispatch commits to it, whichever plan lower baked.
-/// Undecided, `Direct` emits a token-led `if/else if` chain and `Tournament`
-/// reuses the longest-match scan tournament (`gen_scan_winner_tournament`
-/// over the group's `scan_alts`) and emits the winning alt's appending body.
+/// Group-alt dispatch under the GIR walker (used for LR-suffix group bodies).
+/// A `decided` caller names the winner and this commits to it; otherwise
+/// `Direct` emits a token-led chain and `Tournament` the longest-match scan.
 fn gen_alt_dispatch(
     w: &mut CodeWriter,
     alts: &List<AltBody>,
@@ -3285,14 +3212,6 @@ fn gen_alt_dispatch(
             gen_alt_commit(w, alts, picked, &winner, ctx, nc);
         }
     }
-    // A trailing branch admitting everything already answers every lookahead,
-    // so the expect-set arm behind it is unreachable. `decision_is_unconditional`
-    // decided above whether a chain was opened at all, and it and
-    // `is_decision_fallback` disagree on an `Everything` branch — an `else`
-    // here with no `if` before it. Unreachable because a `Direct` dispatch
-    // never carries one (`build_overlap_dispatch` routes an open-ended class to
-    // `Tournament`), which is a property of another function and so is stated
-    // rather than assumed.
     let last = &branches[branches.len() - 1];
     assert !admits_tests_nothing(&last.test) || is_decision_fallback(last), "a Direct chain's last branch admits everything, so no `if` was emitted for the `else` to follow";
     if !is_decision_fallback(last) {
@@ -3302,8 +3221,7 @@ fn gen_alt_dispatch(
     close_decision_chain(w, &branches);
 }
 
-/// The alternatives a baked dispatch decides between, in the order it emits
-/// them. What a caller running the decision itself has to commit over.
+/// The alternatives a baked dispatch decides between, in emission order.
 fn dispatch_alt_order(dispatch: &MultiAltDispatch) -> List<i32> {
     return match dispatch {
         Direct(dd) => {
@@ -3914,9 +3832,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     // FOLLOW and the body is scannable, each iteration scans the whole body and
     // only commits on a match — so a trailing token a following `,?` wants is
     // yielded instead of greedily consumed (e.g. `(',' arm)* ','?`). `Optional`
-    // never needs it.
-    // A body admitting everything overlaps whatever follows it, and says so
-    // rather than reading as disjoint through an empty set.
+    // never needs it. A body admitting everything overlaps whatever follows.
     let overlaps_follow = r.body_admits matches { Everything }
         || sets_overlap(&admits_kinds(&r.body_admits), &r.caller_follow_first);
     if r.body_scannable && overlaps_follow {
@@ -3936,9 +3852,8 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             if ctx.emit_follow() && r.gate_caller_follow {
                 w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
             }
-            // The iteration's guard is its body's own decision where the body
-            // has alternatives: what it fails to find ends the loop, and the
-            // dispatch commits to what it found.
+            // Where the body has alternatives its own decision is the guard:
+            // finding none ends the loop, and the dispatch commits to a find.
             if let Group(g) = &r.body {
                 if let Some(branches) = op_group_alt_decision(g, ctx) {
                     let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
@@ -3985,8 +3900,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
 /// (`gen_op_storable_optional` / `gen_op_transparent_optional`): a `??` asks the
 /// runtime ATN, a shape lookahead branches per shape, and every other strategy
 /// reduces to the single entry condition `gen_op_optional_entry_cond` builds.
-/// `follow_gate` is the caller-FOLLOW yield gate, spelled by the one helper
-/// both walkers use rather than by a suffix this one renders for itself.
+/// `follow_gate` is the caller-FOLLOW yield gate.
 fn gen_op_optional(
     w: &mut CodeWriter,
     r: &RepeatOp,
@@ -4007,10 +3921,8 @@ fn gen_op_optional(
     if r.strategy matches { OptionalScanGuard } {
         if let Group(g) = &r.body {
             if let Some(branches) = op_group_alt_decision(g, ctx) {
-                // The scan that decides entry is the scan the dispatch
-                // decides on: one answer, one set of scans. The caller-FOLLOW
-                // yield gate wraps them, so an optional that must yield does
-                // not pay for a decision it will not use.
+                // One answer, one set of scans: the scan deciding entry is the
+                // scan the dispatch decides on, wrapped by the yield gate.
                 let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, follow_gate);
                 w.begin(&`if ${best} >= 0`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
@@ -4159,7 +4071,7 @@ fn gen_op_inner_for_storable_repeat(
     entry: GroupEntry,
     decided: Option<String> = null,
 ) {
-    let entry = open_group_entry(w, elem, group_branch_kind(&rep_op.body), ctx, entry);
+    let entry = open_group_entry(w, elem, ctx, entry);
     let op = &rep_op.body;
     let unwrapped_elem = peel_repeat_body_label(elem);
     return match rep_op.body_shape {
@@ -4282,14 +4194,10 @@ fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
     return op;
 }
 
-/// Op-driven scan-guard for a `Group`-shaped Optional inner whose
-/// alternatives the caller does not decide between — a token-only group, or
-/// a lone alternative. Walks the scan side via op-driven helpers
-/// (`gen_scan_op_elements_in_block` / `gen_scan_op_group`) over the scan group
-/// lower built. It used to assemble one from `g_op`'s bodies and a
-/// classification of its own, which is how it came to partition this group
-/// differently from the surface walker and to lose `empty_alt_admits`
-/// (invariant 9). Strict, because a guard that rewinds decides nothing.
+/// Op-driven scan-guard for a `Group`-shaped Optional inner whose alternatives
+/// the caller does not decide between — a token-only group, or a lone
+/// alternative — over the scan group lower built (invariant 9). Strict,
+/// because a guard that rewinds decides nothing.
 fn gen_op_opt_scan_guard_for_group(
     w: &mut CodeWriter,
     g_op: &GroupOp,
@@ -4369,8 +4277,7 @@ fn gen_op_storable_optional(
         ),
         OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
-                // The scan that decides entry is the scan the dispatch
-                // decides on: one answer, one set of scans.
+                // One answer, one set of scans.
                 let [winner, best] = gen_group_decide(
                     w,
                     &decision.branches,
@@ -4464,15 +4371,13 @@ fn gen_op_storable_optional_with_first(
     ctx: &mut GenContext,
     cond: &String,
 ) {
-    let entry = optional_entry_test(cond, inner_elem, group_branch_kind(&rep_op.body), ctx);
+    let entry = optional_entry_test(cond, inner_elem, ctx);
     gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &entry, null);
 }
 
 /// The `if <entry> { … }` an Optional + storable body reduces to. `decided`
-/// carries a winner the entry condition already scanned for, which is also
-/// what makes the entry condition complete: a decision that named an
-/// alternative also proved its branch's lookahead and gate, so it needs no
-/// `optional_entry_test` on top.
+/// names a winner the entry condition already scanned for, so a decided entry
+/// needs no `optional_entry_test` on top.
 fn gen_op_storable_optional_body(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
@@ -4575,7 +4480,7 @@ fn gen_op_transparent_optional_with_cond(
 ) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
-    w.begin(&`if ${optional_entry_test(cond, inner, GroupBranchKind::RuleRef, ctx)}`);
+    w.begin(&`if ${optional_entry_test(cond, inner, ctx)}`);
     let mut nc: List<[String, i32]> = [];
     let outer_choice = ctx.enter_group_body(false);
     let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
@@ -4623,10 +4528,8 @@ fn any_alt_gated(branches: &List<DecisionBranch>, ctx: &GenContext) -> bool {
 }
 
 /// Whether an alternative's predicate actually reaches its emitted arm. With
-/// actions retained but not emitted, `alt_gate_and_suffix` renders nothing, so
-/// an alternative that "has a gate" still gets an unconditional arm — and one
-/// left among the others is what the alternatives behind it are dead behind.
-/// Asking `alt_has_gate` alone is what missed that.
+/// actions retained but not emitted it renders nothing, so the arm is
+/// unconditional and everything behind it dead — `alt_has_gate` alone misses that.
 fn alt_gates_branch(alt: &Alternative, ctx: &GenContext) -> bool {
     return ctx.emit_actions() && alt_has_gate(alt, ctx);
 }
@@ -4648,26 +4551,22 @@ struct GroupAdmits {
     expected: List<String>,
 }
 
-/// Read per alternative instead, this would gate one the dispatch cannot:
-/// alternatives sharing a branch are picked by the scan tournament, which no
-/// predicate reaches, and registering a gate there suppresses the inline guard
-/// that was enforcing it. `null` when the body is not a group.
-fn group_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> Option<GroupAdmits> {
+/// The disjunction admitting the group, and the gates it answers — branch by
+/// branch, never per alternative: alternatives sharing a branch are picked by
+/// the scan tournament, which no predicate reaches. `null` for a non-group body.
+fn group_admits(inner: &Element, ctx: &mut GenContext) -> Option<GroupAdmits> {
     let alts = repeat_body_group_alts(inner)?;
     // A guard, not a dispatch chain: an empty alternative widens it to admit
     // everything, which is the safe direction and creates no dead branch.
-    let [classes, groups] = group_partition(alts, kind, &null, ctx);
+    let [classes, groups] = group_partition(alts, &null, ctx);
     let branches = guard_branches(alts, &groups, &classes, ctx);
     let mut parts: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
         parts.push(`(${render_branch_cond(&branches[i], &"p.peek_kind()", ctx)})`);
     }
-    // A disjunction is only as weak as its weakest term, and an unconditional
-    // branch makes the whole of it `true`: the gates beside it are rendered and
-    // then absorbed. Only a condition that really requires a predicate may
-    // claim to answer it — claiming per alternative while the condition was
-    // still being built is what would drop the body's inline guard for a
-    // predicate nothing then checks.
+    // An unconditional branch makes the disjunction `true`, absorbing the gates
+    // beside it: they are rendered but answer nothing, so they stay unmarked and
+    // the body keeps its inline guard.
     let absorbed = branches.iter_ref().any(|b: &DecisionBranch| admits_tests_nothing(&b.test) && b.gate.is_empty());
     if !absorbed {
         for let b of &branches {
@@ -4685,11 +4584,11 @@ fn group_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) ->
 
 /// The disjunction for a caller whose own first-set test already agrees with
 /// the dispatch: only a gate narrows it, so `null` where no branch has one.
-fn group_entry_condition(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> Option<String> {
+fn group_entry_condition(inner: &Element, ctx: &mut GenContext) -> Option<String> {
     if !ctx.emit_actions() {
         return null;
     }
-    let admits = group_admits(inner, kind, ctx)?;
+    let admits = group_admits(inner, ctx)?;
     if !admits.gated {
         return null;
     }
@@ -4704,53 +4603,27 @@ fn looped() -> GroupEntry {
 /// The test an optional enters its body on: what its strategy proved, and what
 /// the body's dispatch will accept. Building one any other way is how an
 /// optional comes to admit a token its gated body then has no arm for.
-fn optional_entry_test(own: &String, inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> String {
-    return match group_entry_condition(inner, kind, ctx) {
+fn optional_entry_test(own: &String, inner: &Element, ctx: &mut GenContext) -> String {
+    return match group_entry_condition(inner, ctx) {
         Some(gate) => `${*own} && (${gate})`,
         None => *own,
     };
 }
 
-/// Which branch shape a group op's dispatch takes, so a caller reading its
-/// entry condition partitions the alternatives the same way it will. Only the
-/// General shape holds a wildcard-led alternative; every other has one branch.
-fn group_branch_kind(op: &Op) -> GroupBranchKind {
-    if let Group(g) = op {
-        return shape_branch_kind(&g.shape);
-    }
-    return GroupBranchKind::RuleRef;
-}
-
-/// The same answer for a group op already in hand — reading its shape must not
-/// cost a copy of the whole op.
-fn shape_branch_kind(shape: &GroupShape) -> GroupBranchKind {
-    if let General(_) = shape {
-        return GroupBranchKind::General;
-    }
-    return GroupBranchKind::RuleRef;
-}
-
-
 /// Discharge what `entry` owes before the group's own emit, and return what is
 /// left for the dispatch. A loop's gate break, its unscanned first iteration's
 /// report, and the flag both read all belong here — the site that decides it is
 /// a loop cannot also forget to guard it.
-fn open_group_entry(
-    w: &mut CodeWriter,
-    elem: &Element,
-    kind: GroupBranchKind,
-    ctx: &mut GenContext,
-    entry: GroupEntry,
-) -> GroupEntry {
+fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, entry: GroupEntry) -> GroupEntry {
     let plus_flag = match &entry {
         Looped(flag) => *flag,
         _ => {
             return entry;
         },
     };
-    gen_repeat_gate_break(w, elem, kind, ctx, &plus_flag);
+    gen_repeat_gate_break(w, elem, ctx, &plus_flag);
     if !plus_flag.is_empty() {
-        gen_mandatory_first_report(w, elem, kind, ctx, &plus_flag);
+        gen_mandatory_first_report(w, elem, ctx, &plus_flag);
         w.line(&`${plus_flag} = false;`);
     }
     return GroupEntry::Guaranteed;
@@ -4759,14 +4632,8 @@ fn open_group_entry(
 /// Report a token the mandatory first iteration admits nowhere — the one
 /// position the loop's scan guard does not cover. A gated group is already
 /// reported by its own dispatch.
-fn gen_mandatory_first_report(
-    w: &mut CodeWriter,
-    inner: &Element,
-    kind: GroupBranchKind,
-    ctx: &mut GenContext,
-    plus_flag: &String,
-) {
-    let Some(admits) = mandatory_first_admits(inner, kind, ctx) else {
+fn gen_mandatory_first_report(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, plus_flag: &String) {
+    let Some(admits) = mandatory_first_admits(inner, ctx) else {
         return;
     };
     let expected_ref = sync_set_ref(ctx, &admits.expected);
@@ -4777,13 +4644,9 @@ fn gen_mandatory_first_report(
 }
 
 /// What the mandatory first iteration of an undecided loop reports over, or
-/// `null` where something else already reports there: a single-alternative
-/// body reports at its first mandatory element, and a gated group at the
-/// dispatch that has an arm the predicate excludes. A decided iteration
-/// answers that position from its own decision (`gen_rep_decided_entry`),
-/// where the dispatch commits rather than reports and neither refusal holds.
-fn mandatory_first_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenContext) -> Option<GroupAdmits> {
-    let admits = group_admits(inner, kind, ctx)?;
+/// `null` where the body or its gated dispatch already reports there.
+fn mandatory_first_admits(inner: &Element, ctx: &mut GenContext) -> Option<GroupAdmits> {
+    let admits = group_admits(inner, ctx)?;
     if admits.gated || repeat_body_reports_itself(inner, ctx) {
         return null;
     }
@@ -4793,14 +4656,8 @@ fn mandatory_first_admits(inner: &Element, kind: GroupBranchKind, ctx: &mut GenC
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s
 /// mandatory first iteration is a required position, so it does not exit on the
 /// gate: it reports — at the dispatch, or here where there is none.
-fn gen_repeat_gate_break(
-    w: &mut CodeWriter,
-    inner: &Element,
-    kind: GroupBranchKind,
-    ctx: &mut GenContext,
-    plus_flag: &String,
-) {
-    let Some(cond) = group_entry_condition(inner, kind, ctx) else {
+fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, plus_flag: &String) {
+    let Some(cond) = group_entry_condition(inner, ctx) else {
         return;
     };
     if plus_flag.is_empty() {
@@ -5101,7 +4958,7 @@ fn gen_op_group(
     // `peel_scalar_label` helper handles theoretical multi-level
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
-    let entry = open_group_entry(w, elem, shape_branch_kind(&g_op.shape), ctx, entry);
+    let entry = open_group_entry(w, elem, ctx, entry);
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts),
@@ -5599,41 +5456,26 @@ fn gen_op_repeat_optional_rulecall(
     }
 
     // Hold the optional back from what may follow it, so it does not swallow a
-    // token the caller needs. A body admitting everything has no set the
-    // follow can be taken out of — what is left is everything *except* it,
-    // which is a negative test. Reading the subtraction's emptiness as "can
-    // never match" is what dropped `x?` where `x : . ;` entirely: the
-    // alternative was never emitted, so the rule could not parse `x` at all.
+    // token the caller needs. `Everything` has no set to take the follow out
+    // of, and `Untestable` matches here and everywhere.
     let entry = match &rep_op.body_admits {
         Everything(_) => repeat_guard_cond(&rep_op.body_admits, follow, &PEEK_KIND, ctx),
-        // Not "can never match": a body deriving only the empty string matches
-        // here and everywhere, so the optional always takes it and the jar
-        // produces the empty node. Returning instead dropped `x?` with
-        // `x : ;` from the parse entirely.
         Untestable => repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
         Kinds(kinds) => {
             let first = subtract_sets(kinds, follow);
             if first.is_empty() {
-                // RuleCall always has a field — `body_shape == LeafRuleCall`
-                // implies `body_has_field == true`. Nothing selects the
-                // optional here, so emit nothing.
+                // Nothing selects the optional here, so emit nothing.
                 return;
             }
             repeat_guard_cond(&Admits::Kinds(first), &NO_EXCLUSION, &PEEK_KIND, ctx);
         },
     };
 
-    // Caller-FOLLOW yield gate: when the caller's continuation matches at
-    // this position, yield to the caller (null) so the Optional body
-    // doesn't swallow tokens the caller needs. Empty (`follow` absent)
-    // falls through to the regular `first_check` shape.
     let caller_follow_gate = if rep_op.gate_caller_follow {
         "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
     } else {
         "";
     };
-    // The if-expression collapses to a present/absent
-    // statement — the body appends when taken, nothing otherwise.
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx);
 }
 
@@ -5670,9 +5512,6 @@ fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenConte
         "";
     };
     w.line(&`let mut ${verdict}: bool = false;`);
-    // The body's own guard, through the one renderer: taking the set out of
-    // `body_admits` first and rendering that is how an open-ended body came
-    // back as `true` and entered at EOF.
     w.begin(&`if ${entry_gate}${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}`);
     gen_viability_probe(
         w,
@@ -6424,10 +6263,9 @@ fn decision_branches(
     return build_decision_branches(alts, groups, classes, ctx, true);
 }
 
-/// The same branches for a caller that renders them into a disjunction, where
-/// an unconditional term can absorb a gate. It cannot claim a predicate is
-/// answered until the whole condition exists, so building the branches claims
-/// nothing and `group_admits` decides after.
+/// The same branches for a caller rendering them into a disjunction, where an
+/// unconditional term can absorb a gate: these claim no predicate answered,
+/// leaving `group_admits` to decide once the whole condition exists.
 fn guard_branches(
     alts: &List<Alternative>,
     groups: &List<List<i32>>,
@@ -6465,23 +6303,20 @@ fn render_branch_cond(b: &DecisionBranch, kind_expr: &String, ctx: &mut GenConte
 struct GroupDecision {
     /// In dispatch order.
     branches: List<DecisionBranch>,
-    /// What a caller reports where the decision finds nothing at a position
-    /// the group must match. Empty where the branches admit every lookahead
-    /// and there is nothing to name.
+    /// What a caller reports where the decision finds nothing at a required
+    /// position; empty where the branches admit every lookahead.
     expected: List<String>,
 }
 
 /// The decision a group's dispatch takes, off the one partition
-/// (`group_partition`). A caller deciding whether to enter the group reads
-/// it, so it cannot disagree with the dispatch about which alternative a
-/// lookahead selects.
+/// (`group_partition`), for the dispatch and for callers deciding whether to
+/// enter the group.
 fn group_decision(
     alts: &List<Alternative>,
-    kind: GroupBranchKind,
     empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut GenContext,
 ) -> GroupDecision {
-    let [classes, groups] = group_partition(alts, kind, empty_alt_admits, ctx);
+    let [classes, groups] = group_partition(alts, empty_alt_admits, ctx);
     return GroupDecision {
         branches: decision_branches(alts, &groups, &classes, ctx),
         expected: classes_union(&classes),
@@ -6489,9 +6324,7 @@ fn group_decision(
 }
 
 /// The decision of a group that decides between alternatives, or `null` for
-/// one that does not: a lone alternative, or a token-only group whose whole
-/// body is a single `expect_set`. Only the first has a decision for a
-/// caller's scan guard to share.
+/// one that does not: a lone alternative, or a token-only group.
 fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext) -> Option<GroupDecision> {
     let dispatches = match &g_op.shape {
         SimpleCst(_) | General(_) => g_op.alts.len() > 1,
@@ -6500,19 +6333,12 @@ fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContex
     if !dispatches {
         return null;
     }
-    return Option::Some(group_decision(
-        &g_elem.alternatives,
-        shape_branch_kind(&g_op.shape),
-        &g_op.empty_alt_admits,
-        ctx,
-    ));
+    return Option::Some(group_decision(&g_elem.alternatives, &g_op.empty_alt_admits, ctx));
 }
 
-/// `group_alt_decision` for the op-only walker, which reads the dispatch lower
-/// baked rather than the surface alternatives (invariant 9). `Direct` is one
-/// branch per alternative, `Tournament` one branch holding them all. Its
-/// callers commit to what the decision picks and never report, so there is no
-/// expected set to carry.
+/// `group_alt_decision` for the op-only walker, off the dispatch lower baked
+/// rather than the surface alternatives (invariant 9). Its callers commit and
+/// never report, so no expected set comes with it.
 fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<DecisionBranch>> {
     if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } {
         return null;
@@ -6520,25 +6346,12 @@ fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<Decis
     return Option::Some(dispatch_branches(&g.dispatch));
 }
 
-/// Decide a group, as `[winner, best]` — two variables because a group's
-/// callers ask two questions of one decision:
-///
-/// * `winner` is **which alternative**, and is prediction's answer: a branch
-///   holding one alternative is picked by the lookahead alone, a branch
-///   holding several by the longest scan among them. `-1` only where no
-///   branch admits the lookahead, or where a branch of several admits it and
-///   none of them scans — the positions ANTLR4 calls no-viable-alternative.
-/// * `best` is **how far that alternative validated**, `-1` where it did not
-///   scan at all.
-///
-/// A caller that may decline the group — an optional, an iteration after a
-/// loop's first — reads `best`; one at a required position reads `winner` and
-/// commits, leaving the body to report what it cannot match. Answering both
-/// from one variable is what made a `+`'s mandatory first iteration decline a
-/// position it had to take.
-///
-/// `follow_gate` wraps the scans in the caller-FOLLOW yield test, so a
-/// tail-position group that must yield never pays for them.
+/// Decide a group, as `[winner, best]`: which alternative (`-1` where no
+/// branch admits the lookahead), and how far it scanned (`-1` where it did
+/// not scan at all). A caller that may decline the
+/// group reads `best`; one at a required position reads `winner` and commits,
+/// leaving the body to report what it cannot match. `follow_gate` wraps the
+/// scans in the caller-FOLLOW yield test.
 fn gen_group_decide(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
@@ -6554,8 +6367,7 @@ fn gen_group_decide(
     if follow_gate {
         w.begin(&`if !(${CALLER_FOLLOW_YIELDS})`);
     }
-    // One read of the lookahead for the whole chain, where the chain tests it
-    // at all — inlining `p.peek_kind()` per arm reads the token once per test.
+    // One read of the lookahead for the whole chain, where it tests it at all.
     let kind_expr = if decision_reads_lookahead(branches) {
         let var = dedup_name(&"gd_kind", name_counts);
         w.line(&`let ${var} = p.peek_kind();`);
@@ -6612,9 +6424,7 @@ fn decision_is_unconditional(branches: &List<DecisionBranch>) -> bool {
     return branches.len() == 1 && admits_tests_nothing(&branches[0].test) && branches[0].gate.is_empty();
 }
 
-/// Whether any branch's test reads the lookahead. A chain whose every branch
-/// admits everything still emits its arms, but binding the token they never
-/// look at is dead work.
+/// Whether any branch's test reads the lookahead, so binding it is not dead.
 fn decision_reads_lookahead(branches: &List<DecisionBranch>) -> bool {
     return branches.iter_ref().any(|b: &DecisionBranch| b.test matches { Kinds(_) });
 }
@@ -6629,12 +6439,9 @@ fn open_decision_branch(
     if decision_is_unconditional(branches) {
         return;
     }
-    // Only an untestable branch: a wildcard's `Everything` admits every token
-    // by decision, and shadowing what follows it is the lowest-alternative
-    // rule, so it is allowed mid-chain.
+    // An `Everything` branch may shadow what follows it — that is the
+    // lowest-alternative rule — so only an untestable one must come last.
     assert !is_decision_fallback(&branches[i]) || i == branches.len() - 1, "a branch the lookahead cannot decide is the chain's last, or the ones after it are dead";
-    // The trailing fallback is the `else` it means, not a test that always
-    // passes: one spelling, so the chain reads the way the decision does.
     if i > 0 && is_decision_fallback(&branches[i]) {
         w.else_begin(&"else");
         return;
@@ -6737,10 +6544,8 @@ variant GroupBranchKind {
 /// what `entry` owes a token no alternative admits. Every group decision goes
 /// through here (`antlr4-compatibility.md`, "One dispatch emitter").
 ///
-/// `decided` names the variable a caller's own scan (`gen_group_decide`) left
-/// the winning alt index in. That scan ran the same partition, testing each
-/// branch's lookahead and gate before scanning the alternatives it holds, so
-/// the dispatch has nothing left to test: it commits to the winner.
+/// `decided` names the variable a caller's own `gen_group_decide` left the
+/// winning alt index in; that scan ran the same partition, so this commits.
 fn gen_group_dispatch(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
@@ -6767,18 +6572,15 @@ fn gen_group_dispatch(
         gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &order, kind, ctx, name_counts, decided);
         return;
     }
-    // A decision that tests nothing has no chain to emit: no lookahead to bind,
-    // no arm for a report to reach.
+    // A decision that tests nothing has no chain to emit.
     if decision_is_unconditional(branches) {
         gen_group_branch_body(w, &branches[0].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
         return;
     }
-    // A trailing branch that admits everything is the `else`, and there is
-    // nothing left for a report to answer: the group matches here whatever the
-    // lookahead is. A gated alternative needs a condition of its own, so it
-    // takes the last branch's `else` away and brings the report back with it —
-    // a false predicate must not land in the arm meant for the alternative it
-    // excludes.
+    // A trailing fallback is the `else`, so nothing is left to report. A gated
+    // alternative needs a condition of its own, which takes that `else` away
+    // and brings the report back: a false predicate must not land in the arm
+    // meant for the alternative it excludes.
     let ends_in_fallback = is_decision_fallback(&branches[branches.len() - 1]);
     let report = !ends_in_fallback && (any_alt_gated(branches, ctx) || entry matches { Required });
     let grp_var = dedup_name(&"grp_kind", name_counts);
@@ -6805,10 +6607,8 @@ fn gen_group_dispatch(
     w.end();
 }
 
-/// The union of one branch's first sets, for the two branches that are not
-/// over classified alternatives: LR suffixes, which begin with a mandatory
-/// operator token by construction and have nothing to classify, and a rule's
-/// arms, whose partition is not the shared one (see `rule_overlap_groups`).
+/// The union of one branch's first sets, for the branches not over classified
+/// alternatives: LR suffixes, and a rule's arms (see `rule_overlap_groups`).
 fn slot_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
     let mut union_first: List<String> = [];
     for let idx of group {
@@ -6817,14 +6617,11 @@ fn slot_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<
     return union_first;
 }
 
-/// The gate a lone alternative's alt-initial predicates contribute. A group of
-/// several has no single alternative to gate on — the scan dispatch inside
-/// picks between them.
-///
-/// `answers_gates` says whether emitting this branch's condition is by itself
-/// enough to answer the predicate, so the body may drop its inline guard. A
-/// chain arm answers it; a term of a disjunction does not until the caller has
-/// checked that no unconditional term absorbs it.
+/// The gate a lone alternative's alt-initial predicates contribute; a branch
+/// of several has none, since the scan dispatch picks between them.
+/// `answers_gates`: whether this condition alone answers the predicate, so the
+/// body may drop its inline guard. A chain arm does; a disjunction term does
+/// not until the caller has ruled out an absorbing unconditional term.
 fn group_gate(group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext, answers_gates: bool) -> String {
     if group.len() != 1 {
         return String::new();
@@ -6914,7 +6711,7 @@ fn gen_general_group(
     decided: Option<String> = null,
 ) {
     let _ = dedup_name(&general_group_field_name(gs.group_index), name_counts);
-    let [classes, groups] = group_partition(alts, GroupBranchKind::General, empty_alt_admits, ctx);
+    let [classes, groups] = group_partition(alts, empty_alt_admits, ctx);
     gen_group_dispatch(
         w,
         &decision_branches(alts, &groups, &classes, ctx),
@@ -6943,9 +6740,8 @@ fn gen_rule_ref_group(
     decided: Option<String> = null,
 ) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
-    // A rule-ref group is one distinct RuleRef per alternative, so none is
-    // empty and there is no admit set to supply.
-    let [classes, groups] = group_partition(alts, GroupBranchKind::RuleRef, &null, ctx);
+    // One distinct RuleRef per alternative, so none is empty: no admit set.
+    let [classes, groups] = group_partition(alts, &null, ctx);
     gen_group_dispatch(
         w,
         &decision_branches(alts, &groups, &classes, ctx),
@@ -6962,21 +6758,14 @@ fn gen_rule_ref_group(
 }
 
 /// What a group's alternatives match and the branches its dispatch takes over
-/// them, as `[classes, groups]`. The one place a group is partitioned: the
-/// dispatch, and anything deciding whether to enter it, must read the same
-/// branches or they disagree about which alternative a gate belongs to.
+/// them, as `[classes, groups]` — the one place a group is partitioned.
 fn group_partition(
     alts: &List<Alternative>,
-    kind: GroupBranchKind,
     empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut GenContext,
 ) -> [List<AltClass>, List<List<i32>>] {
     let mut classes = alt_classes_of(alts, ctx);
     apply_empty_alt_admits(&mut classes, empty_alt_admits);
-    // One partition for both kinds. A rule-ref group was assumed unable to
-    // hold an open-ended alternative, because it is a single call per
-    // alternative — but the rule that call reaches can be open-ended, and
-    // lower's SimpleCst dispatch and scan group both know it now.
     return [classes, compute_overlap_groups_of(&classes)];
 }
 
@@ -7553,13 +7342,10 @@ fn gen_multi_alt_body_alt(
 ) {
     w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
-    // Same rule as the token-led sibling: the arms are independent `if`s that
-    // return, so one the lookahead cannot decide is what every later
-    // alternative would be dead behind. An open-ended group decides — it
-    // admits every token — and keeps its place.
-    //
-    // The partition is over the non-LR alternatives, so a group's members are
-    // slots into `non_lr_indices` and the verdicts have to be too.
+    // The arms are independent `if`s that return, so an undecidable one goes
+    // last or the alternatives after it are dead. The partition is over the
+    // non-LR alternatives, so groups and verdicts are slots into
+    // `non_lr_indices`.
     let classes = alt_classes(non_lr_indices, &rule.alternatives, first_sets, ctx);
     let mut admits: List<Admits> = [];
     let mut untestable: List<bool> = [];
@@ -7577,13 +7363,10 @@ fn gen_multi_alt_body_alt(
         } else {
             String::new();
         };
-        // The union of the group's raw first sets, not `admits[g]`. They differ
-        // only for an open-ended alternative, which `admits[g]` calls
-        // `Everything` — sound where the partition has merged the other
-        // alternatives into the branch, which at rule level it has not (see
-        // `rule_overlap_groups`). Testing the narrower union keeps the arms
-        // after it reachable; the `#[TODO]` in
-        // `driver_cst_open_ended_rule_alt_test.wado` is what it costs.
+        // The raw union, not `admits[g]`: rule level does not merge the other
+        // alternatives into an open-ended branch (see `rule_overlap_groups`),
+        // so the narrower test is what keeps the arms after it reachable. The
+        // `#[TODO]` in `driver_cst_open_ended_rule_alt_test.wado` is the cost.
         let cond = ctx.admits_check_str(
             &admits_or_everything(&slot_first_union(group, first_sets)),
             &DISPATCH_KIND_LOCAL,

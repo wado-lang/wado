@@ -1,12 +1,8 @@
-//! A rule alternative that can match nothing is viable at every position, so
-//! its arm carries no lookahead test and the alternatives after it are only
-//! reached when it is placed later. Where it belongs is not a property of the
-//! rule: ANTLR4 takes it in one caller and not in another, on the same input.
-//!
-//! So neither order is the answer, and reordering only trades one caller for
-//! the other. Gale keeps alternative order; the divergent caller is the
-//! full-context decision the ATN simulator makes, marked `#[TODO]` rather
-//! than argued away.
+//! A rule alternative that can match nothing is viable everywhere, so its arm
+//! carries no lookahead test. Where it belongs is not a property of the rule —
+//! ANTLR4 takes it in one caller and not another on the same input — so no
+//! static order is the answer. Gale keeps alternative order; the divergent
+//! caller is `#[TODO]`, for the ATN simulator's full-context decision.
 //!
 //! Trees from the published ANTLR4 jar (`scripts/antlr4-oracle.sh`).
 

@@ -7,9 +7,8 @@
 //
 //   'k' x? A EOF   on `k a` → (s k x a)
 //
-// Reading the absent first set as "can never match" dropped the optional from
-// the parse entirely; asserting the case away instead aborted the generator on
-// the left-recursive spelling below, which reaches a different emitter.
+// The left-recursive spelling below reaches a different emitter, so every
+// renderer of a repeat guard has to answer for this case.
 grammar OptEpsilonRule;
 
 s : 'k' x? A EOF

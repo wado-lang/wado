@@ -3,9 +3,9 @@
 //
 // A wildcard admits every token, so no lookahead test separates any
 // alternative from it: all three share one branch and the scan lengths decide,
-// with the empty alternative ranked as epsilon. Left out of that merge it
-// became a branch of its own, behind the wildcard's unconditional one, and no
-// input could reach it. Measured against the published jar:
+// with the empty alternative ranked as epsilon — left out of that merge it is
+// a branch behind the wildcard's unconditional one, which no input reaches.
+// Measured against the published jar:
 //
 //   ``      → `(s r)`       nothing scans, so the empty alternative wins
 //   `a`     → `(s (r a))`   `A` and `.` tie at one token; lowest index wins

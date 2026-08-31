@@ -2901,8 +2901,6 @@ test "canonicalizing a labelled empty-alt group leaves no Repeat under the label
 test "canonicalizing collapses nested optionals through a bare wrapper" {
     // The parentheses around an already-optional body add a group that carries
     // nothing, and `(X?)?` is `X?` whether or not one stands between the two.
-    // Asking which wrappers to look through by listing them is what left
-    // `((A|))?` nesting a Repeat: the list had `Label` on it and not `Group`.
     let sources = [
         "grammar S;\nr : ((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",
         "grammar S;\nr : x=((A|))? B ;\nA : 'a' ;\nB : 'b' ;\n",

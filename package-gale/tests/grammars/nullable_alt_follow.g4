@@ -13,9 +13,6 @@
 //
 // The indirect spelling behaves identically: `x : A? ;` is nullable through
 // the rule, which is why the two must not be told apart by counting elements.
-//
-// Writing the follow set over the alternative's own first set — rather than
-// joining the two — is what made `k a c` unreachable.
 grammar NullableAltFollow;
 
 s : 'k' ( A? | B ) C EOF

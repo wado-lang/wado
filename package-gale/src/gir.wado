@@ -458,37 +458,13 @@ pub variant MultiAltDispatch {
     Tournament(TournamentDispatch),
 }
 
-/// What a lookahead test admits. A `List<String>` cannot say it: an empty set
-/// is a wildcard's first set at one site and an empty alternative's absent one
-/// at another, and a renderer that answers for both has to guess. It guessed
-/// `true`, and the alternatives after the guess became unreachable — six
-/// times, in six emitters. So the case is named where it is known.
-///
-/// `Everything` and `Untestable` both render `true` and are still not the same
-/// answer, which is the distinction the first attempt at this type missed:
-/// they differ in whether the arm may keep its place. A wildcard admits every
-/// token *exactly*, so shadowing the alternatives after it is ANTLR4's
-/// lowest-viable-alternative rule working correctly. An untestable arm shadows
-/// them by default rather than by decision, so it goes last.
-///
-/// It lives here, in the IR, because lower has to be able to bake one: a scan
-/// element that carries a raw set instead leaves emit to guess again, from the
-/// same emptiness and with less to go on.
+/// What a lookahead test admits. `Everything` and `Untestable` both render
+/// `true` and differ in whether the arm may keep its place.
 pub variant Admits {
-    /// Admits every token. The payload is what a static first-set walk did
-    /// enumerate — a strict subset of what is admitted, and never a substitute
-    /// for it. A guard built from it would be too narrow; a caller that needs
-    /// *some* set to point at (the repeat-exit probe, which cannot speculate
-    /// on every lookahead) reads it through `admits_enumerated`, and gets an
-    /// empty list where the walk found nothing.
-    ///
-    /// Dropping it was the same collapse this type exists to prevent, one
-    /// level in: "admits everything" and "these are the kinds we found" are
-    /// two facts about one body, and `( . | X )`-shaped bodies have both.
+    /// Admits every token. The payload is the subset a static first-set walk
+    /// enumerated, read through `admits_enumerated`, never a guard's own test.
     Everything(List<String>),
-    /// Cannot be decided from the lookahead: an alternative whose first set is
-    /// absent because it matches nothing, and whose viability rests on what
-    /// follows the decision. Belongs after every arm that can be tested.
+    /// No lookahead decides it; it belongs after every testable arm.
     Untestable,
     /// Never empty: an empty set is `Everything` or `Untestable`, and which
     /// one is not a property of the set.
@@ -504,9 +480,8 @@ pub fn admits_is_everything(admits: &Admits) -> bool {
     return *admits matches { Everything(_) };
 }
 
-/// The kinds a static walk enumerated, whether or not they are the whole of
-/// what is admitted. For a caller that needs a set to gate on and can accept a
-/// subset; a caller building the arm's own test uses `admits_kinds`.
+/// The kinds a static walk enumerated, whole or not — for a caller that needs
+/// a set to gate on and can accept a subset.
 pub fn admits_enumerated(admits: &Admits) -> List<String> {
     return match admits {
         Everything(kinds) => *kinds,
@@ -515,8 +490,8 @@ pub fn admits_enumerated(admits: &Admits) -> List<String> {
     };
 }
 
-/// Whether this arm decides nothing the arms after it could still decide, so
-/// that placing it among them is what makes them dead code.
+/// Whether this arm decides nothing the arms after it could, so placing it
+/// among them makes them dead.
 pub fn admits_is_untestable(admits: &Admits) -> bool {
     return *admits matches { Untestable };
 }
@@ -528,19 +503,9 @@ pub fn admits_tests_nothing(admits: &Admits) -> bool {
 
 /// The kinds an arm narrows by, empty for the two cases no set describes.
 ///
-/// **Never render from this.** The list it hands back is the very
-/// `List<String>` whose emptiness means two opposite things — the thing
-/// `Admits` exists to replace — so feeding it to `first_check_str` or
-/// `admits_or_everything` puts the defect straight back. Every recurrence of
-/// that defect so far came through here: an `Everything` body came back as
-/// `[]`, was read as "nothing to narrow by", and rendered `true`.
-///
-/// Renderers take the `Admits`: `admits_check_str` for a decision branch,
-/// `repeat_guard_cond` for a repeat's entry or iteration. What is left for
-/// this accessor is the readers that do not render — a probe's gate, a
-/// set union, an overlap test — where an empty list costs nothing. A caller
-/// that needs to tell the two empty cases apart asks `admits_is_untestable`
-/// or `admits_is_everything`, never the emptiness of this.
+/// **Never render from this** — the emptiness is exactly the overload this
+/// type replaces. Renderers take the `Admits` (`admits_check_str`,
+/// `repeat_guard_cond`); this is for readers that do not render.
 pub fn admits_kinds(admits: &Admits) -> List<String> {
     return match admits {
         Kinds(kinds) => *kinds,
@@ -548,9 +513,8 @@ pub fn admits_kinds(admits: &Admits) -> List<String> {
     };
 }
 
-/// A set that narrows the lookahead, where having none to narrow by means
-/// nothing is excluded — a wildcard-led alternative, a guard with no first set
-/// to test. This is the reading `kind_check_str` used to take for everyone.
+/// A set that narrows the lookahead, where having none means nothing is
+/// excluded — a wildcard-led alternative, a guard with no first set to test.
 pub fn admits_or_everything(kinds: &List<String>) -> Admits {
     if kinds.is_empty() {
         return admits_everything();
@@ -567,39 +531,17 @@ pub fn admits_or_untestable(kinds: &List<String>) -> Admits {
     return Admits::Kinds(*kinds);
 }
 
-/// What an alternative matches, as one value rather than a question each
-/// decision site works out from whatever it has in hand. Six predicates over
-/// eighteen call sites asked it separately — "is there a wildcard in the
-/// elements", "is the first set empty", "is it nullable", "has it no elements"
-/// — and every one was right for the spelling its author had in front of them
-/// and wrong for another.
-///
-/// A first set beside a flag saying how to read it is the same defect one
-/// indirection out: the two travel as separate values and can be paired
-/// wrongly. So they do not travel separately. `alt_class` in `alt_grouping`
-/// produces this; everything else reads it.
+/// What an alternative matches. `alt_class` in `alt_grouping` is the only
+/// producer; every decision site reads it rather than deriving its own.
 pub variant AltClass {
-    /// Matches at least one token, of any kind: `.` or `~X`, written in the
-    /// alternative or reached through a nullable prefix or a rule. No first
-    /// set names what it admits, and it admits everything.
-    ///
-    /// The payload is what the first-set walk did enumerate — `A? .` is
-    /// open-ended *and* starts with `a` — a strict subset of what is admitted,
-    /// exactly as `Admits::Everything` carries. Dropping it narrowed every
-    /// union built from these classes: the expected list a `no viable
-    /// alternative` names and the SYNC set it recovers on both lost the
-    /// tokens, and the overlap advisory lost the shared ones it reports.
+    /// Matches at least one token, of any kind. The payload is the subset the
+    /// first-set walk enumerated — `A? .` is open-ended *and* starts with `a`.
     OpenEnded(List<String>),
     /// Selected by exactly these tokens and nothing else. Never empty.
     Selects(List<String>),
-    /// Can also match nothing, so what may follow the decision selects it too,
-    /// on top of these tokens — of which it may have none (`( A | | B )`) or
-    /// several (`( A? | B )`). Both are one alternative that is nullable; the
-    /// empty first set is not what makes it so, and telling the two apart is
-    /// what dropped `A?`'s own first set when the follow set arrived.
-    ///
-    /// `apply_empty_alt_admits` resolves it to `Selects(tokens ∪ follow)` once
-    /// lower knows what follows the group.
+    /// Can also match nothing, so what follows the decision selects it as well
+    /// as these tokens, of which it may have none (`( A | | B )`).
+    /// `apply_empty_alt_admits` resolves it to `Selects(tokens ∪ follow)`.
     Nullable(List<String>),
 }
 
@@ -620,10 +562,9 @@ pub fn alt_class_tests_nothing(c: &AltClass) -> bool {
     };
 }
 
-/// The tokens that select the alternative by lookahead alone. Empty for
-/// `OpenEnded`, which no token set describes, and for a nullable alternative
-/// with no first set of its own — a caller that needs to tell those apart asks
-/// the class, never the emptiness of this.
+/// The tokens the alternative's own first-set walk enumerated. For `OpenEnded`
+/// that is a subset of what it matches, so what an arm tests comes from
+/// `group_branch_admits`, never from the emptiness of this.
 pub fn alt_class_first_set(c: &AltClass) -> List<String> {
     return match c {
         Selects(tokens) => *tokens,
@@ -913,17 +854,8 @@ pub struct RepeatOp {
     /// shapes. Precomputed so emit doesn't re-run
     /// `ctx.is_element_scannable` at each Repeat dispatch.
     pub body_scannable: bool,
-    /// What one iteration of the inner element admits. The parse-side twin of
-    /// `ScanRepeatElement.inner_admits`, and the same type for the same
-    /// reason: an empty first set means `.` / `~X`, which fire on every token,
-    /// at one site and a body that matches nothing at another. Read as a set,
-    /// the emptiness said "can never match" and dropped `x?` where `x : . ;`
-    /// entirely.
-    ///
-    /// Used by emit's per-shape dispatchers for the loop guard, the
-    /// caller-follow exclusion on an Optional+RuleCall, and
-    /// `compute_iter_follow`'s iter-follow union. Precomputed so emit doesn't
-    /// re-run `ctx.first_of_element` at each dispatch.
+    /// What one iteration of the inner element admits — the parse-side twin of
+    /// `ScanRepeatElement.inner_admits`.
     pub body_admits: Admits,
     /// True iff the inner element is a single-alt `Group` — i.e.
     /// `compute_iter_follow` should union the body's first set with
@@ -1018,29 +950,17 @@ pub struct GroupOp {
     /// For `Transparent` shape there is exactly one alt and its body
     /// inlines into the surrounding sequence at emit.
     pub alts: List<AltBody>,
-    /// Scan-side mirror, as the whole scan group and not the bare bodies.
-    ///
-    /// Emit needs a `ScanGroupElement` to measure this group, and given only
-    /// the bodies it built one — pairing them with a classification of its own
-    /// and dropping `empty_alt_admits`, which is the two walkers disagreeing
-    /// (invariant 9) reintroduced by a site that could still *construct* the
-    /// thing lower produces. Holding the built value is what stops that: there
-    /// is nothing left for emit to assemble.
+    /// Scan-side mirror, as the whole scan group and not the bare bodies, so
+    /// emit reads the classification instead of making its own (invariant 9).
     pub scan_group: ScanGroupElement,
     /// Dispatch when the group has multiple alts; parse and scan share
     /// it. For single-alt groups this is `MultiAltDispatch::Direct` with
     /// one branch.
     pub dispatch: MultiAltDispatch,
-    /// Which alternative is the empty one and what admits it — what may follow
-    /// the group inside its own alternative, since an empty alternative has no
-    /// first set of its own to be selected by. Lower names the alternative so
-    /// emit writes the set rather than working out again which alternative
-    /// earns it: the answer depends on emit-time context an earlier pass reads
-    /// differently, and the two walkers must partition alike (invariant 9).
-    ///
-    /// `null` is every case with nothing to write: no alternative is empty, or
-    /// the suffix is nullable and the answer is the caller's FOLLOW, where the
-    /// alternative admits whatever the branches before it did not.
+    /// Which alternative is the nullable one and what selects it: what may
+    /// follow the group inside its own alternative. Lower names it so both
+    /// walkers partition alike (invariant 9); `null` where there is nothing to
+    /// write, the caller's FOLLOW being the answer.
     pub empty_alt_admits: Option<EmptyAltAdmits>,
 }
 
@@ -1262,15 +1182,8 @@ pub struct ScanExcludedElement {
 pub struct ScanRepeatElement {
     pub kind: RepeatKind,
     pub body: ScanElement,
-    /// What an iteration of `body` admits, classified at lower time. emit's
-    /// scan-side repeat emitter builds its loop guard from this.
-    ///
-    /// It is an `Admits` and not a first set because the two readings of an
-    /// empty set are opposite here: `.?` and `~X?` have no first set because
-    /// no set enumerates every token, and their iteration fires on *every*
-    /// token — while a body that matches nothing has none to fire on. Reading
-    /// the emptiness made `.?` scan zero tokens where `A?` scanned one, so the
-    /// alternative holding it lost every tournament its parse side then won.
+    /// What an iteration of `body` admits, classified at lower time; the scan
+    /// repeat's loop guard is built from it.
     pub inner_admits: Admits,
     /// Scan-side mirror of `RepeatOp.caller_follow_first`. Default is
     /// the variant-aware `outer_follow` at construction time; alt-level
@@ -1286,10 +1199,8 @@ pub struct ScanRepeatElement {
     /// entry so the longest-match tournament yields to the caller in
     /// lockstep with the parse side.
     pub gate_caller_follow: bool,
-    /// True for a non-greedy `*?` / `+?`. A non-greedy repeat over a body that
-    /// admits everything stops at the exit set rather than at a first-set
-    /// guard: the scan skips tokens until `caller_follow_first` or EOF,
-    /// mirroring the parse-side `compute_non_greedy_condition`.
+    /// True for a non-greedy `*?` / `+?`. Over a body admitting everything the
+    /// scan stops at the exit set, not a kind guard, as the parse side does.
     pub non_greedy: bool,
     /// Mirrors the four `RepeatOp` probe stamps below, so a probed Repeat
     /// decides the same on both sides — the tournament measures scan lengths
@@ -1308,10 +1219,8 @@ pub struct ScanGroupElement {
     /// True for "lenient" groups whose dispatch may bail out
     /// without advancing on no match (used for `?`-over-group).
     pub lenient: bool,
-    /// What each alt matches (parallel to `alts`), classified at lower time
-    /// where the surface alternatives are still in hand. It is the whole input
-    /// to the partition the scan branches on — the same partition, computed by
-    /// the same function, that the parse-side dispatch takes (invariant 9).
+    /// What each alt matches (parallel to `alts`), classified at lower time —
+    /// the whole input to the partition both sides branch on (invariant 9).
     pub alt_classes: List<AltClass>,
 }
 

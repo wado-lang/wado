@@ -1326,8 +1326,7 @@ impl GenContext {
 
     /// Whether a position the alternative can reach — every element before it
     /// nullable — matches a token no first set names. Having a first set
-    /// settles nothing: `A? .` is selected by `a` and by every other token
-    /// too, and reading the first set alone called it narrow.
+    /// settles nothing: `A? .` is selected by `a` and by every other token too.
     pub fn alt_reaches_open_end(&mut self, alt: &Alternative, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.alt_reaches_open_end_at(alt, visiting, &mut min_cycle);
@@ -1346,10 +1345,8 @@ impl GenContext {
         return false;
     }
 
-    /// `.` and `~X` carry the empty static FIRST set, and neither a label, a
-    /// `( … )`, a repeat nor a rule reference changes what is behind them — so
-    /// `w=.`, `(~X)`, `(.)+` and a call to `w : . ;` are all as open-ended as
-    /// the bare form.
+    /// Whether the element matches a token of any kind. A label, a `( … )`, a
+    /// repeat and a rule reference all pass through to what is behind them.
     pub fn element_reaches_open_end(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.element_reaches_open_end_at(elem, visiting, &mut min_cycle);
@@ -1375,9 +1372,8 @@ impl GenContext {
         };
     }
 
-    /// Open-endedness with the same SCC-aware memoization as
-    /// `rule_is_nullable_at`: without it this walks the transitive rule graph
-    /// afresh at every decision site, and every decision site asks.
+    /// Open-endedness of a rule, with `rule_is_nullable_at`'s SCC-aware memo:
+    /// every decision site asks, and the rule graph is transitive.
     fn rule_reaches_open_end_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
@@ -1521,11 +1517,10 @@ impl GenContext {
         return [] as List<String>;
     }
 
-    /// Whether `compute_call_site_follow` at `i` is the whole answer. A
-    /// nullable suffix lets the caller's FOLLOW extend it, and a first-exact
-    /// one still returns a non-empty set there — a prefix, not the answer. A
-    /// decision that reads that prefix as the answer rejects every lookahead
-    /// the caller could still supply, so it has to ask this separately.
+    /// Whether `compute_call_site_follow` at `i` is the whole answer: a
+    /// nullable suffix lets the caller's FOLLOW extend it, so what comes back
+    /// there is a prefix, and a decision reading it as the answer rejects
+    /// every lookahead the caller could still supply.
     pub fn call_site_follow_is_exact(&mut self, elements: &List<Element>, i: i32) -> bool {
         return !self.tail_is_nullable_deep(elements, i + 1);
     }
@@ -1952,11 +1947,8 @@ impl GenContext {
     /// duplicate sets across the grammar share a single function body
     /// in the generated wasm.
     ///
-    /// An empty set is not a condition. It used to render as `true`, which
-    /// reads as "admits everything" — the right answer where the set is a
-    /// wildcard's absent first set, and the wrong one where it is an
-    /// alternative nothing selects. Six emitters took the wrong one. Say which
-    /// it is at the site that knows, with `Admits`, and pass a real set here.
+    /// An empty set is not a condition: which of the two it means is `Admits`'s
+    /// to say at the site that knows, so pass a real set here.
     pub fn kind_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
         assert !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
@@ -1968,10 +1960,8 @@ impl GenContext {
     }
 
     /// Render a guard: enter, or go round again, while the lookahead is in
-    /// `first_set`. A body with no first set is open-ended (`.` / `~X`), and a
-    /// guard has one reading of that — nothing excludes it. Saying so here is
-    /// why this is its own entry point rather than sugar for `kind_check_str`,
-    /// which refuses to choose for callers that do not all agree.
+    /// `first_set`. Its own entry point because a guard has one reading of an
+    /// absent first set — nothing excludes it — where callers differ.
     pub fn first_check_str(&mut self, first_set: &List<String>) -> String {
         return self.admits_first_check_str(&admits_or_everything(first_set));
     }
@@ -2130,11 +2120,6 @@ impl GenContext {
     /// `!_kind_set_<id>(<expr>)` for ≥2 tokens, else
     /// `<expr> != TK_X`. Used by non-greedy emit sites.
     pub fn kind_negate_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
-        // The mirror of `kind_check_str`'s fold, and it took the opposite
-        // default: excluding nothing excludes no token, so the truthful answer
-        // is `true`, and this returned `false`. Its one caller seeds `TK_EOF`,
-        // so the branch was never taken and the wrong answer never showed —
-        // which is the whole reason a renderer must not choose for a caller.
         assert !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
             return `${*expr} != ${tokens[0]}`;
