@@ -4,7 +4,7 @@
 
 enum wasi:cli/types.wado//enum:ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // TypeId(0)
 
-struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>] {  // TypeId(1)
+struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>] {  // TypeId(1)
     mut 0: i32,
     mut 1: i32,
 }
@@ -37,7 +37,7 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(13)
+type "functype//stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(13)
 
 type "functype//stream_cm_stdin_pipe.wado/__cm_export__run" = fn();  // TypeId(14)
 
@@ -74,13 +74,13 @@ fn "stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"() with Stdin 
     __lifted_result_1 = builtin::load_i32(__outptr + 0);
     __lifted_result_2 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]" { 0: __lifted_result_1, 1: __lifted_result_2 };
+    return struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]" { 0: __lifted_result_1, 1: __lifted_result_2 };
 }
 
 fn "stream_cm_stdin_pipe.wado/__cm_export__run"() {
     let stdin_stream: i32;
     let subtask: i32;
-    let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
+    let __pattern_temp_0: ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_cm_stdin_pipe.wado::__modules_initialized);
         cold_path;

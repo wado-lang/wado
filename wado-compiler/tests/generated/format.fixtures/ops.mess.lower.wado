@@ -11948,32 +11948,6 @@ pub fn "core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self: &Stream
     let end: i32 = (data."core:prelude/slice.wado/Slice<u8>::internal_start"() + data."core:prelude/slice.wado/Slice<u8>::len"());
     let mut offset: i32 = data."core:prelude/slice.wado/Slice<u8>::internal_start"();
     loop {
-        __assert_0: {
-            let __cond: bool = (offset < end);
-            if !__cond {
-                core::builtin::cold_path();
-                core::rt::panic(__tmpl: {
-                    let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(145);
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"StreamWritable::write_raw_all", used: 29 });
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/types.wado", used: 23 });
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
-                    let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                    Box<i32> { value: 336 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: offset < end\n", used: 25 });
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"offset: ", used: 8 });
-                    __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                    Box<i32> { value: offset }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"end: ", used: 5 });
-                    __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                    Box<i32> { value: end }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
-                    __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                    break __tmpl: __r;
-                });
-            }
-        }
         let written: StreamWrite = core::rt::cm_stream_write_raw_u8(self as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(repr, offset, end));
         offset = (offset + written.count);
         if ("core::prelude/types.wado::write_copy_is_final"(&written) || (offset >= end)) {
@@ -16590,8 +16564,8 @@ fn "$value_copy$core:prelude/types.wado/StreamWrite"(v: StreamWrite) -> StreamWr
     return StreamWrite { count: v.count, result: v.result };
 }
 
-fn "$value_copy$[Stream<u8>,StreamWritable<u8>]"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
-    return [Stream<u8>,StreamWritable<u8>] { 0: v.0, 1: v.1 };
+fn "$value_copy$[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StreamWritable<u8>]"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
+    return [core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StreamWritable<u8>] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
