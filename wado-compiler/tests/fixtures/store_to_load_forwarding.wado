@@ -1,6 +1,9 @@
-// Store-to-load forwarding on struct fields. The absent `Pair` is what says
-// the loads resolved: every field store and load is gone by O2, leaving the
-// forwarded constants, whose spelling `const_object_globalization` owns.
+// Store-to-load forwarding on struct fields. The forwarded constant is pinned
+// on the scalar the field decomposes to rather than on the `fmt_decimal`
+// argument: `${p2.a}` reads it inside a template region, and an address-taken
+// primitive is stored boxed, so the region sees a `Box<i32>`-typed mention
+// where the environment holds a scalar — which `region_free_reads` refuses to
+// seed. Seeding a boxed scalar would restore it.
 use { println, Stdout } from "core:cli";
 
 struct Pair {
@@ -41,12 +44,11 @@ __DATA__
 {
     "stdout": "10, 42, 100\n",
     "wir_expect:O2": [
-        "Box<i32>\" { value: 10 }",
-        "Box<i32>\" { value: 42 }",
-        "Box<i32>\" { value: 100 }"
+        "i32::fmt_decimal$scalar\"(10,",
+        "__sroa_p2_a = 42",
+        "__sroa_p3_a = 100"
     ],
     "wir_not_expect:O2": [
-        "//Pair\"",
         "panic("
     ]
 }

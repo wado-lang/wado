@@ -17,9 +17,6 @@
 // relaxed pass consults `ModRef::can_move_past` and, finding the
 // intervening copy is `Control::Linear`, neither reads `self_N` nor
 // writes anything `r.field` depends on, performs the substitution.
-//
-// Pinned on `dump`'s calls, not on the absence of `Box<u64>`: an assert's
-// diagnostic path boxes its operands, so the type survives elsewhere.
 
 use { println, Stdout } from "core:cli";
 
@@ -43,8 +40,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "100 200\n",
-    "wir_expect:O2": [
-        "u64::fmt_into$scalar\"(100_i64,",
-        "u64::fmt_into$scalar\"(200_i64,"
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Box<u64>\""
     ]
 }

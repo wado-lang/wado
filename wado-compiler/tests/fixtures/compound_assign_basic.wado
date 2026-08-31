@@ -4,9 +4,10 @@
 // local environment buys: `x` is a `let mut`, and the environment carries its
 // scalar value between writes rather than giving up at the binding.
 //
-// The absent `x = x` is what says the fold happened: at O0 each compound
-// assignment is a read-modify-write, and none survives O2. The positives name
-// the folded constants, whose spelling `const_object_globalization` owns.
+// The value is pinned on the assignments, not on the `fmt_decimal` argument.
+// `${x}` reads `x` inside a template region, and an address-taken primitive is
+// stored boxed, so the region sees a `Box<i32>`-typed mention where the
+// environment holds a scalar — which `region_free_reads` refuses to seed.
 
 use { println, Stdout } from "core:cli";
 
@@ -33,13 +34,10 @@ __DATA__
 {
     "stdout": "+= : 15\n-= : 12\n*= : 24\n/= : 6\n%= : 2\n",
     "wir_expect:O2": [
-        "Box<i32>\" { value: 15 }",
-        "Box<i32>\" { value: 12 }",
-        "Box<i32>\" { value: 24 }",
-        "Box<i32>\" { value: 6 }",
-        "Box<i32>\" { value: 2 }"
-    ],
-    "wir_not_expect:O2": [
-        "x = x"
+        "x = 15;",
+        "x = 12;",
+        "x = 24;",
+        "x = 6;",
+        "x = 2;"
     ]
 }
