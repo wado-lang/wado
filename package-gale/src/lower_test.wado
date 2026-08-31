@@ -28,7 +28,12 @@ use {
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
 use { GenContext } from "./gen_context.wado";
-use { assign_atn_call_sites, canonicalize_empty_alt_groups, unwrap_labeled_transparent_groups } from "./ir.wado";
+use {
+    assert_canonical_shape,
+    assign_atn_call_sites,
+    canonicalize_empty_alt_groups,
+    unwrap_labeled_transparent_groups,
+} from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use {
     Rule,
@@ -2876,6 +2881,8 @@ test "canonicalizing a labelled empty-alt group leaves no Repeat under the label
     // nests a Repeat under it, which `classify_repeat_body_shape` rejects.
     let mut g = parse("grammar S;\nr : x=(A|)? B ;\nA : 'a' ;\nB : 'b' ;\n").unwrap();
     canonicalize_empty_alt_groups(&mut g);
+    unwrap_labeled_transparent_groups(&mut g);
+    assert_canonical_shape(&g);
     assign_atn_call_sites(&mut g);
     let lit = collect_literal_tokens(&g.parser_rules);
     let lowered = lower(&g, &lit);
@@ -2919,8 +2926,13 @@ test "canonicalizing collapses nested optionals through a bare wrapper" {
     ];
     for let src of &sources {
         let mut g = parse(*src).unwrap();
-        unwrap_labeled_transparent_groups(&mut g);
+        // The order `codegen.wado` runs them in. Reversed, the test proves
+        // nothing about the pass that runs second in production: a repeat over
+        // a repeat that `unwrap_labeled_transparent_groups` reintroduces would
+        // abort inside `assert_canonical_shape` with this still green.
         canonicalize_empty_alt_groups(&mut g);
+        unwrap_labeled_transparent_groups(&mut g);
+        assert_canonical_shape(&g);
         assign_atn_call_sites(&mut g);
         let lit = collect_literal_tokens(&g.parser_rules);
         let lowered = lower(&g, &lit);
