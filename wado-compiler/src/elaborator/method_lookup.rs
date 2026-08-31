@@ -2086,6 +2086,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
+        // This block binds the parameter, so it — not the letter — names it.
+        let blanket_owner = is_blanket_type_param.then_some(impl_ref.0);
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
         // is a type parameter. These should NOT override base-type methods.
@@ -2262,6 +2264,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
+                blanket_owner,
                 bound_depth,
                 impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
@@ -2334,6 +2337,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                     impl_module_source,
                     blanket_type_param,
+                    blanket_owner,
                     bound_depth,
                     impl_struct_name,
                     impl_struct_fq,

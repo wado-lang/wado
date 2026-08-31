@@ -2679,6 +2679,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info,
             impl_module_source,
             blanket_type_param: None,
+            blanket_owner: None,
             bound_depth: 0,
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),

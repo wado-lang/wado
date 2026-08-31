@@ -582,7 +582,7 @@ impl Receiver {
     /// namespace — only the mangled one, where it is scoped to its template.
     #[must_use]
     pub fn is_binder(&self) -> bool {
-        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Binder(_)))
+        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Binder { .. }))
     }
 
     /// Whether [`Self::head_key`] carries the receiver's module, so the mangled
@@ -2317,9 +2317,20 @@ pub enum TypeHead {
     /// A shape no module declares — a primitive, `()`, `!`, the raw GC `Array`,
     /// a function type. Every mangler spells one the same way.
     Builtin(String),
-    /// A template's own type-parameter binder (`T`, a pack member `F`). Not a
-    /// declaration, so it has no module.
-    Binder(String),
+    /// A template's own type-parameter binder (`T`, a pack member `F`).
+    ///
+    /// `owner` is the declaration that binds it, when one does: an `impl`
+    /// block's receiver parameter is bound by that block, and two blocks'
+    /// `T` are two binders however they are spelled. Equality reads it, so a
+    /// blanket's template name identifies the impl rather than the letter its
+    /// author happened to pick — without it, `impl<T: A> Tr for T` and
+    /// `impl<T: B> Tr for T` share one template and one silently replaces the
+    /// other (WEP 2026-08-12 Declaration Identity, issue #1932). `None` for a
+    /// binder no `impl` block owns, e.g. a generic function's own parameter.
+    Binder {
+        name: String,
+        owner: Option<BinderOwner>,
+    },
     /// A tuple. Its own head, because a tuple is spelled `[a,b]` — not
     /// `Head<a,b>` like every other instantiated shape, which is what a
     /// `Builtin("[]")` carrying arguments would render as.
@@ -2345,7 +2356,7 @@ impl TypeHead {
     pub fn name(&self) -> &str {
         match self {
             Self::Declared(head) => head.name(),
-            Self::Shape { name, .. } | Self::Builtin(name) | Self::Binder(name) => name,
+            Self::Shape { name, .. } | Self::Builtin(name) | Self::Binder { name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
@@ -2355,7 +2366,7 @@ impl TypeHead {
     pub fn rendered(&self) -> &str {
         match self {
             Self::Declared(head) => head.rendered(),
-            Self::Shape { name, .. } | Self::Builtin(name) | Self::Binder(name) => name,
+            Self::Shape { name, .. } | Self::Builtin(name) | Self::Binder { name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
@@ -2366,7 +2377,7 @@ impl TypeHead {
     pub fn def(&self) -> Option<crate::defs::DefId> {
         match self {
             Self::Declared(head) => Some(head.def()),
-            Self::Shape { .. } | Self::Builtin(_) | Self::Binder(_) | Self::Tuple => None,
+            Self::Shape { .. } | Self::Builtin(_) | Self::Binder { .. } | Self::Tuple => None,
         }
     }
 
@@ -2376,7 +2387,7 @@ impl TypeHead {
         match self {
             Self::Declared(head) => Some(head.module()),
             Self::Shape { module, .. } => Some(module),
-            Self::Builtin(_) | Self::Binder(_) | Self::Tuple => None,
+            Self::Builtin(_) | Self::Binder { .. } | Self::Tuple => None,
         }
     }
 }
@@ -2416,11 +2427,28 @@ impl FqTypeName {
         })
     }
 
-    /// A template's own type-parameter binder (`T` in `impl<T: Bound> Trait for
-    /// T`, a pack member `F`). A binder is not a declaration and has no module.
+    /// A template's own type-parameter binder (a generic function's `T`, a pack
+    /// member `F`). A binder is not a declaration and has no module. Use
+    /// [`Self::impl_binder`] for one an `impl` block binds — that one has an
+    /// identity beyond its spelling.
     #[must_use]
     pub fn binder(name: &str) -> Self {
-        Self::of_head_kind(TypeHead::Binder(name.to_string()))
+        Self::of_head_kind(TypeHead::Binder {
+            name: name.to_string(),
+            owner: None,
+        })
+    }
+
+    /// The binder an `impl` block declares — a blanket's receiver parameter
+    /// (`T` in `impl<T: Bound> Trait for T`). Named by the block, so two
+    /// blankets of one trait are two templates whatever they spell their
+    /// parameter (issue #1932).
+    #[must_use]
+    pub fn impl_binder(name: &str, owner: BinderOwner) -> Self {
+        Self::of_head_kind(TypeHead::Binder {
+            name: name.to_string(),
+            owner: Some(owner),
+        })
     }
 
     /// A tuple of `elems`, spelled `[a,b]`.
@@ -2528,7 +2556,15 @@ impl FqTypeName {
                 out.push_str(&format!("{}/{}", head.module(), head.rendered()));
             }
             TypeHead::Shape { module, name } => out.push_str(&format!("{module}/{name}")),
-            TypeHead::Builtin(name) | TypeHead::Binder(name) => out.push_str(name),
+            TypeHead::Builtin(name) => out.push_str(name),
+            // The owner is what separates two impls' identically spelled
+            // binders, so the mangle carries it. An unowned binder keeps its
+            // bare spelling, leaving every template name but a blanket's
+            // receiver byte-identical.
+            TypeHead::Binder { name, owner } => match owner {
+                Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
+                None => out.push_str(name),
+            },
             TypeHead::Tuple => unreachable!("handled above"),
         }
         if !self.args.is_empty() {
@@ -2603,6 +2639,57 @@ impl FqTypeName {
 impl std::fmt::Display for FqTypeName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_mangled())
+    }
+}
+
+/// The `impl` block that binds a type-parameter binder. Equality and hashing
+/// read the [`crate::defs::DefId`] alone, so two blocks' `T` are two binders
+/// however they are spelled.
+#[derive(Debug, Clone)]
+pub struct BinderOwner {
+    def: crate::defs::DefId,
+    /// What a mangle embeds. The block's module plus its *module-local*
+    /// `AstId` index — never the `AstIdSpace`, which is a process-global
+    /// counter and would make mangled names non-deterministic
+    /// (see [`mangle_local_item_name`]).
+    rendered: String,
+}
+
+impl PartialEq for BinderOwner {
+    fn eq(&self, other: &Self) -> bool {
+        self.def == other.def
+    }
+}
+
+impl Eq for BinderOwner {}
+
+impl std::hash::Hash for BinderOwner {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.def.hash(state);
+    }
+}
+
+impl BinderOwner {
+    /// Render the `impl` block `def`. Its module and `AstId` come off the
+    /// table, never from a caller.
+    #[must_use]
+    pub fn new(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+        Self {
+            def,
+            rendered: format!("{}/{}", defs.module(def), defs.ast_id(def).local()),
+        }
+    }
+
+    /// The spelling a mangle embeds.
+    #[must_use]
+    pub fn rendered(&self) -> &str {
+        &self.rendered
+    }
+
+    /// The `impl` block this binder belongs to. This is identity.
+    #[must_use]
+    pub fn def(&self) -> crate::defs::DefId {
+        self.def
     }
 }
 

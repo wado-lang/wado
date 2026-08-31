@@ -900,13 +900,34 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> crate::name::FqTypeName {
+        self.qualified_receiver_name_owned(written, None)
+    }
+
+    /// [`Self::qualified_receiver_name`] for a receiver written inside the
+    /// `impl` block `owner` identifies.
+    ///
+    /// A blanket's receiver *is* that block's own binder, so the block names
+    /// it: two blankets of one trait are two templates whatever letter each
+    /// spells its parameter. Naming it by the spelling alone made them one,
+    /// and the second silently replaced the first (issue #1932).
+    pub(super) fn qualified_receiver_name_owned(
+        &self,
+        written: &str,
+        owner: Option<crate::defs::DefId>,
+    ) -> crate::name::FqTypeName {
         if self
             .annotate_ctx
             .trait_ctx
             .type_params
             .contains_key(written)
         {
-            return crate::name::FqTypeName::binder(written);
+            return match owner {
+                Some(def) => crate::name::FqTypeName::impl_binder(
+                    written,
+                    crate::name::BinderOwner::new(self.tysys.resolutions.defs(), def),
+                ),
+                None => crate::name::FqTypeName::binder(written),
+            };
         }
         if crate::name::is_builtin_shape_name(written) {
             return crate::name::FqTypeName::builtin(written);
@@ -1981,6 +2002,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Resolve impl block methods with mangled names
         let struct_name = scope.get_type_name(&impl_block.ty);
+        // A blanket's receiver is this block's own binder, so this block names
+        // it — see `qualified_receiver_name_owned`.
+        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
         let trait_name = impl_block.trait_type.as_ref().map(|t| {
             let fq = scope.fq_trait_name(t);
             scope.tysys.trait_env.fq_trait_named_by_impl(
@@ -2182,6 +2206,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 impl_is_concrete,
                 &impl_block.type_params,
                 Some(&recorded_sig),
+                impl_owner,
             );
         }
 
@@ -2246,6 +2271,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     impl_is_concrete,
                     &impl_block.type_params,
                     None,
+                    impl_owner,
                 );
 
                 // Swap back, take the populated synthetic out.
