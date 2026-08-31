@@ -292,7 +292,9 @@ impl u128 {
         } else {
             // A divisor past 64 bits leaves the quotient in one word. Halving
             // the dividend is what holds the wide step's own dividend below
-            // its divisor; the estimate that yields is exact or one low.
+            // its divisor; normalization drops the rest of the divisor, so the
+            // estimate that yields is exact or one high — hence the decrement,
+            // and the one correction that answers it.
             let n = builtin::i64_clz(divisor.high as i64) as u64;
             let mut dn = divisor.high << n;
             if n != 0 {
