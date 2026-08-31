@@ -107,7 +107,10 @@ fn debug_log_of(
     let host = crate::common::InMemoryHost::new();
     let options = CompilerOptions {
         opt_level,
-        opt_iterations,
+        opt: wado_compiler::OptOverrides {
+            iterations: opt_iterations,
+            ..Default::default()
+        },
         log_level: Some(LogLevel::Debug),
         ..Default::default()
     };

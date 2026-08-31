@@ -171,6 +171,7 @@ impl Opt {
     const KNOBS: &[KnobOpt] = &[
         KnobOpt::OptLevel,
         KnobOpt::InlineThreshold,
+        KnobOpt::InlineGrowth,
         KnobOpt::OptIterations,
         KnobOpt::LogLevel,
         KnobOpt::NoValidate,
@@ -392,8 +393,7 @@ pub async fn try_compile_with_run_cache(
     let options = wado_compiler::CompilerOptions {
         opt_level: knobs.opt_level.to_compiler(),
         skip_validation: knobs.skip_validation,
-        inline_threshold: knobs.inline_threshold,
-        opt_iterations: knobs.opt_iterations,
+        opt: knobs.opt,
         log_level: Some(knobs.log_level),
         allocator: knobs.allocator.clone(),
         codegen_flags: knobs.codegen_flags.clone(),

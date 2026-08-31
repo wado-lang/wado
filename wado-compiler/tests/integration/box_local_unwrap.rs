@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::OptLevel;
 
 const SOURCE: &str = r#"
 struct Inner { name: String, ids: List<i32> }
@@ -31,26 +31,12 @@ export fn run() {
 "#;
 
 fn count_body() -> String {
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        retain_wir: true,
-        ..Default::default()
-    };
-    let result = crate::common::compile_source_with_compiler_options(
+    crate::common::wir_function_body(
         Path::new("box_local_unwrap_test.wado"),
         SOURCE,
-        options,
+        OptLevel::O2,
+        "fn \"box_local_unwrap_test.wado/count\"",
     )
-    .expect("compilation should succeed");
-    let wir_package = result.wir_package.as_ref().expect("wir retained");
-    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
-
-    let start = wir_text
-        .find("fn \"box_local_unwrap_test.wado/count\"")
-        .expect("count function in WIR");
-    let rest = &wir_text[start..];
-    let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());
-    rest[..end].to_string()
 }
 
 #[test]

@@ -8,6 +8,7 @@ mod aggregate_forward;
 mod alias;
 mod arena_query;
 mod clone_forward;
+mod cold_outline;
 mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
@@ -78,8 +79,12 @@ use crate::nir_package::NirPackage;
 struct OptConfig {
     /// Number of fixed-point iterations
     iterations: u32,
-    /// Maximum statement count for inlining
+    /// What one copy of a callee may cost to run, for it to be worth splicing.
     inline_threshold: usize,
+    /// Percent the inliner may grow the whole unit by, however many copies the
+    /// threshold would otherwise admit, or `None` to leave it unbounded. See
+    /// [`inline::InlineBudget`].
+    inline_growth: Option<u32>,
     /// Whether exhausting `iterations` is a defect rather than a budget — true
     /// for the caps `-O2`/`-Os` and `-O3` size so the loop converges under them.
     cap_is_defect: bool,
@@ -119,15 +124,19 @@ fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
 /// The optimizer's entry point. Every level runs DCE, which cuts codegen work
 /// sharply; `O1` and above run it twice, before the fixed-point loop to shrink
 /// the working set and after it to sweep what the loop made dead. What runs in
-/// between is the pass sequence below, scaled by [`OptLevel`]. `inline_threshold`
-/// and `opt_iterations` override that level's defaults.
+/// between is the pass sequence below, scaled by [`OptLevel`] and by whatever
+/// `opt` overrides of that level's defaults.
 pub fn optimize(
     mut project: NirPackage,
     opt_level: OptLevel,
-    inline_threshold: Option<usize>,
-    opt_iterations: Option<u32>,
+    opt: crate::OptOverrides,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
+    let crate::OptOverrides {
+        inline_threshold,
+        inline_growth,
+        iterations: opt_iterations,
+    } = opt;
     // Decide the short-string inline threshold once, from the opt level. Read
     // by `wir_build` (`translate_packed_array` / `register_literal_data`) to
     // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
@@ -155,6 +164,7 @@ pub fn optimize(
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(2),
                 inline_threshold: inline_threshold.unwrap_or(4),
+                inline_growth,
                 cap_is_defect: false,
             };
             // Early DCE: remove unreachable functions/types before optimization
@@ -168,13 +178,14 @@ pub fn optimize(
             let config = OptConfig {
                 // Every source in the tree settles by 8, so 15 is slack.
                 iterations: opt_iterations.unwrap_or(15),
-                // Threshold 13 is the sweet spot for -O2/-Os: on
-                // syntax-highlight (Gale-generated SQLite highlighter)
-                // throughput is ~30% better than 14 because at 14 a
-                // specific Gale parser action function chain-inlines
-                // and the resulting code regresses (13.5ms/iter -> 18ms).
-                // Sizes at 13 and 14 differ by only ~4KB.
-                inline_threshold: inline_threshold.unwrap_or(13),
+                // Threshold 16, best of three alternating whole-suite runs
+                // against 13: the cbor serialize rows gain 11-13% and eight
+                // more 3-7%, against json-catalog ser at -3%. That row turns
+                // first as the threshold climbs — -8.2% at 20, -35.3% at 26 —
+                // so 16 costs it least while still buying the serde rows.
+                // Below 13 every row is worse.
+                inline_threshold: inline_threshold.unwrap_or(16),
+                inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
             run_dce(&mut project, profiler);
@@ -187,11 +198,16 @@ pub fn optimize(
         OptLevel::O3 => {
             // The heaviest source in the tree — the Gale-generated SQLite parser
             // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack.
-            // Threshold 32 sits just under a size cliff at 33 on
-            // syntax-highlight (859KB → 1049KB), for no speed gain.
+            //
+            // Threshold 26 is the top of what shakes NIR into new shapes for
+            // its cost: on the Gale CSS3 parser 28, 30 and 32 all emit ~959KB
+            // in ~13.5s off the same candidate set, while 26 emits 719KB in
+            // 10.7s. The corpus barely reads the knob (24 → 32 moves its
+            // compile CPU 4.6%), so the cost is felt compiling one heavy file.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),
-                inline_threshold: inline_threshold.unwrap_or(32),
+                inline_threshold: inline_threshold.unwrap_or(26),
+                inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
             run_dce(&mut project, profiler);
@@ -456,6 +472,13 @@ fn run_optimization_passes(
     config: &OptConfig,
     profiler: &dyn SpanEmitter,
 ) {
+    let mut descriptor_cache = dce::DescriptorCache::default();
+    // Before anything prices a body, so `nir/inline`'s cold discount describes
+    // the function it copies. Ahead of the gate too, so the call graph is built
+    // over the split shape rather than growing into it.
+    run_pass("nir/cold_outline", project, profiler, |p| {
+        cold_outline::outline_cold_regions(p, &mut descriptor_cache)
+    });
     // Per-function dirty-set gate. Every loop pass is gate-aware:
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
     // an interprocedural pass scans all functions but reports exactly the ones
@@ -466,7 +489,9 @@ fn run_optimization_passes(
     // changes; see `ConstFoldCache`.
     let mut const_fold_cache: Option<ConstFoldCache> = None;
     let mut param_spec_state = param_spec::ParamSpecState::default();
-    let mut descriptor_cache = dce::DescriptorCache::default();
+    // Held across the loop: the budget anchors on the unit as the loop found it,
+    // so what the rounds add together stays bounded. See `InlineBudget`.
+    let mut inline_budget = inline::InlineBudget::new(config.inline_growth);
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the
     // function-level loop never mutates global initializer bodies, so a single
@@ -556,7 +581,13 @@ fn run_optimization_passes(
         record!(
             "nir/inline",
             run_pass("nir/inline", project, profiler, |p| {
-                inline_functions(p, config.inline_threshold, &mut gate, &mut descriptor_cache)
+                inline_functions(
+                    p,
+                    config.inline_threshold,
+                    &mut inline_budget,
+                    &mut gate,
+                    &mut descriptor_cache,
+                )
             })
         );
         // Peephole engine, post-inline run. `elide_local` runs again over
@@ -619,6 +650,9 @@ fn run_optimization_passes(
             ));
             break;
         }
+    }
+    if let Some(report) = inline_budget.report() {
+        profiler.debug(&report);
     }
     if !iter_changed.is_empty() {
         let report = format!(

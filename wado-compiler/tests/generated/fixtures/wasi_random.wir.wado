@@ -61,21 +61,19 @@ type "functype//wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed" =
 
 type "functype//wasi_random.wado/__cm_export__run" = fn();  // TypeId(22)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(23)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(23)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(24)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(25)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(25)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(26)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(26)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -94,6 +92,18 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:wasi_random.wado::__modules_initialized: bool = 0;
+global global:wasi_random.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 108, 32, 114, 97, 110, 100, 111, 109, 32, 116, 101, 115, 116, 115, 32, 112, 97, 115, 115, 101, 100), used: 23 };
+global global:wasi_random.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 105, 110, 115, 101, 99, 117, 114, 101, 32, 115, 101, 101, 100, 32, 112, 114, 111, 100, 117, 99, 101, 100, 32, 122, 101, 114, 111, 115, 32, 40, 117, 110, 108, 105, 107, 101, 108, 121, 32, 98, 117, 116, 32, 118, 97, 108, 105, 100, 41), used: 55 };
+global global:wasi_random.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 105, 110, 115, 101, 99, 117, 114, 101, 32, 115, 101, 101, 100, 32, 112, 114, 111, 100, 117, 99, 101, 115, 32, 110, 111, 110, 45, 122, 101, 114, 111, 32, 118, 97, 108, 117, 101), used: 43 };
+global global:wasi_random.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 105, 110, 115, 101, 99, 117, 114, 101, 32, 115, 101, 101, 100, 32, 119, 111, 114, 107, 115), used: 25 };
+global global:wasi_random.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 105, 110, 115, 101, 99, 117, 114, 101, 32, 114, 97, 110, 100, 111, 109, 32, 117, 54, 52, 32, 118, 97, 108, 117, 101, 115, 32, 115, 97, 109, 101, 32, 40, 117, 110, 108, 105, 107, 101, 108, 121, 32, 98, 117, 116, 32, 118, 97, 108, 105, 100, 41), used: 58 };
+global global:wasi_random.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 105, 110, 115, 101, 99, 117, 114, 101, 32, 114, 97, 110, 100, 111, 109, 32, 117, 54, 52, 32, 118, 97, 108, 117, 101, 115, 32, 100, 105, 102, 102, 101, 114), used: 39 };
+global global:wasi_random.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 105, 110, 115, 101, 99, 117, 114, 101, 32, 114, 97, 110, 100, 111, 109, 32, 117, 54, 52, 32, 119, 111, 114, 107, 115), used: 31 };
+global global:wasi_random.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 114, 97, 110, 100, 111, 109, 32, 117, 54, 52, 32, 118, 97, 108, 117, 101, 115, 32, 115, 97, 109, 101, 32, 40, 117, 110, 108, 105, 107, 101, 108, 121, 32, 98, 117, 116, 32, 118, 97, 108, 105, 100, 41), used: 49 };
+global global:wasi_random.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 114, 97, 110, 100, 111, 109, 32, 117, 54, 52, 32, 118, 97, 108, 117, 101, 115, 32, 100, 105, 102, 102, 101, 114), used: 30 };
+global global:wasi_random.wado::__const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 114, 97, 110, 100, 111, 109, 32, 117, 54, 52, 32, 112, 114, 111, 100, 117, 99, 101, 100, 32, 116, 119, 111, 32, 122, 101, 114, 111, 115, 32, 40, 117, 110, 108, 105, 107, 101, 108, 121, 32, 98, 117, 116, 32, 118, 97, 108, 105, 100, 41), used: 56 };
+global global:wasi_random.wado::__const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 114, 97, 110, 100, 111, 109, 32, 117, 54, 52, 32, 112, 114, 111, 100, 117, 99, 101, 115, 32, 110, 111, 110, 45, 122, 101, 114, 111, 32, 118, 97, 108, 117, 101, 115), used: 41 };
+global global:wasi_random.wado::__const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 114, 97, 110, 100, 111, 109, 32, 117, 54, 52, 32, 119, 111, 114, 107, 115), used: 22 };
 
 fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     let r1: u64;
@@ -162,32 +172,32 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     rx_13 = builtin::i32_wrap_i64(local.tee packed_12("wasi/stream-new"()));
     tx_14 = builtin::i32_wrap_i64(packed_12 >> 32_i64);
     handle_10 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_13);
-    "core:rt/write_string_to_stream"(tx_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 works"), used: 22 }, 1);
+    "core:rt/write_string_to_stream"(tx_14, global:wasi_random.wado::__const_obj_11, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
     if select i32(r1 != 0_i64, 1, r2 != 0_i64) {
         rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
         tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
         handle_22 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
-        "core:rt/write_string_to_stream"(tx_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 produces non-zero values"), used: 41 }, 1);
+        "core:rt/write_string_to_stream"(tx_26, global:wasi_random.wado::__const_obj_10, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_22);
     } else {
         rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
         tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
         handle_34 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
-        "core:rt/write_string_to_stream"(tx_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 produced two zeros (unlikely but valid)"), used: 56 }, 1);
+        "core:rt/write_string_to_stream"(tx_38, global:wasi_random.wado::__const_obj_9, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_34);
     }
     if r1 != r2 {
         rx_49 = builtin::i32_wrap_i64(local.tee packed_48("wasi/stream-new"()));
         tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
         handle_46 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_49);
-        "core:rt/write_string_to_stream"(tx_50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 values differ"), used: 30 }, 1);
+        "core:rt/write_string_to_stream"(tx_50, global:wasi_random.wado::__const_obj_8, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_46);
     } else {
         rx_61 = builtin::i32_wrap_i64(local.tee packed_60("wasi/stream-new"()));
         tx_62 = builtin::i32_wrap_i64(packed_60 >> 32_i64);
         handle_58 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_61);
-        "core:rt/write_string_to_stream"(tx_62, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 values same (unlikely but valid)"), used: 49 }, 1);
+        "core:rt/write_string_to_stream"(tx_62, global:wasi_random.wado::__const_obj_7, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_58);
     }
     ir1 = "wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"();
@@ -195,19 +205,19 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     rx_73 = builtin::i32_wrap_i64(local.tee packed_72("wasi/stream-new"()));
     tx_74 = builtin::i32_wrap_i64(packed_72 >> 32_i64);
     handle_70 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_73);
-    "core:rt/write_string_to_stream"(tx_74, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 works"), used: 31 }, 1);
+    "core:rt/write_string_to_stream"(tx_74, global:wasi_random.wado::__const_obj_6, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_70);
     if ir1 != ir2 {
         rx_85 = builtin::i32_wrap_i64(local.tee packed_84("wasi/stream-new"()));
         tx_86 = builtin::i32_wrap_i64(packed_84 >> 32_i64);
         handle_82 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_85);
-        "core:rt/write_string_to_stream"(tx_86, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 values differ"), used: 39 }, 1);
+        "core:rt/write_string_to_stream"(tx_86, global:wasi_random.wado::__const_obj_5, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_82);
     } else {
         rx_97 = builtin::i32_wrap_i64(local.tee packed_96("wasi/stream-new"()));
         tx_98 = builtin::i32_wrap_i64(packed_96 >> 32_i64);
         handle_94 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_97);
-        "core:rt/write_string_to_stream"(tx_98, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 values same (unlikely but valid)"), used: 58 }, 1);
+        "core:rt/write_string_to_stream"(tx_98, global:wasi_random.wado::__const_obj_4, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_94);
     }
     seed = "wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"();
@@ -216,25 +226,25 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     rx_109 = builtin::i32_wrap_i64(local.tee packed_108("wasi/stream-new"()));
     tx_110 = builtin::i32_wrap_i64(packed_108 >> 32_i64);
     handle_106 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_109);
-    "core:rt/write_string_to_stream"(tx_110, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed works"), used: 25 }, 1);
+    "core:rt/write_string_to_stream"(tx_110, global:wasi_random.wado::__const_obj_3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_106);
     if select i32(seed_low != 0_i64, 1, seed_high != 0_i64) {
         rx_121 = builtin::i32_wrap_i64(local.tee packed_120("wasi/stream-new"()));
         tx_122 = builtin::i32_wrap_i64(packed_120 >> 32_i64);
         handle_118 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_121);
-        "core:rt/write_string_to_stream"(tx_122, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed produces non-zero value"), used: 43 }, 1);
+        "core:rt/write_string_to_stream"(tx_122, global:wasi_random.wado::__const_obj_2, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_118);
     } else {
         rx_133 = builtin::i32_wrap_i64(local.tee packed_132("wasi/stream-new"()));
         tx_134 = builtin::i32_wrap_i64(packed_132 >> 32_i64);
         handle_130 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_133);
-        "core:rt/write_string_to_stream"(tx_134, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed produced zeros (unlikely but valid)"), used: 55 }, 1);
+        "core:rt/write_string_to_stream"(tx_134, global:wasi_random.wado::__const_obj_1, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_130);
     }
     rx_145 = builtin::i32_wrap_i64(local.tee packed_144("wasi/stream-new"()));
     tx_146 = builtin::i32_wrap_i64(packed_144 >> 32_i64);
     handle_142 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_145);
-    "core:rt/write_string_to_stream"(tx_146, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all random tests passed"), used: 23 }, 1);
+    "core:rt/write_string_to_stream"(tx_146, global:wasi_random.wado::__const_obj_0, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_142);
 }
 
@@ -270,19 +280,6 @@ fn "wasi_random.wado/__cm_export__run"() {
     };
     "wasi_random.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
-    let i: i32;
-    i = 0;
-    b4: block {
-        l5: loop {
-            break_if b4 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            continue l5;
-        };
-    };
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
@@ -327,49 +324,54 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_14: i32;
     let raw_len: i32;
     let written_16: ref "core:prelude/types.wado//StreamWrite";
-    let len: i32;
+    let len_23: i32;
     let ptr_24: i32;
+    let i: i32;
     let result: i32;
     let status: i32;
     let __sroa_data_start: i32;
-    let _av_39: i32;
-    let _av_40: i32;
-    _av_39 = data.start;
-    _av_40 = data.end;
-    if (_av_40 - _av_39) == 0 {
+    let _av_44: i32;
+    let _av_45: i32;
+    _av_44 = data.start;
+    _av_45 = data.end;
+    if (_av_45 - _av_44) == 0 {
         return 0;
     }
     repr_2 = data.repr;
-    end_3 = _av_39 + (_av_40 - _av_39);
+    end_3 = _av_44 + (_av_45 - _av_44);
     offset = data.start;
     block {
-        l9: loop {
+        l7: loop {
             __sroa_data_start = offset;
-            len = end_3 - __sroa_data_start;
-            ptr_24 = "mem/realloc"(0, 0, 1, len);
-            "core:rt/gc_array_to_memory"(repr_2, __sroa_data_start, ptr_24, len);
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len) << 32_i64)));
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b8: block {
+                l9: loop {
+                    break_if b8 i >= len_23;
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
+                    i = i + 1;
+                    continue l9;
+                };
+            }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
             result = "wasi/stream-write"(self, ptr_14, raw_len);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(self);
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_12: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
                 status = result & 15;
                 if status == 0 {
-                    break __inline_cm_copy_result_12: 0;
+                    break __inline_cm_copy_result_13: 0;
                 }
                 if status == 1 {
-                    break __inline_cm_copy_result_12: 1;
+                    break __inline_cm_copy_result_13: 1;
                 }
-                break __inline_cm_copy_result_12: 2;
+                break __inline_cm_copy_result_13: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l9;
+            continue l7;
         };
     };
 }

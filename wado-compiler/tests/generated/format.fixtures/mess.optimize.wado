@@ -26,6 +26,7 @@ fn grow_memory(new_offset: i32) {
         normal_grow;
     };
     if (core::builtin::memory_grow(((grow_bytes + 65535) / 65536)) < 0) {
+        core::builtin::cold_path();
         core::builtin::unreachable();
     }
 }
@@ -103,6 +104,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         let mut block: i32 = (oldptr - 8);
         let header: i32 = core::builtin::i32_load(block);
         if (core::builtin::i32_and(header, 1) == 0) {
+            core::builtin::cold_path();
             core::builtin::unreachable();
         }
         let mut size: i32 = core::builtin::i32_and(header, -8);

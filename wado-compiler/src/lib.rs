@@ -259,6 +259,15 @@ pub struct ProviderComponent {
     pub bytes: Vec<u8>,
 }
 
+/// What a caller may override in the optimizer, each `None` meaning "whatever
+/// the level decides".
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OptOverrides {
+    pub inline_threshold: Option<usize>,
+    pub inline_growth: Option<u32>,
+    pub iterations: Option<u32>,
+}
+
 /// Compilation options for the compiler
 #[derive(Debug, Clone)]
 pub struct CompilerOptions {
@@ -273,12 +282,9 @@ pub struct CompilerOptions {
     /// When true, retain the WIR module in [`CompileResult::wir_package`].
     /// Used by test infrastructure to inspect WIR without a second compilation pass.
     pub retain_wir: bool,
-    /// Override the inline threshold for the optimization pass.
-    /// When `None`, the default for the `opt_level` is used.
-    pub inline_threshold: Option<usize>,
-    /// Override the number of fixed-point optimization iterations.
-    /// When `None`, the default for the `opt_level` is used.
-    pub opt_iterations: Option<u32>,
+    /// What to override in the optimizer instead of taking `opt_level`'s
+    /// defaults.
+    pub opt: OptOverrides,
     /// Log level for compiler diagnostics.
     /// When `None`, uses the default (`Info`).
     pub log_level: Option<LogLevel>,
@@ -340,8 +346,7 @@ impl Default for CompilerOptions {
             target_world: None,
             skip_validation: false,
             retain_wir: false,
-            inline_threshold: None,
-            opt_iterations: None,
+            opt: OptOverrides::default(),
             log_level: None,
             allocator: None,
             invocations: kiln::InvocationIndex::default(),
@@ -931,6 +936,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             lib_world: Some(fq.clone()),
             lib_interface_export: true,
             opt_level: parent.opt_level,
+            opt: parent.opt,
             log_level: parent.log_level,
             codegen_flags: parent.codegen_flags.clone(),
             param_overrides: parent.param_overrides.clone(),
@@ -1578,13 +1584,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 11: Optimize (NirPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("optimize");
-        optimize(
-            nir,
-            options.opt_level,
-            options.inline_threshold,
-            options.opt_iterations,
-            logger,
-        )
+        optimize(nir, options.opt_level, options.opt, logger)
     };
 
     // Emit optimizer remarks for residual value-semantic copies that survived
@@ -1736,8 +1736,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         opt_level,
         None,
         None,
-        None,
-        None,
+        OptOverrides::default(),
         &[],
         &crate::hashmap::IndexMap::default(),
         param_resolution::ParamPolicy::default(),
@@ -1762,8 +1761,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     opt_level: OptLevel,
     target_world: Option<&str>,
     allocator: Option<&str>,
-    inline_threshold: Option<usize>,
-    opt_iterations: Option<u32>,
+    opt: OptOverrides,
     codegen_flags: &[String],
     param_overrides: &crate::hashmap::IndexMap<String, String>,
     param_policy: param_resolution::ParamPolicy,
@@ -1997,7 +1995,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Optimize
             let nir = {
                 let _span = logger.span("optimize");
-                optimize(nir, opt_level, inline_threshold, opt_iterations, &logger)
+                optimize(nir, opt_level, opt, &logger)
             };
 
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
