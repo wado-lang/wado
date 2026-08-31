@@ -158,6 +158,7 @@ pub(crate) fn from_compiler_diagnostic(
 #[cfg(test)]
 mod tests {
     use wado_compiler::DiagnosticSpan;
+    use wado_compiler::ast::AstIdSpace;
 
     use super::*;
 
@@ -173,6 +174,7 @@ mod tests {
                 column: 5,
                 end_line: Some(10),
                 end_column: None,
+                space: AstIdSpace::FRESH,
             }),
         };
 
@@ -196,6 +198,7 @@ mod tests {
                 column: 4,
                 end_line: Some(1),
                 end_column: Some(10),
+                space: AstIdSpace::FRESH,
             }),
         };
         let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
@@ -216,6 +219,7 @@ mod tests {
                 column: 1,
                 end_line: Some(1),
                 end_column: Some(2),
+                space: AstIdSpace::FRESH,
             }),
         };
         let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
@@ -266,6 +270,7 @@ mod tests {
                 column: 1,
                 end_line: Some(1),
                 end_column: None,
+                space: AstIdSpace::FRESH,
             }),
         };
         let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
@@ -290,6 +295,7 @@ mod tests {
                 column: 13, // codepoint col in imported.wado
                 end_line: Some(1),
                 end_column: Some(15),
+                space: AstIdSpace::FRESH,
             }),
         };
         let diag = from_compiler_diagnostic(
@@ -321,6 +327,7 @@ mod tests {
                 column: 5,
                 end_line: Some(1),
                 end_column: Some(6),
+                space: AstIdSpace::FRESH,
             }),
         };
         let diag = from_compiler_diagnostic(
@@ -345,6 +352,7 @@ mod tests {
                 column: 0,
                 end_line: None,
                 end_column: None,
+                space: AstIdSpace::FRESH,
             }),
         };
         let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
@@ -367,6 +375,7 @@ mod tests {
                 column: 5,
                 end_line: Some(3),
                 end_column: Some(15),
+                space: AstIdSpace::FRESH,
             }),
         };
         let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();

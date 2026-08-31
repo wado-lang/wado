@@ -366,6 +366,7 @@ mod tests {
             end_column: 7,
             start: 3,
             end: 6,
+            ..Span::default()
         };
         let r = span_to_range(&span, Some(src), PositionEncoding::Utf16);
         assert_eq!(r.start, pos(0, 3));
@@ -386,6 +387,7 @@ mod tests {
             end_column: 5,
             start: 3,
             end: 6,
+            ..Span::default()
         };
         let r = span_to_range(&span, Some(src), PositionEncoding::Utf16);
         assert_eq!(r.start, pos(0, 3));
@@ -402,6 +404,7 @@ mod tests {
             end_column: 5,
             start: 3,
             end: 6,
+            ..Span::default()
         };
         let r = span_to_range(&span, Some(src), PositionEncoding::Utf8);
         // Codepoint 3 = byte 3, codepoint 4 = byte 3 + 3 (length of 'あ') = 6.
@@ -421,6 +424,7 @@ mod tests {
             end_column: 6, // codepoint index 5 (after 🦀)
             start: 4,
             end: 8,
+            ..Span::default()
         };
         let r = span_to_range(&span, Some(src), PositionEncoding::Utf16);
         assert_eq!(r.start, pos(0, 4));

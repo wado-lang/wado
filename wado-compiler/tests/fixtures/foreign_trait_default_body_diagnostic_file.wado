@@ -1,0 +1,22 @@
+// A trait's default body is foreign AST synthesized into each impl, so its
+// spans index the trait's file rather than the impl's. The diagnostic names the
+// file its coordinates belong to — and it is raised after the walk that
+// synthesized the body has moved on, so nothing ambient can supply it.
+
+use { Greet } from "./sub/foreign_trait_default_infer_lib.wado";
+
+struct S {}
+
+impl Greet for S {
+    fn name(&self) -> String {
+        return "s";
+    }
+}
+
+export fn run() {
+    let s = S {};
+    let _ = s.greet();
+}
+
+__DATA__
+{"compile_error": "./sub/foreign_trait_default_infer_lib.wado:9:16: analysis error: cannot infer type parameter `T` of function `nothing`"}

@@ -4,8 +4,8 @@
 // The lexer is *resilient*: malformed input never aborts tokenisation. Every
 // byte of the source is accounted for as a token, comment, whitespace,
 // shebang, or data-section content, and lex errors are surfaced alongside a
-// best-effort token stream via [`LexResult`]. The recommended entry points
-// are the free functions [`lex`] and [`lex_with_line`].
+// best-effort token stream via [`LexResult`]. The entry points are the free
+// functions [`lex`] and [`lex_in`].
 
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
@@ -22,15 +22,16 @@ pub fn is_valid_ident(s: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// Tokenise `source`. See module docs for the recovery contract.
+/// Tokenise `source` as its own parse. See module docs for the recovery
+/// contract.
 pub fn lex(source: &str) -> LexResult {
-    Lexer::new(source).run()
+    lex_in(source, crate::ast::AstIdSpace::next())
 }
 
-/// Like [`lex`] but starts numbering lines at `start_line` — used by the
-/// parser when re-lexing the inside of a template-string interpolation.
-pub fn lex_with_line(source: &str, start_line: usize) -> LexResult {
-    Lexer::with_line(source, start_line).run()
+/// [`lex`] into an existing parse, for text that belongs to one already: a
+/// template interpolation is part of the file its template sits in.
+pub fn lex_in(source: &str, space: crate::ast::AstIdSpace) -> LexResult {
+    Lexer::new(source).run().in_space(space)
 }
 
 /// Lex an interpolation's expression source, positioned on the file it came
@@ -47,8 +48,12 @@ pub fn lex_with_line(source: &str, start_line: usize) -> LexResult {
 /// tokens inside an interpolation, which the outer template hides behind a
 /// single [`TokenKind::TemplateStringLit`].
 #[must_use]
-pub fn lex_interpolation(source: &str, origin: Position) -> LexResult {
-    let mut result = lex(source);
+pub fn lex_interpolation(
+    source: &str,
+    origin: Position,
+    space: crate::ast::AstIdSpace,
+) -> LexResult {
+    let mut result = lex_in(source, space);
     for token in &mut result.tokens {
         token.span = rebase_span(token.span, origin);
         if let TokenKind::TemplateStringLit(parts) = &mut token.kind {
@@ -105,6 +110,7 @@ pub fn rebase_span(span: Span, origin: Position) -> Span {
         origin.line + span.end_line - 1,
         shift_column(span.end_line, span.end_column),
     )
+    .in_space(span.space)
 }
 
 /// Bundle of tokens + recovered diagnostics + trivia returned by [`lex`].
@@ -119,6 +125,31 @@ pub struct LexResult {
     /// content is not Wado, so nothing downstream of the lexer carries a span
     /// for it; the highlighter needs one to say so.
     pub data_section_span: Option<Span>,
+    /// The parse every span in here belongs to. [`crate::parser::Parser`] adopts
+    /// it rather than drawing its own, so a module's `AstId`s and its spans name
+    /// the same parse.
+    pub space: crate::ast::AstIdSpace,
+}
+
+impl LexResult {
+    /// Stamp `space` onto every span this run produced. One choke point covers
+    /// the lot: nothing else here carries a position.
+    fn in_space(mut self, space: crate::ast::AstIdSpace) -> Self {
+        for token in &mut self.tokens {
+            token.span = token.span.in_space(space);
+        }
+        for error in &mut self.errors {
+            error.span = error.span.in_space(space);
+        }
+        for comment in &mut self.comments {
+            comment.span = comment.span.in_space(space);
+        }
+        if let Some(span) = &mut self.data_section_span {
+            *span = span.in_space(space);
+        }
+        self.space = space;
+        self
+    }
 }
 
 /// What [`Lexer::collect_interpolation_source`] is currently inside of. Only
@@ -252,22 +283,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Like `new`, but starts numbering lines at `line`.
-    fn with_line(input: &'a str, line: usize) -> Self {
-        Self {
-            input,
-            chars: input.char_indices().peekable(),
-            pos: 0,
-            line,
-            column: 1,
-            data_section: None,
-            data_section_span: None,
-            comments: Vec::new(),
-            shebang: None,
-            errors: Vec::new(),
-        }
-    }
-
     /// Drive the lexer to completion and return the bundled [`LexResult`].
     fn run(mut self) -> LexResult {
         self.skip_shebang();
@@ -289,6 +304,7 @@ impl<'a> Lexer<'a> {
             shebang: self.shebang,
             data_section: self.data_section,
             data_section_span: self.data_section_span,
+            space: crate::ast::AstIdSpace::FRESH,
         }
     }
 

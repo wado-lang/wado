@@ -202,6 +202,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                     column,
                     end_line: None,
                     end_column: None,
+                    space: crate::ast::AstIdSpace::FRESH,
                 }),
             },
             LoadError::ParseError {
@@ -219,6 +220,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                     column,
                     end_line: None,
                     end_column: None,
+                    space: crate::ast::AstIdSpace::FRESH,
                 }),
             },
             LoadError::BindError {
@@ -254,6 +256,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                     column,
                     end_line: None,
                     end_column: None,
+                    space: crate::ast::AstIdSpace::FRESH,
                 }),
             },
             ref other => Self {

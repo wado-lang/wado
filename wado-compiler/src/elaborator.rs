@@ -218,24 +218,14 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    /// Emit a `TypeError` attributed to `current_module_source` — the channel
-    /// for every diagnostic raised during item/body resolution.
+    /// The channel for every diagnostic raised during item/body resolution.
+    /// A located one names the file its span indexes; `current_module_source`
+    /// answers only for a span no parse produced.
     pub(super) fn emit(
         &self,
         err: impl Into<crate::compiler_host::Diagnostic>,
     ) -> Result<(), crate::logger::Bail> {
         self.logger.error_in(&self.current_module_source, err)
-    }
-
-    /// [`Self::emit`] for a diagnostic whose span belongs to `module` — a
-    /// foreign default expression or associated-constant body — so the file it
-    /// is reported against is the one the span indexes.
-    pub(super) fn emit_in(
-        &self,
-        module: &ModuleSource,
-        err: impl Into<crate::compiler_host::Diagnostic>,
-    ) -> Result<(), crate::logger::Bail> {
-        self.logger.error_in(module, err)
     }
 
     /// The declaration an item node declares.

@@ -48,6 +48,9 @@ pub struct Logger<'a, H: CompilerHost> {
     /// one phase, and the same message at the same place is the same fault —
     /// saying it twice gives the reader nothing to act on.
     reported: std::cell::RefCell<crate::hashmap::IndexSet<String>>,
+    /// Which module's parse minted each id space, over the loaded set. What
+    /// turns a span's [`crate::ast::AstIdSpace`] into the file it indexes.
+    parses: std::cell::RefCell<crate::hashmap::IndexMap<crate::ast::AstIdSpace, ModuleSource>>,
 }
 
 /// Drops error diagnostics for as long as it lives. See [`Logger::quiet`].
@@ -70,7 +73,26 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             error_count: Cell::new(0),
             quiet_depth: Cell::new(0),
             reported: std::cell::RefCell::default(),
+            parses: std::cell::RefCell::default(),
         }
+    }
+
+    /// Record which module each loaded parse belongs to, so a diagnostic's span
+    /// can name its own file. Called once the loader has the set; a span from a
+    /// parse not in it falls back to the reporting caller's module.
+    pub fn register_parses(
+        &self,
+        parses: impl IntoIterator<Item = (crate::ast::AstIdSpace, ModuleSource)>,
+    ) {
+        self.parses.borrow_mut().extend(parses);
+    }
+
+    /// The file a span's own parse indexes, if that parse is a loaded module
+    /// with a loadable path. A synthetic entry (`<stdin>`, `<entry>`) has none,
+    /// and answering with its empty path would blank a file the caller knew.
+    fn file_of_parse(&self, space: crate::ast::AstIdSpace) -> Option<String> {
+        let file = self.parses.borrow().get(&space)?.source_path();
+        (!file.is_empty()).then_some(file)
     }
 
     /// Access the underlying `CompilerHost` for callers that need to
@@ -98,8 +120,18 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
+    /// The one way a diagnostic reaches the host, so nothing leaves without the
+    /// file its span indexes. Severity decides nothing here: a warning from a
+    /// foreign body is as misfiled as an error would be.
+    fn emit(&self, diag: Diagnostic) {
+        self.host.emit_diagnostic(self.attributed(diag));
+    }
+
     /// Count the diagnostic, emit it, and signal `Bail` at `MAX_ERRORS`.
     fn emit_error(&self, diag: Diagnostic) -> Result<(), Bail> {
+        // Attributed up front: `identity` dedups on the file, so it has to be
+        // the resolved one.
+        let diag = self.attributed(diag);
         if self.quiet_depth.get() > 0 {
             return Ok(());
         }
@@ -110,7 +142,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
         let count = self.error_count.get() + 1;
         self.error_count.set(count);
-        self.host.emit_diagnostic(diag);
+        self.emit(diag);
         if count >= MAX_ERRORS {
             Err(Bail)
         } else {
@@ -129,8 +161,21 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         ))
     }
 
-    /// Stamp `file` onto a diagnostic's span when the span carries no file of
-    /// its own, so a caller that knows its module wins over a bare `Span`.
+    /// Name the file a located diagnostic's coordinates index, from the span's
+    /// own parse. This outranks what a caller supplied: a body walked away from
+    /// home — a trait's default synthesized into an impl — is where the
+    /// reporting walk's module is the wrong answer.
+    fn attributed(&self, mut diag: Diagnostic) -> Diagnostic {
+        if let Some(span) = diag.span.as_mut()
+            && let Some(file) = self.file_of_parse(span.space)
+        {
+            span.file = file;
+        }
+        diag
+    }
+
+    /// Stamp `file` onto a diagnostic's span when neither the span's parse nor
+    /// an earlier caller named one.
     fn with_file(mut diag: Diagnostic, file: &str) -> Diagnostic {
         if let Some(span) = diag.span.as_mut()
             && span.file.is_empty()
@@ -168,7 +213,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             return Err(Bail);
         }
         self.error_count.set(self.error_count.get() + 1);
-        self.host.emit_diagnostic(err.into());
+        self.emit(err.into());
         Err(Bail)
     }
 
@@ -236,7 +281,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Log a warning (informational, not counted as error)
     pub fn warn(&self, code: Code, message: impl Into<String>) {
         if self.should_log(Severity::Warning) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Warning,
                 code,
                 message: message.into(),
@@ -252,7 +297,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Some(file))`); no file is stamped here.
     pub fn warn_at(&self, code: Code, message: impl Into<String>, span: DiagnosticSpan) {
         if self.should_log(Severity::Warning) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Warning,
                 code,
                 message: message.into(),
@@ -264,7 +309,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Log an info message
     pub fn info(&self, message: impl Into<String>) {
         if self.should_log(Severity::Info) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Info,
                 code: Code::Log,
                 message: message.into(),
@@ -283,7 +328,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// message.
     pub fn remark(&self, message: impl Into<String>, span: DiagnosticSpan) {
         if self.should_log(Severity::Info) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Info,
                 code: Code::Remark,
                 message: format!("remark: {}", message.into()),
@@ -295,7 +340,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Log a debug message
     pub fn debug(&self, message: impl Into<String>) {
         if self.should_log(Severity::Debug) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Debug,
                 code: Code::Log,
                 message: message.into(),
@@ -325,7 +370,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Must be paired with a corresponding `span_end()` call.
     pub fn span_start(&self, name: &str) {
         if self.should_log(Severity::Debug) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Debug,
                 code: Code::SpanStart,
                 message: name.to_string(),
@@ -340,7 +385,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Must be paired with a corresponding `span_start()` call.
     pub fn span_end(&self, name: &str) {
         if self.should_log(Severity::Debug) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Debug,
                 code: Code::SpanEnd,
                 message: name.to_string(),
@@ -556,6 +601,7 @@ mod tests {
                     column: 5,
                     end_line: None,
                     end_column: None,
+                    space: crate::ast::AstIdSpace::FRESH,
                 }),
             },
         );
@@ -581,6 +627,7 @@ mod tests {
                     column: 5,
                     end_line: None,
                     end_column: None,
+                    space: crate::ast::AstIdSpace::FRESH,
                 }),
             },
         );

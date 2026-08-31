@@ -102,10 +102,10 @@ pub struct FlatPackage {
     /// trait-method instances.
     pub trait_env: std::sync::Arc<crate::elaborator::trait_env::TraitEnv>,
 
-    /// Local last-use spans per module (WEP 2026-05-21). `(module, span)` is
-    /// present when the identifier use at that source span is a move-eligible
-    /// local's final use; the value-copy planner elides the copy there.
-    pub moved_local_spans: IndexMap<ModuleSource, IndexSet<crate::token::Span>>,
+    /// Local last-use spans (WEP 2026-05-21). A span is present when the
+    /// identifier use there is a move-eligible local's final use; the
+    /// value-copy planner elides the copy there.
+    pub moved_local_spans: IndexSet<crate::token::Span>,
 }
 
 impl FlatPackage {

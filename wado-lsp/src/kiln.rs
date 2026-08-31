@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use wado_compiler::ast::{Item, Module};
+use wado_compiler::ast::{AstIdSpace, Item, Module};
 use wado_compiler::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filename};
 use wado_compiler::kiln::{InvocationIndex, InvocationPath, collect_inline_invocations};
 use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -90,6 +90,7 @@ fn use_decl_span_for(module: &Module, from: &InvocationPath, filename: &str) -> 
         column: 1,
         end_line: Some(1),
         end_column: Some(1),
+        space: AstIdSpace::FRESH,
     }
 }
 

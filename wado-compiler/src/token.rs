@@ -266,6 +266,11 @@ pub struct Span {
     /// For multi-line or multi-byte content, callers must supply the value explicitly
     /// via `Span::with_end`; lexer tracks this via its own cursor state.
     pub end_column: usize,
+    /// The parse whose text these offsets index, so a location stays whole
+    /// however far it travels from the walk that read it.
+    /// [`crate::ast::AstIdSpace::FRESH`] for a synthesized span, which indexes
+    /// no text.
+    pub space: crate::ast::AstIdSpace,
 }
 
 impl Token {
@@ -304,6 +309,7 @@ impl Span {
             column,
             end_line: line,
             end_column: column + (end - start),
+            space: crate::ast::AstIdSpace::FRESH,
         }
     }
 
@@ -324,6 +330,7 @@ impl Span {
             column,
             end_line,
             end_column,
+            space: crate::ast::AstIdSpace::FRESH,
         }
     }
 
@@ -339,7 +346,14 @@ impl Span {
             column: self.column,
             end_line: other.end_line,
             end_column: other.end_column,
+            space: self.space,
         }
+    }
+
+    /// Say which parse's text this span indexes.
+    pub fn in_space(mut self, space: crate::ast::AstIdSpace) -> Self {
+        self.space = space;
+        self
     }
 }
 

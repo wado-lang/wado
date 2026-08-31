@@ -2694,11 +2694,10 @@ impl FunctionTranslator<'_, '_> {
                 case_index,
                 payload_type,
             } => {
-                // A unit-payload case (e.g. `Result<(), E>::Ok`) carries no
-                // runtime value. Extracting it must yield nothing — returning
-                // the scrutinee ref instead would leave a value on the operand
-                // stack when the extraction is used in statement position.
-                if matches!(self.type_table.get(*payload_type), ResolvedType::Unit) {
+                // Extracting a stackless payload must yield nothing: the
+                // `StructGet` would leave a value where the extraction sits in
+                // statement position.
+                if self.is_stackless_type(*payload_type) {
                     WirInstr::Nop
                 } else {
                     self.translate_variant_payload(*inner, *case_index)

@@ -8,13 +8,24 @@ use crate::token::Span;
 /// stamps it into every id, so a full [`AstId`] is globally unique while
 /// [`AstId::local`] stays dense per module; sub-parsers continue an existing
 /// space. Ids identify a *parse* and never survive a re-parse.
+/// [`crate::token::Span`] carries one too, which is what lets a span say which
+/// text its offsets index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstIdSpace(u32);
 
+/// [`AstIdSpace::FRESH`], never the first allocated space: a default-constructed
+/// [`crate::token::Span`] belongs to no parse.
+impl Default for AstIdSpace {
+    fn default() -> Self {
+        Self::FRESH
+    }
+}
+
 impl AstIdSpace {
-    /// Space reserved for [`AstId::fresh`] transient ids. Never returned by
+    /// Space reserved for [`AstId::fresh`] transient ids, and for a
+    /// [`crate::token::Span`] no parse produced. Never returned by
     /// [`Self::next`].
-    const FRESH: Self = Self(u32::MAX);
+    pub const FRESH: Self = Self(u32::MAX);
 
     /// Allocate the next allocation space from the process-global counter.
     #[must_use]

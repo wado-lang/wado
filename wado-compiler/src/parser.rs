@@ -120,17 +120,19 @@ enum ComparisonChainGroup {
 }
 
 impl Parser {
-    /// Parse a hand-built token stream. Used by tests and the interpolation
-    /// re-parser; production sites that have a full [`crate::lexer::LexResult`]
-    /// should call [`Parser::from_lex`] instead so shebang / data section /
-    /// comments flow through.
+    /// Parse a hand-built token stream, in a parse of its own. Used by tests;
+    /// production sites that have a full [`crate::lexer::LexResult`] should call
+    /// [`Parser::from_lex`] instead so shebang / data section / comments flow
+    /// through, and so the ids and the spans name the same parse. The
+    /// interpolation re-parser continues its parent's space through
+    /// [`Parser::build`] rather than minting one here.
     pub fn new(tokens: Vec<Token>) -> Self {
         Self::build(
+            crate::ast::AstIdSpace::next(),
             tokens,
             None,
             None,
             Vec::new(),
-            crate::ast::AstIdSpace::next(),
         )
     }
 
@@ -142,11 +144,11 @@ impl Parser {
     /// `parse error:`.
     pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
         Self::build(
+            lex.space,
             lex.tokens,
             lex.shebang,
             lex.data_section,
             lex.comments,
-            crate::ast::AstIdSpace::next(),
         )
     }
 
@@ -156,20 +158,20 @@ impl Parser {
     /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
     pub fn from_lex_no_trivia(lex: crate::lexer::LexResult) -> Self {
         Self::build(
+            lex.space,
             lex.tokens,
             lex.shebang,
             lex.data_section,
             Vec::new(),
-            crate::ast::AstIdSpace::next(),
         )
     }
 
     fn build(
+        ast_id_space: crate::ast::AstIdSpace,
         tokens: Vec<Token>,
         shebang: Option<String>,
         data_section: Option<String>,
         comments: Vec<crate::comment::Comment>,
-        ast_id_space: crate::ast::AstIdSpace,
     ) -> Self {
         // Filter `TokenKind::Error` tokens at construction time so no parser
         // path can mistake one for an identifier or generate a duplicate
@@ -6016,7 +6018,7 @@ impl Parser {
         let at = origin.advance(&spec[..error.offset]);
         Err(ParseError {
             message: format!("{error} in template string"),
-            span: span_of(at, spec[error.offset..].chars().next()),
+            span: span_of(at, spec[error.offset..].chars().next(), self.ast_id_space),
         })
     }
 
@@ -6039,11 +6041,11 @@ impl Parser {
         if expr_str.is_empty() {
             return Err(ParseError {
                 message: "empty interpolation expression in template string".to_string(),
-                span: span_of_open_brace(open),
+                span: span_of_open_brace(open, self.ast_id_space),
             });
         }
 
-        let lex_result = crate::lexer::lex_interpolation(expr_str, origin);
+        let lex_result = crate::lexer::lex_interpolation(expr_str, origin, self.ast_id_space);
         // Lex errors inside the interpolation surface alongside the outer
         // parser's diagnostics, at the offending byte rather than the whole
         // `{…}`.
@@ -6060,7 +6062,7 @@ impl Parser {
         // in the parent's space avoids minting — and wasting — a fresh space
         // per interpolation.
         let mut parser =
-            Parser::build(lex_result.tokens, None, None, Vec::new(), self.ast_id_space);
+            Parser::build(self.ast_id_space, lex_result.tokens, None, None, Vec::new());
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
@@ -6186,9 +6188,9 @@ impl Parser {
     }
 }
 
-/// The span of `ch` at `at`; zero-width when there is no character left to
-/// blame, so an error past the end of the text claims no byte.
-fn span_of(at: crate::token::Position, ch: Option<char>) -> Span {
+/// The span of `ch` at `at` in `space`'s text; zero-width when there is no
+/// character left to blame, so an error past the end of the text claims no byte.
+fn span_of(at: crate::token::Position, ch: Option<char>, space: crate::ast::AstIdSpace) -> Span {
     let width = ch.map_or(0, char::len_utf8);
     Span::with_end(
         at.offset,
@@ -6198,11 +6200,12 @@ fn span_of(at: crate::token::Position, ch: Option<char>) -> Span {
         at.line,
         at.column + usize::from(ch.is_some()),
     )
+    .in_space(space)
 }
 
 /// The span of the `${` whose expression starts at `origin` — both ASCII, and
 /// always on the expression's own line, so the opening column is two back.
-fn span_of_open_brace(origin: crate::token::Position) -> Span {
+fn span_of_open_brace(origin: crate::token::Position, space: crate::ast::AstIdSpace) -> Span {
     assert!(
         origin.offset >= 2 && origin.column >= 3,
         "an interpolation origin always follows `${{`"
@@ -6215,6 +6218,7 @@ fn span_of_open_brace(origin: crate::token::Position) -> Span {
         origin.line,
         origin.column,
     )
+    .in_space(space)
 }
 
 /// The backing is a property of the handle type, so it has one home: the

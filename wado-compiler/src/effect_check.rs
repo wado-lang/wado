@@ -2681,6 +2681,7 @@ mod tests {
                 column: 5,
                 end_line: 10,
                 end_column: 12,
+                ..Span::default()
             },
             module: "example/hello.wado".to_string(),
         };
