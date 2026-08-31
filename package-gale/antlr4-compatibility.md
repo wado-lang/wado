@@ -708,10 +708,9 @@ relevant sites.
 4. Wildcard alts collapse the overlap group. A wildcard alt has empty FIRST
    yet effectively overlaps every token-consuming alt, so it is merged into a
    single overlap group with the non-empty-FIRST alts, and that branch's
-   kind-check tests nothing. The alternatives inside it are then separated by
-   scan length, which is why the merge needs no iteration order to go with it
-   (it once did: where a scan committed on first match, wildcard alts had to be
-   visited last). Without this, the parse side commits to the more specific
+   kind-check tests nothing. Scan length separates the alternatives inside it,
+   so the merge needs no iteration order. Without this, the parse side commits
+   to the more specific
    alt on a lookahead match even when its deeper structure cannot succeed
    (`ParserExec/Wildcard`: `(assign | .)+ EOF` on `x=10; abc;`). Fixture
    `tests/grammars/ll_wildcard_alt.g4`.
@@ -771,17 +770,16 @@ relevant sites.
    `lr_suffix_non_greedy_opt.g4` — pair any new decision input with one like
    them.
 
-   One known exception is unclosed, and it is unclosable at this layer: a
-   branch that no lookahead selects and that an alt-initial predicate gates
-   (`( {p}? | A ) B`) keeps its place in the parse chain, because the predicate
-   can decline it — while the scan, which does not evaluate predicates, reads
-   it as testing nothing and moves it last (`fallback_last`). Both readings are
-   right for their own side, and they order the chain differently, so where the
-   predicate holds the scan measures a length the parse will not consume.
-   Neither side can be corrected without evaluating the predicate at prediction
-   time, which is the gap `warn_unsupported_prediction_predicate` names for the
-   rule-level case. Not diagnosed: the same shape parses correctly wherever the
-   group is not scanned, which `nested_action_gate_test.wado` pins.
+   One known exception is unclosable at this layer: a branch that no lookahead
+   selects and that an alt-initial predicate gates (`( {p}? | A ) B`) keeps its
+   place in the parse chain, because the predicate can decline it — while the
+   scan, which does not evaluate predicates, reads it as testing nothing and
+   moves it last (`fallback_last`). Each reading is right for its own side, so
+   where the predicate holds the scan measures a length the parse will not
+   consume. Correcting either needs the predicate evaluated at prediction time,
+   the gap `warn_unsupported_prediction_predicate` names for the rule-level
+   case. Not diagnosed: the same shape parses correctly wherever the group is
+   not scanned, which `nested_action_gate_test.wado` pins.
 10. A viability probe is stamped only where the walk reaches the rule's tail.
     The probe scans the continuation and, when that runs out, conjoins the
     rule's FOLLOW — an answer that is only about the caller if nothing else

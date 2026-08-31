@@ -19,17 +19,10 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
-// The three `+`-then-`'x'` arms are one grammar spelled three ways, and the
-// collapse is what makes them so. What they still get wrong they get wrong
-// together — a greedy `+` whose first set contains the token its own suffix
-// needs eats it and leaves the suffix nothing. That is the plain `'d'` arm's
-// defect, present before this branch and not introduced by the collapse; the
-// nested arms inherit it because they now *are* the plain arm.
-//
-// `('x'+?)+` briefly passed here, by accident: propagating the inner `+?`
-// left a loop that stopped after its mandatory iteration and so happened to
-// leave the suffix its token. Keeping that would have made `('x'+?)+ 'x'` and
-// `('x'+)+ 'x'` behave differently, which the jar says they do not.
+// The three `+`-then-`'x'` arms are one grammar spelled three ways, so they
+// fail together on the plain `'d'` arm's own defect: a greedy `+` whose first
+// set holds the token its suffix needs eats it. Propagating the inner `+?`
+// would hide that on `'a'` alone, and the jar says the two spellings agree.
 
 #[TODO]
 test "nested repeat: a non-greedy inner loop does not make the outer one non-greedy" {

@@ -3720,16 +3720,11 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
 /// competing readings are the loop's own, so `body_admits` stands in for
 /// the overlap; it also gates each iteration, hence non-empty.
 fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
+    let body_first = admits_kinds(&r.body_admits);
     return r.static_exit_undecided
         && r.kind matches { Star | Plus }
-        && !admits_kinds(&r.body_admits).is_empty()
-        && probe_decides(
-        &admits_kinds(&r.body_admits),
-        &admits_kinds(&r.body_admits),
-        &r.continuation_scan,
-        r.continuation_scannable,
-        ctx,
-    );
+        && !body_first.is_empty()
+        && probe_decides(&body_first, &body_first, &r.continuation_scan, r.continuation_scannable, ctx);
 }
 
 /// Open a non-greedy loop that exits only when exiting is viable. The caller
@@ -5947,23 +5942,11 @@ fn decided_entry(decided: &Option<String>, plus_flag: &String) -> GroupEntry {
     return GroupEntry::Looped(*plus_flag);
 }
 
+/// Continue while the lookahead is neither EOF nor in the follow set — one
+/// check, since `follow_first` may already name EOF.
 fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &List<String>) -> String {
-    // Continue while peek is not EOF and not in the follow set. `follow_first`
-    // may already contain TK_EOF (e.g. when the follow is the final `EOF`
-    // token). Dedup into a single exclusion set so we emit one check.
     let mut excluded: List<String> = ["TK_EOF"];
-    for let tk of follow_first {
-        let mut seen = false;
-        for let e of &excluded {
-            if *e == *tk {
-                seen = true;
-                break;
-            }
-        }
-        if !seen {
-            excluded.push(*tk);
-        }
-    }
+    dedup_append_arr(&mut excluded, follow_first);
     return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
 }
 
@@ -5973,18 +5956,14 @@ fn compute_non_greedy_condition(
     follow_second: &List<String>,
     ctx: &mut GenContext,
 ) -> String {
-    let raw_first = &admits_kinds(&rep_op.body_admits);
-
-    // Wildcard (`.*?`) and Not (`~TOK*?`) inner: their match set is
-    // open-ended, so `body_admits` is `Everything` and names no kinds. The same is true
-    // for `(.)*?` / `(~TOK)*?` whose body op is `Op::Group(Transparent)`
-    // wrapping the open-ended leaf. Detecting the open-ended case via
-    // the empty first set covers both shapes uniformly: keep looping
-    // while the current token is not EOF and not in the follow set
-    // (i.e. the continuation can't yet fire).
-    if raw_first.is_empty() {
+    // An open-ended body (`.*?`, `~TOK*?`, and the same behind a Transparent
+    // group) matches every token, so no kind guard ends the loop — only the
+    // follow set does.
+    if admits_tests_nothing(&rep_op.body_admits) {
+        assert admits_is_everything(&rep_op.body_admits), "a non-greedy closure over a body matching nothing is rejected by check_epsilon_closure";
         return wildcard_non_greedy_condition(ctx, follow_first);
     }
+    let raw_first = &admits_kinds(&rep_op.body_admits);
 
     let inner_second_first = &rep_op.body_second_position_first;
     if non_greedy_static_undecided(raw_first, follow_first, inner_second_first, follow_second) {

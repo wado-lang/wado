@@ -387,6 +387,15 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
     return Result::Ok(());
 }
 
+/// Reject the rule shapes that have no terminating parse. Both walks read one
+/// left-corner fixpoint, built here.
+pub fn check_rule_shapes(grammar: &Grammar) -> Result<(), ParseError> {
+    let ctx = build_left_corner_ctx(&grammar.parser_rules, false);
+    check_left_recursion(grammar, &ctx)?;
+    check_epsilon_closure(grammar, &ctx)?;
+    return Result::Ok(());
+}
+
 /// Reject hidden / indirect left recursion. Gale, like ANTLR4, supports only
 /// *direct* left recursion — a self-reference as an alternative's leading
 /// element, lowered by precedence climbing. Hidden (`a : x? a`, a nullable
@@ -394,14 +403,13 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
 /// would generate a recursive-descent scan/parse that re-enters a rule without
 /// consuming input and never terminates (issue #1671), so reject them here
 /// instead of emitting looping code.
-pub fn check_left_recursion(grammar: &Grammar) -> Result<(), ParseError> {
+fn check_left_recursion(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), ParseError> {
     if grammar.kind matches { Lexer } {
         return Result::Ok(());
     }
-    let ctx = build_left_corner_ctx(&grammar.parser_rules, false);
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         // A left-corner path back to the rule is a hidden / indirect cycle.
-        if left_corners_reach_self(&ctx, i) {
+        if left_corners_reach_self(ctx, i) {
             return Result::Err(
                 ParseError::new(
                     `rule "${grammar.parser_rules[i].name}" is indirectly or hidden left-recursive (reachable from itself through a nullable prefix); only direct left recursion is supported`,
@@ -417,11 +425,10 @@ pub fn check_left_recursion(grammar: &Grammar) -> Result<(), ParseError> {
 /// Reject a closure — `*` or `+` — whose body can match the empty string: the
 /// loop would never leave the position. ANTLR4 rejects it too (error 153). An
 /// optional over the same body is not a closure and stays accepted.
-pub fn check_epsilon_closure(grammar: &Grammar) -> Result<(), ParseError> {
-    let ctx = build_left_corner_ctx(&grammar.parser_rules, false);
+fn check_epsilon_closure(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), ParseError> {
     for let rule of &grammar.parser_rules {
         for let alt of &rule.alternatives {
-            if elements_hold_epsilon_closure(&alt.elements, &ctx) {
+            if elements_hold_epsilon_closure(&alt.elements, ctx) {
                 return Result::Err(epsilon_closure_error(&rule.name));
             }
         }
