@@ -6018,7 +6018,7 @@ impl Parser {
         let at = origin.advance(&spec[..error.offset]);
         Err(ParseError {
             message: format!("{error} in template string"),
-            span: span_of(at, spec[error.offset..].chars().next()),
+            span: span_of(at, spec[error.offset..].chars().next(), self.ast_id_space),
         })
     }
 
@@ -6041,7 +6041,7 @@ impl Parser {
         if expr_str.is_empty() {
             return Err(ParseError {
                 message: "empty interpolation expression in template string".to_string(),
-                span: span_of_open_brace(open),
+                span: span_of_open_brace(open, self.ast_id_space),
             });
         }
 
@@ -6188,9 +6188,9 @@ impl Parser {
     }
 }
 
-/// The span of `ch` at `at`; zero-width when there is no character left to
-/// blame, so an error past the end of the text claims no byte.
-fn span_of(at: crate::token::Position, ch: Option<char>) -> Span {
+/// The span of `ch` at `at` in `space`'s text; zero-width when there is no
+/// character left to blame, so an error past the end of the text claims no byte.
+fn span_of(at: crate::token::Position, ch: Option<char>, space: crate::ast::AstIdSpace) -> Span {
     let width = ch.map_or(0, char::len_utf8);
     Span::with_end(
         at.offset,
@@ -6200,11 +6200,12 @@ fn span_of(at: crate::token::Position, ch: Option<char>) -> Span {
         at.line,
         at.column + usize::from(ch.is_some()),
     )
+    .in_space(space)
 }
 
 /// The span of the `${` whose expression starts at `origin` — both ASCII, and
 /// always on the expression's own line, so the opening column is two back.
-fn span_of_open_brace(origin: crate::token::Position) -> Span {
+fn span_of_open_brace(origin: crate::token::Position, space: crate::ast::AstIdSpace) -> Span {
     assert!(
         origin.offset >= 2 && origin.column >= 3,
         "an interpolation origin always follows `${{`"
@@ -6217,6 +6218,7 @@ fn span_of_open_brace(origin: crate::token::Position) -> Span {
         origin.line,
         origin.column,
     )
+    .in_space(space)
 }
 
 /// The backing is a property of the handle type, so it has one home: the
