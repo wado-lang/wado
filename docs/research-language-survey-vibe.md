@@ -34,7 +34,7 @@ work; the two wasm backends; the Vibe Book.
 | --- | --- | --- | --- | --- |
 | A1 Canonicity | "One concept, one spelling" | Mechanized, not asserted: a gate verifies documented signatures against the compiler, another enforces the canonical call form, doctest compiles every `vibe` block in the docs. A block that must not compile is marked `vibe skip` and carries a `doctest-skip:` comment giving the reason, so a "do not write this" example stays in the document without exempting the gate. `AGENTS.md` marks decided-but-not-landed rules inline and warns not to read them as today's behaviour | Yes | Landing: structural `==` in every context, constructor-polymorphic pipeline combinators, `Exception` over `Error` at the 1.0 freeze |
 | A2 Type vocabulary | Own surface, representations chosen to match wasm and WIT without friction | A value is a tagged i64; `String` is a byte string indexed by byte offset (ADR-0098, "semantics that match what the memory actually is"); what may cross a WIT boundary is decided by nominal rules (ADR-0089) | Yes | — |
-| A3 Effects | Row-polymorphic effect types with handlers; capabilities ride the row | `fn main with Console`, `with Exception + Fs`, `handle { … } with Exception[String] { … }`. Deno-style permissions cross Koka-style effects: authority is fixed once in the earliest phase and immutable while running; `--allow-*` const-folds and dead-code-eliminates ungranted capabilities, and the emitted binary declares the wasm feature level it needs | Yes | — |
+| A3 Effects | Row-polymorphic effect types with handlers; capabilities ride the row | `fn main with Console`, `with Exception + Fs`, `handle { … } with Exception[String] { … }`. Deno-style permissions cross Koka-style effects: authority is fixed once in the earliest phase and immutable while running; `--allow-*` const-folds and dead-code-eliminates ungranted capabilities, and the emitted binary declares the wasm feature level it needs. The handler lowering is replay and it corrupts values — see below | Partly: the wasm-gc backend implements no handler at all beyond a `Throw` stub | — |
 | A4 Errors | Failure travels in the effect row, not in a return-type wrapper | `fn safe_div(a: Int, b: Int) -> Int with Exception[String]` — the success value flows straight through, and `handle` discharges the row at one site instead of unwrapping per call. The checked Error policy is the adopted static rule and is formalized in Lean | Yes | Rejected: ambient Error, kept in the Lean model as a negative witness |
 | A5 Concurrency | Structured, shared-nothing | `TaskGroup` plus `Send`/region checks. Async syntax exists behind `--unstable-async`. Continuations designed against wasm-gc typed reference lanes, stack switching today, JSPI as an alternate backend | Yes | Real threads deferred, but the representation is chosen for them |
 | A6 Boundary mechanisms | No macros | None a user can invoke: no generation command, no plugin, no build hook among the 25 user-facing CLI commands. `derive` is the only generation and its set is fixed — `Eq`, `Ord`, `Show`, `Hash`, `Default`, none of them serialization. Values cross the boundary through a dynamic `Json::` API (`stringify: (Any) -> String`), with no typed mapping either way. The compiler generates WIT from declarations | — | — |
@@ -100,6 +100,62 @@ proposal or draft is non-normative. It then partitions the language a second
 way, into what the standard tutorial teaches and what is documented but left
 out of it — a statement of the subset a reader should generate from, distinct
 from the subset that is frozen.
+
+### The handler lowering, and what it costs
+
+`handle` is compiled by replay. The body is wrapped in a wasm `loop`, `perform`
+unwinds to the handler while recording resolved resume values into a fixed 128 KB
+region, and `resume(v)` appends to that memo and re-runs the body **from the
+top**, skipping already-resolved performs. Only the return value of a perform is
+memoized, so everything else in the body runs again per resume.
+
+The consequence is measured, in their own review round: a body performing twice
+prints its first line three times, a `let mut` accumulator reads 23 against an
+expected 11, and the returned value is 29 against an expected 17. The value
+itself is wrong. The mitigation shipped was a cheatsheet sentence telling authors
+to keep a handle body pure until the last perform, and the defect was not pinned
+by a fixture. There is also a hard ceiling — 128 KB over 8 bytes is 16,382
+performs per handle — whose constant is duplicated across three files, and
+shrinking it once corrupted the heap.
+
+ADR-0076 replaces all of it with Koka's generalized evidence passing, and the
+design's first move is reuse: vibe already passes trait dictionaries as implicit
+witness parameters for generic method calls, so the evidence vector is built as
+an application of that mechanism rather than a second one. Two things in the
+write-up are worth as much as the decision. It corrects the premise of the issue
+that requested it — the tail-resumptive fast path the issue assumed would be
+generalized existed only in the retired MoonBit host, so this is introduction,
+not generalization. And its phase 1 is to pin the existing corruption as a
+regression fixture *before* fixing anything, so that "fixed" is later provable
+rather than asserted.
+
+The plan then shrank on investigation. A CPS runtime was scheduled for phase 3
+and turned out to be unnecessary: the checker already rejects non-tail and
+multi-shot resume, which by the Xie and Leijen definition makes every handler
+tail-resumptive already, so the work reduces to widening the static coverage of
+the evidence pass. The document records that the phase evaporated.
+
+### Backends, and where wasm-gc actually is
+
+The gc backend is not what its name suggests. It enables the Wasm-GC feature set
+but does not emit `struct.new` or `array.new` for user values — tuples, structs,
+constructors and closures live in guest linear memory behind a bump allocator,
+so nothing exists for a tracing collector to reclaim. It is not reachable from
+the compile CLI at all: `compile --wasm-gc` throws, and the lane is entered only
+through test and bench environment variables for host-import-free cases.
+
+The production default is linear memory with Perceus reference counting.
+Reclamation is eager and deterministic, cycles leak permanently, and the
+compiler's own self-build is pinned away from RC to bump for performance — RC
+costs it roughly 1.7× wall clock and 2.9× output size.
+
+The backends do not agree on the language. `Array::push` is in-place and growable
+on linear and fixed-size with a rebound local on gc, and the memory contract
+records that this "must be reconciled or documented before unifying defaults".
+The same document states what has to happen once the gc lane emits real GC
+allocations: eager RC against lazy GC is a fundamental difference, and the plan
+for holding observable behaviour identical across it is a differential test
+rather than an argument.
 
 ### Oracle documents
 
@@ -187,6 +243,31 @@ outright.
 
 Learned:
 
+- Wado's effect-handler lowering is where vibe is migrating to, and it got there
+  by aiming at the platform. A handler whose `resume` is in tail position
+  compiles to `return`; only a handler with code after `resume` needs Wasm stack
+  switching. vibe has no tail-resumptive path at all, so every perform goes
+  through replay, and replay is what re-runs the body and corrupts the value.
+  ADR-0076's conclusion — that the checker's rejection of non-tail and
+  multi-shot resume already makes every handler tail-resumptive, so a direct
+  call suffices — is a description of what Wado already does. The lesson is not
+  that the design was lucky: refusing to build a mechanism the platform was
+  going to provide is what left the fast path as the only path.
+- Both surveyed languages run on reference counting over linear memory, and both
+  name wasm-gc as the long-term primary target without having it. vibe's gc
+  backend does not emit a single `struct.new`, is unreachable from its compile
+  CLI, and disagrees with the linear backend about what `Array::push` means.
+  Wado's founding bet — let the host own the collector, ship no runtime — is the
+  thing neither of them has managed, and their documents are a catalogue of what
+  is paid for not managing it: cycles leaking permanently, a self-build pinned
+  away from RC for a 1.7× cost, a language whose semantics differ per backend.
+  The bet looks better after reading what the alternative costs than it does
+  from inside.
+- Pin the defect before fixing it, at architecture scale. ADR-0076's phase 1 is
+  a regression fixture for the corruption its phase 2 removes, written so that
+  "fixed" becomes provable instead of asserted. This is the red/green rule
+  `AGENTS.md` already requires, applied to a migration long enough that nobody
+  would otherwise remember what the old behaviour was.
 - Both surveyed languages arrived independently at two documents Wado has
   neither of, which is a stronger signal than either instance alone. The first
   is a traceability table running claim → mechanism → evidence: vibe's oracle

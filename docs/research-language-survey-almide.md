@@ -126,6 +126,28 @@ names which row is the gap that matters and the issue tracking it, and it scopes
 itself to one of the two wasm legs, warning that no sentence in it describes
 bytes the other leg produced.
 
+`TRUST-SPINE.md` states the architecture in one move: do not prove the compiler,
+prove a tiny checker and have the compiler emit a certificate on every build
+that the checker re-verifies. It rests on building being hard and checking cheap,
+so the compiler is allowed to have bugs — a wrong artifact carries a certificate
+that fails to check — and the only theorem is that if the checker accepts, the
+artifact has the property, which never mentions the compiler's internals. The
+trusted base drops from the whole compiler to 1,348 lines of OCaml extracted
+from the proofs, regenerated into the document between markers so the number
+cannot drift.
+
+What makes it worth reading is that the advocacy piece states its own limits.
+There is no mechanized evaluation relation for Almide source and no theorem of
+the shape `⟦s⟧ ≈ ⟦compile(s)⟧`; the translation checker performs a structural
+realization check and not a semantic refinement proof; stack balance and
+termination are proven in the Rocq spine but not extracted into the checker or
+witnessed per build; verified extraction is a future ratchet, not a present
+fact. Byte-for-byte agreement between the targets — the project's headline claim
+— "is established empirically", and the document says so in the same paragraph
+that describes aiming the pipeline at a single semantics. CI is placed
+deliberately outside the trusted base, as a courtesy pre-run, so that trusting
+the artifact never requires trusting their infrastructure.
+
 The contract ledger is the same traceability in the other direction. Each of the
 327 entries is a named promise carrying the specification section it certifies
 and the fixture that executes it, and the gate makes the link mandatory in both
@@ -178,6 +200,15 @@ yardstick.
 
 Learned:
 
+- A benchmark table earns belief by publishing the column that hurts. The native
+  scoreboard names the machine and the compiler version, verifies stdout
+  byte-identical across every variant before timing anything, interleaves runs,
+  commits the raw per-run JSON, and reports n-body against two Rust baselines —
+  1.00× against same-shape Rust and 0.73× against the array-based version, which
+  is to say idiomatic Rust is a quarter faster and they printed it. One row
+  carries a footnote saying it was re-measured and why its number moved. The
+  wasm size table splits "as shipped" from "after `wasm-opt -Oz`" and calls the
+  second an opt-in that leaves the verified envelope.
 - A proof's value is bounded by a sentence the project has to be willing to
   write. Almide sells certificates and then states that an accepted one proves
   memory safety and nothing about whether the lowering picked the right
