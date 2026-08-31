@@ -1,0 +1,32 @@
+//! An optional whose body admits every token is held back by what follows it,
+//! and nothing else. Taking the follow set out of "everything" leaves
+//! everything *except* it — a negative test, not a smaller set.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use ooe from "./grammars/opt_open_ended_rule.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_opt_open_ended_rule" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = ooe::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = ooe::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "optional over an open-ended rule: the follow token is left alone" {
+    assert_tree(&"b", &"(s (t b))");
+}
+
+#[TODO]
+test "optional over an open-ended rule: a token that is not the follow enters it" {
+    // The scan now declines the `b`, but the parse side never enters this
+    // optional at all: its surface emitter drops a `?` whose body has no first
+    // set instead of reading it as one that admits everything, so `_parse_t`
+    // is just `expect(B)`. Pre-existing — the same empty-set reading the scan
+    // side had, one emitter over.
+    assert_tree(&"a b", &"(s (t (x a) b))");
+}

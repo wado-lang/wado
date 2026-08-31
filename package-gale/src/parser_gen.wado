@@ -1686,10 +1686,27 @@ fn repeat_body_implied_by_guard(body: &ScanElement, admits: &Admits) -> bool {
 /// any token fires on the token that is there — which is the case a raw first
 /// set could not tell from `Untestable` and so emitted nothing for.
 fn scan_repeat_guard(admits: &Admits, caller_follow_gate: &String, ctx: &mut GenContext) -> String {
+    let none: List<String> = [];
+    return scan_repeat_guard_excluding(admits, &none, caller_follow_gate, ctx);
+}
+
+/// `scan_repeat_guard`, holding the iteration back from `excluded` as well.
+/// A set taken out of `Everything` is a negative test and not a smaller set,
+/// so the caller that wants one states it here rather than trying to shrink
+/// what the body admits.
+fn scan_repeat_guard_excluding(
+    admits: &Admits,
+    excluded: &List<String>,
+    caller_follow_gate: &String,
+    ctx: &mut GenContext,
+) -> String {
     assert !admits_is_untestable(admits), "a repeat whose body matches nothing has no iteration to guard";
     let mut parts: List<String> = ["pos < tokens.len()"];
     if let Kinds(kinds) = admits {
         parts.push(ctx.kind_check_str(kinds, &"tokens[pos]"));
+    }
+    if !excluded.is_empty() {
+        parts.push(ctx.kind_negate_check_str(excluded, &"tokens[pos]"));
     }
     if !caller_follow_gate.is_empty() {
         parts.push(`!(${*caller_follow_gate})`);
@@ -1722,17 +1739,18 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             return;
         }
         // Mirror the pre-Phase-2-F `gen_scan_repeat_optional_with_follow`
-        // contract: when the Optional's body is a RuleCall, subtract
-        // the caller-side follow first (the tokens that may appear
-        // right after this Optional in the surrounding alt) so we
-        // don't fire the Optional on a token that belongs to the
-        // caller's next position. The `caller_follow_first` subtraction
-        // matches the surface emitter's `combined_follow = follow_first`.
-        // Nothing is subtracted from a body that admits everything: what it
-        // admits is not a set the caller's follow can be taken out of, and the
-        // gate below is what holds it back.
-        let effective = if let Kinds(kinds) = &loop_admits {
-            if body_is_rulecall && !re.caller_follow_first.is_empty() {
+        // contract: when the Optional's body is a RuleCall, hold the Optional
+        // back from the tokens that may appear right after it in the
+        // surrounding alt, so the scan does not eat one its own suffix needs.
+        // The `caller_follow_first` exclusion matches the surface emitter's
+        // `combined_follow = follow_first`.
+        let excludes_follow = body_is_rulecall && !re.caller_follow_first.is_empty();
+        // Taking a set out of `Everything` leaves everything *except* it,
+        // which no token set names — it is a negative test, not a smaller
+        // set. Subtracting only in the `Kinds` case left `.?` before a `B`
+        // firing on the `B`.
+        let effective = if excludes_follow {
+            if let Kinds(kinds) = &loop_admits {
                 admits_or_untestable(&subtract_sets(kinds, &re.caller_follow_first));
             } else {
                 loop_admits;
@@ -1743,9 +1761,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if admits_is_untestable(&effective) {
             return;
         }
+        let excluded = if excludes_follow && effective matches { Everything } {
+            re.caller_follow_first;
+        } else {
+            [] as List<String>;
+        };
         // Caller-FOLLOW gate wins: `if pos < len && peek matches first AND
         // NOT caller_follow_gate { try iter }`.
-        w.begin(&`if ${scan_repeat_guard(&effective, &caller_follow_gate, ctx)}`);
+        w.begin(&`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
         if repeat_body_implied_by_guard(&re.body, &effective) {
             w.line(&"pos += 1;");
         } else {
