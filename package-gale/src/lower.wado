@@ -52,6 +52,7 @@ use {
     compute_overlap_groups,
     compute_overlap_groups_of,
     dispatch_branches,
+    element_reaches_open_end,
     scan_decision_branches,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
@@ -133,6 +134,9 @@ use {
     DiagnosticKind,
     DiagnosticOwner,
     DiagnosticSite,
+    Admits,
+    admits_kinds,
+    admits_or_untestable,
     AltClass,
     alt_class_first_set,
     alt_class_is_nullable,
@@ -409,16 +413,16 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             }
         },
         Repeat(r) => {
-            // `gen_scan_op_repeat` reads `inner_first` for the
+            // `gen_scan_op_repeat` reads `inner_admits` for the
             // while-loop guard. For Optional + RuleRef bodies the emit
             // additionally subtracts `caller_follow_first` from the
             // loop's first set — pre-register that derived set too so
             // the `_kind_set_<id>` registry stays anchored to the
             // lower walk order.
-            if r.inner_first.len() >= 2 {
-                ctx.intern_kind_set(&r.inner_first);
+            let loop_first = admits_kinds(&r.inner_admits);
+            if loop_first.len() >= 2 {
+                ctx.intern_kind_set(&loop_first);
             }
-            let loop_first = r.inner_first;
             if let Optional = r.kind {
                 let body_is_rulecall = r.body matches { RuleCall(_) };
                 if body_is_rulecall && !r.caller_follow_first.is_empty() {
@@ -2046,6 +2050,19 @@ fn scan_group_is_nullable(alts: &List<Alternative>, ctx: &mut GenContext) -> boo
     return false;
 }
 
+/// What one iteration of a repeat's body admits. An empty first set means two
+/// opposite things and only the element says which: `.` and `~X` have none
+/// because no set enumerates every token, and they fire on any token there is;
+/// a body that derives only epsilon has none because nothing fires it. Emit
+/// used to read the emptiness, so `.?` scanned nothing while `A?` scanned one.
+fn repeat_inner_admits(inner: &Element, inner_first: &List<String>, ctx: &mut GenContext) -> Admits {
+    let mut visiting: List<String> = [];
+    if element_reaches_open_end(inner, ctx, &mut visiting) {
+        return Admits::Everything;
+    }
+    return admits_or_untestable(inner_first);
+}
+
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
 /// `Star` / `Plus` with a leaf inner only.
 fn lower_scan_repeat(
@@ -2111,7 +2128,7 @@ fn lower_scan_repeat(
     return ScanElement::Repeat(ScanRepeatElement {
         kind: rep.kind,
         body,
-        inner_first: inner_first,
+        inner_admits: repeat_inner_admits(&rep.element, &inner_first, ctx),
         caller_follow_first: *outer_follow,
         gate_caller_follow: effective_gate,
         non_greedy: rep.non_greedy,
@@ -2147,7 +2164,7 @@ fn rebind_scan_repeat_caller_follow(
             }
         }
         let static_exit_undecided = non_greedy_static_undecided(
-            &re.inner_first,
+            &admits_kinds(&re.inner_admits),
             &caller_follow_first,
             &scan_repeat_body_second(&alt_elements[index], ctx),
             &compute_caller_follow_second(alt_elements, index + 1, ctx),
@@ -2155,7 +2172,7 @@ fn rebind_scan_repeat_caller_follow(
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
-            inner_first: re.inner_first,
+            inner_admits: re.inner_admits,
             caller_follow_first: caller_follow_first,
             gate_caller_follow: re.gate_caller_follow,
             non_greedy: re.non_greedy,

@@ -458,6 +458,74 @@ pub variant MultiAltDispatch {
     Tournament(TournamentDispatch),
 }
 
+/// What a lookahead test admits. A `List<String>` cannot say it: an empty set
+/// is a wildcard's first set at one site and an empty alternative's absent one
+/// at another, and a renderer that answers for both has to guess. It guessed
+/// `true`, and the alternatives after the guess became unreachable — six
+/// times, in six emitters. So the case is named where it is known.
+///
+/// `Everything` and `Untestable` both render `true` and are still not the same
+/// answer, which is the distinction the first attempt at this type missed:
+/// they differ in whether the arm may keep its place. A wildcard admits every
+/// token *exactly*, so shadowing the alternatives after it is ANTLR4's
+/// lowest-viable-alternative rule working correctly. An untestable arm shadows
+/// them by default rather than by decision, so it goes last.
+///
+/// It lives here, in the IR, because lower has to be able to bake one: a scan
+/// element that carries a raw set instead leaves emit to guess again, from the
+/// same emptiness and with less to go on.
+pub variant Admits {
+    /// Admits every token, and that is the whole truth about it.
+    Everything,
+    /// Cannot be decided from the lookahead: an alternative whose first set is
+    /// absent because it matches nothing, and whose viability rests on what
+    /// follows the decision. Belongs after every arm that can be tested.
+    Untestable,
+    /// Never empty: an empty set is `Everything` or `Untestable`, and which
+    /// one is not a property of the set.
+    Kinds(List<String>),
+}
+
+/// Whether this arm decides nothing the arms after it could still decide, so
+/// that placing it among them is what makes them dead code.
+pub fn admits_is_untestable(admits: &Admits) -> bool {
+    return *admits matches { Untestable };
+}
+
+/// Whether the arm renders no test at all, either way.
+pub fn admits_tests_nothing(admits: &Admits) -> bool {
+    return !*admits matches { Kinds(_) };
+}
+
+/// The kinds an arm narrows by, empty for the two cases no set describes. A
+/// caller that needs to tell those apart asks `admits_is_untestable`, never
+/// the emptiness of this.
+pub fn admits_kinds(admits: &Admits) -> List<String> {
+    return match admits {
+        Kinds(kinds) => *kinds,
+        _ => [] as List<String>,
+    };
+}
+
+/// A set that narrows the lookahead, where having none to narrow by means
+/// nothing is excluded — a wildcard-led alternative, a guard with no first set
+/// to test. This is the reading `kind_check_str` used to take for everyone.
+pub fn admits_or_everything(kinds: &List<String>) -> Admits {
+    if kinds.is_empty() {
+        return Admits::Everything;
+    }
+    return Admits::Kinds(*kinds);
+}
+
+/// A set that selects, where having none to select by means the lookahead
+/// cannot decide this arm at all.
+pub fn admits_or_untestable(kinds: &List<String>) -> Admits {
+    if kinds.is_empty() {
+        return Admits::Untestable;
+    }
+    return Admits::Kinds(*kinds);
+}
+
 /// What an alternative matches, as one value rather than a question each
 /// decision site works out from whatever it has in hand. Six predicates over
 /// eighteen call sites asked it separately — "is there a wildcard in the
@@ -1133,10 +1201,16 @@ pub struct ScanExcludedElement {
 pub struct ScanRepeatElement {
     pub kind: RepeatKind,
     pub body: ScanElement,
-    /// First set of `body` cached at lower time. emit's scan-side
-    /// repeat emitter uses this for `while peek_kind ∈ inner_first`
-    /// loop guards and for Plus's mandatory-first iteration condition.
-    pub inner_first: List<String>,
+    /// What an iteration of `body` admits, classified at lower time. emit's
+    /// scan-side repeat emitter builds its loop guard from this.
+    ///
+    /// It is an `Admits` and not a first set because the two readings of an
+    /// empty set are opposite here: `.?` and `~X?` have no first set because
+    /// no set enumerates every token, and their iteration fires on *every*
+    /// token — while a body that matches nothing has none to fire on. Reading
+    /// the emptiness made `.?` scan zero tokens where `A?` scanned one, so the
+    /// alternative holding it lost every tournament its parse side then won.
+    pub inner_admits: Admits,
     /// Scan-side mirror of `RepeatOp.caller_follow_first`. Default is
     /// the variant-aware `outer_follow` at construction time; alt-level
     /// scan walkers override it with `first_of_elements_from(elements,
@@ -1151,12 +1225,10 @@ pub struct ScanRepeatElement {
     /// entry so the longest-match tournament yields to the caller in
     /// lockstep with the parse side.
     pub gate_caller_follow: bool,
-    /// True for a non-greedy `*?` / `+?`. When the body has an empty
-    /// `inner_first` (a wildcard `.`), the plain `while peek ∈ inner_first`
-    /// guard can never fire, so the scan would undershoot (match zero
-    /// inner tokens). For non-greedy wildcards the scan instead skips
-    /// tokens until the exit set (`caller_follow_first`) or EOF, mirroring
-    /// the parse-side `compute_non_greedy_condition`.
+    /// True for a non-greedy `*?` / `+?`. A non-greedy repeat over a body that
+    /// admits everything stops at the exit set rather than at a first-set
+    /// guard: the scan skips tokens until `caller_follow_first` or EOF,
+    /// mirroring the parse-side `compute_non_greedy_condition`.
     pub non_greedy: bool,
     /// Mirrors the four `RepeatOp` probe stamps below, so a probed Repeat
     /// decides the same on both sides — the tournament measures scan lengths

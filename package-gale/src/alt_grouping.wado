@@ -21,15 +21,11 @@
 //! bands are split the way they are.
 
 use { Alternative, Element } from "./ir.wado";
+use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 use {
-    GenContext,
     Admits,
     admits_is_untestable,
     admits_or_untestable,
-    is_nullable,
-    sets_overlap,
-} from "./gen_context.wado";
-use {
     AltClass,
     DirectDispatch,
     MultiAltDispatch,
@@ -241,7 +237,7 @@ fn alt_reaches_open_end(alt: &Alternative, ctx: &mut GenContext, visiting: &mut 
 /// `( … )`, a repeat nor a rule reference changes what is behind them — so
 /// `w=.`, `(~X)`, `(.)+` and a call to `w : . ;` are all as open-ended as the
 /// bare form. `visiting` breaks the recursion on a left-recursive rule.
-fn element_reaches_open_end(elem: &Element, ctx: &mut GenContext, visiting: &mut List<String>) -> bool {
+pub fn element_reaches_open_end(elem: &Element, ctx: &mut GenContext, visiting: &mut List<String>) -> bool {
     return match elem {
         Wildcard(_) | Not(_) => true,
         Label(lab) => element_reaches_open_end(&lab.element, ctx, visiting),

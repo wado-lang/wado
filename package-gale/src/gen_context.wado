@@ -2,7 +2,7 @@ use { ParserRule, Alternative, Element, RepeatElement, ActionLanguage, compute_s
 use { SuperOp } from "./superclass.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { literal_const_name, is_single_alt_group, single_alt_group_type_name, dedup_append_arr } from "./gen_util.wado";
-use { Diagnostic, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
+use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything } from "./gir.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
@@ -55,60 +55,6 @@ impl RuleCaptures {
 }
 
 global NO_CAPTURES: RuleCaptures = RuleCaptures {};
-
-/// What a lookahead test admits. A `List<String>` cannot say it: an empty set
-/// is a wildcard's first set at one site and an empty alternative's absent one
-/// at another, and a renderer that answers for both has to guess. It guessed
-/// `true`, and the alternatives after the guess became unreachable — six
-/// times, in six emitters. So the case is named where it is known.
-///
-/// `Everything` and `Untestable` both render `true` and are still not the same
-/// answer, which is the distinction the first attempt at this type missed:
-/// they differ in whether the arm may keep its place. A wildcard admits every
-/// token *exactly*, so shadowing the alternatives after it is ANTLR4's
-/// lowest-viable-alternative rule working correctly. An untestable arm shadows
-/// them by default rather than by decision, so it goes last.
-pub variant Admits {
-    /// Admits every token, and that is the whole truth about it.
-    Everything,
-    /// Cannot be decided from the lookahead: an alternative whose first set is
-    /// absent because it matches nothing, and whose viability rests on what
-    /// follows the decision. Belongs after every arm that can be tested.
-    Untestable,
-    /// Never empty: an empty set is `Everything` or `Untestable`, and which
-    /// one is not a property of the set.
-    Kinds(List<String>),
-}
-
-/// Whether this arm decides nothing the arms after it could still decide, so
-/// that placing it among them is what makes them dead code.
-pub fn admits_is_untestable(admits: &Admits) -> bool {
-    return *admits matches { Untestable };
-}
-
-/// Whether the arm renders no test at all, either way.
-pub fn admits_tests_nothing(admits: &Admits) -> bool {
-    return !*admits matches { Kinds(_) };
-}
-
-/// A set that narrows the lookahead, where having none to narrow by means
-/// nothing is excluded — a wildcard-led alternative, a guard with no first set
-/// to test. This is the reading `kind_check_str` used to take for everyone.
-pub fn admits_or_everything(kinds: &List<String>) -> Admits {
-    if kinds.is_empty() {
-        return Admits::Everything;
-    }
-    return Admits::Kinds(*kinds);
-}
-
-/// A set that selects, where having none to select by means the lookahead
-/// cannot decide this arm at all.
-pub fn admits_or_untestable(kinds: &List<String>) -> Admits {
-    if kinds.is_empty() {
-        return Admits::Untestable;
-    }
-    return Admits::Kinds(*kinds);
-}
 
 /// Codegen-time context shared across emit walkers. Holds the
 /// first / nullable / single-token / scannable caches, the

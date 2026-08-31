@@ -16,6 +16,7 @@ use {
     LrDispatchData,
     MultiAltDispatch,
     DirectDispatch,
+    Admits,
     AltClass,
     DispatchBranch,
     TournamentDispatch,
@@ -418,7 +419,7 @@ test "ScanElement variants round-trip" {
     let rep = ScanElement::Repeat(ScanRepeatElement {
         kind: RepeatKind::Plus,
         body: inner_scan,
-        inner_first: [],
+        inner_admits: Admits::Kinds(["TK_X"]),
         caller_follow_first: [],
         gate_caller_follow: false,
         non_greedy: false,

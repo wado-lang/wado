@@ -38,17 +38,7 @@ use {
     elements_match,
 } from "./gen_util.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
-use {
-    Admits,
-    GenContext,
-    admits_is_untestable,
-    admits_or_everything,
-    admits_or_untestable,
-    admits_tests_nothing,
-    is_nullable,
-    sets_overlap,
-    union_kind_arrays,
-} from "./gen_context.wado";
+use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, str_lit } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
 use {
@@ -82,6 +72,12 @@ use {
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
 use {
+    Admits,
+    admits_is_untestable,
+    admits_kinds,
+    admits_or_everything,
+    admits_or_untestable,
+    admits_tests_nothing,
     AltClass,
     alt_class_first_set,
     alt_class_tests_nothing,
@@ -1599,13 +1595,7 @@ fn gen_scan_optional_probe(
     ctx: &mut GenContext,
     caller_follow_gate: &String,
 ) {
-    let check = ctx.kind_check_str(&re.inner_first, &"tokens[pos]");
-    let guard = if caller_follow_gate.is_empty() {
-        `pos < tokens.len() && ${check}`;
-    } else {
-        `pos < tokens.len() && ${check} && !(${*caller_follow_gate})`;
-    };
-    w.begin(&`if ${guard}`);
+    w.begin(&`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
     w.line(&"let sp = pos;");
     gen_scan_op_element_assign(w, &re.body, ctx);
     w.begin(&"if pos < 0");
@@ -1630,7 +1620,8 @@ fn gen_scan_optional_probe(
 /// stays non-viable, so the tournament measures what the parse consumes.
 /// `Plus`'s mandatory first iteration is emitted by the caller.
 fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext) {
-    let check = ctx.kind_check_str(&re.inner_first, &"tokens[pos]");
+    let no_gate = String::new();
+    let guard = scan_repeat_guard(&re.inner_admits, &no_gate, ctx);
     w.begin(&"loop");
     w.line(&"let ep = pos;");
     w.line(&"let mut ng_exit: bool = false;");
@@ -1644,7 +1635,7 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     w.end();
     w.line(&"pos = ep;");
     w.line(&"if ng_exit { break; }");
-    w.line(&`if !(pos < tokens.len() && ${check}) \{ break; \}`);
+    w.line(&`if !(${guard}) \{ break; \}`);
     w.line(&"let sp = pos;");
     gen_scan_op_element_assign(w, &re.body, ctx);
     w.line(&"if pos < 0 { pos = sp; break; }");
@@ -1655,10 +1646,11 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
 /// Whether the exit probe decides this scan-side loop, from the same stamp
 /// and parts the parse side reads.
 fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
+    let first = admits_kinds(&re.inner_admits);
     return re.non_greedy
         && re.static_exit_undecided
-        && !re.inner_first.is_empty()
-        && probe_decides(&re.inner_first, &re.inner_first, &re.continuation_scan, re.continuation_scannable, ctx);
+        && !first.is_empty()
+        && probe_decides(&first, &first, &re.continuation_scan, re.continuation_scannable, ctx);
 }
 
 /// Scan-side twin of `optional_probe_decides` — same conjuncts off the mirror
@@ -1667,7 +1659,7 @@ fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> 
     return re.body matches { RuleCall(_) }
         && re.body_scannable
         && probe_decides(
-        &re.inner_first,
+        &admits_kinds(&re.inner_admits),
         &re.caller_follow_first,
         &re.continuation_scan,
         re.continuation_scannable,
@@ -1677,7 +1669,8 @@ fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> 
 
 /// Whether the repeat guard already proves the body matches, leaving the
 /// generic emit's re-test and `sp` save/restore dead.
-fn repeat_body_implied_by_guard(body: &ScanElement, first: &List<String>) -> bool {
+fn repeat_body_implied_by_guard(body: &ScanElement, admits: &Admits) -> bool {
+    let first = admits_kinds(admits);
     if first.len() != 1 {
         return false;
     }
@@ -1688,8 +1681,24 @@ fn repeat_body_implied_by_guard(body: &ScanElement, first: &List<String>) -> boo
     };
 }
 
+/// The condition one scan iteration tests: in bounds, admitted, and not yielded
+/// to the caller. `Everything` contributes no kind test — a body that matches
+/// any token fires on the token that is there — which is the case a raw first
+/// set could not tell from `Untestable` and so emitted nothing for.
+fn scan_repeat_guard(admits: &Admits, caller_follow_gate: &String, ctx: &mut GenContext) -> String {
+    assert !admits_is_untestable(admits), "a repeat whose body matches nothing has no iteration to guard";
+    let mut parts: List<String> = ["pos < tokens.len()"];
+    if let Kinds(kinds) = admits {
+        parts.push(ctx.kind_check_str(kinds, &"tokens[pos]"));
+    }
+    if !caller_follow_gate.is_empty() {
+        parts.push(`!(${*caller_follow_gate})`);
+    }
+    return parts.join(" && ");
+}
+
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
-    let loop_first = re.inner_first;
+    let loop_admits = re.inner_admits;
 
     // Caller-FOLLOW yield gate: when the caller's continuation matches at
     // this scan position, the scan must stop (mirroring the parse-side
@@ -1704,7 +1713,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     if let Optional = re.kind {
         // OptionalLookahead doesn't reach this path (it's a
         // ScanElement::OptionalLookahead, not a ScanElement::Repeat).
-        if loop_first.is_empty() {
+        if admits_is_untestable(&loop_admits) {
             return;
         }
         let body_is_rulecall = re.body matches { RuleCall(_) };
@@ -1719,25 +1728,25 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         // don't fire the Optional on a token that belongs to the
         // caller's next position. The `caller_follow_first` subtraction
         // matches the surface emitter's `combined_follow = follow_first`.
-        let effective_first = if body_is_rulecall && !re.caller_follow_first.is_empty() {
-            subtract_sets(&loop_first, &re.caller_follow_first);
+        // Nothing is subtracted from a body that admits everything: what it
+        // admits is not a set the caller's follow can be taken out of, and the
+        // gate below is what holds it back.
+        let effective = if let Kinds(kinds) = &loop_admits {
+            if body_is_rulecall && !re.caller_follow_first.is_empty() {
+                admits_or_untestable(&subtract_sets(kinds, &re.caller_follow_first));
+            } else {
+                loop_admits;
+            }
         } else {
-            loop_first;
+            loop_admits;
         };
-        if effective_first.is_empty() {
+        if admits_is_untestable(&effective) {
             return;
         }
-        let check = ctx.kind_check_str(&effective_first, &"tokens[pos]");
         // Caller-FOLLOW gate wins: `if pos < len && peek matches first AND
-        // NOT caller_follow_gate { try iter }`. When `caller_follow_gate` is
-        // empty (no `follow`), the guard collapses to the regular shape.
-        let guard = if caller_follow_gate.is_empty() {
-            `pos < tokens.len() && ${check}`;
-        } else {
-            `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
-        };
-        w.begin(&`if ${guard}`);
-        if repeat_body_implied_by_guard(&re.body, &effective_first) {
+        // NOT caller_follow_gate { try iter }`.
+        w.begin(&`if ${scan_repeat_guard(&effective, &caller_follow_gate, ctx)}`);
+        if repeat_body_implied_by_guard(&re.body, &effective) {
             w.line(&"pos += 1;");
         } else {
             w.line(&"let sp = pos;");
@@ -1748,28 +1757,23 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         return;
     }
     if let Star = re.kind {
-        if loop_first.is_empty() {
-            // Non-greedy wildcard `.*?`: the body matches any token, so a
-            // first-set guard can never fire. Skip tokens until the exit
-            // set (the repeat's follow) or EOF, mirroring the parse-side
-            // `compute_non_greedy_condition`.
-            if re.non_greedy {
-                gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
-            }
+        if admits_is_untestable(&loop_admits) {
+            return;
+        }
+        // A non-greedy repeat over a body admitting everything (`.*?`) stops
+        // at the exit set, not at a kind guard: every token passes the guard,
+        // so the loop below would run to EOF. Mirrors the parse-side
+        // `compute_non_greedy_condition`.
+        if re.non_greedy && loop_admits matches { Everything } {
+            gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
             return;
         }
         if scan_non_greedy_probe_decides(re, ctx) {
             gen_scan_non_greedy_probe_loop(w, re, ctx);
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
-        let guard = if caller_follow_gate.is_empty() {
-            `pos < tokens.len() && ${check}`;
-        } else {
-            `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
-        };
-        w.begin(&`while ${guard}`);
-        if repeat_body_implied_by_guard(&re.body, &loop_first) {
+        w.begin(&`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
+        if repeat_body_implied_by_guard(&re.body, &loop_admits) {
             w.line(&"pos += 1;");
         } else {
             w.line(&"let sp = pos;");
@@ -1783,28 +1787,23 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     if let Plus = re.kind {
         // First iteration is mandatory: failure goes through fail_stmt.
         gen_scan_op_element(w, &re.body, ctx, fail_stmt);
-        if loop_first.is_empty() {
-            // Non-greedy wildcard `.+?`: mandatory iter ran above; skip the
-            // rest until the exit set or EOF (see the Star arm).
-            if re.non_greedy {
-                gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
-            }
+        if admits_is_untestable(&loop_admits) {
+            return;
+        }
+        // `.+?`: mandatory iter ran above; the rest stops at the exit set
+        // rather than a kind guard (see the Star arm).
+        if re.non_greedy && loop_admits matches { Everything } {
+            gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
             return;
         }
         if scan_non_greedy_probe_decides(re, ctx) {
             gen_scan_non_greedy_probe_loop(w, re, ctx);
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
         // Plus's subsequent iters get the K-prefix gate; the mandatory
         // first iter ran above.
-        let guard = if caller_follow_gate.is_empty() {
-            `pos < tokens.len() && ${check}`;
-        } else {
-            `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
-        };
-        w.begin(&`while ${guard}`);
-        if repeat_body_implied_by_guard(&re.body, &loop_first) {
+        w.begin(&`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
+        if repeat_body_implied_by_guard(&re.body, &loop_admits) {
             w.line(&"pos += 1;");
         } else {
             w.line(&"let sp = pos;");
