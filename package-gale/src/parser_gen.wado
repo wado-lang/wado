@@ -63,7 +63,6 @@ use {
     dispatch_branches,
     fallback_last,
     group_branch_admits,
-    group_first_union,
     has_multi_alt_groups,
     is_decision_fallback,
     scan_decision_branches,
@@ -80,13 +79,11 @@ use {
     admits_or_untestable,
     admits_tests_nothing,
     AltClass,
-    alt_class_first_set,
     alt_class_tests_nothing,
     LoweredGrammar,
     Rule,
     LrAlt,
     LrDispatchData,
-    DirectDispatch,
     MultiAltDispatch,
     AltBody,
     Op,
@@ -3228,8 +3225,16 @@ fn gen_alt_dispatch(
         }
     }
     // A trailing branch admitting everything already answers every lookahead,
-    // so the expect-set arm behind it is unreachable.
-    if !is_decision_fallback(&branches[branches.len() - 1]) {
+    // so the expect-set arm behind it is unreachable. `decision_is_unconditional`
+    // decided above whether a chain was opened at all, and it and
+    // `is_decision_fallback` disagree on an `Everything` branch — an `else`
+    // here with no `if` before it. Unreachable because a `Direct` dispatch
+    // never carries one (`build_overlap_dispatch` routes an open-ended class to
+    // `Tournament`), which is a property of another function and so is stated
+    // rather than assumed.
+    let last = &branches[branches.len() - 1];
+    assert !admits_tests_nothing(&last.test) || is_decision_fallback(last), "a Direct chain's last branch admits everything, so no `if` was emitted for the `else` to follow";
+    if !is_decision_fallback(last) {
         w.else_begin(&"else");
         w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
     }
@@ -5740,7 +5745,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
             let no_flag = String::new();
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag, &loop_first);
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &no_flag), decided);
             w.end();
@@ -5759,7 +5764,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.line(&`let mut ${plus_flag} = true;`);
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag, &loop_first);
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &plus_flag), decided);
             w.end();
@@ -5873,8 +5878,14 @@ fn gen_op_repeat_star_plus_storable(
     let inner_first = admits_kinds(&rep_op.body_admits);
     let loop_first = inner_first;
     // Per-iteration follow propagated into a nested non-greedy Repeat
-    // inside a SingleAlt body — `first(inner) ∪ outer_follow`.
-    let iter_follow = if rep_op.body_is_single_alt_group { union_kind_arrays(&inner_first, follow) } else { *follow };
+    // inside a SingleAlt body — `first(inner) ∪ outer_follow`. What the walk
+    // enumerated, not what the guard narrows by: an open-ended body admits
+    // more than its set names and still contributes the set to the follow.
+    let iter_follow = if rep_op.body_is_single_alt_group {
+        union_kind_arrays(&admits_enumerated(&rep_op.body_admits), follow);
+    } else {
+        *follow;
+    };
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
     // The iteration body appends to the builder, so there is no `List<T>` to
@@ -5886,7 +5897,7 @@ fn gen_op_repeat_star_plus_storable(
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
             let no_flag = String::new();
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag, &loop_first);
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(
                 w,
@@ -5916,7 +5927,7 @@ fn gen_op_repeat_star_plus_storable(
             w.line(&`let mut ${plus_flag} = true;`);
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag, &loop_first);
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(
                 w,
@@ -5949,13 +5960,6 @@ fn gen_op_repeat_star_plus_storable(
     }
 }
 
-/// Loop-exit guard for a scan-gated Repeat. Augments the plain
-/// `if scan_pos < 0 { break }` with a speculative re-parse of a RuleRef inner
-/// that records the precise deep error (`gen_rep_break_with_recovery`); the
-/// emitter brackets the speculative parse with a builder
-/// checkpoint/truncate (the speculation drives the real `TreeBuilder`, so the
-/// throwaway subtree is rolled back along with the cursor — only the recorded
-/// deep error survives).
 /// What a scan-guarded iteration clears before its body: the caller-FOLLOW
 /// yield gate, then either the body group's own decision or the plain scan
 /// guard. Returns the winning alternative the body's dispatch commits to, or
@@ -5971,7 +5975,6 @@ fn gen_rep_iteration_entry(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     plus_flag: &String,
-    loop_first: &List<String>,
 ) -> Option<String> {
     if let Group(g_op) = &rep_op.body {
         if let Group(g_elem) = peel_scalar_label(inner) {

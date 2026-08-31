@@ -2016,12 +2016,6 @@ fn lower_general_scan_group(
     });
 }
 
-/// Whether a required scan group is emitted `lenient` — bailing out at its entry
-/// position on no match instead of failing. The lenient over-approximation is
-/// what the longest-match tournament relies on, so it is the default; only a
-/// mandatory (non-nullable) group whose rule's scan can re-enter itself at the
-/// same position (`is_rule_scan_cyclic`) must scan strict, or that
-/// zero-consumption cycle never terminates (issue #1671).
 /// The scan group a `GroupOp` carries: the bodies lower built, paired here —
 /// and only here — with the classification lower made. Given the bodies alone,
 /// emit built its own `ScanGroupElement`, classified the alternatives a second
@@ -2043,6 +2037,12 @@ fn group_op_scan_group(
     };
 }
 
+/// Whether a required scan group is emitted `lenient` — bailing out at its entry
+/// position on no match instead of failing. The lenient over-approximation is
+/// what the longest-match tournament relies on, so it is the default; only a
+/// mandatory (non-nullable) group whose rule's scan can re-enter itself at the
+/// same position (`is_rule_scan_cyclic`) must scan strict, or that
+/// zero-consumption cycle never terminates (issue #1671).
 fn scan_group_lenient(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     if scan_group_is_nullable(alts, ctx) {
         return true;
