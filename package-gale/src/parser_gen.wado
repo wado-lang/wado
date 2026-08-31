@@ -1788,12 +1788,24 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     // `follow` is empty.
     let caller_follow_gate = if re.gate_caller_follow { "follow_yields(tokens, pos, follow, TK_EOF)" } else { "" };
 
+    // A body matching nothing has no iteration to scan. Once per function, not
+    // once per arm: the same guard written in all three arms is what
+    // `scan_repeat_guard_excluding`'s assert was really relying on, and an arm
+    // added without it would trip that assert instead of being caught here —
+    // the shape that cost the parse side a grammar that used to generate.
+    //
+    // Returning before the `Plus` arm's mandatory first iteration is safe
+    // because that arm cannot be reached with such a body at all: `X*` and
+    // `X+` over one that derives only the empty string are a closure over a
+    // nullable body, which `check_epsilon_closure` rejects.
+    if admits_is_untestable(&loop_admits) {
+        assert re.kind matches { Optional }, "a closure over a body matching nothing is rejected by check_epsilon_closure before emit";
+        return;
+    }
+
     if let Optional = re.kind {
         // OptionalLookahead doesn't reach this path (it's a
         // ScanElement::OptionalLookahead, not a ScanElement::Repeat).
-        if admits_is_untestable(&loop_admits) {
-            return;
-        }
         let body_is_rulecall = re.body matches { RuleCall(_) };
         if scan_optional_probe_decides(re, ctx) {
             gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);
@@ -1841,9 +1853,6 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         return;
     }
     if let Star = re.kind {
-        if admits_is_untestable(&loop_admits) {
-            return;
-        }
         // A non-greedy repeat over a body admitting everything (`.*?`) stops
         // at the exit set, not at a kind guard: every token passes the guard,
         // so the loop below would run to EOF. Mirrors the parse-side
@@ -1871,9 +1880,6 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     if let Plus = re.kind {
         // First iteration is mandatory: failure goes through fail_stmt.
         gen_scan_op_element(w, &re.body, ctx, fail_stmt);
-        if admits_is_untestable(&loop_admits) {
-            return;
-        }
         // `.+?`: mandatory iter ran above; the rest stops at the exit set
         // rather than a kind guard (see the Star arm).
         if re.non_greedy && loop_admits matches { Everything } {
