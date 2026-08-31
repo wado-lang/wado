@@ -1649,10 +1649,10 @@ impl FunctionTranslator<'_, '_> {
             .and_then(|stmt_id| match &arena.stmts[*stmt_id].kind {
                 StmtKind::Expr(op) => {
                     let ty = self.operand_type_id(*op);
-                    if !self.is_stackless_type(ty) {
-                        Some(self.ctx.type_id_to_wir_type(self.type_table, ty))
-                    } else {
+                    if self.is_stackless_type(ty) {
                         None
+                    } else {
+                        Some(self.ctx.type_id_to_wir_type(self.type_table, ty))
                     }
                 }
                 StmtKind::If {

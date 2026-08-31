@@ -2407,10 +2407,7 @@ impl TypeTable {
     /// `WirType::Unit`: anything the parameter and result lists drop by that
     /// mapping, every use site must drop by this predicate.
     pub fn is_stackless(&self, type_id: TypeId) -> bool {
-        matches!(
-            self.peel_refs(type_id),
-            TypeTable::UNIT | TypeTable::NEVER
-        )
+        matches!(self.peel_refs(type_id), TypeTable::UNIT | TypeTable::NEVER)
     }
 
     /// Peel through Ref/MutRef wrappers to get the underlying type.
