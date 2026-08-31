@@ -613,6 +613,32 @@ impl TypeSystem {
         result
     }
 
+    /// Whether `type_id` satisfies `trait_` *at the type itself*, without
+    /// following a newtype to its base.
+    ///
+    /// Dispatch lets a newtype inherit its base's impls, which is what
+    /// [`Self::type_implements_trait`] answers. Blanket selection needs the
+    /// other question: a bound the newtype carries must outrank one only its
+    /// base carries, or the base's blanket silently claims the receiver
+    /// (WEP 2026-06-25 Trait Derivation Policy).
+    pub(super) fn type_implements_trait_here(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        trait_: DefId,
+    ) -> bool {
+        let is_newtype = matches!(
+            self.type_table.borrow().get(type_id),
+            ResolvedType::Newtype { .. }
+        );
+        if !is_newtype {
+            return self.type_implements_trait(ctx, scope, type_id, trait_);
+        }
+        let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+        self.find_trait_impl_for_subject(ctx, scope, Some(type_id), &receiver, trait_)
+    }
+
     /// Whether every member of `resolved` satisfies `trait_` under `tr`'s
     /// structural rule, and which one decided when they do not. One walk: the
     /// check takes the yes and the diagnostic the no, so they cannot disagree.
@@ -2653,6 +2679,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info,
             impl_module_source,
             blanket_type_param: None,
+            bound_depth: 0,
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
             is_blanket_ref_impl: false,

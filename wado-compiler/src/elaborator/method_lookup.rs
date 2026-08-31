@@ -1561,13 +1561,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether a candidate impl applies to the receiver. Returns its receiver
-    /// name and whether it is a blanket type-param impl, or `None` to skip.
+    /// name, whether it is a blanket type-param impl, and the newtype-chain
+    /// depth its target bounds hold at, or `None` to skip.
     fn candidate_matches_receiver(
         &mut self,
         impl_ref: &ImplBlockRef,
         names_to_check: &[ImplTargetKey],
         receiver_type_id: Option<TypeId>,
-    ) -> Option<(String, crate::name::FqTypeName, bool)> {
+    ) -> Option<(String, crate::name::FqTypeName, bool, usize)> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
         let impl_struct_name = self.get_type_name(&header.ty);
@@ -1587,17 +1588,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.ref_impl_targets_receiver(&header.ty, receiver_type_id) {
             return None;
         }
-        if !self.blanket_target_bounds_satisfied(&header.ty, &header.type_params, receiver_type_id)
-        {
-            return None;
-        }
+        let bound_depth =
+            self.blanket_target_bounds_depth(&header.ty, &header.type_params, receiver_type_id)?;
         if !self.concrete_impl_matches_receiver(impl_ref, receiver_type_id) {
             return None;
         }
         // Qualified in the impl's own frame by the decl pass: the call site's
         // imports may name the same declaration differently, or not at all.
         let impl_struct_fq = self.impl_sig(impl_ref).target_fq.clone();
-        Some((impl_struct_name, impl_struct_fq, is_blanket_type_param))
+        Some((
+            impl_struct_name,
+            impl_struct_fq,
+            is_blanket_type_param,
+            bound_depth,
+        ))
     }
 
     /// For a reference-typed impl (`impl ... for &Container<T>`), whether its
@@ -1665,35 +1669,63 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// For a blanket impl (target type is one of its own type params with
-    /// bounds), whether the receiver satisfies those bounds. Prevents using e.g.
-    /// `impl<I: Iterator> IntoIterator for I` for a `TypeParam` `I` that is not
-    /// itself `Iterator`. Returns `true` (keep) for non-blanket impls.
-    fn blanket_target_bounds_satisfied(
+    /// bounds), how far down the receiver's newtype chain those bounds first
+    /// hold: `Some(0)` at the receiver itself, `Some(1)` at its base, `None`
+    /// when they never do. `None` rejects the candidate, which is what keeps
+    /// `impl<I: Iterator> IntoIterator for I` off a `TypeParam` `I` that is not
+    /// itself `Iterator`; `Some(0)` for non-blanket impls.
+    ///
+    /// The depth is the rank, not a detail: a newtype inherits its base's
+    /// impls, so a blanket keyed by a bound only the base carries is admitted
+    /// for the newtype too. Without the rank it ties with the blanket the
+    /// newtype's *own* impl selects, and the tie is broken arbitrarily —
+    /// issue #1932, against WEP 2026-06-25.
+    fn blanket_target_bounds_depth(
         &self,
         impl_ty: &Type,
         impl_type_params: &[ast::GenericParam],
         receiver_type_id: Option<TypeId>,
-    ) -> bool {
+    ) -> Option<usize> {
         let impl_ty_name = super::trait_env::get_type_name_static(impl_ty);
         let Some(param) = impl_type_params
             .iter()
             .find(|tp| tp.name == impl_ty_name && !tp.bounds.is_empty())
         else {
-            return true;
+            return Some(0);
         };
-        param.bounds.iter().all(|bound| {
-            let Some(bound_def) = self.bound_trait_def(bound.id) else {
-                return true;
-            };
-            receiver_type_id.is_some_and(|rt| {
-                self.tysys.type_implements_trait(
+        let rt = receiver_type_id?;
+        // A bound that names no resolvable declaration constrains nothing, as
+        // the boolean gate this replaces also held.
+        let bound_defs: Vec<_> = param
+            .bounds
+            .iter()
+            .filter_map(|bound| self.bound_trait_def(bound.id))
+            .collect();
+        let type_lookup = self.type_lookup();
+        self.receiver_newtype_levels(rt).into_iter().position(|level| {
+            bound_defs.iter().all(|&bound_def| {
+                self.tysys.type_implements_trait_here(
                     &self.annotate_ctx,
-                    &self.type_lookup(),
-                    rt,
+                    &type_lookup,
+                    level,
                     bound_def,
                 )
             })
         })
+    }
+
+    /// The receiver's type and each newtype base under it, nearest first. The
+    /// index into this is the peel depth a blanket's bounds are ranked by.
+    fn receiver_newtype_levels(&self, receiver_type_id: TypeId) -> Vec<TypeId> {
+        let mut levels = vec![receiver_type_id];
+        let mut current = receiver_type_id;
+        while let ResolvedType::Newtype { base_type, .. } =
+            self.tysys.type_table.borrow().get(current).clone()
+        {
+            levels.push(base_type);
+            current = base_type;
+        }
+        levels
     }
 
     /// Whether a concrete `impl Trait for <NamedType>` really targets the
@@ -1790,7 +1822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_refs = self.trait_method_candidates(&names_to_check, receiver_type_id);
 
         for impl_ref in &impl_refs {
-            let Some((impl_struct_name, impl_struct_fq, is_blanket_type_param)) =
+            let Some((impl_struct_name, impl_struct_fq, is_blanket_type_param, bound_depth)) =
                 self.candidate_matches_receiver(impl_ref, &names_to_check, receiver_type_id)
             else {
                 continue;
@@ -1800,6 +1832,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_struct_name,
                 impl_struct_fq,
                 is_blanket_type_param,
+                bound_depth,
                 method_name,
                 receiver_type_args,
                 receiver_type_id,
@@ -1867,6 +1900,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_struct_name: String,
         impl_struct_fq: crate::name::FqTypeName,
         is_blanket_type_param: bool,
+        bound_depth: usize,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
@@ -2228,6 +2262,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
+                bound_depth,
                 impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
@@ -2299,6 +2334,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                     impl_module_source,
                     blanket_type_param,
+                    bound_depth,
                     impl_struct_name,
                     impl_struct_fq,
                     is_blanket_ref_impl,
@@ -2341,13 +2377,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // duplicates. A blanket is the general case and loses to any impl
         // written for the receiver — even a local blanket to a foreign
         // concrete impl — so concrete-vs-blanket ranks above locality.
+        //
+        // Between two blankets, the one whose bounds hold at the receiver
+        // itself beats one that only holds after peeling to a newtype's base:
+        // the newtype exists to be a type distinct from its base, so its own
+        // impls select for it first (WEP 2026-06-25). This ranks above
+        // locality, which is about where an impl is written rather than which
+        // type it was selected by.
         let current_module = &self.current_module_source;
         found_traits.sort_by(|a, b| {
             let a_concrete = a.blanket_type_param.is_none();
             let b_concrete = b.blanket_type_param.is_none();
             let a_local = &a.impl_module_source == current_module;
             let b_local = &b.impl_module_source == current_module;
-            b_concrete.cmp(&a_concrete).then(b_local.cmp(&a_local))
+            b_concrete
+                .cmp(&a_concrete)
+                .then(a.bound_depth.cmp(&b.bound_depth))
+                .then(b_local.cmp(&a_local))
         });
         found_traits.dedup_by(|a, b| {
             a.trait_decl == b.trait_decl

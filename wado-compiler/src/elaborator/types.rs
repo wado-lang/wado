@@ -2330,6 +2330,12 @@ pub(super) struct TraitMethodMatch {
     /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
     /// this holds the type parameter name (e.g., `"I"`). `None` for normal impls.
     pub(super) blanket_type_param: Option<String>,
+    /// How far down the receiver's newtype chain this impl's target bounds
+    /// hold: 0 at the receiver itself, 1 at its base. A newtype inherits its
+    /// base's impls, so a blanket keyed by a bound only the base carries is
+    /// admitted alongside the one the newtype's own impl selects; ranking on
+    /// this is what keeps the newtype's own from losing (issue #1932).
+    pub(super) bound_depth: usize,
     /// The struct name that actually has the trait impl (may differ from the
     /// receiver's struct name when the impl was found through the newtype chain).
     /// Written form — the impl-index key.
