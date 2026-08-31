@@ -46,22 +46,30 @@ What the language lets you write.
 | A6 Code generation | Macros are refused nearly everywhere. Where was generation pushed instead? |
 | A7 Hidden operations | Is there an inventory of what the compiler does behind your back? |
 
-### The stdlib cross-check
+### The self-application cross-check
 
-Every A row carries one more column: does the claim hold in the language's own
-standard library. The stdlib is the language's harshest client — it needs
-performance, it needs abstraction, and it cannot opt out. A claim that breaks
-there is a surface claim.
+Every A row carries one more column: does the claim hold in the hardest program
+written in the language. Such a program needs performance, needs abstraction,
+and cannot opt out, so a claim that breaks there is a surface claim.
+
+Find that program first. The floor is the standard library, which every
+language has. The ceiling is a self-hosted compiler, which is the strongest
+form of the check available — a claim that survives a lexer, a type checker and
+a code generator has been tested against everything the language can be asked
+to express.
 
 ```sh
 grep -rl '<privileged prefix>' <stdlib>/ | wc -l   # numerator
 ls <stdlib>/*.<ext> | wc -l                        # denominator
 ```
 
-The privileged prefix is whatever the stdlib is allowed to call that user code
-is not: an intrinsic module, a raw-memory module, an FFI escape. A public API
-file whose functions all have empty bodies means the real implementation lives
-in another language or under that prefix; find it before filling the row.
+The privileged prefix is whatever that code may call and user code may not: an
+intrinsic module, a raw-memory module, an FFI escape. A public API file whose
+functions all have empty bodies means the real implementation lives in another
+language or under that prefix; find it before filling the row. Read the floor
+too — a typed generic floor (`Array::get: (Array[T], Int) -> T`) and an
+address-based one (`load64(p + 12 + i * 8)`) score the same by ratio and are
+not the same finding.
 
 An A row with only the claim column filled is not a finding.
 
@@ -71,7 +79,7 @@ Why the language is the way it is, and what keeps that honest.
 
 | Axis | What to look at |
 | --- | --- |
-| B1 Arbiter | Is there one sentence naming what the project maximizes at the cost of everything else? Does it open the philosophy document or close it? |
+| B1 Arbiter | Is there one sentence settling what wins when goals conflict? Record its form — a single maximized metric, or a priority order over several values — and whether it opens the philosophy document or closes it |
 | B2 Accept/reject criteria | Numeric, or taste? |
 | B3 The "why" axis | Roadmap records what is next and the spec records what is; is the reasoning behind a decision recorded anywhere? |
 | B4 Falsifier | Does the decision template require "what would retract this"? |
@@ -88,6 +96,12 @@ B6 must record scope, not just presence. A gate over numbers and contracts
 leaves prose unguarded, and prose is where a language's promises about its own
 surface usually live.
 
+Every B row takes three states, not two. A missing mechanism is either absent
+or refused with a doctrine, and the second is a decision — the same distinction
+the surface axes draw between unimplemented and rejected. Record the doctrine
+when there is one; two projects can lack the same mechanism for opposite
+reasons.
+
 ## C. Spin-off value
 
 > If this project stopped tomorrow, what would still be worth having?
@@ -103,6 +117,11 @@ Each entry carries two more columns.
 
 - Externality: usable without adopting the language?
 - Contender: what incumbent does it compete with, and does it win?
+
+The language's own toolchain is not C1. A compiler, formatter, LSP, or editor
+plugin for a language nobody uses is worth nothing, which is what the question
+at the head of this section asks. A self-hosted compiler is the strongest entry
+in the A cross-check and belongs there; counting it twice flatters the project.
 
 C is not a proxy for maturity. A young project can have a thick C2 and C3 and an
 empty C1; that is a choice about where surplus effort went, and it is visible
@@ -122,11 +141,11 @@ Arbiter: "<one sentence, quoted>" (opens / closes the philosophy document)
 
 ## A. Surface
 
-| Axis | Claim | Reality | Holds in stdlib | Unimplemented / Rejected |
+| Axis | Claim | Reality | Holds in self-application | Unimplemented / Rejected |
 
 ## B. Design and governance
 
-| Axis | Present | Scope |
+| Axis | Present / Absent / Refused | Scope or doctrine |
 
 ## C. Spin-off value
 
@@ -142,3 +161,4 @@ Arbiter: "<one sentence, quoted>" (opens / closes the philosophy document)
 ## Surveys
 
 - [Almide](./research-language-survey-almide.md)
+- [vibe](./research-language-survey-vibe.md)

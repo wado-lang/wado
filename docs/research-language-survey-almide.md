@@ -17,7 +17,7 @@ its tests after a series of AI-driven edits.
 
 ## A. Surface
 
-| Axis | Claim | Reality | Holds in stdlib | Unimplemented / Rejected |
+| Axis | Claim | Reality | Holds in self-application | Unimplemented / Rejected |
 | --- | --- | --- | --- | --- |
 | A1 Canonicity | "One name per operation, no aliases" (`DESIGN.md`); the cheatsheet lists `string.length` as wrong | Prose convention only; nothing checks it | No — `stdlib/string_len.almd` defines `string.length` as an alias of `string.len`, and `list.len`/`list.length` both map to `almide_rt_list_len` | — |
 | A2 Type vocabulary | Invented; primitives cut to `Int`, `Float`, `String`, `Bool`, `Unit`, `Path` | Sized integers exist as conversion modules (`int8`…`uint64`) reached by UFCS, not as surface types | — | Rejected: no external ABI to mirror |
@@ -34,7 +34,11 @@ cost only inside a closed domain; leaving that domain demotes it back to
 lints hold it up: E035 warns on branching over an error's message text, E036
 warns when a named `map_err` parameter drops `${e}`.
 
-### The stdlib cross-check
+### The self-application cross-check
+
+The hardest program written in Almide is its standard library. The compiler is
+Rust (836 files across 24 crates), so the ceiling form of this check — a
+self-hosted compiler — is unavailable, and the stdlib carries it alone.
 
 232 of 309 stdlib files (75%) call `prim`, which the module header describes as
 "the PRIMITIVE FLOOR: raw memory access … UNSAFE: addresses are unchecked".
