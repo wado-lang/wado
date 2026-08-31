@@ -70,6 +70,7 @@ impl OnBoundTrait {
             CompilerItem::Serialize => Self::Serialize,
             CompilerItem::Deserialize => Self::Deserialize,
             CompilerItem::Default => Self::Default,
+            CompilerItem::Reflect => Self::Reflect,
             CompilerItem::ReflectStruct => Self::ReflectStruct,
             CompilerItem::ReflectVariant => Self::ReflectVariant,
             CompilerItem::ReflectEnum => Self::ReflectEnum,
@@ -102,7 +103,11 @@ impl OnBoundTrait {
     pub(super) fn is_reflect(self) -> bool {
         matches!(
             self,
-            Self::ReflectStruct | Self::ReflectVariant | Self::ReflectEnum | Self::ReflectFlags
+            Self::Reflect
+                | Self::ReflectStruct
+                | Self::ReflectVariant
+                | Self::ReflectEnum
+                | Self::ReflectFlags
         )
     }
 }
@@ -1197,10 +1202,13 @@ impl TypeSystem {
             // The identity root holds for every kind, and unlike a kind bound it
             // is ungated by field visibility: naming a type is not enumerating
             // it (WEP 2026-06-13).
-            (ResolvedType::Struct { .. }, Some(OnBoundTrait::Reflect))
-            | (ResolvedType::Variant { .. }, Some(OnBoundTrait::Reflect))
-            | (ResolvedType::Enum { .. }, Some(OnBoundTrait::Reflect))
-            | (ResolvedType::Flags { .. }, Some(OnBoundTrait::Reflect)) => true,
+            (
+                ResolvedType::Struct { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. },
+                Some(OnBoundTrait::Reflect),
+            ) => true,
             (ResolvedType::Struct { def, .. }, Some(OnBoundTrait::ReflectStruct)) => def
                 .decl()
                 .and_then(|d| scope.struct_fields_of(d))
