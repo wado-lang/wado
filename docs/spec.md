@@ -37,10 +37,9 @@ See also: [Cheatsheet](./cheatsheet.md) for quick syntax reference.
 
 ## Design Philosophy
 
-- Wasm only: Zero abstraction to Wasm
-- Explicitness: Make intent explicit
-- Colorless async: Eliminates async/await "color" problem via Wasm Stack Switching
-- Effect System: Side effect tracking and control, swappable via Handlers
+See [Design Philosophy](./design-philosophy.md). The rules those principles
+produced are stated here, each where it applies: [Memory Model](#memory-model),
+[Concurrency Model](#concurrency-model), [Effect System](#effect-system).
 
 ## Lexical Structure
 
@@ -4667,7 +4666,13 @@ fn load_data() -> Data with Http {
 }
 ```
 
-Note: Wado is fully colorless — the `async` keyword only appears in world declarations (the Component Model surface) to match WIT's `async func` signatures for exports. Effect declarations and function implementations never use `async`.
+Wado is colorless: a function's signature does not record whether it suspends,
+so an asynchronous callee imposes nothing on its caller and one implementation
+serves both. Suspension is Wasm stack switching, not a source-level transform.
+
+The `async` keyword appears only in world declarations, where the Component
+Model surface has to match WIT's `async func` signature for an export. Effect
+declarations and function implementations never use it.
 
 ## Effect System
 
