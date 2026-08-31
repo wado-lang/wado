@@ -1792,65 +1792,45 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             [] as List<String>;
         };
         w.begin(&`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
-        if repeat_body_implied_by_guard(&re.body, &effective) {
-            w.line(&"pos += 1;");
-        } else {
-            w.line(&"let sp = pos;");
-            gen_scan_op_element_assign(w, &re.body, ctx);
-            w.line(&"if pos < 0 { pos = sp; }");
-        }
+        gen_scan_iteration(w, re, &effective, ctx, false);
         w.end();
         return;
     }
-    if let Star = re.kind {
-        // `.*?` stops at the exit set: every token passes a kind guard, so the
-        // loop below would run to EOF. Mirrors `compute_non_greedy_condition`.
-        if re.non_greedy && loop_admits matches { Everything } {
-            gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
-            return;
-        }
-        if scan_non_greedy_probe_decides(re, ctx) {
-            gen_scan_non_greedy_probe_loop(w, re, ctx);
-            return;
-        }
-        w.begin(&`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
-        if repeat_body_implied_by_guard(&re.body, &loop_admits) {
-            w.line(&"pos += 1;");
-        } else {
-            w.line(&"let sp = pos;");
-            gen_scan_op_element_assign(w, &re.body, ctx);
-            w.line(&"if pos < 0 { pos = sp; break; }");
-            w.line(&"if pos == sp { break; }");
-        }
-        w.end();
-        return;
-    }
-    if let Plus = re.kind {
-        // First iteration is mandatory: failure goes through fail_stmt.
+
+    // A `+`'s first iteration is mandatory, so its failure is the element's.
+    if re.kind matches { Plus } {
         gen_scan_op_element(w, &re.body, ctx, fail_stmt);
-        // `.+?`: the rest stops at the exit set (see the Star arm).
-        if re.non_greedy && loop_admits matches { Everything } {
-            gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
-            return;
-        }
-        if scan_non_greedy_probe_decides(re, ctx) {
-            gen_scan_non_greedy_probe_loop(w, re, ctx);
-            return;
-        }
-        // Plus's subsequent iters get the K-prefix gate; the mandatory
-        // first iter ran above.
-        w.begin(&`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
-        if repeat_body_implied_by_guard(&re.body, &loop_admits) {
-            w.line(&"pos += 1;");
-        } else {
-            w.line(&"let sp = pos;");
-            gen_scan_op_element_assign(w, &re.body, ctx);
-            w.line(&"if pos < 0 { pos = sp; break; }");
-            w.line(&"if pos == sp { break; }");
-        }
-        w.end();
+    }
+    // `.*?` / `.+?` stop at the exit set: every token passes a kind guard, so
+    // the loop below would run to EOF. Mirrors `compute_non_greedy_condition`.
+    if re.non_greedy && loop_admits matches { Everything } {
+        gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
         return;
     }
+    if scan_non_greedy_probe_decides(re, ctx) {
+        gen_scan_non_greedy_probe_loop(w, re, ctx);
+        return;
+    }
+    w.begin(&`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
+    gen_scan_iteration(w, re, &loop_admits, ctx, true);
+    w.end();
+}
+
+/// One scanned iteration: take the token the guard already proved, or scan the
+/// body and rewind where it fails. A loop also leaves where it cannot advance.
+fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admits, ctx: &mut GenContext, looping: bool) {
+    if repeat_body_implied_by_guard(&re.body, admits) {
+        w.line(&"pos += 1;");
+        return;
+    }
+    w.line(&"let sp = pos;");
+    gen_scan_op_element_assign(w, &re.body, ctx);
+    if !looping {
+        w.line(&"if pos < 0 { pos = sp; }");
+        return;
+    }
+    w.line(&"if pos < 0 { pos = sp; break; }");
+    w.line(&"if pos == sp { break; }");
 }
 
 /// Op-driven scan emitter for `ScanElement::Group`: the same partition the
@@ -6207,13 +6187,7 @@ fn gen_scan_winner_round(
         } else {
             let end_var = dedup_name(&"gd_end", name_counts);
             w.line(&`let mut ${end_var}: i32 = -1;`);
-            let scan_label = dedup_name(&"gd_scan", name_counts);
-            w.begin(&`${scan_label}:`);
-            w.line(&"let tokens = &p.kinds;");
-            w.line(&"let mut pos: i32 = p.pos;");
-            gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
-            w.line(&`${end_var} = pos;`);
-            w.end();
+            gen_scan_alt_end(w, sb, &end_var, ctx, name_counts);
             emit_argmax_update(w, best_var, winner_var, &end_var, ai);
         }
         // The early exit skips the alts still to come; after the last one
@@ -6346,12 +6320,10 @@ fn op_group_alt_decision(g: &GroupOp, ctx: &mut GenContext) -> Option<List<Decis
     return Option::Some(dispatch_branches(&g.dispatch));
 }
 
-/// Decide a group, as `[winner, best]`: which alternative (`-1` where no
-/// branch admits the lookahead), and how far it scanned (`-1` where it did
-/// not scan at all). A caller that may decline the
-/// group reads `best`; one at a required position reads `winner` and commits,
-/// leaving the body to report what it cannot match. `follow_gate` wraps the
-/// scans in the caller-FOLLOW yield test.
+/// Decide a group, as `[winner, best]`: which alternative, and how far it
+/// scanned (each `-1` where there is no answer). A caller that may decline
+/// the group reads `best`; one at a required position reads `winner` and
+/// commits. `follow_gate` wraps the scans in the caller-FOLLOW yield test.
 fn gen_group_decide(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
@@ -6408,12 +6380,24 @@ fn gen_decision_measure(
         w.line(&`${*best_var} = p.pos;`);
         return;
     }
+    gen_scan_alt_end(w, sb, best_var, ctx, name_counts);
+}
+
+/// Scan one alternative's body from the parse position into `end_var`, which
+/// keeps the value the caller seeded it with where the scan fails.
+fn gen_scan_alt_end(
+    w: &mut CodeWriter,
+    sb: &ScanBody,
+    end_var: &String,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+) {
     let scan_label = dedup_name(&"gd_scan", name_counts);
     w.begin(&`${scan_label}:`);
     w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
     gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
-    w.line(&`${*best_var} = pos;`);
+    w.line(&`${*end_var} = pos;`);
     w.end();
 }
 
@@ -6539,13 +6523,10 @@ variant GroupBranchKind {
     General,
 }
 
-/// Emit a group's alternative dispatch: one branch per overlap group, each
-/// alternative's alt-initial predicate folded into its condition, closed by
-/// what `entry` owes a token no alternative admits. Every group decision goes
-/// through here (`antlr4-compatibility.md`, "One dispatch emitter").
-///
-/// `decided` names the variable a caller's own `gen_group_decide` left the
-/// winning alt index in; that scan ran the same partition, so this commits.
+/// Emit a group's alternative dispatch: one branch per overlap group, closed
+/// by what `entry` owes a token no alternative admits (`antlr4-compatibility.md`,
+/// "One dispatch emitter"). `decided` names the variable a caller's own
+/// `gen_group_decide` left the winner in, which this commits to.
 fn gen_group_dispatch(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,

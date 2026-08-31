@@ -1573,9 +1573,8 @@ C : 'c' ;
 ";
 
 test "an undecided dispatch keeps every alternative reachable" {
-    // The chain that is not handed a decision built its own conditions, so the
-    // empty alternative's absent first set rendered as `true` there and left
-    // `B` behind a test that can never fail.
+    // The chain that is not handed a decision builds its own conditions, and
+    // owes the empty alternative's absent first set the same reading.
     let mut g = parse(UNDECIDED_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_r__inner(");
@@ -1607,10 +1606,8 @@ test "the overlap rule dispatch orders its fallback last too" {
 }
 
 test "an optional over a wildcard has no first set to guard on" {
-    // A guard is a site where an empty set means "nothing is excluded". The
-    // renderer no longer answers that for its callers, so a guard that can be
-    // handed one has to say so — and this one panicked the generator until it
-    // did.
+    // A guard is a site where an empty set means "nothing is excluded", and
+    // the renderer does not answer that for its callers, so the guard says so.
     let mut g = parse(WILDCARD_OPTIONAL_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
@@ -1632,8 +1629,7 @@ test "a nullable alternative with a first set keeps its index" {
 
 test "a wildcard behind a nullable prefix still makes its alternative open-ended" {
     // Having a first set does not settle it: `A? .` is selected by `a` and also
-    // by every other token. Reading the first set alone said "narrow", and the
-    // group was then partitioned by `{A}` with `c` reaching no alternative.
+    // by every other token, so partitioning by `{A}` leaves `c` no alternative.
     let mut g = parse(PREFIXED_WILDCARD_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
@@ -1641,9 +1637,8 @@ test "a wildcard behind a nullable prefix still makes its alternative open-ended
 }
 
 test "an epsilon alternative earns its follow set however it is spelled" {
-    // Lower decided which alternative gets the group's follow set by counting
-    // elements while everything else on this path asks nullability, so
-    // `( A | x | B )` lost the branch and the report that `( A | | B )` gets.
+    // Which alternative earns the follow set is nullability's answer, not an
+    // element count: `( A | x | B )` gets the branch `( A | | B )` gets.
     let mut g = parse(INDIRECT_EPSILON_ADMITS_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
@@ -1653,10 +1648,8 @@ test "an epsilon alternative earns its follow set however it is spelled" {
 
 test "an alternative that derives only epsilon through a rule is selected by its follow" {
     // `x` matches nothing, so what selects it is what follows the group — the
-    // same answer a written-empty alternative gets, and it earns it however it
-    // is spelled. Reading the surface elements called `x` non-empty, so it
-    // took neither the follow set nor the trailing arm and the `A` arm behind
-    // it was dead. ANTLR4 parses `b` as `(s x b)` and `a b` as `(s a b)`.
+    // answer a written-empty alternative gets, earned however it is spelled.
+    // ANTLR4 parses `b` as `(s x b)` and `a b` as `(s a b)`.
     let mut g = parse(INDIRECT_EPSILON_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
@@ -1677,9 +1670,8 @@ test "the op walker keeps an alternative open-ended through a rule in place" {
 
 test "an alternative open-ended through a rule keeps its index too" {
     // An empty first set says nothing about the surface element that produced
-    // it. Asking `alt_is_wildcard_led` answers for a `.` written in place and
-    // not for one reached through `w`, so this alternative was read as the
-    // empty one and demoted behind `A`.
+    // it, so reading the elements answers for a `.` written in place and not
+    // for one reached through `w`.
     let mut g = parse(INDIRECT_WILDCARD_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_s__inner(");
@@ -1716,9 +1708,8 @@ B : 'b' ;
 
 test "an open-ended alternative still contributes the first set it does have" {
     // The expected list a `no viable alternative` names, and the SYNC set it
-    // recovers on, are unions over the group's classes. Dropping the payload
-    // narrowed both to `{TK_B}`, so the `a` that really can start the group
-    // was neither reported nor recovered on.
+    // recovers on, are unions over the group's classes, so an open-ended
+    // alternative's own tokens have to reach both.
     let mut g = parse(OPEN_ENDED_WITH_FIRST_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let both = "global SYNC_0: List<i32> = [TK_A, TK_B];";
@@ -1753,8 +1744,8 @@ test "a wildcard puts every alternative in one branch, epsilon included" {
     // `( A | . | )`: the wildcard admits every token, so no lookahead test
     // separates any alternative from it — all three share the tournament and
     // the scan lengths decide, with the empty alternative ranked as epsilon.
-    // Partitioned apart it became an arm behind the wildcard's unconditional
-    // one, which no input could reach.
+    // Partitioned apart it is an arm behind the wildcard's unconditional one,
+    // which no input reaches.
     let mut g = parse(WILDCARD_AND_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_r__inner(");

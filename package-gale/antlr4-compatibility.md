@@ -464,12 +464,11 @@ committing, so the rule's own error path still names the rule rather than one
 alternative's next token.
 
 **A group is decided once, wherever the decision is needed.** That partition
-and tournament is one emitter (`gen_group_decide`), and it answers two
-questions of the group rather than one, because its callers ask two: **which
-alternative** (prediction — the lookahead alone where a branch holds one
-alternative, the longest scan where it holds several) and **how far that
-alternative validated**. Everything that has to know what a group takes here
-reads the half that matches its position:
+and tournament is one emitter (`gen_group_decide`), answering the two
+questions its callers ask: **which alternative** (prediction — the lookahead
+alone where a branch holds one alternative, the longest scan where it holds
+several) and **how far that alternative validated**. Each caller reads the
+half that matches its position:
 
 - **A caller that may decline the group** — an optional, or a loop iteration
   after the first — reads how far the alternative validated: what did not
@@ -507,13 +506,14 @@ empty, is it nullable, has it no elements — gets a different answer per
 spelling, so the two emit walkers partition the same group differently
 (invariant 9). `alt_class` in `alt_grouping` is the only producer:
 
-- `OpenEnded` — `.` or `~X`, written in the alternative or reached through a
-  nullable prefix or a rule. Admits every token; no first set names it.
+- `OpenEnded(first)` — `.` or `~X`, written in the alternative or reached
+  through a nullable prefix or a rule. Admits every token, so no set describes
+  it; `first` is the subset the walk did enumerate (`A? .` starts with `a`).
 - `Selects(first)` — selected by exactly these tokens, never empty.
 - `Nullable(first)` — can also match nothing, so the follow set joins `first`,
   which may itself be empty (`( A | | B )`) or not (`( A? | B )`).
 
-Everything downstream reads it. `alt_grouping` owns the whole decision —
+`alt_grouping` owns the whole decision —
 `compute_overlap_groups_of` partitions, `group_branch_admits` says what a
 branch admits, `fallback_last` orders — and the surface walker, the op-only
 walker, the scan and lower's kind-set interning are four readers of that one
@@ -593,16 +593,14 @@ policy, stated once per call site, and it has three values:
 - **Required** — the group must match here, so a token no alternative admits is
   a no-viable-alternative, over the union of the alternatives' first sets.
 - **Guaranteed** — the caller decided before entering, so there is no report to
-  make. What it decided says how much of the dispatch is left. Where the caller
-  ran the group's own decision — an optional's entry check, a scan-guarded
-  loop's iteration — it names the winning alternative and the dispatch commits
-  to it, testing nothing else: such a group needs no policy of its own, the
-  decision that admitted it is what would have skipped it. Where the caller
-  only proved the position viable — a loop over a body with no alternatives to
-  decide — the dispatch still picks by lookahead and the last branch needs no
-  condition of its own; there a gated alternative forces Guaranteed back to
-  Required, since a false predicate must not land in an unconditional `else`
-  meant for the alternative it excludes.
+  make, and what it decided says how much of the dispatch is left. Where it ran
+  the group's own decision — an optional's entry check, a scan-guarded loop's
+  iteration — it names the winning alternative and the dispatch commits to it,
+  testing nothing else. Where it only proved the position viable — a loop over
+  a body with no alternatives to decide — the dispatch still picks by lookahead
+  and the last branch needs no condition of its own; there a gated alternative
+  forces Guaranteed back to Required, since a false predicate must not land in
+  an unconditional `else` meant for the alternative it excludes.
 - **Looped** — a loop iteration, carrying the mandatory-first-iteration flag or
   none. It is what a repeat states where its body has no decision of its own,
   and `open_group_entry` discharges it into one of the two above: the loop's
@@ -610,18 +608,17 @@ policy, stated once per call site, and it has three values:
   the position they do not cover.
 
 A `+`'s mandatory first iteration is the position no guard covers — it is
-required, so the loop enters it unguarded. A decided body's decision runs
-there too, and the position reads the half of it that cannot decline: the
-alternative prediction picked. Where the lookahead admits a branch holding one
-alternative, that alternative is the answer whether or not its scan reached
-the end — the iteration commits and the body reports what it cannot match,
-which is what ANTLR4 does (`( A t | B t )+` on `a` is `missing ';'`, not a
-no-viable-alternative). Only where prediction picked nothing — no branch
-admits the lookahead, or a branch of several admits it and none of them scans
-— is the position a `no viable alternative`, which is again ANTLR4's answer
-(`( A B | A C )+` on `a a`). Fixture `plus_first_commit.g4`, both trees taken
-from the published jar. An undecided body still needs both answers emitted
-where the flag reads true, before the body:
+required, so the loop enters it unguarded, and reads the half of a decided
+body's decision that cannot decline: the alternative prediction picked. Where
+the lookahead admits a branch holding one alternative, that is the answer
+whether or not its scan reached the end — the iteration commits and the body
+reports what it cannot match, as ANTLR4 does (`( A t | B t )+` on `a` is
+`missing ';'`). Only where prediction picked nothing — no branch admits the
+lookahead, or a branch of several admits it and none of them scans — is the
+position a `no viable alternative`, again ANTLR4's answer (`( A B | A C )+` on
+`a a`). Fixture `plus_first_commit.g4`, both trees taken from the published
+jar. An undecided body still needs both answers emitted where the flag reads
+true, before the body:
 
 - Gated, single-alternative body — no dispatch to force Guaranteed back, so the
   gate reports. Without it the gate registers the predicate, the body drops its

@@ -45,13 +45,14 @@ use {
     GroupElement,
 } from "./ir.wado";
 use {
-    alt_class,
     alt_class_of,
     alt_classes,
     alt_classes_of,
     compute_overlap_groups,
     compute_overlap_groups_of,
+    DecisionBranch,
     dispatch_branches,
+    identity_slots,
     scan_decision_branches,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
@@ -436,13 +437,7 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
         Group(g) => {
             // The very branches `gen_scan_op_group` renders: a test rendered
             // from a set this walker did not intern references no id.
-            for let b of &scan_decision_branches(&g) {
-                if let Kinds(tokens) = &b.test {
-                    if tokens.len() >= 2 {
-                        ctx.intern_kind_set(tokens);
-                    }
-                }
-            }
+            intern_branch_tests(&scan_decision_branches(&g), ctx);
             for let b of &g.alts {
                 walk_scan_body_for_kind_sets(b, ctx);
             }
@@ -466,7 +461,13 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
 }
 
 fn walk_dispatch_for_kind_sets(d: &MultiAltDispatch, ctx: &mut GenContext) {
-    for let b of &dispatch_branches(d) {
+    intern_branch_tests(&dispatch_branches(d), ctx);
+}
+
+/// Intern the kind set behind every branch test emit will render, so the id it
+/// names exists.
+fn intern_branch_tests(branches: &List<DecisionBranch>, ctx: &mut GenContext) {
+    for let b of branches {
         if let Kinds(tokens) = &b.test {
             if tokens.len() >= 2 {
                 ctx.intern_kind_set(tokens);
@@ -1654,21 +1655,24 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatc
     };
 }
 
-/// Build a `Direct` dispatch from disjoint first sets. Each branch
-/// matches one alt's first set; emit translates the branch list into
-/// an `if / else if` chain followed by an error fallback.
+/// Build a `Direct` dispatch over alternatives whose first sets are disjoint
+/// by construction — a token-only group's.
 fn build_direct_dispatch(
     alts: &List<Alternative>,
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> MultiAltDispatch {
-    assert alts.len() == first_sets.len(), "one first set per alternative";
+    let slots = identity_slots(alts.len());
+    return direct_dispatch(&alt_classes(&slots, alts, first_sets, ctx), &slots);
+}
+
+/// The token-led chain itself: one branch per class, in `indices` order. Emit
+/// translates it into `if / else if` and an error fallback.
+fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDispatch {
+    assert classes.len() == indices.len(), "one alternative index per class";
     let mut branches: List<DispatchBranch> = [];
-    for let mut i = 0; i < first_sets.len(); i += 1 {
-        branches.push(DispatchBranch {
-            alt_class: alt_class(&alts[i], &first_sets[i], ctx),
-            alt_index: i,
-        });
+    for let mut k = 0; k < indices.len(); k += 1 {
+        branches.push(DispatchBranch { alt_class: classes[k], alt_index: indices[k] });
     }
     return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
@@ -1677,18 +1681,11 @@ fn any_open_ended(classes: &List<AltClass>) -> bool {
     return classes.iter_ref().any(|c: &AltClass| alt_class_is_open_ended(c));
 }
 
-/// Choose a dispatch for a set of alternatives. When the per-alt
-/// first sets are pairwise disjoint, falls through to a token-led
-/// `Direct` dispatch. Otherwise (any two alts share a first token),
-/// requires every alt to be fully scannable and falls back to a
-/// scan-side `Tournament` dispatch sorted by element count
-/// descending — emit runs each scan helper and commits to the
-/// longest match. ANTLR4's longest-match LL choice, no backtracking.
-///
-/// `owner` identifies the decision site: it names the owner in the panic
-/// message for unscannable alts and keys the advisory diagnostic. `alts` is
-/// the underlying surface alternative list; `indices` selects which alts
-/// participate in this dispatch.
+/// Choose a dispatch for the alternatives `indices` selects: a token-led
+/// `Direct` chain where the partition separates them all, otherwise a
+/// `Tournament` over their scans — ANTLR4's longest-match LL choice, which
+/// needs every alternative scannable. `owner` names the decision site in the
+/// unscannable panic and keys the advisory diagnostic.
 fn build_overlap_dispatch(
     owner: &DiagnosticOwner,
     alts: &List<Alternative>,
@@ -1706,14 +1703,7 @@ fn build_overlap_dispatch(
     // An open-ended alt reads as disjoint by its static set, and a Direct
     // chain would give it an unreachable empty-token branch.
     if disjoint && !any_open_ended(classes) {
-        let mut branches: List<DispatchBranch> = [];
-        for let mut k = 0; k < indices.len(); k += 1 {
-            branches.push(DispatchBranch {
-                alt_class: classes[k],
-                alt_index: indices[k],
-            });
-        }
-        return MultiAltDispatch::Direct(DirectDispatch { branches });
+        return direct_dispatch(classes, indices);
     }
 
     for let idx of indices {
