@@ -4,9 +4,9 @@
 // local environment buys: `x` is a `let mut`, and the environment carries its
 // scalar value between writes rather than giving up at the binding.
 //
-// The constant reaches the formatter, so `x` itself is gone by O2. Which
-// spelling it takes there — an immediate or the boxed constant
-// `const_object_globalization` hoists — is that pass's call, same bytes.
+// The absent `x = x` is what says the fold happened: at O0 each compound
+// assignment is a read-modify-write, and none survives O2. The positives name
+// the folded constants, whose spelling `const_object_globalization` owns.
 
 use { println, Stdout } from "core:cli";
 
@@ -38,5 +38,8 @@ __DATA__
         "Box<i32>\" { value: 24 }",
         "Box<i32>\" { value: 6 }",
         "Box<i32>\" { value: 2 }"
+    ],
+    "wir_not_expect:O2": [
+        "x = x"
     ]
 }

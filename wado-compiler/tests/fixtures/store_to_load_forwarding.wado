@@ -1,7 +1,6 @@
-// Store-to-load forwarding on struct fields. Each forwarded constant reaches
-// the formatter, so the field store, the load, and the scalar the field
-// decomposed to are all gone by O2 — leaving the constant itself, which
-// `const_object_globalization` hoists into a boxed global.
+// Store-to-load forwarding on struct fields. The absent `Pair` is what says
+// the loads resolved: every field store and load is gone by O2, leaving the
+// forwarded constants, whose spelling `const_object_globalization` owns.
 use { println, Stdout } from "core:cli";
 
 struct Pair {
@@ -47,6 +46,7 @@ __DATA__
         "Box<i32>\" { value: 100 }"
     ],
     "wir_not_expect:O2": [
+        "//Pair\"",
         "panic("
     ]
 }
