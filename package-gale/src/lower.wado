@@ -1614,9 +1614,6 @@ fn compute_lr_conflict_min_prec(
 /// indices (into `lr_alts`) of alts whose suffix is non-empty —
 /// degenerate `expr : expr` alts are filtered out. `groups` is the
 /// overlap-group partition over those alts' `suffix_first` sets.
-///
-/// Phase 2.4 only handles the disjoint case (each group is a
-/// singleton). Overlap groups land in Phase 2.3c.
 fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatchData {
     let mut valid_lr_alts: List<i32> = [];
     let mut suffix_first_sets: List<List<String>> = [];
@@ -2000,12 +1997,23 @@ fn lower_general_scan_group(
         }
         bodies.push(ScanBody { elements });
     }
-    let mut classes = alt_classes_of(alts, ctx);
-    apply_empty_alt_admits(&mut classes, &group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx));
+    return scan_group_element(bodies, alts, outer_follow, follow_is_exact, ctx);
+}
+
+/// A standalone scan group over `bodies` — the leniency its alternatives call
+/// for, and the one classification lower makes for every shape (invariant 9).
+fn scan_group_element(
+    bodies: List<ScanBody>,
+    alts: &List<Alternative>,
+    outer_follow: &List<String>,
+    follow_is_exact: bool,
+    ctx: &mut GenContext,
+) -> ScanElement {
+    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
-        alt_classes: classes,
+        alt_classes: group_alt_classes(alts, &empty_alt_admits, ctx),
     });
 }
 
@@ -2019,12 +2027,37 @@ fn group_op_scan_group(
     ctx: &mut GenContext,
 ) -> ScanGroupElement {
     assert bodies.len() == alts.len(), "one scan body per alternative";
-    let mut classes = alt_classes_of(alts, ctx);
-    apply_empty_alt_admits(&mut classes, empty_alt_admits);
     // Strict, not `scan_group_lenient`'s answer: this copy is scanned only by
     // the optional's entry guard, which cannot rewind and call it a match.
     let lenient = false;
-    return ScanGroupElement { alts: *bodies, lenient, alt_classes: classes };
+    return ScanGroupElement {
+        alts: *bodies,
+        lenient,
+        alt_classes: group_alt_classes(alts, empty_alt_admits, ctx),
+    };
+}
+
+/// The `GroupOp` a multi-alt shape becomes: one classification of `alts`, the
+/// dispatch that reads it, and the scan group carrying the same one.
+fn group_op(
+    shape: GroupShape,
+    owner: &DiagnosticOwner,
+    alts: &List<Alternative>,
+    bodies: List<AltBody>,
+    scan_bodies: &List<ScanBody>,
+    outer_follow: &List<String>,
+    follow_is_exact: bool,
+    ctx: &mut GenContext,
+) -> Op {
+    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
+    let classes = group_alt_classes(alts, &empty_alt_admits, ctx);
+    return Op::Group(GroupOp {
+        shape: shape,
+        alts: bodies,
+        scan_group: group_op_scan_group(scan_bodies, alts, &empty_alt_admits, ctx),
+        dispatch: build_overlap_dispatch(owner, alts, &identity_slots(alts.len()), &classes, ctx),
+        empty_alt_admits: empty_alt_admits,
+    });
 }
 
 /// Whether a required scan group is emitted `lenient` — bailing out at its entry
@@ -2757,25 +2790,9 @@ fn lower_op(
     };
 }
 
-/// Lower a `Group` element. Phase 2.x.transparent only handles the
-/// trivial wrapping shape — a single alt containing exactly one
-/// leaf element (e.g. `(INT)`). The wrapping is purely syntactic;
-/// the inner element runs unconditionally with the surrounding
-/// alt's binding scope, so the inner Op is lowered against the same
-/// `name_counts` and the resulting `GroupOp` carries
-/// `GroupShape::Transparent`.
-///
-/// Storable shapes (`SingleAlt`, `TokenOnly`, `SimpleCst`,
-/// `General`) and multi-element Transparent groups land in their
-/// own follow-up sub-phases:
-///
-/// * Phase 2.x.singlealt — single alt with ≥ 2 elements →
-///   `GroupShape::SingleAlt` (struct of its own)
-/// * Phase 2.x.tokenonly — every alt a single Token / Literal →
-///   `GroupShape::TokenOnly`
-/// * Phase 2.x.simplecst — every alt a single distinct RuleRef →
-///   `GroupShape::SimpleCst`
-/// * Phase 2.x.general — multi-alt non-trivial → `GroupShape::General`
+/// Lower a `Group` element into the `GroupShape` `classify_group` names.
+/// Inner ops share the surrounding alt's `name_counts` only for `Transparent`,
+/// whose wrapping is purely syntactic; every storable shape gets its own scope.
 fn lower_group_op(
     g: &GroupElement,
     name_counts: &mut List<[String, i32]>,
@@ -2841,12 +2858,9 @@ fn lower_transparent_group(
     outer_follow: &List<String>,
     follow_is_exact: bool,
 ) -> Op {
-    // Nested inner is allowed: `((a))` / `(a*)` / `(name=a)`.
-    // The Op carries whatever shape `lower_op` produces; the
-    // surrounding emit-side Transparent path inlines it directly.
     // A Transparent group adds nothing between the inner and the outer alt, so
     // `outer_follow` and its exactness pass through verbatim.
-
+    //
     // TODO(redesign): forward the outer position's FollowArg/gate through
     // the transparent wrapper so `(RuleRef)` / `(e)*` at a rule tail still
     // gates on the caller's continuation. Conservative `NoFollow`/`false`
@@ -2901,11 +2915,9 @@ fn lower_transparent_group(
 /// field in the outer alt. The struct's element bindings live in a
 /// fresh name scope — they don't pollute the outer alt's counts.
 ///
-/// `owner_rule` records the surrounding rule's name so a future
-/// nested `General` group inside this body can resolve its
-/// monomorph table key (`<RuleName>Group<idx>`). For Phase
-/// 2.x.singlealt the inner ops are leaves only; nested groups land
-/// in Phase 2.x.nested.
+/// `owner_rule` records the surrounding rule's name so a nested `General`
+/// group inside this body resolves its monomorph table key
+/// (`<RuleName>Group<idx>`).
 fn lower_single_alt_group(
     alt: &Alternative,
     name_counts: &mut List<[String, i32]>,
@@ -3112,15 +3124,8 @@ fn token_only_kind(elem: &Element) -> String {
 }
 
 /// Multi-alt group whose every alt is a single distinct `RuleRef` —
-/// `(stmt | expr | decl)`. Lowers to `GroupShape::SimpleCst` with
-/// a shared variant type name and a single field name. Each alt's
-/// body is the matched `RuleCall`; dispatch uses each callee rule's
-/// first set.
-///
-/// Phase 2.x.simplecst handles only the disjoint-first-set case so
-/// the dispatch is a clean `Direct` chain. Overlapping rule-ref
-/// alts (e.g. two rules sharing a leading IDENT) need the scan-side
-/// tournament dispatch — that lands in Phase 2.3c.
+/// `(stmt | expr | decl)`. One shared variant type, one field, one `RuleCall`
+/// per alt.
 fn lower_simple_cst_group(
     alts: &List<Alternative>,
     name_counts: &mut List<[String, i32]>,
@@ -3131,19 +3136,12 @@ fn lower_simple_cst_group(
     let type_name = group_variant_type_name(alts);
     let field = dedup_name(&group_field_base_name(alts), name_counts);
 
-    let mut first_sets: List<List<String>> = [];
-    for let alt of alts {
-        assert !alt.elements.is_empty(), "a SimpleCst alt is one RuleRef, never empty";
-        let mut visiting: List<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-    }
-
     let mut bodies: List<AltBody> = [];
     let mut scan_bodies: List<ScanBody> = [];
     let mut inner_counts: List<[String, i32]> = [];
-    let mut all_indices: List<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
+        assert !alt.elements.is_empty(), "a SimpleCst alt is one RuleRef, never empty";
         let elem = &alt.elements[0];
         let case_name = group_case_name(alt);
         let op = lower_simple_cst_alt_call(elem, &mut inner_counts);
@@ -3166,35 +3164,25 @@ fn lower_simple_cst_group(
                 ),
             ],
         });
-        all_indices.push(i);
     }
     let owner = DiagnosticOwner {
         rule: ctx.current_rule_name(),
         site: DiagnosticSite::SimpleCstGroup,
     };
-    // A SimpleCst alternative is one rule call, and that rule can be nullable,
-    // so what follows the group selects it here as in any other shape.
-    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
-    let mut classes = alt_classes(&all_indices, alts, &first_sets, ctx);
-    apply_empty_alt_admits(&mut classes, &empty_alt_admits);
-    let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &classes, ctx);
-    return Op::Group(GroupOp {
-        shape: GroupShape::SimpleCst(SimpleCstShape {
-            type_name: type_name,
-            field: field,
-        }),
-        alts: bodies,
-        scan_group: group_op_scan_group(&scan_bodies, alts, &empty_alt_admits, ctx),
-        dispatch: dispatch,
-        empty_alt_admits: empty_alt_admits,
-    });
+    return group_op(
+        GroupShape::SimpleCst(SimpleCstShape { type_name: type_name, field: field }),
+        &owner,
+        alts,
+        bodies,
+        &scan_bodies,
+        outer_follow,
+        follow_is_exact,
+        ctx,
+    );
 }
 
-/// `lower_scan_element`'s per-position follow is read only by its Label,
-/// Repeat and Group arms. `is_simple_cst_group` admits an alt only when it
-/// is one bare `RuleRef`, so a SimpleCst alt reaches none of them and the
-/// value here is unobservable — both lowering paths pass this rather than
-/// each arguing for a different one.
+/// A SimpleCst alt is one bare `RuleRef`, reaching none of the arms that read
+/// `lower_scan_element`'s per-position follow — so both paths pass one value.
 global SIMPLE_CST_NO_FOLLOW: List<String> = [];
 
 fn lower_simple_cst_scan_group(
@@ -3217,17 +3205,7 @@ fn lower_simple_cst_scan_group(
             ],
         });
     }
-    // A SimpleCst alternative is one rule call, and the rule it calls can be
-    // open-ended or nullable, so the classification is asked for rather than
-    // assumed, and the follow set resolves the nullable one as it does
-    // elsewhere.
-    let mut classes = alt_classes_of(alts, ctx);
-    apply_empty_alt_admits(&mut classes, &group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx));
-    return ScanElement::Group(ScanGroupElement {
-        alts: bodies,
-        lenient: scan_group_lenient(alts, ctx),
-        alt_classes: classes,
-    });
+    return scan_group_element(bodies, alts, outer_follow, follow_is_exact, ctx);
 }
 
 fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -> Op {
@@ -3277,10 +3255,22 @@ pub fn group_empty_alt_admits(
     return null;
 }
 
+/// What a group's alternatives match: the classification, with the group's
+/// follow set resolving the one that matches empty.
+pub fn group_alt_classes(
+    alts: &List<Alternative>,
+    empty_alt_admits: &Option<EmptyAltAdmits>,
+    ctx: &mut GenContext,
+) -> List<AltClass> {
+    let mut classes = alt_classes_of(alts, ctx);
+    apply_empty_alt_admits(&mut classes, empty_alt_admits);
+    return classes;
+}
+
 /// Union the group's follow set into the nullable alternative's class — it
 /// joins that alternative's own first set rather than replacing it: `( A? | B ) C`
 /// is selected by `a` and by `c` alike.
-pub fn apply_empty_alt_admits(classes: &mut List<AltClass>, admits: &Option<EmptyAltAdmits>) {
+fn apply_empty_alt_admits(classes: &mut List<AltClass>, admits: &Option<EmptyAltAdmits>) {
     let e = if let Some(x) = admits {
         x;
     } else {
@@ -3308,10 +3298,6 @@ pub fn apply_empty_alt_admits(classes: &mut List<AltClass>, admits: &Option<Empt
 ///   uses this id to look up monomorph table entries and to
 ///   resolve the cross-pass general-group enumeration.
 ///
-/// Phase 2.x.general handles only the disjoint-first-set case.
-/// Overlapping alts (the typical case for non-trivial groups) need
-/// the scan-tournament dispatch from Phase 2.3c.
-///
 /// Per-alt elements use a fresh name table — the inner ops bind
 /// names inside the group's struct, not the outer alt. The shared
 /// `group_counter` is bumped before lowering inner alts so any
@@ -3332,20 +3318,12 @@ fn lower_general_group(
     let variant_type = general_group_type_name(rule_name, group_index);
     let field = dedup_name(&general_group_field_name(group_index), name_counts);
 
-    let mut first_sets: List<List<String>> = [];
-    for let alt of alts {
-        let mut visiting: List<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-    }
-
     let mut bodies: List<AltBody> = [];
     let mut scan_bodies: List<ScanBody> = [];
     let mut alt_struct_names: List<String> = [];
-    let mut all_indices: List<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
         let alt_struct = general_group_alt_struct_name(rule_name, group_index, i);
-        all_indices.push(i);
         alt_struct_names.push(alt_struct);
 
         // Inner alts get a fresh name table (the group struct is
@@ -3421,22 +3399,21 @@ fn lower_general_group(
         rule: *rule_name,
         site: DiagnosticSite::GeneralGroup(group_index),
     };
-    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
-    let mut classes = alt_classes(&all_indices, alts, &first_sets, ctx);
-    apply_empty_alt_admits(&mut classes, &empty_alt_admits);
-    let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &classes, ctx);
-    return Op::Group(GroupOp {
-        shape: GroupShape::General(GeneralShape {
+    return group_op(
+        GroupShape::General(GeneralShape {
             variant_type: variant_type,
             alt_struct_names: alt_struct_names,
             field: field,
             group_index: group_index,
         }),
-        alts: bodies,
-        scan_group: group_op_scan_group(&scan_bodies, alts, &empty_alt_admits, ctx),
-        dispatch: dispatch,
-        empty_alt_admits: empty_alt_admits,
-    });
+        &owner,
+        alts,
+        bodies,
+        &scan_bodies,
+        outer_follow,
+        follow_is_exact,
+        ctx,
+    );
 }
 
 /// Outer struct field name for the alt that contains a Repeat. For
@@ -3458,12 +3435,8 @@ fn compute_repeat_outer_field(rep: &RepeatElement, name_counts: &mut List<[Strin
     return dedup_name(&outer_base, name_counts);
 }
 
-/// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial
-/// only handles greedy `Star` / `Plus` whose inner is a leaf element
-/// (no nested `Repeat` / `Group` / `Label`); the remaining shapes panic
-/// with their own `TODO` markers so a half-lowered `Repeat` cannot
-/// quietly reach codegen. The strategy (`Plain` vs. the specialised
-/// Optional shapes) is chosen inline below.
+/// Lower a `Repeat` element (`e?` / `e*` / `e+`). The strategy (`Plain` vs.
+/// the specialised Optional shapes) is chosen inline below.
 ///
 /// The inner Op uses a fresh `name_counts`: a binding name inside a
 /// loop body is local to that iteration and does not dedup against the
@@ -4188,12 +4161,8 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
 ///
 /// Mirrors `parser_gen::gen_element`'s scalar-Label arm: the inner
 /// emission would have produced its own field name, but the label
-/// rebinds the value under `lab.field_name`. Phase 2.1 only allows
-/// labels around leaf elements; nested `Repeat` / `Group` inside a
-/// label requires the matching lowerings (Phase 2.3+) before the
-/// rebind can be expressed. List labels (`+=`) need an additional
-/// `List<...>`-typed wrapper field; that wrapping is handled by
-/// the CST `FieldDecl` enumeration in Phase 2.9.
+/// rebinds the value under `lab.field_name`. A list label (`+=`) needs a
+/// `List<...>`-typed wrapper field, which the CST `FieldDecl` enumeration adds.
 fn lower_label_op(
     lab: &LabelElement,
     name_counts: &mut List<[String, i32]>,

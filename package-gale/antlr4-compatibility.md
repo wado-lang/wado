@@ -46,15 +46,17 @@ diverge.
 ### Rejections Gale shares with ANTLR4
 
 Being a superset does not mean accepting everything. A grammar whose meaning
-is not determined is rejected loudly, at the same points ANTLR4 rejects it:
+is not determined is rejected loudly, at the same points ANTLR4 rejects it.
+Both checks read one left-corner fixpoint, built once per grammar by
+`check_rule_shapes` in `finish_grammar`, over the merged grammar and for lexer
+rules as well as parser rules. Like its sibling whole-grammar checks neither
+diagnostic carries a span.
 
 - **Left recursion** that precedence climbing cannot resolve —
   `check_left_recursion`, ANTLR4 error 119.
 - **An epsilon closure** — a `*` or `+` over a body that can match nothing
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
-  error 153. Checked over the merged grammar in `finish_grammar`, for lexer
-  rules as well as parser rules. Like its sibling whole-grammar checks the
-  diagnostic carries no span.
+  error 153.
 
 ### The Unicode version is Gale's, not the jar's
 
@@ -710,8 +712,8 @@ relevant sites.
    single overlap group with the non-empty-FIRST alts, and that branch's
    kind-check tests nothing. Scan length separates the alternatives inside it,
    so the merge needs no iteration order. Without this, the parse side commits
-   to the more specific
-   alt on a lookahead match even when its deeper structure cannot succeed
+   to the more specific alt on a lookahead match even when its deeper structure
+   cannot succeed
    (`ParserExec/Wildcard`: `(assign | .)+ EOF` on `x=10; abc;`). Fixture
    `tests/grammars/ll_wildcard_alt.g4`.
 5. A scan group's `lenient` fallthrough (bail out at the entry position

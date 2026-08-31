@@ -43,7 +43,7 @@ use {
     build_group_prediction_tree_from_order,
     group_prediction_order,
 } from "./prediction.wado";
-use { compute_overlap_groups } from "./alt_grouping.wado";
+use { rule_overlap_groups } from "./parser_gen.wado";
 use { literal_const_name } from "./gen_util.wado";
 
 /// Render the full per-rule dump report for a lowered grammar.
@@ -225,10 +225,8 @@ fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule) {
 // Prediction tree
 // ==========================================================================
 
-/// Mirror `gen_parse_fn_named` (parser_gen.wado): collect the rule's
-/// non-LR alt indices, compute their FIRST sets, partition into overlap
-/// groups, and render each multi-alt group's prediction tree (built by
-/// the shared `build_group_prediction_tree_from_order`) inline.
+/// Render each multi-alt overlap group's prediction tree inline, off the same
+/// partition (`rule_overlap_groups`) and the same tree builder the emit reads.
 fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut GenContext) {
     let header = rule_header(rule);
     let surface = grammar.parser_rules.iter_ref().find(|r| r.name == header.name);
@@ -239,32 +237,10 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         },
     };
 
-    let mut non_lr_indices: List<i32> = [];
-    match rule {
-        Simple(_) => {
-            return;
-        },
-        MultiAlt(m) => {
-            for let alt of &m.alts {
-                non_lr_indices.push(alt.alt_index);
-            }
-        },
-        LeftRecursive(l) => {
-            for let alt of &l.atom.alts {
-                non_lr_indices.push(alt.alt_index);
-            }
-        },
-    }
+    let [non_lr_indices, first_sets, groups] = rule_overlap_groups(surface, rule, ctx);
     if non_lr_indices.len() < 2 {
         return;
     }
-
-    let mut first_sets: List<List<String>> = [];
-    for let idx of &non_lr_indices {
-        let mut visiting: List<String> = [];
-        first_sets.push(ctx.first_of_alt(&surface.alternatives[*idx], &mut visiting));
-    }
-    let mut groups = compute_overlap_groups(&first_sets);
 
     let mut printed_header = false;
     for let mut g = 0; g < groups.len(); g += 1 {

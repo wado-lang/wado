@@ -1969,8 +1969,7 @@ impl GenContext {
     /// Render what an `Admits` admits, as a condition on `expr`.
     pub fn admits_check_str(&mut self, admits: &Admits, expr: &String) -> String {
         return match admits {
-            Everything(_) => "true",
-            Untestable => "true",
+            Everything(_) | Untestable => "true",
             Kinds(kinds) => self.kind_check_str(kinds, expr),
         };
     }

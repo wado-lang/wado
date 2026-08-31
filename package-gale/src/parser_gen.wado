@@ -55,7 +55,6 @@ use {
     DecisionBranch,
     alt_class_of,
     alt_classes,
-    alt_classes_of,
     classes_union,
     compute_overlap_groups,
     compute_overlap_groups_of,
@@ -171,12 +170,7 @@ use {
     gen_scan_lookahead_condition,
     sync_set_ref,
 } from "./kind_set_gen.wado";
-use {
-    apply_empty_alt_admits,
-    non_greedy_static_undecided,
-    peel_repeat_body_label,
-    rebind_op_field,
-} from "./lower.wado";
+use { group_alt_classes, non_greedy_static_undecided, peel_repeat_body_label, rebind_op_field } from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -1969,10 +1963,10 @@ fn gen_scan_op_elements_in_block(
 }
 
 /// A rule's non-LR alt indices, their FIRST sets, and the overlap groups over
-/// them — the shared front matter of both the AtEndConflict detection
-/// (`rule_has_at_end_conflict`) and the multi-alt emit (`gen_parse_fn`), so the
-/// two cannot drift on how a rule's alternatives are grouped.
-fn rule_overlap_groups(
+/// them — the one answer the AtEndConflict detection
+/// (`rule_has_at_end_conflict`), the multi-alt emit (`gen_parse_fn`) and the
+/// dump all read, so none can drift on how a rule's alternatives are grouped.
+pub fn rule_overlap_groups(
     rule: &ParserRule,
     lowered_rule: &Rule,
     ctx: &mut GenContext,
@@ -6728,8 +6722,7 @@ fn group_partition(
     empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut GenContext,
 ) -> [List<AltClass>, List<List<i32>>] {
-    let mut classes = alt_classes_of(alts, ctx);
-    apply_empty_alt_admits(&mut classes, empty_alt_admits);
+    let classes = group_alt_classes(alts, empty_alt_admits, ctx);
     return [classes, compute_overlap_groups_of(&classes)];
 }
 
