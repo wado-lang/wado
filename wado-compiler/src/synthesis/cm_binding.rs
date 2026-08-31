@@ -98,49 +98,95 @@ fn lookup_effect_owner(
     fallback
 }
 
-use record_payload_validation::{RecordPayloadsValidated, reject_unresolvable_record_payloads};
+use payload_validation::reject_unresolvable_record_payloads;
+pub use payload_validation::{PayloadsValidated, reject_unresolvable_payloads_monomorphized};
 
-/// The record-payload scan and its witness, together in one module so the
-/// witness's private field can only be minted by the scan — a caller elsewhere
-/// cannot fabricate the `RecordPayloadsValidated` proof to skip the scan.
-mod record_payload_validation {
+/// The payload scans and their witness, together in one module so the witness's
+/// private field can only be minted by a scan.
+mod payload_validation {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use crate::component_model::CmInterfaceRegistry;
+    use crate::flat_package::FlatPackage;
+    use crate::hashmap::IndexSet;
+    use crate::module_source::ModuleSource;
     use crate::package::Package;
+    use crate::tir::{TirFunction, TypeTable};
     use crate::tir_visitor::TirRefVisitor;
 
-    /// Witness that [`reject_unresolvable_record_payloads`] ran while the TIR
-    /// still carried the pristine `future-new`/`stream-new` call shape its scan
-    /// matches. [`super::rewrite_async_primitives`] consumes it by value, so
-    /// reordering the validation after the rewrites fails to compile. The
-    /// private field makes the scan the only place that can mint one.
-    pub(in crate::synthesis::cm_binding) struct RecordPayloadsValidated(());
+    use super::{FunctionKey, NamedPayloadFinder};
 
-    /// Reject a user record used as a `future`/`stream` payload when its fields
-    /// are not registered in the CM interface registry: with no CM type to lower
-    /// against, the lower would mis-treat it as an i32 handle and emit an invalid
-    /// component. Records are registered only for `--lib` components. Scoped to
-    /// functions reachable from the active world's export bindings.
+    /// Witness that a scan ran while the TIR still carried the pristine
+    /// `future-new` / `stream-new` shape it matches. Each rewrite half consumes
+    /// one by value, so scanning after that half fails to compile. The private
+    /// field makes a scan the only place that can mint one.
+    pub struct PayloadsValidated(());
+
+    /// A user record used as a `future`/`stream` payload whose fields are not
+    /// registered in the CM interface registry: with no CM type to lower
+    /// against, the lower would mis-treat it as an i32 handle and emit an
+    /// invalid component. Records are registered only for `--lib` components,
+    /// so the reachable set scopes the check to the code the world keeps.
+    fn first_unresolvable<'a>(
+        tt: &TypeTable,
+        registry: &CmInterfaceRegistry,
+        functions: impl Iterator<Item = (ModuleSource, &'a Rc<RefCell<TirFunction>>)>,
+        reachable: &IndexSet<FunctionKey>,
+    ) -> Option<String> {
+        for (module_source, func_rc) in functions {
+            let func = func_rc.borrow();
+            let Some(body) = &func.body else { continue };
+            let mut finder = NamedPayloadFinder {
+                tt,
+                registry,
+                check_records: reachable.contains(&(module_source, func.name.clone())),
+                found: None,
+            };
+            finder.visit_block(body);
+            if finder.found.is_some() {
+                return finder.found;
+            }
+        }
+        None
+    }
+
+    /// Pre-monomorphize: every payload already concrete. Each module owns its
+    /// own type table, so the scan runs per module.
     pub(in crate::synthesis::cm_binding) fn reject_unresolvable_record_payloads(
         project: &Package,
-    ) -> Result<RecordPayloadsValidated, String> {
+    ) -> Result<PayloadsValidated, String> {
         let reachable = super::reachable_from_export_bindings(project);
         for (module_source, module) in &project.tir_modules {
             let tt = module.type_table.borrow();
-            for func_rc in &module.functions {
-                let func = func_rc.borrow();
-                let Some(body) = &func.body else { continue };
-                let mut finder = super::NamedPayloadFinder {
-                    tt: &tt,
-                    registry: project.cm_interface_registry.as_ref(),
-                    check_records: reachable.contains(&(module_source.clone(), func.name.clone())),
-                    found: None,
-                };
-                finder.visit_block(body);
-                if let Some(reason) = finder.found {
-                    return Err(reason);
-                }
+            let functions = module.functions.iter().map(|f| (module_source.clone(), f));
+            if let Some(reason) = first_unresolvable(
+                &tt,
+                project.cm_interface_registry.as_ref(),
+                functions,
+                &reachable,
+            ) {
+                return Err(reason);
             }
         }
-        Ok(RecordPayloadsValidated(()))
+        Ok(PayloadsValidated(()))
+    }
+
+    /// Post-monomorphize: the sites the `is_concrete` guard deferred, judged now
+    /// that each instance names a concrete payload.
+    pub fn reject_unresolvable_payloads_monomorphized(
+        flat: &FlatPackage,
+    ) -> Result<PayloadsValidated, String> {
+        let reachable = super::reachable_from_export_bindings_flat(flat);
+        let tt = flat.type_table.borrow();
+        let functions = flat
+            .functions
+            .iter()
+            .map(|f| (f.borrow().module_source.clone(), f));
+        match first_unresolvable(&tt, &flat.cm_interface_registry, functions, &reachable) {
+            Some(reason) => Err(reason),
+            None => Ok(PayloadsValidated(())),
+        }
     }
 }
 
@@ -316,32 +362,6 @@ fn unresolvable_future_stream_payload(
     crate::component_model::stream_payload_rejection(tt, payload)
 }
 
-/// Post-monomorphize half of [`reject_unresolvable_record_payloads`]: the sites
-/// its `is_concrete` guard deferred, judged now that each instance names a
-/// concrete payload. Without it the same program written through a generic
-/// helper reaches WIR build with no binding to call, and panics.
-pub fn reject_unresolvable_payloads_monomorphized(
-    flat: &crate::flat_package::FlatPackage,
-) -> Result<(), String> {
-    let reachable = reachable_from_export_bindings_flat(flat);
-    let tt = flat.type_table.borrow();
-    for func_rc in &flat.functions {
-        let func = func_rc.borrow();
-        let Some(body) = &func.body else { continue };
-        let mut finder = NamedPayloadFinder {
-            tt: &tt,
-            registry: &flat.cm_interface_registry,
-            check_records: reachable.contains(&(func.module_source.clone(), func.name.clone())),
-            found: None,
-        };
-        finder.visit_block(body);
-        if let Some(reason) = finder.found {
-            return Err(reason);
-        }
-    }
-    Ok(())
-}
-
 /// Two shapes name a payload: a `new()` static call, and a CM method on a
 /// handle. The bool is whether it is a future's.
 fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, bool)> {
@@ -437,7 +457,7 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 ///
 /// Ordered pipeline: import adapters, export adapters, the shared task-return
 /// signature, test-world bindings, payload validation (producing the
-/// `RecordPayloadsValidated` witness), task-return stripping, and finally
+/// `PayloadsValidated` witness), task-return stripping, and finally
 /// the async/resource primitive rewrites (consuming the witness).
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
@@ -449,7 +469,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;
     strip_unexpanded_task_returns(&project);
-    rewrite_async_primitives(&mut project, validated);
+    resource_rewrite::rewrite_async_primitives(&mut project, validated);
     Ok(project)
 }
 
@@ -1196,13 +1216,4 @@ fn strip_unexpanded_task_returns(project: &Package) {
             }
         }
     }
-}
-
-/// Synthesize binding functions for the async CM primitives — the `Stream<T>` /
-/// `Future<T>` read and write families — then rewrite `#[cm("...")]` resource
-/// method calls onto them, which requires they exist first. Consumes the
-/// [`RecordPayloadsValidated`] witness: the rewrites destroy the pristine
-/// `future-new` / `stream-new` shape that validation scans.
-fn rewrite_async_primitives(project: &mut Package, _validated: RecordPayloadsValidated) {
-    resource_rewrite::rewrite_async_primitives(project);
 }

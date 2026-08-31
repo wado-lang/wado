@@ -1542,10 +1542,10 @@ fn compile_after_load<H: CompilerHost>(
         // resume.
         // Ahead of the rewrites, as pre-monomorphize: both consume the pristine
         // `#[cm]` call shape the scan matches.
-        synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
+        let validated = synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
             .map_err(|message| bail_unsupported(logger, message))?;
         synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
-        synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
+        synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
         mono.resume(&mut flat);
     }
 
@@ -1968,10 +1968,11 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             {
                 let _span = logger.span("monomorphize");
                 let mut mono = monomorphize(&mut flat);
-                synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
-                    .map_err(|message| bail_unsupported(&logger, message))?;
+                let validated =
+                    synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
+                        .map_err(|message| bail_unsupported(&logger, message))?;
                 synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
-                synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat);
+                synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
                 mono.resume(&mut flat);
             }
 

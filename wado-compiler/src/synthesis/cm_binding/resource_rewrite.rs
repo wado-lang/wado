@@ -512,7 +512,11 @@ fn rewrite_async_primitives_at(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFu
 }
 
 /// Pre-monomorphize half: every body whose payloads are already concrete.
-pub(super) fn rewrite_async_primitives(project: &mut Package) {
+/// Consumes the witness — these rewrites destroy the shape the scan matches.
+pub(super) fn rewrite_async_primitives(
+    project: &mut Package,
+    _validated: super::PayloadsValidated,
+) {
     let generated = rewrite_async_primitives_at(&BindingSites::from_package(project));
     if generated.is_empty() {
         return;
@@ -528,7 +532,10 @@ pub(super) fn rewrite_async_primitives(project: &mut Package) {
 
 /// Post-monomorphize half: the bodies that were generic, where a `#[cm]` call's
 /// payload only became concrete when the instance was minted.
-pub fn rewrite_async_primitives_monomorphized(flat: &mut crate::flat_package::FlatPackage) {
+pub fn rewrite_async_primitives_monomorphized(
+    flat: &mut crate::flat_package::FlatPackage,
+    _validated: super::PayloadsValidated,
+) {
     let generated = rewrite_async_primitives_at(&BindingSites::from_flat(flat));
     // Link is what stamps a module source on a pre-monomorphize helper, by the
     // module it was placed in. These arrive after it, so they carry the entry

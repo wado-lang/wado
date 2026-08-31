@@ -161,12 +161,21 @@ The generated bodies call generic stdlib functions (`List<Elem>::with_capacity`)
 whose instantiations monomorphize would already have had to mint. Synthesis
 therefore runs to a fixpoint with monomorphize rather than strictly after it.
 
-Effect dispatch moves with it, and runs first. A handler installed for
-`Stream<u8>` claims `read` wherever it is called from, and the wrappers it
-routes through are synthesized from the handler impls, which name the
-instantiation already. Only the _rewriting_ of the call sites has to happen
-again, over the instances: a call left for the CM binding would reach the
-canonical past the handler that exists for it.
+Effect dispatch moves with it. A handler installed for `Stream<u8>` claims
+`read` wherever it is called from, and the wrappers it routes through are
+synthesized from the handler impls, which name the instantiation already. Only
+the _rewriting_ of the call sites has to happen again, over the instances: a
+call left for the CM binding would reach the canonical past the handler that
+exists for it.
+
+The payload scan splits the same way, and each half runs before the rewrites of
+its own half: both consume the pristine `future-new` / `stream-new` call shape
+the scan matches. A `PayloadsValidated` witness — minted only by a scan, taken
+by value by each rewrite — makes that order a compile error to get wrong.
+Without the post-monomorphize half, a payload the pre-monomorphize scan skipped
+for being a type parameter reached WIR build with no binding to call and panicked
+there, while the same program written without the generic helper was a clean
+diagnostic.
 
 ## Consequences
 
