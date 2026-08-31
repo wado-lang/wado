@@ -302,9 +302,9 @@ impl u128 {
             let half_low = self.low >> 1 | self.high << 63;
             let [estimate, _] = u128::div_rem_wide(half_high, half_low, dn);
             let mut q = estimate >> 63 - n;
-            if q != 0 {
-                q -= 1;
-            }
+            // self >= divisor >= dn << 64 - n, so the estimate is at least one.
+            assert q != 0;
+            q -= 1;
             let mut rem = *self - u128::from_u64(q) * *divisor;
             if rem >= *divisor {
                 q += 1;
