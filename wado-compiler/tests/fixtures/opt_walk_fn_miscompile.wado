@@ -11,7 +11,7 @@
 //   away; every other pass is irrelevant. So this is a copy_prop bug
 //   on inliner output, not an inliner bug per se.
 // * Empirically the trigger is `i32::fmt_decimal` (stdlib, about
-//   28 statements after inlining `count_digits_i64`) becoming an
+//   28 statements after inlining `count_digits_u64`) becoming an
 //   inline candidate. Once `fmt_decimal` lands inside the `walk_fn`
 //   body, copy_prop drops the `self.indent_level -= 1` write from
 //   the first inlined `Writer::end()` per call and the scalar drifts
@@ -47,7 +47,7 @@
 
 // Minimal `Dec: Display` whose `fmt` (via `dec_count_digits`) mirrors
 // the early-return + tight loop shape of the stdlib `i32::fmt_decimal`
-// + `count_digits_i64` pair. The `if val == 0 { return 1; }` early
+// + `count_digits_u64` pair. The `if val == 0 { return 1; }` early
 // return is what copy_prop chokes on after inlining; stripping it
 // makes the bug disappear. With `#[inline(always)]` on both, the
 // repro fires at default -O1 / -O2 / -O3 / -Os.
