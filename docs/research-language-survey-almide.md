@@ -21,9 +21,9 @@ Examined: `README.md`, `llms.txt`, `docs/CHEATSHEET.md`, the five files under
 `research/grammar-lab/REPORT.md`, and the `stdlib/`, `runtime/` and `crates/`
 trees by listing, count and sampled reading. Not examined: the 1,607-line
 `SPEC.md` and the rest of `docs/specs/`; the contract ledger itself, cited here
-only by its count; the bodies of the twelve ADRs; what the Lean belts prove, as
-against whether they prove it; `TRUST-SPINE.md`, taken from the claims made
-about it.
+only by its count; the ADR bodies beyond their section structure and two sampled
+falsifiers; what the Lean belts prove, as against whether they prove it;
+`TRUST-SPINE.md`, taken from the claims made about it.
 
 ## A. Surface
 
@@ -82,7 +82,7 @@ contact with the language's own standard library.
 | B1 Arbiter | Yes | One sentence, opening the philosophy document; every other section derives from it |
 | B2 Accept/reject criteria | Yes, numeric | Rejected if median MSR drops ≥ 3 points on any model, or if it introduces a second canonical form, or if it trades generation predictability for human aesthetics. Accepted if MSR measurably rises, or if it removes an error class that retry-with-diagnostic cannot repair |
 | B3 The "why" axis | Yes | `docs/adr/`, 12 records. Its README states the problem directly: roadmap and spec both fail to preserve why, so the same argument is replayed and a rejected proposal returns with its rationale lost |
-| B4 Falsifier | Yes, mandatory | Template field, with the rule "a decision whose retraction condition cannot be written is a preference, not a decision" |
+| B4 Falsifier | Yes, mandatory, and obeyed | Template field, with the rule "a decision whose retraction condition cannot be written is a preference, not a decision". All twelve ADRs carry it, and carry `Alternatives` too. The ones sampled hold a threshold, a named fallback position and, in ADR-0001, the experiment that will produce the number: if the calibration gate measures a spread beyond the declared band, roughly 5×, the millisecond label comes off and the units go back to dimensionless |
 | B5 Rejection record | Yes | `docs/design/REJECTED_PATTERNS.md`, 154 lines, with an operating rule: add on rejection with the reason, remove only on an edition-level change of direction, cite it when a PR proposes the feature. Carries a reversal in place — `??` was rejected, then reinstated by ADR-0005, and the rejection is kept as history |
 | B6 Sync gate | Yes, partial | `check-readme-numbers.sh` refuses a bare number in the README, `gen-claims.sh` generates the public claims block from the contract ledger, `check-contracts.sh` fails on drift. Scope is numbers and contracts. Prose is unguarded, which is how A1 leaked |
 | B7 Self-reported violations | Yes | `docs/specs/edit-locality.md` §3 lists eight standing violations of its own L1 invariant with mechanism and `file:line`, triaged into language bugs, backend obligations, and declared side conditions |
@@ -96,6 +96,16 @@ maps each language rule to the role it plays in enforcing L1 — mandatory retur
 types, no overloading, no glob imports, module-isolated inference, no
 dynamically scoped handlers — and §5 makes it a gate: every change answers "does
 this preserve L1" before landing.
+
+Two of these rules are unchecked prose and only one of them leaked. Nothing
+enforces the mandatory falsifier, and all twelve ADRs have one; nothing enforces
+"no synonyms", and the standard library has them. The difference is where the
+rule has to be remembered. A falsifier is a heading in a template already open
+in front of the author, so its absence is visible while the decision is being
+written. Not adding a synonym has to be recalled months later at an unrelated
+keystroke, with nothing on screen to prompt it. A rule attached to the artifact
+it governs holds without a gate; a rule that must be recalled elsewhere needs
+one.
 
 ## C. Spin-off value
 
