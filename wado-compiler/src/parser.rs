@@ -120,10 +120,12 @@ enum ComparisonChainGroup {
 }
 
 impl Parser {
-    /// Parse a hand-built token stream. Used by tests and the interpolation
-    /// re-parser; production sites that have a full [`crate::lexer::LexResult`]
-    /// should call [`Parser::from_lex`] instead so shebang / data section /
-    /// comments flow through.
+    /// Parse a hand-built token stream, in a parse of its own. Used by tests;
+    /// production sites that have a full [`crate::lexer::LexResult`] should call
+    /// [`Parser::from_lex`] instead so shebang / data section / comments flow
+    /// through, and so the ids and the spans name the same parse. The
+    /// interpolation re-parser continues its parent's space through
+    /// [`Parser::build`] rather than minting one here.
     pub fn new(tokens: Vec<Token>) -> Self {
         Self::build(
             crate::ast::AstIdSpace::next(),

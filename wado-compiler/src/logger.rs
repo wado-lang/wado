@@ -117,8 +117,17 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
+    /// The one way a diagnostic reaches the host, so nothing leaves without the
+    /// file its span indexes. Severity decides nothing here: a warning from a
+    /// foreign body is as misfiled as an error would be.
+    fn emit(&self, diag: Diagnostic) {
+        self.host.emit_diagnostic(self.attributed(diag));
+    }
+
     /// Count the diagnostic, emit it, and signal `Bail` at `MAX_ERRORS`.
     fn emit_error(&self, diag: Diagnostic) -> Result<(), Bail> {
+        // Attributed up front: `identity` dedups on the file, so it has to be
+        // the resolved one.
         let diag = self.attributed(diag);
         if self.quiet_depth.get() > 0 {
             return Ok(());
@@ -130,7 +139,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
         let count = self.error_count.get() + 1;
         self.error_count.set(count);
-        self.host.emit_diagnostic(diag);
+        self.emit(diag);
         if count >= MAX_ERRORS {
             Err(Bail)
         } else {
@@ -201,7 +210,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             return Err(Bail);
         }
         self.error_count.set(self.error_count.get() + 1);
-        self.host.emit_diagnostic(err.into());
+        self.emit(err.into());
         Err(Bail)
     }
 
@@ -269,7 +278,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Log a warning (informational, not counted as error)
     pub fn warn(&self, code: Code, message: impl Into<String>) {
         if self.should_log(Severity::Warning) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Warning,
                 code,
                 message: message.into(),
@@ -285,7 +294,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Some(file))`); no file is stamped here.
     pub fn warn_at(&self, code: Code, message: impl Into<String>, span: DiagnosticSpan) {
         if self.should_log(Severity::Warning) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Warning,
                 code,
                 message: message.into(),
@@ -297,7 +306,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Log an info message
     pub fn info(&self, message: impl Into<String>) {
         if self.should_log(Severity::Info) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Info,
                 code: Code::Log,
                 message: message.into(),
@@ -316,7 +325,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// message.
     pub fn remark(&self, message: impl Into<String>, span: DiagnosticSpan) {
         if self.should_log(Severity::Info) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Info,
                 code: Code::Remark,
                 message: format!("remark: {}", message.into()),
@@ -328,7 +337,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Log a debug message
     pub fn debug(&self, message: impl Into<String>) {
         if self.should_log(Severity::Debug) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Debug,
                 code: Code::Log,
                 message: message.into(),
@@ -358,7 +367,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Must be paired with a corresponding `span_end()` call.
     pub fn span_start(&self, name: &str) {
         if self.should_log(Severity::Debug) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Debug,
                 code: Code::SpanStart,
                 message: name.to_string(),
@@ -373,7 +382,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Must be paired with a corresponding `span_start()` call.
     pub fn span_end(&self, name: &str) {
         if self.should_log(Severity::Debug) {
-            self.host.emit_diagnostic(Diagnostic {
+            self.emit(Diagnostic {
                 severity: Severity::Debug,
                 code: Code::SpanEnd,
                 message: name.to_string(),
