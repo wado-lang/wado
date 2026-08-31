@@ -964,8 +964,15 @@ pub struct GroupOp {
     /// For `Transparent` shape there is exactly one alt and its body
     /// inlines into the surrounding sequence at emit.
     pub alts: List<AltBody>,
-    /// Scan-side mirror.
-    pub scan_alts: List<ScanBody>,
+    /// Scan-side mirror, as the whole scan group and not the bare bodies.
+    ///
+    /// Emit needs a `ScanGroupElement` to measure this group, and given only
+    /// the bodies it built one — pairing them with a classification of its own
+    /// and dropping `empty_alt_admits`, which is the two walkers disagreeing
+    /// (invariant 9) reintroduced by a site that could still *construct* the
+    /// thing lower produces. Holding the built value is what stops that: there
+    /// is nothing left for emit to assemble.
+    pub scan_group: ScanGroupElement,
     /// Dispatch when the group has multiple alts; parse and scan share
     /// it. For single-alt groups this is `MultiAltDispatch::Direct` with
     /// one branch.

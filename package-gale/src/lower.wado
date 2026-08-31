@@ -504,8 +504,8 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
                 walk_alt_body_for_kind_sets(inner_alt, ctx);
             }
             // Likewise anchor sets reachable only through the group's
-            // nested scan mirror (`GroupOp.scan_alts`).
-            for let sb of &go.scan_alts {
+            // nested scan mirror (`GroupOp.scan_group`).
+            for let sb of &go.scan_group.alts {
                 walk_scan_body_for_kind_sets(sb, ctx);
             }
         },
@@ -2022,6 +2022,27 @@ fn lower_general_scan_group(
 /// mandatory (non-nullable) group whose rule's scan can re-enter itself at the
 /// same position (`is_rule_scan_cyclic`) must scan strict, or that
 /// zero-consumption cycle never terminates (issue #1671).
+/// The scan group a `GroupOp` carries: the bodies lower built, paired here —
+/// and only here — with the classification lower made. Given the bodies alone,
+/// emit built its own `ScanGroupElement`, classified the alternatives a second
+/// time and dropped `empty_alt_admits`; a value it can only read is what makes
+/// that unwritable rather than merely wrong.
+fn group_op_scan_group(
+    bodies: &List<ScanBody>,
+    alts: &List<Alternative>,
+    empty_alt_admits: &Option<EmptyAltAdmits>,
+    ctx: &mut GenContext,
+) -> ScanGroupElement {
+    assert bodies.len() == alts.len(), "one scan body per alternative";
+    let mut classes = alt_classes_of(alts, ctx);
+    apply_empty_alt_admits(&mut classes, empty_alt_admits);
+    return ScanGroupElement {
+        alts: *bodies,
+        lenient: scan_group_lenient(alts, ctx),
+        alt_classes: classes,
+    };
+}
+
 fn scan_group_lenient(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     if scan_group_is_nullable(alts, ctx) {
         return true;
@@ -2874,10 +2895,11 @@ fn lower_transparent_group(
     // emit recognises `GroupShape::Transparent` and skips the
     // dispatch step, running the body unconditionally. The empty
     // `Direct` placeholder is the cheapest valid `MultiAltDispatch`.
+    let surface = Alternative::new([*inner]);
     return Op::Group(GroupOp {
         shape: GroupShape::Transparent,
         alts: [body],
-        scan_alts: [scan_body],
+        scan_group: group_op_scan_group(&[scan_body], &[surface], &null, ctx),
         dispatch: empty_direct_dispatch(),
         empty_alt_admits: null,
     });
@@ -3002,7 +3024,7 @@ fn lower_single_alt_group(
             owner_rule: owner_rule,
         }),
         alts: [body],
-        scan_alts: [scan_body],
+        scan_group: group_op_scan_group(&[scan_body], &[*alt], &null, ctx),
         dispatch: empty_direct_dispatch(),
         empty_alt_admits: null,
     });
@@ -3065,7 +3087,7 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
     return Op::Group(GroupOp {
         shape: GroupShape::TokenOnly(TokenOnlyShape { field: field }),
         alts: bodies,
-        scan_alts: scan_bodies,
+        scan_group: group_op_scan_group(&scan_bodies, alts, &null, ctx),
         dispatch: dispatch,
         empty_alt_admits: null,
     });
@@ -3161,7 +3183,7 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
             field: field,
         }),
         alts: bodies,
-        scan_alts: scan_bodies,
+        scan_group: group_op_scan_group(&scan_bodies, alts, &null, ctx),
         dispatch: dispatch,
         empty_alt_admits: null,
     });
@@ -3422,7 +3444,7 @@ fn lower_general_group(
             group_index: group_index,
         }),
         alts: bodies,
-        scan_alts: scan_bodies,
+        scan_group: group_op_scan_group(&scan_bodies, alts, &empty_alt_admits, ctx),
         dispatch: dispatch,
         empty_alt_admits: empty_alt_admits,
     });

@@ -529,9 +529,9 @@ test "lower transparent Group wraps single leaf element" {
             } else {
                 panic("expected inner Token");
             }
-            assert go.scan_alts.len() == 1;
-            assert go.scan_alts[0].elements.len() == 1;
-            if let Token(t) = &go.scan_alts[0].elements[0] {
+            assert go.scan_group.alts.len() == 1;
+            assert go.scan_group.alts[0].elements.len() == 1;
+            if let Token(t) = &go.scan_group.alts[0].elements[0] {
                 assert t.kind == "TK_INT";
             } else {
                 panic("expected scan-side inner Token");
@@ -628,8 +628,8 @@ test "lower single-alt Group with two leaves produces SingleAlt shape" {
             assert go.alts.len() == 1;
             assert go.alts[0].ops.len() == 3;
             assert go.alts[0].struct_name == "IdEqIntItem";
-            assert go.scan_alts.len() == 1;
-            assert go.scan_alts[0].elements.len() == 3;
+            assert go.scan_group.alts.len() == 1;
+            assert go.scan_group.alts[0].elements.len() == 3;
         } else {
             panic("expected Op::Group");
         }
@@ -783,7 +783,7 @@ test "lower token-only Group produces TokenOnly shape with single field" {
             } else {
                 panic("expected MultiAltDispatch::Direct");
             }
-            assert go.scan_alts.len() == 2;
+            assert go.scan_group.alts.len() == 2;
         } else {
             panic("expected Op::Group");
         }

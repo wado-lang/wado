@@ -3115,7 +3115,7 @@ fn gen_group_body(
         gen_ops(w, &g.alts[0].ops, ctx, nc);
         return;
     }
-    gen_alt_dispatch(w, &g.alts, &g.scan_alts, &g.dispatch, ctx, nc, decided);
+    gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc, decided);
 }
 
 fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
@@ -3813,7 +3813,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             // dispatch commits to what it found.
             if let Group(g) = &r.body {
                 if let Some(branches) = op_group_alt_decision(g, ctx) {
-                    let [winner, best] = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, false);
+                    let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
                     w.line(&`if ${best} <= p.pos \{ break; \}`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
                     w.end();
@@ -3880,7 +3880,7 @@ fn gen_op_optional(
                 // decides on: one answer, one set of scans. The caller-FOLLOW
                 // yield gate wraps them, so an optional that must yield does
                 // not pay for a decision it will not use.
-                let [winner, best] = gen_group_decide(w, &branches, &g.scan_alts, ctx, nc, follow_gate);
+                let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, follow_gate);
                 w.begin(&`if ${best} >= 0`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
@@ -4086,7 +4086,7 @@ fn gen_op_storable_group_inner(
         SimpleCst(_) => gen_rule_ref_group(
             w,
             &g_op.alts,
-            &g_op.scan_alts,
+            &g_op.scan_group.alts,
             &g_elem.alternatives,
             entry,
             ctx,
@@ -4097,7 +4097,7 @@ fn gen_op_storable_group_inner(
             w,
             gs,
             &g_op.alts,
-            &g_op.scan_alts,
+            &g_op.scan_group.alts,
             &g_elem.alternatives,
             entry,
             ctx,
@@ -4154,16 +4154,14 @@ fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
 /// Op-driven scan-guard for a `Group`-shaped Optional inner whose
 /// alternatives the caller does not decide between — a token-only group, or
 /// a lone alternative. Walks the scan side via op-driven helpers
-/// (`gen_scan_op_elements_in_block` / `gen_scan_op_group`) using
-/// `g_op.scan_alts` directly. `g_elem` is the surface `Group` matching
-/// `g_op`; it is consulted only to classify the alternatives the scan
-/// partitions on (lower bakes those on `ScanGroupElement.alt_classes` but the
-/// `GroupOp` itself does not surface them — reclassifying through the one
-/// classifier is what `lower_scan_group` does too).
+/// (`gen_scan_op_elements_in_block` / `gen_scan_op_group`) over the scan group
+/// lower built. It used to assemble one from `g_op`'s bodies and a
+/// classification of its own, which is how it came to partition this group
+/// differently from the surface walker and to lose `empty_alt_admits`
+/// (invariant 9). Strict, because a guard that rewinds decides nothing.
 fn gen_op_opt_scan_guard_for_group(
     w: &mut CodeWriter,
     g_op: &GroupOp,
-    g_elem: &GroupElement,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) -> String {
@@ -4173,17 +4171,12 @@ fn gen_op_opt_scan_guard_for_group(
     w.begin(&`${scan_label}:`);
     w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
-    let fail = `break ${scan_label};`;
-    if g_op.scan_alts.len() == 1 {
-        let body = &g_op.scan_alts[0];
+    let scan_group = &g_op.scan_group;
+    if scan_group.alts.len() == 1 {
+        let body = &scan_group.alts[0];
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
     } else {
-        let scan_elem = ScanGroupElement {
-            alts: g_op.scan_alts,
-            lenient: false,
-            alt_classes: alt_classes_of(&g_elem.alternatives, ctx),
-        };
-        gen_scan_op_group(w, &scan_elem, ctx, &fail, false);
+        gen_scan_op_group(w, scan_group, ctx, &`break ${scan_label};`, false);
     }
     w.line(&`${scan_pos_var} = pos;`);
     w.end();
@@ -4250,14 +4243,14 @@ fn gen_op_storable_optional(
                 let [winner, best] = gen_group_decide(
                     w,
                     &decision.branches,
-                    &g_op.scan_alts,
+                    &g_op.scan_group.alts,
                     ctx,
                     name_counts,
                     rep_op.gate_caller_follow,
                 );
                 gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &`${best} >= 0`, Option::Some(winner));
             } else {
-                let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+                let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
                 gen_op_storable_optional_with_first(
                     w,
                     rep_op,
@@ -4412,7 +4405,7 @@ fn gen_op_transparent_optional(
             &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow),
         ),
         OptionalScanGuard => {
-            let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+            let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
             gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &gate_cond_with_caller_follow(
                 &`${scan_pos_var} >= 0`,
                 rep_op.gate_caller_follow,
@@ -4975,7 +4968,7 @@ fn gen_op_group(
             SimpleCst(_) => gen_rule_ref_group(
                 w,
                 &g_op.alts,
-                &g_op.scan_alts,
+                &g_op.scan_group.alts,
                 &g_elem.alternatives,
                 entry,
                 ctx,
@@ -4986,7 +4979,7 @@ fn gen_op_group(
                 w,
                 gs,
                 &g_op.alts,
-                &g_op.scan_alts,
+                &g_op.scan_group.alts,
                 &g_elem.alternatives,
                 entry,
                 ctx,
@@ -5937,7 +5930,7 @@ fn gen_rep_decided_entry(
     // No gate break: every branch of the decision carries the gate the loop
     // would test, so a predicate the decision already answered is not asked
     // a second time.
-    let [winner, best] = gen_group_decide(w, &decision.branches, &g_op.scan_alts, ctx, name_counts, false);
+    let [winner, best] = gen_group_decide(w, &decision.branches, &g_op.scan_group.alts, ctx, name_counts, false);
     if plus_flag.is_empty() {
         // Every iteration may decline, and one that consumed nothing would
         // come round at the same position forever.
