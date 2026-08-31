@@ -14,11 +14,13 @@
 
 import { group, labelOf, type Row } from "./logs.ts";
 
-type Arm = { min: number; max: number; best: number };
+// `min` is also the arm's best: every run of a row does the same fixed work, so
+// the shortest time is the highest true throughput.
+type Arm = { min: number; max: number };
 
 function arm(rows: Row[]): Arm {
   const ms = rows.map((r) => r.ms);
-  return { min: Math.min(...ms), max: Math.max(...ms), best: Math.min(...ms) };
+  return { min: Math.min(...ms), max: Math.max(...ms) };
 }
 
 function splitArgs(argv: string[]): { base: string[]; head: string[] } {
@@ -66,7 +68,7 @@ function main(): void {
       b,
       h,
       // Positive is faster: the row spends less time per iteration.
-      delta: ((b.best - h.best) / b.best) * 100,
+      delta: ((b.min - h.min) / b.min) * 100,
       real: h.min > b.max || b.min > h.max,
     });
   }
@@ -84,7 +86,7 @@ function main(): void {
       [
         `${v.delta >= 0 ? "+" : ""}${v.delta.toFixed(1)}%`.padStart(7),
         verdict.padEnd(6),
-        `${v.b.best.toFixed(3)} -> ${v.h.best.toFixed(3)} ms`.padStart(24),
+        `${v.b.min.toFixed(3)} -> ${v.h.min.toFixed(3)} ms`.padStart(24),
         `[${v.b.min.toFixed(3)}-${v.b.max.toFixed(3)}] [${v.h.min.toFixed(3)}-${v.h.max.toFixed(3)}]`.padStart(
           31,
         ),

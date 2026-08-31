@@ -20,11 +20,10 @@ export type Row = {
 const RATE =
   /([\d.]+)\s+([GMK]?B\/s|(?:[GMk] )?[A-Za-z]+\/s)\s+\(([\d.]+) ms\/iter,\s*(\d+) iter\)/;
 
-/// A row is keyed by (task, implementation, phase), parsed from the mise task
-/// markers (`[json-twitter] $ ...`), the `=== Impl ===` headers, and the phase
-/// label on the throughput line (`Ser:` / `de:` / `Compress:` / bare). Keying
-/// this way — rather than by line position — is robust to a benchmark being
-/// skipped or reordered in one run.
+// A row is keyed by (task, implementation, phase), read from the mise task
+// markers (`[json-twitter] $ ...`), the `=== Impl ===` headers, and the phase
+// label on the throughput line (`Ser:` / `de:` / `Compress:` / bare) — not by
+// line position, so a benchmark skipped or reordered in one run still lines up.
 export function parse(text: string, run: number): Row[] {
   const rows: Row[] = [];
   let task = "";
@@ -66,7 +65,7 @@ export function labelOf(r: { task: string; impl: string; phase: string }): strin
   return [r.task, r.impl, r.phase].filter(Boolean).join(" / ");
 }
 
-/// Every row of every log, grouped by key, in first-seen order.
+// Every row of every log, grouped by key, in first-seen order.
 export function group(files: string[]): Map<string, Row[]> {
   const byKey = new Map<string, Row[]>();
   files.forEach((f, i) => {

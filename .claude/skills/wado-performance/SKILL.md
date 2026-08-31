@@ -146,8 +146,9 @@ A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it
 ### A/B-ing a compiler change
 
 A change to the compiler needs two compilers. `benchmark-baseline` builds
-`origin/main`'s once and caches it under that commit, so every later A/B in the
-session — and after it, until main moves — costs nothing:
+`origin/main`'s once and caches it under that commit; `WADO_BIN` then runs it
+through _this_ tree's harness, so only the compiler differs — the baseline's own
+`benchmark/` would put the branch's harness changes inside the comparison too.
 
 ```sh
 base=$(mise run benchmark-baseline)   # ~5 min the first time, 2 s after
@@ -157,21 +158,15 @@ mise run benchmark-all > h1.log 2>&1  # …and so on, 3 each
 node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
 ```
 
-`WADO_BIN` points the harness at a prebuilt compiler, so both arms run the same
-benchmark sources over the same data and only the compiler differs. Running the
-baseline's own `benchmark/` instead would put every change the branch made to
-the harness inside the comparison.
+`ab.ts` decides each row by whether the arms' `[min, max]` overlap, not by the
+delta: on a 5 ms benchmark a 6% gap between bests sits inside one arm's own
+spread. **Read the reference rows first** — C, Rust and JavaScript run the same
+binary in both arms, so a `SLOWER` among them is the host drifting and no Wado
+row can be read either.
 
-`ab.ts` decides each row by whether the two arms' `[min, max]` overlap, not by
-the delta: on a 5 ms benchmark a 6% gap between bests is routine inside one arm's
-own spread. **Read the reference rows first.** C, Rust and JavaScript run the
-same binary in both arms, so a `SLOWER` among them means the host drifted between
-the arms and no Wado row can be read either.
-
-A row that survives that is still worth one targeted confirmation before you
-believe it, because the whole-suite runs are minutes apart and the reference
-rows only catch drift big enough to cross a range. Loop that one benchmark,
-alternating the binaries back to back, and check the ranking holds pair by pair:
+Confirm a surviving row before believing it: the whole-suite arms are minutes
+apart, and the reference rows only catch drift big enough to cross a range. Loop
+that one benchmark back to back and check the ranking holds pair by pair.
 
 ```sh
 for i in 1 2 3 4 5; do
@@ -179,11 +174,10 @@ for i in 1 2 3 4 5; do
 done
 ```
 
-`WADO_SKIP_PASS=<pass>` gives a third arm for free, off the same binary — which
-is how a regression gets attributed to one pass without a third build. Only a
-knob every compiling subcommand accepts can be swept through
-`WADO_BENCH_FLAGS` (the harness spends it on `wado run`), so a knob added to
-`compile` alone is one the sweep cannot reach.
+`WADO_SKIP_PASS=<pass>` is a third arm off the same binary, which is how a
+regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`
+sweeps a knob the same way, but the harness spends it on `wado run`, so a knob
+`compile` alone accepts is one no sweep reaches.
 
 **What decides adoption**, in priority order:
 
