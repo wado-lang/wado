@@ -43,6 +43,21 @@ trees, token streams, and semantics must match ANTLR4; an incidental
 rendering difference that carries no structural meaning is allowed to
 diverge.
 
+### Rejections Gale shares with ANTLR4
+
+Being a superset does not mean accepting everything. A grammar whose meaning
+is not determined is rejected loudly, at the same points ANTLR4 rejects it:
+
+- **Left recursion** that precedence climbing cannot resolve —
+  `check_left_recursion`, ANTLR4 error 119.
+- **An epsilon closure** — a `*` or `+` over a body that can match nothing
+  (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
+  error 153. The loop would never terminate on its own, and no reading of the
+  grammar says how many times it should run. Checked over the merged grammar
+  in `finish_grammar`, for lexer rules as well as parser rules, with the same
+  nullability fixpoint each uses elsewhere. Like its sibling whole-grammar
+  checks the diagnostic carries no span.
+
 ### The Unicode version is Gale's, not the jar's
 
 `\p{...}` resolves against the latest UCD — 17.0.0 today — and tracking a
@@ -485,14 +500,39 @@ order (invariant 4's merge is what puts the two in one branch). Testing the
 branch before scanning also drops the scans of alternatives the lookahead
 cannot reach.
 
-**An empty alternative is admitted by what follows the group.** It has no
-first set to be selected by, so nothing about the alternative itself decides
-it; what does is the group's local FOLLOW, which lower computes at the
-group's position and bakes as `GroupOp.empty_alt_admits` — one value both
-walkers read, rather than an absence each interprets. It has three states,
-because a bare list would fold two of them together: no alternative is empty;
-an empty one whose suffix is nullable, so the answer is the caller's FOLLOW
-and is not statically known; or an empty one admitted by exactly this set.
+**A nullable alternative is admitted by what follows the group, as well as by
+its own first set.** It can match nothing, so the group's local FOLLOW selects
+it too; lower computes that at the group's position and bakes it as
+`GroupOp.empty_alt_admits` — one value both walkers read, rather than an
+absence each interprets. It has three states, because a bare list would fold
+two of them together: no alternative is nullable; a nullable one whose suffix
+is nullable in turn, so the answer is the caller's FOLLOW and is not
+statically known; or one admitted by exactly this set. The follow set **joins**
+the alternative's first set rather than replacing it: `( A? | B ) C` is
+selected by `a` because the alternative starts with one and by `c` because it
+can also be skipped, and writing only the second in cost it the first.
+
+**What an alternative matches is one value, `AltClass`, produced once.** Six
+predicates over eighteen sites used to work it out separately — is there a
+wildcard in the elements, is the first set empty, is it nullable, has it no
+elements — and each was right for the spelling its author had in front of them
+and wrong for another, so the two emit walkers partitioned the same group
+differently (invariant 9). `alt_class` in `alt_grouping` is the only producer:
+
+- `OpenEnded` — `.` or `~X`, written in the alternative or reached through a
+  nullable prefix or a rule. Admits every token; no first set names it.
+- `Selects(first)` — selected by exactly these tokens, never empty.
+- `Nullable(first)` — can also match nothing, so the follow set joins `first`,
+  which may itself be empty (`( A | | B )`) or not (`( A? | B )`).
+
+Everything downstream reads it. `alt_grouping` owns the whole decision —
+`compute_overlap_groups_of` partitions, `group_branch_admits` says what a
+branch admits, `fallback_last` orders — and the surface walker, the op-only
+walker, the scan and lower's kind-set interning are four readers of that one
+answer rather than four derivations of it. Lower bakes the classification into
+`DispatchBranch.alt_class` and `ScanGroupElement.alt_classes`, and `GroupOp`
+carries the built `ScanGroupElement` rather than bare scan bodies, so emit has
+nothing left to assemble a second classification into.
 
 A branch of the decision therefore carries what it admits — `Admits`, one of
 `Everything`, `Untestable`, or `Kinds` (never empty) — instead of a rendered
@@ -502,6 +542,14 @@ wildcard alternative) and "has no first set of its own" (an empty
 alternative), and both rendered as `true`: an unconditional arm in the middle
 of the chain, with every later alternative behind a test that can never fail.
 `( A | | B )` never reached `B`.
+
+`Admits` lives in the IR, not in the emitter, because lower has to bake one:
+`ScanRepeatElement.inner_admits` is what a scan iteration tests. The same
+empty set means opposite things there — `.?` and `~X?` have no first set
+because none enumerates every token and fire on every token there is, while a
+body deriving only epsilon has none to fire on — so reading the emptiness made
+`.?` scan zero tokens where `A?` scanned one, and the alternative holding it
+lost every tournament its parse side then won.
 
 `Everything` and `Untestable` still render the same `true` and are still not
 the same answer: they differ in whether the arm may keep its place. A wildcard
