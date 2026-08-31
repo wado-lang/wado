@@ -72,6 +72,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let FlatPackage {
         entry_module_source,
         type_table,
+        interner: _,
+        resource_wrappers: _,
         functions,
         structs,
         enums,

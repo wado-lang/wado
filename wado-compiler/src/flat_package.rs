@@ -32,6 +32,14 @@ pub struct FlatPackage {
     /// Shared type table
     pub type_table: Rc<RefCell<TypeTable>>,
 
+    /// The package's `ModuleSource` interner, carried past link so a
+    /// post-monomorphize synthesis can name a module the way the frontend did.
+    pub interner: Rc<RefCell<crate::module_source::ModuleSourceInterner>>,
+
+    /// The effect-dispatch wrappers a resource `#[cm]` call routes through,
+    /// for the calls that were still generic when the early pass ran.
+    pub resource_wrappers: crate::synthesis::effect_dispatch::ResourceWrapperIndex,
+
     /// All functions from all modules. Each `TirFunction` carries its own `module_source`.
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
     /// All struct declarations (each carries its own `module_source`)

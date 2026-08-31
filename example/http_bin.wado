@@ -153,14 +153,7 @@ fn parse_url(request: &Request) -> Url {
 fn read_body_from_request(request: Request) -> String {
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
-    let mut buf: List<u8> = [];
-    loop {
-        let chunk = body_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        buf.extend(&chunk);
-    }
+    let buf = body_stream.read_to_end();
     body_stream.drop();
     return match String::from_utf8(buf) {
         Ok(s) => s,
@@ -357,7 +350,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
 
     task return Result::Ok(response);
 
-    body_tx.write_raw(resp.body.as_slice());
+    body_tx.write_raw_all(resp.body.as_slice());
     body_tx.drop();
 
     // Server-Timing trailer carries the handler's wall-clock time so curious

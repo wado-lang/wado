@@ -93,17 +93,10 @@ export fn run() with (Stdout, IpNameLookup, TcpSocket, Connector, Error) {
     // come back as expected; the run-to-completion exit then GCs both
     // ends.
     let request = `GET /get HTTP/1.1\r\nHost: ${domain}\r\nUser-Agent: wado-hello-tls\r\nConnection: close\r\n\r\n`;
-    data_tx.write(request.bytes().collect());
+    data_tx.write_all(request.bytes().collect());
 
     // Read until the peer closes the connection.
-    let mut response: List<u8> = [];
-    loop {
-        let chunk = tls_rx.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        response.extend(&chunk);
-    }
+    let response = tls_rx.read_to_end();
     tls_rx.drop();
     data_tx.drop();
 

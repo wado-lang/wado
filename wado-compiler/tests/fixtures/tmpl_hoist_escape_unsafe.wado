@@ -1,12 +1,31 @@
 // Escape analysis: hoisting must NOT fire when the whole template String
+<<<<<<< HEAD
 // escapes the iteration, so its backing buffer cannot be reused.
+||||||| d8ba3bf081
+// escapes the iteration. Each result is passed by value to println (a core
+// lib function, not inlined), so the entire local escapes and its backing
+// buffer cannot be reused. The WIR must NOT contain __tmpl_buf_.
+=======
+// escapes the iteration. Each result is moved into a list that outlives the
+// loop, so all six must coexist — a reused scratch buffer would leave every
+// entry showing the last iteration's bytes, which the printed output catches.
+// The WIR must NOT contain __tmpl_buf_.
+>>>>>>> origin/main
 //
+<<<<<<< HEAD
 // `#[inline(never)]` on the sink makes the escape a property of the fixture
 // rather than of the inline threshold: a `println` small enough to inline stops
 // the String escaping at all, and hoisting it is then legitimate.
 //
 // The complementary case — bytes escaping only through a fresh deep copy — IS
 // safely hoisted; see tmpl_hoist_escape_copy_safe.wado.
+||||||| d8ba3bf081
+// The complementary case — a template whose bytes escape only through a fresh
+// deep copy — IS safely hoisted; see tmpl_hoist_escape_copy_safe.wado.
+=======
+// The complementary case — a template moved straight into a map key — is the
+// same rule seen from the caller side; see tmpl_hoist_escape_copy_safe.wado.
+>>>>>>> origin/main
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]
@@ -15,15 +34,39 @@ fn sink(s: String) with Stdout {
 }
 
 export fn run() with Stdout {
+<<<<<<< HEAD
     // Case 1: let-bound template passed by value to a call that stays a call
+||||||| d8ba3bf081
+    // Case 1: let-bound template passed to println (core lib, not inlined)
+=======
+    let mut kept: List<String> = [];
+
+    // Case 1: let-bound template moved into the list
+>>>>>>> origin/main
     for let mut i = 0; i < 3; i += 1 {
         let s = `x=${i}`;
+<<<<<<< HEAD
         sink(s);
+||||||| d8ba3bf081
+        println(s);
+=======
+        kept.push(s);
+>>>>>>> origin/main
     }
 
     // Case 2: template directly as arg (non-Let context)
     for let mut i = 0; i < 3; i += 1 {
+<<<<<<< HEAD
         sink(`y=${i}`);
+||||||| d8ba3bf081
+        println(`y=${i}`);
+=======
+        kept.push(`y=${i}`);
+    }
+
+    for let s of &kept {
+        println(*s);
+>>>>>>> origin/main
     }
 }
 

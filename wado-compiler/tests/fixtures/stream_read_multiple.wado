@@ -8,11 +8,11 @@ export fn run() with Stdout {
     // Close writer immediately so reads see EOF
     tx.drop();
 
-    // Read loop should terminate immediately with 0-length chunk
+    // Read loop should terminate immediately on the first non-Completed result
     let mut reads = 0;
     loop {
         let chunk = rx.read(2);
-        if chunk.len() == 0 {
+        if chunk.result != CopyResult::Completed {
             break;
         }
         reads = reads + 1;

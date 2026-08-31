@@ -23,7 +23,9 @@ export async fn handle(_request: Request) -> Result<Response, ErrorCode> {
     // buffer autotuning. A stalled consumer therefore leaves the guest
     // with thousands of writes still pending.
     for let _ of 0..<4096 {
-        body_tx.write(chunk);
+        if body_tx.write_all(chunk) != CopyResult::Completed {
+            break;
+        }
     }
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

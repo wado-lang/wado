@@ -153,6 +153,22 @@ pub struct CmImportViolation {
     pub span: crate::token::Span,
 }
 
+impl CmImportViolation {
+    #[must_use]
+    pub fn message(&self) -> String {
+        // The one canonical a program reaches unbound while an interface does
+        // declare it: the raw write lines up with the CM buffer only for bytes.
+        let reason = if self.cm_name == "stream-write-raw" {
+            "which only a `u8` stream can bind: the raw write hands the backing \
+             array to the canonical unlowered. Use `write` or `write_all`"
+        } else {
+            "which no bundled interface declares; a `#[cm(...)]` member is only \
+             callable from the stdlib and from component dependencies"
+        };
+        format!("`{}` binds `{}`, {reason}", self.call_display, self.cm_name)
+    }
+}
+
 /// What `wir_build` collects out of a `#![wasm_module("name")]` source module,
 /// before [`WasmModuleInfo::to_wir_package`] turns it into a standalone
 /// [`WirPackage`].

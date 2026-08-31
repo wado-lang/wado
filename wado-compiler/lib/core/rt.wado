@@ -14,9 +14,12 @@ use { Formatter } from "core:prelude/format.wado";
 use {
     Option,
     Result,
+    CopyResult,
     Future,
     FutureWritable,
     Stream,
+    StreamChunk,
+    StreamWrite,
     StreamWritable,
     Subtask,
     WaitEvent,
@@ -95,9 +98,9 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
         let mut new_repr: Array<u8> = builtin::array_new(len + 1);
         builtin::array_copy(&mut new_repr, 0, message.internal_raw_bytes(), 0, len);
         builtin::array_set_u8(&mut new_repr, len, 10);
-        tx.write_raw(Slice::internal_new(&new_repr, 0, len + 1));
+        tx.write_raw_all(Slice::internal_new(&new_repr, 0, len + 1));
     } else {
-        tx.write_raw(Slice::internal_new(message.internal_raw_bytes(), 0, len));
+        tx.write_raw_all(Slice::internal_new(message.internal_raw_bytes(), 0, len));
     }
     tx.drop();
 }
@@ -247,11 +250,23 @@ internal fn cm_await_blocked(handle: i32) -> i32 {
     return status;
 }
 
-/// CM adapter for stream.read(max) on Stream<u8>.
-/// Allocates linear memory, calls stream-read, handles BLOCKED,
-/// lifts bytes to GC array, constructs List<u8>.
+/// The `CopyResult` a packed CM copy reports (`CanonicalABI.md`): the low
+/// nibble of `(count << 4) | status`.
+#[compiler_item("cm_copy_result")]
+internal fn cm_copy_result(packed: i32) -> CopyResult {
+    let status = packed & 0xf;
+    if status == 0 {
+        return CopyResult::Completed;
+    }
+    if status == 1 {
+        return CopyResult::Dropped;
+    }
+    return CopyResult::Cancelled;
+}
+
+/// CM adapter for stream.read(max) on Stream<u8>, awaiting a BLOCKED copy.
 #[compiler_item("cm_stream_read_u8")]
-internal fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
+internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
     let ptr = builtin::realloc(0, 0, 1, max);
     let mut result = builtin::stream_read(handle, ptr, max);
     if result == -1 {
@@ -260,63 +275,34 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
     let count = result >> 4;
     let arr = memory_to_gc_array(ptr, count);
     let freed = builtin::realloc(ptr, max, 1, 0);
-    return List::internal_from_raw(arr, count);
+    return StreamChunk {
+        items: List::internal_from_raw(arr, count),
+        result: cm_copy_result(result),
+    };
 }
 
-/// CM adapter for stream.read(max) on Stream<T> where T is a CM record.
-/// Allocates a linear memory buffer sized for max*element_size bytes,
-/// calls stream-read, handles BLOCKED, and returns [ptr, count].
-/// The caller must decode each record from the buffer.
-internal fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_align: i32) -> [i32, i32] {
-    let byte_count = max * element_size;
-    let ptr = builtin::realloc(0, 0, element_align, byte_count);
-    let mut result = builtin::stream_read(handle, ptr, max);
-    if result == -1 {
-        result = cm_await_blocked(handle);
-    }
-    let count = result >> 4;
-    return [ptr, count];
-}
-
-/// Create a new empty List<u8> with the given capacity.
-/// Used by synthesized stream-read binding functions for non-u8 types.
-/// The type parameter is monomorphized away during compilation.
-internal fn array_new_empty(capacity: i32) -> List<u8> {
-    return List::with_capacity(capacity);
-}
-
-/// Free a buffer previously allocated by cm_stream_read_raw.
-internal fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
-    let freed = builtin::realloc(ptr, byte_count, element_align, 0);
-}
-
-/// CM adapter for stream.write(data) on Stream<u8>.
-/// Lowers List<u8> to linear memory, calls stream-write, handles BLOCKED.
+/// CM adapter for stream.write(data) on Stream<u8>: one copy, reporting what
+/// the reader took. `StreamWritable::write_all` is the loop over it.
 #[compiler_item("cm_stream_write_u8")]
-internal fn cm_stream_write_u8(handle: i32, data: List<u8>) {
+internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
     let packed = cm_lower_array_u8(data);
     let ptr = packed as i32;
     let len = (packed >> 32) as i32;
-    cm_stream_write_drain(handle, ptr, len, 1);
+    let written = cm_stream_write_once(handle, ptr, len);
     let freed = builtin::realloc(ptr, len, 1, 0);
+    return written;
 }
 
-/// Drive a `stream.write` to completion. A reader may take fewer elements than
-/// offered, so the canonical can copy only a prefix and report COMPLETED; loop,
-/// advancing past the written elements, until the buffer is drained or the
-/// reader drops. `elem_size` is the byte stride per element (1 for `u8`).
-internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: i32) {
-    for let mut offset = 0; offset < count;  {
-        let mut result = builtin::stream_write(handle, ptr + offset * elem_size, count - offset);
-        if result == -1 {
-            result = cm_await_blocked(handle);
-        }
-        offset += result >> 4;
-        // No progress, or the reader/stream closed (DROPPED/CANCELLED).
-        if result >> 4 == 0 || result & 0xf != 0 {
-            break;
-        }
+/// One `stream.write` of `count` elements from `ptr`, awaiting a BLOCKED copy.
+internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
+    let mut result = builtin::stream_write(handle, ptr, count);
+    if result == -1 {
+        result = cm_await_blocked(handle);
     }
+    return StreamWrite {
+        count: result >> 4,
+        result: cm_copy_result(result),
+    };
 }
 
 /// CM adapter for stream.write_raw(slice) on Stream<u8>.
@@ -325,12 +311,13 @@ internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: 
 /// (no intermediate slice `struct.new`) rather than crossing the call boundary.
 #[inline(always)]
 #[compiler_item("cm_stream_write_raw_u8")]
-internal fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) {
+internal fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) -> StreamWrite {
     let packed = cm_lower_list_u8(data.internal_repr(), data.internal_start(), data.len());
     let ptr = packed as i32;
     let raw_len = (packed >> 32) as i32;
-    cm_stream_write_drain(handle, ptr, raw_len, 1);
+    let written = cm_stream_write_once(handle, ptr, raw_len);
     let freed = builtin::realloc(ptr, raw_len, 1, 0);
+    return written;
 }
 
 /// CM adapter for ErrorContext::new(msg).
