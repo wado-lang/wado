@@ -179,14 +179,11 @@ pub fn optimize(
                 // Every source in the tree settles by 8, so 15 is slack.
                 iterations: opt_iterations.unwrap_or(15),
                 // Threshold 16, best of three alternating whole-suite runs
-                // against 13: cbor-twitter ser +13.3%, cbor-catalog ser +12.7%,
-                // cbor-canada ser +11.2%, json-canada de +6.7%, fts +5.0%,
-                // json-canada ser +4.3%, count-prime +3.9%, syntax-highlight
-                // +3.4%, sqlite-parse +3.1%, against json-catalog ser -3%.
-                // That row is what turns first as the threshold climbs — -8.2%
-                // at 20, -35.3% at 26 — and 16 is where it costs the least that
-                // still buys the serde rows. Below it 10 is worse than 13 on
-                // every row.
+                // against 13: the cbor serialize rows gain 11-13% and eight
+                // more 3-7%, against json-catalog ser at -3%. That row turns
+                // first as the threshold climbs — -8.2% at 20, -35.3% at 26 —
+                // so 16 costs it least while still buying the serde rows.
+                // Below 13 every row is worse.
                 inline_threshold: inline_threshold.unwrap_or(16),
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
@@ -203,12 +200,10 @@ pub fn optimize(
             // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack.
             //
             // Threshold 26 is the top of what shakes NIR into new shapes for
-            // its cost. On the Gale CSS3 parser 28, 30 and 32 all emit ~959KB
-            // in ~13.5s — the same candidate set, so nothing above 28 varies
-            // the shape at all — while 26 emits 719KB in 10.7s. The whole
-            // corpus barely reads the knob (24 → 32 moves its compile CPU
-            // 4.6%), so what the level costs is felt compiling one heavy file
-            // by hand, which is the 25% this leaves on the table.
+            // its cost: on the Gale CSS3 parser 28, 30 and 32 all emit ~959KB
+            // in ~13.5s off the same candidate set, while 26 emits 719KB in
+            // 10.7s. The corpus barely reads the knob (24 → 32 moves its
+            // compile CPU 4.6%), so the cost is felt compiling one heavy file.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),
                 inline_threshold: inline_threshold.unwrap_or(26),

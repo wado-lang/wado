@@ -83,17 +83,15 @@ struct Region {
     /// Locals of the enclosing frame the region reads, which the helper takes
     /// as parameters past the ones it inherits. Ascending.
     args: Vec<u32>,
-    /// What the helper returns, and so what the call in its place is worth to
-    /// every later pass: `!` when the region cannot fall through — the shape a
-    /// panic guard has, and what proves the guarded branch never continues.
-    /// Losing that turns a bounds check into an ordinary `if`.
+    /// `!` when the region cannot fall through, which is what still proves a
+    /// guarded branch never continues. Losing it turns a bounds check into an
+    /// ordinary `if`.
     return_type: TypeId,
 }
 
-/// Whether a function's own shape allows moving code out of it at all. The
-/// exclusions are the signatures whose calling convention is not an ordinary
-/// call: an ABI bridge, an effect dispatcher, and an async frame, whose `task
-/// return` leaves through the frame the region would no longer be in.
+/// Whether a function's calling convention is an ordinary call. An ABI bridge,
+/// an effect dispatcher and an async frame are not: `task return` leaves
+/// through the frame the region would no longer be in.
 fn is_splittable(func: &NirFunction) -> bool {
     !func.is_cm_binding && !func.is_dispatch_wrapper && !func.is_cm_export && !func.is_async
 }
@@ -163,10 +161,8 @@ fn find_region(
 }
 
 /// The reachable blocks whose tail nothing reads, each with whether a loop
-/// encloses it: a statement `if` or `loop`, and the arms of the expression
-/// forms whose own type is `()`. Replacing the tail of one with a `()` call
-/// cannot change what anything evaluates to, which is what lets a region become
-/// a call.
+/// encloses it. Replacing such a tail with a `()` call cannot change what
+/// anything evaluates to, which is what lets a region become a call.
 fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)> {
     let unit = |id| matches!(type_table.get(id), ResolvedType::Unit);
     let mut out = Vec::new();
@@ -211,13 +207,9 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
     out
 }
 
-/// Whether moving the region would buy nothing: it holds no more than the call
-/// that would replace it. Weighing the region rather than counting its
-/// statements is what sees a lone `panic(…)` whose argument builds a message —
-/// one statement, and the bulk of the function.
-///
-/// This is also what makes a second scan a fixed point: what the pass leaves
-/// behind is exactly a call of that size.
+/// Whether the region holds no more than the call that would replace it, which
+/// is also what makes a second scan a fixed point. Weighing rather than counting
+/// statements is what sees a lone `panic(…)` whose argument builds a message.
 fn buys_nothing(
     body: &Body,
     type_table: &TypeTable,
@@ -309,12 +301,11 @@ fn free_vars(
         if crossing != Crossing::Argument {
             continue;
         }
-        // An argument is read at the call, where the region read it under
-        // whatever guard stands in front of it. For a primitive that is the same
-        // value either way, the slot always holding one. A reference slot need
-        // not: an assertion's short-circuit operands are filled only on the path
-        // that evaluates them, and passing one the guard would have skipped
-        // hands a null across a non-null parameter.
+        // An argument is read at the call, ahead of the guard the region read it
+        // behind. A primitive slot always holds a value, so that is the same
+        // read; a reference slot need not — an assertion's short-circuit
+        // operands are filled only on the path that evaluates them, and one the
+        // guard would have skipped hands a null across a non-null parameter.
         if !matches!(
             type_table.get(func.locals[idx as usize].type_id),
             ResolvedType::Primitive(_)
@@ -587,13 +578,11 @@ fn build_helper(
     helper.visibility = crate::ast::Visibility::Private;
     helper.is_export = false;
     helper.export_name = None;
-    // A helper is a plain function of the enclosing frame: not the method, the
-    // monomorphization, or the compiler item its enclosing function was, and
-    // never re-entered by whatever recognised those.
+    // A plain function of the enclosing frame: not the method, monomorphization
+    // or compiler item its enclosing function was, and — monomorphization having
+    // run long before the optimizer — carrying nothing left to instantiate.
     helper.method_info = None;
     helper.monomorph_info = None;
-    // The moved statements are concrete — monomorphization ran long before the
-    // optimizer — so the helper carries no type parameters to instantiate.
     helper.type_params = Vec::new();
     helper.impl_type_params = Vec::new();
     helper.compiler_item = None;
@@ -602,9 +591,8 @@ fn build_helper(
     helper.scalarized_from = None;
     helper.inline_hint = InlineHint::default();
     helper.return_type = region.return_type;
-    // The enclosing function's return ABI describes a value the helper does not
-    // deliver: it returns `()` or `!`, so a `MultiValue` inherited from the
-    // parent would put result types on a signature nothing produces.
+    // The helper returns `()` or `!`, so an inherited `MultiValue` would put
+    // result types on a signature nothing produces.
     helper.return_abi = ReturnAbi::Single;
     helper.task_return_type = None;
     helper.body = Some(body);

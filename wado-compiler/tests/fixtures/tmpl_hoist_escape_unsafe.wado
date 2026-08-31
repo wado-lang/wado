@@ -1,15 +1,12 @@
 // Escape analysis: hoisting must NOT fire when the whole template String
-// escapes the iteration. Each result is passed by value to a call that stays a
-// call, so the entire local escapes and its backing buffer cannot be reused.
-// The WIR must NOT contain __tmpl_buf_.
+// escapes the iteration, so its backing buffer cannot be reused.
 //
-// `#[inline(never)]` on the sink is what makes the escape a property of the
-// fixture rather than of whatever the inline threshold happens to be: a
-// `println` small enough to inline stops the String escaping at all, and
-// hoisting it then becomes legitimate.
+// `#[inline(never)]` on the sink makes the escape a property of the fixture
+// rather than of the inline threshold: a `println` small enough to inline stops
+// the String escaping at all, and hoisting it is then legitimate.
 //
-// The complementary case — a template whose bytes escape only through a fresh
-// deep copy — IS safely hoisted; see tmpl_hoist_escape_copy_safe.wado.
+// The complementary case — bytes escaping only through a fresh deep copy — IS
+// safely hoisted; see tmpl_hoist_escape_copy_safe.wado.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]

@@ -1,10 +1,9 @@
-// A `&mut` parameter lowers to a `Box<T>` built from the caller's value, and the
-// callee writes the field through it. The read after the call is therefore not
-// the literal the box was built with — folding it to that literal drops the
-// write-back, and `scale(2, true)` returns its argument instead of 3x it.
+// A `&mut` parameter lowers to a `Box<T>` the callee writes the field through,
+// so the read after the call is not the literal the box was built with. Folding
+// it to that literal drops the write-back and `scale(2, true)` returns 2.
 //
-// The call has to sit between the box and the read, which is what the `println`
-// keeps `const_branch_prune` from collapsing away.
+// The `println` is what keeps `const_branch_prune` from collapsing the call out
+// from between the box and the read.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]

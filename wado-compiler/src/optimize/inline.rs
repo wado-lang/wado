@@ -1,7 +1,20 @@
-//! Function inlining optimization for Wado NIR.
+//! Replace a call to a small, non-recursive function with its body, spliced
+//! into a labeled block so the `return` becomes a `break`.
 //!
-//! This module provides function inlining for small functions.
-//! It uses labeled block expressions for cleaner value handling.
+//! A body carries two prices, parting company where it keeps a cold arm.
+//! `inline_cost` is what running one copy costs and is what the threshold
+//! judges; `inline_size` is what holding one costs, cold paths included.
+//! `InlineBudget` spends the second over a cap set as a percentage of the unit
+//! as the loop found it, cheapest body first, and reports at debug level what it
+//! turned down. `cold_outline` is what keeps the two prices in agreement, so no
+//! level sets a cap by default.
+//!
+//! A callee over budget as written is re-read under the constants its callers
+//! pass, taken across every call site so admission stays a property of the
+//! callee. Fitting folded is not enough on its own — admitting every marginal
+//! fold measured -9% on cbor-twitter — so the fold must also delete a loop or
+//! halve the body. Such a callee then receives no inlining itself: growing a
+//! body worth more copied than called past the budget destroys it, one-way.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -1002,29 +1015,20 @@ fn classify_callee(
             return (false, false);
         }
         let walk = CostWalk::new(body, type_table, descriptors, Price::Hot).under(view);
-        // Fitting folded is not enough on its own — admitting every marginal
-        // fold measured -9% on cbor-twitter. It must also delete a loop, or
-        // halve the body.
         (folded * 2 <= plain, fold_drops_loop(body, view, &walk))
     };
 
-    // `inline` reads the call sites, because splicing has to pay at the sites
-    // that exist. The hold reads the body alone, because it protects an option
-    // whose evidence has not arrived yet: a `field<T>` in a derived serializer
-    // is admitted at plain=18 against a budget of 13, on a folded price that
-    // exists only once the reflection walk has unrolled its keys into literals
-    // — rounds after the leaves would have been spliced in.
+    // `inline` reads the call sites, since splicing pays at the sites that
+    // exist; the hold reads the body alone, since it protects an option whose
+    // evidence has not arrived — a `field<T>` in a derived serializer is
+    // admitted at plain=18 against a budget of 13, on a folded price the
+    // reflection walk only produces rounds later.
     //
-    // Only a deleted loop counts. Assuming the receiver constant halves almost
-    // any body, so holding on that suppressed bottom-up inlining across the
-    // whole program: `String::get_byte_unchecked` stopped reaching a two-line
-    // `peek`.
-    //
-    // Measured slower and not worth retrying: holding only what the call sites
-    // already admit (identical output to holding nothing), holding every
-    // candidate, and keeping a frozen copy to splice from so the original could
-    // grow freely — a detached copy is code no other pass can reach, so
-    // `sroa_param` rewrites a signature under it and it has to be discarded.
+    // Only a deleted loop counts: a constant receiver halves almost any body,
+    // and holding on that stopped `String::get_byte_unchecked` reaching a
+    // two-line `peek`. Measured slower and not worth retrying — holding what
+    // the call sites already admit, holding every candidate, and splicing from
+    // a frozen copy, which no other pass can reach and `sroa_param` invalidates.
     let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let (_, optimistic_loop) = weigh(&ConstView {
         params: &all_params,
