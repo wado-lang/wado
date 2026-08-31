@@ -730,7 +730,7 @@ impl Monomorphizer {
             let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
                 // A tuple is module-independent, so its receiver form is bare.
                 MethodName::format_local(
-                    &FqTypeName::binder(TypeTable::TUPLE_TYPE_NAME),
+                    &FqTypeName::builtin(TypeTable::TUPLE_TYPE_NAME),
                     info.trait_name.as_ref(),
                     &info.method_name,
                 )

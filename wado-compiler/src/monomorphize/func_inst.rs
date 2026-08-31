@@ -1544,7 +1544,7 @@ impl Monomorphizer {
                         // A tuple is module-independent, so its receiver form is
                         // the bare tuple name.
                         MethodName::format_local(
-                            &FqTypeName::binder(TypeTable::TUPLE_TYPE_NAME),
+                            &FqTypeName::builtin(TypeTable::TUPLE_TYPE_NAME),
                             info.trait_name.as_ref(),
                             &info.method_name,
                         )
