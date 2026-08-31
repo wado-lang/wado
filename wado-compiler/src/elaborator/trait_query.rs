@@ -12,6 +12,7 @@ use crate::name::{FqTypeName, Receiver, RefKind, TypeHead};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
+use super::scope::BinderInScope;
 use super::Elaborator;
 use super::callee::CalleeRef;
 use super::scope::Scope;
@@ -2390,7 +2391,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .annotate_ctx
                         .trait_ctx
                         .type_params
-                        .insert(tp_name.clone(), (i as u32, concrete_arg));
+                        .insert(
+                            tp_name.clone(),
+                            BinderInScope::undeclared(i as u32, concrete_arg),
+                        );
                 }
             }
             // Add bounds from type param declarations
@@ -2498,7 +2502,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .annotate_ctx
                 .trait_ctx
                 .type_params
-                .insert(info.blanket_param_name.clone(), (0, concrete_type_id));
+                .insert(
+                    info.blanket_param_name.clone(),
+                    BinderInScope::undeclared(0, concrete_type_id),
+                );
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -2679,7 +2686,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info,
             impl_module_source,
             blanket_type_param: None,
-            blanket_owner: None,
+            blanket_binder: None,
             bound_depth: 0,
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),

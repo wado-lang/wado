@@ -1,5 +1,6 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
+use super::scope::BinderInScope;
 use super::trait_env::ImplTargetKey;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -1422,6 +1423,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+/// Bind `name` in the current type-param scope, recording the node that
+    /// declares it. Scope presence and binder identity are written together:
+    /// a name in `type_params` without its `type_param_decls` entry reads back
+    /// as an unowned binder, which is a *different* template name (#1932).
+    fn bind_type_param(
+        scope: &mut super::scope::TypeParamScope<'_, '_, H>,
+        header: &ImplHeader,
+        name: &str,
+        slot: u32,
+        type_id: TypeId,
+    ) {
+        let decl = header
+            .type_params
+            .iter()
+            .find(|p| p.name == name)
+            .map(|p| p.id);
+        scope.annotate_ctx.trait_ctx.type_params.insert(
+            name.to_string(),
+            BinderInScope {
+                index: slot,
+                type_id,
+                decl,
+            },
+        );
+    }
+
     /// The typed receiver chain: `type_key` plus the newtype/flags base heads
     /// reachable from it. A reference head has no newtype base, so it is
     /// returned as a singleton; a named head walks its newtype chain via
@@ -1996,11 +2023,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (name, idx) in &type_param_entries {
                 let i = *idx as usize;
                 if i < type_args.len() {
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .insert(name.clone(), (*idx, type_args[i]));
+                    Self::bind_type_param(&mut scope, &header, name, *idx, type_args[i]);
                 }
             }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
@@ -2011,11 +2034,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow_mut()
                     .make_tuple(type_args.to_vec());
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(pack_name.clone(), (*pack_idx, pack_type));
+                Self::bind_type_param(&mut scope, &header, pack_name, *pack_idx, pack_type);
             }
         }
 
@@ -2035,22 +2054,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .filter(|p| p.is_real_type_param())
                     .position(|p| &p.name == name)
                     .unwrap_or(0) as u32;
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(name.clone(), (slot, recv_id));
+                Self::bind_type_param(&mut scope, &header, name, slot, recv_id);
             } else {
                 let type_id = scope
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_type_param(name.clone(), 0);
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(name.clone(), (0, type_id));
+                Self::bind_type_param(&mut scope, &header, name, 0, type_id);
             }
         }
 
@@ -2063,7 +2074,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_params
             .values()
-            .copied()
+            .map(BinderInScope::slot)
             .collect();
         // A binding naming a type private to the declaring module (`type Iter
         // = TreeSetIter<T>`) means what the block wrote, not what the caller's
@@ -2086,8 +2097,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        // This block binds the parameter, so it — not the letter — names it.
-        let blanket_owner = is_blanket_type_param.then_some(impl_ref.0);
+        // The parameter's own declaration node names it — not the letter, which
+        // another blanket of the same trait may also spell.
+        let blanket_binder = is_blanket_type_param.then(|| {
+            let param_id = header
+                .type_params
+                .iter()
+                .find(|p| p.name == impl_struct_name)
+                .map(|p| p.id);
+            match param_id {
+                Some(id) => crate::name::FqTypeName::binder_owned(
+                    &impl_struct_name,
+                    crate::name::BinderOwner::of_param(&impl_home, id),
+                ),
+                None => crate::name::FqTypeName::binder(&impl_struct_name),
+            }
+        });
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
         // is a type parameter. These should NOT override base-type methods.
@@ -2167,11 +2192,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | ResolvedType::TypePack { index, .. } => *index,
                     other => panic!("method slot is not a type parameter: {other:?}"),
                 };
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(type_param.name.clone(), (index, type_param_id));
+                Self::bind_type_param(&mut scope, &header, &type_param.name, index, type_param_id);
                 if !type_param.bounds.is_empty() {
                     scope
                         .annotate_ctx
@@ -2264,7 +2285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
-                blanket_owner,
+                blanket_binder: blanket_binder.clone(),
                 bound_depth,
                 impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
@@ -2337,7 +2358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                     impl_module_source,
                     blanket_type_param,
-                    blanket_owner,
+                    blanket_binder: blanket_binder.clone(),
                     bound_depth,
                     impl_struct_name,
                     impl_struct_fq,

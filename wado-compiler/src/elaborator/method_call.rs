@@ -286,7 +286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut trait_name: Option<crate::name::FqTraitName> = None;
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
-        let mut blanket_owner: Option<crate::defs::DefId> = None;
+        let mut blanket_binder: Option<FqTypeName> = None;
         let mut trait_impl_struct_name: Option<FqTypeName> = None;
         let mut matched_impl_struct_name: Option<String> = None;
         // `Some` when the ref-priority path below adopts a `&T` / `&mut T` impl,
@@ -330,7 +330,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info = Some(info);
                     trait_impl_module_source = Some(trait_match.impl_module_source);
                     blanket_type_param = trait_match.blanket_type_param;
-                    blanket_owner = trait_match.blanket_owner;
+                    blanket_binder = trait_match.blanket_binder.clone();
                 }
             }
         }
@@ -395,7 +395,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info = Some(trait_match.method_info);
             trait_impl_module_source = Some(trait_match.impl_module_source);
             blanket_type_param = trait_match.blanket_type_param;
-            blanket_owner = trait_match.blanket_owner;
+            blanket_binder = trait_match.blanket_binder.clone();
         }
 
         // Selection is over; the classes come out of the probe so the arguments
@@ -947,7 +947,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The call site uses the concrete receiver (e.g., "ListIter<i32>").
             // monomorph_info maps from the concrete name back to the template.
             let generic_name = MethodName::format_local(
-                &Self::blanket_binder(self.tysys.resolutions.defs(), blanket_param, blanket_owner),
+                blanket_binder
+                    .as_ref()
+                    .unwrap_or(&FqTypeName::binder(blanket_param)),
                 trait_name.as_ref(),
                 method_name,
             );
@@ -2240,21 +2242,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// receiver's bucket never sees them. Select the blanket whose bounds the
     /// receiver satisfies and dispatch to its template, the way an instance
     /// method reached through the same impl already does.
-/// The binder naming a blanket's receiver parameter. The `impl` block owns it,
-/// so two blankets of one trait stay two templates whatever letter each spells
-/// its parameter (issue #1932). A caller without the block falls back to the
-/// bare spelling, which is what every non-blanket binder uses.
-fn blanket_binder(
-    defs: &crate::defs::DefTable,
-    param: &str,
-    owner: Option<crate::defs::DefId>,
-) -> FqTypeName {
-    match owner {
-        Some(def) => FqTypeName::impl_binder(param, crate::name::BinderOwner::new(defs, def)),
-        None => FqTypeName::binder(param),
-    }
-}
-
     pub(super) fn resolve_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
@@ -2266,14 +2253,9 @@ fn blanket_binder(
         arg_spans: &[Span],
         span: Span,
     ) -> Option<TypeId> {
-        let (trait_name, blanket_param, blanket_module, blanket_def) =
+        let (trait_name, blanket_param, blanket_module, blanket_def, binder) =
             self.find_blanket_static_method(receiver_type_id, method)?;
 
-        let binder = Self::blanket_binder(
-            self.tysys.resolutions.defs(),
-            &blanket_param,
-            Some(blanket_def),
-        );
         let template_name = MethodName::format_local(&binder, Some(&trait_name), method);
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
@@ -2478,7 +2460,8 @@ fn blanket_binder(
     }
 
     /// The value blanket impl carrying a static `method_name` whose receiver
-    /// bounds `receiver_type_id` satisfies, as `(trait, receiver param, module)`.
+    /// bounds `receiver_type_id` satisfies, as
+    /// `(trait, receiver param, module, receiver binder)`.
     pub(super) fn find_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
@@ -2488,12 +2471,14 @@ fn blanket_binder(
         String,
         ModuleSource,
         crate::defs::DefId,
+        FqTypeName,
     )> {
         let candidates: Vec<(
             crate::name::FqTraitName,
             String,
             ModuleSource,
             crate::defs::DefId,
+            FqTypeName,
             Vec<super::trait_env::BlanketBound>,
         )> = self
             .tysys
@@ -2536,6 +2521,7 @@ fn blanket_binder(
                     b.param.clone(),
                     b.module.clone(),
                     b.def,
+                    b.receiver_binder(),
                     b.bounds.clone(),
                 ))
             })
@@ -2543,7 +2529,7 @@ fn blanket_binder(
 
         candidates
             .into_iter()
-            .find(|(_, _, _, _, bounds)| {
+            .find(|(_, _, _, _, _, bounds)| {
                 bounds.iter().all(|bound| {
                     bound.decl_ref.is_some_and(|bound_def| {
                         self.tysys.type_implements_trait(
@@ -2555,7 +2541,7 @@ fn blanket_binder(
                     })
                 })
             })
-            .map(|(trait_name, param, module, def, _)| (trait_name, param, module, def))
+            .map(|(trait_name, param, module, def, binder, _)| (trait_name, param, module, def, binder))
     }
 
     /// Look up `#[cm("...")]` for a static (no-self) method on the resource
@@ -2872,8 +2858,10 @@ fn blanket_binder(
 
         let env = &self.tysys.trait_env;
         let declared = env.entries_by_receiver_vec(&target.receiver(defs));
-        let binder =
-            env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::binder(&declared_name)));
+        let binder = env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::param_bucket(
+            &self.current_module_source,
+            &declared_name,
+        )));
         let is_current = |k: &&crate::defs::DefId| *defs.module(**k) == self.current_module_source;
         let mut keys: Vec<crate::defs::DefId> = declared
             .iter()

@@ -6,6 +6,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
+use super::scope::BinderInScope;
 use super::Elaborator;
 use super::types::TypeError;
 use crate::symbol::SymbolKind;
@@ -106,7 +107,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(name, span) => {
                 // Look up the type pack parameter
-                if let Some((index, _type_id)) = self.annotate_ctx.trait_ctx.type_params.get(name) {
+                if let Some(BinderInScope { index, .. }) = self.annotate_ctx.trait_ctx.type_params.get(name) {
                     self.tysys
                         .type_table
                         .borrow_mut()
@@ -364,7 +365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
-        if let Some(&(_, param_type_id)) = self
+        if let Some(&BinderInScope { type_id: param_type_id, .. }) = self
             .annotate_ctx
             .trait_ctx
             .type_params
@@ -484,7 +485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // First check if it's a type parameter in scope
-        if let Some(&(_, type_id)) = self.annotate_ctx.trait_ctx.type_params.get(name) {
+        if let Some(&BinderInScope { type_id, .. }) = self.annotate_ctx.trait_ctx.type_params.get(name) {
             return type_id;
         }
 
@@ -840,7 +841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_params
             .get(base_name)
-            .map(|&(_, id)| id)
+            .map(|b| b.type_id)
         {
             Some(id) => self.with_self_type(id, |s| s.resolve_type(ty)),
             None => self.resolve_type(ty),

@@ -22,14 +22,55 @@ use super::trait_env::InheritedBound;
 /// (impl blocks, trait method lookups, etc). Use
 /// [`Elaborator::enter_inherited_type_param_scope`] to mutate this safely
 /// with RAII restore on drop.
+/// A name bound in a type-parameter scope: its slot, the type it stands for,
+/// and the node that declares it.
+///
+/// One entry, not two parallel maps. The declaration node is what names a
+/// binder — a template keyed by the spelling alone made two blankets of one
+/// trait share it (#1932) — so a writer cannot record the binding and forget
+/// the identity.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct BinderInScope {
+    /// Slot in the enclosing item's parameter list.
+    pub(super) index: u32,
+    pub(super) type_id: TypeId,
+    /// The parameter's own declaration node, or `None` for a name in scope
+    /// that no parameter declares: `Self`, or a parameter already bound to a
+    /// concrete type by a lookup. `None` is a fact about the name — only a
+    /// declared binder can own a template name — not a writer that forgot.
+    pub(super) decl: Option<ast::AstId>,
+}
+
+impl BinderInScope {
+    /// A binder the source declares, named by its own node.
+    pub(super) fn declared(index: u32, type_id: TypeId, decl: ast::AstId) -> Self {
+        Self {
+            index,
+            type_id,
+            decl: Some(decl),
+        }
+    }
+
+    /// A name in scope that no parameter declares — see [`Self::decl`].
+    pub(super) fn undeclared(index: u32, type_id: TypeId) -> Self {
+        Self {
+            index,
+            type_id,
+            decl: None,
+        }
+    }
+
+    /// The pair readers that only need the slot and the type destructure.
+    pub(super) fn slot(&self) -> (u32, TypeId) {
+        (self.index, self.type_id)
+    }
+}
+
 #[derive(Clone, Default)]
 pub(super) struct TraitContext {
-    /// Type parameters currently in scope (name → (index, `TypeId`)).
-    /// Set when resolving generic structs, functions, or impl blocks.
-    pub(super) type_params: IndexMap<String, (u32, TypeId)>,
-    /// `AstId` of each type param's declaration site (for LSP jump-to-def on
-    /// type-parameter uses). Parallel to `type_params`, keyed by name.
-    pub(super) type_param_decls: IndexMap<String, ast::AstId>,
+    /// Type parameters currently in scope. Set when resolving generic structs,
+    /// functions, or impl blocks.
+    pub(super) type_params: IndexMap<String, BinderInScope>,
     /// Trait bounds on type parameters in scope (name → full bounds with assoc types).
     /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
     pub(super) type_param_bounds: IndexMap<String, Vec<ast::TraitBound>>,
@@ -310,7 +351,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .trait_ctx
             .type_params
             .iter()
-            .flat_map(|(name, &(index, tid))| {
+            .flat_map(|(name, &BinderInScope { index, type_id: tid, .. })| {
                 let elem = matches!(tt.get(tid), ResolvedType::TypePack { .. })
                     .then(|| tt.make_type_param(name.clone(), index));
                 std::iter::once(tid).chain(elem)
@@ -363,11 +404,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.annotate_ctx
                 .trait_ctx
                 .type_params
-                .insert(tp.name.clone(), (idx, type_id));
-            self.annotate_ctx
-                .trait_ctx
-                .type_param_decls
-                .insert(tp.name.clone(), tp.id);
+                .insert(tp.name.clone(), BinderInScope::declared(idx, type_id, tp.id));
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
@@ -420,7 +457,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.annotate_ctx
                 .trait_ctx
                 .type_params
-                .insert(tp.name.clone(), (idx, resolved_arg));
+                .insert(
+                    tp.name.clone(),
+                    BinderInScope::declared(idx, resolved_arg, tp.id),
+                );
             if !tp.bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx

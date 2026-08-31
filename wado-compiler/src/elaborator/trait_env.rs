@@ -144,9 +144,13 @@ impl ImplTargetKey {
             ImplTargetKey::Undeclared(module, name) => {
                 name::Receiver::Type(name::FqTypeName::shape(module, name))
             }
-            // A type parameter names no declaration, so no module qualifies it.
-            ImplTargetKey::TypeParam(_, name) => {
-                name::Receiver::Type(name::FqTypeName::binder(name))
+            // Not a binder: the bucket of every impl in this module binding
+            // this spelling as its own parameter. Several impls share it, and
+            // a lookup starting from a type never reaches it — which is what
+            // keeps a blanket out of the bucket of a type that happens to
+            // share the parameter's name.
+            ImplTargetKey::TypeParam(module, name) => {
+                name::Receiver::Type(name::FqTypeName::param_bucket(module, name))
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
             ImplTargetKey::Builtin(name) => name::Receiver::Type(name::FqTypeName::builtin(name)),
@@ -471,6 +475,9 @@ pub(crate) struct BlanketImpl {
     pub(crate) receiver: BlanketReceiver,
     /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
     pub(crate) param: String,
+    /// The receiver param's own declaration node — its identity, and what
+    /// [`Self::receiver_binder`] names it by.
+    pub(crate) param_id: ast::AstId,
     /// Bound trait names on the receiver param, each with the declaration its
     /// own reference site resolves to. The spelling stays for the by-name
     /// queries that have not been flipped; the answer is what a bound check
@@ -485,8 +492,11 @@ impl BlanketImpl {
     /// owns the binder, so two blankets of one trait stay two templates
     /// whatever letter each spells its parameter; a name built from the
     /// spelling alone looks up a *different* template, silently (issue #1932).
-    pub(crate) fn receiver_binder(&self, defs: &crate::defs::DefTable) -> name::FqTypeName {
-        name::FqTypeName::impl_binder(&self.param, name::BinderOwner::new(defs, self.def))
+    pub(crate) fn receiver_binder(&self) -> name::FqTypeName {
+        name::FqTypeName::binder_owned(
+            &self.param,
+            name::BinderOwner::of_param(&self.module, self.param_id),
+        )
     }
 }
 
@@ -1189,6 +1199,11 @@ impl TraitEnv {
                 if impl_block.trait_type.is_some() {
                     if let Some((receiver, param)) =
                         classify_blanket_receiver(&impl_block.ty, &impl_block.type_params)
+                        && let Some(param_id) = impl_block
+                            .type_params
+                            .iter()
+                            .find(|p| p.name == param)
+                            .map(|p| p.id)
                     {
                         let bounds: Vec<BlanketBound> = impl_block
                             .type_params
@@ -1221,6 +1236,7 @@ impl TraitEnv {
                                     def: impl_def,
                                     receiver,
                                     param,
+                                    param_id,
                                     bounds,
                                 });
                         }

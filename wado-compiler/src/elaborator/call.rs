@@ -8,6 +8,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
+use super::scope::BinderInScope;
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
@@ -276,7 +277,9 @@ impl TypeSystem {
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
-        if let Some(&(_, type_param_type_id)) = ctx.trait_ctx.type_params.get(prefix) {
+        if let Some(&BinderInScope { type_id: type_param_type_id, .. }) =
+            ctx.trait_ctx.type_params.get(prefix)
+        {
             // If the type parameter is bound to a concrete type (e.g. a
             // trait default method synthesised for an impl binds the
             // trait's `T` to the impl's concrete arg), dispatch
@@ -2966,7 +2969,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                 .collect();
             let mut method_info = LocalMethodName::new(
-                FqTypeName::binder(type_param_name),
+                self.binder_in_scope(type_param_name),
                 Some(found_trait),
                 method_name.to_string(),
             );

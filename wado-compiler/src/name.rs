@@ -2439,15 +2439,31 @@ impl FqTypeName {
         })
     }
 
-    /// The binder an `impl` block declares — a blanket's receiver parameter
-    /// (`T` in `impl<T: Bound> Trait for T`). Named by the block, so two
-    /// blankets of one trait are two templates whatever they spell their
-    /// parameter (issue #1932).
+    /// A binder named by its declaration site — a blanket's receiver parameter
+    /// (`T` in `impl<T: Bound> Trait for T`), or any parameter reached from a
+    /// scope that knows where it was declared. Two items' `T` are two binders
+    /// whatever each spells it (issue #1932).
     #[must_use]
-    pub fn impl_binder(name: &str, owner: BinderOwner) -> Self {
+    pub fn binder_owned(name: &str, owner: BinderOwner) -> Self {
         Self::of_head_kind(TypeHead::Binder {
             name: name.to_string(),
             owner: Some(owner),
+        })
+    }
+
+    /// The index bucket holding every `impl` in `module` whose target is a type
+    /// parameter spelled `name`.
+    ///
+    /// This is deliberately keyed by the spelling: it answers "which impls bind
+    /// this name as their own parameter", a question only a spelling can ask,
+    /// and its entries are a `Vec` precisely because several impls share it.
+    /// It is not a binder — a binder is one parameter of one item — so it does
+    /// not use [`Self::binder`], whose identity is its binding site.
+    #[must_use]
+    pub fn param_bucket(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+        Self::of_head_kind(TypeHead::Shape {
+            module: module.clone(),
+            name: name.to_string(),
         })
     }
 
@@ -2642,22 +2658,23 @@ impl std::fmt::Display for FqTypeName {
     }
 }
 
-/// The `impl` block that binds a type-parameter binder. Equality and hashing
-/// read the [`crate::defs::DefId`] alone, so two blocks' `T` are two binders
-/// however they are spelled.
+/// The declaration site of a type-parameter binder — the parameter's own node,
+/// which is what [`crate::resolve::Resolution::Binder`] names it by. Equality
+/// and hashing read that node alone, so two items' `T` are two binders however
+/// they are spelled.
 #[derive(Debug, Clone)]
 pub struct BinderOwner {
-    def: crate::defs::DefId,
-    /// What a mangle embeds. The block's module plus its *module-local*
-    /// `AstId` index — never the `AstIdSpace`, which is a process-global
-    /// counter and would make mangled names non-deterministic
+    id: crate::ast::AstId,
+    /// What a mangle embeds: the declaring module plus the node's
+    /// *module-local* `AstId` index — never the `AstIdSpace`, which is a
+    /// process-global counter and would make mangled names non-deterministic
     /// (see [`mangle_local_item_name`]).
     rendered: String,
 }
 
 impl PartialEq for BinderOwner {
     fn eq(&self, other: &Self) -> bool {
-        self.def == other.def
+        self.id == other.id
     }
 }
 
@@ -2665,18 +2682,17 @@ impl Eq for BinderOwner {}
 
 impl std::hash::Hash for BinderOwner {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.def.hash(state);
+        self.id.hash(state);
     }
 }
 
 impl BinderOwner {
-    /// Render the `impl` block `def`. Its module and `AstId` come off the
-    /// table, never from a caller.
+    /// The binder declared at `id` in `module`.
     #[must_use]
-    pub fn new(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn of_param(module: &crate::module_source::ModuleSource, id: crate::ast::AstId) -> Self {
         Self {
-            def,
-            rendered: format!("{}/{}", defs.module(def), defs.ast_id(def).local()),
+            id,
+            rendered: format!("{module}/{}", id.local()),
         }
     }
 
@@ -2686,10 +2702,10 @@ impl BinderOwner {
         &self.rendered
     }
 
-    /// The `impl` block this binder belongs to. This is identity.
+    /// The node declaring this binder. This is identity.
     #[must_use]
-    pub fn def(&self) -> crate::defs::DefId {
-        self.def
+    pub fn id(&self) -> crate::ast::AstId {
+        self.id
     }
 }
 

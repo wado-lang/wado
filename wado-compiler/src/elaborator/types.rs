@@ -2330,10 +2330,10 @@ pub(super) struct TraitMethodMatch {
     /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
     /// this holds the type parameter name (e.g., `"I"`). `None` for normal impls.
     pub(super) blanket_type_param: Option<String>,
-    /// The `impl` block that binds [`Self::blanket_type_param`]. The block
-    /// names the binder, so two blankets of one trait are two templates
-    /// whatever letter each spells its parameter (issue #1932).
-    pub(super) blanket_owner: Option<crate::defs::DefId>,
+    /// [`Self::blanket_type_param`] as a binder named by its own declaration
+    /// node, so two blankets of one trait are two templates whatever letter
+    /// each spells its parameter (issue #1932).
+    pub(super) blanket_binder: Option<crate::name::FqTypeName>,
     /// How far down the receiver's newtype chain this impl's target bounds
     /// hold: 0 at the receiver itself, 1 at its base. A newtype inherits its
     /// base's impls, so a blanket keyed by a bound only the base carries is

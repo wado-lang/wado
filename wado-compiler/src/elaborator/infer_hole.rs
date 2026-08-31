@@ -245,7 +245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_params
             .values()
-            .map(|&(_, tid)| tid)
+            .map(|b| b.type_id)
             .collect();
         self.tysys
             .type_table

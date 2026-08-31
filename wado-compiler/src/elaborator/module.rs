@@ -4,6 +4,7 @@ use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::tir::{TypeId, TypeTable};
 
+use super::scope::BinderInScope;
 use super::Elaborator;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, StructFieldInfo,
@@ -138,7 +139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .trait_ctx
                                 .type_params
                                 .get(&p.name)
-                                .map(|&(_, id)| id)
+                                .map(|b| b.type_id)
                         })
                         .collect();
 
@@ -391,12 +392,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .annotate_ctx
                         .trait_ctx
                         .type_params
-                        .insert(param.name.clone(), (actual_idx, type_id));
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_param_decls
-                        .insert(param.name.clone(), param.id);
+                        .insert(
+                            param.name.clone(),
+                            BinderInScope::declared(actual_idx, type_id, param.id),
+                        );
                     if !param.bounds.is_empty() {
                         scope
                             .annotate_ctx
@@ -434,7 +433,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .annotate_ctx
                                     .trait_ctx
                                     .type_params
-                                    .insert(name.clone(), (index, type_id));
+                                    .insert(
+                                        name.clone(),
+                                        BinderInScope {
+                                            index,
+                                            type_id,
+                                            // The block declares this argument:
+                                            // `impl<T> Tr for Pair<T>` binds its
+                                            // own `T`.
+                                            decl: impl_block
+                                                .type_params
+                                                .iter()
+                                                .find(|p| &p.name == name)
+                                                .map(|p| p.id),
+                                        },
+                                    );
                             }
                         }
                     }
@@ -510,12 +523,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .annotate_ctx
                             .trait_ctx
                             .type_params
-                            .insert(param.name.clone(), (idx, type_id));
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .type_param_decls
-                            .insert(param.name.clone(), param.id);
+                            .insert(
+                                param.name.clone(),
+                                BinderInScope::declared(idx, type_id, param.id),
+                            );
                         if !param.bounds.is_empty() {
                             scope
                                 .annotate_ctx

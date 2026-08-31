@@ -175,7 +175,14 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 self.annotate_ctx
                     .trait_ctx
                     .type_params
-                    .insert(param.name.clone(), (actual_idx, type_id));
+                    .insert(
+                        param.name.clone(),
+                        crate::elaborator::scope::BinderInScope::declared(
+                            actual_idx,
+                            type_id,
+                            param.id,
+                        ),
+                    );
             }
             if !param.bounds.is_empty() {
                 self.annotate_ctx
@@ -210,7 +217,13 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                         self.annotate_ctx
                             .trait_ctx
                             .type_params
-                            .insert(name.clone(), (i as u32, type_id));
+                            .insert(
+                                name.clone(),
+                                crate::elaborator::scope::BinderInScope::undeclared(
+                                    i as u32,
+                                    type_id,
+                                ),
+                            );
                     }
                 }
             }
@@ -558,7 +571,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         use_id: crate::ast::AstId,
         name: &str,
     ) {
-        if let Some(&decl_id) = self.annotate_ctx.trait_ctx.type_param_decls.get(name) {
+        if let Some(decl_id) = self.annotate_ctx.trait_ctx.type_params.get(name).and_then(|b| b.decl) {
             self.record_reference(use_id, decl_id);
         } else {
             self.record_item_reference_by_name(use_id, name);
@@ -900,34 +913,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> crate::name::FqTypeName {
-        self.qualified_receiver_name_owned(written, None)
-    }
-
-    /// [`Self::qualified_receiver_name`] for a receiver written inside the
-    /// `impl` block `owner` identifies.
-    ///
-    /// A blanket's receiver *is* that block's own binder, so the block names
-    /// it: two blankets of one trait are two templates whatever letter each
-    /// spells its parameter. Naming it by the spelling alone made them one,
-    /// and the second silently replaced the first (issue #1932).
-    pub(super) fn qualified_receiver_name_owned(
-        &self,
-        written: &str,
-        owner: Option<crate::defs::DefId>,
-    ) -> crate::name::FqTypeName {
         if self
             .annotate_ctx
             .trait_ctx
             .type_params
             .contains_key(written)
         {
-            return match owner {
-                Some(def) => crate::name::FqTypeName::impl_binder(
-                    written,
-                    crate::name::BinderOwner::new(self.tysys.resolutions.defs(), def),
-                ),
-                None => crate::name::FqTypeName::binder(written),
-            };
+            return self.binder_in_scope(written);
         }
         if crate::name::is_builtin_shape_name(written) {
             return crate::name::FqTypeName::builtin(written);
@@ -938,6 +930,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             || crate::name::FqTypeName::shape(&self.current_module_source, written),
             |def| crate::name::FqTypeName::of_head(self.tysys.resolutions.defs(), def),
         )
+    }
+
+    /// The binder `written` names in the current type-param scope.
+    ///
+    /// A declared parameter is named by its own node, so a blanket's template
+    /// and the calls into its body agree by construction — naming it by the
+    /// spelling alone made two blankets of one trait share a template, and the
+    /// second silently replaced the first (issue #1932). A name no parameter
+    /// declares (`Self`, a parameter a lookup already bound to a concrete
+    /// type) keeps its bare spelling: it owns no template, so there is nothing
+    /// for a node to distinguish it from.
+    pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
+        match self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(written)
+            .and_then(|binder| binder.decl)
+        {
+            Some(id) => crate::name::FqTypeName::binder_owned(
+                written,
+                crate::name::BinderOwner::of_param(&self.current_module_source, id),
+            ),
+            None => crate::name::FqTypeName::binder(written),
+        }
     }
 
     /// The spelling `def` renders to in a mangled head — its declared name,
@@ -1209,7 +1226,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .trait_ctx
                 .type_params
                 .iter()
-                .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
+                .map(|(name, b)| (name.clone(), b.index, b.type_id))
                 .collect();
             self.record_pending_synthesis_request(tir::SynthesisRequest {
                 trait_ref,
@@ -2002,9 +2019,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Resolve impl block methods with mangled names
         let struct_name = scope.get_type_name(&impl_block.ty);
-        // A blanket's receiver is this block's own binder, so this block names
-        // it — see `qualified_receiver_name_owned`.
-        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
         let trait_name = impl_block.trait_type.as_ref().map(|t| {
             let fq = scope.fq_trait_name(t);
             scope.tysys.trait_env.fq_trait_named_by_impl(
@@ -2206,7 +2220,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 impl_is_concrete,
                 &impl_block.type_params,
                 Some(&recorded_sig),
-                impl_owner,
             );
         }
 
@@ -2271,7 +2284,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     impl_is_concrete,
                     &impl_block.type_params,
                     None,
-                    impl_owner,
                 );
 
                 // Swap back, take the populated synthetic out.
