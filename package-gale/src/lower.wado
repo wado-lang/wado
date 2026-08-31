@@ -2078,7 +2078,9 @@ fn scan_group_is_nullable(alts: &List<Alternative>, ctx: &mut GenContext) -> boo
 fn repeat_inner_admits(inner: &Element, inner_first: &List<String>, ctx: &mut GenContext) -> Admits {
     let mut visiting: List<String> = [];
     if ctx.element_reaches_open_end(inner, &mut visiting) {
-        return Admits::Everything;
+        // The walk's set is kept, not discarded: it is a subset of what the
+        // body admits, and the repeat-exit probe needs a set to gate on.
+        return Admits::Everything(*inner_first);
     }
     return admits_or_untestable(inner_first);
 }
@@ -3642,7 +3644,7 @@ fn lower_repeat_op(
         caller_follow_second: [],
         body_scannable,
         body_has_field,
-        body_first_set: inner_first,
+        body_admits: repeat_inner_admits(&rep.element, &inner_first, ctx),
         body_is_single_alt_group,
         body_second_position_first,
         body_shape,
@@ -4068,7 +4070,7 @@ fn patch_repeat_op_caller_follow(
         probe_viable = ctx.rule_follow_for_probe(rule_name);
     }
     let static_exit_undecided = non_greedy_static_undecided(
-        &rep_op.body_first_set,
+        &admits_kinds(&rep_op.body_admits),
         &caller_follow_first,
         &rep_op.body_second_position_first,
         &caller_follow_second,

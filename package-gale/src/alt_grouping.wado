@@ -24,6 +24,7 @@ use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 use {
     Admits,
+    admits_everything,
     admits_is_untestable,
     admits_or_untestable,
     AltClass,
@@ -99,7 +100,7 @@ pub fn classes_union(classes: &List<AltClass>) -> List<String> {
 /// is an alternative the lookahead cannot decide, which does not.
 pub fn group_branch_admits(group: &List<i32>, classes: &List<AltClass>) -> Admits {
     if group.iter_ref().any(|slot: &i32| alt_class_is_open_ended(&classes[*slot])) {
-        return Admits::Everything;
+        return Admits::Everything(group_first_union(group, classes));
     }
     return admits_or_untestable(&group_first_union(group, classes));
 }
@@ -151,7 +152,7 @@ pub fn dispatch_branches(d: &MultiAltDispatch) -> List<DecisionBranch> {
     return match d {
         Direct(dd) => direct_dispatch_branches(dd),
         Tournament(td) => [
-            DecisionBranch { test: Admits::Everything, gate: "", alts: td.alts },
+            DecisionBranch { test: admits_everything(), gate: "", alts: td.alts },
         ],
     };
 }

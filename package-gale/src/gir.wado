@@ -475,8 +475,17 @@ pub variant MultiAltDispatch {
 /// element that carries a raw set instead leaves emit to guess again, from the
 /// same emptiness and with less to go on.
 pub variant Admits {
-    /// Admits every token, and that is the whole truth about it.
-    Everything,
+    /// Admits every token. The payload is what a static first-set walk did
+    /// enumerate — a strict subset of what is admitted, and never a substitute
+    /// for it. A guard built from it would be too narrow; a caller that needs
+    /// *some* set to point at (the repeat-exit probe, which cannot speculate
+    /// on every lookahead) reads it through `admits_enumerated`, and gets an
+    /// empty list where the walk found nothing.
+    ///
+    /// Dropping it was the same collapse this type exists to prevent, one
+    /// level in: "admits everything" and "these are the kinds we found" are
+    /// two facts about one body, and `( . | X )`-shaped bodies have both.
+    Everything(List<String>),
     /// Cannot be decided from the lookahead: an alternative whose first set is
     /// absent because it matches nothing, and whose viability rests on what
     /// follows the decision. Belongs after every arm that can be tested.
@@ -484,6 +493,26 @@ pub variant Admits {
     /// Never empty: an empty set is `Everything` or `Untestable`, and which
     /// one is not a property of the set.
     Kinds(List<String>),
+}
+
+/// Admits every token, with no statically enumerated kinds to point at.
+pub fn admits_everything() -> Admits {
+    return Admits::Everything([]);
+}
+
+pub fn admits_is_everything(admits: &Admits) -> bool {
+    return *admits matches { Everything(_) };
+}
+
+/// The kinds a static walk enumerated, whether or not they are the whole of
+/// what is admitted. For a caller that needs a set to gate on and can accept a
+/// subset; a caller building the arm's own test uses `admits_kinds`.
+pub fn admits_enumerated(admits: &Admits) -> List<String> {
+    return match admits {
+        Everything(kinds) => *kinds,
+        Kinds(kinds) => *kinds,
+        Untestable => [] as List<String>,
+    };
 }
 
 /// Whether this arm decides nothing the arms after it could still decide, so
@@ -512,7 +541,7 @@ pub fn admits_kinds(admits: &Admits) -> List<String> {
 /// to test. This is the reading `kind_check_str` used to take for everyone.
 pub fn admits_or_everything(kinds: &List<String>) -> Admits {
     if kinds.is_empty() {
-        return Admits::Everything;
+        return admits_everything();
     }
     return Admits::Kinds(*kinds);
 }
@@ -865,12 +894,18 @@ pub struct RepeatOp {
     /// shapes. Precomputed so emit doesn't re-run
     /// `ctx.is_element_scannable` at each Repeat dispatch.
     pub body_scannable: bool,
-    /// FIRST set of the inner element. Used by emit's per-shape
-    /// dispatchers for the `while peek ∈ first` loop guard, the
-    /// `subtract_sets(first, follow)` Optional+RuleCall gate, and
-    /// `compute_iter_follow`'s iter-follow union. Precomputed so
-    /// emit doesn't re-run `ctx.first_of_element` at each dispatch.
-    pub body_first_set: List<String>,
+    /// What one iteration of the inner element admits. The parse-side twin of
+    /// `ScanRepeatElement.inner_admits`, and the same type for the same
+    /// reason: an empty first set means `.` / `~X`, which fire on every token,
+    /// at one site and a body that matches nothing at another. Read as a set,
+    /// the emptiness said "can never match" and dropped `x?` where `x : . ;`
+    /// entirely.
+    ///
+    /// Used by emit's per-shape dispatchers for the loop guard, the
+    /// caller-follow exclusion on an Optional+RuleCall, and
+    /// `compute_iter_follow`'s iter-follow union. Precomputed so emit doesn't
+    /// re-run `ctx.first_of_element` at each dispatch.
+    pub body_admits: Admits,
     /// True iff the inner element is a single-alt `Group` — i.e.
     /// `compute_iter_follow` should union the body's first set with
     /// the outer follow rather than using outer alone. Mirrors the

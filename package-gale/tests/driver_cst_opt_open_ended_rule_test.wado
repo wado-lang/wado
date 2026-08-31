@@ -21,12 +21,6 @@ test "optional over an open-ended rule: the follow token is left alone" {
     assert_tree(&"b", &"(s (t b))");
 }
 
-#[TODO]
 test "optional over an open-ended rule: a token that is not the follow enters it" {
-    // The scan now declines the `b`, but the parse side never enters this
-    // optional at all: its surface emitter drops a `?` whose body has no first
-    // set instead of reading it as one that admits everything, so `_parse_t`
-    // is just `expect(B)`. Pre-existing — the same empty-set reading the scan
-    // side had, one emitter over.
     assert_tree(&"a b", &"(s (t (x a) b))");
 }

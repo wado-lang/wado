@@ -73,6 +73,7 @@ use {
 } from "./alt_grouping.wado";
 use {
     Admits,
+    admits_enumerated,
     admits_is_untestable,
     admits_kinds,
     admits_or_everything,
@@ -1691,9 +1692,6 @@ fn scan_repeat_guard(admits: &Admits, caller_follow_gate: &String, ctx: &mut Gen
 }
 
 /// `scan_repeat_guard`, holding the iteration back from `excluded` as well.
-/// A set taken out of `Everything` is a negative test and not a smaller set,
-/// so the caller that wants one states it here rather than trying to shrink
-/// what the body admits.
 fn scan_repeat_guard_excluding(
     admits: &Admits,
     excluded: &List<String>,
@@ -1702,14 +1700,32 @@ fn scan_repeat_guard_excluding(
 ) -> String {
     assert !admits_is_untestable(admits), "a repeat whose body matches nothing has no iteration to guard";
     let mut parts: List<String> = ["pos < tokens.len()"];
-    if let Kinds(kinds) = admits {
-        parts.push(ctx.kind_check_str(kinds, &"tokens[pos]"));
-    }
-    if !excluded.is_empty() {
-        parts.push(ctx.kind_negate_check_str(excluded, &"tokens[pos]"));
+    let admitted = admits_check_excluding(admits, excluded, &"tokens[pos]", ctx);
+    if admitted != "true" {
+        parts.push(admitted);
     }
     if !caller_follow_gate.is_empty() {
         parts.push(`!(${*caller_follow_gate})`);
+    }
+    return parts.join(" && ");
+}
+
+/// What `admits` admits, less `excluded`. A set taken out of `Everything` is a
+/// negative test and not a smaller set — everything *except* those tokens —
+/// which is why a caller holding a repeat back from its follow states the
+/// exclusion here rather than trying to shrink what the body admits. Both
+/// sides of the walk render their exclusion through this, so neither can
+/// silently drop one by subtracting from a set that has no members to lose.
+fn admits_check_excluding(admits: &Admits, excluded: &List<String>, expr: &String, ctx: &mut GenContext) -> String {
+    let mut parts: List<String> = [];
+    if let Kinds(kinds) = admits {
+        parts.push(ctx.kind_check_str(kinds, expr));
+    }
+    if !excluded.is_empty() {
+        parts.push(ctx.kind_negate_check_str(excluded, expr));
+    }
+    if parts.is_empty() {
+        return "true";
     }
     return parts.join(" && ");
 }
@@ -3728,8 +3744,14 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
 fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
     return r.static_exit_undecided
         && r.kind matches { Star | Plus }
-        && !r.body_first_set.is_empty()
-        && probe_decides(&r.body_first_set, &r.body_first_set, &r.continuation_scan, r.continuation_scannable, ctx);
+        && !admits_kinds(&r.body_admits).is_empty()
+        && probe_decides(
+        &admits_kinds(&r.body_admits),
+        &admits_kinds(&r.body_admits),
+        &r.continuation_scan,
+        r.continuation_scannable,
+        ctx,
+    );
 }
 
 /// Open a non-greedy loop that exits only when exiting is viable. The caller
@@ -3742,7 +3764,7 @@ fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCo
     w.line(&`let mut ${verdict}: bool = false;`);
     gen_viability_probe(w, &r.continuation_scan, &verdict, &"ng_exit_scan", ctx, nc, null, &r.probe_viable);
     w.line(&`if ${verdict} \{ break; \}`);
-    w.line(&`if !(${ctx.first_check_str(&r.body_first_set)}) \{ break; \}`);
+    w.line(&`if !(${ctx.admits_first_check_str(&r.body_admits)}) \{ break; \}`);
 }
 
 /// A labelled block that scans `continuation` from the parse position and,
@@ -3813,7 +3835,10 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     // only commits on a match — so a trailing token a following `,?` wants is
     // yielded instead of greedily consumed (e.g. `(',' arm)* ','?`). `Optional`
     // never needs it.
-    let overlaps_follow = sets_overlap(&r.body_first_set, &r.caller_follow_first);
+    // A body admitting everything overlaps whatever follows it, and says so
+    // rather than reading as disjoint through an empty set.
+    let overlaps_follow = r.body_admits matches { Everything }
+        || sets_overlap(&admits_kinds(&r.body_admits), &r.caller_follow_first);
     if r.body_scannable && overlaps_follow {
         let is_opt = if let Optional = r.kind {
             true;
@@ -3853,7 +3878,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
     let follow_gate = ctx.emit_follow() && r.gate_caller_follow;
-    let cond = gate_cond_with_caller_follow(&ctx.first_check_str(&r.body_first_set), follow_gate);
+    let cond = gate_cond_with_caller_follow(&ctx.admits_first_check_str(&r.body_admits), follow_gate);
     match r.kind {
         Optional => gen_op_optional(w, r, ctx, nc, follow_gate),
         Star => {
@@ -3930,7 +3955,7 @@ fn gen_op_optional_entry_cond(
             let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, &"opt_scan_pos", &"opt_scan", false);
             `${scan_pos} >= 0`;
         },
-        Plain => ctx.first_check_str(&r.body_first_set),
+        Plain => ctx.admits_first_check_str(&r.body_admits),
         OptionalShapeLookahead(_) => panic(
             "gen_op_optional_entry_cond: shape lookahead has one condition per shape, not one for the optional",
         ),
@@ -4290,7 +4315,7 @@ fn gen_op_storable_optional(
             rep_op,
             inner_elem,
             ctx,
-            &gate_cond_with_caller_follow(&ctx.first_check_str(&rep_op.body_first_set), rep_op.gate_caller_follow),
+            &gate_cond_with_caller_follow(&ctx.admits_first_check_str(&rep_op.body_admits), rep_op.gate_caller_follow),
         ),
         // `NonGreedy` is caught upstream by `gen_op_repeat_non_greedy`;
         // reaching here is a lower-side bug.
@@ -4441,7 +4466,7 @@ fn gen_op_transparent_optional(
             &rep.element,
             ctx,
             &gate_cond_with_caller_follow(
-                &ctx.first_check_str(&rep_op.body_first_set),
+                &ctx.admits_first_check_str(&rep_op.body_admits),
                 rep_op.gate_caller_follow,
             ),
         ),
@@ -5462,12 +5487,11 @@ fn gen_op_repeat_optional_rulecall(
     name_counts: &mut List<[String, i32]>,
     follow: &List<String>,
 ) {
-    let raw_first = rep_op.body_first_set;
-    let first = subtract_sets(&raw_first, follow);
+    let raw_first = admits_kinds(&rep_op.body_admits);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
 
-    // Ambiguous entry: the subtraction below would hand every shared token
+    // Ambiguous entry: the exclusion below would hand every shared token
     // to the continuation, but ANTLR4 resolves the ambiguity by entering
     // whenever entering leaves a viable parse. Ask the probe instead.
     if optional_probe_decides(rep_op, follow, ctx) {
@@ -5475,12 +5499,28 @@ fn gen_op_repeat_optional_rulecall(
         return;
     }
 
-    if first.is_empty() {
-        // RuleCall always has a field — `body_shape == LeafRuleCall`
-        // implies `body_has_field == true`. The optional can
-        // never match, so emit nothing.
-        return;
-    }
+    // Hold the optional back from what may follow it, so it does not swallow a
+    // token the caller needs. A body admitting everything has no set the
+    // follow can be taken out of — what is left is everything *except* it,
+    // which is a negative test. Reading the subtraction's emptiness as "can
+    // never match" is what dropped `x?` where `x : . ;` entirely: the
+    // alternative was never emitted, so the rule could not parse `x` at all.
+    let entry = match &rep_op.body_admits {
+        Everything(_) => admits_check_excluding(&rep_op.body_admits, follow, &"p.peek_kind()", ctx),
+        Untestable => {
+            return;
+        },
+        Kinds(kinds) => {
+            let first = subtract_sets(kinds, follow);
+            if first.is_empty() {
+                // RuleCall always has a field — `body_shape == LeafRuleCall`
+                // implies `body_has_field == true`. Nothing selects the
+                // optional here, so emit nothing.
+                return;
+            }
+            ctx.first_check_str(&first);
+        },
+    };
 
     // Caller-FOLLOW yield gate: when the caller's continuation matches at
     // this position, yield to the caller (null) so the Optional body
@@ -5493,12 +5533,12 @@ fn gen_op_repeat_optional_rulecall(
     };
     // The if-expression collapses to a present/absent
     // statement — the body appends when taken, nothing otherwise.
-    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&first), ctx);
+    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx);
 }
 
 fn optional_probe_decides(r: &RepeatOp, follow: &List<String>, ctx: &mut GenContext) -> bool {
     return r.body_scannable
-        && probe_decides(&r.body_first_set, follow, &r.continuation_scan, r.continuation_scannable, ctx);
+        && probe_decides(&admits_kinds(&r.body_admits), follow, &r.continuation_scan, r.continuation_scannable, ctx);
 }
 
 /// Whether a probe can decide this Repeat, from the parts the parse-side
@@ -5575,7 +5615,7 @@ fn gen_op_repeat_optional_leaf(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let loop_first = rep_op.body_first_set;
+    let loop_first = admits_kinds(&rep_op.body_admits);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
 
@@ -5677,7 +5717,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
     name_counts: &mut List<[String, i32]>,
 ) {
     let inner = &rep.element;
-    let inner_first = rep_op.body_first_set;
+    let inner_first = admits_kinds(&rep_op.body_admits);
     let loop_first = inner_first;
     let _ = dedup_name(&rep_op.field, name_counts);
 
@@ -5756,15 +5796,14 @@ fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
 
 /// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented on the error
 /// path with a diagnostic-only re-parse of a RuleRef inner.
-fn gen_rep_break_with_recovery(
-    w: &mut CodeWriter,
-    scan_pos: &String,
-    rep_op: &RepeatOp,
-    ctx: &mut GenContext,
-    loop_first: &List<String>,
-) {
+fn gen_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext) {
     let recovery = rep_recovery_expr(rep_op, ctx.emit_follow());
     if let Some(call) = recovery {
+        // The probe wants a set to point at, and takes the one the first-set
+        // walk enumerated even where the body admits more than it: gating a
+        // speculative re-parse on "any lookahead" is what the branch below
+        // refuses to do.
+        let loop_first = &admits_enumerated(&rep_op.body_admits);
         if loop_first.is_empty() {
             // No FIRST tokens to gate the speculative re-parse on, and no
             // reading of that emptiness makes one: gating on nothing fires the
@@ -5817,7 +5856,7 @@ fn gen_op_repeat_star_plus_storable(
     follow: &List<String>,
 ) {
     let inner = &rep.element;
-    let inner_first = rep_op.body_first_set;
+    let inner_first = admits_kinds(&rep_op.body_admits);
     let loop_first = inner_first;
     // Per-iteration follow propagated into a nested non-greedy Repeat
     // inside a SingleAlt body — `first(inner) ∪ outer_follow`.
@@ -5933,7 +5972,7 @@ fn gen_rep_iteration_entry(
     }
     gen_caller_follow_gate(w, rep_op);
     let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-    gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, loop_first);
+    gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx);
     if guarded_only {
         w.end();
     }
@@ -6008,10 +6047,10 @@ fn compute_non_greedy_condition(
     follow_second: &List<String>,
     ctx: &mut GenContext,
 ) -> String {
-    let raw_first = &rep_op.body_first_set;
+    let raw_first = &admits_kinds(&rep_op.body_admits);
 
     // Wildcard (`.*?`) and Not (`~TOK*?`) inner: their match set is
-    // open-ended, so `body_first_set` lowers to `[]`. The same is true
+    // open-ended, so `body_admits` is `Everything` and names no kinds. The same is true
     // for `(.)*?` / `(~TOK)*?` whose body op is `Op::Group(Transparent)`
     // wrapping the open-ended leaf. Detecting the open-ended case via
     // the empty first set covers both shapes uniformly: keep looping
