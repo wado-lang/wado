@@ -239,7 +239,7 @@ fn expand_template(
             continue;
         };
         push_run(out, cursor, expr_start, token_type::STRING);
-        let inner = lex_interpolation(expr, *origin);
+        let inner = lex_interpolation(expr, *origin, token.span.space);
         for i in 0..inner.tokens.len() {
             // A template nested in this one expands the same way.
             classify_into(&inner.tokens, i, ast_spans, sem_classes, out);

@@ -141,12 +141,13 @@ impl Parser {
     /// so the wire format keeps the `lexer error:` prefix distinct from
     /// `parse error:`.
     pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
+        let space = lex.space;
         Self::build(
             lex.tokens,
             lex.shebang,
             lex.data_section,
             lex.comments,
-            crate::ast::AstIdSpace::next(),
+            space,
         )
     }
 
@@ -155,13 +156,8 @@ impl Parser {
     /// thrown away — clearing it up front skips the per-AST-id comment-cursor
     /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
     pub fn from_lex_no_trivia(lex: crate::lexer::LexResult) -> Self {
-        Self::build(
-            lex.tokens,
-            lex.shebang,
-            lex.data_section,
-            Vec::new(),
-            crate::ast::AstIdSpace::next(),
-        )
+        let space = lex.space;
+        Self::build(lex.tokens, lex.shebang, lex.data_section, Vec::new(), space)
     }
 
     fn build(
@@ -6043,7 +6039,7 @@ impl Parser {
             });
         }
 
-        let lex_result = crate::lexer::lex_interpolation(expr_str, origin);
+        let lex_result = crate::lexer::lex_interpolation(expr_str, origin, self.ast_id_space);
         // Lex errors inside the interpolation surface alongside the outer
         // parser's diagnostics, at the offending byte rather than the whole
         // `{…}`.
