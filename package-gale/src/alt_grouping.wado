@@ -311,10 +311,11 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
     return ALT_PRIORITY_MULTI_RULE_REF_LED;
 }
 
-/// Sort `group` by mandatory match length, then `alt_sort_priority`, then
-/// source order, so the longer LL match among alts sharing a prefix is tried
-/// first. Counting only mandatory elements is the distinguisher: `( a b | a )`
-/// sorts the two-element alt first, `( a b? | a )` ties and falls to priority.
+/// Sort `group` by `ll_match_length`, then `alt_sort_priority`, then source
+/// order, so the longer LL match among alts sharing a prefix is tried first.
+/// `( a b | a )` sorts the two-element alt ahead on its mandatory `b`, and so
+/// does `( a b? | a )` where `b?` is first-exact; a nullable that is not falls
+/// to priority instead.
 pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) {
     let mut keyed: List<[i32, i32, i32]> = [];
     for let mut i = 0; i < group.len(); i += 1 {
