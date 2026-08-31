@@ -1,0 +1,52 @@
+// A `VariantCase::extract` payload is the enclosing scope's pack forwarded
+// through the case's payload parameter, so it must reach a free generic
+// function's type argument the same way a scalar type parameter does — by
+// reference, by value, through a local binding, and into a callee that returns
+// an aggregate.
+
+fn show_ref<P: Inspect>(payload: &P) -> String {
+    return `${payload:?}`;
+}
+
+// Same spelling as the pack in scope at the call site: the callee's own slot
+// must not be confused with the caller's forwarded one.
+fn show_value<P: Inspect>(payload: P) -> String {
+    return `${payload:?}`;
+}
+
+// A tuple return travels as N Wasm results, and the unit case's payload erases
+// its argument away — leaving the call under a prelude that must not name a
+// single result type.
+fn wrap<P: Inspect>(payload: &P) -> [String, String] {
+    return [show_ref(payload), show_value(*payload)];
+}
+
+fn render<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(v: &V) -> String {
+    let mut out = "";
+    for let case of ReflectVariant::<V>::members() {
+        if case.holds(v) && !case.is_unit() {
+            let pair = wrap(&case.extract(v));
+            let bound = case.extract(v);
+            out = `${case.name()}:${show_ref(&case.extract(v))}:${show_value(case.extract(v))}:${show_ref(&bound)}:${pair[0]}:${pair[1]}`;
+        }
+    }
+    return out;
+}
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Named(String),
+    Point,
+}
+
+test "an extracted payload infers a free generic function's type argument" {
+    assert render(&Shape::Circle(2.5)) == "Circle:2.5:2.5:2.5:2.5:2.5";
+    assert render(&Shape::Rectangle([3.0, 4.0]))
+        == "Rectangle:[3.0, 4.0]:[3.0, 4.0]:[3.0, 4.0]:[3.0, 4.0]:[3.0, 4.0]";
+    assert render(&Shape::Named("hi")) == `Named:"hi":"hi":"hi":"hi":"hi"`;
+    assert render(&Shape::Point) == "";
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,25 @@
+// A `!` payload has no Wasm representation, so it erases from the signature of
+// the free function it reaches — and every read of it in the body erases with
+// it. `Result<T, !>` is where an uninhabited payload reaches a walk.
+
+fn show<P: Inspect>(payload: &P) -> String {
+    return `${payload:?}`;
+}
+
+fn render<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(v: &V) -> String {
+    let mut out = "";
+    for let case of ReflectVariant::<V>::members() {
+        if case.holds(v) && !case.is_unit() {
+            out = show(&case.extract(v));
+        }
+    }
+    return out;
+}
+
+test "an uninhabited payload erases from the callee it reaches" {
+    let ok: Result<i32, !> = Result::<i32, !>::Ok(5);
+    assert render(&ok) == "5";
+}
+
+__DATA__
+{"test": {}}

@@ -373,7 +373,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut seen: IndexSet<&str> = IndexSet::default();
             let unique: Vec<&str> = named.into_iter().filter(|p| seen.insert(p)).collect();
             let blame = &owners[&key];
-            let _ = self.logger.error(TypeError::CannotInferType {
+            // The module being resolved owns every hole in the table.
+            let _ = self.emit(TypeError::CannotInferType {
                 message: blame.message(&unique),
                 span: blame.span,
             });

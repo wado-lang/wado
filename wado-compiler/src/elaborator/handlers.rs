@@ -138,12 +138,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 EffectRef::Param { name } => {
-                    let _ = self
-                        .logger
-                        .error(TypeError::GenericEffectParamNotInstallable {
-                            name: name.clone(),
-                            span: effect_ty.span(),
-                        });
+                    let _ = self.emit(TypeError::GenericEffectParamNotInstallable {
+                        name: name.clone(),
+                        span: effect_ty.span(),
+                    });
                 }
             }
         }
@@ -301,13 +299,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ref other => {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let type_kind = describe_resolved_type_kind(other);
-                let _ = self
-                    .logger
-                    .error(TypeError::BundledHandlerUnsupportedHandlerType {
-                        type_name,
-                        type_kind,
-                        span: binding.span,
-                    });
+                let _ = self.emit(TypeError::BundledHandlerUnsupportedHandlerType {
+                    type_name,
+                    type_kind,
+                    span: binding.span,
+                });
                 return;
             }
         }
@@ -316,12 +312,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let effects = self.collect_effect_impls_for_type(handler_type);
 
         if effects.is_empty() {
-            let _ = self
-                .logger
-                .error(TypeError::BundledHandlerImplementsNoEffect {
-                    type_name,
-                    span: binding.span,
-                });
+            let _ = self.emit(TypeError::BundledHandlerImplementsNoEffect {
+                type_name,
+                span: binding.span,
+            });
             return;
         }
 
@@ -506,9 +500,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         if !ctx.in_handler_method {
-            let _ = self
-                .logger
-                .error(TypeError::ResumeOutsideHandler { span: resume.span });
+            let _ = self.emit(TypeError::ResumeOutsideHandler { span: resume.span });
         }
 
         // Resolve the value with the surrounding method's return type as the

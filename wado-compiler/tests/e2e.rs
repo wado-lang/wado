@@ -167,6 +167,12 @@ struct TestSpec {
     #[serde(default)]
     compile_error_count: Option<usize>,
 
+    /// Substrings that must each appear in *some* error diagnostic. Where
+    /// `compile_error` pins the one the compilation failed with, this reaches
+    /// the ones behind it.
+    #[serde(default)]
+    compile_errors_contains: Vec<String>,
+
     /// Preopened directories, each `[template, guest_path]`. Every preopen is a
     /// fresh temp dir (see `prepare_preopened_dirs`). `template` seeds it:
     /// `""` for empty scratch, or a workspace-relative path to copy in.
@@ -734,8 +740,11 @@ fn run_normal_test(
         ..Default::default()
     };
 
-    // Try to compile the fixture, capturing compile-time warnings.
-    let (compile_result, warnings) = common::compile_capturing_warnings(
+    let common::CapturedCompile {
+        result: compile_result,
+        warnings,
+        errors,
+    } = common::compile_capturing_diagnostics(
         fixture_path,
         source,
         options,
@@ -757,6 +766,13 @@ fn run_normal_test(
         assert!(
             !warnings.iter().any(|w| w.contains(unexpected)),
             "[{test_id}] warning must not contain {unexpected:?}\n  warnings: {warnings:?}"
+        );
+    }
+
+    for expected in &spec.compile_errors_contains {
+        assert!(
+            errors.iter().any(|e| e.contains(expected)),
+            "[{test_id}] expected an error containing {expected:?}\n  errors: {errors:?}"
         );
     }
 

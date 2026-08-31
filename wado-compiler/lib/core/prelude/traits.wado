@@ -807,6 +807,22 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Inspect for E {
     }
 }
 
+/// A non-unit case's payload in parens; the alternate (`#`) form puts it on its
+/// own indented line.
+fn inspect_variant_payload<P: Inspect>(payload: &P, f: &mut Formatter) {
+    if f.alternate {
+        f.open_brace("(");
+        f.write_newline_indent();
+        payload.inspect(f);
+        f.write_str(&",");
+        f.close_brace(")");
+        return;
+    }
+    f.write_str(&"(");
+    payload.inspect(f);
+    f.write_str(&")");
+}
+
 /// Variant debug formatting derived over `ReflectVariant` (WEP 2026-06-13):
 /// write `Name::Case`, then the payload in parens unless the case is unit.
 impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
@@ -817,19 +833,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
                 f.write_str(&"::");
                 f.write_str(&case.name());
                 if !case.is_unit() {
-                    // Alternate puts the payload on its own indented line;
-                    // a unit case is the bare name either way.
-                    if f.alternate {
-                        f.open_brace("(");
-                        f.write_newline_indent();
-                        case.extract(self).inspect(f);
-                        f.write_str(&",");
-                        f.close_brace(")");
-                    } else {
-                        f.write_str(&"(");
-                        case.extract(self).inspect(f);
-                        f.write_str(&")");
-                    }
+                    inspect_variant_payload(&case.extract(self), f);
                 }
             }
         }
