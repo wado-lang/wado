@@ -1,5 +1,5 @@
 // Test: Stream::read() compiles and handles closed writer (EOF)
-// When the writer is closed before reading, read returns an empty array.
+// When the writer is closed before reading, read reports `Dropped` with no items.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -8,9 +8,10 @@ export fn run() with Stdout {
     // Close the writer so reader sees EOF
     tx.drop();
 
-    // Read from the readable end - should get empty (EOF since writer closed)
-    let result = rx.read(64);
-    assert result.len() == 0;
+    // Read from the readable end - should report the writable end dropped
+    let chunk = rx.read(64);
+    assert chunk.items.len() == 0;
+    assert chunk.result == CopyResult::Dropped;
 
     rx.drop();
     println("read ok");

@@ -55,14 +55,7 @@ pub fn read_file(root: &Descriptor, path: &String) -> Option<String> with Stderr
         },
     };
     let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut bytes: List<u8> = [];
-    loop {
-        let chunk = read_stream.read(65536);
-        if chunk.len() == 0 {
-            break;
-        }
-        bytes.extend(&chunk);
-    }
+    let bytes = read_stream.read_to_end();
     read_stream.drop();
     return match String::from_utf8(bytes) {
         Ok(s) => Option::Some(s),

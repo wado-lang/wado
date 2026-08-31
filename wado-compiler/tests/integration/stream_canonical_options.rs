@@ -20,7 +20,7 @@ export fn run() with (Stdout, Stdin) {
     let [stdin_stream, _done] = Stdin::read_via_stream();
     let chunk = stdin_stream.read(16);
     stdin_stream.drop();
-    println(`read ${chunk.len()} bytes`);
+    println(`read ${chunk.items.len()} bytes`);
 }
 "#;
 

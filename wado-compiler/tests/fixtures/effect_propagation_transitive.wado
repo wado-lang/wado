@@ -10,7 +10,7 @@ use { println, Stdout } from "core:cli";
 // Never called at runtime — we only want to verify effect-check accepts the body.
 pub fn writes_via_stdout() with Stdout {
     let [rx, tx] = Stream::<u8>::new();
-    tx.write([42 as u8]);
+    tx.write_all([42 as u8]);
     tx.drop();
     rx.drop();
 }
