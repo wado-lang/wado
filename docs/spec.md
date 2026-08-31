@@ -1063,6 +1063,9 @@ fn translate(p: &mut Point, dx: i32, dy: i32) {
 }
 ```
 
+These semantics are as-if. A program may rely on the value each expression
+denotes; it may not rely on the number of copies performed to produce it.
+
 ## Type System
 
 ### Type Mapping at Component Boundaries

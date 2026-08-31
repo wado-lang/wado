@@ -120,11 +120,9 @@ Take:
 - [ ] Gate self-tests and a gate registry. A check script with no test is a
       claim nobody checked; vibe pairs most of its gates with a `_test.sh` and
       keeps a registry gate over the set.
-- [ ] The `proposed` advancement rule for WEPs: a proposal must state what
-      would make it accepted, and one that has not moved in a cycle is deleted
-      rather than left standing. This composes with Wado's rule that only the
-      human decides, and is a lighter alternative to the falsifier field
-      proposed in the [Almide survey](./research-language-survey-almide.md).
+- [x] The `proposed` advancement rule — Wado already has it. `docs/CLAUDE.md`
+      requires an unfinished mechanism to be a "Known gap" stating what is
+      missing and what closing it takes, which is the same obligation.
 
 Refuse:
 

@@ -131,14 +131,20 @@ Take, in order of cost to value:
       borrow checker, `unsafe`, macros, dynamic dispatch, and ASI live nowhere,
       so an agent re-derives them each time. The operating rule matters as much
       as the list.
-- [ ] An inventory of hidden operations. Wado's philosophy claims more here than
-      Almide's — "the code you read is the code that runs" — while value-copy
-      insertion and elision, bound-driven derivation of `Eq`/`Ord`/`Default`/
-      `Serialize`, literal coercion, `&mut` to `&` coercion, reference
-      write-back, and monomorphization are each documented only in their own WEP.
-      There is no list. Publishing one is the principle being kept.
-- [ ] A falsifier field in the WEP template. One line, and it composes with the
-      existing rule that only the human decides.
+- [x] An inventory of hidden operations — checked against `spec.md` and not
+      needed. The operations that change what a program means are already
+      specified there: bound-driven derivation of `Eq` / `Ord` / `Default` /
+      `Serialize`, integer / float / sequence / collection literal coercion, and
+      the automatic `&mut` to `&` coercion each have their own section. Nothing
+      of Almide's shape remains to inventory, because Wado does not insert
+      copies and then remove them — defensive copies are chosen once by the
+      ownership analysis at lowering, so there is no elision pass and no
+      user-written `.copy()` for one to defeat. What was missing was only the
+      as-if statement bounding what a program may rely on, now in
+      [Memory Model](./spec.md#memory-model). How `&mut` is realized is an
+      implementation detail and stays in its WEP.
+- [ ] A falsifier field in the WEP template — declined. A decision may rest on
+      a preference.
 
 Refuse:
 
