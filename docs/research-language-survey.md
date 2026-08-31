@@ -29,8 +29,8 @@ A missing feature is either "not built yet" or "decided against". The first
 resolves with time and says nothing about the design; the second is the design.
 Every surface axis carries this column.
 
-Implementation maturity is not an axis. It appears once, as a context line in
-the header, and is never scored.
+Implementation maturity is not itself an axis. It appears once, as a context
+line in the header, and is never scored.
 
 ## A. Surface
 
@@ -82,7 +82,7 @@ Why the language is the way it is, and what keeps that honest.
 | B1 Arbiter | Is there one sentence settling what wins when goals conflict? Record its form — a single maximized metric, or a priority order over several values — and whether it opens the philosophy document or closes it |
 | B2 Accept/reject criteria | Numeric, or taste? |
 | B3 The "why" axis | Roadmap records what is next and the spec records what is; is the reasoning behind a decision recorded anywhere? |
-| B4 Falsifier | Does the decision template require "what would retract this"? |
+| B4 Falsifier | Does the decision template require a condition on the decision — what would retract it, or what would advance it out of "proposed"? |
 | B5 Rejection record | Is there a list of designs considered and refused, with reasons and an operating rule for citing it? |
 | B6 Sync gate | Does CI fail when a public claim stops being true? Over what scope? |
 | B7 Self-reported violations | Does the project document where it currently breaks its own invariants, with file and line? |
@@ -135,7 +135,7 @@ finding.
 ```markdown
 # Research: Language Survey — <name>
 
-<commits> commits / first <date> / surveyed at <sha> <date>
+`<repo>` — <n> commits / first <date> / surveyed at <sha> <date>
 
 Arbiter: "<one sentence, quoted>" (opens / closes the philosophy document)
 
@@ -157,6 +157,12 @@ Arbiter: "<one sentence, quoted>" (opens / closes the philosophy document)
 - Refuse (why):
 - Hold:
 ```
+
+Take carries open work and nothing else, so every box in it is unchecked.
+Anything settled the other way goes under Refuse with its reason — including
+what turned out to be already present, and what was checked and found
+unnecessary. A survey re-read a year on has to show which candidates were
+looked at and declined, not only which were adopted.
 
 ## Surveys
 

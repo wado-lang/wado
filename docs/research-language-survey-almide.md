@@ -20,11 +20,11 @@ its tests after a series of AI-driven edits.
 | Axis | Claim | Reality | Holds in self-application | Unimplemented / Rejected |
 | --- | --- | --- | --- | --- |
 | A1 Canonicity | "One name per operation, no aliases" (`DESIGN.md`); the cheatsheet lists `string.length` as wrong | Prose convention only; nothing checks it | No — `stdlib/string_len.almd` defines `string.length` as an alias of `string.len`, and `list.len`/`list.length` both map to `almide_rt_list_len` | — |
-| A2 Type vocabulary | Invented; primitives cut to `Int`, `Float`, `String`, `Bool`, `Unit`, `Path` | Sized integers exist as conversion modules (`int8`…`uint64`) reached by UFCS, not as surface types | — | Rejected: no external ABI to mirror |
+| A2 Type vocabulary | Invented; primitives cut to `Int`, `Float`, `String`, `Bool`, `Unit`, `Path` | Sized integers exist as conversion modules (`int8`…`uint64`) reached by UFCS, not as surface types. There is no external ABI the vocabulary has to mirror | — | — |
 | A3 Effects | `effect fn` marks I/O; a pure fn cannot call one (E006) | One bit. No effect names, no polymorphism, no handlers | Yes | Rejected — `REJECTED_PATTERNS.md` refuses algebraic effects, citing Gleam |
 | A4 Errors | `Result[T, E]` only; `T!` is `Result[T, String]`, `T!E` is `Result[T, E]`, `T?` is `Option[T]` | Propagation is `!` and always explicit (ADR-0008 abolished auto-`?`); `!` never converts `E`, a mismatch stays a type error (ADR-0003) | Yes | Rejected: exceptions, `null`, implicit conversion at propagation |
 | A5 Concurrency | `fan`, structured, no async/await | Deterministic by construction: `fan.race` picks the winner by least compute spent, ties by source order, same answer on every target and machine. `Compute` and `Duration` are separate types; a bare `Int` is not a time and there are no literal suffixes | Yes | Rejected: async/await (function colouring), goroutines, exposed `Future[T]` |
-| A6 Code generation | No macros, no reflection | Generation lives in TOML definitions plus `build.rs` | — | Rejected |
+| A6 Code generation | No macros, no reflection | Generation lives in TOML definitions plus `build.rs` | — | Rejected: macros, reflection, monkey patching |
 | A7 Hidden operations | Zig's "no hidden control flow" cited, then deliberately departed from | `docs/design/HIDDEN_OPERATIONS.md` enumerates five, each with trigger condition, implementing file, and user impact: clone insertion, runtime embedding, Perceus RC insertion, `fan` threading, and one entry recording that auto-`?` was removed | — | — |
 
 A4 carries a doctrine the other axes do not. `E = String` is the reporting
@@ -125,29 +125,27 @@ yardstick.
 
 ## For Wado
 
-Take, in order of cost to value:
+Take:
 
 - [ ] A rejection record. Wado has none; the reasons for refusing lifetimes, a
       borrow checker, `unsafe`, macros, dynamic dispatch, and ASI live nowhere,
       so an agent re-derives them each time. The operating rule matters as much
       as the list.
-- [x] An inventory of hidden operations — checked against `spec.md` and not
-      needed. The operations that change what a program means are already
-      specified there: bound-driven derivation of `Eq` / `Ord` / `Default` /
-      `Serialize`, integer / float / sequence / collection literal coercion, and
-      the automatic `&mut` to `&` coercion each have their own section. Nothing
-      of Almide's shape remains to inventory, because Wado does not insert
-      copies and then remove them — defensive copies are chosen once by the
-      ownership analysis at lowering, so there is no elision pass and no
-      user-written `.copy()` for one to defeat. What was missing was only the
-      as-if statement bounding what a program may rely on, now in
-      [Memory Model](./spec.md#memory-model). How `&mut` is realized is an
-      implementation detail and stays in its WEP.
-- [ ] A falsifier field in the WEP template — declined. A decision may rest on
-      a preference.
 
 Refuse:
 
+- An inventory of hidden operations. Checked against `spec.md`: the operations
+  that change what a program means are already specified there — bound-driven
+  derivation of `Eq` / `Ord` / `Default` / `Serialize`, integer / float /
+  sequence / collection literal coercion, and the automatic `&mut` to `&`
+  coercion each have their own section. Nothing of Almide's shape remains,
+  because Wado does not insert copies and then remove them: defensive copies are
+  chosen once by the ownership analysis at lowering, so there is no elision pass
+  and no hand-written `.copy()` for one to defeat. The only omission was the
+  as-if statement bounding what a program may rely on, now in
+  [Memory Model](./spec.md#memory-model). How `&mut` is realized is an
+  implementation detail and stays in its WEP.
+- A falsifier field in the WEP template. A decision may rest on a preference.
 - A contract ledger. Almide needs one because two backends implement the
   semantics separately; Wado has one target and golden fixtures already cover
   the ground.

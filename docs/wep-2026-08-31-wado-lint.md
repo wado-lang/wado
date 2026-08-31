@@ -50,8 +50,7 @@ carries per-package configuration, alongside the existing `[format]` and
 Findings exit non-zero.
 
 The analysis is a library, separate from the command, so the LSP can call it on
-save or from a code action later. The reverse order — embedding it in
-elaboration and lifting it out afterwards — is not available.
+save or from a code action later.
 
 ### The first check: duplicate implementations
 
@@ -91,10 +90,9 @@ runs only within a bucket.
 
 ### The standard library is index-side only
 
-The stdlib is indexed and matched against; it never receives a finding. This
-inverts the rule in Unused Diagnostics, where the stdlib is excluded from
-reporting because it is not the user's code — here it is excluded as a target
-for the same reason, while remaining the most valuable source.
+The stdlib is indexed and matched against; it never receives a finding. Unused
+Diagnostics excludes it from reporting for the same reason — it is not the
+reader's code to fix — and this check adds the second role without the first.
 
 ### Exclusions
 
@@ -122,15 +120,13 @@ quadratic over pairs, and the corpus is the whole standard library.
 ## Consequences
 
 An agent that writes `fn strip_leading_spaces` is told `String::trim_start`
-exists, which is the case this check is for. The finding names the existing
-declaration and its location, and proposes the call that replaces it when the
-signatures allow.
+exists. The finding names the existing declaration and its location, and
+proposes the call that replaces it when the signatures allow.
 
 The check is not available while typing. It runs from the CLI, from CI, and
 from the completion flow, and reaches the LSP only once the library is wired to
-it. This is the intended trade: the check is worth running when a function is
-finished, not on each keystroke, and a body mid-edit does not type-check and so
-cannot be canonicalized at all.
+it. A body mid-edit does not type-check and so cannot be canonicalized at all,
+so what is given up is a check on a function that is not finished.
 
 `wado lint` is a new user-facing command and a new surface to keep. It is
 introduced as a container rather than as a single check so that the second

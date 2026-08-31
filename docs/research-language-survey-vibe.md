@@ -25,9 +25,9 @@ wrong above P1 = crashes.
 | A1 Canonicity | "One concept, one spelling" | Mechanized, not asserted: a gate verifies documented signatures against the compiler, another enforces the canonical call form, doctest compiles every `vibe` block in the docs. A block that must not compile is marked `vibe skip` and carries a `doctest-skip:` comment giving the reason, so a "do not write this" example stays in the document without exempting the gate. `AGENTS.md` marks decided-but-not-landed rules inline and warns not to read them as today's behaviour | Yes | Landing: structural `==` in every context, constructor-polymorphic pipeline combinators, `Exception` over `Error` at the 1.0 freeze |
 | A2 Type vocabulary | Own surface, representations chosen to match wasm and WIT without friction | A value is a tagged i64; `String` is a byte string indexed by byte offset (ADR-0098, "semantics that match what the memory actually is"); what may cross a WIT boundary is decided by nominal rules (ADR-0089) | Yes | — |
 | A3 Effects | Row-polymorphic effect types with handlers; capabilities ride the row | `fn main with Console`, `with Exception + Fs`, `handle { … } with Exception[String] { … }`. Deno-style permissions cross Koka-style effects: authority is fixed once in the earliest phase and immutable while running; `--allow-*` const-folds and dead-code-eliminates ungranted capabilities, and the emitted binary declares the wasm feature level it needs | Yes | — |
-| A4 Errors | Failure travels in the effect row, not in a return-type wrapper | `fn safe_div(a: Int, b: Int) -> Int with Exception[String]` — the success value flows straight through, and `handle` discharges the row at one site instead of unwrapping per call | Yes | Checked Error policy is the adopted static rule; formalized in Lean, with ambient Error retained as a rejected comparison witness |
+| A4 Errors | Failure travels in the effect row, not in a return-type wrapper | `fn safe_div(a: Int, b: Int) -> Int with Exception[String]` — the success value flows straight through, and `handle` discharges the row at one site instead of unwrapping per call. The checked Error policy is the adopted static rule and is formalized in Lean | Yes | Rejected: ambient Error, kept in the Lean model as a negative witness |
 | A5 Concurrency | Structured, shared-nothing | `TaskGroup` plus `Send`/region checks. Async syntax exists behind `--unstable-async`. Continuations designed against wasm-gc typed reference lanes, stack switching today, JSPI as an alternate backend | Yes | Real threads deferred, but the representation is chosen for them |
-| A6 Code generation | No macros | `derive(Eq, Show)` on declarations; the executable book generates its own output | — | — |
+| A6 Code generation | No macros | `derive(Eq, Show)` on declarations. Where generation was pushed instead was not examined | — | — |
 | A7 Hidden operations | Not claimed either way | Perceus reference counting is inserted, monomorphization runs, ungranted capabilities are eliminated. Each is documented in its own file; there is no single inventory. The cheatsheet's measured-pitfalls section covers part of the ground from the other side, recording observed behaviour rather than compiler steps | — | Gap, not a decision |
 
 ### The self-application cross-check
@@ -109,39 +109,32 @@ Almide, from a different arbiter. The self-hosted compiler is not counted here:
 it is worth nothing if the language stops, which is what makes it an A
 cross-check rather than spin-off value.
 
-The measured-pitfalls section of the cheatsheet is the strongest of these, and
-the cheapest to copy, because the difference from an ordinary list of common
-mistakes is entirely in how it is written. Its opening states the rule: every
-entry is measured against the current compiler rather than read out of the
-specification, and the section exists so that nobody investigates the same
-question twice. Entries carry the date and name the test that pins them.
+The measured-pitfalls section states its purpose as keeping anyone from
+investigating the same question twice, and two of its entries record the section
+having been wrong. One had quoted a diagnostic's own enumeration as the rule;
+measuring it showed that four of the shapes the message named as rejected in
+fact compile, and that the two which fail do so for reasons the message never
+mentioned — the message was rewritten and a measured table replaced the
+enumeration. The other notes that the cheatsheet had the declaration separator
+backwards in the very place that explains it.
 
-Two of them record the section being wrong. One had quoted a diagnostic's own
-enumeration as the rule; measuring it showed that four of the shapes the
-message named as rejected in fact compile, and that the two which fail do so
-for reasons the message never mentioned — the message was rewritten and a
-measured table replaced the enumeration. The other notes that the cheatsheet
-had the declaration separator backwards in the very place that explains it.
+Its lead entry shows what the format is for. A library that defines
+`fn String::index_of` replaces the builtin of that name across the whole linked
+program: a file that imports only some unrelated function from that library gets
+the replacement, nothing is reported either way, and the two readings of one
+source are indistinguishable without running it. The measured cost is 0.8 us
+against the builtin and 174 us against the shadowing definition, and the answers
+differ as well as the speed. A lexical scanner built to catch the hazard missed
+it three ways — a raw identifier, a preceding declaration attribute, and a
+declaration split across lines — from which the entry concludes that deciding
+what a declaration binds is the compiler's job.
 
-Its lead entry is a good argument for the section existing at all. A library
-that defines `fn String::index_of` replaces the builtin of that name across the
-whole linked program: a file that imports only some unrelated function from that
-library gets the replacement, nothing is reported either way, and the two
-readings of one source are indistinguishable without running it. The measured
-cost is 0.8 us against the builtin and 174 us against the shadowing definition,
-and the answers differ as well as the speed. The entry also records that a
-lexical scanner built to catch the hazard missed it three ways — a raw
-identifier, a preceding declaration attribute, and a declaration split across
-lines — and concludes that deciding what a declaration binds is the compiler's
-job.
-
-`docs/pl-survey-2026-07.md` deserves separate mention because it is this
-document's own genre, done first. It surveys sixteen topics from primary
-sources, and it surveys Almide specifically — down to naming
-`almide-mir/src/alias_safety.rs` as ahead of vibe's own Perceus work, and
-recording that Almide's binary-size benchmark method and its modification
-survival rate were both adopted, with the issue numbers where they landed. The
-`eval/msr/` README states the borrowing outright.
+`docs/pl-survey-2026-07.md` is this document's own genre, done first, and it
+surveys Almide specifically — down to naming `almide-mir/src/alias_safety.rs` as
+ahead of vibe's own Perceus work, and recording that Almide's binary-size
+benchmark method and its modification survival rate were both adopted, with the
+issue numbers where they landed. The `eval/msr/` README states the borrowing
+outright.
 
 ## For Wado
 
@@ -167,9 +160,6 @@ Take:
 - [ ] Gate self-tests and a gate registry. A check script with no test is a
       claim nobody checked; vibe pairs most of its gates with a `_test.sh` and
       keeps a registry gate over the set.
-- [x] The `proposed` advancement rule — Wado already has it. `docs/CLAUDE.md`
-      requires an unfinished mechanism to be a "Known gap" stating what is
-      missing and what closing it takes, which is the same obligation.
 
 Refuse:
 
@@ -185,6 +175,9 @@ Refuse:
   the annotated code, so the annotation breaks for reasons its own body did not
   cause. [Optimizer Remarks](./wep-2026-06-03-optimizer-remarks.md) reports the
   same facts to the reader who can act on them.
+- The `proposed` advancement rule. `docs/CLAUDE.md` already requires an
+  unfinished mechanism to be a "Known gap" stating what is missing and what
+  closing it takes, which is the same obligation.
 - Citing vibe's program-wide shadowing measurement in
   [`wado lint`](./wep-2026-08-31-wado-lint.md) as evidence that a check must
   resolve declarations rather than spellings.
