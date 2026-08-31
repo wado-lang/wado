@@ -149,14 +149,10 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         ))
     }
 
-    /// Name the file a located diagnostic's coordinates index, taking it from
-    /// the span's own parse.
-    ///
-    /// This overrides what a caller supplied: the reporting walk's module is
-    /// the ambient answer, and a body walked away from home — a trait's default
-    /// synthesized into an impl — is exactly where ambient is wrong. It also
-    /// reaches a diagnostic raised after that walk moved on, which nothing
-    /// ambient can.
+    /// Name the file a located diagnostic's coordinates index, from the span's
+    /// own parse. This outranks what a caller supplied: a body walked away from
+    /// home — a trait's default synthesized into an impl — is where the
+    /// reporting walk's module is the wrong answer.
     fn attributed(&self, mut diag: Diagnostic) -> Diagnostic {
         if let Some(span) = diag.span.as_mut()
             && let Some(file) = self.file_of_parse(span.space)

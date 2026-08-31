@@ -266,11 +266,10 @@ pub struct Span {
     /// For multi-line or multi-byte content, callers must supply the value explicitly
     /// via `Span::with_end`; lexer tracks this via its own cursor state.
     pub end_column: usize,
-    /// The parse whose text these offsets index. Stamped by [`crate::lexer::lex`]
-    /// onto everything it produces, and carried through every span derived from
-    /// one, so a location stays whole however far it travels from the walk that
-    /// read it. [`crate::ast::AstIdSpace::FRESH`] for a synthesized span, which
-    /// indexes no text.
+    /// The parse whose text these offsets index, so a location stays whole
+    /// however far it travels from the walk that read it.
+    /// [`crate::ast::AstIdSpace::FRESH`] for a synthesized span, which indexes
+    /// no text.
     pub space: crate::ast::AstIdSpace,
 }
 
@@ -351,8 +350,7 @@ impl Span {
         }
     }
 
-    /// Say which parse's text this span indexes. Applied by
-    /// [`crate::lexer::lex`] to everything one run produced.
+    /// Say which parse's text this span indexes.
     pub fn in_space(mut self, space: crate::ast::AstIdSpace) -> Self {
         self.space = space;
         self

@@ -8,9 +8,8 @@ use crate::token::Span;
 /// stamps it into every id, so a full [`AstId`] is globally unique while
 /// [`AstId::local`] stays dense per module; sub-parsers continue an existing
 /// space. Ids identify a *parse* and never survive a re-parse.
-///
 /// [`crate::token::Span`] carries one too, which is what lets a span say which
-/// text its offsets index — see [`crate::logger::SourceMap`].
+/// text its offsets index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstIdSpace(u32);
 

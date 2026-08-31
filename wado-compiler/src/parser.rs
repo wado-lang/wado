@@ -126,11 +126,11 @@ impl Parser {
     /// comments flow through.
     pub fn new(tokens: Vec<Token>) -> Self {
         Self::build(
+            crate::ast::AstIdSpace::next(),
             tokens,
             None,
             None,
             Vec::new(),
-            crate::ast::AstIdSpace::next(),
         )
     }
 
@@ -141,13 +141,12 @@ impl Parser {
     /// so the wire format keeps the `lexer error:` prefix distinct from
     /// `parse error:`.
     pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
-        let space = lex.space;
         Self::build(
+            lex.space,
             lex.tokens,
             lex.shebang,
             lex.data_section,
             lex.comments,
-            space,
         )
     }
 
@@ -156,16 +155,21 @@ impl Parser {
     /// thrown away — clearing it up front skips the per-AST-id comment-cursor
     /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
     pub fn from_lex_no_trivia(lex: crate::lexer::LexResult) -> Self {
-        let space = lex.space;
-        Self::build(lex.tokens, lex.shebang, lex.data_section, Vec::new(), space)
+        Self::build(
+            lex.space,
+            lex.tokens,
+            lex.shebang,
+            lex.data_section,
+            Vec::new(),
+        )
     }
 
     fn build(
+        ast_id_space: crate::ast::AstIdSpace,
         tokens: Vec<Token>,
         shebang: Option<String>,
         data_section: Option<String>,
         comments: Vec<crate::comment::Comment>,
-        ast_id_space: crate::ast::AstIdSpace,
     ) -> Self {
         // Filter `TokenKind::Error` tokens at construction time so no parser
         // path can mistake one for an identifier or generate a duplicate
@@ -6056,7 +6060,7 @@ impl Parser {
         // in the parent's space avoids minting — and wasting — a fresh space
         // per interpolation.
         let mut parser =
-            Parser::build(lex_result.tokens, None, None, Vec::new(), self.ast_id_space);
+            Parser::build(self.ast_id_space, lex_result.tokens, None, None, Vec::new());
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
