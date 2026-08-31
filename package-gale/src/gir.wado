@@ -466,8 +466,8 @@ pub variant Admits {
     Everything(List<String>),
     /// No lookahead decides it; it belongs after every testable arm.
     Untestable,
-    /// Never empty: an empty set is `Everything` or `Untestable`, and which
-    /// one is not a property of the set.
+    /// Never empty — build it through `admits_kinds_of` or one of the two
+    /// readings of an empty set, which assert it.
     Kinds(List<String>),
 }
 
@@ -513,13 +513,22 @@ pub fn admits_kinds(admits: &Admits) -> List<String> {
     };
 }
 
+/// A set that narrows, for a caller that has already ruled out empty. The two
+/// readings of an empty set are `admits_or_everything` and
+/// `admits_or_untestable`; construct through one of the three, never the
+/// variant, so the invariant is checked where it can still be attributed.
+pub fn admits_kinds_of(kinds: &List<String>) -> Admits {
+    assert !kinds.is_empty(), "an empty set is `Everything` or `Untestable`, and which one is not a property of the set";
+    return Admits::Kinds(*kinds);
+}
+
 /// A set that narrows the lookahead, where having none means nothing is
 /// excluded — a wildcard-led alternative, a guard with no first set to test.
 pub fn admits_or_everything(kinds: &List<String>) -> Admits {
     if kinds.is_empty() {
         return admits_everything();
     }
-    return Admits::Kinds(*kinds);
+    return admits_kinds_of(kinds);
 }
 
 /// A set that selects, where having none to select by means the lookahead
@@ -528,7 +537,7 @@ pub fn admits_or_untestable(kinds: &List<String>) -> Admits {
     if kinds.is_empty() {
         return Admits::Untestable;
     }
-    return Admits::Kinds(*kinds);
+    return admits_kinds_of(kinds);
 }
 
 /// What an alternative matches. `alt_class` in `alt_grouping` is the only
