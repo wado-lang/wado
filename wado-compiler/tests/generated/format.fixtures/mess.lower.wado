@@ -4939,9 +4939,29 @@ pub fn "core:prelude/int128.wado/u128::div_rem"(self: &u128, divisor: &u128) -> 
             let estimate: u64 = __pattern_temp_1.0;
             __pattern_temp_1.1;
             let mut q: u64 = (estimate >> (63 - n));
-            if (q != 0) {
-                q = (q - 1);
+            __assert_0: {
+                let __cond: bool = (q != 0);
+                if !__cond {
+                    core::builtin::cold_path();
+                    core::rt::panic(__tmpl: {
+                        let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(112);
+                        __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
+                        __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"u128::div_rem", used: 13 });
+                        __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
+                        __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/int128.wado", used: 24 });
+                        __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
+                        let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                        Box<i32> { value: 306 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                        __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: q != 0\n", used: 19 });
+                        __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"q: ", used: 3 });
+                        __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                        Box<u64> { value: q }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                        __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                        break __tmpl: __r;
+                    });
+                }
             }
+            q = (q - 1);
             let mut rem: u128 = *self."core:prelude/int128.wado/u128^core:prelude/traits.wado/Sub::sub"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(q)."core:prelude/int128.wado/u128^core:prelude/traits.wado/Mul::mul"(&*divisor));
             if (rem."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&*divisor) != Ordering::Less) {
                 q = (q + 1);
