@@ -36,8 +36,8 @@ Every kind spells its member channel the same way: `type Members` plus
 `fn members()`. A kind that has payloads adds a payload pack alongside it. The
 type's scalar facts and the value→member build direction round out each trait.
 Every per-member fact — name, wire override, doc, `is_unit` / `has_default` /
-`is_secret`, validation, value access — lives on the member, so no kind carries a
-parallel metadata list or value accessor.
+`is_secret`, value access — lives on the member, so no kind carries a parallel
+metadata list or value accessor.
 
 ```wado
 internal trait ReflectStruct {                    // struct
@@ -133,8 +133,8 @@ reads.
 ## Members
 
 Every reflected member is a handle implementing the sealed `Member` trait — the
-shared attr-reading face, so wire-naming, validation, and doc logic is written
-once and reused across kinds.
+shared attr-reading face, so wire-naming and doc logic is written once and
+reused across kinds.
 
 ```wado
 internal trait Member {
@@ -143,8 +143,8 @@ internal trait Member {
     fn doc(&self) -> Option<String>;                 // /// doc comment
 }
 
-struct StructField<T, F> { … }  // Member + index() has_default() is_secret() validate() get(&self, v: &T) -> F
-struct VariantCase<T, P> { … }  // Member + discriminant() is_unit() validate() holds(&v) extract(&v) -> P construct(P) -> T make() -> T
+struct StructField<T, F> { … }  // Member + index() has_default() is_secret() get(&self, v: &T) -> F
+struct VariantCase<T, P> { … }  // Member + discriminant() is_unit() holds(&v) extract(&v) -> P construct(P) -> T make() -> T
 struct EnumCase<T>       { … }  // Member + discriminant() holds(&v) make() -> T
 struct FlagsBit<T>        { … }  // Member + bit() is_set(&v) set() -> T
 ```
@@ -155,8 +155,7 @@ derivation walking the case members writes one body per case, and
 that is not unit, like every other value bridge over a mismatched member.
 
 Members are sealed to these four stdlib types and minted only by `members()`
-(their fields are private), so a program cannot forge one. `validate()` is only on
-the value-bearing members (`Field` / `VariantCase`). A `#[secret]` field reports
+(their fields are private), so a program cannot forge one. A `#[secret]` field reports
 `is_secret()` and takes the value-opaque `Secret<F>` projection in `FieldTypes`
 (see [Struct Walkability](./wep-2026-07-10-struct-walkability.md)).
 
@@ -168,6 +167,12 @@ Reflection stops at these four handles: they are themselves generic structs, and
 a handle's own `Members` would mention `StructField<Self, …>`, growing `Self`
 without bound. They are not reflectable, by the same seal that rejects a user
 `impl`.
+
+A member carries no validation. A value's permitted range is a fact about the
+field's _type_, not about the field, so it is declared once on that type through
+`core:serde`'s `Constrained` and read from there by every boundary and by a
+schema library alike (see [Serde](./wep-2026-02-28-serde.md)). Reflection stays
+what the compiler alone can answer: a type's structure.
 
 ## Type identity
 
@@ -336,35 +341,6 @@ the six styles (`camelCase`, `snake_case`, `PascalCase`, `SCREAMING_SNAKE_CASE`,
 tags, so "wire name" is the boundary-facing name in general, not a serde-only
 concept.
 
-## `#[validate(…)]`
-
-A single generic, built-in attribute with a closed vocabulary, owned by no
-library:
-
-```wado
-struct CreateUser {
-    #[validate(min_length = 1, max_length = 64)]
-    user_name: String,
-    #[validate(format = "email")]
-    email: String,
-    #[validate(minimum = 0, maximum = 150)]
-    age: i32 = 0,
-}
-```
-
-Recognized keys: `min_length` / `max_length`, `minimum` / `maximum` /
-`exclusive_minimum` / `exclusive_maximum`, `multiple_of`, `pattern`, `format`,
-`min_items` / `max_items`, `unique_items`. The compiler parses them into a
-`Validate` value — a struct of `Option` fields, one per key — which is:
-
-- Enforced at the `Deserialize` boundary: a violation is a `DeserializeError`
-  (`InvalidValue`) with the field offset. Trusted struct literals are not checked.
-- Exposed via the member: `StructField::validate()` / `VariantCase::validate()`, so a
-  schema library emits the corresponding keywords.
-
-`description` is not a `#[validate]` concern — it comes from `///` doc comments via
-`Member::doc()`.
-
 ## Known gaps
 
 The reflection traits, the member handles, the wire-naming split, and the
@@ -377,22 +353,6 @@ library reads and nothing else yet does.
   comment lives in the `TriviaMap` that `wado doc` reads — so closing this is
   plumbing that string through `TirField` into the synthesized member, beside
   the wire-name override that already travels that path.
-- `#[validate(…)]`, end to end. Carrying it mirrors `#[secret]` and
-  `#[wire(name)]`: the `Validate` value joins the serde facts on `TirField`, the
-  member handles gain the field and the accessor, and the members literal gains
-  one element. Two pieces are new. An attribute argument's value is a string or a
-  string array today, so `min_length = 1` does not parse and the parser needs a
-  numeric key-value; and an unrecognized key must be rejected, since the
-  vocabulary is closed while an unknown attribute is silently ignored today.
-- How `#[validate]` enforcement dispatches is open. The `Deserialize` blanket
-  sees a field only as a pack element `F` constrained by its bounds, so it cannot
-  apply `min_length` to a string and `min_items` to a list without a per-type
-  check reached through a bound — a trait implemented for the string, numeric,
-  and sequence types, with a no-op blanket over the reflected kinds, in the shape
-  `Serialize` already takes. Whether the check belongs on that bound or in the
-  format layer, whether a rule sees through `Option<F>`, and where the violated
-  field's offset comes from are undecided; the first is what settles the other
-  two.
 - `TypeInfo` is designed above and unimplemented. Nothing in the tree needs a new
   mechanism — it is a sealed handle minted like a member — but the four
   `type_info()` bodies are per-instantiation, so they follow `type_name()`'s
