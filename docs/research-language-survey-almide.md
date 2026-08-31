@@ -2,8 +2,8 @@
 
 Survey against [the rubric](./research-language-survey.md).
 
-7827 commits / first 2026-03-07 / surveyed at b900c57ed 2026-08-31
-([almide/almide](https://github.com/almide/almide))
+`almide/almide` — 7827 commits / first 2026-03-07 / surveyed at b900c57ed
+2026-08-31
 
 Arbiter: "Almide optimizes for minimal thinking tokens: the less an LLM has to
 branch over syntax, semantics, repair strategies, or missing abstractions, the
