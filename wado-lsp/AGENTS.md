@@ -131,6 +131,12 @@ without one, and the same failure returns `Semantics::empty`, silencing
 every position query. Dropping the diagnostic left a file that looked
 clean and answered nothing.
 
+Selecting on `span.file` means a diagnostic that carries a span but no file
+is dropped here — invisible in the editor while the batch compiler still
+prints it. The compiler owes every located diagnostic its module
+(`Elaborator::emit` / `Logger::error_in`, never `Logger::error`); its e2e
+host asserts that on emit, so the whole fixture corpus enforces it.
+
 The Design-B semantic checks (effect / stores / default-purity / resource
 moves) are derived from the snapshot lazily, on the first `diagnostics`
 call, and cached on the `Snapshot`. Every other query reuses the same

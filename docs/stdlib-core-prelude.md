@@ -874,19 +874,17 @@ Drop this writable end handle. Traps if no value has been written yet.
 ### `pub resource Stream<T>`
 
 Readable end of an async sequence (WASI Component Model stream).
-Opaque i32 handle managed by the runtime.
-
-Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
+`Stream::<T>::new()` creates the `[Stream<T>, StreamWritable<T>]` pair.
 
 #### `fn new() -> [Stream<T>, StreamWritable<T>]`
 
-Create a new stream pair: [Stream<T>, StreamWritable<T>].
+#### `fn read(&self, max: i32) -> StreamChunk<T>`
 
-#### `fn read(&self, max: i32) -> List<T>`
-
-Read up to `max` elements from the stream.
-Blocks until data is available or the writer drops.
-Returns an empty array on end-of-stream.
+One Component Model copy of up to `max` elements, blocking until at
+least one arrives or the writable end drops. A `Dropped` result can
+carry elements of its own, and reading an end whose result was `Dropped`
+traps, so a loop breaks on the result, never on an empty chunk.
+`read_to_end` is that loop.
 
 #### `fn cancel_read(&self)`
 
@@ -896,21 +894,32 @@ Cancel an in-progress read. Blocks until cancellation completes.
 
 Drop the readable end of the stream.
 
+#### `pub fn read_to_end(&self) -> List<T>`
+
+Read until the writable end drops, and return everything it wrote.
+Only the result stops it: an empty `Completed` copy is the writer
+offering nothing this time, and more can still follow.
+
 ### `pub resource StreamWritable<T>`
 
 Writable end of an async sequence (WASI Component Model stream).
-Opaque i32 handle managed by the runtime.
 
-#### `fn write(&self, data: List<T>)`
+#### `fn write(&self, data: List<T>) -> StreamWrite`
 
-Write a chunk of data to the stream.
+One Component Model copy of `data`, blocking until the reader takes at
+least one element or drops. The reader may take a prefix, so the count
+can be short of `data.len()`. Writing to an end whose result was
+`Dropped` traps, and an empty `data` is the CM's readiness signal, which
+blocks until a reader rendezvouses rather than writing nothing.
+`write_all` is the loop that finishes the buffer.
 
-#### `fn write_raw(&self, data: Slice<T>)`
+#### `fn write_raw(&self, data: Slice<T>) -> StreamWrite`
 
-Write a byte view directly to the stream, without the deep copy that
+Write a view directly to the stream, without the deep copy that
 value-semantics `write` makes. The slice references its backing array
 (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`), so
-only the CM lowering copy remains.
+only the CM lowering copy remains. `T` must be a byte: any other element
+type is a compile error, and `write` is what carries it.
 
 #### `fn cancel_write(&self)`
 
@@ -919,6 +928,17 @@ Cancel an in-progress write. Blocks until cancellation completes.
 #### `fn drop(self)`
 
 Drop the writable end, signaling end-of-stream.
+
+#### `pub fn write_all(&self, data: List<T>) -> CopyResult`
+
+Write every element, or stop early when the readable end drops.
+Returns the result of the copy that ended the loop.
+
+#### `pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
+
+`write_all` for elements already held in one array, without its
+value-semantics copy. The tail view skips `Slice::slice`, whose clamp
+these offsets cannot need and every program that prints would pay for.
 
 ### `pub resource WaitableSet`
 
@@ -2783,15 +2803,7 @@ Used by the compiler to lower `u128 as f32` casts.
 #### `pub fn div_rem(&self, divisor: &u128) -> [u128, u128]`
 
 Divide self by divisor, returning (quotient, remainder). One native
-division when both fit in 64 bits, binary long division otherwise.
-
-#### `pub fn get_bit(&self, i: i32) -> bool`
-
-Get the bit at position i (0 = LSB, 127 = MSB)
-
-#### `pub fn set_bit(&self, i: i32) -> u128`
-
-Set the bit at position i to 1, returning a new u128
+division when both fit in 64 bits, otherwise Algorithm D over limbs.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -3124,6 +3136,24 @@ Convert i128 to String (for template string interpolation)
 #### `impl Step for i128`
 
 ##### `fn next_step(&self) -> Option<i128>`
+
+### `pub struct StreamChunk<T>`
+
+What one `Stream::read` copied, and how that copy ended. A copy carries
+elements and the peer's drop together, so `result` is what says more follows.
+
+#### `items: List<T>`
+
+#### `result: CopyResult`
+
+### `pub struct StreamWrite`
+
+What one `StreamWritable::write` copied, and how that copy ended. A reader
+may take a prefix, so `count` can be short of what was offered.
+
+#### `count: i32`
+
+#### `result: CopyResult`
 
 ### `pub struct WaitEvent`
 
@@ -4217,6 +4247,23 @@ Center-aligned: `${x:^5}` -> " 42 "
 #### `Right`
 
 Right-aligned (default for numbers): `${x:>5}` -> " 42"
+
+### `pub enum CopyResult`
+
+How one Component Model copy ended (`CanonicalABI.md`, `CopyResult`).
+It describes that copy, not the stream: only `Dropped` ends the stream.
+
+#### `Completed`
+
+The copy finished.
+
+#### `Dropped`
+
+The peer end is gone; no further copy is possible on this end.
+
+#### `Cancelled`
+
+A cancel finished and returned the buffer; the end stays usable.
 
 ### `pub enum IntErrorKind`
 

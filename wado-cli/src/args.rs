@@ -349,7 +349,7 @@ pub fn parse_inline_threshold_arg(opt: &str, parser: &mut Parser) -> Result<usiz
         .map_err(|_| CliExit::error(format!("{opt} requires a non-negative integer, got '{s}'")))
 }
 
-pub fn parse_opt_iterations_arg(opt: &str, parser: &mut Parser) -> Result<u32, CliExit> {
+pub fn parse_u32_arg(opt: &str, parser: &mut Parser) -> Result<u32, CliExit> {
     let s = require_string(parser)?;
     s.parse::<u32>()
         .map_err(|_| CliExit::error(format!("{opt} requires a non-negative integer, got '{s}'")))

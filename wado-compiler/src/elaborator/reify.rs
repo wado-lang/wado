@@ -2186,7 +2186,41 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             stmts.extend(self.reify_stmt(s, ctx));
         }
-        stmts
+        self.mark_diverging_stmts(stmts)
+    }
+
+    /// Open the cold tail of a block at its first statement that cannot return.
+    ///
+    /// Marking here rather than at each synthesis site is what gives a
+    /// `panic(…)` written in source the same treatment as the ones this file
+    /// builds. A `return` / `break` ends a path too, but a normal exit is not a
+    /// cold one, so it is left alone.
+    fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
+        let diverges =
+            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if e.type_id == TypeTable::NEVER);
+        if !stmts.iter().any(diverges) {
+            return stmts;
+        }
+        let is_marker = |s: &TirStmt| {
+            matches!(&s.kind, TirStmtKind::Expr(e)
+                if matches!(&e.kind, TirExprKind::Call { func, .. }
+                    if func.builtin_name().as_deref() == Some("builtin::cold_path")))
+        };
+        let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
+        // A marker makes the rest of its block cold, which is where `block_cut`
+        // stops pricing and where `cold_outline`'s region starts, so the first
+        // one in a block is the only one worth placing — and a synthesis site
+        // that placed its own ahead of the statements it built keeps it.
+        let mut marked = false;
+        for s in stmts {
+            marked = marked || is_marker(&s);
+            if diverges(&s) && !marked {
+                out.push(self.make_cold_path_stmt(s.span));
+                marked = true;
+            }
+            out.push(s);
+        }
+        out
     }
 
     /// Desugar `let PAT = EXPR else { ELSE };` followed by `rest` into a

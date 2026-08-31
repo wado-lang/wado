@@ -14,7 +14,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Write "Hello, World!" as response body
     let data: List<u8> = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33];
-    body_tx.write(data);
+    body_tx.write_all(data);
     body_tx.drop();
 
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

@@ -3,7 +3,7 @@
 // The in-loop construction-forward (scalar_forward's aggregate-only subset)
 // folds `end` into the field, so `const_branch_prune` collapses the block and
 // `sroa` sees a direct literal and scalarizes it: the write lowers straight to
-// `cm_lower_list_u8(repr, …)` with no intermediate slice `struct.new`.
+// a byte copy into linear memory, with no intermediate slice `struct.new`.
 use { Stderr } from "core:cli";
 
 export fn run() with Stderr {
@@ -18,6 +18,6 @@ export fn run() with Stderr {
 __DATA__
 {
     "stderr": "Hello",
-    "wir_expect:O2": ["core:rt/gc_array_to_memory"],
+    "wir_expect:O2": ["builtin::store_u8("],
     "wir_not_expect:O2": ["struct.new \"core:prelude/slice.wado//Slice<u8>\""]
 }

@@ -674,8 +674,17 @@ impl<'a> WirContext<'a> {
     /// Use [`Self::type_id_to_wir_type_pending`] inside `register_types`.
     #[track_caller]
     pub fn type_id_to_wir_type(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
-        self.lookup_wir_type(type_table, type_id)
-            .unwrap_or_else(|pending| panic!("[WIR] {} is not registered", pending.description))
+        let wir = self
+            .lookup_wir_type(type_table, type_id)
+            .unwrap_or_else(|pending| panic!("[WIR] {} is not registered", pending.description));
+        debug_assert_eq!(
+            matches!(wir, WirType::Unit),
+            type_table.is_stackless(type_id),
+            "[WIR] {} disagrees with `is_stackless`: a type the signature lists and the body \
+             drops (or the reverse) desyncs the two",
+            type_table.type_name(type_id),
+        );
+        wir
     }
 
     /// [`Self::type_id_to_wir_type`] for use during type registration, where a

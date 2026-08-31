@@ -44,7 +44,7 @@ export fn run() with (Stdout, Stderr, Preopens) {
         let [write_rx, write_tx] = Stream::<u8>::new();
         let sub1 = file.write_via_stream(write_rx, 0 as Filesize);
         let data: List<u8> = [72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10];
-        write_tx.write(data);
+        write_tx.write_all(data);
         write_tx.drop();
         sub1.drop();
 
@@ -54,10 +54,10 @@ export fn run() with (Stdout, Stderr, Preopens) {
         let sub2 = Stdout::write_via_stream(out_rx);
         loop {
             let chunk = file_rx.read(4096);
-            if chunk.len() == 0 {
+            out_tx.write_all(chunk.items);
+            if chunk.result != CopyResult::Completed {
                 break;
             }
-            out_tx.write(chunk);
         }
         file_rx.drop();
         out_tx.drop();

@@ -588,16 +588,7 @@ fn read_file(path: &String) -> String with (Stderr, Preopens, Exit) {
     }
     let file = opened.unwrap();
     let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut bytes: List<u8> = [];
-    loop {
-        let chunk = read_stream.read(65536);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let b of chunk {
-            bytes.push(b);
-        }
-    }
+    let bytes = read_stream.read_to_end();
     return String::from_utf8_unchecked(bytes);
 }
 

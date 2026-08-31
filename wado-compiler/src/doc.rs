@@ -263,7 +263,9 @@ pub fn extract_doc_filtered(
             Item::Variant(v) => variants.push(build_doc_variant(v, trivia)),
             Item::Flags(f) => flags.push(build_doc_flags(f, trivia)),
             Item::Interface(e) => effects.push(build_doc_interface(e, trivia)),
-            Item::Resource(r) => resources.push(build_doc_resource(r, trivia)),
+            Item::Resource(r) => {
+                resources.push(build_doc_resource(r, &impls, trivia, include_private));
+            }
             Item::Function(f) => functions.push(build_doc_function(f, trivia)),
             _ => {}
         }
@@ -533,7 +535,14 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
     }
 }
 
-fn build_doc_resource(r: &crate::ast::ResourceDecl, trivia: &TriviaMap) -> DocResource {
+/// A resource's declared members plus, like a struct, whatever an `impl` adds —
+/// `Stream<T>::read_to_end` is not in the `resource` body.
+fn build_doc_resource(
+    r: &crate::ast::ResourceDecl,
+    impls: &[&ImplBlock],
+    trivia: &TriviaMap,
+    include_private: bool,
+) -> DocResource {
     let mut sig = String::new();
     if r.visibility.is_public() {
         sig.push_str("pub ");
@@ -542,7 +551,7 @@ fn build_doc_resource(r: &crate::ast::ResourceDecl, trivia: &TriviaMap) -> DocRe
     sig.push_str(&r.name);
     sig.push_str(&render_generic_params(&r.type_params));
 
-    let methods: Vec<DocFunction> = r
+    let mut methods: Vec<DocFunction> = r
         .methods
         .iter()
         .map(|m| DocFunction {
@@ -550,6 +559,8 @@ fn build_doc_resource(r: &crate::ast::ResourceDecl, trivia: &TriviaMap) -> DocRe
             doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
+    let (inherent, _) = collect_impl_methods_for_type(&r.name, impls, trivia, include_private);
+    methods.extend(inherent);
 
     DocResource {
         name: r.name.clone(),

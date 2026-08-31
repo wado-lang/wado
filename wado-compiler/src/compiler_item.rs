@@ -578,6 +578,14 @@ pub enum CompilerItem {
     CmLowerArrayU8,
     /// `core:rt::cm_await_blocked`.
     CmAwaitBlocked,
+    /// `core:prelude/types::CopyResult`, how a CM copy ended.
+    CopyResult,
+    /// `core:prelude/types::StreamChunk`, what one `Stream::read` copied.
+    StreamChunk,
+    /// `core:prelude/types::StreamWrite`, what one `StreamWritable::write` copied.
+    StreamWrite,
+    /// `core:rt::cm_copy_result`.
+    CmCopyResult,
     /// `core:rt::cm_stream_read_u8`.
     CmStreamReadU8,
     /// `core:rt::cm_stream_write_u8`.
@@ -622,6 +630,9 @@ impl CompilerItem {
         Self::Option,
         Self::Result,
         Self::Ordering,
+        Self::CopyResult,
+        Self::StreamChunk,
+        Self::StreamWrite,
         Self::CaseStyle,
         Self::Default,
         Self::ReflectStruct,
@@ -782,6 +793,7 @@ impl CompilerItem {
         Self::CmLowerString,
         Self::CmLowerArrayU8,
         Self::CmAwaitBlocked,
+        Self::CmCopyResult,
         Self::CmStreamReadU8,
         Self::CmStreamWriteU8,
         Self::CmStreamWriteRawU8,
@@ -816,6 +828,9 @@ impl CompilerItem {
             Self::Option => "option",
             Self::Result => "result",
             Self::Ordering => "ordering",
+            Self::CopyResult => "copy_result",
+            Self::StreamChunk => "stream_chunk",
+            Self::StreamWrite => "stream_write",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
             Self::ReflectStruct => "reflect_struct",
@@ -917,6 +932,7 @@ impl CompilerItem {
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
             Self::CmAwaitBlocked => "cm_await_blocked",
+            Self::CmCopyResult => "cm_copy_result",
             Self::CmStreamReadU8 => "cm_stream_read_u8",
             Self::CmStreamWriteU8 => "cm_stream_write_u8",
             Self::CmStreamWriteRawU8 => "cm_stream_write_raw_u8",
@@ -1012,6 +1028,7 @@ impl CompilerItem {
             | Self::CmLowerString
             | Self::CmLowerArrayU8
             | Self::CmAwaitBlocked
+            | Self::CmCopyResult
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawU8
@@ -1042,6 +1059,9 @@ impl CompilerItem {
             | Self::Option
             | Self::Result
             | Self::Ordering
+            | Self::CopyResult
+            | Self::StreamChunk
+            | Self::StreamWrite
             | Self::CaseStyle
             | Self::Default
             | Self::ReflectStruct
@@ -1242,6 +1262,7 @@ impl CompilerItem {
             | Self::CmLowerString
             | Self::CmLowerArrayU8
             | Self::CmAwaitBlocked
+            | Self::CmCopyResult
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawU8
@@ -1269,7 +1290,10 @@ impl CompilerItem {
             }
             Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Ordering | Self::Alignment | Self::CaseStyle => CompilerItemKind::Enum,
+            Self::Ordering | Self::Alignment | Self::CaseStyle | Self::CopyResult => {
+                CompilerItemKind::Enum
+            }
+            Self::StreamChunk | Self::StreamWrite => CompilerItemKind::Struct,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,

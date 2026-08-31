@@ -137,6 +137,7 @@ impl Opt {
     const KNOBS: &[KnobOpt] = &[
         KnobOpt::OptLevel,
         KnobOpt::InlineThreshold,
+        KnobOpt::InlineGrowth,
         KnobOpt::OptIterations,
         KnobOpt::LogLevel,
         KnobOpt::Allocator,

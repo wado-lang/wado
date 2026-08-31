@@ -26,12 +26,12 @@ impl Stream<u8> for BaseStream {
         let id: i32 = 0;
         resume [id as Stream<u8>, id as StreamWritable<u8>]
     }
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
         let _ = this;
         let _ = max;
         let snapshot = self.buf;
         self.buf = [];
-        resume snapshot
+        resume StreamChunk { items: snapshot, result: CopyResult::Completed }
     }
     fn drop(&mut self, this: &Stream<u8>) {
         let _ = this;
@@ -41,12 +41,13 @@ impl Stream<u8> for BaseStream {
 }
 
 impl StreamWritable<u8> for BaseStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
         let _ = this;
+        let count = data.len();
         for let b of data {
             self.buf.push(b);
         }
-        resume ()
+        resume StreamWrite { count: count, result: CopyResult::Completed }
     }
     fn drop(&mut self, this: &StreamWritable<u8>) {
         let _ = this;
@@ -66,7 +67,7 @@ struct LoggingStream {
 }
 
 impl Stream<u8> for LoggingStream {
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
         self.reads += 1;
         let inner = this.read(max);   // -> BaseStream via outer handler
         resume inner
@@ -75,10 +76,10 @@ impl Stream<u8> for LoggingStream {
 }
 
 impl StreamWritable<u8> for LoggingStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
         self.writes += 1;
-        this.write(data);             // -> BaseStream via outer handler
-        resume ()
+        let inner = this.write(data); // -> BaseStream via outer handler
+        resume inner
     }
     ..trap
 }
@@ -91,7 +92,7 @@ export fn run() with Stdout {
         with &mut logger do {
             let payload: List<u8> = [104 as u8, 105 as u8]; // "hi"
             tx.write(payload);
-            let got = rx.read(16);
+            let got = rx.read(16).items;
             assert got.len() == 2;
             assert got[0] == 104 as u8;
             assert got[1] == 105 as u8;

@@ -38,6 +38,24 @@ use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
 };
 
+/// A located diagnostic names the file it is in — what a per-document consumer
+/// selects on, and without which the LSP drops it. Checked at the host, so the
+/// whole fixture corpus enforces it. A span-less diagnostic is about the
+/// compilation rather than a place in it, and is exempt.
+fn assert_diagnostic_is_attributed(diagnostic: &Diagnostic) {
+    if let Some(span) = diagnostic.span.as_ref() {
+        assert!(
+            !span.file.is_empty(),
+            "diagnostic carries a span but no file: {} ({:?}) at {}:{}\n\
+             emit it through `Elaborator::emit` / `Logger::error_in`, not `Logger::error`",
+            diagnostic.message,
+            diagnostic.code,
+            span.line,
+            span.column,
+        );
+    }
+}
+
 /// A filesystem-based `CompilerHost` for tests that need to load files
 pub struct FilesystemHost {
     base_path: PathBuf,
@@ -91,6 +109,7 @@ impl CompilerHost for FilesystemHost {
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        assert_diagnostic_is_attributed(&diagnostic);
         self.diagnostics.lock().unwrap().push(diagnostic);
     }
 
@@ -878,6 +897,58 @@ pub fn compile_source_with_opts(
         .map_err(|_: CompileFailure| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
+/// Compile `source` and unparse the WIR it retained.
+pub fn wir_text(path: &std::path::Path, source: &str, opt_level: OptLevel) -> String {
+    let options = wado_compiler::CompilerOptions {
+        opt_level,
+        retain_wir: true,
+        ..Default::default()
+    };
+    let result = compile_source_with_compiler_options(path, source, options)
+        .expect("compilation should succeed");
+    wado_compiler::wir_unparse::unparse_wir(result.wir_package.as_ref().expect("wir retained"))
+}
+
+/// [`wir_text`], cut to the one function whose header starts with `fn_header`
+/// and ending at the next top-level `fn`.
+pub fn wir_function_body(
+    path: &std::path::Path,
+    source: &str,
+    opt_level: OptLevel,
+    fn_header: &str,
+) -> String {
+    let wir = wir_text(path, source, opt_level);
+    let start = wir
+        .find(fn_header)
+        .unwrap_or_else(|| panic!("{fn_header} in WIR"));
+    let rest = &wir[start..];
+    let end = rest[1..].find("\nfn ").map_or(rest.len(), |i| i + 1);
+    rest[..end].to_string()
+}
+
+/// Assert that `body` pushes into `dst` by moving the element rather than
+/// copying it, and that nothing in it deep-copies more than the one element the
+/// iterator itself yields.
+///
+/// A `!body.contains("array_copy")` in place of this only holds while the
+/// iterator's `next` stays out of line: inlining brings that copy — which value
+/// semantics requires — into the body under test.
+pub fn assert_pushes_by_move(body: &str, dst: &str) {
+    let store = body
+        .lines()
+        .find(|l| l.contains("array_set") && l.contains(&format!("{dst}.repr")))
+        .unwrap_or_else(|| panic!("a push into `{dst}`:\n{body}"));
+    assert!(
+        !store.contains("struct.new") && !store.contains("array_copy"),
+        "the element the iterator already copied must move into `{dst}`:\n{store}"
+    );
+    let copies = body.matches("array_copy").count();
+    assert!(
+        copies <= 1,
+        "only the iterator's own copy of the element may remain, found {copies}:\n{body}"
+    );
+}
+
 /// Compile source code with full compiler options (including WIR backend flag)
 pub fn compile_source_with_compiler_options(
     path: &std::path::Path,
@@ -898,7 +969,7 @@ pub fn compile_source_with_compiler_options_and_filename(
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    compile_capturing_warnings(
+    compile_capturing_diagnostics(
         path,
         source,
         options,
@@ -906,29 +977,28 @@ pub fn compile_source_with_compiler_options_and_filename(
         indexmap::IndexMap::new(),
         indexmap::IndexMap::new(),
     )
-    .0
+    .result
 }
 
-/// Compile and return both the result and the captured compile-time *warning*
-/// messages.
-///
-/// Warnings (e.g. `DeadFunction` / `DeadGlobal`) are emitted to the host during
-/// elaboration; the other helpers surface host diagnostics only on failure.
-/// This variant returns the `Severity::Warning` messages on both success and
-/// failure so fixtures can assert them (`warnings_contains` /
-/// `warnings_not_contains`). Only the message text is returned — matching is
-/// message-based.
-pub fn compile_capturing_warnings(
+/// One compile and every diagnostic it raised, by severity. `CompileError`
+/// carries only the first error, so the ones behind it are reachable only here.
+pub struct CapturedCompile {
+    pub result: Result<wado_compiler::CompileResult, CompileError>,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+/// Compile and return the result alongside every diagnostic message the host
+/// received, on both success and failure — what `warnings_contains` /
+/// `warnings_not_contains` / `compile_errors_contains` assert against.
+pub fn compile_capturing_diagnostics(
     path: &std::path::Path,
     source: &str,
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
     env: indexmap::IndexMap<String, String>,
     dependencies: indexmap::IndexMap<String, String>,
-) -> (
-    Result<wado_compiler::CompileResult, CompileError>,
-    Vec<String>,
-) {
+) -> CapturedCompile {
     use wado_compiler::Severity;
     let base_path = path
         .parent()
@@ -950,14 +1020,21 @@ pub fn compile_capturing_warnings(
         ))
         .map_err(|_| bail_to_compile_error(&host.diagnostics(), Some(&filename)));
 
-    let warnings = host
-        .diagnostics()
-        .into_iter()
-        .filter(|d| matches!(d.severity, Severity::Warning))
-        .map(|d| d.message)
-        .collect();
+    let diagnostics = host.diagnostics();
+    let messages = |keep: fn(Severity) -> bool| -> Vec<String> {
+        diagnostics
+            .iter()
+            .filter(|d| keep(d.severity))
+            .map(|d| d.message.clone())
+            .collect()
+    };
 
-    (result, warnings)
+    CapturedCompile {
+        result,
+        warnings: messages(|s| s == Severity::Warning),
+        // The same set `bail_to_compile_error` picks `compile_error` from.
+        errors: messages(|s| matches!(s, Severity::Error | Severity::Fatal)),
+    }
 }
 
 /// Compile a file asynchronously (for use within async context)

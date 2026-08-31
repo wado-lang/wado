@@ -63,6 +63,7 @@ impl Opt {
     const KNOBS: &[KnobOpt] = &[
         KnobOpt::OptLevel,
         KnobOpt::InlineThreshold,
+        KnobOpt::InlineGrowth,
         KnobOpt::OptIterations,
         KnobOpt::LogLevel,
         KnobOpt::Allocator,
@@ -353,8 +354,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         knobs.opt_level.to_compiler(),
         opts.target_world.as_deref(),
         knobs.allocator.as_deref(),
-        knobs.inline_threshold,
-        knobs.opt_iterations,
+        knobs.opt,
         &knobs.codegen_flags,
         &knobs.params.overrides,
         knobs.params.policy,

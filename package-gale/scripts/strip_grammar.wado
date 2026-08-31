@@ -32,16 +32,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     }
     let file = open_result.unwrap();
     let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut bytes: List<u8> = [];
-    loop {
-        let chunk = read_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let b of chunk {
-            bytes.push(b);
-        }
-    }
+    let bytes = read_stream.read_to_end();
     let content = String::from_utf8_unchecked(bytes);
     print(strip_action_bodies(&content));
 }

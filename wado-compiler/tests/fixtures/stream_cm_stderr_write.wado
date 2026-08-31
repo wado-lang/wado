@@ -3,7 +3,7 @@
 //
 // Uses the same ordering as eprintln: start consumer first, then write.
 // CM streams are zero-buffered rendezvous channels, so the consumer must be
-// started before stream.write() to avoid BLOCKED.
+// started before write_all to avoid BLOCKED.
 use { Stderr } from "core:cli";
 
 export fn run() with Stderr {
@@ -14,7 +14,7 @@ export fn run() with Stderr {
 
     // 2. Write "err msg\n" as raw bytes to the stream via resource API
     let data: List<u8> = [101, 114, 114, 32, 109, 115, 103, 10];
-    tx.write(data);
+    tx.write_all(data);
 
     // 3. Close the writable end
     tx.drop();

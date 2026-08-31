@@ -621,17 +621,20 @@ fn test_log_level() {
 }
 
 #[test]
-fn test_inline_threshold_and_iterations() {
+fn test_inline_threshold_growth_and_iterations() {
     let parser = Parser::from_args(&[
         "--optimize-inline-threshold",
         "42",
+        "--optimize-inline-growth",
+        "25",
         "--optimize-iterations",
         "7",
         "a.wado",
     ]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.knobs.inline_threshold, Some(42));
-    assert_eq!(opts.knobs.opt_iterations, Some(7));
+    assert_eq!(opts.knobs.opt.inline_threshold, Some(42));
+    assert_eq!(opts.knobs.opt.inline_growth, Some(25));
+    assert_eq!(opts.knobs.opt.iterations, Some(7));
 }
 
 #[test]

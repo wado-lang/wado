@@ -35,18 +35,10 @@ fn read_body(resp: Response) -> String {
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Response::consume_body(resp, res_future);
 
-    let mut result = "";
-    loop {
-        let chunk = body_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        let text = match String::from_utf8(chunk) {
-            Ok(s) => s,
-            Err(_) => panic("invalid utf-8"),
-        };
-        result = result + text;
-    }
+    let result = match String::from_utf8(body_stream.read_to_end()) {
+        Ok(s) => s,
+        Err(_) => panic("invalid utf-8"),
+    };
     body_stream.drop();
     return result;
 }
@@ -88,7 +80,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
 
     task return Result::<Response, ErrorCode>::Ok(response);
 
-    resp_tx.write(combined.bytes().collect());
+    resp_tx.write_all(combined.bytes().collect());
     resp_tx.drop();
     resp_trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }

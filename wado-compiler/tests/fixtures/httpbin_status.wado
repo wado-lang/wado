@@ -19,7 +19,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
     response.set_status_code(status as u16 as StatusCode);
     task return Result::<Response, ErrorCode>::Ok(response);
-    body_tx.write(body_str.bytes().collect());
+    body_tx.write_all(body_str.bytes().collect());
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }

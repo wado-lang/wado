@@ -25,7 +25,6 @@ use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } fr
 use { ErrorCode } from "wasi:filesystem/types.wado";
 use { expand_action_templates } from "../src/g4/action_templates.wado";
 
-global FILE_READ_CHUNK: i32 = 8192;
 global DIR_READ_CHUNK: i32 = 64;
 
 fn grammars_root() -> String {
@@ -93,16 +92,7 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
         DescriptorFlags::Read,
     ).wait()?;
     let [stream, done] = opened.read_via_stream(0 as Filesize);
-    let mut bytes: List<u8> = [];
-    loop {
-        let chunk = stream.read(FILE_READ_CHUNK);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let b of chunk {
-            bytes.push(b);
-        }
-    }
+    let bytes = stream.read_to_end();
     stream.drop();
     let read_result = done.read();
     done.drop();
@@ -125,7 +115,7 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
     let bytes: List<u8> = content.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
-    tx.write(bytes);
+    tx.write_all(bytes);
     tx.drop();
     let write_result = sub.read();
     sub.drop();
@@ -150,13 +140,13 @@ fn list_subdirs(dir: &Descriptor) -> List<String> {
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(DIR_READ_CHUNK);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let e of chunk {
+        for let e of chunk.items {
             if e.type matches { Directory } {
                 out.push(e.name);
             }
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
         }
     }
     stream.drop();
@@ -170,13 +160,13 @@ fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> List<String> {
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(DIR_READ_CHUNK);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let e of chunk {
+        for let e of chunk.items {
             if e.type matches { RegularFile } && e.name.ends_with(*suffix) {
                 out.push(e.name);
             }
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
         }
     }
     stream.drop();

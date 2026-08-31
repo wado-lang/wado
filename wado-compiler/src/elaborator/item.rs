@@ -2618,13 +2618,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {
-                let _ = scope
-                    .logger
-                    .error(TypeError::AsyncUserEffectHandlerUnsupported {
-                        interface_name: name.to_string(),
-                        op_name: func.name.clone(),
-                        span: func.span,
-                    });
+                let _ = scope.emit(TypeError::AsyncUserEffectHandlerUnsupported {
+                    interface_name: name.to_string(),
+                    op_name: func.name.clone(),
+                    span: func.span,
+                });
             }
         }
 
