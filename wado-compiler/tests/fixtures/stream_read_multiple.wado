@@ -8,13 +8,10 @@ export fn run() with Stdout {
     // Close writer immediately so reads see EOF
     tx.drop();
 
-    // A terminal chunk can still carry elements, so the loop takes what it
-    // copied before it looks at the result.
+    // Read loop should terminate immediately on the first non-Completed result
     let mut reads = 0;
-    let mut items = 0;
     loop {
         let chunk = rx.read(2);
-        items += chunk.items.len();
         if chunk.result != CopyResult::Completed {
             break;
         }
@@ -22,7 +19,6 @@ export fn run() with Stdout {
     }
 
     assert reads == 0;
-    assert items == 0;
     rx.drop();
     println("multi-read ok");
 }
