@@ -52,6 +52,7 @@ mise run on-task-started
 issues, so an arm costs a benchmark run rather than a release rebuild:
 
 ```sh
+set -e  # a failed arm would leave pick.ts choosing among the rest
 for t in 13 20 32; do
   WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > thr$t.log 2>&1
 done

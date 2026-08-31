@@ -1901,6 +1901,17 @@ impl<'a> InlineCtx<'a> {
 }
 
 impl InlineCtx<'_> {
+    /// The label a `return` becomes a `break` to. `InlineCtx::lifting` carries
+    /// none, since `cold_outline` moves only a region control cannot leave, and
+    /// a `break ""` names no block.
+    fn return_label(&self) -> String {
+        assert!(
+            !self.label.is_empty(),
+            "[NIR] inline: a `return` reached a splice with no label to break to"
+        );
+        self.label.to_string()
+    }
+
     pub(super) fn local(&self, idx: u32) -> u32 {
         remap_local_index(
             idx,
@@ -2184,7 +2195,7 @@ fn splice_block_into(
                 let value = v.map(|x| splice_operand(caller, callee, x, ctx));
                 out.push(caller.stmts.push(StmtNode {
                     kind: StmtKind::Break {
-                        label: Some(ctx.label.to_string()),
+                        label: Some(ctx.return_label()),
                         value,
                     },
                     span,
@@ -2267,15 +2278,9 @@ pub(super) fn splice_stmt(
         }
         StmtKind::Expr(e) => StmtKind::Expr(splice_operand(caller, callee, *e, ctx)),
         StmtKind::Return { value } => {
-            // `InlineCtx::lifting` carries no label, since `cold_outline` moves
-            // only a region control cannot leave. A `break ""` names no block.
-            assert!(
-                !ctx.label.is_empty(),
-                "[NIR] inline: a `return` reached a splice with no label to break to"
-            );
             let v = *value;
             StmtKind::Break {
-                label: Some(ctx.label.to_string()),
+                label: Some(ctx.return_label()),
                 value: v.map(|x| splice_operand(caller, callee, x, ctx)),
             }
         }
