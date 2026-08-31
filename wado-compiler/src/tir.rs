@@ -2400,10 +2400,11 @@ impl TypeTable {
         matches!(self.get(base), ResolvedType::Primitive(p) if *p != PrimitiveType::V128)
     }
 
-    /// Whether a value of this type leaves nothing on the Wasm stack: unit, or
-    /// a reference to unit — `&x` is transparent at the WIR level.
+    /// Whether a value of this type leaves nothing on the Wasm stack: unit or
+    /// never, or a reference to either — `&x` is transparent at the WIR level.
+    /// `type_id_to_wir_type` asserts it answers `WirType::Unit` for exactly these.
     pub fn is_stackless(&self, type_id: TypeId) -> bool {
-        self.peel_refs(type_id) == TypeTable::UNIT
+        matches!(self.peel_refs(type_id), TypeTable::UNIT | TypeTable::NEVER)
     }
 
     /// Peel through Ref/MutRef wrappers to get the underlying type.

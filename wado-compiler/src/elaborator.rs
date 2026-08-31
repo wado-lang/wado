@@ -705,7 +705,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
             return;
         }
-        let _ = self.logger.error(types::TypeError::MissingReturn {
+        let _ = self.emit(types::TypeError::MissingReturn {
             return_type: self.tysys.type_table.borrow().type_name(return_type),
             span,
         });
@@ -1166,14 +1166,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             target_type_id,
             trait_name,
         );
-        let _ = self
-            .logger
-            .error(types::TypeError::ExplicitDeriveNotEligible {
-                trait_name: self.get_type_name_full(trait_type),
-                type_name: target_type_name.to_string(),
-                reason,
-                span,
-            });
+        let _ = self.emit(types::TypeError::ExplicitDeriveNotEligible {
+            trait_name: self.get_type_name_full(trait_type),
+            type_name: target_type_name.to_string(),
+            reason,
+            span,
+        });
     }
 
     fn resolve_synthesize_request_marker(
@@ -1213,14 +1211,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let is_display = trait_type
                 .head_base_name()
                 .is_some_and(|base| self.tysys.is_display_trait(&self.type_lookup(), base));
-            let _ = self
-                .logger
-                .error(types::TypeError::UnsupportedSynthesisTrait {
-                    trait_name: self.get_type_name_full(trait_type),
-                    type_name: struct_name.to_string(),
-                    is_display,
-                    span: impl_block.span,
-                });
+            let _ = self.emit(types::TypeError::UnsupportedSynthesisTrait {
+                trait_name: self.get_type_name_full(trait_type),
+                type_name: struct_name.to_string(),
+                is_display,
+                span: impl_block.span,
+            });
         }
     }
 

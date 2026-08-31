@@ -1,0 +1,16 @@
+// A not-callable callee must not swallow its arguments: they are still
+// resolved, so an error inside one is reported behind the callee's rather than
+// masked by it. `callable_ident_not_callable_error.wado` pins the callee's own
+// diagnostic on its own.
+
+global X: i32 = 5;
+
+export fn run() {
+    let _ = X(undefined_fn());
+}
+
+__DATA__
+{
+    "compile_error": "expression is not callable: type 'i32' is not a function",
+    "compile_errors_contains": ["unknown function 'undefined_fn'"]
+}
