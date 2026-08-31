@@ -52,7 +52,6 @@ use {
     compute_overlap_groups,
     compute_overlap_groups_of,
     dispatch_branches,
-    element_reaches_open_end,
     scan_decision_branches,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
@@ -2057,7 +2056,7 @@ fn scan_group_is_nullable(alts: &List<Alternative>, ctx: &mut GenContext) -> boo
 /// used to read the emptiness, so `.?` scanned nothing while `A?` scanned one.
 fn repeat_inner_admits(inner: &Element, inner_first: &List<String>, ctx: &mut GenContext) -> Admits {
     let mut visiting: List<String> = [];
-    if element_reaches_open_end(inner, ctx, &mut visiting) {
+    if ctx.element_reaches_open_end(inner, &mut visiting) {
         return Admits::Everything;
     }
     return admits_or_untestable(inner_first);

@@ -90,6 +90,7 @@ pub struct GenContext {
     single_token_cache: List<Option<bool>>,
     nullable_cache: List<Option<bool>>,
     scannable_cache: List<Option<bool>>,
+    open_end_cache: List<Option<bool>>,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -265,6 +266,7 @@ impl GenContext {
             single_token_cache: none_bool_cache(rule_count),
             nullable_cache: none_bool_cache(rule_count),
             scannable_cache: none_bool_cache(rule_count),
+            open_end_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: TreeMap::new(),
             kind_set_used: [],
@@ -1314,6 +1316,105 @@ impl GenContext {
         if local_min >= p {
             if rid >= 0 {
                 self.nullable_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
+        }
+
+        return result;
+    }
+
+    /// Whether a position the alternative can reach — every element before it
+    /// nullable — matches a token no first set names. Having a first set
+    /// settles nothing: `A? .` is selected by `a` and by every other token
+    /// too, and reading the first set alone called it narrow.
+    pub fn alt_reaches_open_end(&mut self, alt: &Alternative, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.alt_reaches_open_end_at(alt, visiting, &mut min_cycle);
+    }
+
+    fn alt_reaches_open_end_at(&mut self, alt: &Alternative, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        for let elem of &alt.elements {
+            if self.element_reaches_open_end_at(elem, visiting, min_cycle) {
+                return true;
+            }
+            let mut nullable_visiting: List<String> = [];
+            if !self.element_is_nullable_deep(elem, &mut nullable_visiting) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /// `.` and `~X` carry the empty static FIRST set, and neither a label, a
+    /// `( … )`, a repeat nor a rule reference changes what is behind them — so
+    /// `w=.`, `(~X)`, `(.)+` and a call to `w : . ;` are all as open-ended as
+    /// the bare form.
+    pub fn element_reaches_open_end(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.element_reaches_open_end_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn element_reaches_open_end_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        return match elem {
+            Wildcard(_) | Not(_) => true,
+            Label(lab) => self.element_reaches_open_end_at(&lab.element, visiting, min_cycle),
+            Repeat(rep) => self.element_reaches_open_end_at(&rep.element, visiting, min_cycle),
+            Group(g) => {
+                let mut any = false;
+                for let alt of &g.alternatives {
+                    if self.alt_reaches_open_end_at(alt, visiting, min_cycle) {
+                        any = true;
+                        break;
+                    }
+                }
+                any;
+            },
+            RuleRef(r) => self.rule_reaches_open_end_at(&r.name, visiting, min_cycle),
+            TokenRef(_) | Literal(_) => false,
+        };
+    }
+
+    /// Open-endedness with the same SCC-aware memoization as
+    /// `rule_is_nullable_at`: without it this walks the transitive rule graph
+    /// afresh at every decision site, and every decision site asks.
+    fn rule_reaches_open_end_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            if let Some(val) = self.open_end_cache[rid] {
+                return val;
+            }
+        }
+
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
+            return false;
+        }
+
+        let p = visiting.len();
+        visiting.push(*name);
+
+        let mut local_min = i32::MAX;
+        let mut result = false;
+        if rid >= 0 {
+            let alt_count = self.parser_rules[rid].alternatives.len();
+            for let mut i = 0; i < alt_count; i += 1 {
+                let alt = self.parser_rules[rid].alternatives[i];
+                if self.alt_reaches_open_end_at(&alt, visiting, &mut local_min) {
+                    result = true;
+                    break;
+                }
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if local_min >= p {
+            if rid >= 0 {
+                self.open_end_cache[rid] = Option::Some(result);
             }
         } else if local_min < *min_cycle {
             *min_cycle = local_min;
