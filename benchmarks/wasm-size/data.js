@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788181477985,
+  "lastUpdate": 1788209516890,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52129,6 +52129,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 282194,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e66c161093d5d91b5217ac622330ff1b4f5f2cec",
+          "message": "Merge pull request #1930 from wado-lang/fix/span-source-identity\n\nfix(diagnostics): a span says which parse's text it indexes",
+          "timestamp": "2026-09-01T05:38:59+09:00",
+          "tree_id": "9afc012c43b635f4120439d1d7bc824a4da7975d",
+          "url": "https://github.com/wado-lang/wado/commit/e66c161093d5d91b5217ac622330ff1b4f5f2cec"
+        },
+        "date": 1788209516334,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2026,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6425,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19611,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281515,
             "unit": "bytes"
           }
         ]
