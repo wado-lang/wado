@@ -117,12 +117,12 @@ pub struct Package {
     /// only consume existing `ModuleSource` values.
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
 
-    /// Local last-use spans per module (WEP 2026-05-21, value-copy client).
-    /// A `(module, span)` is present when the source identifier use at that
-    /// span is the final use of a move-eligible local, so the value-copy
-    /// planner elides the defensive copy (a move). Produced by
-    /// `elaborator::liveness`; threaded on to `FlatPackage`.
-    pub moved_local_spans: IndexMap<ModuleSource, IndexSet<crate::token::Span>>,
+    /// Local last-use spans (WEP 2026-05-21, value-copy client). A span is
+    /// present when the source identifier use there is the final use of a
+    /// move-eligible local, so the value-copy planner elides the defensive copy
+    /// (a move). Produced by `elaborator::liveness`; threaded on to
+    /// `FlatPackage`.
+    pub moved_local_spans: IndexSet<crate::token::Span>,
 }
 
 /// Decide whether a `test "name"` block is selected by the active
@@ -187,7 +187,7 @@ impl Package {
             dispatch_plans: IndexMap::default(),
             resource_wrappers: IndexMap::default(),
             // Populated post-construction from `state.liveness.moved_spans`.
-            moved_local_spans: IndexMap::default(),
+            moved_local_spans: IndexSet::default(),
         }
     }
 

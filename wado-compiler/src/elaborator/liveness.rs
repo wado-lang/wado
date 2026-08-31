@@ -38,12 +38,11 @@ pub(crate) struct Liveness {
     /// the local dead afterward, so an unrecorded use always falls back to a
     /// copy.
     pub(crate) last_uses: IndexSet<AstId>,
-    /// The same last-use facts projected to `(module, source span)`, the form
-    /// the value-copy planner consumes in the `lower` phase — TIR carries a
-    /// `Span` but no `AstId`, and a `Span` is only unique within its own
-    /// source, so the outer key disambiguates across modules. Threaded through
-    /// `Package` → `FlatPackage` to the planner.
-    pub(crate) moved_spans: IndexMap<ModuleSource, IndexSet<Span>>,
+    /// The same last-use facts projected to source spans, the form the
+    /// value-copy planner consumes in the `lower` phase — TIR carries a `Span`
+    /// but no `AstId`. One set over the program: a span names its own parse.
+    /// Threaded through `Package` → `FlatPackage` to the planner.
+    pub(crate) moved_spans: IndexSet<Span>,
 }
 
 /// Compute liveness over every loaded module.
@@ -241,17 +240,16 @@ pub(crate) struct References<'a> {
 
 /// Compute local last-use liveness over every function / method body in the
 /// program (WEP 2026-05-21). Fills `last_uses` (the `AstId`-keyed set) and
-/// `moved_spans` (the `(module, span)` projection). Analyzed over all modules —
+/// `moved_spans` (the span projection). Analyzed over all modules —
 /// stdlib bodies benefit from copy elision too. Reads only the single-definition
 /// edges: a trait default body's locals are per-impl, so not decidable here.
 fn compute_last_uses(
     modules: &IndexMap<ModuleSource, Module>,
     references: &IndexMap<AstId, AstId>,
     last_uses: &mut IndexSet<AstId>,
-    moved_spans: &mut IndexMap<ModuleSource, IndexSet<Span>>,
+    spans: &mut IndexSet<Span>,
 ) {
-    for (source, module) in modules {
-        let spans = moved_spans.entry(source.clone()).or_default();
+    for module in modules.values() {
         for item in &module.items {
             match item {
                 Item::Function(func) => analyze_body(func, references, last_uses, spans),
@@ -980,7 +978,7 @@ impl Graph {
             dead_items,
             test_only_items,
             last_uses: IndexSet::default(),
-            moved_spans: IndexMap::default(),
+            moved_spans: IndexSet::default(),
         }
     }
 

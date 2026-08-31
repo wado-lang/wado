@@ -36,11 +36,7 @@ pub fn lex_in(source: &str, space: crate::ast::AstIdSpace) -> LexResult {
 
 /// Like [`lex_in`] but starts numbering lines at `start_line` — used by the
 /// parser when re-lexing the inside of a template-string interpolation.
-pub fn lex_with_line(
-    source: &str,
-    start_line: usize,
-    space: crate::ast::AstIdSpace,
-) -> LexResult {
+pub fn lex_with_line(source: &str, start_line: usize, space: crate::ast::AstIdSpace) -> LexResult {
     Lexer::with_line(source, start_line).run().in_space(space)
 }
 

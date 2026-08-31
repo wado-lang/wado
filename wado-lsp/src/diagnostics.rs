@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use wado_compiler::ast::AstIdSpace;
 use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
 use crate::macros::lsp_repr_u32_enum;
@@ -159,6 +158,7 @@ pub(crate) fn from_compiler_diagnostic(
 #[cfg(test)]
 mod tests {
     use wado_compiler::DiagnosticSpan;
+    use wado_compiler::ast::AstIdSpace;
 
     use super::*;
 

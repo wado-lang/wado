@@ -246,10 +246,10 @@ struct Translator<'a> {
     /// callees are interned on first sight as `extern_stub`s appended after the
     /// in-package functions. Replaces the former post-pass `assign_func_ids`.
     interner: RefCell<Interner>,
-    /// Per-module last-use spans (WEP 2026-05-21). A `Local` read whose span is
-    /// listed is a move-eligible local's final use, so its defensive value copy
-    /// is elided.
-    moved_local_spans: IndexMap<crate::module_source::ModuleSource, IndexSet<Span>>,
+    /// Last-use spans (WEP 2026-05-21). A `Local` read whose span is listed is
+    /// a move-eligible local's final use, so its defensive value copy is
+    /// elided.
+    moved_local_spans: IndexSet<Span>,
 }
 
 /// Construction-time callee-id minting (see [`Translator::interner`]).
@@ -379,7 +379,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
         let address_taken = func.address_taken_locals.clone();
-        let func_moved_spans = base.moved_local_spans.get(&func.module_source);
+        let func_moved_spans = Some(&base.moved_local_spans);
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most

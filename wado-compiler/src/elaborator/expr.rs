@@ -1466,16 +1466,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             MemberOwner::Written(Some(ty)) => self.get_type_name(ty),
             MemberOwner::Written(None) => member_name.to_string(),
         };
-        let _ = self.emit_in(
-            &vantage,
-            TypeError::PrivateMemberAccess {
-                type_name,
-                member_name: member_name.to_string(),
-                member_kind,
-                visibility,
-                span,
-            },
-        );
+        let _ = self.emit(TypeError::PrivateMemberAccess {
+            type_name,
+            member_name: member_name.to_string(),
+            member_kind,
+            visibility,
+            span,
+        });
     }
 
     pub(super) fn check_field_visibility(
