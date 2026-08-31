@@ -71,6 +71,25 @@ Named types resolve through the interface's own module provenance rather than
 by namespace prefix, so a dependency's package namespace is arbitrary — nothing
 in the pipeline assumes `wasi:`.
 
+### Async value types and `async func`
+
+`stream<T>` and `future<T>` cross an import the same way they cross an export:
+the value is the readable end, and the writable end stays with whoever created
+the pair. A consumer therefore creates the pair itself, hands the readable end
+to the dependency, and reads what the dependency hands back — two components
+sharing a stream, with no host between them.
+
+A dependency's `async func` becomes an `async fn` returning
+[`AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md), as a host async import
+does, so the caller writes into the stream while the dependency's subtask reads
+it. Without that, the two ends deadlock: the copy is a rendezvous, so a
+synchronous callee cannot read what its caller has not yet written.
+
+An interface method and a world-level function are the same function at
+different levels of the world, so one signature rule serves both: the same
+value-type engine on the component type, the same core import signature, and
+`canon lower async` whenever the function is async.
+
 ### Composition
 
 The program component imports the dependency's interface exactly as it imports a
@@ -102,9 +121,8 @@ the two components' host imports without hand-written forwarding.
       its referents have a backing, and the importer takes it at its word. The
       compile-time-bounded half of a bundled ICU surface
       ([`core:icu`](./wep-2026-08-09-core-icu.md)) rests on the token alone.
-- [ ] Async value types (`stream<T>` / `future<T>`) in an imported signature.
-      This is the async import surface of
-      [Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md).
+- [ ] Resource handles inside an async value type's payload, which the
+      resource gap above covers.
 - [ ] World-level type exports. A component exporting a type directly from its
       world, rather than from an interface, is rejected.
 - [ ] Component-defined named types in a world-level function signature. That

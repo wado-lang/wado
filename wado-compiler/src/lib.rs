@@ -179,6 +179,21 @@ pub struct CompileResult {
     pub kiln_options_descriptor: Option<kiln::OptionsDescriptor>,
 }
 
+/// Report a synthesis rejection — a shape the Component Model cannot express —
+/// and bail. Synthesis names the offending type; it has no span to attach.
+fn bail_unsupported<H: compiler_host::CompilerHost>(
+    logger: &Logger<'_, H>,
+    message: String,
+) -> Bail {
+    let _ = logger.error(compiler_host::Diagnostic {
+        severity: compiler_host::Severity::Error,
+        code: compiler_host::Code::UnsupportedFeature,
+        message,
+        span: None,
+    });
+    Bail
+}
+
 /// Compilation failure with metadata from the successfully-parsed AST.
 ///
 /// Internal `Bail` carries no data (errors are already emitted to the host).
@@ -244,6 +259,15 @@ pub struct ProviderComponent {
     pub bytes: Vec<u8>,
 }
 
+/// What a caller may override in the optimizer, each `None` meaning "whatever
+/// the level decides".
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OptOverrides {
+    pub inline_threshold: Option<usize>,
+    pub inline_growth: Option<u32>,
+    pub iterations: Option<u32>,
+}
+
 /// Compilation options for the compiler
 #[derive(Debug, Clone)]
 pub struct CompilerOptions {
@@ -258,12 +282,9 @@ pub struct CompilerOptions {
     /// When true, retain the WIR module in [`CompileResult::wir_package`].
     /// Used by test infrastructure to inspect WIR without a second compilation pass.
     pub retain_wir: bool,
-    /// Override the inline threshold for the optimization pass.
-    /// When `None`, the default for the `opt_level` is used.
-    pub inline_threshold: Option<usize>,
-    /// Override the number of fixed-point optimization iterations.
-    /// When `None`, the default for the `opt_level` is used.
-    pub opt_iterations: Option<u32>,
+    /// What to override in the optimizer instead of taking `opt_level`'s
+    /// defaults.
+    pub opt: OptOverrides,
     /// Log level for compiler diagnostics.
     /// When `None`, uses the default (`Info`).
     pub log_level: Option<LogLevel>,
@@ -325,8 +346,7 @@ impl Default for CompilerOptions {
             target_world: None,
             skip_validation: false,
             retain_wir: false,
-            inline_threshold: None,
-            opt_iterations: None,
+            opt: OptOverrides::default(),
             log_level: None,
             allocator: None,
             invocations: kiln::InvocationIndex::default(),
@@ -916,6 +936,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             lib_world: Some(fq.clone()),
             lib_interface_export: true,
             opt_level: parent.opt_level,
+            opt: parent.opt,
             log_level: parent.log_level,
             codegen_flags: parent.codegen_flags.clone(),
             param_overrides: parent.param_overrides.clone(),
@@ -1450,15 +1471,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
-        synthesis::synthesize(package).map_err(|message| {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::UnsupportedFeature,
-                message,
-                span: None,
-            });
-            Bail
-        })?
+        synthesis::synthesize(package).map_err(|message| bail_unsupported(logger, message))?
     };
 
     // === Phase 8c: Effect Dispatch Synthesis ===
@@ -1525,9 +1538,21 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 9: Monomorphize (FlatPackage → FlatPackage) ===
     {
         let _span = logger.span("monomorphize");
-        monomorphize(&mut flat);
+        let mut mono = monomorphize(&mut flat);
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
+
+        // A `#[cm]` primitive in a generic body learns its payload only here.
+        // An installed handler claims the call before the CM binding does, and
+        // the helpers that binding mints call generics of their own — hence the
+        // resume.
+        // Ahead of the rewrites, as pre-monomorphize: both consume the pristine
+        // `#[cm]` call shape the scan matches.
+        let validated = synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
+            .map_err(|message| bail_unsupported(logger, message))?;
+        synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
+        synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
+        mono.resume(&mut flat);
     }
 
     // === Phase 9a: Erase Newtypes and Flags ===
@@ -1559,13 +1584,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 11: Optimize (NirPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("optimize");
-        optimize(
-            nir,
-            options.opt_level,
-            options.inline_threshold,
-            options.opt_iterations,
-            logger,
-        )
+        optimize(nir, options.opt_level, options.opt, logger)
     };
 
     // Emit optimizer remarks for residual value-semantic copies that survived
@@ -1622,15 +1641,10 @@ fn compile_after_load<H: CompilerHost>(
         logger,
         &entry_filename,
         compiler_host::Code::UnsupportedFeature,
-        wir_package.cm_import_violations.iter().map(|v| {
-            (
-                v.span,
-                format!(
-                    "`{}` binds `{}`, which no bundled interface declares; a `#[cm(...)]` member is only callable from the stdlib and from component dependencies",
-                    v.call_display, v.cm_name
-                ),
-            )
-        }),
+        wir_package
+            .cm_import_violations
+            .iter()
+            .map(|v| (v.span, v.message())),
     )?;
 
     // === Phase 13: Optimize WIR ===
@@ -1722,8 +1736,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         opt_level,
         None,
         None,
-        None,
-        None,
+        OptOverrides::default(),
         &[],
         &crate::hashmap::IndexMap::default(),
         param_resolution::ParamPolicy::default(),
@@ -1748,8 +1761,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     opt_level: OptLevel,
     target_world: Option<&str>,
     allocator: Option<&str>,
-    inline_threshold: Option<usize>,
-    opt_iterations: Option<u32>,
+    opt: OptOverrides,
     codegen_flags: &[String],
     param_overrides: &crate::hashmap::IndexMap<String, String>,
     param_policy: param_resolution::ParamPolicy,
@@ -1916,15 +1928,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Synthesis (must run before monomorphize)
             let package = {
                 let _span = logger.span("synthesis");
-                synthesis::synthesize(package).map_err(|message| {
-                    let _ = logger.error(compiler_host::Diagnostic {
-                        severity: compiler_host::Severity::Error,
-                        code: compiler_host::Code::UnsupportedFeature,
-                        message,
-                        span: None,
-                    });
-                    Bail
-                })?
+                synthesis::synthesize(package).map_err(|message| bail_unsupported(&logger, message))?
             };
 
             // Effect dispatch synthesis (lowers WithHandler / Resume).
@@ -1957,10 +1961,17 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 )?;
             }
 
-            // Monomorphize
+            // Monomorphize, then bind the async primitives whose payload the
+            // instances just made concrete (mirrors `compile_with_options`).
             {
                 let _span = logger.span("monomorphize");
-                monomorphize(&mut flat);
+                let mut mono = monomorphize(&mut flat);
+                let validated =
+                    synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
+                        .map_err(|message| bail_unsupported(&logger, message))?;
+                synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
+                synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
+                mono.resume(&mut flat);
             }
 
             // Erase Newtypes and Flags (after monomorphize, before lower)
@@ -1984,7 +1995,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Optimize
             let nir = {
                 let _span = logger.span("optimize");
-                optimize(nir, opt_level, inline_threshold, opt_iterations, &logger)
+                optimize(nir, opt_level, opt, &logger)
             };
 
             // WIR: Translate optimized NirPackage to WirPackage for inspection.

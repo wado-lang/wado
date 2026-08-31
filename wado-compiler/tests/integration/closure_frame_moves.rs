@@ -5,8 +5,6 @@
 
 use std::path::Path;
 
-use wado_compiler::{CompilerOptions, OptLevel};
-
 const SOURCE: &str = r#"
 struct Cfg { alt: i32, elems: List<i32>, pos: i32 }
 
@@ -42,34 +40,13 @@ export fn run() {
 }
 "#;
 
-fn build_body() -> String {
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        retain_wir: true,
-        ..Default::default()
-    };
-    let result = crate::common::compile_source_with_compiler_options(
-        Path::new("closure_frame_moves_test.wado"),
-        SOURCE,
-        options,
-    )
-    .expect("compilation should succeed");
-    let wir_package = result.wir_package.as_ref().expect("wir retained");
-    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
-
-    let start = wir_text
-        .find("fn \"closure_frame_moves_test.wado/build\"")
-        .expect("build function in WIR");
-    let rest = &wir_text[start..];
-    let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());
-    rest[..end].to_string()
-}
-
 #[test]
 fn a_closure_leaves_the_rest_of_the_frame_moving() {
-    let body = build_body();
-    assert!(
-        !body.contains("array_copy"),
-        "the element the iterator already copied must move into `next`:\n{body}"
+    let body = crate::common::wir_function_body(
+        Path::new("closure_frame_moves_test.wado"),
+        SOURCE,
+        wado_compiler::OptLevel::O2,
+        "fn \"closure_frame_moves_test.wado/build\"",
     );
+    crate::common::assert_pushes_by_move(&body, "next");
 }

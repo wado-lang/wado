@@ -110,11 +110,24 @@ for `Array<T>`-backed `String` / `List`).
 
 wasmtime/Cranelift call small Wasm functions cheaply, so forcing inlining rarely
 moves wall-time and raising the threshold bloats hot loops (measured slower). The
-exception is a tight iteration-bound loop with a trivial body. When a hot leaf
-has a rare heavy sub-case, split it: a tiny wrapper on the common path
-(`if width > 0 { apply_padding_slow(…) }`) plus an out-of-line `#[inline(never)]`
-helper — preferred over a `cold_path()` marker, which lies about branch
-likelihood when the slow path is always taken once reached.
+exception is a tight iteration-bound loop with a trivial body.
+
+A rare heavy sub-case behind a `cold_path()` marker usually needs no
+hand-splitting: `nir/cold_outline` moves what the marker opens into a function of
+its own, so the leaf inlines at its hot-path size. Its region runs to the end of
+the enclosing block, so a marker mid-loop-body is one it cannot take (see that
+pass's module doc) and that shape still needs the split written out. Split by
+hand also when the slow path is not rare: a `width > 0` branch that runs every
+time a width is set is hot when taken, which no marker should claim otherwise.
+
+**Write the stdlib to be fast without inline hints.** A `#[inline]` /
+`#[inline(never)]` in `wado-compiler/lib/` is a claim the cost model got it
+wrong, and it silently outlives whatever measurement justified it — the split
+that `#[inline(never)]` was added for is usually one the inliner already
+declines on size. Prefer changing the shape (a separate function, a smaller hot
+path) and leave the decision to the threshold; reach for a hint only after
+measuring that the shape alone does not get there, and say in a comment what it
+buys.
 
 ## 5. Measurement
 
@@ -128,6 +141,43 @@ ranking. Nothing in a number says whether its host was idle, so
 control for it — even on the machine that produced it; a HEAD build has measured
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
 A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it.
+
+### A/B-ing a compiler change
+
+A change to the compiler needs two compilers. `benchmark-baseline` builds
+`origin/main`'s once and caches it under that commit; `WADO_BIN` then runs it
+through _this_ tree's harness, so only the compiler differs — the baseline's own
+`benchmark/` would put the branch's harness changes inside the comparison too.
+
+```sh
+base=$(mise run benchmark-baseline)   # ~5 min the first time, 2 s after
+# alternate, so neither arm always goes second
+WADO_BIN=$base mise run benchmark-all > b1.log 2>&1
+mise run benchmark-all > h1.log 2>&1  # …and so on, 3 each
+node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
+```
+
+`ab.ts` decides each row by whether the arms' `[min, max]` overlap, not by the
+delta: on a 5 ms benchmark a 6% gap between bests sits inside one arm's own
+spread. **Read the reference rows first** — C, Rust and JavaScript run the same
+binary in both arms, so a `SLOWER` among them is the host drifting and no Wado
+row can be read either.
+
+Confirm a surviving row before believing it: the whole-suite arms are minutes
+apart, and the reference rows only catch drift big enough to cross a range. Loop
+that one benchmark back to back and check the ranking holds pair by pair.
+
+```sh
+for i in 1 2 3 4 5; do
+  "$base" run -O2 benchmark/sieve/sieve.wado
+  target/release/wado run -O2 benchmark/sieve/sieve.wado
+done
+```
+
+`WADO_SKIP_PASS=<pass>` is a third arm off the same binary, which is how a
+regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`
+sweeps a knob the same way, but the harness spends it on `wado run`, so a knob
+`compile` alone accepts is one no sweep reaches.
 
 **What decides adoption**, in priority order:
 

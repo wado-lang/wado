@@ -51,12 +51,18 @@ pub fn is_cm_record_stream_element(type_table: &TypeTable, element: TypeId) -> b
     )
 }
 
+/// The byte stream, which the hand-written `core:rt` adapters bind. A newtype
+/// over `u8` is one: the payload classification peels before it decides.
+pub fn is_u8_stream_element(type_table: &TypeTable, element: TypeId) -> bool {
+    matches!(
+        type_table.get(peel_newtypes(type_table, element)),
+        ResolvedType::Primitive(PrimitiveType::U8)
+    )
+}
+
 pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Option<String> {
     let element = peel_newtypes(type_table, element);
-    if matches!(
-        type_table.get(element),
-        ResolvedType::Primitive(PrimitiveType::U8)
-    ) {
+    if is_u8_stream_element(type_table, element) {
         return None;
     }
     cm_payload_type_from_type_id(type_table, element)
@@ -141,10 +147,7 @@ pub fn classify_stream_payload(
 ) -> crate::canonical::CmStreamPayload {
     use crate::canonical::CmStreamPayload;
     let element = peel_newtypes(type_table, element);
-    if matches!(
-        type_table.get(element),
-        ResolvedType::Primitive(PrimitiveType::U8)
-    ) {
+    if is_u8_stream_element(type_table, element) {
         return CmStreamPayload::U8;
     }
     match cm_payload_type_from_type_id(type_table, element) {
@@ -1955,11 +1958,15 @@ impl CmInterfaceRegistry {
                         (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
                     })
                     .collect();
+                // As for an interface method, the CM-ABI return type drops the
+                // `AsyncCall<T>` wrapper user code keeps seeing.
+                let return_type = unwrap_async_call_if_async(func.is_async, &func.return_type);
                 self.register_world_import(
                     &func.name,
                     cm_func_name,
+                    func.is_async,
                     params,
-                    func.return_type.clone(),
+                    return_type,
                 );
             }
         }
@@ -3127,6 +3134,7 @@ impl CmInterfaceRegistry {
         &mut self,
         func_name: &str,
         cm_func_name: &str,
+        is_async: bool,
         params: Vec<(String, String, Type)>,
         return_type: Option<Type>,
     ) {
@@ -3143,7 +3151,7 @@ impl CmInterfaceRegistry {
             wasi_func_name: cm_func_name.to_string(),
             interface_path: String::new(),
             package: String::new(),
-            is_async: false,
+            is_async,
             params: resolved_params,
             return_type,
         };

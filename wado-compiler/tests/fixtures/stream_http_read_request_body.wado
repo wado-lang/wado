@@ -1,4 +1,4 @@
-// Test: Reading HTTP request body via Stream::read()
+// Test: Reading HTTP request body via Stream::read_to_end()
 // Consumes the request body stream and echoes the length in the response body.
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
@@ -8,14 +8,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
 
     // Read the entire request body
-    let mut total_len = 0;
-    loop {
-        let chunk = body_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        total_len = total_len + chunk.len();
-    }
+    let total_len = body_stream.read_to_end().len();
     body_stream.drop();
 
     // Build response with body length as body text
@@ -31,7 +24,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // For "Hello" (5 bytes), write "5"
     let len_byte = (total_len + 48) as u8;  // ASCII digit
     let body_data: List<u8> = [len_byte];
-    resp_body_tx.write(body_data);
+    resp_body_tx.write_all(body_data);
     resp_body_tx.drop();
 
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

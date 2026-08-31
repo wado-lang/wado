@@ -14,8 +14,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Write response body in multiple chunks
     let chunk1: List<u8> = [72, 101, 108];  // "Hel"
     let chunk2: List<u8> = [108, 111];  // "lo"
-    body_tx.write(chunk1);
-    body_tx.write(chunk2);
+    body_tx.write_all(chunk1);
+    body_tx.write_all(chunk2);
     body_tx.drop();
 
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

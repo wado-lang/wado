@@ -1,7 +1,20 @@
-//! Function inlining optimization for Wado NIR.
+//! Replace a call to a small, non-recursive function with its body, spliced
+//! into a labeled block so the `return` becomes a `break`.
 //!
-//! This module provides function inlining for small functions.
-//! It uses labeled block expressions for cleaner value handling.
+//! A body carries two prices, parting company where it keeps a cold arm.
+//! `inline_cost` is what running one copy costs and is what the threshold
+//! judges; `inline_size` is what holding one costs, cold paths included.
+//! `InlineBudget` spends the second over a cap set as a percentage of the unit
+//! as the loop found it, cheapest body first, and reports at debug level what it
+//! turned down. `cold_outline` is what keeps the two prices in agreement, so no
+//! level sets a cap by default.
+//!
+//! A callee over budget as written is re-read under the constants its callers
+//! pass, taken across every call site so admission stays a property of the
+//! callee. Fitting folded is not enough on its own — admitting every marginal
+//! fold measured -9% on cbor-twitter — so the fold must also delete a loop or
+//! halve the body. Such a callee then receives no inlining itself: growing a
+//! body worth more copied than called past the budget destroys it, one-way.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -139,8 +152,22 @@ fn block_cut(
     }
 }
 
+/// Which of a body's two prices a walk is computing. Both are counted in
+/// [`weight`]'s unit; they differ over cold code, which runs rarely but is
+/// emitted all the same.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Price {
+    /// What a caller pays to *run* one copy — the question the inline threshold
+    /// asks. A `cold_path()` marker ends its block.
+    Hot,
+    /// What the module pays to *hold* one copy — the question the growth budget
+    /// asks. Cold code counts; only what a divergence makes unreachable does
+    /// not, since that is never emitted.
+    Size,
+}
+
 /// The immutable context of the inline cost walk: how many Wasm instructions a
-/// callee's hot path emits, in the unit [`weight`] defines.
+/// callee emits, in the unit [`weight`] defines and under the [`Price`] asked.
 ///
 /// The `seen` set threaded through it charges each promoted value once. The
 /// operand graph is hash-consed, so a sub-value reachable from several operands
@@ -149,6 +176,7 @@ struct CostWalk<'a> {
     body: &'a Body,
     type_table: &'a TypeTable,
     descriptors: &'a [FunctionRef],
+    price: Price,
     /// The constants this walk prices the body under, or `None` to price it as
     /// written. See [`ConstView`].
     consts: Option<&'a ConstView<'a>>,
@@ -166,7 +194,33 @@ pub(super) struct ConstView<'a> {
 /// Promoted values already charged by one walk.
 type SeenValues = IndexSet<ValueId>;
 
-impl CostWalk<'_> {
+impl<'a> CostWalk<'a> {
+    fn new(
+        body: &'a Body,
+        type_table: &'a TypeTable,
+        descriptors: &'a [FunctionRef],
+        price: Price,
+    ) -> Self {
+        Self {
+            body,
+            type_table,
+            descriptors,
+            price,
+            consts: None,
+        }
+    }
+
+    /// Price the body under the constants `view` says arrive at every call site.
+    fn under(mut self, view: &'a ConstView<'a>) -> Self {
+        self.consts = Some(view);
+        self
+    }
+
+    /// What the whole body costs at this walk's price.
+    fn whole_body(&self) -> usize {
+        self.block(self.body.root, &mut SeenValues::default())
+    }
+
     /// Whether `op` is a constant once the caller's constant arguments are
     /// substituted, so constant folding decides whatever reads it. Only the
     /// shapes `const_folding` itself folds are admitted.
@@ -268,14 +322,16 @@ impl CostWalk<'_> {
 
     /// Cost of a NIR block, stopping once the rest of it becomes cold or
     /// unreachable. The walk ends at the first statement [`block_cut`] flags: a
-    /// `cold_path()` marker drops the marker and everything after it, while a
-    /// diverging statement (`return` / `break` / `continue` or a `-> !` call
-    /// such as `panic`) is itself charged but cuts off its unreachable tail.
+    /// `cold_path()` marker drops the marker and, at [`Price::Hot`], everything
+    /// after it; a diverging statement (`return` / `break` / `continue` or a
+    /// `-> !` call such as `panic`) is itself charged but cuts off its
+    /// unreachable tail at either price.
     fn block(&self, block: BlockId, seen: &mut SeenValues) -> usize {
         let mut total = 0;
         for &stmt in &self.body.blocks[block].stmts {
             match block_cut(self.body, stmt, self.type_table, self.descriptors) {
-                BlockCut::Cold => break,
+                BlockCut::Cold if self.price == Price::Hot => break,
+                BlockCut::Cold => {}
                 BlockCut::Diverges => {
                     total += self.stmt(stmt, seen);
                     break;
@@ -558,13 +614,37 @@ const FREE_ARITY: usize = 2;
 
 /// The inline cost of a function body, in the unit [`weight`] defines.
 fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
-    let walk = CostWalk {
-        body,
-        type_table,
-        descriptors,
-        consts: None,
-    };
-    walk.block(body.root, &mut SeenValues::default())
+    CostWalk::new(body, type_table, descriptors, Price::Hot).whole_body()
+}
+
+/// What one copy of `body` occupies, cold paths included — the quantity the
+/// growth budget spends. A `cold_path()` branch is free to run and not free to
+/// store, so this parts company with [`inline_cost`] exactly where a callee
+/// keeps a rare heavy arm: `TreeBuilder::push_row` in the Gale runtime prices at
+/// 27 hot and 166 by size.
+fn inline_size(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
+    CostWalk::new(body, type_table, descriptors, Price::Size).whole_body()
+}
+
+/// What a run of statements occupies, on the same terms as [`inline_size`].
+/// `cold_outline` weighs a region against the call that would replace it with
+/// this, since a region's cost is its whole subtree — a lone `panic(…)` call
+/// whose argument builds a message is a statement to look at and 150 to hold.
+pub(super) fn region_size(
+    body: &Body,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    stmts: &[StmtId],
+) -> usize {
+    let walk = CostWalk::new(body, type_table, descriptors, Price::Size);
+    let mut seen = SeenValues::default();
+    stmts.iter().map(|&s| walk.stmt(s, &mut seen)).sum()
+}
+
+/// What a call to a helper taking `param_count` arguments costs the caller: the
+/// call itself, plus reading each argument out of a local.
+pub(super) fn call_site_size(param_count: usize) -> usize {
+    weight::CALL + param_count * weight::OP
 }
 
 /// What the caller pays for `body` once constant folding has run on it, given
@@ -577,13 +657,9 @@ fn inline_cost_folded(
     descriptors: &[FunctionRef],
     view: &ConstView<'_>,
 ) -> usize {
-    let walk = CostWalk {
-        body,
-        type_table,
-        descriptors,
-        consts: Some(view),
-    };
-    walk.block(body.root, &mut SeenValues::default())
+    CostWalk::new(body, type_table, descriptors, Price::Hot)
+        .under(view)
+        .whole_body()
 }
 
 fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<String>) {
@@ -841,6 +917,9 @@ fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
 /// What the engine decides about one callee.
 #[derive(Clone, Copy, Default)]
 struct Verdict {
+    /// The hot price the verdict was reached on, or `0` for a callee turned
+    /// down before it was priced at all.
+    hot: usize,
     /// Splice it at its call sites.
     inline: bool,
     /// Keep it as a template: splice nothing *into* it.
@@ -896,6 +975,7 @@ fn classify_callee(
     // a body, a non-adapter, and non-recursion, all checked above)
     if func.inline_hint == InlineHint::Always {
         return Verdict {
+            hot: 0,
             inline: true,
             hold: false,
         };
@@ -921,6 +1001,7 @@ fn classify_callee(
     let plain = inline_cost(body, type_table, descriptors);
     if plain <= effective_threshold {
         return Verdict {
+            hot: plain,
             inline: true,
             hold: false,
         };
@@ -933,35 +1014,21 @@ fn classify_callee(
         if folded > effective_threshold {
             return (false, false);
         }
-        let walk = CostWalk {
-            body,
-            type_table,
-            descriptors,
-            consts: Some(view),
-        };
-        // Fitting folded is not enough on its own — admitting every marginal
-        // fold measured -9% on cbor-twitter. It must also delete a loop, or
-        // halve the body.
+        let walk = CostWalk::new(body, type_table, descriptors, Price::Hot).under(view);
         (folded * 2 <= plain, fold_drops_loop(body, view, &walk))
     };
 
-    // `inline` reads the call sites, because splicing has to pay at the sites
-    // that exist. The hold reads the body alone, because it protects an option
-    // whose evidence has not arrived yet: a `field<T>` in a derived serializer
-    // is admitted at plain=18 against a budget of 13, on a folded price that
-    // exists only once the reflection walk has unrolled its keys into literals
-    // — rounds after the leaves would have been spliced in.
+    // `inline` reads the call sites, since splicing pays at the sites that
+    // exist; the hold reads the body alone, since it protects an option whose
+    // evidence has not arrived — a `field<T>` in a derived serializer is
+    // admitted at plain=18 against a budget of 13, on a folded price the
+    // reflection walk only produces rounds later.
     //
-    // Only a deleted loop counts. Assuming the receiver constant halves almost
-    // any body, so holding on that suppressed bottom-up inlining across the
-    // whole program: `String::get_byte_unchecked` stopped reaching a two-line
-    // `peek`.
-    //
-    // Measured slower and not worth retrying: holding only what the call sites
-    // already admit (identical output to holding nothing), holding every
-    // candidate, and keeping a frozen copy to splice from so the original could
-    // grow freely — a detached copy is code no other pass can reach, so
-    // `sroa_param` rewrites a signature under it and it has to be discarded.
+    // Only a deleted loop counts: a constant receiver halves almost any body,
+    // and holding on that stopped `String::get_byte_unchecked` reaching a
+    // two-line `peek`. Measured slower and not worth retrying — holding what
+    // the call sites already admit, holding every candidate, and splicing from
+    // a frozen copy, which no other pass can reach and `sroa_param` invalidates.
     let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let (_, optimistic_loop) = weigh(&ConstView {
         params: &all_params,
@@ -973,6 +1040,7 @@ fn classify_callee(
         halves || drops_loop
     });
     Verdict {
+        hot: plain,
         inline,
         hold: optimistic_loop,
     }
@@ -1090,6 +1158,166 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
     }
 }
 
+/// How many call sites each callee has, counted with repetition and keyed by
+/// store position. This is the multiplier on what one splice adds, so a callee
+/// reached twice from one body counts twice — unlike [`collect_callees`], whose
+/// answer is a set because the recursion graph only asks whether an edge exists.
+fn call_site_counts(project: &NirPackage) -> Vec<usize> {
+    let mut counts = vec![0usize; project.functions.len()];
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(body) = func.body.as_ref() else {
+            continue;
+        };
+        let mut stack = vec![NodeRef::Block(body.root)];
+        while let Some(node) = stack.pop() {
+            if let NodeRef::Expr(id) = node
+                && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
+                && let Some(slot) = counts.get_mut(func_id.index())
+            {
+                *slot += 1;
+            }
+            body.for_each_child(node, |c| stack.push(c));
+        }
+    }
+    counts
+}
+
+/// A callee the heuristic admitted, priced for the budget.
+struct Candidate {
+    id: FuncId,
+    name: String,
+    /// What running one copy costs — the price the threshold judged.
+    hot: usize,
+    /// What holding one copy costs. Above `hot` exactly when the body keeps a
+    /// cold path the threshold discounted.
+    size: usize,
+    sites: usize,
+    /// `#[inline(always)]`: a directive, so it is charged but never declined.
+    forced: bool,
+}
+
+/// A callee the budget turned down, for the post-loop report.
+pub(super) struct Declined {
+    hot: usize,
+    size: usize,
+    sites: usize,
+}
+
+/// How far the inliner may push the package past the size it entered the
+/// optimizer loop at.
+///
+/// The threshold decides whether one copy is worth making; this decides how many
+/// copies the package can afford. One number cannot do both jobs, and a
+/// threshold asked to do both ends up tuned to sit just under whichever
+/// program's cliff was last measured.
+#[derive(Default)]
+pub(super) struct InlineBudget {
+    /// Percent of the baseline the inliner may add on top of it, or `None` for
+    /// a level that does not bound it.
+    growth: Option<u32>,
+    /// Unit size the first round saw. Anchoring here rather than on the current
+    /// size is what makes the budget finite: the loop runs many rounds, and a
+    /// cap re-read from a grown unit would ratchet.
+    baseline: Option<usize>,
+    /// Keyed by callee name, so a candidate turned down in several rounds is
+    /// reported once, at its latest price.
+    declined: IndexMap<String, Declined>,
+}
+
+/// Below this the budget does not apply. A small package has no cliff to fall
+/// off — the absolute growth is bounded by how little there is to copy — and a
+/// percentage of a small baseline is too tight to inline anything at all.
+const BUDGET_MIN_UNIT: usize = 4_000;
+
+impl InlineBudget {
+    pub(super) fn new(growth: Option<u32>) -> Self {
+        Self {
+            growth,
+            ..Default::default()
+        }
+    }
+
+    /// Whether anything reads a round's prices: a cap to spend them against, or
+    /// a trace that reports them. Taking them walks every body in the unit, so
+    /// the default — no cap, no trace — should not pay for it.
+    pub(super) fn prices_read(&self) -> bool {
+        let trace = crate::trace::filter();
+        self.growth.is_some() || trace.enabled("inline") || trace.enabled("opt_loop")
+    }
+
+    /// What the inliner may still add, given the unit's size right now. Read
+    /// from the live size rather than accumulated per round, so a round that
+    /// over-estimated its growth — or a later pass that folded some away — hands
+    /// the difference back instead of losing it.
+    fn headroom(&mut self, unit_size: usize) -> Option<usize> {
+        let growth = self.growth? as usize;
+        let baseline = *self.baseline.get_or_insert(unit_size);
+        if baseline < BUDGET_MIN_UNIT {
+            return None;
+        }
+        Some((baseline + baseline * growth / 100).saturating_sub(unit_size))
+    }
+
+    /// Spend this round's headroom over `priced` and return the candidates it
+    /// could not cover.
+    ///
+    /// Cheapest body first: with no profile to say which callee is hot, the
+    /// ranking that is defensible is the one that buys the most inlining per
+    /// unit of budget. A single-site candidate costs nothing (its body goes with
+    /// the site), so it is never what runs the budget out.
+    fn select(&mut self, priced: &mut [Candidate], unit_size: usize) -> IndexSet<FuncId> {
+        let mut over = IndexSet::default();
+        let Some(headroom) = self.headroom(unit_size) else {
+            return over;
+        };
+        priced.sort_by_key(|c| c.size);
+        let mut spent = 0usize;
+        for c in priced {
+            let growth = splice_growth(c.size, c.sites);
+            if c.forced || spent + growth <= headroom {
+                spent += growth;
+                continue;
+            }
+            over.insert(c.id);
+            self.declined.insert(
+                c.name.clone(),
+                Declined {
+                    hot: c.hot,
+                    size: c.size,
+                    sites: c.sites,
+                },
+            );
+        }
+        over
+    }
+
+    /// What the budget turned down over the whole run, largest first. Both
+    /// prices are named: a `hot` far under `size` is a callee the threshold
+    /// admitted on a cold-discounted price and the budget then had to pay for
+    /// in full.
+    pub(super) fn report(&self) -> Option<String> {
+        let (growth, baseline) = (self.growth?, self.baseline?);
+        let (name, largest) = self.declined.iter().max_by_key(|(_, d)| d.size * d.sites)?;
+        Some(format!(
+            "inline: the {}% growth budget over {} declined {} candidate(s); largest `{}` (hot {}, size {} x {} sites)",
+            growth,
+            baseline,
+            self.declined.len(),
+            name,
+            largest.hot,
+            largest.size,
+            largest.sites,
+        ))
+    }
+}
+
+/// What splicing one callee everywhere adds to the unit: a copy per call site,
+/// less the body itself, which goes with the last site that called it.
+fn splice_growth(size: usize, sites: usize) -> usize {
+    size * sites.saturating_sub(1)
+}
+
 /// Inline eligible functions at their call sites
 ///
 /// The `inline_threshold` parameter controls the maximum number of statements
@@ -1097,6 +1325,7 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 pub fn inline_functions(
     project: &mut NirPackage,
     inline_threshold: usize,
+    budget: &mut InlineBudget,
     gate: &mut FunctionGate,
     descriptor_cache: &mut super::dce::DescriptorCache,
 ) -> bool {
@@ -1139,9 +1368,27 @@ pub fn inline_functions(
     // Callees that must not receive inlining this round — see `Verdict::hold`.
     let mut held: IndexSet<FuncId> = IndexSet::default();
 
+    // What the unit holds right now, and what each admitted candidate would add
+    // to it. `Candidate::forced` marks the ones the budget may not turn down.
+    // Both prices cost a walk over the whole unit per round and no level sets a
+    // growth cap, so they are taken only where something reads them.
+    let pricing = budget.prices_read();
+    let call_sites = if pricing {
+        call_site_counts(project)
+    } else {
+        Vec::new()
+    };
+    let mut unit_size = 0usize;
+    let mut priced: Vec<Candidate> = Vec::new();
+
     let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
+        let size = match func.body.as_ref() {
+            Some(b) if pricing => inline_size(b, &type_table, descriptors),
+            _ => 0,
+        };
+        unit_size += size;
         let view = func
             .id
             .and_then(|id| const_params.get(&id))
@@ -1172,16 +1419,65 @@ pub fn inline_functions(
             if let Some(strings) = project.function_strings.get(&string_key) {
                 candidate_strings.insert(id, strings.clone());
             }
+            if pricing {
+                priced.push(Candidate {
+                    id,
+                    name: func.name.clone(),
+                    hot: verdict.hot,
+                    size,
+                    sites: call_sites.get(id.index()).copied().unwrap_or(0),
+                    forced: func.inline_hint == InlineHint::Always,
+                });
+            }
             inline_candidates.insert(id, func.clone());
         }
     }
     drop(type_table);
 
+    // What this round would add, and which callees dominate it. A candidate the
+    // threshold admitted only because the cold discount put its hot path under
+    // it is flagged `cold`: the two prices disagree about exactly those.
+    crate::compiler_trace!("inline", "{}", {
+        let mut ranked: Vec<&Candidate> = priced.iter().collect();
+        ranked.sort_by_key(|c| std::cmp::Reverse(splice_growth(c.size, c.sites)));
+        let total: usize = ranked.iter().map(|c| splice_growth(c.size, c.sites)).sum();
+        use std::fmt::Write as _;
+        let top = ranked.iter().take(6).fold(String::new(), |mut s, c| {
+            let _ = write!(
+                s,
+                "\n    {:>8}  {} (hot {}, size {} x {} sites){}",
+                splice_growth(c.size, c.sites),
+                c.name,
+                c.hot,
+                c.size,
+                c.sites,
+                if c.hot <= inline_threshold && c.size > inline_threshold {
+                    "  [cold]"
+                } else {
+                    ""
+                }
+            );
+            s
+        });
+        format!(
+            "unit {unit_size}: {} candidates worth {total} of growth{top}",
+            priced.len(),
+        )
+    });
+
+    let over_budget = budget.select(&mut priced, unit_size);
+    for id in &over_budget {
+        inline_candidates.shift_remove(id);
+        candidate_strings.shift_remove(id);
+    }
+
     crate::compiler_trace!(
         "opt_loop",
-        "inline: threshold={} candidates={}",
+        "inline: threshold={} candidates={} (unit {}, {} over budget)",
         inline_threshold,
-        inline_candidates.len()
+        inline_candidates.len(),
+        unit_size,
+        over_budget.len()
     );
 
     if inline_candidates.is_empty() {
@@ -1576,7 +1872,7 @@ struct InlineBinding {
 
 /// Threaded context for the callee->caller splice: how to remap the callee's
 /// local indices and inner labels, and which label a `return` breaks to.
-struct InlineCtx<'a> {
+pub(super) struct InlineCtx<'a> {
     param_to_local: &'a IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
@@ -1584,8 +1880,39 @@ struct InlineCtx<'a> {
     label_map: &'a IndexMap<String, String>,
 }
 
+impl<'a> InlineCtx<'a> {
+    /// The context `cold_outline` moves a region under: the first `inherited`
+    /// locals keep their indices, each local in `lifted` takes the parameter
+    /// slot it maps to, and everything else shifts past the new parameters.
+    /// With `lifted` empty this renames nothing.
+    pub(super) fn lifting(
+        inherited: u32,
+        lifted: &'a IndexMap<u32, u32>,
+        label_map: &'a IndexMap<String, String>,
+    ) -> Self {
+        Self {
+            param_to_local: lifted,
+            local_offset: inherited + lifted.len() as u32,
+            param_count: inherited,
+            label: "",
+            label_map,
+        }
+    }
+}
+
 impl InlineCtx<'_> {
-    fn local(&self, idx: u32) -> u32 {
+    /// The label a `return` becomes a `break` to. `InlineCtx::lifting` carries
+    /// none, since `cold_outline` moves only a region control cannot leave, and
+    /// a `break ""` names no block.
+    fn return_label(&self) -> String {
+        assert!(
+            !self.label.is_empty(),
+            "[NIR] inline: a `return` reached a splice with no label to break to"
+        );
+        self.label.to_string()
+    }
+
+    pub(super) fn local(&self, idx: u32) -> u32 {
         remap_local_index(
             idx,
             self.param_to_local,
@@ -1868,7 +2195,7 @@ fn splice_block_into(
                 let value = v.map(|x| splice_operand(caller, callee, x, ctx));
                 out.push(caller.stmts.push(StmtNode {
                     kind: StmtKind::Break {
-                        label: Some(ctx.label.to_string()),
+                        label: Some(ctx.return_label()),
                         value,
                     },
                     span,
@@ -1914,7 +2241,12 @@ fn splice_block(caller: &mut Body, callee: &Body, block: BlockId, ctx: &InlineCt
     caller.blocks.push(BlockNode { stmts: out, span })
 }
 
-fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -> StmtId {
+pub(super) fn splice_stmt(
+    caller: &mut Body,
+    callee: &Body,
+    sid: StmtId,
+    ctx: &InlineCtx,
+) -> StmtId {
     let span = callee.stmts[sid].span;
     let kind = match &callee.stmts[sid].kind {
         StmtKind::Let {
@@ -1948,7 +2280,7 @@ fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -
         StmtKind::Return { value } => {
             let v = *value;
             StmtKind::Break {
-                label: Some(ctx.label.to_string()),
+                label: Some(ctx.return_label()),
                 value: v.map(|x| splice_operand(caller, callee, x, ctx)),
             }
         }

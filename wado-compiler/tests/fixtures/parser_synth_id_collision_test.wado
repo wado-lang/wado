@@ -307,16 +307,7 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
         },
     };
     let [stream, done] = opened.read_via_stream(0 as Filesize);
-    let mut bytes: List<u8> = [];
-    loop {
-        let chunk = stream.read(8192);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let b of chunk {
-            bytes.push(b);
-        }
-    }
+    let bytes = stream.read_to_end();
     stream.drop();
     done.drop();
     return match String::from_utf8(bytes) {
@@ -340,7 +331,7 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
     let bytes: List<u8> = content.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
-    tx.write(bytes);
+    tx.write_all(bytes);
     tx.drop();
     sub.drop();
     return Result::Ok(());

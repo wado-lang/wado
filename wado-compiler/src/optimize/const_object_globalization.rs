@@ -45,6 +45,7 @@ enum CandidateKind {
     /// global's set value stays self-contained (eager-promotable, dedupable)
     /// exactly like the pre-normal-form builder-temp block.
     LetBinding {
+        stmt: StmtId,
         local_index: u32,
         sibling_lets: Vec<StmtId>,
     },
@@ -85,6 +86,32 @@ impl CandidateKind {
         match self {
             CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => true,
             CandidateKind::LetBinding { .. } => false,
+        }
+    }
+
+    /// The `let`s this candidate detaches into its own initializer.
+    fn sibling_lets(&self) -> &[StmtId] {
+        match self {
+            CandidateKind::LetBinding { sibling_lets, .. }
+            | CandidateKind::InlineRef { sibling_lets, .. }
+            | CandidateKind::ValueArg { sibling_lets, .. } => sibling_lets,
+        }
+    }
+
+    /// What the candidate hoists, for `WADO_TRACE`.
+    fn what(&self) -> String {
+        match self {
+            CandidateKind::LetBinding { local_index, .. } => format!("local {local_index}"),
+            CandidateKind::InlineRef { .. } => "an `&` literal".to_string(),
+            CandidateKind::ValueArg { .. } => "a by-value argument".to_string(),
+        }
+    }
+
+    /// The `let` this candidate replaces, for the kind that has one.
+    fn own_stmt(&self) -> Option<StmtId> {
+        match self {
+            CandidateKind::LetBinding { stmt, .. } => Some(*stmt),
+            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => None,
         }
     }
 }
@@ -149,6 +176,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         let Some(body) = &f.body else {
             continue;
         };
+        crate::compiler_trace!("const_object_globalization", "fn {}", f.name);
         collect_candidates(body, &gate, fi, &f.module_source, &mut candidates);
     }
     if candidates.is_empty() {
@@ -174,11 +202,18 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         let prefer_fixed_repr = kind.prefer_fixed_repr();
 
         let mut func = project.functions[func_idx].borrow_mut();
+        crate::compiler_trace!(
+            "const_object_globalization",
+            "  {} hoists {} as {name} (guarded={guarded})",
+            func.name,
+            kind.what(),
+        );
         let body = func.body.as_mut().expect("candidate function has a body");
         match kind {
             CandidateKind::LetBinding {
                 local_index,
                 sibling_lets,
+                ..
             } => {
                 // Rewrite reads first (the let's own value is const and
                 // references no local index, so it is untouched), then
@@ -274,6 +309,7 @@ fn collect_candidates(
     promoted_local_reads(body, &mut read_locals);
     let buried = buried_promoted_reads(body);
     let leaked_ref_args = ref_args_that_escape(body, gate);
+    let first = out.len();
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -292,6 +328,7 @@ fn collect_candidates(
                 .chain(sibling_lets.iter().copied())
                 .any(|st| stmt_needs_lazy_guard(body, st, gate, false));
             let kind = CandidateKind::LetBinding {
+                stmt: s,
                 local_index: *local_index,
                 sibling_lets,
             };
@@ -370,6 +407,19 @@ fn collect_candidates(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
+    // A `let` listed as some candidate's sibling is detached into that
+    // candidate's initializer, so it cannot also be hoisted on its own.
+    let claimed: IndexSet<StmtId> = out[first..]
+        .iter()
+        .flat_map(|c| c.kind.sibling_lets())
+        .copied()
+        .collect();
+    let collected = out.split_off(first);
+    out.extend(
+        collected
+            .into_iter()
+            .filter(|c| c.kind.own_stmt().is_none_or(|s| !claimed.contains(&s))),
+    );
 }
 
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
@@ -760,6 +810,7 @@ fn let_stmt_qualifies(
     buried: &IndexSet<u32>,
 ) -> Option<Vec<StmtId>> {
     let StmtKind::Let {
+        name,
         local_index,
         value,
         type_id,
@@ -769,22 +820,36 @@ fn let_stmt_qualifies(
         return None;
     };
     let (local_index, value, type_id) = (*local_index, *value, *type_id);
-    if !gate.is_reference_type(type_id)
-        || !is_globalizable_const_operand(body, value, gate, &mut siblings.set.clone())
-        || !is_readonly_body(body, local_index, gate)
-        || local_leaks_through_call(body, local_index, gate)
-    {
-        return None;
+    let decline = |why: &str| -> Option<Vec<StmtId>> {
+        crate::compiler_trace!(
+            "const_object_globalization",
+            "  {name}#{local_index} declined: {why}"
+        );
+        None
+    };
+    if !gate.is_reference_type(type_id) {
+        return decline("not a reference type");
+    }
+    if !is_globalizable_const_operand(body, value, gate, &mut siblings.set.clone()) {
+        return decline("initializer is not a closed constant");
+    }
+    if let Some(why) = readonly_body_violation(body, local_index, gate) {
+        return decline(why);
+    }
+    if local_leaks_through_call(body, local_index, gate) {
+        return decline("storage leaks through a call");
     }
     // An unread binding is dead code on its way out, not a hoist target:
     // hoisting it manufactures a live global no WIR cleanup deletes.
     if !read_locals.contains(&local_index) {
-        return None;
+        return decline("never read");
     }
     if buried.contains(&local_index) {
-        return None;
+        return decline("read is buried under a promoted local");
     }
-    let (used_siblings, lets) = confined_sibling_lets(body, value, siblings)?;
+    let Some((used_siblings, lets)) = confined_sibling_lets(body, value, siblings) else {
+        return decline("a sibling const is read from outside the initializer");
+    };
     let has_aggregate = contains_aggregate_operand(body, value, gate)
         || used_siblings.iter().any(|l| {
             siblings
@@ -793,7 +858,7 @@ fn let_stmt_qualifies(
                 .is_some_and(|&d| contains_aggregate_operand(body, d, gate))
         });
     if !has_aggregate {
-        return None;
+        return decline("no aggregate to hoist");
     }
     Some(lets)
 }
@@ -1670,8 +1735,13 @@ impl Gate<'_> {
 /// is a write to `writer` that no use of `writer` shows. [`param_storage_escapes`]
 /// reads the callee side through the same [`projection_alias_roots`].
 fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
+    readonly_body_violation(body, idx, gate).is_none()
+}
+
+/// [`is_readonly_body`], naming the check that rejected `idx` for `WADO_TRACE`.
+fn readonly_body_violation(body: &Body, idx: u32, gate: &Gate<'_>) -> Option<&'static str> {
     if !block_readonly(body, body.root, idx, gate) {
-        return false;
+        return Some("written after the binding");
     }
     // The aliases answer a narrower question. `block_readonly` also rejects a
     // bare whole-value read, which is a consuming use of the constant but
@@ -1679,7 +1749,8 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     projection_alias_roots(body, idx, gate, AliasRoots::Declared)
         .into_iter()
         .filter(|&root| root != idx)
-        .all(|root| !written_through(body, root, gate))
+        .any(|root| written_through(body, root, gate))
+        .then_some("an alias of the binding is written")
 }
 
 /// Whether a write reaches local `idx`: an assignment rooted at it, a `&mut` of
@@ -2134,6 +2205,18 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         } => !inner
             .as_expr()
             .is_some_and(|e| expr_mentions_local(body, e, idx)),
+
+        // `&<…xs…>` — a shared borrow reads. What the borrow is then bound to
+        // is an alias [`is_readonly_body`] follows through
+        // [`projection_alias_roots`], so a write through it is still caught.
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref,
+            expr: inner,
+        } => {
+            let inner = *inner;
+            inner.as_expr().is_some_and(|e| is_local(body, e, idx))
+                || expr_readonly_operand(body, inner, idx, gate)
+        }
 
         // Pure scalar reads.
         ExprKind::Binary { left, right, .. } => {

@@ -878,6 +878,58 @@ pub fn compile_source_with_opts(
         .map_err(|_: CompileFailure| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
+/// Compile `source` and unparse the WIR it retained.
+pub fn wir_text(path: &std::path::Path, source: &str, opt_level: OptLevel) -> String {
+    let options = wado_compiler::CompilerOptions {
+        opt_level,
+        retain_wir: true,
+        ..Default::default()
+    };
+    let result = compile_source_with_compiler_options(path, source, options)
+        .expect("compilation should succeed");
+    wado_compiler::wir_unparse::unparse_wir(result.wir_package.as_ref().expect("wir retained"))
+}
+
+/// [`wir_text`], cut to the one function whose header starts with `fn_header`
+/// and ending at the next top-level `fn`.
+pub fn wir_function_body(
+    path: &std::path::Path,
+    source: &str,
+    opt_level: OptLevel,
+    fn_header: &str,
+) -> String {
+    let wir = wir_text(path, source, opt_level);
+    let start = wir
+        .find(fn_header)
+        .unwrap_or_else(|| panic!("{fn_header} in WIR"));
+    let rest = &wir[start..];
+    let end = rest[1..].find("\nfn ").map_or(rest.len(), |i| i + 1);
+    rest[..end].to_string()
+}
+
+/// Assert that `body` pushes into `dst` by moving the element rather than
+/// copying it, and that nothing in it deep-copies more than the one element the
+/// iterator itself yields.
+///
+/// A `!body.contains("array_copy")` in place of this only holds while the
+/// iterator's `next` stays out of line: inlining brings that copy — which value
+/// semantics requires — into the body under test.
+pub fn assert_pushes_by_move(body: &str, dst: &str) {
+    let store = body
+        .lines()
+        .find(|l| l.contains("array_set") && l.contains(&format!("{dst}.repr")))
+        .unwrap_or_else(|| panic!("a push into `{dst}`:\n{body}"));
+    assert!(
+        !store.contains("struct.new") && !store.contains("array_copy"),
+        "the element the iterator already copied must move into `{dst}`:\n{store}"
+    );
+    let copies = body.matches("array_copy").count();
+    assert!(
+        copies <= 1,
+        "only the iterator's own copy of the element may remain, found {copies}:\n{body}"
+    );
+}
+
 /// Compile source code with full compiler options (including WIR backend flag)
 pub fn compile_source_with_compiler_options(
     path: &std::path::Path,

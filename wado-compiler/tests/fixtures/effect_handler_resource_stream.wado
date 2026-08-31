@@ -27,12 +27,12 @@ impl Stream<u8> for MockStream {
         let id: i32 = 0;
         resume [id as Stream<u8>, id as StreamWritable<u8>]
     }
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
         let _ = this;
         let _ = max;
         let snapshot = self.log;
         self.log = [];
-        resume snapshot
+        resume StreamChunk { items: snapshot, result: CopyResult::Completed }
     }
     fn drop(&mut self, this: &Stream<u8>) {
         let _ = this;
@@ -42,12 +42,13 @@ impl Stream<u8> for MockStream {
 }
 
 impl StreamWritable<u8> for MockStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
         let _ = this;
+        let count = data.len();
         for let b of data {
             self.log.push(b);
         }
-        resume ()
+        resume StreamWrite { count: count, result: CopyResult::Completed }
     }
     fn drop(&mut self, this: &StreamWritable<u8>) {
         let _ = this;
@@ -62,7 +63,7 @@ export fn run() with Stdout {
         let [rx, tx] = Stream::<u8>::new();
         let payload: List<u8> = [104 as u8, 105 as u8]; // "hi"
         tx.write(payload);
-        let got = rx.read(16);
+        let got = rx.read(16).items;
         assert got.len() == 2;
         assert got[0] == 104 as u8;
         assert got[1] == 105 as u8;

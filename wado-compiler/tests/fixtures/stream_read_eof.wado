@@ -1,5 +1,5 @@
-// Test: Stream::read() returns empty array on end-of-stream
-// When the writable end is closed without writing, read should return empty.
+// Test: Stream::read() reports end-of-stream through `CopyResult`
+// When the writable end is closed without writing, `read_to_end` yields nothing.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -8,8 +8,8 @@ export fn run() with Stdout {
     // Close writer immediately (no data written)
     tx.drop();
 
-    // Read should return empty array (end-of-stream)
-    let result = rx.read(64);
+    // Draining an already-dropped stream yields no elements
+    let result = rx.read_to_end();
     assert result.len() == 0;
 
     rx.drop();

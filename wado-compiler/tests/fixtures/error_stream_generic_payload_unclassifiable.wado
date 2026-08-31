@@ -1,0 +1,25 @@
+// A generic body names its payload with a type parameter, so the
+// pre-monomorphize payload scan cannot judge it. The same program written
+// without the helper is a clean diagnostic; routed through one, it used to
+// reach WIR build with no binding to call and panic there.
+struct Unrepresentable {
+    a: i32,
+    b: String,
+}
+
+fn roundtrip<T>(items: List<T>) -> List<T> with (Stream, StreamWritable) {
+    let [rx, tx] = Stream::<T>::new();
+    tx.write_all(items);
+    tx.drop();
+    let out = rx.read_to_end();
+    rx.drop();
+    return out;
+}
+
+export fn run() with (Stream, StreamWritable) {
+    let items: List<Unrepresentable> = [Unrepresentable { a: 1, b: "x" }];
+    assert roundtrip::<Unrepresentable>(items).len() == 1;
+}
+
+__DATA__
+{"compile_error": "record type `Unrepresentable` is used as a `future` / `stream` payload"}

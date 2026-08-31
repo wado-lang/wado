@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::OptLevel;
 
 const SOURCE: &str = r#"
 #[inline(never)]
@@ -30,30 +30,26 @@ export fn run() {
 }
 "#;
 
-/// The number of bounds-check panic calls inside `bump`'s WIR body: one per
+/// The number of bounds-check panics inside one function's WIR body: one per
 /// surviving `>= arr.used` guard.
-fn bump_panic_count(opt_level: OptLevel) -> usize {
-    let options = CompilerOptions {
+///
+/// A guard's taken arm is spelled one of two ways — an inline `core:rt/panic`,
+/// or a call to the `$cold` helper `nir/cold_outline` moves that arm into. Both
+/// count: what these tests are about is how many checks survive, not which
+/// shape the optimizer left them in, and counting the callee name alone would
+/// read the split shape as no check at all.
+fn panic_count(opt_level: OptLevel, file: &str, source: &str, func: &str) -> usize {
+    let body = crate::common::wir_function_body(
+        Path::new(file),
+        source,
         opt_level,
-        retain_wir: true,
-        ..Default::default()
-    };
-    let result = crate::common::compile_source_with_compiler_options(
-        Path::new("redundant_bce_test.wado"),
-        SOURCE,
-        options,
-    )
-    .expect("compilation should succeed");
-    let wir_package = result.wir_package.as_ref().expect("wir retained");
-    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
+        &format!("fn \"{file}/{func}\""),
+    );
+    body.matches("core:rt/panic").count() + body.matches("$cold").count()
+}
 
-    let start = wir_text
-        .find("fn \"redundant_bce_test.wado/bump\"")
-        .expect("bump function in WIR");
-    let rest = &wir_text[start..];
-    // The next top-level `\nfn ` marks the end of `bump`'s body.
-    let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());
-    rest[..end].matches("core:rt/panic").count()
+fn bump_panic_count(opt_level: OptLevel) -> usize {
+    panic_count(opt_level, "redundant_bce_test.wado", SOURCE, "bump")
 }
 
 #[test]
@@ -88,27 +84,13 @@ export fn run() {
 }
 "#;
 
-/// Bounds-check panic calls inside `top`'s WIR body.
 fn top_panic_count(opt_level: OptLevel) -> usize {
-    let options = CompilerOptions {
+    panic_count(
         opt_level,
-        retain_wir: true,
-        ..Default::default()
-    };
-    let result = crate::common::compile_source_with_compiler_options(
-        Path::new("last_element_test.wado"),
+        "last_element_test.wado",
         LAST_ELEMENT_SOURCE,
-        options,
+        "top",
     )
-    .expect("compilation should succeed");
-    let wir_package = result.wir_package.as_ref().expect("wir retained");
-    let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
-    let start = wir_text
-        .find("fn \"last_element_test.wado/top\"")
-        .expect("top function in WIR");
-    let rest = &wir_text[start..];
-    let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());
-    rest[..end].matches("core:rt/panic").count()
 }
 
 #[test]

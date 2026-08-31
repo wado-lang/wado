@@ -105,6 +105,10 @@ pub struct Package {
         crate::synthesis::effect_dispatch::DispatchPlan,
     >,
 
+    /// The resource half of the wrapper index the same early pass built, kept
+    /// past link for the calls monomorphize has yet to make concrete.
+    pub resource_wrappers: crate::synthesis::effect_dispatch::ResourceWrapperIndex,
+
     /// `ModuleSource` interner shared with the elaborator. Synthesis
     /// passes (`cm_binding`, `effect_dispatch`) borrow this when they
     /// need to construct fresh `ModuleSource` values for synthesised
@@ -181,6 +185,7 @@ impl Package {
             wasm_assets: IndexMap::default(),
             // Effect-dispatch plans flow from pre-cm_binding to post-check
             dispatch_plans: IndexMap::default(),
+            resource_wrappers: IndexMap::default(),
             // Populated post-construction from `state.liveness.moved_spans`.
             moved_local_spans: IndexMap::default(),
         }

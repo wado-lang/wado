@@ -22,16 +22,7 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
         Err(_) => panic(`failed to open ${path}`),
     };
     let [stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut buf: ByteList = [];
-    loop {
-        let chunk = stream.read(65536);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let mut i = 0; i < chunk.len(); i += 1 {
-            buf.push(chunk[i]);
-        }
-    }
+    let buf = stream.read_to_end() as ByteList;
     stream.drop();
     return buf;
 }

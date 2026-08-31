@@ -124,7 +124,10 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
     }
 
     if !b.errors.is_empty() {
-        return Err(b.errors.join("; "));
+        // One unsupported shape reaches the collector once per signature
+        // position it occupies; the reader needs it once.
+        let unique: crate::hashmap::IndexSet<String> = b.errors.into_iter().collect();
+        return Err(unique.into_iter().collect::<Vec<_>>().join("; "));
     }
 
     // Carry the host-leaf set on the synthesized module so the registration
@@ -229,6 +232,12 @@ impl Builder {
             self.emit_type_def(resolve, *type_id, fq);
         }
 
+        let iface_name = iface
+            .name
+            .as_deref()
+            .unwrap_or_default()
+            .to_upper_camel_case();
+
         let mut methods = Vec::new();
         for (fname, func) in &iface.functions {
             let cm_params: Vec<AttrArg> = func
@@ -253,7 +262,8 @@ impl Builder {
                     }
                 })
                 .collect();
-            let return_type = func.result.map(|r| self.map_type(resolve, r, fq));
+            let is_async = is_async_func(func);
+            let return_type = self.func_return_type(resolve, func, fq);
             let attrs = vec![
                 self.cm_import_attr(fq, Some(fname)),
                 Attribute {
@@ -269,7 +279,7 @@ impl Builder {
                 name_span: syn(),
                 visibility: Visibility::Private,
                 is_export: false,
-                is_async: false,
+                is_async,
                 type_params: Vec::new(),
                 attrs,
                 params,
@@ -282,22 +292,32 @@ impl Builder {
             });
         }
 
-        let name = iface
-            .name
-            .as_deref()
-            .unwrap_or_default()
-            .to_upper_camel_case();
         let attrs = vec![self.cm_import_attr(fq, None)];
         let id = self.id();
         self.items.push(Item::Interface(InterfaceDecl {
             id,
-            name,
+            name: iface_name,
             name_span: syn(),
             visibility: Visibility::Public,
             attrs,
             methods,
             span: syn(),
         }));
+    }
+
+    /// A WIT result, wrapped in `AsyncCall<T>` for an `async func` — the shape
+    /// the consumer drives the subtask through.
+    fn func_return_type(
+        &mut self,
+        resolve: &Resolve,
+        func: &wit_parser::Function,
+        fq: &str,
+    ) -> Option<Type> {
+        let result = func.result.map(|r| self.map_type(resolve, r, fq));
+        if is_async_func(func) {
+            return Some(self.generic("AsyncCall", vec![result.unwrap_or_else(unit)]));
+        }
+        result
     }
 
     /// Emit a bodyless free `Item::Function` for a world-level function export
@@ -326,7 +346,8 @@ impl Builder {
                 }
             })
             .collect();
-        let return_type = func.result.map(|r| self.map_type(resolve, r, ""));
+        let is_async = is_async_func(func);
+        let return_type = self.func_return_type(resolve, func, "");
         let attrs = vec![
             self.cm_world_import_attr(&func.name),
             Attribute {
@@ -343,7 +364,7 @@ impl Builder {
             name_span: syn(),
             visibility: Visibility::Public,
             is_export: false,
-            is_async: false,
+            is_async,
             type_params: Vec::new(),
             attrs,
             params,
@@ -616,6 +637,21 @@ fn classify_wit(resolve: &Resolve, ty: WitType) -> CmShape<WitType> {
         TypeDefKind::Stream(t) => CmShape::Stream(*t),
         TypeDefKind::Type(inner) => classify_wit(resolve, *inner),
         _ => CmShape::Leaf,
+    }
+}
+
+/// Whether a WIT function is declared `async func`, which the consumer calls
+/// through an `AsyncCall<T>` like any other CM async import.
+fn is_async_func(func: &wit_parser::Function) -> bool {
+    use wit_parser::FunctionKind;
+    match func.kind {
+        FunctionKind::AsyncFreestanding
+        | FunctionKind::AsyncMethod(_)
+        | FunctionKind::AsyncStatic(_) => true,
+        FunctionKind::Freestanding
+        | FunctionKind::Method(_)
+        | FunctionKind::Static(_)
+        | FunctionKind::Constructor(_) => false,
     }
 }
 

@@ -56,6 +56,79 @@ fn packed_status(result: TirExpr) -> TirExpr {
     )
 }
 
+/// `cm_copy_result(packed)`: the `CopyResult` a packed copy reports.
+fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
+    let copy_result = type_table
+        .borrow_mut()
+        .make_compiler_enum(crate::compiler_item::CompilerItem::CopyResult);
+    internal_call("cm_copy_result", vec![packed], copy_result)
+}
+
+/// `StreamChunk { items, result }` / `StreamWrite { count, result }` — what a
+/// copy moved, paired with how it ended. Field order follows the declaration.
+fn copy_report_literal(
+    type_id: TypeId,
+    item: crate::compiler_item::CompilerItem,
+    moved_field: &str,
+    moved: TirExpr,
+    result: TirExpr,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    let struct_name = type_table.borrow().compiler_struct_name(item).to_string();
+    TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type: type_id,
+            struct_name,
+            fields: vec![
+                crate::tir::TirStructField {
+                    name: moved_field.to_string(),
+                    value: moved,
+                    field_index: 0,
+                },
+                crate::tir::TirStructField {
+                    name: "result".to_string(),
+                    value: result,
+                    field_index: 1,
+                },
+            ],
+        },
+        type_id,
+        synth_span(),
+    )
+}
+
+fn stream_chunk_literal(
+    chunk_type_id: TypeId,
+    items: TirExpr,
+    result: TirExpr,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    copy_report_literal(
+        chunk_type_id,
+        crate::compiler_item::CompilerItem::StreamChunk,
+        "items",
+        items,
+        result,
+        type_table,
+    )
+}
+
+fn stream_write_literal(
+    write_type_id: TypeId,
+    count: TirExpr,
+    result: TirExpr,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    copy_report_literal(
+        write_type_id,
+        crate::compiler_item::CompilerItem::StreamWrite,
+        "count",
+        count,
+        result,
+        type_table,
+    )
+}
+
 /// `result == -1`: the BLOCKED sentinel of a CM async built-in.
 fn is_blocked(result: TirExpr) -> TirExpr {
     binary(
@@ -73,6 +146,13 @@ struct SynthCtx<'a> {
     interner: &'a RefCell<ModuleSourceInterner>,
 }
 
+/// Whether a CM async primitive call can be bound where it stands: a call in a
+/// generic body names its payload with a type parameter, and the helper it
+/// needs is minted per instance, after monomorphize.
+pub(super) fn payload_is_bindable(tt: &TypeTable, expr: &TirExpr) -> bool {
+    super::future_stream_payload_site(tt, expr).is_none_or(|(payload, _)| tt.is_concrete(payload))
+}
+
 /// Applies `find` to every expression, recording helper-name → key per match.
 struct BindingFinder<'a, K, F: Fn(&TypeTable, &TirExpr) -> Option<(String, K)>> {
     tt: &'a TypeTable,
@@ -84,31 +164,88 @@ impl<K, F: Fn(&TypeTable, &TirExpr) -> Option<(String, K)>> TirRefVisitor
     for BindingFinder<'_, K, F>
 {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let Some((name, key)) = (self.find)(self.tt, expr) {
+        if payload_is_bindable(self.tt, expr)
+            && let Some((name, key)) = (self.find)(self.tt, expr)
+        {
             self.results.entry(name).or_insert(key);
         }
         self.walk_expr(expr);
     }
 }
 
+/// The bodies a binding pass walks and the state it synthesizes against. A
+/// `Package` and a `FlatPackage` both present it, so the passes run over either.
+pub(super) struct BindingSites<'a> {
+    /// Every function whose body may hold an unrewritten `#[cm]` call.
+    pub functions: Vec<Rc<RefCell<TirFunction>>>,
+    /// The package-wide type table every module shares.
+    pub type_table: Rc<RefCell<TypeTable>>,
+    pub cm_interface_registry: &'a CmInterfaceRegistry,
+    pub interner: &'a RefCell<ModuleSourceInterner>,
+    pub entry_module_source: ModuleSource,
+    /// The names the entry module — where every helper lands — already holds.
+    /// Reaching a payload a second time calls its helper, never mints another.
+    existing: IndexSet<String>,
+}
+
+impl<'a> BindingSites<'a> {
+    fn from_package(project: &'a Package) -> Self {
+        let entry = project
+            .tir_modules
+            .get(&project.entry_module_source)
+            .expect("entry module must exist in tir_modules");
+        Self {
+            existing: entry
+                .functions
+                .iter()
+                .map(|f| f.borrow().name.clone())
+                .collect(),
+            functions: project
+                .tir_modules
+                .values()
+                .flat_map(|m| m.functions.iter().cloned())
+                .collect(),
+            type_table: entry.type_table.clone(),
+            cm_interface_registry: &project.cm_interface_registry,
+            interner: &project.interner,
+            entry_module_source: project.entry_module_source.clone(),
+        }
+    }
+
+    fn from_flat(flat: &'a crate::flat_package::FlatPackage) -> Self {
+        Self {
+            functions: flat.functions.clone(),
+            existing: flat
+                .functions
+                .iter()
+                .filter_map(|f| {
+                    let f = f.borrow();
+                    (f.module_source == flat.entry_module_source).then(|| f.name.clone())
+                })
+                .collect(),
+            type_table: flat.type_table.clone(),
+            cm_interface_registry: &flat.cm_interface_registry,
+            interner: &flat.interner,
+            entry_module_source: flat.entry_module_source.clone(),
+        }
+    }
+}
+
 /// Shared driver for the `synthesize_*` binding passes: walk every TIR
 /// function body with `find` (an exhaustive [`TirRefVisitor`] traversal whose
 /// coverage matches the rewriter's, so a call nested in an `if`-expression
-/// branch still gets its helper generated), dedupe matches by helper name,
-/// synthesize one function per key, and add them to the entry module — not
-/// `values().next()`, which is not guaranteed to be the entry module. Calls
-/// synthesized by `rewrite_cm_resource_methods` target the entry module via
-/// `entry_call`, so the helpers must live there for resolution to succeed in
-/// `wir_build`.
-fn synthesize_entry_bindings<K>(
-    project: &mut Package,
+/// branch still gets its helper generated), dedupe matches by helper name, and
+/// synthesize one function per key. The helpers belong to the entry module,
+/// which is where `rewrite_cm_resource_methods` points its `entry_call`s.
+fn synthesize_bindings<K>(
+    sites: &BindingSites<'_>,
     find: impl Fn(&TypeTable, &TirExpr) -> Option<(String, K)>,
     synthesize: impl Fn(K, &SynthCtx) -> TirFunction,
-) {
+) -> Vec<Rc<RefCell<TirFunction>>> {
     let mut needed: IndexMap<String, K> = IndexMap::default();
-    for module in project.tir_modules.values() {
-        let tt = module.type_table.borrow();
-        for func_rc in &module.functions {
+    {
+        let tt = sites.type_table.borrow();
+        for func_rc in &sites.functions {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
                 BindingFinder {
@@ -120,62 +257,42 @@ fn synthesize_entry_bindings<K>(
             }
         }
     }
+    needed.retain(|name, _| !sites.existing.contains(name));
     if needed.is_empty() {
-        return;
+        return Vec::new();
     }
 
-    let entry_source = project.entry_module_source.clone();
-    let type_table = project
-        .tir_modules
-        .get(&entry_source)
-        .expect("entry module must exist in tir_modules")
-        .type_table
-        .clone();
     let ctx = SynthCtx {
-        cm_interface_registry: &project.cm_interface_registry,
-        type_table: &type_table,
-        interner: &project.interner,
+        cm_interface_registry: sites.cm_interface_registry,
+        type_table: &sites.type_table,
+        interner: sites.interner,
     };
-    let new_functions: Vec<Rc<RefCell<TirFunction>>> = needed
+    needed
         .into_iter()
         .map(|(_, key)| Rc::new(RefCell::new(synthesize(key, &ctx))))
-        .collect();
-
-    let entry_module = project
-        .tir_modules
-        .get_mut(&entry_source)
-        .expect("entry module must exist in tir_modules");
-    entry_module.functions.extend(new_functions);
+        .collect()
 }
 
 /// Generate binding functions for Stream<T>.`read()` where T is a non-u8 WASI record type.
 ///
 /// For each unique stream element type T found in stream-read calls, generates a
 /// TIR function `__cm_stream_read_<T>` that:
-/// 1. Calls `cm_stream_read_raw(handle, max, elem_size, elem_align)` to get raw buffer
+/// 1. Allocates a `max * elem_size` buffer and issues the element-parameterized
+///    `stream-read` canonical, awaiting BLOCKED
 /// 2. Loops through the buffer, lifting each record from linear memory
-/// 3. Constructs `List<T>` and returns it
-pub(super) fn synthesize_record_stream_reads(project: &mut Package) {
-    synthesize_entry_bindings(
-        project,
+/// 3. Returns them as a `StreamChunk<T>` with the copy's result
+fn synthesize_record_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunction>>> {
+    synthesize_bindings(
+        sites,
         |tt, expr| {
-            let (elem, list) = record_stream_read_element(tt, expr)?;
-            Some((
-                record_stream_read_func_name(&tt.base_type_name(elem)),
-                (elem, list),
-            ))
+            let elem = record_stream_read_element(tt, expr)?;
+            Some((record_stream_read_func_name(&tt.base_type_name(elem)), elem))
         },
-        |(elem_type_id, array_type_id), ctx| {
-            synthesize_record_stream_read_func(elem_type_id, array_type_id, ctx)
-        },
-    );
+        synthesize_record_stream_read_func,
+    )
 }
 
-fn synthesize_record_stream_read_func(
-    elem_type_id: TypeId,
-    array_type_id: TypeId,
-    ctx: &SynthCtx,
-) -> TirFunction {
+fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
     let registry = ctx.cm_interface_registry;
     let elem_name = ctx.type_table.borrow().base_type_name(elem_type_id);
     let source = registry
@@ -219,7 +336,6 @@ fn synthesize_record_stream_read_func(
         record_stream_read_func_name(&elem_name),
         CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(cm_record_name)),
         elem_type_id,
-        array_type_id,
         elem_size,
         elem_align,
         &ast_type,
@@ -238,9 +354,9 @@ fn synthesize_record_stream_read_func(
 /// `future-read` canonical, handles BLOCKED via `cm_await_blocked`, lifts the
 /// payload with the shared `synthesize_lift`, and wraps it in `Option`. This
 /// replaces the hand-rolled WIR-build lift with its hardcoded CM offsets.
-pub(super) fn synthesize_future_reads(project: &mut Package) {
-    synthesize_entry_bindings(
-        project,
+fn synthesize_future_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunction>>> {
+    synthesize_bindings(
+        sites,
         |tt, expr| {
             let (payload, option) = future_read_payload(tt, expr)?;
             Some((future_read_func_name(tt, payload), (payload, option)))
@@ -248,7 +364,7 @@ pub(super) fn synthesize_future_reads(project: &mut Package) {
         |(payload_type_id, option_type_id), ctx| {
             synthesize_future_read_func(payload_type_id, option_type_id, ctx)
         },
-    );
+    )
 }
 
 /// Generate the per-payload `FutureWritable<T>::write()` binding functions,
@@ -258,15 +374,15 @@ pub(super) fn synthesize_future_reads(project: &mut Package) {
 /// reader and free the buffer, but value payloads leave the buffer alive and
 /// return: their reader is another task in the same instance, so busy-waiting
 /// would deadlock the async executor.
-pub(super) fn synthesize_future_writes(project: &mut Package) {
-    synthesize_entry_bindings(
-        project,
+fn synthesize_future_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunction>>> {
+    synthesize_bindings(
+        sites,
         |tt, expr| {
             let payload = future_write_payload(tt, expr)?;
             Some((future_write_func_name(tt, payload), payload))
         },
         synthesize_future_write_func,
-    );
+    )
 }
 
 /// The payload type of a `future-write` method call, or `None` if the
@@ -298,15 +414,15 @@ fn future_write_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
 /// element-parameterized `stream-write` canonical, waiting for the reader on
 /// BLOCKED (streams deliver element-by-element, so the buffer must survive the
 /// wait — the function runs in an `async` task).
-pub(super) fn synthesize_stream_writes(project: &mut Package) {
-    synthesize_entry_bindings(
-        project,
+fn synthesize_stream_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunction>>> {
+    synthesize_bindings(
+        sites,
         |tt, expr| {
             let elem = stream_write_value_element(tt, expr)?;
             Some((stream_write_func_name(tt, elem), elem))
         },
         synthesize_stream_write_func,
-    );
+    )
 }
 
 /// The AST type a payload lays out as: a newtype has no representation of its
@@ -342,24 +458,17 @@ fn payload_ast_type(
 /// Asked directly rather than through `classify_stream_payload`, which panics
 /// instead of answering `false`.
 fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
-    !matches!(
-        tt.get(elem),
-        ResolvedType::Primitive(crate::tir::PrimitiveType::U8)
-    ) && crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
+    !crate::component_model::is_u8_stream_element(tt, elem)
+        && crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
 }
 
 /// The stream-write element type for a scalar / structural `stream-write`, or
 /// `None` for `u8` and record streams (handled elsewhere).
 fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let (receiver, func, _) = expr.kind.as_method_call()?;
-    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-write") {
+    if cm_name_of(expr) != Some("stream-write") {
         return None;
     }
-    let mut recv = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
-        recv = *inner;
-    }
-    let elem = *tt.generic_type_args(recv)?.first()?;
+    let elem = stream_receiver_element(tt, expr)?;
     has_value_payload(tt, elem).then_some(elem)
 }
 
@@ -376,30 +485,71 @@ fn stream_write_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
 /// buffer via the element-parameterized `stream-read` canonical, lifts each
 /// element with the shared `synthesize_lift`, and returns `List<T>`. An empty
 /// result signals EOF to the caller.
-pub(super) fn synthesize_stream_reads(project: &mut Package) {
-    synthesize_entry_bindings(
-        project,
+fn synthesize_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunction>>> {
+    synthesize_bindings(
+        sites,
         |tt, expr| {
             let elem = stream_read_value_element(tt, expr)?;
             Some((stream_read_value_func_name(tt, elem), elem))
         },
         synthesize_stream_read_value_func,
-    );
+    )
+}
+
+/// Generate the payload-parameterized helpers every `#[cm]` async primitive in
+/// `sites` needs, rewrite those calls onto them, and return the helpers for the
+/// caller to place. Runs twice over a compilation: once before monomorphize for
+/// the concrete bodies, once after it for the ones whose payload was still a
+/// type parameter.
+fn rewrite_async_primitives_at(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunction>>> {
+    let mut generated = synthesize_record_stream_reads(sites);
+    generated.extend(synthesize_future_reads(sites));
+    generated.extend(synthesize_future_writes(sites));
+    generated.extend(synthesize_stream_writes(sites));
+    generated.extend(synthesize_stream_reads(sites));
+    rewrite_cm_resource_methods(sites);
+    generated
+}
+
+/// Pre-monomorphize half: every body whose payloads are already concrete.
+/// Consumes the witness — these rewrites destroy the shape the scan matches.
+pub(super) fn rewrite_async_primitives(
+    project: &mut Package,
+    _validated: super::PayloadsValidated,
+) {
+    let generated = rewrite_async_primitives_at(&BindingSites::from_package(project));
+    if generated.is_empty() {
+        return;
+    }
+    let entry_source = project.entry_module_source.clone();
+    project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module must exist in tir_modules")
+        .functions
+        .extend(generated);
+}
+
+/// Post-monomorphize half: the bodies that were generic, where a `#[cm]` call's
+/// payload only became concrete when the instance was minted.
+pub fn rewrite_async_primitives_monomorphized(
+    flat: &mut crate::flat_package::FlatPackage,
+    _validated: super::PayloadsValidated,
+) {
+    let generated = rewrite_async_primitives_at(&BindingSites::from_flat(flat));
+    // Link is what stamps a module source on a pre-monomorphize helper, by the
+    // module it was placed in. These arrive after it, so they carry the entry
+    // module themselves — the module their `entry_call` sites name.
+    for func in &generated {
+        func.borrow_mut().module_source = flat.entry_module_source.clone();
+    }
+    flat.functions.extend(generated);
 }
 
 /// The stream-read element type for a value-payload `stream-read`, or `None`
 /// for `u8` and WASI record streams (handled by their own paths).
 fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let TirExprKind::Call { func, .. } = &expr.kind else {
-        return None;
-    };
-    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-read") {
-        return None;
-    }
-    if is_u8_array_type(expr.type_id, tt) {
-        return None;
-    }
-    let elem = *tt.generic_type_args(expr.type_id)?.first()?;
+    let elem = stream_read_element(tt, expr)?;
     has_value_payload(tt, elem).then_some(elem)
 }
 
@@ -473,22 +623,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     );
     stmts.extend(lower_stmts);
 
-    // A reader may take fewer elements than offered, so `stream.write` can copy
-    // only a prefix and report COMPLETED. Loop, advancing past the elements
-    // already written, until the whole buffer is sent or the reader drops.
-    let offset_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("offset".to_string()),
-        TypeTable::I32,
-        true,
-    );
-    stmts.push(let_mut_stmt(
-        "offset",
-        offset_idx,
-        TypeTable::I32,
-        i32_const(0),
-    ));
+    // One copy. A reader may take only a prefix, which the returned count
+    // reports; `StreamWritable::write_all` is the loop that finishes a buffer.
     let result_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -500,97 +636,18 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         "result",
         result_idx,
         TypeTable::I32,
-        i32_const(0),
-    ));
-
-    let offset_ref = || local_ref(offset_idx, "offset", TypeTable::I32);
-    let result_ref = || local_ref(result_idx, "result", TypeTable::I32);
-    let count_ref = || local_ref(count_local, "__list_len", TypeTable::I32);
-
-    // cur_ptr = base + offset * elem_size
-    let cur_ptr = binary(
-        TirBinaryOp::Add,
-        local_ref(ptr_local, "__list_base", TypeTable::I32),
-        binary(
-            TirBinaryOp::Mul,
-            offset_ref(),
-            i32_const(elem_size),
+        cm_canonical_call(
+            write_name,
+            vec![
+                local_ref(handle_idx, "handle", TypeTable::I32),
+                local_ref(ptr_local, "__list_base", TypeTable::I32),
+                local_ref(count_local, "__list_len", TypeTable::I32),
+            ],
             TypeTable::I32,
         ),
-        TypeTable::I32,
-    );
-    // remaining = count - offset
-    let remaining = binary(TirBinaryOp::Sub, count_ref(), offset_ref(), TypeTable::I32);
-
-    let loop_body = TirBlock {
-        stmts: vec![
-            // if offset >= count { break }
-            if_stmt(
-                binary(
-                    TirBinaryOp::GtEq,
-                    offset_ref(),
-                    count_ref(),
-                    TypeTable::BOOL,
-                ),
-                TirBlock {
-                    stmts: vec![break_stmt()],
-                    span: synth_span(),
-                },
-                None,
-            ),
-            // result = stream-write:<elem>(handle, cur_ptr, remaining)
-            expr_stmt(assign(
-                result_ref(),
-                cm_canonical_call(
-                    write_name,
-                    vec![
-                        local_ref(handle_idx, "handle", TypeTable::I32),
-                        cur_ptr,
-                        remaining,
-                    ],
-                    TypeTable::I32,
-                ),
-            )),
-            await_if_blocked(result_idx, "result", handle_idx),
-            // offset += packed count (the copied-element count)
-            expr_stmt(assign(
-                offset_ref(),
-                binary(
-                    TirBinaryOp::Add,
-                    offset_ref(),
-                    packed_count(result_ref()),
-                    TypeTable::I32,
-                ),
-            )),
-            // if packed count == 0 || packed status != 0 { break }
-            // No progress, or the reader/stream closed (DROPPED/CANCELLED).
-            if_stmt(
-                binary(
-                    TirBinaryOp::Or,
-                    binary(
-                        TirBinaryOp::Eq,
-                        packed_count(result_ref()),
-                        i32_const(0),
-                        TypeTable::BOOL,
-                    ),
-                    binary(
-                        TirBinaryOp::NotEq,
-                        packed_status(result_ref()),
-                        i32_const(0),
-                        TypeTable::BOOL,
-                    ),
-                    TypeTable::BOOL,
-                ),
-                TirBlock {
-                    stmts: vec![break_stmt()],
-                    span: synth_span(),
-                },
-                None,
-            ),
-        ],
-        span: synth_span(),
-    };
-    stmts.push(loop_stmt(loop_body));
+    ));
+    stmts.push(await_if_blocked(result_idx, "result", handle_idx));
+    let result_ref = || local_ref(result_idx, "result", TypeTable::I32);
 
     // Free the element buffer: realloc(ptr, count * elem_size, elem_align, 0).
     let byte_count = binary(
@@ -622,6 +679,16 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         ),
     ));
 
+    let write_type_id = type_table
+        .borrow_mut()
+        .make_compiler_struct(crate::compiler_item::CompilerItem::StreamWrite);
+    stmts.push(return_stmt(Some(stream_write_literal(
+        write_type_id,
+        packed_count(result_ref()),
+        copy_result_of(result_ref(), type_table),
+        type_table,
+    ))));
+
     TirFunction {
         module_source: ModuleSource::default(),
         name: func_name,
@@ -651,7 +718,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
                 span: synth_span(),
             },
         ],
-        return_type: TypeTable::UNIT,
+        return_type: write_type_id,
         task_return_type: None,
         effects: vec![],
         stores: vec![],
@@ -1149,21 +1216,41 @@ fn synthesize_future_read_func(
 
 /// The `(element, List<element>)` types of a WASI-record `stream-read`, or
 /// `None` for `u8` and value-payload streams (handled by their own paths).
-fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, TypeId)> {
+fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let elem_type_id = stream_read_element(tt, expr)?;
+    (!has_value_payload(tt, elem_type_id)).then_some(elem_type_id)
+}
+
+/// What the receiver of a stream `#[cm]` method streams. Never read off what
+/// the call returns: monomorphize replaces a `StreamChunk<T>` with a struct.
+fn stream_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let (receiver, _, _) = expr.kind.as_method_call()?;
+    let mut recv = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
+        recv = *inner;
+    }
+    // `type MyStream = Stream<u8>` names the same stream; the payload paths peel
+    // it too, so a newtype receiver must answer with the element, not nothing.
+    let recv = crate::component_model::peel_newtypes(tt, recv);
+    tt.generic_type_args(recv)?.first().copied()
+}
+
+/// The `#[cm(...)]` name a call carries, if any.
+fn cm_name_of(expr: &TirExpr) -> Option<&str> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
     };
-    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-read") {
+    func.method_info.as_ref()?.cm_name.as_deref()
+}
+
+/// The element type of a `stream-read` call, or `None` for anything else and
+/// for the `u8` stream, which `core:rt` binds by hand.
+fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    if cm_name_of(expr) != Some("stream-read") {
         return None;
     }
-    if is_u8_array_type(expr.type_id, tt) {
-        return None;
-    }
-    let elem_type_id = *tt.generic_type_args(expr.type_id)?.first()?;
-    if has_value_payload(tt, elem_type_id) {
-        return None;
-    }
-    Some((elem_type_id, expr.type_id))
+    let elem = stream_receiver_element(tt, expr)?;
+    (!crate::component_model::is_u8_stream_element(tt, elem)).then_some(elem)
 }
 
 /// The `__cm_stream_read_<record>` helper name for a WASI record element.
@@ -1180,7 +1267,6 @@ fn synthesize_stream_read_func(
     func_name: String,
     stream_read_name: CanonicalIntrinsic,
     elem_type_id: TypeId,
-    array_type_id: TypeId,
     elem_size: i32,
     elem_align: i32,
     payload_ast: &Type,
@@ -1189,6 +1275,8 @@ fn synthesize_stream_read_func(
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
+    let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
+    let chunk_type_id = type_table.borrow_mut().make_stream_chunk(elem_type_id);
     // `List` is a declaration, so the receiver its methods are named after
     // carries it rather than the spelling `List` happens to have.
     let list_fq = super::types::CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
@@ -1463,8 +1551,12 @@ fn synthesize_stream_read_func(
     );
     stmts.push(let_stmt("__freed", freed_idx, TypeTable::I32, free_call));
 
-    // return arr
-    stmts.push(return_stmt(Some(local_ref(arr_idx, "arr", array_type_id))));
+    stmts.push(return_stmt(Some(stream_chunk_literal(
+        chunk_type_id,
+        local_ref(arr_idx, "arr", array_type_id),
+        copy_result_of(local_ref(result_idx, "result", TypeTable::I32), type_table),
+        type_table,
+    ))));
 
     TirFunction {
         module_source: ModuleSource::default(),
@@ -1495,7 +1587,7 @@ fn synthesize_stream_read_func(
                 span: synth_span(),
             },
         ],
-        return_type: array_type_id,
+        return_type: chunk_type_id,
         task_return_type: None,
         effects: vec![],
         stores: vec![],
@@ -1531,7 +1623,6 @@ fn synthesize_stream_read_func(
 fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
     let (func_name, read_name, payload_ast, elem_size, elem_align) = {
         let tt = type_table.borrow();
         let func_name = stream_read_value_func_name(&tt, elem_type_id);
@@ -1555,7 +1646,6 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
         func_name,
         read_name,
         elem_type_id,
-        array_type_id,
         elem_size,
         elem_align,
         &payload_ast,
@@ -1577,11 +1667,23 @@ enum BindingTarget {
     Entry(String),
 }
 
+/// The [`cm_binding_function`] entries written for a `u8` element. The rewriter
+/// checks the element rather than trusting that a wider one was parameterized.
+const U8_STREAM_BINDINGS: &[&str] = &[
+    "stream-drop-readable",
+    "stream-drop-writable",
+    "stream-cancel-read",
+    "stream-cancel-write",
+    "stream-read",
+    "stream-write",
+    "stream-write-raw",
+];
+
 /// `None` for a method not handled here — it falls through to WIR translate.
 fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
     use BindingTarget::{Canonical, Internal};
     use CanonicalIntrinsic as C;
-    // A non-u8 element is parameterized before it reaches here.
+    // Every stream arm below is `U8_STREAM_BINDINGS`, gated by the caller.
     let u8_stream = CmStreamPayload::U8;
     Some(match cm_name {
         // Simple drops → direct CmRawCall (non-parameterized)
@@ -1618,21 +1720,17 @@ fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
 }
 
 /// Rewrite all #[cm("...")] resource method calls in the project.
-pub(super) fn rewrite_cm_resource_methods(project: &mut Package) {
-    let entry_source = project.entry_module_source.clone();
-    let cm_interface_registry = &project.cm_interface_registry;
-    for module in project.tir_modules.values() {
-        let type_table = module.type_table.clone();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(body) = &mut func.body {
-                rewrite_cm_methods_in_block(
-                    body,
-                    &type_table.borrow(),
-                    &entry_source,
-                    cm_interface_registry,
-                );
-            }
+fn rewrite_cm_resource_methods(sites: &BindingSites<'_>) {
+    let type_table = sites.type_table.borrow();
+    for func_rc in &sites.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = &mut func.body {
+            rewrite_cm_methods_in_block(
+                body,
+                &type_table,
+                &sites.entry_module_source,
+                sites.cm_interface_registry,
+            );
         }
     }
 }
@@ -1693,6 +1791,11 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         let Some(cm_name) = cm_name else {
             return;
         };
+        // Leave a generic body's call for the instances: its helper is keyed by
+        // the payload, which this site does not have yet.
+        if !payload_is_bindable(self.tt, expr) {
+            return;
+        }
 
         // future-new / stream-new: emit the payload-parameterized canonical as a
         // `CmRawCall` (returns the packed i64) and pass it to the `core:rt` pair
@@ -1733,16 +1836,13 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             return;
         }
         // WASI-record stream reads call a generated binding function.
-        if cm_name == "stream-read" {
-            if let Some((elem_type_id, _)) = record_stream_read_element(self.tt, expr) {
-                let elem_name = self.tt.base_type_name(elem_type_id);
-                let func_name = record_stream_read_func_name(&elem_name);
-                rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
-                return;
-            }
-            if !is_u8_array_type(expr.type_id, self.tt) {
-                return;
-            }
+        if cm_name == "stream-read"
+            && let Some(elem_type_id) = record_stream_read_element(self.tt, expr)
+        {
+            let elem_name = self.tt.base_type_name(elem_type_id);
+            let func_name = record_stream_read_func_name(&elem_name);
+            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
+            return;
         }
         // Stream ops on a non-u8 element, and future drop / cancel: parameterized
         // by the receiver's payload, so they go straight to a canonical call.
@@ -1751,6 +1851,15 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
                 .or_else(|| parameterize_future_cm_name(&cm_name, expr, self.tt));
         if let Some(intrinsic) = parameterized {
             rewrite_cm_call(expr, BindingTarget::Canonical(intrinsic), self.entry_source);
+            return;
+        }
+        // Everything above is what parameterizes a wider element, so what is
+        // left of the stream surface is the hand-written `u8` path: an element
+        // that got here unparameterized stays unbound and is reported.
+        if U8_STREAM_BINDINGS.contains(&cm_name.as_str())
+            && !stream_receiver_element(self.tt, expr)
+                .is_some_and(|e| crate::component_model::is_u8_stream_element(self.tt, e))
+        {
             return;
         }
         // Look up the binding function for everything else.
@@ -1883,16 +1992,11 @@ fn parameterize_stream_cm_name(
         "stream-cancel-write" => CanonicalIntrinsic::StreamCancelWrite,
         _ => return None,
     };
-    let (receiver, _, _) = expr.kind.as_method_call()?;
-    let mut type_id = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
-        type_id = *inner;
-    }
-    if let Some(type_args) = tt.generic_type_args(type_id)
-        && let Some(&elem) = type_args.first()
-    {
-        let elem_name = tt.base_type_name(elem);
-        if elem_name != "u8" {
+    if let Some(elem) = stream_receiver_element(tt, expr) {
+        // The same predicate the payload classification uses: a `type MyByte =
+        // u8` stream must not drop under one canonical and read under another.
+        if !crate::component_model::is_u8_stream_element(tt, elem) {
+            let elem_name = tt.base_type_name(elem);
             if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
                 return Some(make(CmStreamPayload::Value(payload)));
             }
@@ -1939,16 +2043,5 @@ fn pascal_to_kebab(name: &str) -> String {
         }
         s.push(c.to_ascii_lowercase());
         s
-    })
-}
-
-/// Check if a `TypeId` represents `List<u8>`, structurally — never via the
-/// rendered type name, which a stdlib rename or newtype alias would break.
-fn is_u8_array_type(type_id: TypeId, tt: &TypeTable) -> bool {
-    tt.as_list(type_id).is_some_and(|elem| {
-        matches!(
-            tt.get(elem),
-            ResolvedType::Primitive(crate::tir::PrimitiveType::U8)
-        )
     })
 }

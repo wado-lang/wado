@@ -14,7 +14,7 @@ export fn run() with Stdout {
     // writable end, then drop both ends to signal completion.
     let [rx, tx] = Stream::<u8>::new();
     let pending = Stdout::write_via_stream(rx);
-    tx.write(message);
+    tx.write_all(message);
     tx.drop();
     pending.drop();
 }

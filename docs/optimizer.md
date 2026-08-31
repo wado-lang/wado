@@ -16,11 +16,11 @@ All levels run DCE on functions, types, and globals.
 | --------------- | ---------- | ------------- | ----------------------------------------------- |
 | `-O0`           | 0          | N/A           | DCE only + `match_to_switch` + backend rewrites |
 | `-O1`           | 2          | 4             |                                                 |
-| `-O2` (default) | 15         | 13            |                                                 |
-| `-O3`           | 20         | 32            |                                                 |
-| `-Os`           | 15         | 13            | strips the Wasm name section                    |
+| `-O2` (default) | 15         | 16            |                                                 |
+| `-O3`           | 20         | 26            |                                                 |
+| `-Os`           | 15         | 16            | strips the Wasm name section                    |
 
-The inline budget counts emitted Wasm instructions on the callee's hot path, not NIR nodes — see [`inline`](#nir-passes) for the weights.
+The inline budget counts emitted Wasm instructions on the callee's hot path, not NIR nodes — see [`inline`](#nir-passes) for the weights. `--optimize-inline-growth <pct>` additionally bounds how far inlining may grow the whole unit; no level sets it by default.
 
 The fixed-point loop exits early on convergence, so a pass must report a change only when it made one, never when it merely found work to look at. A `gate_only!` pass reports to the dirty-set gate alone and never extends the loop.
 
@@ -39,7 +39,7 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 `optimize.rs` orchestrates the NIR stages; `wir_optimize.rs` runs the WIR stages.
 
 1. Early DCE — remove unreachable functions/types/globals.
-2. Before the loop: dense `Match` → `Switch` over global initializer bodies, then the early arithmetic promotion.
+2. Before the loop: cold-region outlining, dense `Match` → `Switch` over global initializer bodies, then the early arithmetic promotion.
 3. Fixed-point loop (skipped at `-O0`): container SROA, peephole (pre-inline), value-copy demotion, parameter SROA, variant-return scalarization, inlining, peephole (post-inline), let-block flattening, SROA, copy propagation, dead-argument and dead-return elimination, constant folding, parameter specialization, LICM, template hoisting.
 4. Post-loop, once: field scalarization, store-load forwarding, template-wrapper cleanup, constant-object globalization, a final folding pass, scalar-temp forwarding, and clone forwarding.
 5. Final DCE.
@@ -51,7 +51,8 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 
 Allocation and aggregate:
 
-- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. Size is the callee's hot path priced in emitted Wasm instructions, so control flow outweighs a straight-line operation and a cold or unreachable tail prices nothing; the weights are in the pass's `weight` module. A callee over budget as written gets a second reading **after the fold its callers' constants cause**: a branch a constant argument decides costs the one arm it keeps, and a call the compile-time engine runs on constants costs nothing. Which parameters arrive constant is taken across every call site, so admission stays a property of the callee. Folded size alone would admit every marginal fold — measured -9% on cbor-twitter — so the fold must also delete a loop, or halve the body. Such a callee then receives no inlining itself: a body worth more copied than called is destroyed by growing it past the budget, and that is one-way. Holding it is what an `#[inline(never)]` on each leaf otherwise applies by hand.
+- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. A callee over budget as written is re-read under the constants its callers pass. `--optimize-inline-growth` additionally caps what the pass adds to the whole unit; no level sets it.
+- `cold_outline` — move what a `cold_path()` marker opens into a function of its own, so `inline`'s cold discount describes the callee. The caller keeps the branch; the marked arm becomes a call. A region moves when control cannot leave it and every local it touches is one the call can hand over. Runs once, before the loop, so the inliner never sees the unsplit shape. It costs `sieve` 4.5% for no reason the IR shows, and a marker in the middle of a loop body is one it cannot take. A function's root block is deliberately not a region — see the pass's module doc.
 - `sroa` — decompose non-escaping struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn `List<Struct>` / `List<Tuple>` into parallel per-field lists (array-of-structs → struct-of-arrays).
 - `sroa_param` — replace a struct reference parameter with the one field the callee reads, unwrapping the box that `&T` values allocate. A multi-field struct is scalarized on a clone, so the callers that pass a whole struct keep the original; how the callee holds the field decides whether the scalar arrives by value or by reference, and a call site that would have to read the field ahead of an effectful later argument is refused.

@@ -471,7 +471,8 @@ impl Monomorphizer {
             // (`impl Trait for ()`), so a unit receiver finds them like a
             // primitive does.
             ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::GenericResource { def, type_args } => {
                 // Return the mangled name with type args (e.g., "List<i32>", "Box<String>")
                 let args: Vec<String> = type_args
                     .iter()

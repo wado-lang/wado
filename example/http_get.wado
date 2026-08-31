@@ -39,14 +39,7 @@ fn read_body(resp: Response) -> String {
     let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Response::consume_body(resp, res_rx);
 
-    let mut body: List<u8> = [];
-    loop {
-        let chunk = body_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        body.extend(&chunk);
-    }
+    let body = body_stream.read_to_end();
     body_stream.drop();
 
     return String::from_utf8_lossy(body);

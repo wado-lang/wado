@@ -98,10 +98,7 @@ fn collect_entries(dir: &Descriptor, opts: &Options) -> List<DirectoryEntry> {
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(64);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let e of chunk {
+        for let e of chunk.items {
             if !opts.show_hidden && e.name.starts_with(".") {
                 continue;
             }
@@ -109,6 +106,9 @@ fn collect_entries(dir: &Descriptor, opts: &Options) -> List<DirectoryEntry> {
                 continue;
             }
             out.push(e);
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
         }
     }
     stream.drop();

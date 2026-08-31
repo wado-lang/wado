@@ -1,22 +1,29 @@
 // Escape analysis: hoisting must NOT fire when the whole template String
-// escapes the iteration. Each result is passed by value to println (a core
-// lib function, not inlined), so the entire local escapes and its backing
-// buffer cannot be reused. The WIR must NOT contain __tmpl_buf_.
+// escapes the iteration. Each result is moved into a list that outlives the
+// loop, so all six must coexist — a reused scratch buffer would leave every
+// entry showing the last iteration's bytes, which the printed output catches.
+// The WIR must NOT contain __tmpl_buf_.
 //
-// The complementary case — a template whose bytes escape only through a fresh
-// deep copy — IS safely hoisted; see tmpl_hoist_escape_copy_safe.wado.
+// The complementary case — a template moved straight into a map key — is the
+// same rule seen from the caller side; see tmpl_hoist_escape_copy_safe.wado.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    // Case 1: let-bound template passed to println (core lib, not inlined)
+    let mut kept: List<String> = [];
+
+    // Case 1: let-bound template moved into the list
     for let mut i = 0; i < 3; i += 1 {
         let s = `x=${i}`;
-        println(s);
+        kept.push(s);
     }
 
-    // Case 2: template directly as arg to println (non-Let context)
+    // Case 2: template directly as arg (non-Let context)
     for let mut i = 0; i < 3; i += 1 {
-        println(`y=${i}`);
+        kept.push(`y=${i}`);
+    }
+
+    for let s of &kept {
+        println(*s);
     }
 }
 

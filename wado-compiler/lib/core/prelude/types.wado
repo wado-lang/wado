@@ -85,7 +85,6 @@ impl Option<T> {
 }
 
 /// Cold slow path for `unwrap`/`expect` failures: traps with `${msg}: ${value:?}`.
-#[inline(never)]
 internal fn unwrap_failed<V>(msg: String, value: V) -> ! {
     panic(`${msg}: ${value:?}`);
 }
@@ -188,21 +187,48 @@ pub resource FutureWritable<T> {
     fn drop(self);
 }
 
+/// How one Component Model copy ended (`CanonicalABI.md`, `CopyResult`).
+/// It describes that copy, not the stream: only `Dropped` ends the stream.
+#[compiler_item("copy_result")]
+pub enum CopyResult {
+    /// The copy finished.
+    Completed,
+    /// The peer end is gone; no further copy is possible on this end.
+    Dropped,
+    /// A cancel finished and returned the buffer; the end stays usable.
+    Cancelled,
+}
+
+/// What one `Stream::read` copied, and how that copy ended. A copy carries
+/// elements and the peer's drop together, so `result` is what says more follows.
+#[compiler_item("stream_chunk")]
+pub struct StreamChunk<T> {
+    pub items: List<T>,
+    pub result: CopyResult,
+}
+
+/// What one `StreamWritable::write` copied, and how that copy ended. A reader
+/// may take a prefix, so `count` can be short of what was offered.
+#[compiler_item("stream_write")]
+pub struct StreamWrite {
+    pub count: i32,
+    pub result: CopyResult,
+}
+
 /// Readable end of an async sequence (WASI Component Model stream).
-/// Opaque i32 handle managed by the runtime.
-///
-/// Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
+/// `Stream::<T>::new()` creates the `[Stream<T>, StreamWritable<T>]` pair.
 #[compiler_item("stream")]
 pub resource Stream<T> {
-    /// Create a new stream pair: [Stream<T>, StreamWritable<T>].
     #[cm("stream-new")]
     fn new() -> [Stream<T>, StreamWritable<T>];
 
-    /// Read up to `max` elements from the stream.
-    /// Blocks until data is available or the writer drops.
-    /// Returns an empty array on end-of-stream.
+    /// One Component Model copy of up to `max` elements, blocking until at
+    /// least one arrives or the writable end drops. A `Dropped` result can
+    /// carry elements of its own, and reading an end whose result was `Dropped`
+    /// traps, so a loop breaks on the result, never on an empty chunk.
+    /// `read_to_end` is that loop.
     #[cm("stream-read")]
-    fn read(&self, max: i32) -> List<T>;
+    fn read(&self, max: i32) -> StreamChunk<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
     #[cm("stream-cancel-read")]
@@ -213,20 +239,45 @@ pub resource Stream<T> {
     fn drop(self);
 }
 
+impl Stream<T> {
+    /// Read until the writable end drops, and return everything it wrote.
+    /// Only the result stops it: an empty `Completed` copy is the writer
+    /// offering nothing this time, and more can still follow.
+    pub fn read_to_end(&self) -> List<T> {
+        let mut all: List<T> = [];
+        loop {
+            let chunk = self.read(STREAM_CHUNK_ELEMENTS);
+            all.extend(&chunk.items);
+            if chunk.result != CopyResult::Completed {
+                return all;
+            }
+        }
+    }
+}
+
+/// Elements per copy in the read/write loops the stdlib runs. A copy blocks
+/// until the peer moves, so this bounds the buffer, not the throughput.
+internal global STREAM_CHUNK_ELEMENTS: i32 = 4096;
+
 /// Writable end of an async sequence (WASI Component Model stream).
-/// Opaque i32 handle managed by the runtime.
 #[compiler_item("stream_writable")]
 pub resource StreamWritable<T> {
-    /// Write a chunk of data to the stream.
+    /// One Component Model copy of `data`, blocking until the reader takes at
+    /// least one element or drops. The reader may take a prefix, so the count
+    /// can be short of `data.len()`. Writing to an end whose result was
+    /// `Dropped` traps, and an empty `data` is the CM's readiness signal, which
+    /// blocks until a reader rendezvouses rather than writing nothing.
+    /// `write_all` is the loop that finishes the buffer.
     #[cm("stream-write")]
-    fn write(&self, data: List<T>);
+    fn write(&self, data: List<T>) -> StreamWrite;
 
-    /// Write a byte view directly to the stream, without the deep copy that
+    /// Write a view directly to the stream, without the deep copy that
     /// value-semantics `write` makes. The slice references its backing array
     /// (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`), so
-    /// only the CM lowering copy remains.
+    /// only the CM lowering copy remains. `T` must be a byte: any other element
+    /// type is a compile error, and `write` is what carries it.
     #[cm("stream-write-raw")]
-    fn write_raw(&self, data: Slice<T>);
+    fn write_raw(&self, data: Slice<T>) -> StreamWrite;
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
     #[cm("stream-cancel-write")]
@@ -235,6 +286,51 @@ pub resource StreamWritable<T> {
     /// Drop the writable end, signaling end-of-stream.
     #[cm("stream-drop-writable")]
     fn drop(self);
+}
+
+/// Whether a copy ends a write loop: the peer stopped, or it moved nothing and
+/// retrying the same buffer would be a hang rather than a write.
+internal fn write_copy_is_final(written: &StreamWrite) -> bool {
+    return written.result != CopyResult::Completed || written.count <= 0;
+}
+
+impl StreamWritable<T> {
+    /// Write every element, or stop early when the readable end drops.
+    /// Returns the result of the copy that ended the loop.
+    pub fn write_all(&self, data: List<T>) -> CopyResult {
+        if data.is_empty() {
+            return CopyResult::Completed;
+        }
+        let mut rest = data;
+        loop {
+            let written = self.write(rest);
+            if write_copy_is_final(&written) || written.count >= rest.len() {
+                return written.result;
+            }
+            let mut remainder: List<T> = [];
+            remainder.extend_from_slice(rest.as_slice().slice(written.count, rest.len()));
+            rest = remainder;
+        }
+    }
+
+    /// `write_all` for elements already held in one array, without its
+    /// value-semantics copy. The tail view skips `Slice::slice`, whose clamp
+    /// these offsets cannot need and every program that prints would pay for.
+    pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult {
+        if data.is_empty() {
+            return CopyResult::Completed;
+        }
+        let repr = data.internal_repr();
+        let end = data.internal_start() + data.len();
+        let mut offset = data.internal_start();
+        loop {
+            let written = self.write_raw(Slice::internal_new(repr, offset, end));
+            offset += written.count;
+            if write_copy_is_final(&written) || offset >= end {
+                return written.result;
+            }
+        }
+    }
 }
 
 /// Opaque token identifying a waitable handle within a WaitableSet.

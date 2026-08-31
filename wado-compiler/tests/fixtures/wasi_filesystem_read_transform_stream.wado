@@ -56,10 +56,10 @@ export fn run() with (Stdout, Stderr, Preopens) {
         // Read from file stream, uppercase, write to stdout stream
         loop {
             let chunk = file_rx.read(4096);
-            if chunk.len() == 0 {
+            out_tx.write_all(to_upper(chunk.items));
+            if chunk.result != CopyResult::Completed {
                 break;
             }
-            out_tx.write(to_upper(chunk));
         }
         file_rx.drop();
         out_tx.drop();
