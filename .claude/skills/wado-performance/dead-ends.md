@@ -232,3 +232,40 @@ Each measured flat or negative, each with an obvious-sounding motivation:
 The generalization: stop when the floor is the representation. A store-bound
 loop over an `Array<T>`-backed `String` is near-optimal short of leaving GC
 arrays, and no scheme that keeps the array beats it.
+
+## Splitting `encode_char` at the ASCII boundary (2026-08-30)
+
+`encode_char` carries `#[inline]`, so its four-way UTF-8 width dispatch and nine
+stores land at every write site. Keeping the one-byte case and calling out for
+the rest — what the manual-split advice prescribes — lost 2-4% on five serde
+rows and gained nothing, including on json-catalog ser, the row it was aimed at.
+
+The split adds a call in the middle of a byte-writing loop, taking `&mut
+Array<u8>`, so the loop reloads the array and the position across it. What it
+removed was three compares the branch predictor gets right on ASCII text.
+
+Generalizes to: the manual-split advice is for a sub-case whose _body_ is heavy
+(an allocation, a grow, a formatter), not for one that is merely branchy. Ask
+what the caller copies instead — if the answer is "a compare", there was nothing
+to move.
+
+## Outlining a `cold_path()` at a function's top level (2026-08-31)
+
+`nir/cold_outline` collects only the arms of a visited node, so a function's
+root block is never a region and a top-level marker is missed. Teaching the
+traversal about the root reads like closing a gap.
+
+The benchmark does not move: `sieve` swaps which arm wins across three
+alternating pairs, `json-catalog` de differs by under 0.2%. The WIR A/B says
+why — the whole diff is one new `__initialize_modules$cold0`, the
+`__initialize_module` it swallowed, and TypeId renumbering. **The parse and
+serialize loops are identical.** What a top-level marker reaches is every
+module's init guard: one call site, behind a branch, run once. Only then does
+size decide, and it decides against: every program grew (hello_world +5,
+pi_approx +5, zlib +3, sqlite_highlight +9 bytes) across 1883 golden fixtures.
+
+Generalizes to: the pass pays off on a hot leaf whose rare arm is copied at
+every call site, and a region reached once behind a branch has nothing to give
+back. "The traversal has a blind spot" is a claim about the code, not about what
+closing it is worth — and bytes alone would have retired this for the wrong
+reason, since they do not track speed.

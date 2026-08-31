@@ -32,7 +32,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [response, _tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
     response.set_status_code(200);
     task return Result::Ok(response);
-    body_tx.write(body_str.bytes().collect());
+    body_tx.write_all(body_str.bytes().collect());
     body_tx.drop();
     trailers_tx.write(Result::Ok(null));
 }

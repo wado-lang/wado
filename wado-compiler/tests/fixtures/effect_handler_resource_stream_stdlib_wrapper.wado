@@ -1,0 +1,82 @@
+// A handler claims the primitive even when a stdlib wrapper is what calls it.
+// `read_to_end`, `write_all` and `write_raw_all` are impl bodies over a type
+// parameter, so their `#[cm]` calls name no concrete receiver until monomorphize
+// mints the instance — effect-dispatch rewriting has to run again over those, or
+// the call reaches the canonical past the installed handler.
+//
+// The direct-call form is effect_handler_resource_stream.wado.
+
+use { println, Stdout } from "core:cli";
+
+struct MockStream {
+    log: List<u8>,
+}
+
+impl Stream<u8> for MockStream {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+        let id: i32 = 0;
+        resume [id as Stream<u8>, id as StreamWritable<u8>]
+    }
+    // `read_to_end` loops until a copy reports something other than
+    // `Completed`, so the drained handler reports `Dropped` rather than an
+    // empty chunk — an empty `Completed` would spin forever.
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
+        let _ = this;
+        let _ = max;
+        let snapshot = self.log;
+        self.log = [];
+        let drained = snapshot.is_empty();
+        resume StreamChunk {
+            items: snapshot,
+            result: if drained { CopyResult::Dropped } else { CopyResult::Completed },
+        }
+    }
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        resume ()
+    }
+    ..trap
+}
+
+impl StreamWritable<u8> for MockStream {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
+        let _ = this;
+        let count = data.len();
+        for let b of data {
+            self.log.push(b);
+        }
+        resume StreamWrite { count: count, result: CopyResult::Completed }
+    }
+    fn write_raw(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> StreamWrite {
+        let _ = this;
+        let count = data.len();
+        self.log.extend_from_slice(data);
+        resume StreamWrite { count: count, result: CopyResult::Completed }
+    }
+    fn drop(&mut self, this: &StreamWritable<u8>) {
+        let _ = this;
+        resume ()
+    }
+    ..trap
+}
+
+export fn run() with Stdout {
+    let mut s = MockStream { log: [] };
+    with &mut s do {
+        let [rx, tx] = Stream::<u8>::new();
+        let hi: List<u8> = [104 as u8, 105 as u8]; // "hi"
+        tx.write_all(hi);
+        let bang: List<u8> = [33 as u8]; // "!"
+        tx.write_raw_all(bang.as_slice());
+        let got = rx.read_to_end();
+        assert got.len() == 3;
+        assert got[0] == 104 as u8;
+        assert got[2] == 33 as u8;
+        tx.drop();
+        rx.drop();
+    }
+    println(`buffered=${s.log.len()}`);
+}
+
+__DATA__
+{"stdout": "buffered=0\n"}

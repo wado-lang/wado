@@ -46,6 +46,30 @@ mise run on-task-started
    inside tables — prose around them is not re-measured and drifts.
 5. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
 
+## Sweeping a compiler knob
+
+`WADO_BENCH_FLAGS` is appended to every `wado compile` / `wado run` the harness
+issues, so an arm costs a benchmark run rather than a release rebuild:
+
+```sh
+set -e  # a failed arm would leave pick.ts choosing among the rest
+for t in 13 20 32; do
+  WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > thr$t.log 2>&1
+done
+node benchmark/pick.ts thr13.log thr20.log thr32.log
+```
+
+Read the sweep with `pick.ts` the same way as a best-of-three: it keys rows by
+(task, implementation, phase), so the "best" column names the winning arm per
+row. Only a knob every compiling subcommand accepts can be swept this way — the
+harness spends the flags on `wado run`, so one added to `compile` alone is one
+the sweep cannot reach. The knob a sweep settles on is a default in
+`optimize.rs`, not a flag the README's numbers were taken under — re-run the
+suite unflagged before updating the tables.
+
+Comparing the settled default against `origin/main` is a different measurement,
+and `WADO_BIN` plus `ab.ts` is how: see the `wado-performance` skill.
+
 ## Reading output
 
 Each program prints a throughput line — `<rate> <unit>/s   (<ms> ms/iter,

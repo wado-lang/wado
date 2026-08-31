@@ -164,3 +164,4 @@ missing and what closing it takes. A deliberate omission goes in Decision.
 - [Power-Assert Coverage](./wep-2026-08-19-power-assert-coverage.md)
 - [Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md)
 - [Markup Dialect — Where the Top Level Lives](./wep-2026-08-29-markup-dialect.md)
+- [Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)

@@ -175,17 +175,8 @@ test "unique_sorted leaves a distinct list sorted" {
 }
 
 fn read_dir_entries(dir: &Descriptor) -> Result<List<DirectoryEntry>, ErrorCode> {
-    let mut entries: List<DirectoryEntry> = [];
     let [stream, done] = dir.read_directory();
-    loop {
-        let chunk = stream.read(64);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let e of chunk {
-            entries.push(e);
-        }
-    }
+    let entries = stream.read_to_end();
     stream.drop();
     let read_result = done.read();
     done.drop();
@@ -202,14 +193,7 @@ fn open_dir(root: &Descriptor, name: String) -> Result<Descriptor, ErrorCode> {
 fn read_file(dir: &Descriptor, path: String) -> Result<String, ErrorCode> {
     let file = dir.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait()?;
     let [stream, done] = file.read_via_stream(0 as Filesize);
-    let mut bytes: List<u8> = [];
-    loop {
-        let chunk = stream.read(8192);
-        if chunk.len() == 0 {
-            break;
-        }
-        bytes.extend(&chunk);
-    }
+    let bytes = stream.read_to_end();
     stream.drop();
     let read_result = done.read();
     done.drop();
@@ -229,7 +213,7 @@ fn write_file(dir: &Descriptor, path: String, content: &String) -> Result<(), Er
     let bytes: List<u8> = content.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
-    tx.write(bytes);
+    tx.write_all(bytes);
     tx.drop();
     let write_result = sub.read();
     sub.drop();

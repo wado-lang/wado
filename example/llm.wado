@@ -71,7 +71,7 @@ fn send_post<B: AsByteSlice>(api_key: String, body: B) -> Response with Client {
     // calls rendezvous with it and the whole body flows out without
     // deadlock.
     let subtask = Client::send(req);
-    body_tx.write(body.as_byte_slice().to_list());
+    body_tx.write_raw_all(body.as_byte_slice() as Slice<u8>);
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
@@ -85,14 +85,7 @@ fn read_body(resp: Response) -> ByteList {
     let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
 
-    let mut buf: List<u8> = [];
-    loop {
-        let chunk = body_stream_rx.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        buf.extend(&chunk);
-    }
+    let buf = body_stream_rx.read_to_end();
     body_stream_rx.drop();
     return buf as ByteList;
 }

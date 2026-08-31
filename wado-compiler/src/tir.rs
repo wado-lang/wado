@@ -915,7 +915,8 @@ impl TypeTable {
     /// dispatch name is derived differently).
     pub fn generic_dispatch_components(&self, type_id: TypeId) -> Option<(String, Vec<TypeId>)> {
         match self.get(type_id) {
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::GenericResource { def, type_args } => {
                 Some((self.def_name(*def).to_string(), type_args.clone()))
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -1995,6 +1996,12 @@ impl TypeTable {
             def,
             type_args: vec![inner],
         })
+    }
+
+    /// The `StreamChunk<T>` a `Stream<T>::read` returns.
+    pub fn make_stream_chunk(&mut self, elem: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::StreamChunk);
+        self.make_generic_instance(def, vec![elem])
     }
 
     /// Create a `AsyncCall<T>` generic struct instance type.
@@ -4006,7 +4013,11 @@ impl TypeTable {
     #[must_use]
     pub fn base_type_name(&self, id: TypeId) -> String {
         match self.get(id) {
-            ResolvedType::GenericInstance { def, .. } => self.def_name(*def).to_string(),
+            // A generic resource heads its methods bare, like a generic struct:
+            // spelling the argument into the head applies it twice
+            // (`StreamWritable<u8><u8>::write_all`) and resolves to nothing.
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => self.def_name(*def).to_string(),
             ResolvedType::Struct { def, .. } => self.struct_head_name(*def),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
             _ => self.mangle_type_name(id),
@@ -4062,16 +4073,17 @@ impl TypeTable {
                     .map_or_else(|| builtin(""), Receiver::Ref)
             }
             ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
-            // A newtype's head is its declaration, arguments never spelled into
-            // it — an `impl` header writes `MyArray`, not `MyArray<i32>`.
+            // The head is the declaration, arguments never spelled into it — an
+            // `impl` header writes `MyArray`, not `MyArray<i32>`, and
+            // `impl Stream<T>`, not `Stream<u8>`. A call keyed the other way
+            // mangles under a second head and never meets the impl's methods.
             ResolvedType::Enum { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Flags { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Newtype { def, .. }
-            | ResolvedType::GenericInstance { def, .. } => declared(*def),
-            // A generic resource and a binder name no declaration of their own.
-            ResolvedType::GenericResource { def, .. } => builtin(self.def_name(*def)),
+            | ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => declared(*def),
             ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
             ResolvedType::BuiltinArray(_) => builtin(Self::ARRAY_TYPE_NAME),
             ResolvedType::Unit => builtin(Self::UNIT_TYPE_NAME),
@@ -4131,7 +4143,8 @@ impl TypeTable {
             | ResolvedType::Newtype { def, .. }
             | ResolvedType::Flags { def }
             | ResolvedType::Resource { def }
-            | ResolvedType::GenericInstance { def, .. } => FqTypeName::declared(&self.defs, *def),
+            | ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => FqTypeName::declared(&self.defs, *def),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.fq_base_type_name(*inner)
             }
@@ -4227,7 +4240,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::GenericResource { def, type_args } => {
-                FqTypeName::builtin(self.def_name(*def)).with_args(args_of(type_args))
+                FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
             ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME)
                 .with_args(vec![self.fq_type_name_spelled(*elem, unboxed)]),

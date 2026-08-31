@@ -1,0 +1,30 @@
+// A `&mut` parameter lowers to a `Box<T>` the callee writes the field through,
+// so the read after the call is not the literal the box was built with. Folding
+// it to that literal drops the write-back and `scale(2, true)` returns 2.
+//
+// The `println` is what keeps `const_branch_prune` from collapsing the call out
+// from between the box and the read.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn bump(x: &mut i32) {
+    *x = *x * 3;
+}
+
+fn scale(mut n: i32, cond: bool) -> i32 with Stdout {
+    if cond {
+        bump(&mut n);
+        println("marked");
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    println(`${scale(2, true)}`);
+    println(`${scale(2, false)}`);
+}
+
+__DATA__
+{
+    "stdout": "marked\n6\n2\n"
+}

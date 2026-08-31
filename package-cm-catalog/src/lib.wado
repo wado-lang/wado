@@ -475,10 +475,10 @@ export async fn id_stream_u32(v: Stream<u32>) -> Stream<u32> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        let written = tx.write_all(chunk.items);
+        if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -488,10 +488,10 @@ export async fn id_stream_string(v: Stream<String>) -> Stream<String> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        let written = tx.write_all(chunk.items);
+        if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -501,10 +501,10 @@ export async fn id_stream_record(v: Stream<Point>) -> Stream<Point> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        let written = tx.write_all(chunk.items);
+        if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -514,10 +514,10 @@ export async fn id_stream_enum(v: Stream<Color>) -> Stream<Color> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        let written = tx.write_all(chunk.items);
+        if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -527,10 +527,10 @@ export async fn id_stream_variant(v: Stream<Shape>) -> Stream<Shape> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        let written = tx.write_all(chunk.items);
+        if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -541,10 +541,10 @@ export async fn id_stream_flags(v: Stream<Perms>) -> Stream<Perms> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        let written = tx.write_all(chunk.items);
+        if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();

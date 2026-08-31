@@ -143,7 +143,7 @@ fn write_output(path: &String, source: &String) with (Stderr, Preopens, Exit) {
     let bytes: List<u8> = source.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
-    tx.write(bytes);
+    tx.write_all(bytes);
     tx.drop();
     // Await the completion future so a partial or failed write is reported
     // rather than silently treated as success.
@@ -346,16 +346,7 @@ fn grant_hint(path: &String) -> String {
 /// EOF (truncated input).
 fn read_all(file: &Descriptor) -> Result<ByteList, ErrorCode> {
     let [read_stream, done] = file.read_via_stream(0 as Filesize);
-    let mut result: ByteList = [];
-    loop {
-        let chunk = read_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        for let b of chunk {
-            result.push(b);
-        }
-    }
+    let result = read_stream.read_to_end() as ByteList;
     read_stream.drop();
     let read_result = done.read();
     done.drop();

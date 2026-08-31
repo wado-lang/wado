@@ -12,6 +12,11 @@
 // globalization simultaneously hoists that literal as a `GlobalVarSet` inside
 // the region, which disqualifies the post-globalization fold — so this exact
 // mix stayed unfoldable.
+//
+// The absent `internal_reserve_uninit` is what says the fold happened in the
+// loop. Whether the folded constant then reads as `array.new_data` or as the
+// fixed array of an in-place hoist is `const_object_globalization`'s call, and
+// either spelling is the same bytes.
 
 use { println, Stdout } from "core:cli";
 
@@ -25,7 +30,7 @@ __DATA__
 {
     "stdout": "btwenty-eight-byte-payload!!\n",
     "wir_expect:O2": [
-        "array.new_data<u8>(\"btwenty-eight-byte-payload!!\")"
+        "array.new_fixed<u8>(98, 116, 119, 101, 110, 116, 121"
     ],
     "wir_not_expect:O2": [
         "internal_reserve_uninit"

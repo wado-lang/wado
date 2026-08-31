@@ -128,6 +128,20 @@ Creating and dropping a waitable set per blocked operation is a per-chunk cost o
 every stream transfer. A per-task set, joined and unjoined around each await,
 replaces it. This is a follow-up to the correctness change, not a precondition.
 
+### A read reports the end
+
+`CopyResult.DROPPED` says the peer end is gone, and the canonical traps on any
+read or write issued after it — the state is per handle, not per copy. A final
+copy can report elements _and_ the drop together, which is what a peer that
+writes its payload and drops in one go produces, so a loop that reads until an
+empty list issues one read too many and traps.
+
+That is now the caller's to see: `read` returns the elements and the status
+together, leaving the state in the caller's control flow — see
+[Stream Copy Results](./wep-2026-08-30-stream-copy-result.md). What remains
+undefined is operating on an end whose peer has already dropped, which is that
+WEP's known gap.
+
 ### Cancellation stays unreachable
 
 `Stream::cancel_read` / `cancel_write` remain uncallable, and this change does

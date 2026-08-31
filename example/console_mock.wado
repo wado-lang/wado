@@ -51,13 +51,17 @@ impl Stream<u8> for MockStdio {
         resume [0 as Stream<u8>, 0 as StreamWritable<u8>];
     }
 
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
         let _ = this;
         let end = i32::min(self.input_pos + max, self.input.len());
         let mut chunk: List<u8> = [];
         chunk.extend_from_slice(self.input.slice(self.input_pos, end));
+        let at_end = self.input_pos == end;
         self.input_pos = end;
-        resume chunk;
+        resume StreamChunk {
+            items: chunk,
+            result: if at_end { CopyResult::Dropped } else { CopyResult::Completed },
+        };
     }
 
     fn drop(&mut self, this: &Stream<u8>) {
@@ -68,22 +72,26 @@ impl Stream<u8> for MockStdio {
 }
 
 impl StreamWritable<u8> for MockStdio {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
         let _ = this;
+        let count = data.len();
         if self.to_stderr {
             self.err.extend(&data);
         } else {
             self.out.extend(&data);
         }
+        resume StreamWrite { count: count, result: CopyResult::Completed };
     }
 
-    fn write_raw(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) {
+    fn write_raw(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> StreamWrite {
         let _ = this;
+        let count = data.len();
         if self.to_stderr {
             self.err.extend_from_slice(data);
         } else {
             self.out.extend_from_slice(data);
         }
+        resume StreamWrite { count: count, result: CopyResult::Completed };
     }
 
     fn drop(&mut self, this: &StreamWritable<u8>) {
@@ -111,14 +119,7 @@ fn greet(name: String) with (Stdout, Stderr) {
 
 fn read_all_stdin() -> String with Stdin {
     let [rx, _done] = Stdin::read_via_stream();
-    let mut buf: List<u8> = [];
-    loop {
-        let chunk = rx.read(1024);
-        if chunk.is_empty() {
-            break;
-        }
-        buf.extend(&chunk);
-    }
+    let buf = rx.read_to_end();
     rx.drop();
     return String::from_utf8_lossy(buf);
 }

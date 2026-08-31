@@ -72,16 +72,7 @@ fn get_header(headers: &Fields, name: String) -> String with Fields {
 pub fn read_body_from_request(request: Request) -> String {
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
-    let mut body = String::with_capacity(256);
-    loop {
-        let chunk = body_stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        if let Ok(s) = String::from_utf8(chunk) {
-            body.push_str(&s);
-        }
-    }
+    let body = String::from_utf8_lossy(body_stream.read_to_end());
     body_stream.drop();
     return body;
 }

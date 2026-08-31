@@ -37,7 +37,10 @@ export fn run() {
 fn wir_without_inlining() -> String {
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
-        inline_threshold: Some(0),
+        opt: wado_compiler::OptOverrides {
+            inline_threshold: Some(0),
+            ..Default::default()
+        },
         retain_wir: true,
         ..Default::default()
     };

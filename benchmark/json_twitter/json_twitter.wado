@@ -30,14 +30,7 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
         Err(_) => unreachable(),
     };
     let [stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut buf: List<u8> = [];
-    loop {
-        let chunk = stream.read(4096);
-        if chunk.len() == 0 {
-            break;
-        }
-        buf.extend(&chunk);
-    }
+    let buf = stream.read_to_end();
     stream.drop();
     return buf as ByteList;
 }

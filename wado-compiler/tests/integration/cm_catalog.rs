@@ -955,7 +955,7 @@ const STREAM_PRODUCER_SOURCE: &str = r#"
 export async fn mk_stream_u32(data: List<u32>) -> Stream<u32> {
     let [rx, tx] = Stream::<u32>::new();
     task return rx;
-    tx.write(data);
+    tx.write_all(data);
     tx.drop();
 }
 "#;
@@ -1250,10 +1250,10 @@ export async fn id_stream_point(v: Stream<Point>) -> Stream<Point> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        tx.write_all(chunk.items);
+        if chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -1407,10 +1407,10 @@ export async fn id_stream_color(v: Stream<Color>) -> Stream<Color> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        tx.write_all(chunk.items);
+        if chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -1420,10 +1420,10 @@ export async fn id_stream_shape(v: Stream<Shape>) -> Stream<Shape> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        tx.write_all(chunk.items);
+        if chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -1433,10 +1433,10 @@ export async fn id_stream_perms(v: Stream<Perms>) -> Stream<Perms> {
     task return rx;
     loop {
         let chunk = v.read(16);
-        if chunk.len() == 0 {
+        tx.write_all(chunk.items);
+        if chunk.result != CopyResult::Completed {
             break;
         }
-        tx.write(chunk);
     }
     v.drop();
     tx.drop();
@@ -1614,10 +1614,10 @@ fn stream_identity_source(ty: &str, name: &str) -> String {
          \x20   task return rx;\n\
          \x20   loop {{\n\
          \x20       let chunk = v.read(16);\n\
-         \x20       if chunk.len() == 0 {{\n\
+         \x20       tx.write_all(chunk.items);\n\
+         \x20       if chunk.result != CopyResult::Completed {{\n\
          \x20           break;\n\
          \x20       }}\n\
-         \x20       tx.write(chunk);\n\
          \x20   }}\n\
          \x20   v.drop();\n\
          \x20   tx.drop();\n\

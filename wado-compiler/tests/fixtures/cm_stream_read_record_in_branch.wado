@@ -26,9 +26,9 @@ export fn run() with (Stdout, Stderr, Preopens) {
     // The record stream read is nested inside an `if`-expression branch — a
     // position the discovery walker historically did not visit.
     let entries = if dirs.len() > 0 {
-        dir_stream.read(100)
+        dir_stream.read(100).items
     } else {
-        dir_stream.read(0)
+        dir_stream.read(0).items
     };
 
     let mut found_hello = false;
