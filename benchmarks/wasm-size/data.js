@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788047219149,
+  "lastUpdate": 1788141892509,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51953,6 +51953,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 256714,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49dc19fb1bf3fe9fa015cbbd551c3bae1d26ba7f",
+          "message": "Merge pull request #1926 from wado-lang/claude/cm-stream-t-channel-t1uyno\n\nfeat(cm): give stream copies their Component Model result",
+          "timestamp": "2026-08-31T10:51:17+09:00",
+          "tree_id": "17d49b8bfdd0238bfe4f703d2e3b19cc875d60da",
+          "url": "https://github.com/wado-lang/wado/commit/49dc19fb1bf3fe9fa015cbbd551c3bae1d26ba7f"
+        },
+        "date": 1788141891773,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2049,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6146,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18052,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 256836,
             "unit": "bytes"
           }
         ]
