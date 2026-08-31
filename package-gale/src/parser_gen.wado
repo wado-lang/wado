@@ -1723,11 +1723,22 @@ fn scan_repeat_guard_excluding(
 /// Not the reading a rule's empty arm takes — there an absent set means the
 /// arm is not narrowed at all and must still hold at EOF, which is why
 /// `admits_or_everything` stays as it is.
+///
+/// `Untestable` — a body deriving only the empty string, `x?` with `x : ;` —
+/// renders `true`: no token selects it, and an optional over it always matches
+/// because matching nothing is what it does. The jar agrees, entering and
+/// producing the empty node (`(s k x a)`).
+///
+/// Total on purpose. The first version asserted `Untestable` away, which reads
+/// as a contract and is really an obligation on eleven callers to remember a
+/// case; one did not, and a grammar that used to generate started aborting.
+/// A renderer that answers for every class cannot be forgotten — and pushing
+/// the answer back out to its callers, whether by assert or by `Option`, is
+/// the same shape as the emptiness this whole change removed.
 global NO_EXCLUSION: List<String> = [];
 global PEEK_KIND: String = "p.peek_kind()";
 
 fn repeat_guard_cond(admits: &Admits, excluded: &List<String>, expr: &String, ctx: &mut GenContext) -> String {
-    assert !admits_is_untestable(admits), "a repeat whose body matches nothing has no iteration to guard";
     let mut parts: List<String> = [];
     if admits_is_everything(admits) {
         parts.push(`${*expr} != TK_EOF`);
@@ -5567,9 +5578,11 @@ fn gen_op_repeat_optional_rulecall(
     // alternative was never emitted, so the rule could not parse `x` at all.
     let entry = match &rep_op.body_admits {
         Everything(_) => repeat_guard_cond(&rep_op.body_admits, follow, &PEEK_KIND, ctx),
-        Untestable => {
-            return;
-        },
+        // Not "can never match": a body deriving only the empty string matches
+        // here and everywhere, so the optional always takes it and the jar
+        // produces the empty node. Returning instead dropped `x?` with
+        // `x : ;` from the parse entirely.
+        Untestable => repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
         Kinds(kinds) => {
             let first = subtract_sets(kinds, follow);
             if first.is_empty() {
