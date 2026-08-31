@@ -509,7 +509,10 @@ if [ ! -x "$bin" ]; then
     git worktree add -q --detach "$tmp/tree" "$want"
     (cd "$tmp/tree" && cargo build --release -q -p wado-cli)
     mkdir -p "$(dirname "$bin")"
-    cp "$tmp/tree/target/release/wado" "$bin"
+    # Published by rename, so an interrupted copy or a second baseline task
+    # cannot leave a truncated compiler for the `-x` above to accept.
+    cp "$tmp/tree/target/release/wado" "$bin.partial"
+    mv "$bin.partial" "$bin"
     # One baseline is enough; the rest are compilers no A/B asks for again.
     find "$cache" -mindepth 1 -maxdepth 1 -not -name "$want" -exec rm -rf {} +
 fi

@@ -2267,6 +2267,12 @@ pub(super) fn splice_stmt(
         }
         StmtKind::Expr(e) => StmtKind::Expr(splice_operand(caller, callee, *e, ctx)),
         StmtKind::Return { value } => {
+            // `InlineCtx::lifting` carries no label, since `cold_outline` moves
+            // only a region control cannot leave. A `break ""` names no block.
+            assert!(
+                !ctx.label.is_empty(),
+                "[NIR] inline: a `return` reached a splice with no label to break to"
+            );
             let v = *value;
             StmtKind::Break {
                 label: Some(ctx.label.to_string()),

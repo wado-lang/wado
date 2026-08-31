@@ -169,7 +169,8 @@ that one benchmark back to back and check the ranking holds pair by pair.
 
 ```sh
 for i in 1 2 3 4 5; do
-  "$base" run -O2 sieve/sieve.wado; ../target/release/wado run -O2 sieve/sieve.wado
+  "$base" run -O2 benchmark/sieve/sieve.wado
+  target/release/wado run -O2 benchmark/sieve/sieve.wado
 done
 ```
 

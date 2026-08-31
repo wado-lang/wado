@@ -53,7 +53,7 @@ issues, so an arm costs a benchmark run rather than a release rebuild:
 
 ```sh
 for t in 13 20 32; do
-  WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run all > thr$t.log 2>&1
+  WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > thr$t.log 2>&1
 done
 node benchmark/pick.ts thr13.log thr20.log thr32.log
 ```

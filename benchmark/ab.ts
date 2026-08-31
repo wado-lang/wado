@@ -53,7 +53,14 @@ function main(): void {
   const baseRows = group(base);
   const headRows = group(head);
 
-  type Verdict = { label: string; b: Arm; h: Arm; delta: number; real: boolean };
+  type Verdict = {
+    label: string;
+    b: Arm;
+    h: Arm;
+    delta: number;
+    real: boolean;
+    sampled: boolean;
+  };
   const out: Verdict[] = [];
   for (const [key, rows] of headRows) {
     const other = baseRows.get(key);
@@ -63,13 +70,17 @@ function main(): void {
     }
     const b = arm(other);
     const h = arm(rows);
+    // A row a run skipped leaves a one-sample arm, whose range is a point that
+    // cannot overlap — the verdict would read as real off a single measurement.
+    const sampled = other.length > 1 && rows.length > 1;
     out.push({
       label: labelOf(rows[0]),
       b,
       h,
       // Positive is faster: the row spends less time per iteration.
       delta: ((b.min - h.min) / b.min) * 100,
-      real: h.min > b.max || b.min > h.max,
+      real: sampled && (h.min > b.max || b.min > h.max),
+      sampled,
     });
   }
   for (const [key, rows] of baseRows) {
@@ -81,7 +92,13 @@ function main(): void {
   // Regressions first: what a tuning run has to explain before it lands.
   out.sort((x, y) => Number(y.real) - Number(x.real) || x.delta - y.delta);
   for (const v of out) {
-    const verdict = !v.real ? "noise" : v.delta > 0 ? "FASTER" : "SLOWER";
+    const verdict = !v.sampled
+      ? "1-run"
+      : !v.real
+        ? "noise"
+        : v.delta > 0
+          ? "FASTER"
+          : "SLOWER";
     console.log(
       [
         `${v.delta >= 0 ? "+" : ""}${v.delta.toFixed(1)}%`.padStart(7),

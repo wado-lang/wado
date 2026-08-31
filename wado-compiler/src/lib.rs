@@ -936,6 +936,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             lib_world: Some(fq.clone()),
             lib_interface_export: true,
             opt_level: parent.opt_level,
+            opt: parent.opt,
             log_level: parent.log_level,
             codegen_flags: parent.codegen_flags.clone(),
             param_overrides: parent.param_overrides.clone(),

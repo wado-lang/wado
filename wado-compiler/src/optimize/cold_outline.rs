@@ -1,7 +1,10 @@
 //! Move what a `cold_path()` marker opens into a function of its own, so that
 //! `inline`'s cold discount describes the callee instead of promising a split.
 //!
-//! Two things are open. The pass costs `sieve` 4.5% for no reason the IR shows
+//! Three things are open. A function's root block is never a region: only the
+//! arms of a visited node are collected, so a marker at the top level of a
+//! unit-returning function is missed. The pass costs `sieve` 4.5% for no reason
+//! the IR shows
 //! — the hot loops are identical in WIR and in the emitted Wasm, and perturbing
 //! the inline threshold moves the row only 2.3% — so the cause is below the
 //! Wasm and reading it needs `perf` against a jitdump. And a region runs to the
