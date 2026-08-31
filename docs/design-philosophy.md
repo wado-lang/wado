@@ -20,7 +20,11 @@ Code generation is not banned; it is kept outside the language. [Kiln](./wep-202
 
 ### Readable without context switching
 
-Explicit over implicit: no implicit type conversions, no function overloading, no hidden dependencies. You should never have to jump to another file to know what a function does.
+Explicit over implicit: no hidden dependencies, and no conversion the source does not show. You should never have to jump to another file to know what a function does.
+
+Overloading is not banned — `a + b` has resolved through an `impl Add` since the beginning, and a method call resolves by the types of its arguments as well as its receiver. What is asked of it is that it be predictable: one spelling reaches one declaration, resolution follows a fixed ladder rather than a search over everything in scope, and no two candidates are separated by a preference a reader has to have memorised. Where that is not obvious from the source it is the diagnostic's job to say which candidate won and why the others lost, and the language service's to say it before the compiler is run.
+
+This is the weakest principle on this page, because unlike the others it names a feeling rather than a rule and nothing measures it. It is kept because the failure it guards against — a call whose meaning changes when a distant file adds an implementation — is worth more than the tidiness of a claim that could be checked.
 
 ### Type-safe by design
 
@@ -72,7 +76,7 @@ Wado takes Rust as its base and adapts it for this platform:
 
 Wado is developed entirely through agentic coding: AI agents write the code while the human handles design and direction. That is not a side note — it shaped the language. After a stretch of intensive agentic work, a few things were clear:
 
-- Agents are fast but literal. Implicit behavior multiplies across a codebase, so predictable, explicit semantics work better — hence no implicit conversions, no overloading, no macros.
+- Agents are fast but literal. Implicit behavior multiplies across a codebase, so predictable semantics work better — hence no macros, and an overloading whose winner is decided by a fixed ladder rather than by what happens to be in scope.
 - Agents drift toward defensive code. Without type safety they pile on runtime checks and nested error handling; strong static types remove the reason to.
 - Exceptions break their reasoning. Non-local control flow is hard to predict, so failures are values that stay visible at the call site.
 
