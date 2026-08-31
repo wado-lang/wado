@@ -2109,6 +2109,7 @@ fn grow_memory(new_offset: i32) {
     };
     let grow_pages: i32 = ((grow_bytes + 65535) / 65536);
     if (core::builtin::memory_grow(grow_pages) < 0) {
+        core::builtin::cold_path();
         core::builtin::unreachable();
     }
 }
@@ -2226,6 +2227,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         let mut block: i32 = (oldptr - 8);
         let header: i32 = core::builtin::i32_load(block);
         if (core::allocator::fl_used(header) == 0) {
+            core::builtin::cold_path();
             core::builtin::unreachable();
         }
         let mut size: i32 = core::allocator::fl_size(header);
@@ -4821,6 +4823,7 @@ pub fn "core:prelude/int128.wado/u128::as_f32"(self: &u128) -> f32 {
 
 pub fn "core:prelude/int128.wado/u128::div_rem"(self: &u128, divisor: &u128) -> [u128, u128] {
     if ((divisor.low == 0) && (divisor.high == 0)) {
+        core::builtin::cold_path();
         core::rt::panic(String { repr: packed"u128 division by zero", used: 21 });
     }
     let mut quotient: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::zero"();
@@ -5674,6 +5677,7 @@ fn parse_unsigned_prefix_range(s: &String, start: i32, end: i32) -> Result<i32, 
 
 fn assert_radix(radix: u32) {
     if ((radix < 2) || (radix > 36)) {
+        core::builtin::cold_path();
         core::rt::panic(String { repr: packed"from_str_radix: radix must be in 2..=36", used: 39 });
     }
 }
@@ -10438,14 +10442,17 @@ pub fn log_stderr(message: String) {
 
 pub fn panic(message: String) -> ! {
     core::rt::log_stderr(message);
+    core::builtin::cold_path();
     core::builtin::unreachable();
 }
 
 fn assert_failed(message: String) -> ! {
+    core::builtin::cold_path();
     core::rt::panic(message);
 }
 
 pub fn unreachable() -> ! {
+    core::builtin::cold_path();
     core::builtin::unreachable();
 }
 
@@ -11548,6 +11555,7 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspec
 }
 
 pub fn "!^core:prelude/traits.wado/Inspect::inspect"(self: &!, f: &mut Formatter) {
+    core::builtin::cold_path();
     core::rt::unreachable();
 }
 
@@ -12832,8 +12840,8 @@ fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Arr
     return core::builtin::array_get_value::<u64>(self, index);
 }
 
-#[inline(never)]
 fn "core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/IntErrorKind>"(msg: String, value: IntErrorKind) -> ! {
+    core::builtin::cold_path();
     core::rt::panic(__tmpl: {
         let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(34);
         __r."core:prelude/string.wado/String::push_str"(&msg);

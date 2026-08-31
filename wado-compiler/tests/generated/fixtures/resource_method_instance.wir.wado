@@ -88,23 +88,21 @@ type "functype//resource_method_instance.wado/__cm_export__run" = fn();  // Type
 
 type "functype//core:rt/memory_to_gc_array" = fn(i32, i32) -> ref Array<u8>;  // TypeId(23)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(24)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(24)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(25)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(25)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(26)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(26)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(27)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(27)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(28)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(30)
+type "functype//wasi/resource-drop:tcp-socket" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/resource-drop:tcp-socket" = fn(i32);  // TypeId(31)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -122,6 +120,8 @@ import fn wasi/resource-drop:tcp-socket from "wasi/resource-drop:tcp-socket";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:resource_method_instance.wado::__modules_initialized: bool = 0;
+global global:resource_method_instance.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 97, 105, 108, 101, 100, 32, 116, 111, 32, 99, 114, 101, 97, 116, 101, 32, 115, 111, 99, 107, 101, 116), used: 23 };
+global global:resource_method_instance.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 115, 111, 117, 114, 99, 101, 32, 101, 120, 116, 114, 97, 99, 116, 101, 100, 32, 102, 114, 111, 109, 32, 82, 101, 115, 117, 108, 116), used: 30 };
 
 fn "resource_method_instance.wado/run"() with Stdout, TcpSocket {
     let result: ref "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
@@ -146,7 +146,7 @@ fn "resource_method_instance.wado/run"() with Stdout, TcpSocket {
         rx_9 = builtin::i32_wrap_i64(local.tee packed_8("wasi/stream-new"()));
         tx_10 = builtin::i32_wrap_i64(packed_8 >> 32_i64);
         handle_6 = "resource_method_instance.wado/__cm_binding__Stdout_write_via_stream"(rx_9);
-        "core:rt/write_string_to_stream"(tx_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Resource extracted from Result"), used: 30 }, 1);
+        "core:rt/write_string_to_stream"(tx_10, global:resource_method_instance.wado::__const_obj_1, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_6);
         "wasi/resource-drop:tcp-socket"(socket);
     } else {
@@ -154,7 +154,7 @@ fn "resource_method_instance.wado/run"() with Stdout, TcpSocket {
             rx_23 = builtin::i32_wrap_i64(local.tee packed_22("wasi/stream-new"()));
             tx_24 = builtin::i32_wrap_i64(packed_22 >> 32_i64);
             handle_18 = "resource_method_instance.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
-            "core:rt/write_string_to_stream"(tx_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Failed to create socket"), used: 23 }, 1);
+            "core:rt/write_string_to_stream"(tx_24, global:resource_method_instance.wado::__const_obj_0, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_18);
         };
     }
@@ -254,19 +254,6 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
     return arr;
 }
 
-fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
-    let i: i32;
-    i = 0;
-    b19: block {
-        l20: loop {
-            break_if b19 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            continue l20;
-        };
-    };
-}
-
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
     let new_repr: ref Array<u8>;
     let self_5: i32;
@@ -309,49 +296,54 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_14: i32;
     let raw_len: i32;
     let written_16: ref "core:prelude/types.wado//StreamWrite";
-    let len: i32;
+    let len_23: i32;
     let ptr_24: i32;
+    let i: i32;
     let result: i32;
     let status: i32;
     let __sroa_data_start: i32;
-    let _av_39: i32;
-    let _av_40: i32;
-    _av_39 = data.start;
-    _av_40 = data.end;
-    if (_av_40 - _av_39) == 0 {
+    let _av_44: i32;
+    let _av_45: i32;
+    _av_44 = data.start;
+    _av_45 = data.end;
+    if (_av_45 - _av_44) == 0 {
         return 0;
     }
     repr_2 = data.repr;
-    end_3 = _av_39 + (_av_40 - _av_39);
+    end_3 = _av_44 + (_av_45 - _av_44);
     offset = data.start;
     block {
-        l24: loop {
+        l22: loop {
             __sroa_data_start = offset;
-            len = end_3 - __sroa_data_start;
-            ptr_24 = "mem/realloc"(0, 0, 1, len);
-            "core:rt/gc_array_to_memory"(repr_2, __sroa_data_start, ptr_24, len);
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len) << 32_i64)));
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b23: block {
+                l24: loop {
+                    break_if b23 i >= len_23;
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
+                    i = i + 1;
+                    continue l24;
+                };
+            }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
             result = "wasi/stream-write"(self, ptr_14, raw_len);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(self);
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_12: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
                 status = result & 15;
                 if status == 0 {
-                    break __inline_cm_copy_result_12: 0;
+                    break __inline_cm_copy_result_13: 0;
                 }
                 if status == 1 {
-                    break __inline_cm_copy_result_12: 1;
+                    break __inline_cm_copy_result_13: 1;
                 }
-                break __inline_cm_copy_result_12: 2;
+                break __inline_cm_copy_result_13: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l24;
+            continue l22;
         };
     };
 }
