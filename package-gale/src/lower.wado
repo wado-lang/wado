@@ -1929,12 +1929,15 @@ fn lower_scan_group(
     let alts = &g.alternatives;
     match classify_group(alts) {
         Transparent => {
+            // The wrapper adds nothing, so the outer follow and its exactness
+            // pass through — the parse side reads them here too (invariant 9).
             return lower_scan_element(
                 &alts[0].elements[0],
                 ctx,
                 outer_follow,
                 FollowArg::NoFollow,
                 false,
+                follow_is_exact,
             );
         },
         SingleAlt => {
@@ -2793,6 +2796,7 @@ fn lower_group_op(
                 ctx,
                 group_counter,
                 outer_follow,
+                follow_is_exact,
             );
         },
         SingleAlt => {
@@ -2835,12 +2839,13 @@ fn lower_transparent_group(
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
+    follow_is_exact: bool,
 ) -> Op {
     // Nested inner is allowed: `((a))` / `(a*)` / `(name=a)`.
     // The Op carries whatever shape `lower_op` produces; the
     // surrounding emit-side Transparent path inlines it directly.
-    // A Transparent group adds nothing between the inner and the
-    // outer alt, so `outer_follow` passes through verbatim.
+    // A Transparent group adds nothing between the inner and the outer alt, so
+    // `outer_follow` and its exactness pass through verbatim.
 
     // TODO(redesign): forward the outer position's FollowArg/gate through
     // the transparent wrapper so `(RuleRef)` / `(e)*` at a rule tail still
@@ -2856,6 +2861,7 @@ fn lower_transparent_group(
         outer_follow,
         FollowArg::NoFollow,
         false,
+        follow_is_exact,
     );
     let body = AltBody {
         alt_index: 0,
