@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788141892509,
+  "lastUpdate": 1788159535764,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -51997,6 +51997,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 256836,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c888b81f93e4776b8561e21ab8098f1767363b90",
+          "message": "Merge pull request #1927 from wado-lang/perf/inline-growth-budget\n\nperf(optimizer): outline cold regions, and retune the inline thresholds",
+          "timestamp": "2026-08-31T15:45:47+09:00",
+          "tree_id": "4b9f6fa64ceb83f2473f68342261c756c3d07f66",
+          "url": "https://github.com/wado-lang/wado/commit/c888b81f93e4776b8561e21ab8098f1767363b90"
+        },
+        "date": 1788159534876,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2026,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6425,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19611,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282194,
             "unit": "bytes"
           }
         ]
