@@ -1302,6 +1302,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let ast::Type::Generic(g) = &static_call.target_type
             && let Some(self_ty_ast) = g.args.first()
         {
+            if self.is_reflect_root_trait_call(&g.name, &static_call.method) {
+                let self_ty = self.resolve_type(self_ty_ast);
+                return self.resolve_reflect_root_static_call(self_ty, static_call, ctx);
+            }
             if self.is_reflect_trait_call(&g.name, &static_call.method) {
                 let self_ty = self.resolve_type(self_ty_ast);
                 return self.resolve_reflect_static_call(self_ty, static_call, ctx);

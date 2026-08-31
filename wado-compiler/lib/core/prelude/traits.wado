@@ -58,12 +58,23 @@ internal trait Default {
     fn default() -> Self;
 }
 
+/// A type's identity: the root every reflected kind sits under. The compiler
+/// synthesizes an impl for every type that carries a name; it cannot be
+/// implemented in user code and is callable only in monomorphized contexts
+/// (`T` a concrete type). See WEP 2026-06-13.
+#[compiler_item("reflect")]
+internal trait Reflect {
+    /// Returns the declaration's name.
+    #[compiler_item("reflect_type_name")]
+    fn type_name() -> String;
+}
+
 /// Compile-time struct introspection. The compiler synthesizes an impl for
 /// every struct; it cannot be implemented in user code and is callable only in
 /// monomorphized contexts (`T` a concrete struct).
 /// See WEP 2026-06-13.
 #[compiler_item("reflect_struct")]
-internal trait ReflectStruct {
+internal trait ReflectStruct: Reflect {
     /// The field types as a tuple `[F_0, F_1, ...]`.
     type FieldTypes;
 
@@ -73,10 +84,6 @@ internal trait ReflectStruct {
     /// The field slots `[Option<F_0>, ...]` — the value-level companion of
     /// `FieldTypes`. A filled slot is one the wire wrote.
     type FieldSlots;
-
-    /// Returns the struct name.
-    #[compiler_item("reflect_struct_type_name")]
-    fn type_name() -> String;
 
     /// Returns the per-field members.
     #[compiler_item("reflect_struct_members")]
@@ -133,16 +140,12 @@ internal trait Member {
 /// in monomorphized contexts (`T` a concrete variant).
 /// See WEP 2026-06-13 §3.
 #[compiler_item("reflect_variant")]
-internal trait ReflectVariant {
+internal trait ReflectVariant: Reflect {
     /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
     type CasePayloads;
 
     /// The per-case member tuple `[VariantCase<Self, P_0>, ...]`.
     type Members;
-
-    /// Returns the variant name.
-    #[compiler_item("reflect_variant_type_name")]
-    fn type_name() -> String;
 
     /// Returns the live case's tag.
     #[compiler_item("reflect_variant_discriminant")]
@@ -162,13 +165,9 @@ internal trait ReflectVariant {
 /// in monomorphized contexts (`T` a concrete enum).
 /// See WEP 2026-06-13 §3b.
 #[compiler_item("reflect_enum")]
-internal trait ReflectEnum {
+internal trait ReflectEnum: Reflect {
     /// The per-case member tuple `[EnumCase<Self>, ...]`.
     type Members;
-
-    /// Returns the enum name.
-    #[compiler_item("reflect_enum_type_name")]
-    fn type_name() -> String;
 
     /// Returns the value's tag.
     #[compiler_item("reflect_enum_discriminant")]
@@ -192,13 +191,9 @@ internal trait ReflectEnum {
 /// only in monomorphized contexts (`T` a concrete flags type).
 /// See WEP 2026-06-13 §3c.
 #[compiler_item("reflect_flags")]
-internal trait ReflectFlags {
+internal trait ReflectFlags: Reflect {
     /// The per-bit member tuple `[FlagsBit<Self>, ...]`.
     type Members;
-
-    /// Returns the flags type name.
-    #[compiler_item("reflect_flags_type_name")]
-    fn type_name() -> String;
 
     /// Returns the value's bits, u64-normalized.
     #[compiler_item("reflect_flags_bits")]
@@ -729,7 +724,7 @@ fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(
             has_secret = true;
         } else {
             if !wrote_field {
-                f.write_str(&ReflectStruct::<S>::type_name());
+                f.write_str(&Reflect::<S>::type_name());
                 f.open_brace(" {");
                 wrote_field = true;
             }
@@ -748,7 +743,7 @@ fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(
         f.close_brace("}");
         return;
     }
-    f.write_str(&ReflectStruct::<S>::type_name());
+    f.write_str(&Reflect::<S>::type_name());
     if has_secret {
         f.write_str(&" { .. }");
         return;
@@ -762,7 +757,7 @@ impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
             inspect_struct_alternate(self, f);
             return;
         }
-        f.write_str(&ReflectStruct::<S>::type_name());
+        f.write_str(&Reflect::<S>::type_name());
         let mut wrote_field = false;
         let mut has_secret = false;
         for let field of ReflectStruct::<S>::members() {
@@ -799,7 +794,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Inspect for E {
     fn inspect(&self, f: &mut Formatter) {
         for let case of ReflectEnum::<E>::members() {
             if case.holds(self) {
-                f.write_str(&ReflectEnum::<E>::type_name());
+                f.write_str(&Reflect::<E>::type_name());
                 f.write_str(&"::");
                 f.write_str(&case.name());
             }
@@ -829,7 +824,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
     fn inspect(&self, f: &mut Formatter) {
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
-                f.write_str(&ReflectVariant::<V>::type_name());
+                f.write_str(&Reflect::<V>::type_name());
                 f.write_str(&"::");
                 f.write_str(&case.name());
                 if !case.is_unit() {
@@ -850,14 +845,14 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
                 if wrote_bit {
                     f.write_str(&" | ");
                 }
-                f.write_str(&ReflectFlags::<L>::type_name());
+                f.write_str(&Reflect::<L>::type_name());
                 f.write_str(&"::");
                 f.write_str(&bit.name());
                 wrote_bit = true;
             }
         }
         if !wrote_bit {
-            f.write_str(&ReflectFlags::<L>::type_name());
+            f.write_str(&Reflect::<L>::type_name());
             f.write_str(&"::none()");
         }
     }

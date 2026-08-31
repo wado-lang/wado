@@ -29,6 +29,7 @@ pub(super) enum OnBoundTrait {
     Serialize,
     Deserialize,
     Default,
+    Reflect,
     ReflectStruct,
     ReflectVariant,
     ReflectEnum,
@@ -49,6 +50,7 @@ impl OnBoundTrait {
             Self::Serialize => CompilerItem::Serialize,
             Self::Deserialize => CompilerItem::Deserialize,
             Self::Default => CompilerItem::Default,
+            Self::Reflect => CompilerItem::Reflect,
             Self::ReflectStruct => CompilerItem::ReflectStruct,
             Self::ReflectVariant => CompilerItem::ReflectVariant,
             Self::ReflectEnum => CompilerItem::ReflectEnum,
@@ -769,6 +771,8 @@ impl TypeSystem {
                 of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
             } else if trait_name == items.trait_name(CompilerItem::Default) {
                 of(CompilerItem::Default, OnBoundTrait::Default)
+            } else if trait_name == items.trait_name(CompilerItem::Reflect) {
+                of(CompilerItem::Reflect, OnBoundTrait::Reflect)
             } else if trait_name == items.trait_name(CompilerItem::ReflectStruct) {
                 of(CompilerItem::ReflectStruct, OnBoundTrait::ReflectStruct)
             } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
@@ -1190,6 +1194,13 @@ impl TypeSystem {
         // shared eligibility predicate accepts it, so nothing needs recording
         // for synthesis to find later.
         let plain_reflect_subject = match (&resolved, on_bound) {
+            // The identity root holds for every kind, and unlike a kind bound it
+            // is ungated by field visibility: naming a type is not enumerating
+            // it (WEP 2026-06-13).
+            (ResolvedType::Struct { .. }, Some(OnBoundTrait::Reflect))
+            | (ResolvedType::Variant { .. }, Some(OnBoundTrait::Reflect))
+            | (ResolvedType::Enum { .. }, Some(OnBoundTrait::Reflect))
+            | (ResolvedType::Flags { .. }, Some(OnBoundTrait::Reflect)) => true,
             (ResolvedType::Struct { def, .. }, Some(OnBoundTrait::ReflectStruct)) => def
                 .decl()
                 .and_then(|d| scope.struct_fields_of(d))
@@ -1225,6 +1236,13 @@ impl TypeSystem {
                 }
                 Some(OnBoundTrait::ReflectVariant) => {
                     scope.variant_cases_of(*def).is_some() && self.is_reflect_eligible(type_id)
+                }
+                // Only a struct or a variant takes type parameters, so an
+                // instance of either names itself through the root.
+                Some(OnBoundTrait::Reflect) => {
+                    (scope.variant_cases_of(*def).is_some()
+                        || scope.struct_fields_of(*def).is_some())
+                        && self.is_reflect_eligible(type_id)
                 }
                 _ => false,
             }
@@ -1585,6 +1603,26 @@ impl TypeSystem {
             return false;
         };
         let subject = match on_bound {
+            // The identity root holds for every reflected kind: it asks for a
+            // name, not for a shape.
+            OnBoundTrait::Reflect => scope
+                .struct_fields_of(def)
+                .map(|info| info.module_source.clone())
+                .or_else(|| {
+                    scope
+                        .variant_cases_of(def)
+                        .map(|info| info.module_source.clone())
+                })
+                .or_else(|| {
+                    scope
+                        .enum_cases_of(def)
+                        .map(|info| info.module_source.clone())
+                })
+                .or_else(|| {
+                    scope
+                        .flags_members_of(def)
+                        .map(|info| info.module_source.clone())
+                }),
             OnBoundTrait::ReflectStruct => scope
                 .struct_fields_of(def)
                 .map(|info| info.module_source.clone()),

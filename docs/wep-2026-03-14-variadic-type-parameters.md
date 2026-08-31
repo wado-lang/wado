@@ -243,11 +243,10 @@ its members are reached only as `ReflectStruct::<T>::members()` (see
 
 ```wado
 #[compiler_item("reflect_struct")]
-internal trait ReflectStruct {
+internal trait ReflectStruct: Reflect {   // `Reflect` carries `type_name()`
     type FieldTypes;
     type Members;
     fn members() -> Self::Members;
-    fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
 ```
