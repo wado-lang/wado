@@ -86,6 +86,19 @@ not the same finding.
 
 An A row with only the claim column filled is not a finding.
 
+Count the implementations of the semantics before filling any of them. One is
+the quiet case. Two — a native and a wasm backend, a linear and a gc backend —
+means the language is whatever both of them do, and what holds them to the same
+answer is a first-class finding rather than a detail: a contract ledger and a
+three-way oracle in one surveyed language, and in the other nothing, so that
+`Array::push` means one thing on each backend and the memory contract says the
+two "must be reconciled or documented before unifying defaults". Half of what
+looks like governance zeal is the price of a second implementation.
+
+Where the reality column turns out to be a defect, record it. The point is not
+to score the other project down; it is that a broken implementation of a feature
+the home language also has is the most valuable thing a survey can return.
+
 ## B. Design and governance
 
 Why the language is the way it is, and what keeps that honest.
@@ -109,11 +122,16 @@ B6 must record scope, not just presence. A gate over numbers and contracts
 leaves prose unguarded, and prose is where a language's promises about its own
 surface usually live.
 
-Every B row takes three states, not two. A missing mechanism is either absent
-or refused with a doctrine, and the second is a decision — the same distinction
-the surface axes draw between unimplemented and rejected. Record the doctrine
-when there is one; two projects can lack the same mechanism for opposite
-reasons.
+Every B row takes four states, not two. A mechanism is present, or practised
+without being written down, or refused with a doctrine, or absent. The middle
+two are the ones a search for documents will miss. Refusal is a decision — the
+same distinction the surface axes draw between unimplemented and rejected, so
+record the doctrine when there is one, because two projects can lack the same
+mechanism for opposite reasons. Practice is a rule that exists and has never
+been stated: Wado's specification ranked itself against 132 WEPs through forty
+links reading "see the WEP for rationale" and no sentence anywhere saying so,
+which is not the same finding as having no rule, and is closed by writing a
+paragraph rather than by building anything.
 
 ## C. Spin-off value
 
@@ -183,7 +201,7 @@ Examined: <what was read or run>. Not examined: <what was left>.
 
 ## B. Design and governance
 
-| Axis | Present / Absent / Refused | Scope or doctrine |
+| Axis | Present / Practised / Refused / Absent | Scope or doctrine |
 
 ## C. Spin-off value
 

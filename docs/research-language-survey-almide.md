@@ -46,6 +46,12 @@ warns when a named `map_err` parameter drops `${e}`.
 
 ### The self-application cross-check
 
+Two implementations of the semantics: a Rust runtime for native and self-hosted
+`.almd` for wasm. Everything under B6 and most of C4 is the price of that — the
+327-contract ledger, the 610 cross-target fixtures, the three-way oracle against
+the interpreter and the differential fuzz all exist to hold two implementations
+to one answer, and the equivalence claim is the promise they buy.
+
 The hardest program written in Almide is its standard library. The compiler is
 Rust (836 files across 24 crates), so the ceiling form of this check — a
 self-hosted compiler — is unavailable, and the stdlib carries it alone.

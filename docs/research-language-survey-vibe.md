@@ -42,8 +42,17 @@ work; the two wasm backends; the Vibe Book.
 
 ### The self-application cross-check
 
-vibe applies the strongest available form of this check: the compiler is
-written in the language.
+Two implementations of the semantics, and nothing holding them to one answer.
+The linear backend is the production default and the gc backend is unreachable
+from the compile CLI, so the disagreement between them is not load-bearing yet —
+which is also why it went unpaid: `Array::push` is in-place and growable on one
+and fixed-size on the other, and the memory contract records the debt rather
+than a gate against it. Compare the surveyed alternative, where two backends of
+comparable standing produced a contract ledger, a fixture corpus and a
+three-way oracle.
+
+On the axis that is load-bearing, vibe applies the strongest available form of
+this check: the compiler is written in the language.
 
 | Measure | Value |
 | --- | --- |
