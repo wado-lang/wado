@@ -1184,6 +1184,19 @@ C : 'c' ;
     }
 }
 
+test "one alternative overlaps nothing, whatever it admits" {
+    // `e : e '+' A | . ;` — the atom has a single open-ended alternative.
+    // Admitting every token puts it in one branch with the alternatives it
+    // overlaps, and there are none, so there is no tournament to report.
+    let input = "grammar Test;
+e : e '+' A | . ;
+A : 'a' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let generated = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert generated.diagnostics.is_empty(), `a lone alternative has nothing to overlap: ${generated.diagnostics[0].message}`;
+}
+
 test "both error paths name tokens through one vocabulary" {
     // `expect` and the no-viable fallback both report through
     // `token_kind_name`, so one token never reads `A` on one path and `TK_A`

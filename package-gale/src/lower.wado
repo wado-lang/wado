@@ -1697,6 +1697,12 @@ fn build_overlap_dispatch(
     let n_indices = indices.len();
     assert n_classes == n_indices, `${owner.label()}: classes is parallel to indices, not to alts (${n_classes} vs ${n_indices})`;
 
+    // A lone alternative overlaps nothing, whatever it admits, so there is no
+    // tournament to run and none to report.
+    if n_indices < 2 {
+        return direct_dispatch(classes, indices);
+    }
+
     // Overlap is `compute_overlap_groups_of`'s answer, as at every emitted
     // decision: a branch of more than one alternative is exactly an overlap.
     let disjoint = !compute_overlap_groups_of(classes).iter_ref().any(|g: &List<i32>| g.len() > 1);

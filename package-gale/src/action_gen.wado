@@ -876,14 +876,14 @@ pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut GenContext) {
 /// token-led dispatch condition, or "" when off (keeping non-Wado grammars
 /// byte-identical) or the alt has none.
 pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut GenContext) -> String {
-    if !ctx.emit_actions() {
-        return String::new();
+    let suffix = alt_gate_suffix_unanswered(alt, ctx);
+    if suffix.is_empty() {
+        return suffix;
     }
-    let conds = alt_initial_gate_conditions(alt, ctx);
-    if conds.is_empty() {
-        return String::new();
-    }
-    return ` && ${join_gate_conds(&conds)}`;
+    // This suffix is rendered into the caller's own test, so emitting it is
+    // what answers the predicate — one collector, two bookkeepings.
+    mark_alt_gate_answered(alt, ctx);
+    return suffix;
 }
 
 /// The same suffix and `pred_<id>` fn without claiming the predicate answered;
