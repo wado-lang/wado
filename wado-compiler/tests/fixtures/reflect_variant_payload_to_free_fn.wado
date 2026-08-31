@@ -1,7 +1,8 @@
 // A `VariantCase::extract` payload is the enclosing scope's pack forwarded
 // through the case's payload parameter, so it must reach a free generic
 // function's type argument the same way a scalar type parameter does — by
-// reference, by value, and into a callee that returns an aggregate.
+// reference, by value, through a local binding, and into a callee that returns
+// an aggregate.
 
 fn show_ref<P: Inspect>(payload: &P) -> String {
     return `${payload:?}`;
@@ -25,7 +26,10 @@ fn render<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(v: &V) -> Strin
     for let case of ReflectVariant::<V>::members() {
         if case.holds(v) && !case.is_unit() {
             let pair = wrap(&case.extract(v));
-            out = `${case.name()}:${show_ref(&case.extract(v))}:${show_value(case.extract(v))}:${pair[0]}:${pair[1]}`;
+            // The payload's type must survive a local binding: the binding is
+            // where the walk would naturally hold it.
+            let bound = case.extract(v);
+            out = `${case.name()}:${show_ref(&case.extract(v))}:${show_value(case.extract(v))}:${show_ref(&bound)}:${pair[0]}:${pair[1]}`;
         }
     }
     return out;
@@ -39,10 +43,10 @@ variant Shape {
 }
 
 test "an extracted payload infers a free generic function's type argument" {
-    assert render(&Shape::Circle(2.5)) == "Circle:2.5:2.5:2.5:2.5";
+    assert render(&Shape::Circle(2.5)) == "Circle:2.5:2.5:2.5:2.5:2.5";
     assert render(&Shape::Rectangle([3.0, 4.0]))
-        == "Rectangle:[3.0, 4.0]:[3.0, 4.0]:[3.0, 4.0]:[3.0, 4.0]";
-    assert render(&Shape::Named("hi")) == `Named:"hi":"hi":"hi":"hi"`;
+        == "Rectangle:[3.0, 4.0]:[3.0, 4.0]:[3.0, 4.0]:[3.0, 4.0]:[3.0, 4.0]";
+    assert render(&Shape::Named("hi")) == `Named:"hi":"hi":"hi":"hi":"hi"`;
     assert render(&Shape::Point) == "";
 }
 
