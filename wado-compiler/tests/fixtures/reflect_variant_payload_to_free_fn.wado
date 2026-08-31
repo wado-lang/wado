@@ -26,8 +26,6 @@ fn render<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(v: &V) -> Strin
     for let case of ReflectVariant::<V>::members() {
         if case.holds(v) && !case.is_unit() {
             let pair = wrap(&case.extract(v));
-            // The payload's type must survive a local binding: the binding is
-            // where the walk would naturally hold it.
             let bound = case.extract(v);
             out = `${case.name()}:${show_ref(&case.extract(v))}:${show_value(case.extract(v))}:${show_ref(&bound)}:${pair[0]}:${pair[1]}`;
         }

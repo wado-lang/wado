@@ -2030,12 +2030,9 @@ impl FunctionTranslator<'_, '_> {
         (prelude, call_args)
     }
 
-    /// Run `prelude` before `call`, preserving the call's value: a `Seq` for a
-    /// void call, a value-typed `Block` otherwise.
-    ///
-    /// A `Block` names exactly one stack result, so `multi_value` — the callee
-    /// returning its aggregate as N results — takes the `Seq` shape too: the
-    /// N results reach the enclosing `MultiValueLocalBind` unwrapped.
+    /// Run `prelude` before `call`, preserving the call's value: a value-typed
+    /// `Block`, or a `Seq` where a `Block`'s one result cannot hold it — a void
+    /// call, or a `multi_value` callee returning N.
     pub(super) fn wrap_call_with_prelude(
         &mut self,
         mut prelude: Vec<WirInstr>,
@@ -2322,12 +2319,9 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::Dead => WirInstr::Nop,
 
             ExprKind::Local { index, .. } => {
-                // A stackless local has no Wasm representation — `&()` and
-                // `&!` included — so the `let` side and the parameter list drop
-                // it and there is nothing to push. Where the type is never the
-                // declaration was skipped too (its initializer diverges) and
-                // the surrounding `translate_expr` wrapper appends
-                // `Unreachable`, so the value never materializes either way.
+                // Nothing declared a stackless local, so there is nothing to
+                // push; where its type is never, `translate_expr` appends the
+                // `Unreachable` that keeps the placeholder unreachable.
                 if self.is_stackless_type(expr.type_id) {
                     WirInstr::Nop
                 } else {

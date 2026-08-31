@@ -388,11 +388,10 @@ impl FunctionTranslator<'_, '_> {
                     }
                 } else {
                     let instr = self.translate_operand(arm.body);
-                    // If the arm body produces a non-unit value (e.g. after inlining
-                    // transforms a Block into a bare call), drop it to avoid leaving
-                    // values on the Wasm stack. Guard with `produces_stack_value()` to
-                    // avoid emitting `drop` after instructions that produce no value
-                    // (e.g. `Block{result: None}` from LabeledBlock fusion).
+                    // A statement-position arm leaves nothing behind. Both tests
+                    // are needed: inlining turns a Block into a bare call that
+                    // pushes, and LabeledBlock fusion leaves a `Block{result:
+                    // None}` that a `drop` would underflow.
                     if !self.is_stackless_type(self.operand_type_id(arm.body))
                         && instr.produces_stack_value()
                     {

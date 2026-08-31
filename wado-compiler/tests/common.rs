@@ -38,10 +38,9 @@ use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
 };
 
-/// A located diagnostic names the file it is in. Enforced at the host, so
-/// every fixture that raises one checks it — the file is what a per-document
-/// consumer (the LSP, which publishes per URI) selects on, and one emitted
-/// without it is dropped rather than shown. A span-less diagnostic is about the
+/// A located diagnostic names the file it is in — what a per-document consumer
+/// selects on, and without which the LSP drops it. Checked at the host, so the
+/// whole fixture corpus enforces it. A span-less diagnostic is about the
 /// compilation rather than a place in it, and is exempt.
 fn assert_diagnostic_is_attributed(diagnostic: &Diagnostic) {
     if let Some(span) = diagnostic.span.as_ref() {
@@ -981,11 +980,8 @@ pub fn compile_source_with_compiler_options_and_filename(
     .result
 }
 
-/// One compile and every diagnostic it raised, by severity.
-///
-/// `CompileError` carries only the first error, so the rest — a diagnostic that
-/// must survive an earlier one rather than be masked by it — are reachable only
-/// here. Message text only: matching is substring-based.
+/// One compile and every diagnostic it raised, by severity. `CompileError`
+/// carries only the first error, so the ones behind it are reachable only here.
 pub struct CapturedCompile {
     pub result: Result<wado_compiler::CompileResult, CompileError>,
     pub warnings: Vec<String>,

@@ -2402,10 +2402,7 @@ impl TypeTable {
 
     /// Whether a value of this type leaves nothing on the Wasm stack: unit or
     /// never, or a reference to either — `&x` is transparent at the WIR level.
-    ///
-    /// Never belongs with unit because `type_id_to_wir_type` maps both to
-    /// `WirType::Unit`: anything the parameter and result lists drop by that
-    /// mapping, every use site must drop by this predicate.
+    /// `type_id_to_wir_type` asserts it answers `WirType::Unit` for exactly these.
     pub fn is_stackless(&self, type_id: TypeId) -> bool {
         matches!(self.peel_refs(type_id), TypeTable::UNIT | TypeTable::NEVER)
     }

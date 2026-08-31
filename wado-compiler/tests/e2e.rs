@@ -169,8 +169,7 @@ struct TestSpec {
 
     /// Substrings that must each appear in *some* error diagnostic. Where
     /// `compile_error` pins the one the compilation failed with, this reaches
-    /// the ones behind it — a diagnostic that must survive an earlier fault
-    /// rather than be masked by it.
+    /// the ones behind it.
     #[serde(default)]
     compile_errors_contains: Vec<String>,
 
@@ -741,7 +740,6 @@ fn run_normal_test(
         ..Default::default()
     };
 
-    // Try to compile the fixture, capturing every diagnostic it raised.
     let common::CapturedCompile {
         result: compile_result,
         warnings,
@@ -771,8 +769,6 @@ fn run_normal_test(
         );
     }
 
-    // Errors behind the one the compilation failed with; `compile_error` below
-    // pins that one.
     for expected in &spec.compile_errors_contains {
         assert!(
             errors.iter().any(|e| e.contains(expected)),

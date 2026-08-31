@@ -1,7 +1,6 @@
 // A `!` payload has no Wasm representation, so it erases from the signature of
-// the free function it reaches. Every read of it in the body must erase with
-// it: `&!` peels to never rather than unit, so only the parameter list was
-// dropping it and the body kept a local nothing declared.
+// the free function it reaches — and every read of it in the body erases with
+// it. `Result<T, !>` is where an uninhabited payload reaches a walk.
 
 fn show<P: Inspect>(payload: &P) -> String {
     return `${payload:?}`;

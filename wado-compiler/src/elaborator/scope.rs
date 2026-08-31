@@ -300,15 +300,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .unwrap_or_default()
     }
 
-    /// The type-parameter ids the enclosing generic scope owns — what a slot
-    /// bound to one of them means "the caller forwarded its own generics",
-    /// not "inference gave up".
-    ///
-    /// A `..P` pack contributes its scalar element placeholder
-    /// `TypeParam { P, index }` as well: that is the spelling a mapped pack's
-    /// element carries (`make_mapped_type_pack`), so a value drawn from one —
-    /// `VariantCase<V, P>::extract` — forwards the scope's pack just as a
-    /// scalar parameter forwards itself.
+    /// The type-parameter ids the enclosing generic scope owns: a slot bound to
+    /// one of them is the caller forwarding its generics, not inference giving
+    /// up. A `..P` pack owns its element placeholder `TypeParam { P, index }`
+    /// too — the spelling `make_mapped_type_pack` gives a pack element.
     pub(super) fn scope_type_param_ids(&self) -> Vec<TypeId> {
         let mut tt = self.tysys.type_table.borrow_mut();
         self.annotate_ctx
