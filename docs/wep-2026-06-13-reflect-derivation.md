@@ -48,6 +48,7 @@ internal trait ReflectStruct {                    // struct
     fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
     fn defaults() -> Self::FieldSlots;           // declared `f: T = expr` per field
     fn type_name() -> String;
+    fn type_info() -> TypeInfo;                  // declaration + this instantiation's args
     fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
@@ -57,6 +58,7 @@ internal trait ReflectVariant {                  // variant
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
     fn type_name() -> String;
+    fn type_info() -> TypeInfo;
     fn wire_name_policy() -> CaseStyle;
 }
 
@@ -66,6 +68,7 @@ internal trait ReflectEnum {                     // enum
     fn discriminant(&self) -> i32;
     fn from_discriminant(disc: i32) -> Option<Self>;
     fn type_name() -> String;
+    fn type_info() -> TypeInfo;
     fn wire_name_policy() -> CaseStyle;
 }
 
@@ -75,6 +78,7 @@ internal trait ReflectFlags {                    // flags
     fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
     fn type_name() -> String;
+    fn type_info() -> TypeInfo;
     fn wire_name_policy() -> CaseStyle;
 }
 ```
@@ -165,6 +169,50 @@ a handle's own `Members` would mention `StructField<Self, …>`, growing `Self`
 without bound. They are not reflectable, by the same seal that rejects a user
 `impl`.
 
+## Type identity
+
+`type_name()` names the _declaration_, so every instantiation of a generic type
+answers alike (`"Pair"`, not `"Pair<String>"` — see [Generic types](#generic-types)). A consumer that keys per instantiation — a schema
+library's `$defs`, a registry, a cache — needs the instance instead, which is a
+distinct fact rather than a different spelling. `type_info()`, on every kind,
+carries it: the declaration's name and module, plus the instantiation's type
+arguments, each itself a `TypeInfo`.
+
+```wado
+/// Sealed like the member handles: fields private, minted only by
+/// `type_info()`, and not itself reflectable.
+pub struct TypeInfo { … }
+
+impl TypeInfo {
+    pub fn name(&self) -> String;              // "Pair"
+    pub fn module(&self) -> String;            // "core:collections" / "./pair.wado"
+    pub fn type_args(&self) -> List<TypeInfo>; // [String, i32] for Pair<String,i32>
+    pub fn canonical_name(&self) -> String;    // "\"./pair.wado\"#Pair<String,i32>"
+}
+```
+
+The parts are the identity; `canonical_name()` renders them in the canonical
+register of [Symbol Notation](./wep-2026-06-14-symbol-notation.md) (`MODULE`
+always quoted), the notation the compiler's own diagnostics and dumps read back.
+Which of the two is primary follows from the derivation running one way only: a
+consumer handed the parts renders the string, while one handed the string parses
+it to recover the parts. And no one rendering serves every consumer — a `$defs`
+key comes back through a `$ref`'s URI reference, where `<` and `>` must be
+escaped — so the parts are what a schema library builds its own key from.
+
+`TypeInfo` names a type; it does not enumerate one. So a type argument that is
+itself generic nests, and one that is not reflectable at all — a primitive, or a
+type whose fields are private (see [Visibility](#visibility)) — still has a name
+and a module, and appears like any other.
+
+The tree is a closed constant expression, so [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md) lowers it to a
+static global — the treatment `members()` already gets — and `type_info()` costs
+no allocation per call.
+
+`Display` is deliberately absent. Symbol notation's other register — the
+shorthand that drops the quotes where unambiguous — has no consumer yet, and
+`canonical_name()` serves the machine one.
+
 ## Building a struct from a streaming format
 
 A struct's build direction is `from_fields`, which takes the field values in
@@ -234,10 +282,10 @@ circular: a derivation needs `Pair<String>: ReflectStruct` _while_
 monomorphizing, which is exactly when the instance appears.
 
 `type_name()` is the declared name (`"Pair"`, not `"Pair<String>"`), matching
-the plain-struct case and Rust's `{:?}`. Open: a schema library keying `$defs`
-per instantiation needs an identity that separates `Pair<String>` from
-`Pair<i32>`. That is a distinct fact (the instance's type arguments), not a
-different spelling of `type_name`, and waits for a consumer.
+the plain-struct case and Rust's `{:?}`. The instantiation shows in
+`type_info()` instead: one declaration name and module for every `Pair<…>`, with
+`type_args()` substituted per instance, so a consumer keying `$defs` separates
+`Pair<String>` from `Pair<i32>` (see [Type identity](#type-identity)).
 
 Two rules bound what is reflectable:
 
@@ -316,6 +364,39 @@ Recognized keys: `min_length` / `max_length`, `minimum` / `maximum` /
 
 `description` is not a `#[validate]` concern — it comes from `///` doc comments via
 `Member::doc()`.
+
+## Known gaps
+
+The reflection traits, the member handles, the wire-naming split, and the
+streaming struct build are implemented — `core:serde` derives every struct,
+variant, enum, and flags impl through them. What remains is what a schema
+library reads and nothing else yet does.
+
+- `Member::doc()`. The trait carries `name()` and `wire_name_override()` only,
+  so `description` / `title` have no source. The fact is not lost — a doc
+  comment lives in the `TriviaMap` that `wado doc` reads — so closing this is
+  plumbing that string through `TirField` into the synthesized member, beside
+  the wire-name override that already travels that path.
+- `#[validate(…)]`, end to end. Carrying it mirrors `#[secret]` and
+  `#[wire(name)]`: the `Validate` value joins the serde facts on `TirField`, the
+  member handles gain the field and the accessor, and the members literal gains
+  one element. Two pieces are new. An attribute argument's value is a string or a
+  string array today, so `min_length = 1` does not parse and the parser needs a
+  numeric key-value; and an unrecognized key must be rejected, since the
+  vocabulary is closed while an unknown attribute is silently ignored today.
+- How `#[validate]` enforcement dispatches is open. The `Deserialize` blanket
+  sees a field only as a pack element `F` constrained by its bounds, so it cannot
+  apply `min_length` to a string and `min_items` to a list without a per-type
+  check reached through a bound — a trait implemented for the string, numeric,
+  and sequence types, with a no-op blanket over the reflected kinds, in the shape
+  `Serialize` already takes. Whether the check belongs on that bound or in the
+  format layer, whether a rule sees through `Option<F>`, and where the violated
+  field's offset comes from are undecided; the first is what settles the other
+  two.
+- `TypeInfo` is designed above and unimplemented. Nothing in the tree needs a new
+  mechanism — it is a sealed handle minted like a member — but the four
+  `type_info()` bodies are per-instantiation, so they follow `type_name()`'s
+  synthesis path with the subject's type arguments read off the instance.
 
 ## Related WEPs
 

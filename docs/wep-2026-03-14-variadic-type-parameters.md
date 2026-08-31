@@ -333,7 +333,7 @@ occurred.
       Selection, pack binding, and template naming all ignore the fixed
       elements, and a pack under a reference never reaches the impl's
       type-param scope
-- [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
+- [x] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
 - [ ] Standard library: add a variadic impl for `Default`
 
