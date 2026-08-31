@@ -2,6 +2,27 @@
 
 Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 
+## Status
+
+This document is normative. It states what the language is meant to be, and a
+program's meaning is read from here; it is not a record of what the compiler
+currently does.
+
+A disagreement between this document and the implementation is a defect, and
+not necessarily the implementation's. Either side can be the one that is wrong,
+and which one it is gets decided when the disagreement is found. What is not
+available is leaving it standing as an accepted difference: one that is not
+resolved is a Known gap, recorded where the area is owned and saying what
+closing it takes.
+
+| Document               | Holds                                                              |
+| ---------------------- | ------------------------------------------------------------------ |
+| this file              | the rules                                                          |
+| `wep-*.md`             | the reasoning behind a rule, and the design it came from            |
+| `design-philosophy.md` | why the language is shaped this way                                 |
+| `cheatsheet.md`        | a quick reference; it promises nothing this file does not           |
+| `stdlib-*.md`          | generated from the compiler by `wado doc`; not edited by hand       |
+
 ## Overview
 
 | Item      | Description               |
