@@ -1,6 +1,7 @@
 // Store-to-load forwarding on struct fields. Each forwarded constant reaches
-// the formatter call itself, so the field store, the load, and the scalar the
-// field decomposed to are all gone by O2.
+// the formatter, so the field store, the load, and the scalar the field
+// decomposed to are all gone by O2 — leaving the constant itself, which
+// `const_object_globalization` hoists into a boxed global.
 use { println, Stdout } from "core:cli";
 
 struct Pair {
@@ -41,9 +42,9 @@ __DATA__
 {
     "stdout": "10, 42, 100\n",
     "wir_expect:O2": [
-        "i32::fmt_into$scalar\"(10,",
-        "i32::fmt_into$scalar\"(42,",
-        "i32::fmt_into$scalar\"(100,"
+        "Box<i32>\" { value: 10 }",
+        "Box<i32>\" { value: 42 }",
+        "Box<i32>\" { value: 100 }"
     ],
     "wir_not_expect:O2": [
         "panic("

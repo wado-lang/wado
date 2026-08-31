@@ -4,7 +4,9 @@
 // local environment buys: `x` is a `let mut`, and the environment carries its
 // scalar value between writes rather than giving up at the binding.
 //
-// The constant reaches the formatter call, so `x` itself is gone by O2.
+// The constant reaches the formatter, so `x` itself is gone by O2. Which
+// spelling it takes there — an immediate or the boxed constant
+// `const_object_globalization` hoists — is that pass's call, same bytes.
 
 use { println, Stdout } from "core:cli";
 
@@ -31,10 +33,10 @@ __DATA__
 {
     "stdout": "+= : 15\n-= : 12\n*= : 24\n/= : 6\n%= : 2\n",
     "wir_expect:O2": [
-        "i32::fmt_decimal$scalar$spec0$scalar\"(15,",
-        "i32::fmt_decimal$scalar$spec0$scalar\"(12,",
-        "i32::fmt_decimal$scalar$spec0$scalar\"(24,",
-        "i32::fmt_decimal$scalar$spec0$scalar\"(6,",
-        "i32::fmt_decimal$scalar$spec0$scalar\"(2,"
+        "Box<i32>\" { value: 15 }",
+        "Box<i32>\" { value: 12 }",
+        "Box<i32>\" { value: 24 }",
+        "Box<i32>\" { value: 6 }",
+        "Box<i32>\" { value: 2 }"
     ]
 }
