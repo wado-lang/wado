@@ -46,16 +46,12 @@ pub(super) fn resolve_panic_ids(
         .iter()
         .filter_map(|f| {
             let f = f.borrow();
-            // A `-> !` return type, not a name: what the matcher needs is that
-            // the arm cannot continue, which is exactly what the type says. It
-            // holds for `core:rt`'s `panic` / `unreachable`, for a stdlib helper
-            // like `unwrap_failed` that ends in one, and for the helper
-            // `cold_outline` moves a panic guard into — none of which a name
-            // list would reach, and it cannot mistake a `panic_free_parse` that
-            // merely reads like one.
-            // `dce` erases the type slots only a dead function still names, so
-            // asking one for its return type would fault on a retired `TypeId`.
-            // A dead function is also uncallable, so there is nothing to lose.
+            // A `-> !` return type, not a name: the matcher needs the arm to be
+            // unable to continue, which is what the type says. A name list would
+            // miss `unwrap_failed` and the helper `cold_outline` moves a panic
+            // guard into, and would claim a `panic_free_parse` that merely reads
+            // like one. `dce` retires the type slots only a dead function names,
+            // and a dead function is uncallable, so skipping one loses nothing.
             (!f.is_dead && type_table.is_never(f.return_type))
                 .then_some(f.id)
                 .flatten()

@@ -114,10 +114,9 @@ exception is a tight iteration-bound loop with a trivial body.
 
 A rare heavy sub-case behind a `cold_path()` marker usually needs no
 hand-splitting: `nir/cold_outline` moves what the marker opens into a function of
-its own, so the leaf inlines at its hot-path size. Its region runs from the
-marker to the end of the enclosing block, so a marker in the middle of a loop
-body — with the loop's own bookkeeping after it — is one it cannot take
-(`docs/optimizer.md`); that shape still needs the split written out. Split by
+its own, so the leaf inlines at its hot-path size. Its region runs to the end of
+the enclosing block, so a marker mid-loop-body is one it cannot take (see that
+pass's module doc) and that shape still needs the split written out. Split by
 hand also when the slow path is not rare: a `width > 0` branch that runs every
 time a width is set is hot when taken, which no marker should claim otherwise.
 

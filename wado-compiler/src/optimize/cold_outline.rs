@@ -1,5 +1,14 @@
 //! Move what a `cold_path()` marker opens into a function of its own, so that
 //! `inline`'s cold discount describes the callee instead of promising a split.
+//!
+//! Two things are open. The pass costs `sieve` 4.5% for no reason the IR shows
+//! — the hot loops are identical in WIR and in the emitted Wasm, and perturbing
+//! the inline threshold moves the row only 2.3% — so the cause is below the
+//! Wasm and reading it needs `perf` against a jitdump. And a region runs to the
+//! end of its block, so a marker mid-loop-body cannot be taken: the loop's own
+//! bookkeeping falls inside the region and writes locals the next iteration
+//! reads. Ending the region at the last statement that can travel would take
+//! that shape, which `core:json`'s escape tail splits by hand for want of it.
 
 use std::cell::RefCell;
 use std::rc::Rc;

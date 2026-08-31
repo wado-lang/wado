@@ -473,11 +473,9 @@ fn run_optimization_passes(
     profiler: &dyn SpanEmitter,
 ) {
     let mut descriptor_cache = dce::DescriptorCache::default();
-    // Split each `cold_path()` region out before anything prices a body. The
-    // inline cost model discounts what the marker opens; this is what makes the
-    // discount describe the function, so `nir/inline` copies the hot path alone.
-    // Once, and ahead of the gate, so the call graph is built over the split
-    // shape rather than growing into it.
+    // Before anything prices a body, so `nir/inline`'s cold discount describes
+    // the function it copies. Ahead of the gate too, so the call graph is built
+    // over the split shape rather than growing into it.
     run_pass("nir/cold_outline", project, profiler, |p| {
         cold_outline::outline_cold_regions(p, &mut descriptor_cache)
     });
