@@ -859,7 +859,7 @@ fn gen_lr_suffix_dispatch(
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
         let group = &lr_dispatch.groups[g];
 
-        let union_first = suffix_first_union(group, &suffix_first_sets);
+        let union_first = slot_first_union(group, &suffix_first_sets);
         let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &"suffix_kind");
         if is_first {
             w.begin(&`if ${cond}`);
@@ -2022,6 +2022,20 @@ fn rule_overlap_groups(
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
+    // Raw first sets, not `compute_overlap_groups_of`, and this is the one
+    // partition that cannot yet be the shared one. A merged branch is decided
+    // by whatever runs inside it: a group's runs the scan tournament, which
+    // ranks an open-ended alternative by scan length, but a rule's runs
+    // `build_prediction`, which walks positions by their static first sets and
+    // so offers an open-ended alternative only for the tokens a nullable
+    // prefix names. Merging here hands it a decision it cannot make, and
+    // `. EOF | A EOF` loses its first alternative outright.
+    //
+    // The cost of not merging is the `#[TODO]` in
+    // `driver_cst_open_ended_rule_alt_test.wado`: an open-ended alternative
+    // sits in a branch of its own, and the arm built from it can shadow the
+    // alternatives after it. Closing that means teaching `build_prediction`
+    // what `AltClass` knows, which is its own change.
     let groups = compute_overlap_groups(&first_sets);
     return [non_lr_indices, first_sets, groups];
 }
@@ -6673,10 +6687,11 @@ fn gen_group_dispatch(
     w.end();
 }
 
-/// The union of one branch's first sets, where the branch is over LR suffixes
-/// rather than alternatives. A suffix begins with a mandatory operator token
-/// by construction, so there is nothing here to classify.
-fn suffix_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
+/// The union of one branch's first sets, for the two branches that are not
+/// over classified alternatives: LR suffixes, which begin with a mandatory
+/// operator token by construction and have nothing to classify, and a rule's
+/// arms, whose partition is not the shared one (see `rule_overlap_groups`).
+fn slot_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
     let mut union_first: List<String> = [];
     for let idx of group {
         dedup_append_arr(&mut union_first, &first_sets[*idx]);
@@ -7420,23 +7435,33 @@ fn gen_multi_alt_body_alt(
     // The partition is over the non-LR alternatives, so a group's members are
     // slots into `non_lr_indices` and the verdicts have to be too.
     let classes = alt_classes(non_lr_indices, &rule.alternatives, first_sets, ctx);
+    let mut admits: List<Admits> = [];
     let mut untestable: List<bool> = [];
     for let group of groups {
         let ungated = group.len() != 1 || !alt_gates_branch(&rule.alternatives[non_lr_indices[group[0]]], ctx);
-        let admits = group_branch_admits(group, &classes);
-        untestable.push(admits_is_untestable(&admits) && ungated);
+        admits.push(group_branch_admits(group, &classes));
+        untestable.push(admits_is_untestable(&admits[admits.len() - 1]) && ungated);
     }
 
     for let slot of &arms_fallback_last(&untestable) {
         let g = *slot;
         let group = &groups[g];
-        let union_first = group_first_union(group, &classes);
         let gate = if group.len() == 1 {
             alt_gate_and_suffix(&rule.alternatives[non_lr_indices[group[0]]], ctx);
         } else {
             String::new();
         };
-        let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &DISPATCH_KIND_LOCAL);
+        // The union of the group's raw first sets, not `admits[g]`. They differ
+        // only for an open-ended alternative, which `admits[g]` calls
+        // `Everything` — sound where the partition has merged the other
+        // alternatives into the branch, which at rule level it has not (see
+        // `rule_overlap_groups`). Testing the narrower union keeps the arms
+        // after it reachable; the `#[TODO]` in
+        // `driver_cst_open_ended_rule_alt_test.wado` is what it costs.
+        let cond = ctx.admits_check_str(
+            &admits_or_everything(&slot_first_union(group, first_sets)),
+            &DISPATCH_KIND_LOCAL,
+        );
         w.begin(&`if ${cond}${gate}`);
 
         if group.len() == 1 {

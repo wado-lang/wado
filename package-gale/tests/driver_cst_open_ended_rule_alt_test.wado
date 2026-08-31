@@ -1,0 +1,47 @@
+//! A rule alternative can have a first set and still admit every token:
+//! `A? . C` is selected by `a` and by everything else too. An arm built from
+//! it tests nothing, so it may only keep its place where the partition has
+//! merged the other alternatives into it — which is why the partition and the
+//! arm's condition have to come from one answer.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use oera from "./grammars/open_ended_rule_alt.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_open_ended_rule_alt" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = oera::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = oera::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "open-ended rule alt: the alternatives after it are still reachable" {
+    assert_tree(&"b d", &"(r b d)");
+    assert_tree(&"b e", &"(r b e)");
+}
+
+test "open-ended rule alt: its own first set selects it" {
+    assert_tree(&"a b c", &"(r a b c)");
+}
+
+// Inside the merged branch the prediction tree decides which alternative the
+// lookahead picks, and it walks positions by their static first sets: `.`
+// contributes none, so alt 0 is offered only for the `a` its `A?` prefix
+// names. It should be offered for every token, which is the same empty-set
+// reading `AltClass` fixed one level up — `build_prediction` is where it still
+// lives, and it wants its own pass rather than a widening folded in here.
+#[TODO]
+test "open-ended rule alt: the wildcard takes a token the prefix does not name" {
+    assert_tree(&"b c", &"(r b c)");
+}
+
+#[TODO]
+test "open-ended rule alt: a nullable prefix yields to the wildcard" {
+    // `A?` skips so `.` can take the `a` and `C` the `c`; Gale's `A?` is
+    // greedy against a first set that does not know the wildcard follows it.
+    assert_tree(&"a c", &"(r a c)");
+}
