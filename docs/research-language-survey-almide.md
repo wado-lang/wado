@@ -21,8 +21,9 @@ Examined: `README.md`, `llms.txt`, `docs/CHEATSHEET.md`, the five files under
 `research/grammar-lab/REPORT.md`, and the `stdlib/`, `runtime/` and `crates/`
 trees by listing, count and sampled reading. Not examined: the 1,607-line
 `SPEC.md` and the rest of `docs/specs/`; the contract ledger itself, cited here
-only by its count; the bodies of the twelve ADRs; the Lean belts and
-`TRUST-SPINE.md`, both taken from the claims made about them.
+only by its count; the bodies of the twelve ADRs; what the Lean belts prove, as
+against whether they prove it; `TRUST-SPINE.md`, taken from the claims made
+about it.
 
 ## A. Surface
 
@@ -104,7 +105,7 @@ this preserve L1" before landing.
 | C2 Method | `research/grammar-lab/` — deciding syntax by measured LLM A/B rather than by taste | High | A language designer's intuition | Yes |
 | C2 Method | The contract ledger: named `C-NNN` promises, bidirectionally linked to fixtures, CI-enforced, with a ratcheted counter that may only fall | High | Prose release notes | Yes |
 | C2 Method | ADR with a mandatory falsifier, plus a rejection record with an operating rule | High | Git history as the record of why | Yes |
-| C3 Proof | Three Lean 4 belts, claimed 0-sorry and not checked here: `almide-edit-belt` for the edit frame and modular typing over the kernel calculus, `almide-perceus-belt` for the RC discipline, `almide-race-belt` | High — theorems about a calculus, not about adopting Almide | — | — |
+| C3 Proof | Three Lean 4 belts: `almide-edit-belt` for the edit frame and modular typing over the kernel calculus, `almide-perceus-belt` for the RC discipline, `almide-race-belt`. No `sorry` in the 18 `.lean` files, grepped rather than built | High — theorems about a calculus, not about adopting Almide | — | — |
 | C3 Proof | The v1 trust spine: emit a certificate per build and re-verify it with an extracted checker (~1,400 lines of OCaml), collapsing the trusted base from the ~100k-line compiler | High | Testing the compiler | Claimed, not yet complete |
 | C4 Corpus | 610 cross-target fixtures, 327 contracts, 426 `.almd` spec test files | Medium | — | — |
 
