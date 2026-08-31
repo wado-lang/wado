@@ -1962,7 +1962,7 @@ fn lower_scan_group(
             });
         },
         SimpleCst => {
-            return lower_simple_cst_scan_group(alts, ctx);
+            return lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact);
         },
         General => {
             return lower_general_scan_group(alts, ctx, outer_follow, follow_is_exact, enclosing_at_tail);
@@ -2803,7 +2803,7 @@ fn lower_group_op(
             return lower_token_only_group(alts, name_counts, ctx);
         },
         SimpleCst => {
-            return lower_simple_cst_group(alts, name_counts, ctx);
+            return lower_simple_cst_group(alts, name_counts, ctx, outer_follow, follow_is_exact);
         },
         General => {
             return lower_general_group(
@@ -3109,7 +3109,13 @@ fn token_only_kind(elem: &Element) -> String {
 /// the dispatch is a clean `Direct` chain. Overlapping rule-ref
 /// alts (e.g. two rules sharing a leading IDENT) need the scan-side
 /// tournament dispatch — that lands in Phase 2.3c.
-fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[String, i32]>, ctx: &mut GenContext) -> Op {
+fn lower_simple_cst_group(
+    alts: &List<Alternative>,
+    name_counts: &mut List<[String, i32]>,
+    ctx: &mut GenContext,
+    outer_follow: &List<String>,
+    follow_is_exact: bool,
+) -> Op {
     let type_name = group_variant_type_name(alts);
     let field = dedup_name(&group_field_base_name(alts), name_counts);
 
@@ -3154,7 +3160,11 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         rule: ctx.current_rule_name(),
         site: DiagnosticSite::SimpleCstGroup,
     };
-    let classes = alt_classes(&all_indices, alts, &first_sets, ctx);
+    // A SimpleCst alternative is one rule call, and that rule can be nullable,
+    // so what follows the group selects it here as in any other shape.
+    let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
+    let mut classes = alt_classes(&all_indices, alts, &first_sets, ctx);
+    apply_empty_alt_admits(&mut classes, &empty_alt_admits);
     let dispatch = build_overlap_dispatch(&owner, alts, &all_indices, &classes, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::SimpleCst(SimpleCstShape {
@@ -3162,9 +3172,9 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
             field: field,
         }),
         alts: bodies,
-        scan_group: group_op_scan_group(&scan_bodies, alts, &null, ctx),
+        scan_group: group_op_scan_group(&scan_bodies, alts, &empty_alt_admits, ctx),
         dispatch: dispatch,
-        empty_alt_admits: null,
+        empty_alt_admits: empty_alt_admits,
     });
 }
 
@@ -3175,7 +3185,12 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
 /// each arguing for a different one.
 global SIMPLE_CST_NO_FOLLOW: List<String> = [];
 
-fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanElement {
+fn lower_simple_cst_scan_group(
+    alts: &List<Alternative>,
+    ctx: &mut GenContext,
+    outer_follow: &List<String>,
+    follow_is_exact: bool,
+) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     for let alt of alts {
         bodies.push(ScanBody {
@@ -3191,11 +3206,15 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -
         });
     }
     // A SimpleCst alternative is one rule call, and the rule it calls can be
-    // open-ended, so the classification is asked for rather than assumed.
+    // open-ended or nullable, so the classification is asked for rather than
+    // assumed, and the follow set resolves the nullable one as it does
+    // elsewhere.
+    let mut classes = alt_classes_of(alts, ctx);
+    apply_empty_alt_admits(&mut classes, &group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx));
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         lenient: scan_group_lenient(alts, ctx),
-        alt_classes: alt_classes_of(alts, ctx),
+        alt_classes: classes,
     });
 }
 

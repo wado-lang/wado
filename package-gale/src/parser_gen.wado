@@ -4109,6 +4109,7 @@ fn gen_op_storable_group_inner(
             entry,
             ctx,
             name_counts,
+            &g_op.empty_alt_admits,
             decided,
         ),
         General(gs) => gen_general_group(
@@ -4953,6 +4954,7 @@ fn gen_op_group(
                 entry,
                 ctx,
                 name_counts,
+                &g_op.empty_alt_admits,
                 decided,
             ),
             General(gs) => gen_general_group(
@@ -6697,11 +6699,13 @@ fn gen_rule_ref_group(
     entry: GroupEntry,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    empty_alt_admits: &Option<EmptyAltAdmits>,
     decided: Option<String> = null,
 ) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
-    // One distinct RuleRef per alternative, so none is empty: no admit set.
-    let [classes, groups] = group_partition(alts, &null, ctx);
+    // One rule call per alternative, and that rule can be nullable, so the
+    // group's follow set selects an alternative here as in any other shape.
+    let [classes, groups] = group_partition(alts, empty_alt_admits, ctx);
     gen_group_dispatch(
         w,
         &decision_branches(alts, &groups, &classes, ctx),
