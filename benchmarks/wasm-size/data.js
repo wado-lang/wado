@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788177322119,
+  "lastUpdate": 1788181477985,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52065,6 +52065,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/22a8393dbfb4be334a57aa5d45b3dc526fee583e"
         },
         "date": 1788177321487,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2026,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6425,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19611,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282194,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f50594fc8ab64674cef8c6a1e0748a053f099a78",
+          "message": "Merge pull request #1929 from wado-lang/claude/int128-division-perf-j4mats\n\nperf(int128): divide by Knuth Algorithm D, render 19 digits per division",
+          "timestamp": "2026-08-31T21:51:07+09:00",
+          "tree_id": "4b3f2bce696bcf1e42fa4255163f6ca2e90e3b99",
+          "url": "https://github.com/wado-lang/wado/commit/f50594fc8ab64674cef8c6a1e0748a053f099a78"
+        },
+        "date": 1788181477043,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
