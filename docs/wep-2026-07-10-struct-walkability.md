@@ -91,7 +91,7 @@ expansion; only type-growing recursion diverges, as anywhere else.
 
 Consequently the only compiler work for struct walkability is finishing the
 three unbuilt items already on the WEP 2026-03-14 / 2026-06-13 checklists:
-`ReflectStruct` per-struct synthesis, `where`-clause pack binding
+`ReflectStruct` per-struct synthesis, pack binding
 `T: ReflectStruct<FieldTypes = [..F]>`, and coherence Rules 1–2.
 
 ### `#[secret]` — upgrade to a security contract
@@ -177,7 +177,7 @@ defaulted trait method that `Secret<T>` overrides to a no-op.
 The `#[secret]` attribute already exists with inspect-only semantics. Everything
 below rides on the `ReflectStruct` substrate, which this WEP does not own — it is the
 three unbuilt items on the WEP 2026-03-14 / 2026-06-13 checklists (per-struct
-`ReflectStruct` synthesis, `where`-clause pack binding `T: ReflectStruct<FieldTypes = [..F]>`,
+`ReflectStruct` synthesis, pack binding `T: ReflectStruct<FieldTypes = [..F]>`,
 coherence Rules 1–2). Struct walkability needs nothing beyond them; the
 `#[secret]` security upgrade needs the two staged items below.
 

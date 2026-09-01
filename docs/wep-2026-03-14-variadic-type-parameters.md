@@ -336,8 +336,6 @@ occurred.
       elements, and a pack under a reference never reaches the impl's
       type-param scope
 - [x] Pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
-- [ ] A `where` clause as a second surface for it: the grammar has no `where` at
-      all, so every bound is written inline on the parameter
 - [ ] Error messages: show call site, element index, and body location
 - [ ] Standard library: add a variadic impl for `Default`
 

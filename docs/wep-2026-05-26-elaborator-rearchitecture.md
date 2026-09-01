@@ -235,7 +235,7 @@ projections rooted at it stand for, and
 slot-only `substitute_type_params` as its empty case.
 
 The use site answers for _every_ associated type the trait declares, not only
-the ones its `where` clause names. Rebuilding the recorded projection over the
+the ones its bound names. Rebuilding the recorded projection over the
 substituted base recovers its owning trait and bounds but not its bindings,
 and those bindings are use-site data — `I::Iter` knowing `Item = u8` comes
 from the caller. Leaving the rest to the rebuild produces a projection that
@@ -279,8 +279,8 @@ Every convergence below was forced by a defect where two of them disagreed:
   [`wep-2026-08-12-declaration-identity.md`](./wep-2026-08-12-declaration-identity.md)
   owns the identity model.
 - What a projection means in a frame — `frame_projection`, answering from the
-  bindings a projection receiver carries and then from the enclosing `where`
-  clause. Three implementations of this question disagreed, and the
+  bindings a projection receiver carries and then from the enclosing bounds.
+  Three implementations of this question disagreed, and the
   trait-bound path's copy is what fed the AST re-resolution.
 - Which target arguments are slots — `TypeSystem::is_impl_target_param`.
 - Where a method's own slots start — `MethodSig::method_param_offset`, carried
@@ -506,7 +506,7 @@ A method reached through a generic bound instantiates the recorded
   parameters after it. The decl pass records it in exactly that frame, so the
   receiver fills slot 0 and nothing else is needed from the declaration.
 - What the trait's associated types mean at this use site — from the caller's
-  `where` clause (`I: IntoIterator<Item = u8>` answers `I::Item`) or from a
+  bound (`I: IntoIterator<Item = u8>` answers `I::Item`) or from a
   projection receiver's own bindings. Use-site data, so it enters as
   `SlotProjections`, never as a re-resolution.
 - The `ast::TraitBound` lists behind both. Declaration facts, but name-keyed
