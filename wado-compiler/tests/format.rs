@@ -2672,6 +2672,39 @@ fn run(p: P, a: List<i32>, b: List<i32>) -> i32 {
 }
 
 #[test]
+fn test_roundtrip_cast_operand_keeps_parens() {
+    // ` as T` binds looser than the postfix operators and tighter than every
+    // binary one, so an operand looser than a cast keeps its parens:
+    // `a < b < c as bool` casts `c`, and `x matches { 200 } as bool` does not
+    // parse at all. A unary operand and a chained cast bind tighter and stay
+    // bare.
+    assert_format_preserves_ast(
+        r"
+fn run(a: i32, b: i32, c: i32, x: i32) -> bool {
+    let t = (a < b < c) as bool;
+    let u = (x matches { 200 }) as bool;
+    let v = -a as i64;
+    let w = a as i64 as i32;
+    return t && u && v == w as i64;
+}
+",
+    );
+}
+
+#[test]
+fn test_roundtrip_method_receiver_keeps_parens() {
+    // A comparison chain as a method receiver reads the call off the chain's
+    // last operand: `a < b < c.to_string()` compares `c.to_string()`.
+    assert_format_preserves_ast(
+        r"
+fn run(a: i32, b: i32, c: i32) -> String {
+    return (a < b < c).to_string();
+}
+",
+    );
+}
+
+#[test]
 fn test_roundtrip_ast_all_fixtures() {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut failures = Vec::new();

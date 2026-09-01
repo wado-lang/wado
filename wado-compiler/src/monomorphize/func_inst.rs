@@ -147,8 +147,10 @@ struct SubstitutedCall {
 pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
+    method: &LocalMethodName,
     trait_: crate::defs::DefId,
     blanket_module: &ModuleSource,
+    generic_name: &str,
     type_table: &TypeTable,
 ) -> Option<Vec<TypeId>> {
     if args.len() != 1 {
@@ -162,6 +164,13 @@ pub(super) fn blanket_pack_dispatch_args(
         receiver,
         type_table,
     )?;
+    // Only the blanket this call dispatches. `ranked_value_blanket` also
+    // answers at the depth a newtype's base carries, so a trait with several
+    // blankets could hand back one whose template the call never names, and
+    // its projections would key an instance nothing instantiates.
+    if blanket_template_name(blanket, method, type_table) != generic_name {
+        return None;
+    }
     // Declaration order, not "receiver then projections": a blanket may write
     // a parameter its bounds determine before the receiver, and the arguments
     // are consumed by position.
@@ -953,8 +962,10 @@ impl Monomorphizer {
                         blanket_pack_dispatch_args(
                             &monomorph.impl_type_args,
                             &self.functions.trait_env,
+                            info,
                             trait_,
                             module_source,
+                            &monomorph.generic_name,
                             type_table,
                         )
                     })
@@ -1541,11 +1552,13 @@ impl Monomorphizer {
                     // `ReflectFlags<Members>`; a one-arg blanket, the shape-keyed
                     // ref blankets, and any non-template dispatch project none.
                     let pack_args = match (trait_name, info) {
-                        (Some(tn), Some(_)) => blanket_pack_dispatch_args(
+                        (Some(tn), Some(method)) => blanket_pack_dispatch_args(
                             &mono.impl_type_args,
                             &self.functions.trait_env,
+                            method,
                             tn,
                             &generic_func.module_source,
+                            &mono.generic_name,
                             type_table,
                         ),
                         _ => None,

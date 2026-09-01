@@ -420,12 +420,12 @@ concept.
 The reflection traits, the member handles, the wire-naming split, and the
 streaming struct build are implemented — `core:serde` derives every struct,
 variant, enum, and flags impl through them, and a newtype reaches those
-derivations through the base whose structure it inherits. No derive is left to
-the compiler: `Inspect`'s `as Name` tag was the last one synthesized per
-declaration. So is the identity
+derivations through the base whose structure it inherits. So is the identity
 root: `Reflect` carries `type_name()` for every kind, a kind bound reaches it
-through the supertrait, and `T: Reflect` is a bound of its own. What remains is
-what a schema library reads and nothing else yet does.
+through the supertrait, and `T: Reflect` is a bound of its own. Nothing is left
+derived by the compiler either — `Inspect`'s `as Name` tag was the last one
+synthesized per declaration. What remains is what a schema library reads and
+nothing else yet does.
 
 - `Member::doc()`. The trait carries `name()` and `wire_name_override()` only,
   so `description` / `title` have no source. The fact is not lost — a doc
