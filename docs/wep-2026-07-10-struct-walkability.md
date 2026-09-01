@@ -36,7 +36,7 @@ A struct walk is the existing tuple unrolling applied to the `ReflectStruct`
 projection:
 
 ```wado
-fn walk_fields<T, ..F: Inspect>(s: &T) where T: ReflectStruct<FieldTypes = [..F]> {
+fn walk_fields<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(s: &T) {
     for let f of ReflectStruct::<T>::members() {
         println(`${f.name()} = ${f.get(s).inspect()}`);
     }
@@ -71,9 +71,7 @@ trait Walk {
 impl Walk for i32    { fn walk(&self, v: &mut Visitor) { v.visit_int(*self); } }
 impl Walk for String { fn walk(&self, v: &mut Visitor) { v.visit_str(self); } }
 
-impl<T, ..F: Walk> Walk for T
-where T: ReflectStruct<FieldTypes = [..F]>
-{
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Walk> Walk for T {
     fn walk(&self, visitor: &mut Visitor) {
         for let f of ReflectStruct::<T>::members() {
             visitor.enter_field(f.name());

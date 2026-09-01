@@ -273,14 +273,12 @@ each struct individually.
 is a concrete struct type, because the implementation is generated per struct, not for a
 generic `T`.
 
-### 11. `where` Clause — Type Pack Pattern Matching
+### 11. Pack Binding — Type Pack Pattern Matching
 
-A `where` clause may bind a type pack from an associated type:
+A bound may bind a type pack from an associated type:
 
 ```wado
-impl<T, ..F: Inspect> Inspect for T
-where T: ReflectStruct<FieldTypes = [..F]>
-{
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
     fn inspect(&self) -> String {
         let mut parts: List<String> = [];
         for let f of ReflectStruct::<T>::members() {
@@ -292,8 +290,8 @@ where T: ReflectStruct<FieldTypes = [..F]>
 ```
 
 `T: ReflectStruct<FieldTypes = [..F]>` constrains `T` to be any type that implements `ReflectStruct`
-with a `Fields` associated type that matches the pack `F`. The compiler extracts `F` from
-the concrete `Fields` type at monomorphization. This is the mechanism that lets the
+with a `FieldTypes` associated type that matches the pack `F`. The compiler extracts `F` from
+the concrete `FieldTypes` type at monomorphization. This is the mechanism that lets the
 struct-inspect implementation be written entirely in Wado.
 
 ---
@@ -337,7 +335,9 @@ occurred.
       Selection, pack binding, and template naming all ignore the fixed
       elements, and a pack under a reference never reaches the impl's
       type-param scope
-- [x] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
+- [x] Pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
+- [ ] A `where` clause as a second surface for it: the grammar has no `where` at
+      all, so every bound is written inline on the parameter
 - [ ] Error messages: show call site, element index, and body location
 - [ ] Standard library: add a variadic impl for `Default`
 
