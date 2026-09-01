@@ -628,10 +628,9 @@ impl TypeSystem {
         result
     }
 
-    /// Whether `type_id` satisfies `trait_` *at the type itself*, without
-    /// following a newtype to its base — the question rank 2 of the selection
-    /// order asks, where [`Self::type_implements_trait`] answers dispatch's
-    /// (`docs/wep-2026-09-01-trait-resolution.md`).
+    /// Whether `type_id` satisfies `trait_` at the type itself, without peeling
+    /// a newtype — rank 2's question, where [`Self::type_implements_trait`]
+    /// answers dispatch's (`docs/wep-2026-09-01-trait-resolution.md`).
     pub(super) fn type_implements_trait_here(
         &self,
         ctx: &Scope,
@@ -646,10 +645,9 @@ impl TypeSystem {
         if !is_newtype {
             return self.type_implements_trait(ctx, scope, type_id, trait_);
         }
-        // A repeat answers `false`, where [`Self::type_implements_trait`]
-        // answers `true` on the same stack: that query recurses into members,
-        // so a repeat is the well-founded structural case, while this one holds
-        // the subject fixed, so a repeat is a bound that grounds nothing.
+        // A repeat answers `false` where `type_implements_trait` answers `true`
+        // on the same stack: that query descends into members, this one holds
+        // the subject fixed, so a repeat here is a bound grounding nothing.
         {
             let stack = ctx.trait_check_stack.borrow();
             if stack.contains(&(type_id, trait_)) {
@@ -1578,14 +1576,10 @@ impl TypeSystem {
             .trait_item_of_decl(decl)
     }
 
-    /// Whether one of a blanket's receiver bounds holds, at the level `peel`
-    /// names.
-    ///
-    /// `Follow` takes either answer: the subject query is the one entry a
-    /// structurally derived `Eq` / `Ord` has, since an impl-index scan sees no
-    /// impl for a derive. `Here` takes only the guarded query — it holds the
-    /// subject fixed, so the index lookup would re-enter this check on the same
-    /// pair with no frame to stop a cycle among bounds.
+    /// Whether one of a blanket's receiver bounds holds at the level `peel`
+    /// names. `Follow` also asks the subject query, the one entry a
+    /// structurally derived `Eq` / `Ord` has; `Here` asks only the guarded one,
+    /// since an unguarded index lookup cannot stop a cycle among bounds.
     fn blanket_bound_holds(
         &self,
         ctx: &Scope,

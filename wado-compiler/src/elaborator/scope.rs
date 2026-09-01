@@ -24,9 +24,9 @@ pub(super) struct BinderInScope {
     pub(super) index: u32,
     pub(super) type_id: TypeId,
     /// Where the parameter is written, for jump-to-def on a use. `None` for a
-    /// name in scope that no parameter declares: `Self`, or a parameter a
-    /// lookup already bound to a concrete type. Not what names a binder in a
-    /// mangle — see [`TraitContext::impl_owner`].
+    /// name no parameter declares: `Self`, or one already bound to a concrete
+    /// type. Not what names a binder in a mangle — see
+    /// [`TraitContext::impl_owner`].
     pub(super) decl: Option<ast::AstId>,
 }
 
@@ -50,11 +50,8 @@ impl BinderInScope {
     }
 }
 
-/// The node in `params` that declares `name`, when one does.
-///
-/// The caller chooses the list, because only the caller knows which item bound
-/// the name: a method parameter may spell the impl's receiver letter, and
-/// searching the impl's list for it records the wrong binder (#1932).
+/// The node in `params` that declares `name`, when one does. The caller picks
+/// the list, since only it knows which item bound the name (#1932).
 pub(super) fn param_decl(params: &[ast::GenericParam], name: &str) -> Option<ast::AstId> {
     params.iter().find(|p| p.name == name).map(|p| p.id)
 }
@@ -84,10 +81,7 @@ pub(super) struct TraitContext {
     pub(super) self_trait: Option<crate::defs::DefId>,
     /// The `impl` block whose type parameters are in scope, paired with the
     /// node declaring its receiver binder — what names that binder in a mangle.
-    ///
-    /// The node, not the spelling: a method parameter may shadow the receiver's
-    /// letter, and then the letter is the method's binder. Only the receiver
-    /// heads a template name, so no other parameter is owned.
+    /// The node, not the spelling: a method parameter may shadow the letter.
     pub(super) impl_owner: Option<(crate::defs::DefId, Option<ast::AstId>)>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
@@ -357,20 +351,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .trait_ctx
             .type_params
             .iter()
-            .flat_map(
-                |(
-                    name,
-                    &BinderInScope {
-                        index,
-                        type_id: tid,
-                        ..
-                    },
-                )| {
-                    let elem = matches!(tt.get(tid), ResolvedType::TypePack { .. })
-                        .then(|| tt.make_type_param(name.clone(), index));
-                    std::iter::once(tid).chain(elem)
-                },
-            )
+            .flat_map(|(name, binder)| {
+                let elem = matches!(tt.get(binder.type_id), ResolvedType::TypePack { .. })
+                    .then(|| tt.make_type_param(name.clone(), binder.index));
+                std::iter::once(binder.type_id).chain(elem)
+            })
             .collect()
     }
 

@@ -105,14 +105,17 @@ Two filters sit beside the order rather than in it:
 They differ in what the programmer can do about it, which is why they are
 separate diagnostics.
 
-**Two traits, one method name.** The receiver has `impl Alpha for Item` and
-`impl Beta for Item`, both declaring `describe`. They share no contract, so
-nothing selects. The call names the trait: `Alpha::describe(&it)`
-(WEP 2026-07-31).
+#### Two traits, one method name
 
-**Two blankets of one trait.** The receiver satisfies both bounds and nothing
-above ranks them. A blanket has no name, so the call _cannot_ pin one. The only
-answer is an impl written for the receiver, which rank 1 puts above both:
+The receiver has `impl Alpha for Item` and `impl Beta for Item`, both declaring
+`describe`. They share no contract, so nothing selects. The call names the
+trait: `Alpha::describe(&it)` (WEP 2026-07-31).
+
+#### Two blankets of one trait
+
+The receiver satisfies both bounds and nothing above ranks them. A blanket has
+no name, so the call _cannot_ pin one. The only answer is an impl written for
+the receiver, which rank 1 puts above both:
 
 ```text
 ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and
@@ -156,11 +159,12 @@ not diverge, which is why the sort cites this document instead of restating it.
 
 ## Known gaps
 
-**Specificity is not ranked.** Where one blanket's bounds imply another's, an
-order exists and is unused: `impl<T: Ord>` is strictly narrower than
-`impl<T: Eq>` when `Ord: Eq` (WEP 2026-07-27), as is `impl<T: A + B>` against
-`impl<T: A>`. Both are decidable from the trait declarations. Such a pair is
-reported ambiguous today.
+### Specificity is not ranked
+
+Where one blanket's bounds imply another's, an order exists and is unused:
+`impl<T: Ord>` is strictly narrower than `impl<T: Eq>` when `Ord: Eq`
+(WEP 2026-07-27), as is `impl<T: A + B>` against `impl<T: A>`. Both are
+decidable from the trait declarations. Such a pair is reported ambiguous today.
 
 Left open deliberately. No standard-library trait carries two blankets with
 comparable bounds — all three that carry several split on the mutually exclusive
@@ -170,27 +174,29 @@ narrower impl binds them differently is the specialization soundness question,
 and wants its own WEP. Rank 4 surfaces the demand with a concrete case when one
 appears.
 
-**An ungrounded bound cycle satisfies its own bounds.** `impl<T: A> B for T`
-beside `impl<T: B> A for T` grounds neither, but the dispatch query answers a
-repeated `(type, trait)` pair yes, so any type satisfies both and a blanket
-keyed by either becomes a candidate. Rank 2's walk refuses such a repeat, which
-is why a newtype is unaffected; a concrete receiver has no such walk and reaches
-the shared answer.
+### An ungrounded bound cycle satisfies its own bounds
 
-One stack cannot separate the two recursions — descending into members is
-well-founded and must answer yes, a cycle at a fixed subject must answer no —
-so closing this needs a second stack for bound cycles, and the answer for a
-concrete receiver is a change to dispatch rather than to selection.
+`impl<T: A> B for T` beside `impl<T: B> A for T` grounds neither, yet the
+dispatch query answers a repeated `(type, trait)` pair yes, so any type
+satisfies both. Rank 2's walk refuses the repeat, so a newtype is unaffected; a
+concrete receiver has no such walk. Closing it takes a second recursion stack —
+one cannot separate descent into members, well-founded and answered yes, from a
+cycle at a fixed subject, answered no — which is a change to dispatch, not to
+selection.
 
-**Rank 3 is undocumented elsewhere.** Locality was never proposed; it is
-recorded here as the behaviour that exists. Whether a tie should instead be an
-error — the reader's vantage deciding a program's meaning is exactly what
-ranks 1 and 2 avoid — is worth asking separately.
+### Rank 3 is undocumented elsewhere
 
-**`spec.md` overstates coherence.** Its "at most one impl can apply" describes
-the orphan rules' guarantee about _where impls may be written_, not about how
-many apply to a call. The selection order belongs in the spec as language
-semantics; this WEP records the decision, and the spec section is the follow-up.
+Locality was never proposed; it is recorded here as the behaviour that exists.
+Whether a tie should instead be an error — the reader's vantage deciding a
+program's meaning is exactly what ranks 1 and 2 avoid — is worth asking
+separately.
+
+### `spec.md` overstates coherence
+
+Its "at most one impl can apply" describes the orphan rules' guarantee about
+_where impls may be written_, not about how many apply to a call. The selection
+order belongs in the spec as language semantics; this WEP records the decision,
+and the spec section is the follow-up.
 
 ## Related WEPs
 

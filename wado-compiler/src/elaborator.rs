@@ -925,9 +925,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         {
             return match owner {
                 Some(def) => self.impl_receiver_binder(def, written),
-                // No caller-supplied block: the scope's own, when this name is
-                // the receiver of the `impl` being elaborated. A lookup inside
-                // the block must reach the template the block registered.
                 None => self.binder_in_scope(written),
             };
         }
@@ -944,9 +941,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The binder `written` names in the current type-param scope: owned by the
     /// `impl` block in scope when it is that block's receiver, bare otherwise.
-    ///
     /// Matched on the binding, not the spelling — a method parameter may shadow
-    /// the receiver's letter, and then the letter heads no template (#1932).
+    /// the receiver's letter (#1932).
     pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
         let ctx = &self.annotate_ctx.trait_ctx;
         if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
@@ -964,11 +960,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         owner: crate::defs::DefId,
         written: &str,
     ) -> crate::name::FqTypeName {
-        let defs = self.tysys.resolutions.defs();
-        crate::name::FqTypeName::binder_owned(
-            written,
-            crate::name::BinderOwner::of_impl(defs.module(owner), defs.ast_id(owner)),
-        )
+        crate::name::FqTypeName::binder_of_impl(self.tysys.resolutions.defs(), owner, written)
     }
 
     /// The name an `impl` block's receiver registers under. One block, one
@@ -2064,10 +2056,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
         let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
         scope.register_impl_block_params(impl_block);
-        // The block names its own receiver binder, both where the template is
-        // recorded (below) and for the `T::method()` calls its bodies write.
-        // Named by the node the registration above bound it to, so a method
-        // parameter that shadows the letter is a different binder.
+        // The node the registration above bound the receiver to, so a method
+        // parameter shadowing the letter is a different binder.
         let receiver_decl = scope
             .annotate_ctx
             .trait_ctx
@@ -2174,10 +2164,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
             // Two names, two uses. `reify_impl_default_methods` recomputes a
             // default method's name from `qualified_struct_name`, so it must be
-            // the one this block's methods are recorded under — owned, or the
-            // block writes two templates. `receiver` keys `method_info`
-            // and is matched against receivers built elsewhere, so it stays
-            // plain.
+            // what this block's methods are recorded under — owned, or the
+            // block writes two templates. `receiver` keys `method_info` against
+            // receivers built elsewhere, so it stays plain.
             let qualified_struct_name =
                 scope.qualified_receiver_name_owned(&struct_name, impl_owner);
             let receiver = match RefKind::from_ast(&impl_block.ty) {

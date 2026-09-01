@@ -1424,12 +1424,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Bind `name` in the current type-param scope as the binder `decl`
-    /// declares.
-    ///
-    /// The node is the caller's to state, never this helper's to find: a method
-    /// parameter may spell the impl's receiver letter, and a helper searching
-    /// one list for every caller records the impl's node for the method's
-    /// binder — which then reads back as the receiver.
+    /// declares. The node is the caller's to state, never this helper's to
+    /// find — see [`super::scope::param_decl`].
     fn bind_type_param(
         scope: &mut super::scope::TypeParamScope<'_, '_, H>,
         decl: Option<ast::AstId>,
@@ -1694,18 +1690,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_inner == receiver_outer
     }
 
-    /// For a blanket impl (target type is one of its own type params with
-    /// bounds), how far down the receiver's newtype chain those bounds first
-    /// hold: `Some(0)` at the receiver itself, `Some(1)` at its base, `None`
-    /// when they never do — which is what keeps `impl<I: Iterator> IntoIterator
-    /// for I` off an `I` that is not itself `Iterator`. `Some(0)` for a
-    /// non-blanket impl.
-    ///
-    /// The depth is rank 2 of the selection order
-    /// (`docs/wep-2026-09-01-trait-resolution.md`), not a detail: a newtype
-    /// inherits its base's impls, so a blanket keyed by a bound only the base
-    /// carries is a candidate for the newtype too, and without the rank it ties
-    /// with the newtype's own.
+    /// How far down the receiver's newtype chain a blanket impl's target bounds
+    /// first hold — rank 2 of the selection order
+    /// (`docs/wep-2026-09-01-trait-resolution.md`). `None` when they never do;
+    /// `Some(0)` for a non-blanket impl.
     fn blanket_target_bounds_depth(
         &self,
         impl_ty: &Type,
@@ -1720,8 +1708,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(0);
         };
         let rt = receiver_type_id?;
-        // A bound that names no resolvable declaration constrains nothing, as
-        // the boolean gate this replaces also held.
+        // A bound naming no resolvable declaration constrains nothing.
         let bound_defs: Vec<_> = param
             .bounds
             .iter()
@@ -2122,28 +2109,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|(n, &t)| (n.clone(), t)),
         );
 
-        let blanket_type_param = if is_blanket_type_param {
-            Some(impl_struct_name.clone())
-        } else {
-            None
-        };
+        let blanket_type_param = is_blanket_type_param.then(|| impl_struct_name.clone());
+        // The receiver as the impl writes it: `T: Limit + Mark`, or bare `T`.
         let blanket_bounds = is_blanket_type_param.then(|| {
-            let bounds = header
+            let bounds: Vec<&str> = header
                 .type_params
                 .iter()
                 .find(|p| p.name == impl_struct_name)
-                .map(|p| {
-                    p.bounds
-                        .iter()
-                        .map(|b| b.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(" + ")
-                })
-                .unwrap_or_default();
+                .into_iter()
+                .flat_map(|p| p.bounds.iter().map(|b| b.name.as_str()))
+                .collect();
             if bounds.is_empty() {
                 impl_struct_name.clone()
             } else {
-                format!("{impl_struct_name}: {bounds}")
+                format!("{impl_struct_name}: {}", bounds.join(" + "))
             }
         });
         // The block names the receiver — not the letter, which another blanket
@@ -2419,14 +2398,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Report rank 4 for one trait's value blankets: two the receiver
-    /// satisfies with nothing ranking them, which the `dedup_by` below would
-    /// otherwise settle by declaration order
-    /// (`docs/wep-2026-09-01-trait-resolution.md`).
-    ///
-    /// Runs on the sorted list, so each trait's first candidate is its best: a
-    /// concrete impl there answers the call, and a shallower bound has already
-    /// won rank 2.
+    /// Report rank 4 for one trait's value blankets: two the receiver satisfies
+    /// with nothing ranking them (`docs/wep-2026-09-01-trait-resolution.md`).
+    /// Runs on the sorted list, so each trait's first candidate is its best.
     fn report_ambiguous_value_blankets(
         &mut self,
         found_traits: &[super::types::TraitMethodMatch],
@@ -2447,9 +2421,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(best) = candidates.first().filter(|m| m.blanket_binder.is_some()) else {
                 continue;
             };
-            // Rank 3 splits local from foreign, and no finer: two blankets in
-            // two foreign modules are tied, so comparing the modules themselves
-            // would drop one and leave declaration order to choose.
+            // Rank 3 splits local from foreign and no finer: two foreign
+            // blankets are tied, and comparing the modules themselves would
+            // drop one and leave declaration order to choose.
             let is_local = |m: &super::types::TraitMethodMatch| {
                 m.impl_module_source == self.current_module_source
             };
@@ -2489,10 +2463,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
         // Rank 0: a variadic impl yields to a non-variadic one of the same
-        // trait at the same argument list. Scoped to one trait in both
-        // directions, so it must not outrank locality between traits — a
-        // foreign blanket `impl<T> A for T` would otherwise beat a local
-        // `impl<..T> B for [..T]` (WEP 2026-03-14 §5 Rule 1).
+        // trait (WEP 2026-03-14 §5 Rule 1). Scoped to one trait, so it must not
+        // outrank locality between traits — a foreign blanket `impl<T> A for T`
+        // would otherwise beat a local `impl<..T> B for [..T]`.
         let traits_with_non_variadic: IndexSet<(crate::defs::DefId, Vec<TypeId>)> = found_traits
             .iter()
             .filter(|m| !m.is_variadic_impl)
@@ -2503,13 +2476,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
         });
 
-        // Ranks 1-3 of the selection order, which
-        // `docs/wep-2026-09-01-trait-resolution.md` states in full and this
-        // sort must not diverge from: a concrete impl over a blanket, then a
-        // bound that holds at the receiver over one that holds only after
-        // peeling to a newtype's base, then a local impl over a foreign one.
-        //
-        // Sorted BEFORE dedup_by, which only removes adjacent duplicates.
+        // Ranks 1-3, stated in full in
+        // `docs/wep-2026-09-01-trait-resolution.md`: concrete over blanket,
+        // then bound depth, then local over foreign. Sorted BEFORE dedup_by,
+        // which only removes adjacent duplicates.
         let current_module = &self.current_module_source;
         found_traits.sort_by(|a, b| {
             let a_concrete = a.blanket_type_param.is_none();

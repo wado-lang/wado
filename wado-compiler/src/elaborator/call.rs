@@ -274,9 +274,7 @@ impl TypeSystem {
         {
             let self_name = self.type_table.borrow().type_name(self_type_id);
             // `Self` names the receiver, not one of its bounds: an impl
-            // *provides* the trait whose default body this is, so the method is
-            // never among the receiver's bounds. The owner the name needs comes
-            // from `qualified_receiver_name` at lookup.
+            // *provides* the trait whose default body this is.
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
@@ -295,11 +293,9 @@ impl TypeSystem {
         suffix: &str,
         type_id: TypeId,
     ) -> CalleeIdentKind<'a> {
-        // A parameter bound to a concrete type (a trait default method
-        // synthesised for an impl binds the trait's `T` to the impl's concrete
-        // arg) dispatches statically on it. An abstract one keeps its form and
-        // routes through trait-bound dispatch, for the monomorphizer to
-        // substitute later.
+        // A parameter bound to a concrete type dispatches statically on it. An
+        // abstract one keeps its form and routes through trait-bound dispatch,
+        // for the monomorphizer to substitute later.
         let is_abstract = matches!(
             self.type_table.borrow().get(type_id),
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }

@@ -340,11 +340,9 @@ pub enum TypeError {
     },
 
     /// Two of one trait's value blankets whose bounds the receiver both
-    /// satisfies, with nothing to rank them.
-    ///
-    /// A blanket has no name, so unlike [`Self::AmbiguousTraitMethod`] the call
-    /// cannot pin one — an impl written for the receiver is the only way to
-    /// answer, and it outranks every blanket.
+    /// satisfies, with nothing to rank them. A blanket has no name, so unlike
+    /// [`Self::AmbiguousTraitMethod`] the call cannot pin one — only an impl
+    /// written for the receiver answers it.
     AmbiguousValueBlankets {
         trait_name: String,
         receiver: String,
@@ -2361,9 +2359,8 @@ pub(super) struct TraitMethodMatch {
     /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
     /// this holds the type parameter name (e.g., `"I"`). `None` for normal impls.
     pub(super) blanket_type_param: Option<String>,
-    /// [`Self::blanket_type_param`] as a binder named by the block that binds
-    /// it, so two blankets of one trait are two templates whatever letter each
-    /// spells its parameter.
+    /// [`Self::blanket_type_param`] as a binder named by its block, so two
+    /// blankets of one trait are two templates whatever letter each spells.
     pub(super) blanket_binder: Option<crate::name::FqTypeName>,
     /// The receiver parameter's bounds as source writes them (`T: Limit`) —
     /// what an ambiguity names two blankets by, neither having a name.

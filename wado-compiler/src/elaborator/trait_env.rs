@@ -480,17 +480,10 @@ pub(crate) struct BlanketImpl {
 }
 
 impl BlanketImpl {
-    /// The binder naming this blanket's receiver parameter — where every
-    /// template name for the blanket comes from. A name built from the spelling
-    /// alone looks up a *different* template, silently.
-    ///
-    /// Both halves come off [`Self::def`], as they do wherever else this name is
-    /// built: a second source for either one is a second name.
+    /// Where every template name for this blanket comes from — one built from
+    /// the spelling alone looks up a *different* template, silently.
     pub(crate) fn receiver_binder(&self, defs: &crate::defs::DefTable) -> name::FqTypeName {
-        name::FqTypeName::binder_owned(
-            &self.param,
-            name::BinderOwner::of_impl(defs.module(self.def), defs.ast_id(self.def)),
-        )
+        name::FqTypeName::binder_of_impl(defs, self.def, &self.param)
     }
 }
 

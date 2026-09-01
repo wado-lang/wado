@@ -577,8 +577,8 @@ impl Receiver {
     }
 
     /// Whether this receiver is one of the binders `names` declares — how a
-    /// blanket's receiver is recognized, asked against source spellings because
-    /// a mangle carries the owning block that no declaration list spells.
+    /// blanket's receiver is recognized. By spelling, since a declaration list
+    /// has no owning block to compare.
     #[must_use]
     pub fn is_declared_binder_of<'a>(&self, names: impl IntoIterator<Item = &'a str>) -> bool {
         self.binder_spelling()
@@ -2344,20 +2344,17 @@ pub enum TypeHead {
     /// A shape no module declares — a primitive, `()`, `!`, the raw GC `Array`,
     /// a function type. Every mangler spells one the same way.
     Builtin(String),
-    /// The index bucket the `impl` blocks of one module that bind a parameter
-    /// of this spelling share. Its own head: a bucket is neither a declaration
-    /// nor a shape, and spelling it as one puts an `impl` on an undeclared
-    /// type of the same name into a blanket's bucket.
+    /// The index bucket one module's `impl` blocks binding a parameter of this
+    /// spelling share. Its own head: spelled as a shape, an `impl` on an
+    /// undeclared type of the same name would land in a blanket's bucket.
     ParamBucket {
         module: crate::module_source::ModuleSource,
         name: String,
     },
-    /// A template's own type-parameter binder (`T`, a pack member `F`).
-    ///
-    /// `owner` is the `impl` block that binds it, `None` for a binder no block
-    /// owns. Two blocks' `T` are two binders however they are spelled: without
-    /// the owner, `impl<T: A> Tr for T` and `impl<T: B> Tr for T` share one
-    /// template and one silently replaces the other (WEP 2026-08-12).
+    /// A template's own type-parameter binder (`T`, a pack member `F`), with
+    /// the `impl` block that binds it. Without `owner`, `impl<T: A> Tr for T`
+    /// and `impl<T: B> Tr for T` share one template and one silently replaces
+    /// the other (WEP 2026-08-12).
     Binder {
         name: String,
         owner: Option<BinderOwner>,
@@ -2471,7 +2468,7 @@ impl FqTypeName {
 
     /// A template's own type-parameter binder (a generic function's `T`, a pack
     /// member `F`). A binder is not a declaration and has no module. Use
-    /// [`Self::impl_binder`] for one an `impl` block binds — that one has an
+    /// [`Self::binder_of_impl`] for one an `impl` block binds — that one has an
     /// identity beyond its spelling.
     #[must_use]
     pub fn binder(name: &str) -> Self {
@@ -2481,13 +2478,18 @@ impl FqTypeName {
         })
     }
 
-    /// A blanket's receiver parameter (`T` in `impl<T: Bound> Trait for T`),
-    /// named by the block that binds it rather than by its letter.
+    /// The receiver parameter `name` of the `impl` block `def` declares (`T` in
+    /// `impl<T: Bound> Trait for T`). The one way to build this name, so no two
+    /// callers can build two.
     #[must_use]
-    pub fn binder_owned(name: &str, owner: BinderOwner) -> Self {
+    pub fn binder_of_impl(
+        defs: &crate::defs::DefTable,
+        def: crate::defs::DefId,
+        name: &str,
+    ) -> Self {
         Self::of_head_kind(TypeHead::Binder {
             name: name.to_string(),
-            owner: Some(owner),
+            owner: Some(BinderOwner::of_impl(defs.module(def), defs.ast_id(def))),
         })
     }
 
@@ -2613,8 +2615,6 @@ impl FqTypeName {
                 out.push_str(&format!("{module}/{name}#param"));
             }
             TypeHead::Builtin(name) => out.push_str(name),
-            // An unowned binder keeps its bare spelling, leaving every template
-            // name but a blanket's receiver byte-identical.
             TypeHead::Binder { name, owner } => match owner {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
@@ -2725,8 +2725,7 @@ impl std::hash::Hash for BinderOwner {
 
 impl BinderOwner {
     /// The receiver binder of the `impl` block declared at `id` in `module`.
-    #[must_use]
-    pub fn of_impl(module: &crate::module_source::ModuleSource, id: crate::ast::AstId) -> Self {
+    fn of_impl(module: &crate::module_source::ModuleSource, id: crate::ast::AstId) -> Self {
         Self {
             id,
             rendered: format!("{module}/{}", id.local()),
