@@ -2566,14 +2566,14 @@ fn generate_newtype_reflect_impls(
         module
             .newtypes
             .iter()
-            .filter_map(|nt| {
+            .map(|nt| {
                 let ResolvedType::Newtype {
                     def, base_type, ..
                 } = tt.get(nt.type_id)
                 else {
                     unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
                 };
-                Some((
+                (
                     tt.fq_base_type_name(nt.type_id),
                     // The declaration's own name: `Reflect` answers `UserId`,
                     // never the `UserId@<local>` spelling a local declaration
@@ -2582,7 +2582,7 @@ fn generate_newtype_reflect_impls(
                     nt.type_id,
                     *base_type,
                     nt.span,
-                ))
+                )
             })
             .collect()
     };
@@ -2609,7 +2609,7 @@ fn generate_newtype_reflect_impls(
             .borrow_mut()
             .register_assoc_type_resolution(
                 *newtype_type,
-                crate::tir::TraitRef::bare(newtype_trait_key.clone()),
+                crate::tir::TraitRef::bare(newtype_trait_key),
                 REFLECT_BASE_ASSOC.to_string(),
                 *base_type,
             );
