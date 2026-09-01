@@ -1,25 +1,19 @@
 //! Fuse a run of sibling `if K == x { … }` statements over one local into a
-//! single `Match`, so `match_to_switch` can reach it and the dispatch stops at
-//! the arm that fired.
+//! single `Match`, so the dispatch stops at the arm that fired.
 //!
-//! A compile-time-unrolled variadic `for` whose body guards on the loop index —
-//! what every `ReflectStruct`-derived `Deserialize` does to route a field to its
-//! slot — expands to a flat chain the arms never leave, so a struct pays one
-//! comparison per declared field for *every* field on the wire: quadratic in the
-//! declaration's width. The guards are mutually exclusive by construction, which
-//! is what makes them one `Match`.
+//! A compile-time-unrolled variadic `for` guarding on its loop index — what a
+//! `ReflectStruct`-derived `Deserialize` does to route a field to its slot —
+//! expands to a flat chain no arm leaves, so a struct pays one comparison per
+//! declared field for *every* field on the wire. Distinct constants over a local
+//! no arm writes are what make the guards exclusive.
 //!
-//! Recognition reads the skeleton and the value pool, never the value graph. A
-//! guard is a constant against a local either way, and the local is what the
-//! write scan needs — so the shape answers the question with no analysis behind
-//! it, in a body of any size.
-//!
-//! Every chain is worth fusing: the `Match` lowers to an early-exit `else if`,
-//! which executes strictly fewer comparisons than the flat run whatever its
-//! length. The threshold that does exist is `match_to_switch`'s, which trades
-//! that cascade for one indirect branch and needs the arms to pay for it.
+//! No width threshold here: the `Match` lowers to an early-exit `else if`,
+//! always fewer comparisons than the flat run. `match_to_switch` holds the one
+//! threshold, trading that cascade for a single indirect branch.
 
+use super::arena_query::local_written_by;
 use crate::compiler_trace;
+use crate::const_eval::is_signed_int;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirLiteralPattern};
 use crate::nir_arena::{
@@ -27,7 +21,8 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::{OpaqueSource, ValueKind};
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeTable};
+use crate::token::Span;
 
 pub(super) struct IfChainToMatchRule<'t> {
     type_table: &'t TypeTable,
@@ -41,18 +36,27 @@ impl<'t> IfChainToMatchRule<'t> {
 
 /// One recognised `if K == x` statement, and where it sits in its block.
 struct Case {
-    stmt: StmtId,
     at: usize,
+    span: Span,
     then_block: BlockId,
     key: i128,
 }
 
 impl Rule for IfChainToMatchRule<'_> {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        // Most blocks hold no guard at all, and the clone below is only needed
+        // to walk one while `engine` is borrowed mutably.
+        let Some(first) = engine.body.blocks[block]
+            .stmts
+            .iter()
+            .position(|&s| split_guard(engine.body, self.type_table, s).is_some())
+        else {
+            return false;
+        };
         let stmts = engine.body.blocks[block].stmts.clone();
-        let mut start = 0;
+        let mut start = first;
         while start < stmts.len() {
-            let Some((local, _)) = split_guard(engine.body, self.type_table, stmts[start]) else {
+            let Some((local, ..)) = split_guard(engine.body, self.type_table, stmts[start]) else {
                 start += 1;
                 continue;
             };
@@ -86,14 +90,10 @@ impl Rule for IfChainToMatchRule<'_> {
                     continue;
                 }
                 // The unrolled loop binds its index between the arms
-                // (`let i = 3; if i == index { … }`), so the arms are adjacent
-                // only up to those. A constant binding moves ahead of the whole
-                // run: its value depends on nothing an arm writes, and being
-                // immutable nothing can reassign it. A second binding of the
-                // same local would — the unrolled copies shadow one name — so
-                // that ends the run instead, as does a binding of the scrutinee
-                // itself, which is the one write the hoist would carry ahead of
-                // the guards that read it.
+                // (`let i = 3; if i == index { … }`), so they are adjacent only
+                // up to those. Hoisting one is sound while it names neither the
+                // scrutinee nor a local already hoisted, either of which would
+                // move a value ahead of a guard that reads it.
                 if let Some(bound) = constant_let(engine.body, stmts[cursor])
                     && bound != local
                     && hoisted_locals.insert(bound)
@@ -110,7 +110,11 @@ impl Rule for IfChainToMatchRule<'_> {
                 start += 1;
                 continue;
             }
-            if let Some(writer) = first_writing_case(engine.body, &cases, local) {
+            // A guard the arms can invalidate is not a guard. Every run holding
+            // that arm is doomed, so resume past it rather than one statement on.
+            if let Some(writer) = cases.iter().position(|c| {
+                subtree_writes_local(engine.body, NodeRef::Block(c.then_block), local)
+            }) {
                 start = cases[writer].at + 1;
                 continue;
             }
@@ -134,28 +138,22 @@ impl Rule for IfChainToMatchRule<'_> {
 
 /// The block's `at`th statement as `if K == <local> { … }` for the run's local.
 fn case_at(body: &Body, table: &TypeTable, stmt: StmtId, at: usize, local: u32) -> Option<Case> {
-    let (found, key) = split_guard(body, table, stmt)?;
-    if found != local {
-        return None;
-    }
-    let StmtKind::If { then_block, .. } = body.stmts[stmt].kind else {
-        return None;
-    };
-    Some(Case {
-        stmt,
+    let (found, key, then_block) = split_guard(body, table, stmt)?;
+    (found == local).then(|| Case {
         at,
+        span: body.stmts[stmt].span,
         then_block,
         key,
     })
 }
 
 /// Split an `if <int const> == <local> { … }` statement (either operand order,
-/// no `else`) into the local's index and the constant.
-fn split_guard(body: &Body, table: &TypeTable, stmt: StmtId) -> Option<(u32, i128)> {
+/// no `else`) into the local's index, the constant, and the arm.
+fn split_guard(body: &Body, table: &TypeTable, stmt: StmtId) -> Option<(u32, i128, BlockId)> {
     let StmtKind::If {
         condition,
+        then_block,
         else_block: None,
-        ..
     } = body.stmts[stmt].kind
     else {
         return None;
@@ -165,7 +163,9 @@ fn split_guard(body: &Body, table: &TypeTable, stmt: StmtId) -> Option<(u32, i12
         (local_of(body, lhs), int_key(body, table, rhs)),
         (local_of(body, rhs), int_key(body, table, lhs)),
     ) {
-        ((Some(local), Some(key)), _) | (_, (Some(local), Some(key))) => Some((local, key)),
+        ((Some(local), Some(key)), _) | (_, (Some(local), Some(key))) => {
+            Some((local, key, then_block))
+        }
         // Two constants fold away on their own; neither is not a dispatch.
         _ => None,
     }
@@ -212,9 +212,8 @@ fn local_of(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-/// The integer an operand holds, if it is an integer constant. The literal
-/// pattern is signed either way — `match_to_switch` reads both `I128` and
-/// `U128`, so the arm key only has to round-trip.
+/// The integer an operand holds, if it is an integer constant, widened by its
+/// own signedness so the arm key round-trips.
 fn int_key(body: &Body, table: &TypeTable, op: Operand) -> Option<i128> {
     let Operand::Value(v) = op else {
         return None;
@@ -222,25 +221,18 @@ fn int_key(body: &Body, table: &TypeTable, op: Operand) -> Option<i128> {
     let ValueKind::Int(bits, ty) = *body.values.kind(v) else {
         return None;
     };
-    Some(if is_signed(table, ty) {
+    let ResolvedType::Primitive(prim) = table.get(ty) else {
+        return None;
+    };
+    Some(if is_signed_int(*prim) {
         i128::from(bits as i64)
     } else {
         i128::from(bits)
     })
 }
 
-fn is_signed(table: &TypeTable, ty: TypeId) -> bool {
-    matches!(
-        table.get(ty),
-        ResolvedType::Primitive(
-            PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64
-        )
-    )
-}
-
-/// The local an immutable `let` of a constant binds. A constant reads nothing,
-/// so where it is evaluated cannot matter; immutability is what stops the run
-/// from reassigning it.
+/// The local an immutable `let` of a constant binds — one the hoist may move
+/// ahead of the run, since a constant reads nothing an arm writes.
 fn constant_let(body: &Body, stmt: StmtId) -> Option<u32> {
     let StmtKind::Let {
         is_mut: false,
@@ -251,57 +243,36 @@ fn constant_let(body: &Body, stmt: StmtId) -> Option<u32> {
     else {
         return None;
     };
-    matches!(
-        body.values.kind(v),
-        ValueKind::Int(..)
-            | ValueKind::Float(..)
-            | ValueKind::Bool(_)
-            | ValueKind::Char(_)
-            | ValueKind::Null
-            | ValueKind::Unit
-            | ValueKind::Const(..)
-    )
-    .then_some(local_index)
-}
-
-/// The first arm that writes `local`, by assignment or by rebinding it. A guard
-/// the arms can invalidate is not a guard, and only an unwritten scrutinee makes
-/// the constants exclusive. Every run containing that arm is rejected, so the
-/// caller resumes past it rather than one statement on.
-fn first_writing_case(body: &Body, cases: &[Case], local: u32) -> Option<usize> {
-    cases
-        .iter()
-        .position(|c| subtree_writes_local(body, NodeRef::Block(c.then_block), local))
+    body.values.kind(v).is_constant().then_some(local_index)
 }
 
 fn subtree_writes_local(body: &Body, root: NodeRef, local: u32) -> bool {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        if node_writes_local(body, node, local) {
+        if local_written_by(body, node) == Some(local) {
             return true;
         }
+        assert!(
+            !binds_local(body, node, local),
+            "local {local} is bound inside an arm that guards on it: \
+             every binding site mints a fresh index, so a collision here is \
+             broken local numbering rather than a scrutinee the arms rewrite"
+        );
         body.for_each_child(node, |c| stack.push(c));
     }
     false
 }
 
-fn node_writes_local(body: &Body, node: NodeRef, local: u32) -> bool {
+/// Whether `node` binds `local` — a `let` or a pattern binding.
+fn binds_local(body: &Body, node: NodeRef, local: u32) -> bool {
     match node {
-        NodeRef::Expr(id) => {
-            let ExprKind::Assign { target, .. } = &body.exprs[id].kind else {
-                return false;
-            };
-            matches!(&body.exprs[*target].kind, ExprKind::Local { index, .. } if *index == local)
-        }
-        // A `let` and a pattern binding are the same write: the scrutinee's
-        // index bound to something else. `for_each_child` yields both.
         NodeRef::Stmt(id) => {
             matches!(&body.stmts[id].kind, StmtKind::Let { local_index, .. } if *local_index == local)
         }
         NodeRef::Pat(id) => {
             matches!(&body.pats[id].kind, PatKind::Binding { local_index, .. } if *local_index == local)
         }
-        NodeRef::Block(_) => false,
+        NodeRef::Expr(_) | NodeRef::Block(_) => false,
     }
 }
 
@@ -309,7 +280,7 @@ fn node_writes_local(body: &Body, node: NodeRef, local: u32) -> bool {
 /// trailing wildcard is what makes the arms exhaustive: the chain ran nothing
 /// when no key matched.
 fn build_match(engine: &mut Engine, local: u32, cases: &[Case]) -> StmtId {
-    let span = engine.body.stmts[cases[0].stmt].span;
+    let span = cases[0].span;
     let (name, local_type) = {
         let l = &engine.locals()[local as usize];
         (l.name.clone(), l.type_id)

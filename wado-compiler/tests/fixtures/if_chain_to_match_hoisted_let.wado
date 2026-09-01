@@ -1,0 +1,48 @@
+// The arms of an unrolled variadic `for` are separated by the constant binding
+// of its index, so fusing the chain has to move those bindings ahead of the run.
+// Written out here, since the derived shape only appears through `ReflectStruct`.
+// An arm reading a hoisted binding must still see its own, not a later one.
+
+use { println, Stdout } from "core:cli";
+
+fn dispatch(x: i32) -> i32 {
+    let mut out = -1;
+    let k0 = 0;
+    if k0 == x { out = k0 * 10 }
+    let k1 = 1;
+    if k1 == x { out = k1 * 10 }
+    let k2 = 2;
+    if k2 == x { out = k2 * 10 }
+    let k3 = 3;
+    if k3 == x { out = k3 * 10 }
+    let k4 = 4;
+    if k4 == x { out = k4 * 10 }
+    let k5 = 5;
+    if k5 == x { out = k5 * 10 }
+    let k6 = 6;
+    if k6 == x { out = k6 * 10 }
+    let k7 = 7;
+    if k7 == x { out = k7 * 10 }
+    let k8 = 8;
+    if k8 == x { out = k8 * 10 }
+    let k9 = 9;
+    if k9 == x { out = k9 * 10 }
+    let k10 = 10;
+    if k10 == x { out = k10 * 10 }
+    let k11 = 11;
+    if k11 == x { out = k11 * 10 }
+    return out;
+}
+
+export fn run() with Stdout {
+    println(`${dispatch(builtin::black_box(0))}`);
+    println(`${dispatch(builtin::black_box(7))}`);
+    println(`${dispatch(builtin::black_box(11))}`);
+    println(`${dispatch(builtin::black_box(12))}`);
+}
+
+__DATA__
+{
+    "stdout": "0\n70\n110\n-1\n",
+    "wir_expect:O2": ["br_table"]
+}

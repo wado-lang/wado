@@ -170,7 +170,7 @@ touch wado-compiler/tests/e2e.rs
 # Leave a core for the threads wasmtime spawns per e2e test (codegen, epoch
 # ticker, async I/O). Drop back to a fixed 2 if a constrained sandbox SIGSEGVs.
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
-cargo test -- --test-threads="$threads"
+./scripts/exclusive.sh test cargo test -- --test-threads="$threads"
 """
 
 [tasks.test-wado]
@@ -185,7 +185,7 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--exclude 'package-gale/**' --format tap)
 fi
-cargo run -p wado-cli -- test -O2 "${extra_args[@]}"
+./scripts/exclusive.sh test-wado cargo run -p wado-cli -- test -O2 "${extra_args[@]}"
 """
 
 [tasks.test-hooks]
@@ -201,7 +201,7 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)
 fi
-cargo run -p wado-cli -- test -O3 package-gale "${extra_args[@]}"
+./scripts/exclusive.sh test-gale-o3 cargo run -p wado-cli -- test -O3 package-gale "${extra_args[@]}"
 """
 
 [tasks.test-cov]

@@ -222,6 +222,23 @@ pub(super) fn storage_root(body: &Body, expr: ExprId) -> Option<u32> {
     }
 }
 
+/// The local `node` writes, if it writes one: the storage root of an `Assign`
+/// target, or of a `&mut` that hands the place to a callee. One definition of
+/// the write channels, so a whole-body scan and a subtree one cannot disagree.
+pub(super) fn local_written_by(body: &Body, node: NodeRef) -> Option<u32> {
+    let NodeRef::Expr(e) = node else {
+        return None;
+    };
+    match &body.exprs[e].kind {
+        ExprKind::Assign { target, .. } => storage_root(body, *target),
+        ExprKind::Unary {
+            op: NirUnaryOp::MutRef,
+            expr,
+        } => storage_root(body, expr.as_expr()?),
+        _ => None,
+    }
+}
+
 /// Whether the subtree at `node` contains a `Break` targeting `label`. A full
 /// subtree search, so nested blocks that rebind the same label are still
 /// searched — the conservative behaviour the sync-placement passes rely on.

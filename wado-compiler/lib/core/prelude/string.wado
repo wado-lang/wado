@@ -1125,9 +1125,8 @@ impl String {
     }
 
     /// Offset of the first malformed UTF-8 sequence in `bytes`, or `-1` when it
-    /// is well-formed. The ASCII test is written out here rather than left to
-    /// `utf8_sequence_len`, which the inliner declines on size — the multi-byte
-    /// dispatch behind a call is what keeps the per-byte scan a loop.
+    /// is well-formed. The ASCII test is written out rather than left to
+    /// `utf8_sequence_len`, which the inliner declines on size — a call a byte.
     internal fn utf8_error_offset(bytes: &ByteSlice) -> i32 {
         let len = bytes.len();
         let mut i = 0;

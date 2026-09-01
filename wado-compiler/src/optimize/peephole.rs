@@ -126,8 +126,6 @@ pub(super) fn run_peephole(
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);
         if pre_inline {
             // Ordered before `match_rule`, which lowers the `Match` it plants.
-            // Both are pre-inline only: the unrolled chain is one function's own
-            // statements before the inliner starts copying bodies around it.
             rules.push(&if_chain_rule);
             rules.push(&match_rule);
         }

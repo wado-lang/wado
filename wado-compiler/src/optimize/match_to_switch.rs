@@ -14,12 +14,10 @@ use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
 use crate::token::Span;
 
-/// Minimum number of literal arms required for the `br_table` rewrite to be
-/// worthwhile. One indirect branch replaces a cascade the predictor gets right,
-/// so it only pays once the cascade is long: at nine arms `json-catalog`'s
-/// derived deserializers lose 3.6 % on deserialize against the `else if` chain
-/// the same `Match` lowers to otherwise, where `cbor-twitter`'s 12-to-40-arm
-/// structs prefer the table.
+/// Minimum literal arms for the `br_table` rewrite. One indirect branch replaces
+/// a cascade the predictor gets right, so it pays only once the cascade is long:
+/// nine-arm `json-catalog` deserializers lose 3.6 % against the `else if` chain,
+/// where `cbor-twitter`'s 12-to-40-arm structs prefer the table.
 const SWITCH_MIN_CASES: usize = 12;
 
 /// Minimum density (cases / range) for `br_table` to be worthwhile.
