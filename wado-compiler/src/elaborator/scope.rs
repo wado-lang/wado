@@ -95,7 +95,11 @@ pub(super) struct TraitContext {
     /// template name, so only that one is owned — a struct's, a function's or
     /// a method's parameter is substituted, never a receiver, and owning it
     /// changes names for nothing.
-    pub(super) impl_owner: Option<crate::defs::DefId>,
+    /// Paired with the receiver parameter's spelling: only that one heads a
+    /// template name. Another parameter of the same block — a pack member in
+    /// `impl<T: …, ..F: Tag> Schema for T` — is substituted like any other, so
+    /// owning it would name a template that does not exist.
+    pub(super) impl_owner: Option<(crate::defs::DefId, String)>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
     /// `EffectRef::Param` and to record its use→def edge.

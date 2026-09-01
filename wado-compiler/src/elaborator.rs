@@ -962,13 +962,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// or a method's parameter is substituted, never a receiver, so it heads
     /// no template for an owner to distinguish.
     pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
-        match self.annotate_ctx.trait_ctx.impl_owner {
-            Some(owner) if self.annotate_ctx.trait_ctx.type_params.contains_key(written) => {
+        match &self.annotate_ctx.trait_ctx.impl_owner {
+            Some((owner, receiver)) if receiver == written => {
                 crate::name::FqTypeName::binder_owned(
                     written,
                     crate::name::BinderOwner::of_impl(
                         &self.current_module_source,
-                        self.tysys.resolutions.defs().ast_id(owner),
+                        self.tysys.resolutions.defs().ast_id(*owner),
                     ),
                 )
             }
@@ -2058,7 +2058,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // The block names its own receiver binder, both where the template is
         // recorded (below) and for the `T::method()` calls its bodies write.
         let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
-        scope.annotate_ctx.trait_ctx.impl_owner = impl_owner;
+        scope.annotate_ctx.trait_ctx.impl_owner =
+            impl_owner.map(|def| (def, struct_name.clone()));
         scope.register_impl_block_params(impl_block);
 
         if impl_block.is_synthesize_request {
