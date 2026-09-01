@@ -413,7 +413,6 @@ fn "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle
     let len_22: i32;
     let arr_23: ref Array<u8>;
     let used: i32;
-    let status: i32;
     byte_count = max * 24;
     ptr_3 = "mem/realloc"(0, 0, 4, byte_count);
     result = "wasi/stream-read:directory-entry"(handle, ptr_3, max);
@@ -468,12 +467,13 @@ fn "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle
     };
     drop("mem/realloc"(ptr_3, byte_count, 4, 0));
     return struct.new "core:prelude/types.wado//StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>" { items: arr_6, result: __inline_cm_copy_result_7: block -> "core:prelude/types.wado//enum:CopyResult" {
-        status = result & 15;
-        if status == 0 {
+        let __match_scrut_0: i32;
+        __match_scrut_0 = result & 15;
+        if __match_scrut_0 == 0 {
             break __inline_cm_copy_result_7: 0;
-        }
-        if status == 1 {
+        } else if __match_scrut_0 == 1 {
             break __inline_cm_copy_result_7: 1;
+        } else {
         }
         break __inline_cm_copy_result_7: 2;
     } };
@@ -1101,7 +1101,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -1130,12 +1129,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };

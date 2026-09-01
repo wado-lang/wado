@@ -77,18 +77,18 @@ global global:opt_match_thread_multi_arm.wado::__const_obj_1: ref null "core:pre
 fn "opt_match_thread_multi_arm.wado/run"() with Stdout {
     let handle: i32;
     let packed: i64;
-    let rx_22: i32;
-    let tx_23: i32;
+    let rx_46: i32;
+    let tx_47: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_match_thread_multi_arm.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_match_thread_multi_arm.wado::__modules_initialized = 1;
     };
-    rx_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_match_thread_multi_arm.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
-    "core:rt/write_string_to_stream"(tx_23, global:opt_match_thread_multi_arm.wado::__const_obj_1, 1);
+    rx_46 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_47 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_match_thread_multi_arm.wado/__cm_binding__Stdout_write_via_stream"(rx_46);
+    "core:rt/write_string_to_stream"(tx_47, global:opt_match_thread_multi_arm.wado::__const_obj_1, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -153,7 +153,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -182,12 +181,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };

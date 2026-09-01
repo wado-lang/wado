@@ -161,15 +161,15 @@ fn "cold_path_fallthrough.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:cold_path_fallthrough.wado::__modules_initialized = 1;
     };
-    __v1_11 = __inline_run_0____inline_if_let_guard_1: block -> i32 {
+    __v1_11 = __inline_run_0____inline_if_let_guard_4: block -> i32 {
         __v0_10 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 7 };
         if @likely(ref.test "core:prelude/types.wado//Option<i32>::Some"(__v0_10)) {
             v = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__v0_10).payload_0;
-            break __inline_run_0____inline_if_let_guard_1: v + 1;
+            break __inline_run_0____inline_if_let_guard_4: v + 1;
         } else {
         }
         cold_path;
-        break __inline_run_0____inline_if_let_guard_1: -1;
+        break __inline_run_0____inline_if_let_guard_4: -1;
     };
     if @unlikely(__v1_11 != 8) {
         cold_path;
@@ -882,7 +882,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -911,12 +910,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };

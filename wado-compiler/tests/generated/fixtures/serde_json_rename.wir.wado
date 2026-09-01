@@ -4248,7 +4248,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -4277,12 +4276,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };
@@ -4386,12 +4386,12 @@ fn "core:serde/serde_json_rename.wado/ApiResponse^core:serde/Deserialize::deseri
                 index = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_45).payload_0;
                 taken = 0;
                 if index == 0 {
-                    if @unlikely(let __match_scrut_3: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_3 = __sroa_slots_0; ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_3)) {
+                    if @unlikely(let __match_scrut_8: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_8 = __sroa_slots_0; ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_8)) {
                         m_58 = "serde_json_rename.wado/serde_json_rename.wado/ApiResponse^core:prelude/traits.wado/ReflectStruct::members"().0;
-                        let __match_scrut_4: ref null "core:prelude/string.wado//String";
-                        __match_scrut_4 = m_58.wire_override;
-                        name_56 = (if ref.is_null(__match_scrut_4) == 0 -> ref "core:prelude/string.wado//String" {
-                            o_60 = ref.as_non_null(__match_scrut_4);
+                        let __match_scrut_9: ref null "core:prelude/string.wado//String";
+                        __match_scrut_9 = m_58.wire_override;
+                        name_56 = (if ref.is_null(__match_scrut_9) == 0 -> ref "core:prelude/string.wado//String" {
+                            o_60 = ref.as_non_null(__match_scrut_9);
                             o_60;
                         } else {
                             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("status_code"), used: 11 };
@@ -4422,14 +4422,13 @@ fn "core:serde/serde_json_rename.wado/ApiResponse^core:serde/Deserialize::deseri
                     });
                     __sroa_slots_0 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: value_17 };
                     taken = 1;
-                }
-                if 1 == index {
-                    if @unlikely(let __match_scrut_7: ref null "core:prelude/string.wado//String"; __match_scrut_7 = __sroa_slots_1; ref.is_null(__match_scrut_7) == 0) {
+                } else if index == 1 {
+                    if @unlikely(let __match_scrut_4: ref null "core:prelude/string.wado//String"; __match_scrut_4 = __sroa_slots_1; ref.is_null(__match_scrut_4) == 0) {
                         m_66 = "serde_json_rename.wado/serde_json_rename.wado/ApiResponse^core:prelude/traits.wado/ReflectStruct::members"().1;
-                        let __match_scrut_8: ref null "core:prelude/string.wado//String";
-                        __match_scrut_8 = m_66.wire_override;
-                        name_64 = (if ref.is_null(__match_scrut_8) == 0 -> ref "core:prelude/string.wado//String" {
-                            o_68 = ref.as_non_null(__match_scrut_8);
+                        let __match_scrut_5: ref null "core:prelude/string.wado//String";
+                        __match_scrut_5 = m_66.wire_override;
+                        name_64 = (if ref.is_null(__match_scrut_5) == 0 -> ref "core:prelude/string.wado//String" {
+                            o_68 = ref.as_non_null(__match_scrut_5);
                             o_68;
                         } else {
                             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("response_data"), used: 13 };
@@ -4461,6 +4460,7 @@ fn "core:serde/serde_json_rename.wado/ApiResponse^core:serde/Deserialize::deseri
                     });
                     __sroa_slots_1 = __local_35;
                     taken = 1;
+                } else {
                 }
                 if taken == 0 {
                     __local_48 = "core:json/core:json/JsonDeserializer::skip_value"(sd.de, sd.depth);
@@ -4484,21 +4484,21 @@ fn "core:serde/serde_json_rename.wado/ApiResponse^core:serde/Deserialize::deseri
         cold_path;
         return 1, ref.null none, "serde_json_rename.wado/$value_copy$core:serde/DeserializeError"(__qm_e_21);
     }
-    return 0, let __match_scrut_13: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_13 = __sroa_slots_0; __sroa_fields_0 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_13) -> i32 {
-        local.tee value_25(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_13).payload_0);
+    return 0, let __match_scrut_14: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_14 = __sroa_slots_0; __sroa_fields_0 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_14) -> i32 {
+        local.tee value_25(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_14).payload_0);
     } else {
-        return 1, ref.null none, m_73 = "serde_json_rename.wado/serde_json_rename.wado/ApiResponse^core:prelude/traits.wado/ReflectStruct::members"().0; v_76 = let __match_scrut_14: ref null "core:prelude/string.wado//String"; __match_scrut_14 = m_73.wire_override; (if ref.is_null(__match_scrut_14) == 0 -> ref "core:prelude/string.wado//String" {
-            o_75 = ref.as_non_null(__match_scrut_14);
+        return 1, ref.null none, m_73 = "serde_json_rename.wado/serde_json_rename.wado/ApiResponse^core:prelude/traits.wado/ReflectStruct::members"().0; v_76 = let __match_scrut_15: ref null "core:prelude/string.wado//String"; __match_scrut_15 = m_73.wire_override; (if ref.is_null(__match_scrut_15) == 0 -> ref "core:prelude/string.wado//String" {
+            o_75 = ref.as_non_null(__match_scrut_15);
             o_75;
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("status_code"), used: 11 };
         }); name_77 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_76.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_76.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: v_76.used }; struct.new "core:serde//DeserializeError" { kind: 1, message: ref.as_non_null(__local_1_78 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_1_78, global:core:serde::__const_obj_46); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_1_78, name_77); __local_1_78), offset: -1_i64 };
-    }); let __match_scrut_15: ref null "core:prelude/string.wado//String"; __match_scrut_15 = __sroa_slots_1; __sroa_fields_1 = (if ref.is_null(__match_scrut_15) == 0 -> ref "core:prelude/string.wado//String" {
-        __local_43 = ref.as_non_null(__match_scrut_15);
+    }); let __match_scrut_16: ref null "core:prelude/string.wado//String"; __match_scrut_16 = __sroa_slots_1; __sroa_fields_1 = (if ref.is_null(__match_scrut_16) == 0 -> ref "core:prelude/string.wado//String" {
+        __local_43 = ref.as_non_null(__match_scrut_16);
         __local_43;
     } else {
-        return 1, ref.null none, m_79 = "serde_json_rename.wado/serde_json_rename.wado/ApiResponse^core:prelude/traits.wado/ReflectStruct::members"().1; v_82 = let __match_scrut_16: ref null "core:prelude/string.wado//String"; __match_scrut_16 = m_79.wire_override; (if ref.is_null(__match_scrut_16) == 0 -> ref "core:prelude/string.wado//String" {
-            o_81 = ref.as_non_null(__match_scrut_16);
+        return 1, ref.null none, m_79 = "serde_json_rename.wado/serde_json_rename.wado/ApiResponse^core:prelude/traits.wado/ReflectStruct::members"().1; v_82 = let __match_scrut_17: ref null "core:prelude/string.wado//String"; __match_scrut_17 = m_79.wire_override; (if ref.is_null(__match_scrut_17) == 0 -> ref "core:prelude/string.wado//String" {
+            o_81 = ref.as_non_null(__match_scrut_17);
             o_81;
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("response_data"), used: 13 };

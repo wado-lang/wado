@@ -9057,26 +9057,38 @@ pub fn "core:prelude/string.wado/String::truncate_chars"(self: &mut String, char
 }
 
 pub fn "core:prelude/string.wado/String::from_utf8_slice"(bytes: Slice<u8>) -> Result<String, String> {
+    let bad: i32 = "core::prelude/string.wado::core:prelude/string.wado/String::utf8_error_offset"(&bytes);
+    if (bad >= 0) {
+        core::builtin::cold_path();
+        return Result<String, String>::Err(__tmpl: {
+            let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(38);
+            __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"invalid UTF-8 at byte ", used: 22 });
+            let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+            Box<i32> { value: bad }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+            break __tmpl: __r;
+        });
+    }
+    return Result<String, String>::Ok(String { repr: bytes."core:prelude/slice.wado/Slice<u8>::to_array"() as Array<u8>, used: bytes."core:prelude/slice.wado/Slice<u8>::len"() });
+}
+
+fn "core:prelude/string.wado/String::utf8_error_offset"(bytes: &Slice<u8>) -> i32 {
     let len: i32 = bytes."core:prelude/slice.wado/Slice<u8>::len"();
     let mut i: i32 = 0;
     loop {
         if !(i < len) {
             break;
         }
-        let advance: i32 = "core::prelude/string.wado::core:prelude/string.wado/String::utf8_sequence_len"(&bytes, i, len);
-        if (advance == 0) {
-            core::builtin::cold_path();
-            return Result<String, String>::Err(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(38);
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"invalid UTF-8 at byte ", used: 22 });
-                let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: i }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
-                break __tmpl: __r;
-            });
+        let mut advance: i32 = 1;
+        if (bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"(i) >= 128) {
+            advance = "core::prelude/string.wado::core:prelude/string.wado/String::utf8_sequence_len"(bytes, i, len);
+            if (advance == 0) {
+                core::builtin::cold_path();
+                return i;
+            }
         }
         i = (i + advance);
     }
-    return Result<String, String>::Ok(String { repr: bytes."core:prelude/slice.wado/Slice<u8>::to_array"() as Array<u8>, used: bytes."core:prelude/slice.wado/Slice<u8>::len"() });
+    return -1;
 }
 
 fn "core:prelude/string.wado/String::utf8_sequence_len"(bytes: &Slice<u8>, start: i32, len: i32) -> i32 {
@@ -11911,6 +11923,10 @@ pub fn "core:prelude/slice.wado/Slice<u8>::get_unchecked"(self: &Slice<u8>, inde
     return core::builtin::array_get_value::<u8>(self.repr, (self.start + index));
 }
 
+pub fn "core:prelude/slice.wado/Slice<u8>::len"(self: &Slice<u8>) -> i32 {
+    return (self.end - self.start);
+}
+
 pub fn "core:prelude/slice.wado/Slice<u8>::to_array"(self: &Slice<u8>) -> Array<u8> {
     let len: i32 = (self.end - self.start);
     let mut out: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(core::rt::i32_max(len, 0));
@@ -11918,10 +11934,6 @@ pub fn "core:prelude/slice.wado/Slice<u8>::to_array"(self: &Slice<u8>) -> Array<
         "core::builtin::core/builtin/array_copy<u8>"(&mut out, 0, self.repr, self.start, len);
     }
     return out;
-}
-
-pub fn "core:prelude/slice.wado/Slice<u8>::len"(self: &Slice<u8>) -> i32 {
-    return (self.end - self.start);
 }
 
 pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
