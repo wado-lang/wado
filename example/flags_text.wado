@@ -44,13 +44,13 @@ fn parse<L: ReflectFlags<Members = [..M]>, ..M>(text: String) -> Result<L, Strin
             }
             if !found {
                 return Result::Err(
-                    `${ReflectFlags::<L>::type_name()} has no member \`${name}\``,
+                    `${Reflect::<L>::type_name()} has no member \`${name}\``,
                 );
             }
         }
     }
     let Some(value) = ReflectFlags::<L>::from_bits(raw) else {
-        return Result::Err(`unknown bits for ${ReflectFlags::<L>::type_name()}`);
+        return Result::Err(`unknown bits for ${Reflect::<L>::type_name()}`);
     };
     return Result::Ok(value);
 }

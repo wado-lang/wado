@@ -1,0 +1,22 @@
+// `Reflect` is sealed like every kind under it: a user impl is a compile error.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Reflect for Point {
+    fn type_name() -> String {
+        return "forged";
+    }
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "cannot implement `Reflect`: it is a sealed"
+}

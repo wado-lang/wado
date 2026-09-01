@@ -9,7 +9,7 @@ trait LibInspect {
 
 impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> LibInspect for T {
     fn lib_inspect(&self) -> String {
-        let type_name = ReflectVariant::<T>::type_name();
+        let type_name = Reflect::<T>::type_name();
         let mut out = "";
         for let c of ReflectVariant::<T>::members() {
             if c.holds(self) {

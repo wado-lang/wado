@@ -1,0 +1,64 @@
+// `type_name()` is declared once on the identity root, not per kind, and a kind
+// bound reaches it through the supertrait (WEP 2026-06-13).
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+variant Shape {
+    Circle(f64),
+    Empty,
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+flags Perm {
+    Read,
+    Write,
+}
+
+struct Wrap<T> {
+    value: T,
+}
+
+// Named through the root and reached no other way, so nothing else mints it.
+struct OnlyNamed<T> {
+    value: T,
+}
+
+// A kind bound carries the root with it: no `T: Reflect` is written here.
+fn name_of<T: ReflectStruct<FieldTypes = [..F]>, ..F>() -> String {
+    return Reflect::<T>::type_name();
+}
+
+fn root_name_of<T: Reflect>() -> String {
+    return Reflect::<T>::type_name();
+}
+
+test "every kind names itself through the root" {
+    assert Reflect::<Wrap<i32>>::type_name() == "Wrap";
+    assert Reflect::<OnlyNamed<String>>::type_name() == "OnlyNamed";
+    assert Reflect::<Point>::type_name() == "Point";
+    assert Reflect::<Shape>::type_name() == "Shape";
+    assert Reflect::<Color>::type_name() == "Color";
+    assert Reflect::<Perm>::type_name() == "Perm";
+}
+
+test "a generic subject resolves at monomorphization" {
+    assert name_of::<Point>() == "Point";
+    assert name_of::<Wrap<i32>>() == "Wrap";
+}
+
+test "the root bound admits every kind" {
+    assert root_name_of::<Point>() == "Point";
+    assert root_name_of::<Shape>() == "Shape";
+    assert root_name_of::<Color>() == "Color";
+    assert root_name_of::<Perm>() == "Perm";
+}
+
+__DATA__
+{"test": {}}

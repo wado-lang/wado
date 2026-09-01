@@ -561,7 +561,7 @@ fn generate_struct_reflect_methods(
         receiver,
         &type_table.borrow().struct_head_decl_name(*def),
         env.string_type,
-        reflect_trait_name,
+        &env.root_trait_name,
         &env.type_name_method,
         span,
     );
@@ -748,6 +748,9 @@ struct ReflectSynthEnv {
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
     member_struct_def: crate::defs::DefId,
+    /// `type_name` is declared on the identity root, not on the kind, so the
+    /// mangled name it is minted under names `Reflect` (WEP 2026-06-13).
+    root_trait_name: crate::name::FqTraitName,
     type_name_method: String,
     members_method: String,
     from_fields_method: String,
@@ -780,9 +783,8 @@ impl ReflectSynthEnv {
             case_style_type,
             member_struct_name,
             member_struct_def,
-            type_name_method: items
-                .method_name(CompilerItem::ReflectStructTypeName)
-                .to_string(),
+            root_trait_name: items.trait_fq(CompilerItem::Reflect),
+            type_name_method: items.method_name(CompilerItem::ReflectTypeName).to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectStructMembers)
                 .to_string(),
@@ -1489,6 +1491,7 @@ struct ReflectVariantSynthEnv {
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
     member_struct_def: crate::defs::DefId,
+    root_trait_name: crate::name::FqTraitName,
     type_name_method: String,
     discriminant_method: String,
     cases_method: String,
@@ -1507,9 +1510,8 @@ impl ReflectVariantSynthEnv {
             string_type,
             member_struct_name,
             member_struct_def,
-            type_name_method: items
-                .method_name(CompilerItem::ReflectVariantTypeName)
-                .to_string(),
+            root_trait_name: items.trait_fq(CompilerItem::Reflect),
+            type_name_method: items.method_name(CompilerItem::ReflectTypeName).to_string(),
             discriminant_method: items
                 .method_name(CompilerItem::ReflectVariantDiscriminant)
                 .to_string(),
@@ -1544,7 +1546,7 @@ fn generate_variant_reflect_methods(
         &target.receiver,
         target.receiver.head().name(),
         env.string_type,
-        variant_trait_name,
+        &env.root_trait_name,
         &env.type_name_method,
         span,
     );
@@ -2172,7 +2174,6 @@ enum ScalarKind {
 struct ScalarReflectItems {
     kind: ScalarKind,
     member_struct: CompilerItem,
-    type_name: CompilerItem,
     value: CompilerItem,
     from_value: CompilerItem,
     members: CompilerItem,
@@ -2182,7 +2183,6 @@ struct ScalarReflectItems {
 const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
     kind: ScalarKind::Enum,
     member_struct: CompilerItem::ReflectEnumCase,
-    type_name: CompilerItem::ReflectEnumTypeName,
     value: CompilerItem::ReflectEnumDiscriminant,
     from_value: CompilerItem::ReflectEnumFromDiscriminant,
     members: CompilerItem::ReflectEnumMembers,
@@ -2192,7 +2192,6 @@ const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
 const REFLECT_FLAGS_ITEMS: ScalarReflectItems = ScalarReflectItems {
     kind: ScalarKind::Flags,
     member_struct: CompilerItem::ReflectFlagsBit,
-    type_name: CompilerItem::ReflectFlagsTypeName,
     value: CompilerItem::ReflectFlagsBits,
     from_value: CompilerItem::ReflectFlagsFromBits,
     members: CompilerItem::ReflectFlagsMembers,
@@ -2209,6 +2208,7 @@ struct ScalarReflectSynthEnv {
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
     member_struct_def: crate::defs::DefId,
+    root_trait_name: crate::name::FqTraitName,
     type_name_method: String,
     /// `discriminant(&self)` on an enum, `bits(&self)` on a flags type.
     value_method: String,
@@ -2230,7 +2230,8 @@ impl ScalarReflectSynthEnv {
             case_style_type,
             member_struct_name,
             member_struct_def,
-            type_name_method: items.method_name(kind.type_name).to_string(),
+            root_trait_name: items.trait_fq(CompilerItem::Reflect),
+            type_name_method: items.method_name(CompilerItem::ReflectTypeName).to_string(),
             value_method: items.method_name(kind.value).to_string(),
             from_value_method: items.method_name(kind.from_value).to_string(),
             members_method: items.method_name(kind.members).to_string(),
@@ -2254,7 +2255,7 @@ fn generate_enum_reflect_methods(
         &target.receiver,
         target.receiver.head().name(),
         env.string_type,
-        enum_trait_name,
+        &env.root_trait_name,
         &env.type_name_method,
         span,
     );
@@ -2621,7 +2622,7 @@ fn generate_flags_reflect_methods(
         &target.receiver,
         target.receiver.head().name(),
         env.string_type,
-        flags_trait_name,
+        &env.root_trait_name,
         &env.type_name_method,
         span,
     );

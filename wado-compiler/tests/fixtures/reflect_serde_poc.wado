@@ -163,7 +163,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: FromWire> FromWire for T {
                 return Result::Ok(ReflectStruct::<T>::from_fields([..F::from_wire_next(&mut cursor)?]));
             },
             _ => {
-                return mismatch(&`an object for ${ReflectStruct::<T>::type_name()}`);
+                return mismatch(&`an object for ${Reflect::<T>::type_name()}`);
             },
         }
     }
@@ -202,11 +202,11 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: FromWire> FromWire for V {
                     }
                 }
                 return Result::Err(WireError {
-                    message: `unknown case ${entries[0].key} of ${ReflectVariant::<V>::type_name()}`,
+                    message: `unknown case ${entries[0].key} of ${Reflect::<V>::type_name()}`,
                 });
             },
             _ => {
-                return mismatch(&`an object for ${ReflectVariant::<V>::type_name()}`);
+                return mismatch(&`an object for ${Reflect::<V>::type_name()}`);
             },
         }
     }
@@ -235,11 +235,11 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> FromWire for E {
                     }
                 }
                 return Result::Err(WireError {
-                    message: `unknown case ${text} of ${ReflectEnum::<E>::type_name()}`,
+                    message: `unknown case ${text} of ${Reflect::<E>::type_name()}`,
                 });
             },
             _ => {
-                return mismatch(&`text for ${ReflectEnum::<E>::type_name()}`);
+                return mismatch(&`text for ${Reflect::<E>::type_name()}`);
             },
         }
     }
@@ -275,7 +275,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> FromWire for L {
                     }
                     if !found {
                         return Result::Err(WireError {
-                            message: `unknown bit ${name} of ${ReflectFlags::<L>::type_name()}`,
+                            message: `unknown bit ${name} of ${Reflect::<L>::type_name()}`,
                         });
                     }
                 }
@@ -284,12 +284,12 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> FromWire for L {
                         return Result::Ok(v);
                     },
                     Option::None => {
-                        return mismatch(&`known bits of ${ReflectFlags::<L>::type_name()}`);
+                        return mismatch(&`known bits of ${Reflect::<L>::type_name()}`);
                     },
                 }
             },
             _ => {
-                return mismatch(&`an array for ${ReflectFlags::<L>::type_name()}`);
+                return mismatch(&`an array for ${Reflect::<L>::type_name()}`);
             },
         }
     }

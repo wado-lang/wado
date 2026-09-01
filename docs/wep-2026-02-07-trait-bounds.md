@@ -85,7 +85,6 @@ The following are in scope:
 
 The following are out of scope (future work):
 
-- `where` clauses
 - Trait objects (`&dyn Trait`)
 - Higher-kinded bounds
 - Default trait method implementations

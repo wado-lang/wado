@@ -29,6 +29,7 @@ pub(super) enum OnBoundTrait {
     Serialize,
     Deserialize,
     Default,
+    Reflect,
     ReflectStruct,
     ReflectVariant,
     ReflectEnum,
@@ -49,6 +50,7 @@ impl OnBoundTrait {
             Self::Serialize => CompilerItem::Serialize,
             Self::Deserialize => CompilerItem::Deserialize,
             Self::Default => CompilerItem::Default,
+            Self::Reflect => CompilerItem::Reflect,
             Self::ReflectStruct => CompilerItem::ReflectStruct,
             Self::ReflectVariant => CompilerItem::ReflectVariant,
             Self::ReflectEnum => CompilerItem::ReflectEnum,
@@ -68,6 +70,7 @@ impl OnBoundTrait {
             CompilerItem::Serialize => Self::Serialize,
             CompilerItem::Deserialize => Self::Deserialize,
             CompilerItem::Default => Self::Default,
+            CompilerItem::Reflect => Self::Reflect,
             CompilerItem::ReflectStruct => Self::ReflectStruct,
             CompilerItem::ReflectVariant => Self::ReflectVariant,
             CompilerItem::ReflectEnum => Self::ReflectEnum,
@@ -100,7 +103,11 @@ impl OnBoundTrait {
     pub(super) fn is_reflect(self) -> bool {
         matches!(
             self,
-            Self::ReflectStruct | Self::ReflectVariant | Self::ReflectEnum | Self::ReflectFlags
+            Self::Reflect
+                | Self::ReflectStruct
+                | Self::ReflectVariant
+                | Self::ReflectEnum
+                | Self::ReflectFlags
         )
     }
 }
@@ -769,6 +776,8 @@ impl TypeSystem {
                 of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
             } else if trait_name == items.trait_name(CompilerItem::Default) {
                 of(CompilerItem::Default, OnBoundTrait::Default)
+            } else if trait_name == items.trait_name(CompilerItem::Reflect) {
+                of(CompilerItem::Reflect, OnBoundTrait::Reflect)
             } else if trait_name == items.trait_name(CompilerItem::ReflectStruct) {
                 of(CompilerItem::ReflectStruct, OnBoundTrait::ReflectStruct)
             } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
@@ -1190,6 +1199,16 @@ impl TypeSystem {
         // shared eligibility predicate accepts it, so nothing needs recording
         // for synthesis to find later.
         let plain_reflect_subject = match (&resolved, on_bound) {
+            // The identity root holds for every kind, and unlike a kind bound it
+            // is ungated by field visibility: naming a type is not enumerating
+            // it (WEP 2026-06-13).
+            (
+                ResolvedType::Struct { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. },
+                Some(OnBoundTrait::Reflect),
+            ) => true,
             (ResolvedType::Struct { def, .. }, Some(OnBoundTrait::ReflectStruct)) => def
                 .decl()
                 .and_then(|d| scope.struct_fields_of(d))
@@ -1225,6 +1244,13 @@ impl TypeSystem {
                 }
                 Some(OnBoundTrait::ReflectVariant) => {
                     scope.variant_cases_of(*def).is_some() && self.is_reflect_eligible(type_id)
+                }
+                // Only a struct or a variant takes type parameters, so an
+                // instance of either names itself through the root.
+                Some(OnBoundTrait::Reflect) => {
+                    (scope.variant_cases_of(*def).is_some()
+                        || scope.struct_fields_of(*def).is_some())
+                        && self.is_reflect_eligible(type_id)
                 }
                 _ => false,
             }
@@ -1585,18 +1611,20 @@ impl TypeSystem {
             return false;
         };
         let subject = match on_bound {
-            OnBoundTrait::ReflectStruct => scope
-                .struct_fields_of(def)
-                .map(|info| info.module_source.clone()),
-            OnBoundTrait::ReflectVariant => scope
-                .variant_cases_of(def)
-                .map(|info| info.module_source.clone()),
-            OnBoundTrait::ReflectEnum => scope
-                .enum_cases_of(def)
-                .map(|info| info.module_source.clone()),
-            OnBoundTrait::ReflectFlags => scope
-                .flags_members_of(def)
-                .map(|info| info.module_source.clone()),
+            // The root asks for a name, not for a shape, so whichever kind
+            // answers answers for it.
+            OnBoundTrait::Reflect => [
+                OnBoundTrait::ReflectStruct,
+                OnBoundTrait::ReflectVariant,
+                OnBoundTrait::ReflectEnum,
+                OnBoundTrait::ReflectFlags,
+            ]
+            .into_iter()
+            .find_map(|kind| declaring_module_of_kind(scope, def, kind)),
+            OnBoundTrait::ReflectStruct
+            | OnBoundTrait::ReflectVariant
+            | OnBoundTrait::ReflectEnum
+            | OnBoundTrait::ReflectFlags => declaring_module_of_kind(scope, def, on_bound),
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
@@ -1620,6 +1648,32 @@ impl TypeSystem {
             .borrow_mut()
             .record_bound_driven_synth_request(&head, &module_source, &key);
         true
+    }
+}
+
+/// The module declaring `def`, when `def` is the kind `on_bound` names.
+/// `None` for any other kind, and for a bound that is not a reflection kind.
+fn declaring_module_of_kind(
+    scope: &TypeLookup,
+    def: crate::defs::DefId,
+    on_bound: OnBoundTrait,
+) -> Option<ModuleSource> {
+    match on_bound {
+        OnBoundTrait::ReflectStruct => scope.struct_fields_of(def).map(|i| i.module_source.clone()),
+        OnBoundTrait::ReflectVariant => {
+            scope.variant_cases_of(def).map(|i| i.module_source.clone())
+        }
+        OnBoundTrait::ReflectEnum => scope.enum_cases_of(def).map(|i| i.module_source.clone()),
+        OnBoundTrait::ReflectFlags => scope.flags_members_of(def).map(|i| i.module_source.clone()),
+        OnBoundTrait::Reflect
+        | OnBoundTrait::Eq
+        | OnBoundTrait::Ord
+        | OnBoundTrait::Serialize
+        | OnBoundTrait::Deserialize
+        | OnBoundTrait::Default
+        | OnBoundTrait::Ref
+        | OnBoundTrait::RefMut
+        | OnBoundTrait::Inspect => None,
     }
 }
 

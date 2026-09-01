@@ -35,7 +35,7 @@ impl Emit for bool {
 
 impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Emit> Emit for T {
     fn emit<S: Sink>(&self, s: &mut S) {
-        s.put(&ReflectStruct::<T>::type_name());
+        s.put(&Reflect::<T>::type_name());
         s.put(&"(");
         for let f of ReflectStruct::<T>::members() {
             f.get(self).emit::<S>(s);
