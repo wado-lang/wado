@@ -138,11 +138,12 @@ by the current crate. Because `core:prelude` owns tuples, the standard library c
 variadic tuple impls; downstream crates may write variadic impls only for their own traits.
 
 These two rules rank impls whose target is the tuple family. A trait's _value_
-blankets — a bare type parameter as target, selected by their bounds — are
-ranked separately, and their overlap is a use-site error, not a definition-time
-one: several per trait are the point, and whether two bounds can both hold is
-not decidable in an open world. The full order, and where these two rules sit
-in it, is [Trait Resolution](./wep-2026-09-01-trait-resolution.md).
+blankets are ranked separately. A value blanket targets a bare type parameter
+and is selected by its bounds. Two of them overlapping is a use-site error, not
+a definition-time one, for two reasons: a trait is meant to carry several, and
+an open world cannot decide whether two bounds can both hold. For the full order,
+and where these two rules sit in it, see
+[Trait Resolution](./wep-2026-09-01-trait-resolution.md).
 
 ### 6. Multi-Pack (Limited)
 
