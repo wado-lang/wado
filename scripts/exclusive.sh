@@ -10,7 +10,13 @@ set -euo pipefail
 name=$1
 shift
 
-command -v flock >/dev/null || exec "$@"
+# Degrade loudly rather than refuse: the lock catches a mistake, it is not a
+# correctness requirement, and macOS ships no `flock` — failing closed there
+# would leave the suite unrunnable to enforce a convenience.
+if ! command -v flock >/dev/null; then
+    echo "mise: no flock, running '$name' unlocked — a second one will not be refused." >&2
+    exec "$@"
+fi
 
 mkdir -p target
 lock="target/.$name.lock"

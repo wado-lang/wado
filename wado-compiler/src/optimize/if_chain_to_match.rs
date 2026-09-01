@@ -7,9 +7,10 @@
 //! declared field for *every* field on the wire. Distinct constants over a local
 //! no arm writes are what make the guards exclusive.
 //!
-//! No width threshold here: the `Match` lowers to an early-exit `else if`,
-//! always fewer comparisons than the flat run. `match_to_switch` holds the one
-//! threshold, trading that cascade for a single indirect branch.
+//! No width threshold here: the `Match` lowers to an early-exit `else if`, which
+//! never tests more keys than the flat run and stops at the arm that fires.
+//! `match_to_switch` holds the one threshold, trading that cascade for a single
+//! indirect branch.
 
 use super::arena_query::local_written_by;
 use crate::compiler_trace;

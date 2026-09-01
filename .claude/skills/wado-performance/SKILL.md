@@ -35,10 +35,11 @@ flat-CST rewrite that cut a benchmark ~3× on dev gained ~1.47× on release,
 because release GC was only ~⅓ of wall-clock to begin with. Pure compute does not
 inflate, so a compute-bound win carries over intact.
 
-**A sample lands on the next function entered, not where the time went.** The
-guest profiler samples on an epoch deadline, and wasmtime checks the epoch at
-function entries and loop headers, so a small leaf called once per unit of work
-absorbs the straight-line cost of whatever ran just before it. A derived
+**A sample lands at the next epoch check, not where the time went.** The guest
+profiler samples on an epoch deadline, and wasmtime checks the epoch at function
+entries and loop headers — so straight-line code is charged to whichever of
+those it reaches next, and a small leaf called once per unit of work collects
+what ran just before it. A derived
 deserializer's field-dispatch chain reported as **73% self in
 `deserialize_i32`** on an 80-field struct, and 19% in `deserialize_bool` on
 cbor-twitter — neither function is more than a bounds check and two compares.
