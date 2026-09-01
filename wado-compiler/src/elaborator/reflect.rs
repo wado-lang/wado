@@ -190,6 +190,14 @@ impl ScalarMethods {
     }
 }
 
+/// Which resolver a `Trait::<T>::method()` call on a reflection trait routes to.
+pub(super) enum ReflectDispatch {
+    Root,
+    Struct,
+    Variant,
+    Scalar(ScalarReflectSpec),
+}
+
 /// How the missing-pack-bound diagnostic spells the binding each payload kind
 /// needs on a generic subject.
 const STRUCT_PACK_BOUND: &str = "FieldTypes = [..F]";
@@ -818,7 +826,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// applies the same module check `on_bound` dispatch uses, so a user type or
     /// trait that happens to be named `ReflectStruct` is not hijacked. `method` is
     /// matched through the compiler-item registry so a stdlib rename flows through.
-    pub(super) fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
+    fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
         if self
             .tysys
             .classify_on_bound_trait(&self.type_lookup(), prefix)
@@ -829,9 +837,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         StructMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
     }
 
+    /// The resolver `prefix::method` routes to, or `None` when the prefix names
+    /// no reflection trait in this scope.
+    pub(super) fn reflect_dispatch_of(
+        &self,
+        prefix: &str,
+        method: &str,
+    ) -> Option<ReflectDispatch> {
+        if self.is_reflect_root_trait_call(prefix, method) {
+            return Some(ReflectDispatch::Root);
+        }
+        if self.is_reflect_trait_call(prefix, method) {
+            return Some(ReflectDispatch::Struct);
+        }
+        if self.is_reflect_variant_trait_call(prefix, method) {
+            return Some(ReflectDispatch::Variant);
+        }
+        [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS]
+            .into_iter()
+            .find(|spec| self.is_reflect_scalar_trait_call(*spec, prefix, method))
+            .map(ReflectDispatch::Scalar)
+    }
+
     /// Whether `prefix::method` names `Reflect::<T>::type_name`. Same scope
     /// discipline as [`Self::is_reflect_trait_call`].
-    pub(super) fn is_reflect_root_trait_call(&self, prefix: &str, method: &str) -> bool {
+    fn is_reflect_root_trait_call(&self, prefix: &str, method: &str) -> bool {
         if self
             .tysys
             .classify_on_bound_trait(&self.type_lookup(), prefix)
@@ -920,7 +950,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
     /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    pub(super) fn is_reflect_variant_trait_call(&self, prefix: &str, method: &str) -> bool {
+    fn is_reflect_variant_trait_call(&self, prefix: &str, method: &str) -> bool {
         if self
             .tysys
             .classify_on_bound_trait(&self.type_lookup(), prefix)
@@ -1176,7 +1206,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `prefix::method` names a member of the scalar-kind reflection
     /// trait `spec` describes (`ReflectEnum` / `ReflectFlags`). Same scope
     /// discipline as [`Self::is_reflect_trait_call`].
-    pub(super) fn is_reflect_scalar_trait_call(
+    fn is_reflect_scalar_trait_call(
         &self,
         spec: ScalarReflectSpec,
         prefix: &str,

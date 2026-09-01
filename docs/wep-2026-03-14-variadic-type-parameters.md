@@ -261,13 +261,17 @@ struct with fields `f_0: F_0, f_1: F_1, …`:
 - `Reflect::<S>::type_name()` returns the struct name as a string (the identity
   root, reached through `ReflectStruct`'s supertrait)
 
-**Why compiler-synthesized**: `ReflectStruct` returns `Self::Members`, which is a concrete tuple
-type specific to each struct. Without `any`, the compiler must generate the implementation
-at compile time for each struct individually.
+#### Why compiler-synthesized
 
-**Why only in monomorphized contexts**: `ReflectStruct::<T>::members()` and
-`Reflect::<T>::type_name()` are only callable when `T` is a concrete struct type, because
-the implementation is generated per struct, not for a generic `T`.
+`ReflectStruct` returns `Self::Members`, which is a concrete tuple type specific to each
+struct. Without `any`, the compiler must generate the implementation at compile time for
+each struct individually.
+
+#### Why only in monomorphized contexts
+
+`ReflectStruct::<T>::members()` and `Reflect::<T>::type_name()` are only callable when `T`
+is a concrete struct type, because the implementation is generated per struct, not for a
+generic `T`.
 
 ### 11. `where` Clause — Type Pack Pattern Matching
 

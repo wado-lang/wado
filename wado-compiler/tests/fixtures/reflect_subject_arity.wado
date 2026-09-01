@@ -1,0 +1,17 @@
+// A reflect trait takes exactly one subject: a second type argument is a clean
+// compile error, not a silently ignored one.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "unreachable" {
+    assert Reflect::<Point, i32>::type_name() == "Point";
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "one subject type argument, found 2"
+}
