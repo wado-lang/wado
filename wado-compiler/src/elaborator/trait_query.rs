@@ -12,10 +12,9 @@ use crate::name::{FqTypeName, Receiver, RefKind, TypeHead};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-use super::scope::BinderInScope;
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::scope::Scope;
+use super::scope::{BinderInScope, Scope};
 use super::sig::TraitSig;
 use super::trait_env::InheritedBound;
 use super::types::{
@@ -615,13 +614,9 @@ impl TypeSystem {
     }
 
     /// Whether `type_id` satisfies `trait_` *at the type itself*, without
-    /// following a newtype to its base.
-    ///
-    /// Dispatch lets a newtype inherit its base's impls, which is what
-    /// [`Self::type_implements_trait`] answers. Blanket selection needs the
-    /// other question: a bound the newtype carries must outrank one only its
-    /// base carries, or the base's blanket silently claims the receiver
-    /// (WEP 2026-06-25 Trait Derivation Policy).
+    /// following a newtype to its base — the question rank 2 of the selection
+    /// order asks, where [`Self::type_implements_trait`] answers dispatch's
+    /// (`docs/wep-2026-09-01-trait-resolution.md`).
     pub(super) fn type_implements_trait_here(
         &self,
         ctx: &Scope,
@@ -2387,14 +2382,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // → set current_type_params["T"] = (0, u8_typeid)
             for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
                 if let Some(&concrete_arg) = concrete_type_args.get(i) {
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .insert(
-                            tp_name.clone(),
-                            BinderInScope::undeclared(i as u32, concrete_arg),
-                        );
+                    scope.annotate_ctx.trait_ctx.type_params.insert(
+                        tp_name.clone(),
+                        BinderInScope::undeclared(i as u32, concrete_arg),
+                    );
                 }
             }
             // Add bounds from type param declarations
@@ -2498,14 +2489,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
             scope.annotate_ctx.trait_ctx.self_type = Some(concrete_type_id);
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(
-                    info.blanket_param_name.clone(),
-                    BinderInScope::undeclared(0, concrete_type_id),
-                );
+            scope.annotate_ctx.trait_ctx.type_params.insert(
+                info.blanket_param_name.clone(),
+                BinderInScope::undeclared(0, concrete_type_id),
+            );
             scope
                 .annotate_ctx
                 .trait_ctx

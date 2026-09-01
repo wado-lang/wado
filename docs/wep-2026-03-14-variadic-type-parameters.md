@@ -137,13 +137,12 @@ if either `Trait` or the tuple type family (`type [...T]` from `core:prelude`) i
 by the current crate. Because `core:prelude` owns tuples, the standard library can write
 variadic tuple impls; downstream crates may write variadic impls only for their own traits.
 
-These two rules rank impls whose target is the tuple family. A trait's *value*
-blankets — target a bare type parameter, selected by their bounds — are ranked
-separately, and their overlap is a use-site error rather than a definition-time
+These two rules rank impls whose target is the tuple family. A trait's _value_
+blankets — a bare type parameter as target, selected by their bounds — are
+ranked separately, and their overlap is a use-site error, not a definition-time
 one: several per trait are the point, and whether two bounds can both hold is
-not decidable in an open world. See
-[Trait Resolution](./wep-2026-09-01-trait-resolution.md) for the full order and
-where these two rules sit in it.
+not decidable in an open world. The full order, and where these two rules sit
+in it, is [Trait Resolution](./wep-2026-09-01-trait-resolution.md).
 
 ### 6. Multi-Pack (Limited)
 

@@ -1,13 +1,10 @@
-// A newtype must take the value blanket whose bound *it* satisfies, not one its
-// base satisfies. `Wrapped` carries `impl Limit for Wrapped`; its base `Inner`
-// is a struct and so satisfies `ReflectStruct`, which `Wrapped` does not
-// (`ReflectStruct::<Wrapped>::type_name()` is not a function). Blanket
-// selection peels the receiver to its base before checking bounds, so the
-// `ReflectStruct` blanket wins and `T` binds to `Inner`.
-//
-// Trait Derivation Policy (WEP 2026-06-25): "A hand-written impl always wins
-// over a derived one — a newtype most of all, since it exists to be a type
-// distinct from its base." Issue #1932.
+// A newtype takes the value blanket whose bound *it* satisfies, not one only
+// its base satisfies. `Wrapped` carries `impl Limit for Wrapped`; its base
+// `Inner` is a struct and so satisfies `ReflectStruct`, which `Wrapped` does
+// not. Both blankets are candidates, and a bound holding at the receiver
+// outranks one holding after a peel — rank 2 of the selection order
+// (WEP 2026-09-01), from WEP 2026-06-25's "a hand-written impl always wins over
+// a derived one — a newtype most of all". Issue #1932.
 
 trait Limit {
     fn limit() -> i32;

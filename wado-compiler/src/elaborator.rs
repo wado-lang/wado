@@ -172,17 +172,10 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                         .borrow_mut()
                         .make_type_param(param.name.clone(), actual_idx)
                 };
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(
-                        param.name.clone(),
-                        crate::elaborator::scope::BinderInScope::declared(
-                            actual_idx,
-                            type_id,
-                            param.id,
-                        ),
-                    );
+                self.annotate_ctx.trait_ctx.type_params.insert(
+                    param.name.clone(),
+                    scope::BinderInScope::declared(actual_idx, type_id, param.id),
+                );
             }
             if !param.bounds.is_empty() {
                 self.annotate_ctx
@@ -214,16 +207,10 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                             .type_table
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
-                        self.annotate_ctx
-                            .trait_ctx
-                            .type_params
-                            .insert(
-                                name.clone(),
-                                crate::elaborator::scope::BinderInScope::undeclared(
-                                    i as u32,
-                                    type_id,
-                                ),
-                            );
+                        self.annotate_ctx.trait_ctx.type_params.insert(
+                            name.clone(),
+                            scope::BinderInScope::undeclared(i as u32, type_id),
+                        );
                     }
                 }
             }
@@ -571,7 +558,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         use_id: crate::ast::AstId,
         name: &str,
     ) {
-        if let Some(decl_id) = self.annotate_ctx.trait_ctx.type_params.get(name).and_then(|b| b.decl) {
+        if let Some(decl_id) = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(name)
+            .and_then(|b| b.decl)
+        {
             self.record_reference(use_id, decl_id);
         } else {
             self.record_item_reference_by_name(use_id, name);
@@ -931,13 +924,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .contains_key(written)
         {
             return match owner {
-                Some(def) => crate::name::FqTypeName::binder_owned(
-                    written,
-                    crate::name::BinderOwner::of_impl(
-                        &self.current_module_source,
-                        self.tysys.resolutions.defs().ast_id(def),
-                    ),
-                ),
+                Some(def) => self.impl_receiver_binder(def, written),
                 // No caller-supplied block: the scope's own, when this name is
                 // the receiver of the `impl` being elaborated. A lookup inside
                 // the block must reach the template the block registered.
@@ -955,28 +942,44 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// The binder `written` names in the current type-param scope.
+    /// The binder `written` names in the current type-param scope: owned by the
+    /// `impl` block in scope when it is that block's receiver, bare otherwise.
     ///
-    /// Owned by the `impl` block whose parameters are in scope, so a blanket's
-    /// template and the calls into its body agree by construction — naming it
-    /// by the spelling alone made two blankets of one trait share a template,
-    /// and the second silently replaced the first (issue #1932). Outside an
-    /// `impl` block the name keeps its bare spelling: a struct's, a function's
-    /// or a method's parameter is substituted, never a receiver, so it heads
-    /// no template for an owner to distinguish.
+    /// So a blanket's template and the calls its body writes agree by
+    /// construction (#1932).
     pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
         match &self.annotate_ctx.trait_ctx.impl_owner {
             Some((owner, receiver)) if receiver == written => {
-                crate::name::FqTypeName::binder_owned(
-                    written,
-                    crate::name::BinderOwner::of_impl(
-                        &self.current_module_source,
-                        self.tysys.resolutions.defs().ast_id(*owner),
-                    ),
-                )
+                self.impl_receiver_binder(*owner, written)
             }
             _ => crate::name::FqTypeName::binder(written),
         }
+    }
+
+    /// The binder naming the receiver parameter `written` of the `impl` block
+    /// `owner` — every pass that names a blanket's receiver asks here (#1932).
+    pub(super) fn impl_receiver_binder(
+        &self,
+        owner: crate::defs::DefId,
+        written: &str,
+    ) -> crate::name::FqTypeName {
+        let defs = self.tysys.resolutions.defs();
+        crate::name::FqTypeName::binder_owned(
+            written,
+            crate::name::BinderOwner::of_impl(defs.module(owner), defs.ast_id(owner)),
+        )
+    }
+
+    /// The name an `impl` block's receiver registers under. One block, one
+    /// name: two spellings of it register two templates (#1932).
+    pub(super) fn impl_receiver_name(
+        &self,
+        impl_block: &crate::ast::ImplBlock,
+    ) -> crate::name::FqTypeName {
+        self.qualified_receiver_name_owned(
+            &self.get_type_name(&impl_block.ty),
+            self.tysys.resolutions.defs().of_ast_id(impl_block.id),
+        )
     }
 
     /// The spelling `def` renders to in a mangled head — its declared name,
@@ -2061,8 +2064,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // The block names its own receiver binder, both where the template is
         // recorded (below) and for the `T::method()` calls its bodies write.
         let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
-        scope.annotate_ctx.trait_ctx.impl_owner =
-            impl_owner.map(|def| (def, struct_name.clone()));
+        scope.annotate_ctx.trait_ctx.impl_owner = impl_owner.map(|def| (def, struct_name.clone()));
         scope.register_impl_block_params(impl_block);
 
         if impl_block.is_synthesize_request {
@@ -2161,13 +2163,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
             );
-            // Two facts, two uses. `struct_name` is what
-            // `reify_impl_default_methods` recomputes a default method's name
-            // from, so it must be the name `resolve_method` records the block's
-            // own methods under — owned, or the block writes two templates
-            // (#1932). `receiver` keys `method_info` for every method and is
-            // matched against receivers built elsewhere, so it keeps the plain
-            // spelling.
+            // Two names, two uses. `reify_impl_default_methods` recomputes a
+            // default method's name from `qualified_struct_name`, so it must be
+            // the one this block's methods are recorded under — owned, or the
+            // block writes two templates (#1932). `receiver` keys `method_info`
+            // and is matched against receivers built elsewhere, so it stays
+            // plain.
             let qualified_struct_name =
                 scope.qualified_receiver_name_owned(&struct_name, impl_owner);
             let receiver = match RefKind::from_ast(&impl_block.ty) {

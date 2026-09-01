@@ -1,6 +1,6 @@
 # Trait Resolution — One Order, Written Down
 
-## Problem
+## Context
 
 `docs/spec.md` says coherence guarantees that "for every `(Trait, Type)` pair,
 there is at most one `impl Trait for Type` that can apply."
@@ -18,19 +18,19 @@ impl Limit for Point { … }          // Point satisfies both bounds
 
 Several impls applying is not a defect to be legislated away — a trait carrying
 several value blankets is the point of `Inspect`, `Serialize` and `Deserialize`,
-each of which derives over the four reflection kinds. So a *selection order* is
+each of which derives over the four reflection kinds. So a _selection order_ is
 needed, and one exists. It just was not written anywhere.
 
-Its rules were spread across five WEPs, one of them silent:
+Its rules were spread across four WEPs, with one recorded in none of them:
 
-| Rule                                        | Recorded in     |
-| ------------------------------------------- | --------------- |
-| Non-variadic beats variadic                 | WEP 2026-03-14  |
-| Variadic overlap is a definition-time error  | WEP 2026-03-14  |
-| A newtype's own impls select for it first    | WEP 2026-06-25  |
-| Two traits, one method name, is ambiguous    | WEP 2026-07-31  |
-| A `Reflect*` bound needs visible members     | WEP 2026-06-13  |
-| Locality — a local impl beats a foreign one  | **nowhere**     |
+| Rule                                        | Recorded in    |
+| ------------------------------------------- | -------------- |
+| Non-variadic beats variadic                 | WEP 2026-03-14 |
+| Variadic overlap is a definition-time error | WEP 2026-03-14 |
+| A newtype's own impls select for it first   | WEP 2026-06-25 |
+| Two traits, one method name, is ambiguous   | WEP 2026-07-31 |
+| A `Reflect*` bound needs visible members    | WEP 2026-06-13 |
+| Locality — a local impl beats a foreign one | **nowhere**    |
 
 The single authority on the order was `select_trait_match`'s `sort_by`.
 Issue #1932 is what that costs: a missing rank let a newtype take its base's
@@ -97,12 +97,12 @@ nothing selects. The call names the trait: `Alpha::describe(&it)`
 (WEP 2026-07-31).
 
 **Two blankets of one trait.** The receiver satisfies both bounds and nothing
-above ranks them. A blanket has no name, so the call *cannot* pin one. The only
+above ranks them. A blanket has no name, so the call _cannot_ pin one. The only
 answer is an impl written for the receiver, which rank 1 puts above both:
 
 ```
 ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and
-'T: ReflectStruct' both apply, and nothing ranks them;
+'T: ReflectStruct' apply, and nothing ranks them;
 write 'impl Describe for Point'
 ```
 
@@ -124,6 +124,15 @@ gates decide that and are not ranking rules:
 - A newtype inherits its base's impls for dispatch, so a blanket keyed by a
   bound only the base carries is a candidate for the newtype — at rank 2's
   depth 1, not excluded.
+
+## Consequences
+
+Selection is one ordered list, so a new rule is a rank in it and its absence is
+visible. Two calls that used to differ only by declaration order now either
+agree or report, and the report names an impl the programmer can write.
+
+The order is stated here and implemented in `select_trait_match`; the two must
+not diverge, which is why the sort cites this document instead of restating it.
 
 ## Known gaps
 
@@ -147,6 +156,16 @@ error — the reader's vantage deciding a program's meaning is exactly what
 ranks 1 and 2 avoid — is worth asking separately.
 
 **`spec.md` overstates coherence.** Its "at most one impl can apply" describes
-the orphan rules' guarantee about *where impls may be written*, not about how
+the orphan rules' guarantee about _where impls may be written_, not about how
 many apply to a call. The selection order belongs in the spec as language
 semantics; this WEP records the decision, and the spec section is the follow-up.
+
+## Related WEPs
+
+What each contributes to the order above.
+
+- [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) — rank 0
+- [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) — rank 2
+- [Overload Resolution](./wep-2026-07-31-overload-resolution.md) — arguments, and the two-trait ambiguity
+- [Visibility](./wep-2026-06-25-visibility-internal-pub-export.md) — the `Reflect*` eligibility gate
+- [Super Traits](./wep-2026-07-27-super-traits.md) — what a specificity rank would read

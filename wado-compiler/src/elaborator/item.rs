@@ -17,9 +17,8 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::scope::BinderInScope;
 use super::Elaborator;
-use super::scope::TypeParamScope;
+use super::scope::{BinderInScope, TypeParamScope};
 use super::sig::{DeclSig, MethodSig};
 use super::types::{FunctionContext, TypeError};
 
@@ -578,10 +577,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 table.make_type_param(name.to_string(), index)
             }
         };
-        self.annotate_ctx
-            .trait_ctx
-            .type_params
-            .insert(name.to_string(), BinderInScope { index, type_id, decl });
+        self.annotate_ctx.trait_ctx.type_params.insert(
+            name.to_string(),
+            BinderInScope {
+                index,
+                type_id,
+                decl,
+            },
+        );
         crate::tir::TirTypeParam {
             name: name.to_string(),
             is_effect: false,
@@ -610,12 +613,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         target_args: &[Type],
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<crate::tir::TirTypeParam> {
-        let decl_of = |n: &str| {
-            impl_declared_params
-                .iter()
-                .find(|p| p.name == n)
-                .map(|p| p.id)
-        };
         let mut params = Vec::new();
         for (index, arg) in target_args.iter().enumerate() {
             let ast::Type::Named(named) = arg else {
@@ -637,7 +634,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 false,
                 vec![],
                 None,
-                decl_of(name),
+                super::scope::param_decl(impl_declared_params, name),
             ));
         }
         params
@@ -651,7 +648,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         saved: &super::scope::TraitContext,
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<crate::tir::TirTypeParam> {
-        let Some(&BinderInScope { index: target_index, .. }) = saved.type_params.get(&named.name)
+        let Some(&BinderInScope {
+            index: target_index,
+            ..
+        }) = saved.type_params.get(&named.name)
         else {
             return Vec::new();
         };
@@ -730,11 +730,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let ast::Type::Named(named) = inner else {
             return Vec::new();
         };
-        let Some(&BinderInScope { index, .. }) = saved.type_params.get(&named.name) else {
+        let Some(&BinderInScope { index, decl, .. }) = saved.type_params.get(&named.name) else {
             return Vec::new();
         };
         let bounds = self.saved_param_bounds(&named.name);
-        let decl = saved.type_params.get(&named.name).and_then(|b| b.decl);
         vec![self.bind_target_param(&named.name, index, false, bounds, None, decl)]
     }
 
@@ -750,11 +749,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             let ast::Type::TypePackSpread(name, _) = element else {
                 continue;
             };
-            let Some(&BinderInScope { index, .. }) = saved.type_params.get(name) else {
+            let Some(&BinderInScope { index, decl, .. }) = saved.type_params.get(name) else {
                 continue;
             };
             let bounds = self.saved_param_bounds(name);
-            let decl = saved.type_params.get(name).and_then(|b| b.decl);
             params.push(self.bind_target_param(name, index, true, bounds, None, decl));
         }
         params
@@ -872,13 +870,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         // The block's name-level facts. Answered here because this is the only
         // phase standing in the block's own frame.
-        // Named the same way as when this block's methods are resolved: one
-        // impl block, one receiver name. Two spellings of it register two
-        // templates, and each instantiates the receiver separately (#1932).
-        let target_fq = scope.qualified_receiver_name_owned(
-            &scope.get_type_name(&impl_block.ty),
-            Some(scope.def_at(impl_block.id)),
-        );
+        let target_fq = scope.impl_receiver_name(impl_block);
         // The header's own site answers: `check_impl_trait_resolves` rejects a
         // header whose trait reaches no declaration, so a well-formed block has
         // an identity here and an erroneous one contributes none.
@@ -1056,13 +1048,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                     true,
                 )
             };
-            self.annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(
-                    param.name.clone(),
-                    BinderInScope::declared(idx, type_id, param.id),
-                );
+            self.annotate_ctx.trait_ctx.type_params.insert(
+                param.name.clone(),
+                BinderInScope::declared(idx, type_id, param.id),
+            );
             // Only push *real* type params (TypeParam-ids) into the
             // inference cache list. Eagerly-resolved fn-bound params have a
             // concrete Function type and aren't generics anymore.

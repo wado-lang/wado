@@ -1916,14 +1916,11 @@ impl Monomorphizer {
                     .iter()
                     .map(|&t| type_table.fq_type_name(t))
                     .collect();
-                // Blanket impl: struct name IS the type param (e.g., "I").
-                // Replace it with the concrete type name instead of appending type args.
-                let param_names: Vec<&str> = generic
-                    .impl_type_params
-                    .iter()
-                    .map(|p| p.name.as_str())
-                    .collect();
-                let is_blanket = info.receiver().is_declared_binder_of(&param_names);
+                // A blanket impl's receiver IS one of its type params (e.g.
+                // "I"): substitute the concrete name instead of appending args.
+                let is_blanket = info.receiver().is_declared_binder_of(
+                    generic.impl_type_params.iter().map(|p| p.name.as_str()),
+                );
                 if is_blanket && !impl_type_arg_names.is_empty() {
                     info.with_substituted_struct_name(&impl_type_arg_names[0])
                 } else {

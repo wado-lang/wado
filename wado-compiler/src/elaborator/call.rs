@@ -8,12 +8,11 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
-use super::scope::BinderInScope;
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
-use super::scope::Scope;
+use super::scope::{BinderInScope, Scope};
 use super::sig::MethodSig;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
@@ -275,59 +274,48 @@ impl TypeSystem {
         {
             let self_name = self.type_table.borrow().type_name(self_type_id);
             // `Self` names the receiver, not one of its bounds: an impl
-            // *provides* the trait whose default body this is, so the method
-            // is never found among the receiver's own bounds. The owner the
-            // name needs comes from `qualified_receiver_name` at lookup.
+            // *provides* the trait whose default body this is, so the method is
+            // never among the receiver's bounds. The owner the name needs comes
+            // from `qualified_receiver_name` at lookup.
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
-        if ctx.trait_ctx.type_params.contains_key(prefix) {
-            return self.callee_ident_for_type_param(ctx, prefix, suffix);
+        if let Some(&BinderInScope { type_id, .. }) = ctx.trait_ctx.type_params.get(prefix) {
+            return self.callee_ident_for_type_param(prefix, suffix, type_id);
         }
 
         CalleeIdentKind::AsIs(ident)
     }
 
-    /// A `Param::method()` call, where `Param` is a type parameter in scope.
-    /// Reached for `Self` too: a blanket's `Self` *is* its receiver parameter.
+    /// A `Param::method()` call, where `Param` is the type parameter bound to
+    /// `type_id`. Reached for `Self` too: a blanket's `Self` *is* its receiver.
     fn callee_ident_for_type_param<'a>(
         &self,
-        ctx: &Scope,
         prefix: &str,
         suffix: &str,
+        type_id: TypeId,
     ) -> CalleeIdentKind<'a> {
-        if let Some(&BinderInScope { type_id: type_param_type_id, .. }) =
-            ctx.trait_ctx.type_params.get(prefix)
-        {
-            // If the type parameter is bound to a concrete type (e.g. a
-            // trait default method synthesised for an impl binds the
-            // trait's `T` to the impl's concrete arg), dispatch
-            // statically on that concrete type. Otherwise keep the
-            // abstract form and route through the trait-bound dispatch
-            // path so the monomorphizer can substitute later.
-            let is_abstract = matches!(
-                self.type_table.borrow().get(type_param_type_id),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            );
-            if is_abstract {
-                return CalleeIdentKind::AbstractTypeParam {
-                    prefix: prefix.to_string(),
-                    suffix: suffix.to_string(),
-                    type_param_type_id,
-                };
-            }
-            // Consumed as a declaration name: `is_static_method` and
-            // `locate_static_method_impl` key on what an `impl` header
-            // writes, which carries no module.
-            let concrete_name = self
-                .type_table
-                .borrow()
-                .fq_type_name(type_param_type_id)
-                .to_display();
-            return CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"));
+        // A parameter bound to a concrete type (a trait default method
+        // synthesised for an impl binds the trait's `T` to the impl's concrete
+        // arg) dispatches statically on it. An abstract one keeps its form and
+        // routes through trait-bound dispatch, for the monomorphizer to
+        // substitute later.
+        let is_abstract = matches!(
+            self.type_table.borrow().get(type_id),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        );
+        if is_abstract {
+            return CalleeIdentKind::AbstractTypeParam {
+                prefix: prefix.to_string(),
+                suffix: suffix.to_string(),
+                type_param_type_id: type_id,
+            };
         }
-
-        CalleeIdentKind::Rewritten(format!("{prefix}::{suffix}"))
+        // Consumed as a declaration name: `is_static_method` and
+        // `locate_static_method_impl` key on what an `impl` header
+        // writes, which carries no module.
+        let concrete_name = self.type_table.borrow().fq_type_name(type_id).to_display();
+        CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"))
     }
 }
 

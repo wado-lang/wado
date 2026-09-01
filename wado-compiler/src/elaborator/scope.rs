@@ -16,19 +16,8 @@ use crate::tir::{ResolvedType, TypeId};
 use super::Elaborator;
 use super::trait_env::InheritedBound;
 
-/// Mutable trait resolution context scoped to the current resolution site.
-///
-/// Groups all state that changes when entering/leaving generic scopes
-/// (impl blocks, trait method lookups, etc). Use
-/// [`Elaborator::enter_inherited_type_param_scope`] to mutate this safely
-/// with RAII restore on drop.
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
 /// and the node that declares it.
-///
-/// One entry, not two parallel maps. The declaration node is what names a
-/// binder — a template keyed by the spelling alone made two blankets of one
-/// trait share it (#1932) — so a writer cannot record the binding and forget
-/// the identity.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct BinderInScope {
     /// Slot in the enclosing item's parameter list.
@@ -36,12 +25,8 @@ pub(super) struct BinderInScope {
     pub(super) type_id: TypeId,
     /// Where the parameter is written, for jump-to-def on a use. `None` for a
     /// name in scope that no parameter declares: `Self`, or a parameter a
-    /// lookup already bound to a concrete type.
-    ///
-    /// This is not what names a binder in a mangle — see
-    /// [`TraitContext::impl_owner`]. The two answer different questions, and
-    /// reading this one for the other made every declared parameter change its
-    /// mangled name.
+    /// lookup already bound to a concrete type. Not what names a binder in a
+    /// mangle — see [`TraitContext::impl_owner`].
     pub(super) decl: Option<ast::AstId>,
 }
 
@@ -64,12 +49,33 @@ impl BinderInScope {
         }
     }
 
-    /// The pair readers that only need the slot and the type destructure.
-    pub(super) fn slot(&self) -> (u32, TypeId) {
-        (self.index, self.type_id)
+    /// A binder bound from a target position (`impl<T> Tr for Pair<T>`), named
+    /// by whichever of `params` declares it.
+    pub(super) fn from_target(
+        index: u32,
+        type_id: TypeId,
+        params: &[ast::GenericParam],
+        name: &str,
+    ) -> Self {
+        Self {
+            index,
+            type_id,
+            decl: param_decl(params, name),
+        }
     }
 }
 
+/// The node in `params` that declares `name`, when one does.
+pub(super) fn param_decl(params: &[ast::GenericParam], name: &str) -> Option<ast::AstId> {
+    params.iter().find(|p| p.name == name).map(|p| p.id)
+}
+
+/// Mutable trait resolution context scoped to the current resolution site.
+///
+/// Groups all state that changes when entering/leaving generic scopes
+/// (impl blocks, trait method lookups, etc). Use
+/// [`Elaborator::enter_inherited_type_param_scope`] to mutate this safely
+/// with RAII restore on drop.
 #[derive(Clone, Default)]
 pub(super) struct TraitContext {
     /// Type parameters currently in scope. Set when resolving generic structs,
@@ -87,18 +93,12 @@ pub(super) struct TraitContext {
     /// names. Qualifies `Self::Assoc` when `Self` is a concrete type, where
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<crate::defs::DefId>,
-    /// The `impl` block whose type parameters are in scope, when one is.
+    /// The `impl` block whose type parameters are in scope, paired with its
+    /// receiver's spelling — what names that binder in a mangle (#1932).
     ///
-    /// This is what names a blanket's receiver binder in a mangle: two
-    /// blankets of one trait write two templates whatever letter each spells
-    /// its parameter (#1932). Only an `impl` block's parameter can head a
-    /// template name, so only that one is owned — a struct's, a function's or
-    /// a method's parameter is substituted, never a receiver, and owning it
-    /// changes names for nothing.
-    /// Paired with the receiver parameter's spelling: only that one heads a
-    /// template name. Another parameter of the same block — a pack member in
-    /// `impl<T: …, ..F: Tag> Schema for T` — is substituted like any other, so
-    /// owning it would name a template that does not exist.
+    /// Only the receiver heads a template name. Every other parameter — a
+    /// struct's, a function's, a pack member in `impl<T: …, ..F: Tag> Schema
+    /// for T` — is substituted, so owning it would name nothing.
     pub(super) impl_owner: Option<(crate::defs::DefId, String)>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
@@ -368,11 +368,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .trait_ctx
             .type_params
             .iter()
-            .flat_map(|(name, &BinderInScope { index, type_id: tid, .. })| {
-                let elem = matches!(tt.get(tid), ResolvedType::TypePack { .. })
-                    .then(|| tt.make_type_param(name.clone(), index));
-                std::iter::once(tid).chain(elem)
-            })
+            .flat_map(
+                |(
+                    name,
+                    &BinderInScope {
+                        index,
+                        type_id: tid,
+                        ..
+                    },
+                )| {
+                    let elem = matches!(tt.get(tid), ResolvedType::TypePack { .. })
+                        .then(|| tt.make_type_param(name.clone(), index));
+                    std::iter::once(tid).chain(elem)
+                },
+            )
             .collect()
     }
 
@@ -418,10 +427,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     true,
                 )
             };
-            self.annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(tp.name.clone(), BinderInScope::declared(idx, type_id, tp.id));
+            self.annotate_ctx.trait_ctx.type_params.insert(
+                tp.name.clone(),
+                BinderInScope::declared(idx, type_id, tp.id),
+            );
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
@@ -471,13 +480,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             let resolved_arg = self.resolve_type(arg_ast);
             let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
-            self.annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(
-                    tp.name.clone(),
-                    BinderInScope::declared(idx, resolved_arg, tp.id),
-                );
+            self.annotate_ctx.trait_ctx.type_params.insert(
+                tp.name.clone(),
+                BinderInScope::declared(idx, resolved_arg, tp.id),
+            );
             if !tp.bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx

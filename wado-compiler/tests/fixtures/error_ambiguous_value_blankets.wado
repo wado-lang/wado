@@ -1,11 +1,9 @@
-// Two value blankets of one trait whose bounds a single type satisfies overlap:
-// `Point` impls `Limit` and, as a struct, satisfies `ReflectStruct`. Nothing
-// ranks them, so selection falls through to declaration order and picks one
-// silently — `limit:7` as written, `struct:Point` with the two impls swapped.
-// Like the two-trait case (`error_ambiguous_cross_trait_method.wado`), an
-// unranked choice must be a diagnostic, not an internal order. Issue #1932
-// ("Related, and not the same defect"); WEP 2026-03-14 §5 covers overlap only
-// for `[..T]` targets, not for bound-keyed blankets over a bare `T`.
+// `Point` impls `Limit` and, as a struct, satisfies `ReflectStruct`, so both of
+// `Describe`'s value blankets apply and nothing ranks them. Rank 4 of the
+// selection order (WEP 2026-09-01): reported, not settled by declaration order.
+// A blanket has no name, so unlike the two-trait case
+// (`error_ambiguous_cross_trait_method.wado`) the call cannot pin one — only an
+// `impl Describe for Point` answers it. Issue #1932.
 
 trait Limit {
     fn limit() -> i32;

@@ -576,31 +576,24 @@ impl Receiver {
         }
     }
 
-    /// Whether this receiver is the binder `impl_type_params` declares — the
-    /// one question "is this a blanket's receiver" is asked by, answered once.
-    ///
-    /// The comparison is on the written spelling: the mangle carries the block
-    /// that owns the binder, which no declaration list spells (#1932).
+    /// Whether this receiver is one of the binders `names` declares — how a
+    /// blanket's receiver is recognized, asked against source spellings because
+    /// a mangle carries the owning block that no declaration list spells.
     #[must_use]
-    pub fn is_declared_binder_of(&self, impl_type_params: &[impl AsRef<str>]) -> bool {
-        let spelling = match self.binder_spelling() {
-            Some(name) => name.to_string(),
-            None => self.head_key().into_string(),
-        };
-        impl_type_params.iter().any(|p| p.as_ref() == spelling)
+    pub fn is_declared_binder_of<'a>(&self, names: impl IntoIterator<Item = &'a str>) -> bool {
+        self.binder_spelling()
+            .is_some_and(|spelling| names.into_iter().any(|n| n == spelling))
     }
 
-    /// The binder's written spelling, for matching a receiver against the
-    /// parameter list its own `impl` block declares. The mangle carries the
-    /// block that owns it, which no declaration list spells (#1932), so a
-    /// comparison against source names asks for this and never
-    /// [`Self::head_key`].
-    #[must_use]
-    pub fn binder_spelling(&self) -> Option<&str> {
+    /// The binder's written spelling, `None` for every other receiver.
+    fn binder_spelling(&self) -> Option<&str> {
         match self {
             Receiver::Type(fq) => match fq.head() {
                 TypeHead::Binder { name, .. } => Some(name),
-                TypeHead::Declared(_) | TypeHead::Shape { .. } | TypeHead::Builtin(_) | TypeHead::Tuple => None,
+                TypeHead::Declared(_)
+                | TypeHead::Shape { .. }
+                | TypeHead::Builtin(_)
+                | TypeHead::Tuple => None,
             },
             Receiver::Ref(_) | Receiver::Projection { .. } => None,
         }
@@ -2349,14 +2342,10 @@ pub enum TypeHead {
     Builtin(String),
     /// A template's own type-parameter binder (`T`, a pack member `F`).
     ///
-    /// `owner` is the declaration that binds it, when one does: an `impl`
-    /// block's receiver parameter is bound by that block, and two blocks'
-    /// `T` are two binders however they are spelled. Equality reads it, so a
-    /// blanket's template name identifies the impl rather than the letter its
-    /// author happened to pick — without it, `impl<T: A> Tr for T` and
-    /// `impl<T: B> Tr for T` share one template and one silently replaces the
-    /// other (WEP 2026-08-12 Declaration Identity, issue #1932). `None` for a
-    /// binder no `impl` block owns, e.g. a generic function's own parameter.
+    /// `owner` is the `impl` block that binds it, `None` for a binder no block
+    /// owns. Two blocks' `T` are two binders however they are spelled: without
+    /// the owner, `impl<T: A> Tr for T` and `impl<T: B> Tr for T` share one
+    /// template and one silently replaces the other (WEP 2026-08-12).
     Binder {
         name: String,
         owner: Option<BinderOwner>,
@@ -2469,10 +2458,8 @@ impl FqTypeName {
         })
     }
 
-    /// A binder named by its declaration site — a blanket's receiver parameter
-    /// (`T` in `impl<T: Bound> Trait for T`), or any parameter reached from a
-    /// scope that knows where it was declared. Two items' `T` are two binders
-    /// whatever each spells it (issue #1932).
+    /// A blanket's receiver parameter (`T` in `impl<T: Bound> Trait for T`),
+    /// named by the block that binds it rather than by its letter.
     #[must_use]
     pub fn binder_owned(name: &str, owner: BinderOwner) -> Self {
         Self::of_head_kind(TypeHead::Binder {
@@ -2482,13 +2469,8 @@ impl FqTypeName {
     }
 
     /// The index bucket holding every `impl` in `module` whose target is a type
-    /// parameter spelled `name`.
-    ///
-    /// This is deliberately keyed by the spelling: it answers "which impls bind
-    /// this name as their own parameter", a question only a spelling can ask,
-    /// and its entries are a `Vec` precisely because several impls share it.
-    /// It is not a binder — a binder is one parameter of one item — so it does
-    /// not use [`Self::binder`], whose identity is its binding site.
+    /// parameter spelled `name`. Keyed by the spelling, since that is the
+    /// question it answers; not a binder, which is one parameter of one item.
     #[must_use]
     pub fn param_bucket(module: &crate::module_source::ModuleSource, name: &str) -> Self {
         Self::of_head_kind(TypeHead::Shape {
@@ -2603,10 +2585,8 @@ impl FqTypeName {
             }
             TypeHead::Shape { module, name } => out.push_str(&format!("{module}/{name}")),
             TypeHead::Builtin(name) => out.push_str(name),
-            // The owner is what separates two impls' identically spelled
-            // binders, so the mangle carries it. An unowned binder keeps its
-            // bare spelling, leaving every template name but a blanket's
-            // receiver byte-identical.
+            // An unowned binder keeps its bare spelling, leaving every template
+            // name but a blanket's receiver byte-identical.
             TypeHead::Binder { name, owner } => match owner {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
@@ -2691,10 +2671,6 @@ impl std::fmt::Display for FqTypeName {
 /// The `impl` block a blanket's receiver binder belongs to. Equality and
 /// hashing read the block alone, so two blankets of one trait write two
 /// template names whatever letter each spells its parameter (#1932).
-///
-/// Only an `impl` block's receiver can head a template name, so only that
-/// binder carries an owner; every other parameter is substituted rather than
-/// named, and mangles bare as before.
 #[derive(Debug, Clone)]
 pub struct BinderOwner {
     id: crate::ast::AstId,
@@ -2730,15 +2706,8 @@ impl BinderOwner {
     }
 
     /// The spelling a mangle embeds.
-    #[must_use]
-    pub fn rendered(&self) -> &str {
+    fn rendered(&self) -> &str {
         &self.rendered
-    }
-
-    /// The `impl` block this binder belongs to. This is identity.
-    #[must_use]
-    pub fn id(&self) -> crate::ast::AstId {
-        self.id
     }
 }
 

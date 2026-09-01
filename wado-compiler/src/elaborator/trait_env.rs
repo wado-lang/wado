@@ -144,11 +144,8 @@ impl ImplTargetKey {
             ImplTargetKey::Undeclared(module, name) => {
                 name::Receiver::Type(name::FqTypeName::shape(module, name))
             }
-            // Not a binder: the bucket of every impl in this module binding
-            // this spelling as its own parameter. Several impls share it, and
-            // a lookup starting from a type never reaches it — which is what
-            // keeps a blanket out of the bucket of a type that happens to
-            // share the parameter's name.
+            // Not a binder: the bucket every impl in this module binding this
+            // spelling as its own parameter shares.
             ImplTargetKey::TypeParam(module, name) => {
                 name::Receiver::Type(name::FqTypeName::param_bucket(module, name))
             }
@@ -475,8 +472,8 @@ pub(crate) struct BlanketImpl {
     pub(crate) receiver: BlanketReceiver,
     /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
     pub(crate) param: String,
-    /// The `impl` block's node — what [`Self::receiver_binder`] names the
-    /// receiver by, and the same one the elaborator carries in scope.
+    /// [`Self::def`]'s node. Kept beside it because a mangle embeds the
+    /// module-local index, which only an `AstId` carries.
     pub(crate) impl_id: ast::AstId,
     /// Bound trait names on the receiver param, each with the declaration its
     /// own reference site resolves to. The spelling stays for the by-name
@@ -486,12 +483,9 @@ pub(crate) struct BlanketImpl {
 }
 
 impl BlanketImpl {
-    /// The binder naming this blanket's receiver parameter.
-    ///
-    /// Every template name for a blanket must come from here. The `impl` block
-    /// owns the binder, so two blankets of one trait stay two templates
-    /// whatever letter each spells its parameter; a name built from the
-    /// spelling alone looks up a *different* template, silently (issue #1932).
+    /// The binder naming this blanket's receiver parameter — where every
+    /// template name for the blanket comes from. A name built from the spelling
+    /// alone looks up a *different* template, silently (issue #1932).
     pub(crate) fn receiver_binder(&self) -> name::FqTypeName {
         name::FqTypeName::binder_owned(
             &self.param,

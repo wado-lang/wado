@@ -1423,10 +1423,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-/// Bind `name` in the current type-param scope, recording the node that
-    /// declares it. Scope presence and binder identity are written together:
-    /// a name in `type_params` without its `type_param_decls` entry reads back
-    /// as an unowned binder, which is a *different* template name (#1932).
+    /// Bind `name` in the current type-param scope, with the header node that
+    /// declares it — jump-to-def reads that node, and no caller may forget it.
     fn bind_type_param(
         scope: &mut super::scope::TypeParamScope<'_, '_, H>,
         header: &ImplHeader,
@@ -1434,18 +1432,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slot: u32,
         type_id: TypeId,
     ) {
-        let decl = header
-            .type_params
-            .iter()
-            .find(|p| p.name == name)
-            .map(|p| p.id);
         scope.annotate_ctx.trait_ctx.type_params.insert(
             name.to_string(),
-            BinderInScope {
-                index: slot,
-                type_id,
-                decl,
-            },
+            BinderInScope::from_target(slot, type_id, &header.type_params, name),
         );
     }
 
@@ -1698,15 +1687,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// For a blanket impl (target type is one of its own type params with
     /// bounds), how far down the receiver's newtype chain those bounds first
     /// hold: `Some(0)` at the receiver itself, `Some(1)` at its base, `None`
-    /// when they never do. `None` rejects the candidate, which is what keeps
-    /// `impl<I: Iterator> IntoIterator for I` off a `TypeParam` `I` that is not
-    /// itself `Iterator`; `Some(0)` for non-blanket impls.
+    /// when they never do — which is what keeps `impl<I: Iterator> IntoIterator
+    /// for I` off an `I` that is not itself `Iterator`. `Some(0)` for a
+    /// non-blanket impl.
     ///
-    /// The depth is the rank, not a detail: a newtype inherits its base's
-    /// impls, so a blanket keyed by a bound only the base carries is admitted
-    /// for the newtype too. Without the rank it ties with the blanket the
-    /// newtype's *own* impl selects, and the tie is broken arbitrarily —
-    /// issue #1932, against WEP 2026-06-25.
+    /// The depth is rank 2 of the selection order
+    /// (`docs/wep-2026-09-01-trait-resolution.md`), not a detail: a newtype
+    /// inherits its base's impls, so a blanket keyed by a bound only the base
+    /// carries is a candidate for the newtype too, and without the rank it ties
+    /// with the newtype's own.
     fn blanket_target_bounds_depth(
         &self,
         impl_ty: &Type,
@@ -1729,16 +1718,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|bound| self.bound_trait_def(bound.id))
             .collect();
         let type_lookup = self.type_lookup();
-        self.receiver_newtype_levels(rt).into_iter().position(|level| {
-            bound_defs.iter().all(|&bound_def| {
-                self.tysys.type_implements_trait_here(
-                    &self.annotate_ctx,
-                    &type_lookup,
-                    level,
-                    bound_def,
-                )
+        self.receiver_newtype_levels(rt)
+            .into_iter()
+            .position(|level| {
+                bound_defs.iter().all(|&bound_def| {
+                    self.tysys.type_implements_trait_here(
+                        &self.annotate_ctx,
+                        &type_lookup,
+                        level,
+                        bound_def,
+                    )
+                })
             })
-        })
     }
 
     /// The receiver's type and each newtype base under it, nearest first. The
@@ -2028,7 +2019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (name, idx) in &type_param_entries {
                 let i = *idx as usize;
                 if i < type_args.len() {
-                    Self::bind_type_param(&mut scope, &header, name, *idx, type_args[i]);
+                    Self::bind_type_param(&mut scope, header,name, *idx, type_args[i]);
                 }
             }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
@@ -2039,7 +2030,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow_mut()
                     .make_tuple(type_args.to_vec());
-                Self::bind_type_param(&mut scope, &header, pack_name, *pack_idx, pack_type);
+                Self::bind_type_param(&mut scope, header,pack_name, *pack_idx, pack_type);
             }
         }
 
@@ -2059,14 +2050,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .filter(|p| p.is_real_type_param())
                     .position(|p| &p.name == name)
                     .unwrap_or(0) as u32;
-                Self::bind_type_param(&mut scope, &header, name, slot, recv_id);
+                Self::bind_type_param(&mut scope, header,name, slot, recv_id);
             } else {
                 let type_id = scope
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_type_param(name.clone(), 0);
-                Self::bind_type_param(&mut scope, &header, name, 0, type_id);
+                Self::bind_type_param(&mut scope, header,name, 0, type_id);
             }
         }
 
@@ -2079,7 +2070,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_params
             .values()
-            .map(BinderInScope::slot)
+            .map(|b| (b.index, b.type_id))
             .collect();
         // A binding naming a type private to the declaring module (`type Iter
         // = TreeSetIter<T>`) means what the block wrote, not what the caller's
@@ -2102,8 +2093,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        // This block names the receiver — not the letter, which another blanket
-        // of the same trait may also spell.
         let blanket_bounds = is_blanket_type_param.then(|| {
             let bounds = header
                 .type_params
@@ -2112,7 +2101,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|p| {
                     p.bounds
                         .iter()
-                        .map(|b| b.name.clone())
+                        .map(|b| b.name.as_str())
                         .collect::<Vec<_>>()
                         .join(" + ")
                 })
@@ -2123,15 +2112,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 format!("{impl_struct_name}: {bounds}")
             }
         });
-        let blanket_binder = is_blanket_type_param.then(|| {
-            crate::name::FqTypeName::binder_owned(
-                &impl_struct_name,
-                crate::name::BinderOwner::of_impl(
-                    &impl_home,
-                    scope.tysys.resolutions.defs().ast_id(impl_ref.0),
-                ),
-            )
-        });
+        // The block names the receiver — not the letter, which another blanket
+        // of the same trait may also spell.
+        let blanket_binder = is_blanket_type_param
+            .then(|| scope.impl_receiver_binder(impl_ref.0, &impl_struct_name));
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
         // is a type parameter. These should NOT override base-type methods.
@@ -2211,7 +2195,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | ResolvedType::TypePack { index, .. } => *index,
                     other => panic!("method slot is not a type parameter: {other:?}"),
                 };
-                Self::bind_type_param(&mut scope, &header, &type_param.name, index, type_param_id);
+                Self::bind_type_param(&mut scope, header,&type_param.name, index, type_param_id);
                 if !type_param.bounds.is_empty() {
                     scope
                         .annotate_ctx
@@ -2378,8 +2362,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                     impl_module_source,
                     blanket_type_param,
-                    blanket_binder: blanket_binder.clone(),
-                blanket_bounds: blanket_bounds.clone(),
+                    blanket_binder,
+                    blanket_bounds,
                     bound_depth,
                     impl_struct_name,
                     impl_struct_fq,
@@ -2395,57 +2379,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Choose the winning match: drop a trait's variadic impl when that same
-    /// trait also has a non-variadic one (coherence Rule 1, WEP 2026-03-14 §5),
-    /// prefer a trait impl in the current module, dedup `(trait, module)`
-    /// pairs, take the first remaining.
-    /// Report two of one trait's value blankets whose bounds the receiver both
-    /// satisfies with nothing to rank them — the choice the `dedup_by` below
-    /// would otherwise make by whichever the sort left first, i.e. by
-    /// declaration order.
+    /// Report rank 4 for one trait's value blankets: two the receiver
+    /// satisfies with nothing ranking them, which the `dedup_by` below would
+    /// otherwise settle by declaration order
+    /// (`docs/wep-2026-09-01-trait-resolution.md`).
     ///
-    /// Only for blankets of the *same* trait: two traits declaring one method
-    /// name is a different ambiguity, reported with the trait to name. And only
-    /// where no impl written for the receiver exists, since that outranks every
-    /// blanket and answers the call.
+    /// Runs on the sorted list, so each trait's first candidate is its best: a
+    /// concrete impl there answers the call, and a shallower bound has already
+    /// won rank 2.
     fn report_ambiguous_value_blankets(
         &mut self,
         found_traits: &[super::types::TraitMethodMatch],
         receiver_display: &str,
         span: Span,
     ) {
-        let mut by_trait: IndexMap<(crate::defs::DefId, Vec<TypeId>), Vec<usize>> =
-            IndexMap::default();
-        for (i, m) in found_traits.iter().enumerate() {
+        let mut by_trait: IndexMap<
+            (crate::defs::DefId, Vec<TypeId>),
+            Vec<&super::types::TraitMethodMatch>,
+        > = IndexMap::default();
+        for m in found_traits {
             by_trait
                 .entry((m.trait_decl, m.trait_args.clone()))
                 .or_default()
-                .push(i);
+                .push(m);
         }
         for candidates in by_trait.values() {
-            if candidates
-                .iter()
-                .any(|&i| found_traits[i].blanket_type_param.is_none())
-            {
-                continue;
-            }
-            let blankets: Vec<&super::types::TraitMethodMatch> = candidates
-                .iter()
-                .map(|&i| &found_traits[i])
-                .filter(|m| m.blanket_binder.is_some())
-                .collect();
-            let Some(first) = blankets.first() else {
+            let Some(best) = candidates.first().filter(|m| m.blanket_binder.is_some()) else {
                 continue;
             };
-            // Distinct blankets, and nothing between them: a deeper one lost on
-            // the newtype rank already, and the sort put the winner first.
-            let tied: Vec<&super::types::TraitMethodMatch> = blankets
+            let tied: Vec<&&super::types::TraitMethodMatch> = candidates
                 .iter()
                 .filter(|m| {
-                    m.bound_depth == first.bound_depth
-                        && m.impl_module_source == first.impl_module_source
+                    m.bound_depth == best.bound_depth
+                        && m.impl_module_source == best.impl_module_source
                 })
-                .copied()
                 .collect();
             let distinct: IndexSet<&crate::name::FqTypeName> = tied
                 .iter()
@@ -2454,19 +2421,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if distinct.len() < 2 {
                 continue;
             }
-            let bounds: Vec<String> = tied
-                .iter()
-                .filter_map(|m| m.blanket_bounds.clone())
-                .collect();
             let _ = self.emit(super::types::TypeError::AmbiguousValueBlankets {
-                trait_name: first.trait_name.to_display(),
+                trait_name: best.trait_name.to_display(),
                 receiver: receiver_display.to_string(),
-                bounds,
+                bounds: tied
+                    .iter()
+                    .filter_map(|m| m.blanket_bounds.clone())
+                    .collect(),
                 span,
             });
         }
     }
 
+    /// Choose the winning match: drop a trait's variadic impl when that same
+    /// trait also has a non-variadic one (coherence Rule 1, WEP 2026-03-14 §5),
+    /// prefer a trait impl in the current module, dedup `(trait, module)`
+    /// pairs, take the first remaining.
     fn select_trait_match(
         &mut self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,

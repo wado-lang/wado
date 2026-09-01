@@ -1164,7 +1164,7 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "ambiguous blanket impls of '{trait_name}' for '{receiver}': {} both apply, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
+                    "ambiguous blanket impls of '{trait_name}' for '{receiver}': {} apply, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
                     bounds
                         .iter()
                         .map(|b| format!("'{b}'"))
@@ -2361,19 +2361,16 @@ pub(super) struct TraitMethodMatch {
     /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
     /// this holds the type parameter name (e.g., `"I"`). `None` for normal impls.
     pub(super) blanket_type_param: Option<String>,
-    /// [`Self::blanket_type_param`] as a binder named by its own declaration
-    /// node, so two blankets of one trait are two templates whatever letter
-    /// each spells its parameter (issue #1932).
+    /// [`Self::blanket_type_param`] as a binder named by the block that binds
+    /// it, so two blankets of one trait are two templates whatever letter each
+    /// spells its parameter (issue #1932).
     pub(super) blanket_binder: Option<crate::name::FqTypeName>,
-    /// The receiver parameter's bounds, as source writes them (`T: Limit`).
-    /// What an ambiguity between two of one trait's blankets names them by:
-    /// a blanket has no name of its own.
+    /// The receiver parameter's bounds as source writes them (`T: Limit`) —
+    /// what an ambiguity names two blankets by, neither having a name.
     pub(super) blanket_bounds: Option<String>,
     /// How far down the receiver's newtype chain this impl's target bounds
-    /// hold: 0 at the receiver itself, 1 at its base. A newtype inherits its
-    /// base's impls, so a blanket keyed by a bound only the base carries is
-    /// admitted alongside the one the newtype's own impl selects; ranking on
-    /// this is what keeps the newtype's own from losing (issue #1932).
+    /// hold: 0 at the receiver itself, 1 at its base. Rank 2 of the selection
+    /// order (`docs/wep-2026-09-01-trait-resolution.md`).
     pub(super) bound_depth: usize,
     /// The struct name that actually has the trait impl (may differ from the
     /// receiver's struct name when the impl was found through the newtype chain).

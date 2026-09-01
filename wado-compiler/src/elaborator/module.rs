@@ -4,8 +4,8 @@ use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::tir::{TypeId, TypeTable};
 
-use super::scope::BinderInScope;
 use super::Elaborator;
+use super::scope::BinderInScope;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, StructFieldInfo,
     VariantCaseData, VariantInfo,
@@ -388,14 +388,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow_mut()
                             .make_type_param(param.name.clone(), actual_idx)
                     };
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .insert(
-                            param.name.clone(),
-                            BinderInScope::declared(actual_idx, type_id, param.id),
-                        );
+                    scope.annotate_ctx.trait_ctx.type_params.insert(
+                        param.name.clone(),
+                        BinderInScope::declared(actual_idx, type_id, param.id),
+                    );
                     if !param.bounds.is_empty() {
                         scope
                             .annotate_ctx
@@ -429,25 +425,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .type_table
                                     .borrow_mut()
                                     .make_type_param(name.clone(), index);
-                                scope
-                                    .annotate_ctx
-                                    .trait_ctx
-                                    .type_params
-                                    .insert(
-                                        name.clone(),
-                                        BinderInScope {
-                                            index,
-                                            type_id,
-                                            // The block declares this argument:
-                                            // `impl<T> Tr for Pair<T>` binds its
-                                            // own `T`.
-                                            decl: impl_block
-                                                .type_params
-                                                .iter()
-                                                .find(|p| &p.name == name)
-                                                .map(|p| p.id),
-                                        },
-                                    );
+                                scope.annotate_ctx.trait_ctx.type_params.insert(
+                                    name.clone(),
+                                    BinderInScope::from_target(
+                                        index,
+                                        type_id,
+                                        &impl_block.type_params,
+                                        name,
+                                    ),
+                                );
                             }
                         }
                     }
@@ -482,13 +468,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let _ = scope.resolve_type(&impl_block.ty);
 
                 // The receiver is named by the module that declares it — the
-                // written name alone is not an identity. A blanket's receiver
-                // is named by its block, the same way every other pass names
-                // it: one impl block, one receiver name (#1932).
-                let struct_name = scope.qualified_receiver_name_owned(
-                    &scope.get_type_name(&impl_block.ty),
-                    scope.tysys.resolutions.defs().of_ast_id(impl_block.id),
-                );
+                // written name alone is not an identity.
+                let struct_name = scope.impl_receiver_name(impl_block);
                 let trait_name = impl_block
                     .trait_type
                     .as_ref()
@@ -523,14 +504,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .type_table
                             .borrow_mut()
                             .make_type_param(param.name.clone(), idx);
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .type_params
-                            .insert(
-                                param.name.clone(),
-                                BinderInScope::declared(idx, type_id, param.id),
-                            );
+                        scope.annotate_ctx.trait_ctx.type_params.insert(
+                            param.name.clone(),
+                            BinderInScope::declared(idx, type_id, param.id),
+                        );
                         if !param.bounds.is_empty() {
                             scope
                                 .annotate_ctx
