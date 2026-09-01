@@ -44,6 +44,11 @@ on cbor-twitter — neither function is more than a bounds check and two compare
 A hot small leaf is telling you how often it is entered, so go read its caller.
 The profile ranks candidates; it does not locate them.
 
+**A low self-percentage retires a dataset, not the idea.** `FieldSchema::lookup`
+read 0.71% on json-catalog, whose widest struct is 16 fields; rewriting the same
+function cut 44% off cbor-twitter's decode, whose `User` has 40. Rank a per-item
+cost on the input whose items are widest, not on whichever is at hand.
+
 **Rule out a super-linear pass before blaming GC** — that same inflation makes an
 algorithmic blow-up read as GC-bound; sweep input size to tell them apart.
 Faster-than-linear growth is a hypothesis and not a verdict, since a live set can

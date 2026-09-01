@@ -3054,12 +3054,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
 }
 
 fn "serde_struct_named_like_pack_param.wado/serde_struct_named_like_pack_param.wado/T^core:serde/FieldSchema::lookup"(__key) {
-    if (if (__key.end - __key.start) == 1 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 118;
-    } else {
-        0;
-    }) {
-        return 0, 0;
+    if (__key.end - __key.start) == 1 {
+        if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 118 {
+            return 0, 0;
+        }
+        return 1, 0;
     }
     return 1, 0;
 }
@@ -6122,12 +6121,13 @@ fn "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_fiel
             e = select i32(a_53 < len, a_53, len);
             __sroa___key_repr = self.de.input.repr;
             __sroa___key_start = self.de.input.start + s;
-            if (if ((self.de.input.start + e) - __sroa___key_start) == 1 -> i32 {
-                builtin::array_get_value<u8>(__sroa___key_repr, __sroa___key_start + 0) == 118;
-            } else {
-                0;
-            }) {
-                __sroa_slot_58 = 0;
+            if ((self.de.input.start + e) - __sroa___key_start) == 1 {
+                if builtin::array_get_value<u8>(__sroa___key_repr, __sroa___key_start + 0) == 118 {
+                    __sroa_slot_58 = 0;
+                    __sroa_slot_59 = 0;
+                    break __inline_serde_struct_named_like_pack_param_wado_T_core_serde_FieldSchema__lookup_4;
+                }
+                __sroa_slot_58 = 1;
                 __sroa_slot_59 = 0;
                 break __inline_serde_struct_named_like_pack_param_wado_T_core_serde_FieldSchema__lookup_4;
             }

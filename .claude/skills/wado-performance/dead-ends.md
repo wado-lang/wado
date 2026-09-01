@@ -36,27 +36,6 @@ so no division was ever issued. The ~28% in these frames is the per-byte
 Reverted; the digit-boundary tests were kept. Generalizes to any "replace a
 constant divide/modulo" idea in guest code.
 
-## Bucketing `FieldSchema::lookup` by wire-name length (2026-08-16)
-
-The synthesized `lookup` (`serde_synth.rs`) is a flat chain of
-`__len == N && key[0] == b0 && …`. Bucketing by length, then dispatching on a
-discriminating byte, mirrors `json_catalog_v2.wado`'s hand-written parser.
-
-Not pursued. `lookup` is **0.71%** of the json-catalog profile (`next_field`
-another 0.50%); it is a real function there, not inlined away. Also:
-
-- Zero gain when name lengths are distinct — the `&&` chain already
-  short-circuits on length. Only same-length-heavy structs benefit (`Event`:
-  16 comparisons → 13).
-- Byte-at-a-time is irreducible: WasmGC has no multi-byte load or compare over
-  `Array<u8>` (`builtin.wado` has only `array_get_value_u8`/`array_copy`/`array_fill`).
-- v2's discriminating-byte shortcut is unsound here — an unknown key matching
-  on length and that byte would silently capture a real field's value.
-
-Where the time actually is: `whitespace_end` 12.5% (`citm_catalog.json` is 71%
-whitespace), and on ser `push_str` 6.6%, `write_plain_key` 5.1%,
-`String::grow` 5.1%.
-
 ## Sharing list elements instead of deep-copying them (2026-08-20)
 
 Lifting `value_copy_demote`'s variant-deep-copy gate is a no-op: the candidate

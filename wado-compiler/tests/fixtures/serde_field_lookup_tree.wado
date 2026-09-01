@@ -1,0 +1,39 @@
+// `FieldSchema::lookup` walks a decision tree over the key's bytes, so a wire
+// key that shares a branch with a field but differs off it must still be
+// unknown: "xyc" takes the same last-byte branch as "abc", "ad" the same length
+// as "ab", and "abcd" no branch at all.
+use { Serialize, Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct Keys {
+    ab: i32 = -1,
+    ac: i32 = -1,
+    abc: i32 = -1,
+    xyz: i32 = -1,
+    xya: i32 = -1,
+    long_field_name_one: i32 = -1,
+    long_field_name_two: i32 = -1,
+}
+
+impl Serialize for Keys;
+impl Deserialize for Keys;
+
+test "every field is reachable by its own key" {
+    let k = from_string::<Keys>(
+        "{\"ab\":1,\"ac\":2,\"abc\":3,\"xyz\":4,\"xya\":5,\"long_field_name_one\":6,\"long_field_name_two\":7}",
+    ).expect("deserialize failed");
+    assert [k.ab, k.ac, k.abc, k.xyz, k.xya] == [1, 2, 3, 4, 5];
+    assert [k.long_field_name_one, k.long_field_name_two] == [6, 7];
+}
+
+test "a key off the tree is unknown, not the field it branches with" {
+    let k = from_string::<Keys>(
+        "{\"aa\":8,\"ad\":8,\"xyc\":8,\"abcd\":8,\"a\":8,\"long_field_name_thr\":8,\"ab\":1}",
+    ).expect("deserialize failed");
+    assert k.ab == 1;
+    assert [k.ac, k.abc, k.xyz, k.xya] == [-1, -1, -1, -1];
+    assert [k.long_field_name_one, k.long_field_name_two] == [-1, -1];
+}
+
+__DATA__
+{"test": {}}
