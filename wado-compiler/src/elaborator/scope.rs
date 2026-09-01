@@ -404,7 +404,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.annotate_ctx
                 .trait_ctx
                 .type_params
-                .insert(tp.name.clone(), BinderInScope::declared(idx, type_id, tp.id));
+                // A struct, variant, function or method parameter, never an
+                // impl block's receiver: it heads no template, so it has no
+                // name for a node to distinguish (see `binder_in_scope`).
+                .insert(tp.name.clone(), BinderInScope::undeclared(idx, type_id));
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
@@ -457,10 +460,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.annotate_ctx
                 .trait_ctx
                 .type_params
-                .insert(
-                    tp.name.clone(),
-                    BinderInScope::declared(idx, resolved_arg, tp.id),
-                );
+                .insert(tp.name.clone(), BinderInScope::undeclared(idx, resolved_arg));
             if !tp.bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx
