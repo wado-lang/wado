@@ -93,13 +93,15 @@ pub(super) struct TraitContext {
     /// names. Qualifies `Self::Assoc` when `Self` is a concrete type, where
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<crate::defs::DefId>,
-    /// The `impl` block whose type parameters are in scope, paired with its
-    /// receiver's spelling — what names that binder in a mangle (#1932).
+    /// The `impl` block whose type parameters are in scope, paired with the
+    /// node declaring its receiver binder — what names that binder in a mangle
+    /// (#1932).
     ///
-    /// Only the receiver heads a template name. Every other parameter — a
-    /// struct's, a function's, a pack member in `impl<T: …, ..F: Tag> Schema
-    /// for T` — is substituted, so owning it would name nothing.
-    pub(super) impl_owner: Option<(crate::defs::DefId, String)>,
+    /// The node, not the spelling: a method parameter may shadow the receiver's
+    /// letter, and inside that method the letter names the method's binder.
+    /// Only the receiver heads a template name — every other parameter is
+    /// substituted, so owning it would name nothing.
+    pub(super) impl_owner: Option<(crate::defs::DefId, Option<ast::AstId>)>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
     /// `EffectRef::Param` and to record its use→def edge.

@@ -592,6 +592,7 @@ impl Receiver {
                 TypeHead::Binder { name, .. } => Some(name),
                 TypeHead::Declared(_)
                 | TypeHead::Shape { .. }
+                | TypeHead::ParamBucket { .. }
                 | TypeHead::Builtin(_)
                 | TypeHead::Tuple => None,
             },
@@ -614,7 +615,10 @@ impl Receiver {
     pub fn is_module_qualified(&self) -> bool {
         matches!(
             self,
-            Receiver::Type(fq) if matches!(fq.head(), TypeHead::Declared(_) | TypeHead::Shape { .. })
+            Receiver::Type(fq) if matches!(
+                fq.head(),
+                TypeHead::Declared(_) | TypeHead::Shape { .. } | TypeHead::ParamBucket { .. }
+            )
         )
     }
 
@@ -2340,6 +2344,14 @@ pub enum TypeHead {
     /// A shape no module declares — a primitive, `()`, `!`, the raw GC `Array`,
     /// a function type. Every mangler spells one the same way.
     Builtin(String),
+    /// The index bucket the `impl` blocks of one module that bind a parameter
+    /// of this spelling share. Its own head: a bucket is neither a declaration
+    /// nor a shape, and spelling it as one puts an `impl` on an undeclared
+    /// type of the same name into a blanket's bucket.
+    ParamBucket {
+        module: crate::module_source::ModuleSource,
+        name: String,
+    },
     /// A template's own type-parameter binder (`T`, a pack member `F`).
     ///
     /// `owner` is the `impl` block that binds it, `None` for a binder no block
@@ -2375,17 +2387,24 @@ impl TypeHead {
     pub fn name(&self) -> &str {
         match self {
             Self::Declared(head) => head.name(),
-            Self::Shape { name, .. } | Self::Builtin(name) | Self::Binder { name, .. } => name,
+            Self::Shape { name, .. }
+            | Self::ParamBucket { name, .. }
+            | Self::Builtin(name)
+            | Self::Binder { name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
 
-    /// The spelling a mangle embeds.
+    /// The spelling a mangle embeds — the head alone. What a binder's owner and
+    /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds.
     #[must_use]
     pub fn rendered(&self) -> &str {
         match self {
             Self::Declared(head) => head.rendered(),
-            Self::Shape { name, .. } | Self::Builtin(name) | Self::Binder { name, .. } => name,
+            Self::Shape { name, .. }
+            | Self::ParamBucket { name, .. }
+            | Self::Builtin(name)
+            | Self::Binder { name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
@@ -2396,7 +2415,11 @@ impl TypeHead {
     pub fn def(&self) -> Option<crate::defs::DefId> {
         match self {
             Self::Declared(head) => Some(head.def()),
-            Self::Shape { .. } | Self::Builtin(_) | Self::Binder { .. } | Self::Tuple => None,
+            Self::Shape { .. }
+            | Self::ParamBucket { .. }
+            | Self::Builtin(_)
+            | Self::Binder { .. }
+            | Self::Tuple => None,
         }
     }
 
@@ -2405,7 +2428,7 @@ impl TypeHead {
     pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
         match self {
             Self::Declared(head) => Some(head.module()),
-            Self::Shape { module, .. } => Some(module),
+            Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
             Self::Builtin(_) | Self::Binder { .. } | Self::Tuple => None,
         }
     }
@@ -2473,7 +2496,7 @@ impl FqTypeName {
     /// question it answers; not a binder, which is one parameter of one item.
     #[must_use]
     pub fn param_bucket(module: &crate::module_source::ModuleSource, name: &str) -> Self {
-        Self::of_head_kind(TypeHead::Shape {
+        Self::of_head_kind(TypeHead::ParamBucket {
             module: module.clone(),
             name: name.to_string(),
         })
@@ -2584,6 +2607,11 @@ impl FqTypeName {
                 out.push_str(&format!("{}/{}", head.module(), head.rendered()));
             }
             TypeHead::Shape { module, name } => out.push_str(&format!("{module}/{name}")),
+            // A bucket keys an index and heads no function name; spelled apart
+            // from a shape's so the two cannot be read as one.
+            TypeHead::ParamBucket { module, name } => {
+                out.push_str(&format!("{module}/{name}#param"));
+            }
             TypeHead::Builtin(name) => out.push_str(name),
             // An unowned binder keeps its bare spelling, leaving every template
             // name but a blanket's receiver byte-identical.

@@ -1,0 +1,33 @@
+// Rank 3 splits local from foreign and no finer, so two blankets in two
+// foreign modules are tied and rank 4 reports them. Comparing the modules
+// themselves instead would call them different, drop one, and let declaration
+// order pick — the silent choice the diagnostic exists to prevent
+// (WEP 2026-09-01, issue #1932).
+
+use { Limit, Mark, Describe } from "./sub/two_foreign_value_blankets_traits.wado";
+use { } from "./sub/two_foreign_value_blankets_limit.wado";
+use { } from "./sub/two_foreign_value_blankets_mark.wado";
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+impl Mark for Point {
+    fn mark() -> i32 {
+        return 9;
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "limit:7";
+}
+
+__DATA__
+{"compile_error": "ambiguous blanket impls of 'Describe' for 'Point'"}

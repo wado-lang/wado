@@ -1,0 +1,10 @@
+// One of `Describe`'s two value blankets. The orphan rule allows it because
+// the package owns `Describe`; the module that owns it is not the module that
+// writes it.
+use { Limit, Describe } from "./two_foreign_value_blankets_traits.wado";
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}

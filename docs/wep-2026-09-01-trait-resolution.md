@@ -67,10 +67,19 @@ receiver satisfies. They are ranked:
    locality, which is about where an impl is written rather than which type
    selected it.
 
+   The level is asked of the whole derivation, not just its first step. A bound
+   satisfied through another blanket (`impl<T: Base> Derived for T` answering
+   `T: Derived`) is at the level that blanket's own bound holds at, so a
+   chained blanket does not report the base's bound as the newtype's.
+
 3. **A local impl beats a foreign one.** Between candidates otherwise equal, the
    one in the calling module wins. This is the tie-break of last resort, not a
    substantive rule: everything above it is about the impl's relation to the
    receiver, and this is about the reader's vantage.
+
+   It splits local from foreign and no finer. Two blankets in two foreign
+   modules are tied, and fall to rank 4 — ordering them by which module wrote
+   them would be declaration order wearing a rank.
 
 4. **Anything left is ambiguous**, and is reported rather than resolved. See
    below for the two shapes.
@@ -100,7 +109,7 @@ nothing selects. The call names the trait: `Alpha::describe(&it)`
 above ranks them. A blanket has no name, so the call _cannot_ pin one. The only
 answer is an impl written for the receiver, which rank 1 puts above both:
 
-```
+```text
 ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and
 'T: ReflectStruct' apply, and nothing ranks them;
 write 'impl Describe for Point'
@@ -124,6 +133,12 @@ gates decide that and are not ranking rules:
 - A newtype inherits its base's impls for dispatch, so a blanket keyed by a
   bound only the base carries is a candidate for the newtype — at rank 2's
   depth 1, not excluded.
+
+A binder is one item's parameter, so a name that reaches a blanket's receiver
+is not the same question as a name spelled like it. A method parameter may
+shadow the receiver's letter, and inside that method the letter is the method's
+binder; the `impl` blocks of one module that bind a parameter of one spelling
+share an index bucket, which is neither a declaration nor a shape.
 
 ## Consequences
 

@@ -1,0 +1,72 @@
+// A blanket the newtype reaches only through a *chain* ranks as its base's.
+// `Wrapped` carries `impl Limit for Wrapped`; `Derived` reaches it only via
+// `impl<T: Base> Derived for T` over `Inner: Base`. Rank 2 asks at which
+// newtype level a bound first holds, so every step of the derivation is asked
+// of the same level (WEP 2026-09-01) — a bound reached by peeling inside a
+// chained blanket would report the base's as the newtype's and flatten the
+// rank. Issue #1932.
+
+trait Base {
+    fn base() -> i32;
+}
+
+trait Derived {
+    fn derived() -> i32;
+}
+
+impl<T: Base> Derived for T {
+    fn derived() -> i32 {
+        return T::base() + 1;
+    }
+}
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl<T: Derived> Describe for T {
+    fn describe(&self) -> String {
+        return `derived:${T::derived()}`;
+    }
+}
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+struct Inner {
+    x: i32,
+}
+
+impl Base for Inner {
+    fn base() -> i32 {
+        return 10;
+    }
+}
+
+type Wrapped = Inner;
+
+impl Limit for Wrapped {
+    fn limit() -> i32 {
+        return 3;
+    }
+}
+
+test "the newtype takes the blanket its own bound keys" {
+    let w = Inner { x: 1 } as Wrapped;
+    assert w.describe() == "limit:3";
+}
+
+test "the base takes the chained blanket" {
+    let i = Inner { x: 1 };
+    assert i.describe() == "derived:11";
+}
+
+__DATA__
+{"test": {}}

@@ -946,14 +946,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `impl` block in scope when it is that block's receiver, bare otherwise.
     ///
     /// So a blanket's template and the calls its body writes agree by
-    /// construction (#1932).
+    /// construction (#1932). Matched on the binding in scope rather than the
+    /// spelling: a method parameter may shadow the receiver's letter, and then
+    /// the letter is the method's binder, which heads no template.
     pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
-        match &self.annotate_ctx.trait_ctx.impl_owner {
-            Some((owner, receiver)) if receiver == written => {
-                self.impl_receiver_binder(*owner, written)
-            }
-            _ => crate::name::FqTypeName::binder(written),
+        let ctx = &self.annotate_ctx.trait_ctx;
+        if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
+            && ctx.type_params.get(written).and_then(|b| b.decl) == Some(*receiver_decl)
+        {
+            return self.impl_receiver_binder(*owner, written);
         }
+        crate::name::FqTypeName::binder(written)
     }
 
     /// The binder naming the receiver parameter `written` of the `impl` block
@@ -2061,11 +2064,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // skipping concrete types (e.g., `impl<i32, T>` — skip "i32").
         // This handles both `impl<T> Trait for Struct<T>` and
         // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
+        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
+        scope.register_impl_block_params(impl_block);
         // The block names its own receiver binder, both where the template is
         // recorded (below) and for the `T::method()` calls its bodies write.
-        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
-        scope.annotate_ctx.trait_ctx.impl_owner = impl_owner.map(|def| (def, struct_name.clone()));
-        scope.register_impl_block_params(impl_block);
+        // Named by the node the registration above bound it to, so a method
+        // parameter that shadows the letter is a different binder.
+        let receiver_decl = scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(&struct_name)
+            .and_then(|b| b.decl);
+        scope.annotate_ctx.trait_ctx.impl_owner = impl_owner.map(|def| (def, receiver_decl));
 
         if impl_block.is_synthesize_request {
             scope.resolve_synthesize_request_marker(impl_block, &struct_name);

@@ -1559,6 +1559,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver_type_id,
                         &target.receiver(self.tysys.resolutions.defs()),
                         bound_def,
+                        super::trait_query::NewtypePeel::Follow,
                     )
                 })
             });
@@ -2019,7 +2020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (name, idx) in &type_param_entries {
                 let i = *idx as usize;
                 if i < type_args.len() {
-                    Self::bind_type_param(&mut scope, header,name, *idx, type_args[i]);
+                    Self::bind_type_param(&mut scope, header, name, *idx, type_args[i]);
                 }
             }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
@@ -2030,7 +2031,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow_mut()
                     .make_tuple(type_args.to_vec());
-                Self::bind_type_param(&mut scope, header,pack_name, *pack_idx, pack_type);
+                Self::bind_type_param(&mut scope, header, pack_name, *pack_idx, pack_type);
             }
         }
 
@@ -2050,14 +2051,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .filter(|p| p.is_real_type_param())
                     .position(|p| &p.name == name)
                     .unwrap_or(0) as u32;
-                Self::bind_type_param(&mut scope, header,name, slot, recv_id);
+                Self::bind_type_param(&mut scope, header, name, slot, recv_id);
             } else {
                 let type_id = scope
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_type_param(name.clone(), 0);
-                Self::bind_type_param(&mut scope, header,name, 0, type_id);
+                Self::bind_type_param(&mut scope, header, name, 0, type_id);
             }
         }
 
@@ -2195,7 +2196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | ResolvedType::TypePack { index, .. } => *index,
                     other => panic!("method slot is not a type parameter: {other:?}"),
                 };
-                Self::bind_type_param(&mut scope, header,&type_param.name, index, type_param_id);
+                Self::bind_type_param(&mut scope, header, &type_param.name, index, type_param_id);
                 if !type_param.bounds.is_empty() {
                     scope
                         .annotate_ctx
@@ -2407,12 +2408,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(best) = candidates.first().filter(|m| m.blanket_binder.is_some()) else {
                 continue;
             };
+            // Rank 3 splits local from foreign, and no finer: two blankets in
+            // two foreign modules are tied, so comparing the modules themselves
+            // would drop one and leave declaration order to choose.
+            let is_local = |m: &super::types::TraitMethodMatch| {
+                m.impl_module_source == self.current_module_source
+            };
             let tied: Vec<&&super::types::TraitMethodMatch> = candidates
                 .iter()
-                .filter(|m| {
-                    m.bound_depth == best.bound_depth
-                        && m.impl_module_source == best.impl_module_source
-                })
+                .filter(|m| m.bound_depth == best.bound_depth && is_local(m) == is_local(best))
                 .collect();
             let distinct: IndexSet<&crate::name::FqTypeName> = tied
                 .iter()
