@@ -351,7 +351,7 @@ Take:
       still exist. Wado's cheatsheet and spec have no gate like this, and the
       third one is a shell script's worth of work. What makes the first one
       workable is a skip marker that requires a reason, so an example of what
-      *not* to write can stay in the document without quietly exempting itself
+      _not_ to write can stay in the document without quietly exempting itself
       from the gate.
 - [ ] Gate self-tests and a gate registry. A check script with no test is a claim
       nobody checked. vibe pairs most of its gates with a `_test.sh`, and keeps a
