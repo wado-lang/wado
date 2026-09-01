@@ -36,24 +36,21 @@ because release GC was only ~⅓ of wall-clock to begin with. Pure compute does 
 inflate, so a compute-bound win carries over intact.
 
 **A sample lands at the next epoch check, not where the time went.** The guest
-profiler samples on an epoch deadline, and wasmtime checks the epoch at function
-entries and loop headers — so straight-line code is charged to whichever of
-those it reaches next, and a small leaf called once per unit of work collects
-what ran just before it. A derived
-deserializer's field-dispatch chain reported as **73% self in
-`deserialize_i32`** on an 80-field struct, and 19% in `deserialize_bool` on
-cbor-twitter — neither function is more than a bounds check and two compares.
-So read a hot small leaf as _"this is entered a great many times, and something
-upstream of it is paying"_, and go look at the caller. It ranks candidates; it
-does not locate them.
+profiler samples on an epoch deadline and wasmtime checks the epoch at function
+entries and loop headers, so straight-line code is charged to whichever it
+reaches next. A derived deserializer's field-dispatch chain reported as **73%
+self in `deserialize_i32`** on an 80-field struct, and 19% in `deserialize_bool`
+on cbor-twitter — neither function is more than a bounds check and two compares.
+A hot small leaf is telling you how often it is entered, so go read its caller.
+The profile ranks candidates; it does not locate them.
 
 **Rule out a super-linear pass before blaming GC** — that same inflation makes an
 algorithmic blow-up read as GC-bound; sweep input size (faster-than-linear growth
 ⇒ the fix is the algorithm, not allocation) to tell them apart. Better still,
-sweep a _shape_ dimension with the total work held fixed, which leaves nothing
-else to explain the difference: 2,000,000 struct fields decoded from ~270 KB of
-CBOR took 147 ms at 5 fields per record and 486 ms at 80, naming the declaration
-width — and no allocation, no GC, no byte count — as the cost.
+sweep a _shape_ dimension with the total work held fixed: 2,000,000 struct fields
+decoded from ~270 KB of CBOR took 147 ms at 5 fields per record and 486 ms at 80,
+naming the declaration width — and no allocation, no GC, no byte count — as the
+cost.
 
 ## 2. Read the WIR — allocations and copies first
 
@@ -158,11 +155,10 @@ three or four, alternating and with the order swapped once — the first run of 
 session reads high, so a fixed order silently taxes whichever arm goes second.
 Run on an **idle** host, nothing else building: an A/B taken beside a compiling
 test suite has put both arms inside each other's spread and flipped their
-ranking. Check `uptime` — another agent's session on the same machine is
-invisible in every other way, and one running here put the same test target at
-145 s and at 2499 s before the box OOM-killed the next command. Nothing in a
-number says whether its host was idle,
-so `benchmark/README.md` is a sanity check on the arm you just built, never the
+ranking. Check `uptime`: another agent's session on the same machine put the same
+test target at 145 s and at 2499 s here, before the box OOM-killed the next
+command. Nothing in a number says whether its host was idle, so
+`benchmark/README.md` is a sanity check on the arm you just built, never the
 control for it — even on the machine that produced it; a HEAD build has measured
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
 A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it.
@@ -209,8 +205,8 @@ rebuilding per value** — and reach for it the moment a change looks like it on
 pays above some size, because that shape usually means two rewrites are riding
 one knob. `if_chain_to_match` appeared to need a 12-arm floor; overriding its
 threshold and `match_to_switch`'s separately showed the fusion was never the
-cost at any width and the `br_table` past it always was, which turned a 3.6%
-regression on json-catalog into a 2.1% gain. Delete the overrides before
+cost at any width and the `br_table` past it was the whole of it on the row that
+regressed, turning 3.6% down on cbor-catalog into 2.1% up. Delete the overrides before
 committing: read per node visit, `std::env::var` is itself a compile-time cost.
 
 **What decides adoption**, in priority order:
