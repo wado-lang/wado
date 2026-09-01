@@ -172,10 +172,10 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                         .borrow_mut()
                         .make_type_param(param.name.clone(), actual_idx)
                 };
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(param.name.clone(), (actual_idx, type_id));
+                self.annotate_ctx.trait_ctx.type_params.insert(
+                    param.name.clone(),
+                    scope::BinderInScope::declared(actual_idx, type_id, param.id),
+                );
             }
             if !param.bounds.is_empty() {
                 self.annotate_ctx
@@ -207,10 +207,10 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                             .type_table
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
-                        self.annotate_ctx
-                            .trait_ctx
-                            .type_params
-                            .insert(name.clone(), (i as u32, type_id));
+                        self.annotate_ctx.trait_ctx.type_params.insert(
+                            name.clone(),
+                            scope::BinderInScope::undeclared(i as u32, type_id),
+                        );
                     }
                 }
             }
@@ -558,7 +558,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         use_id: crate::ast::AstId,
         name: &str,
     ) {
-        if let Some(&decl_id) = self.annotate_ctx.trait_ctx.type_param_decls.get(name) {
+        if let Some(decl_id) = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(name)
+            .and_then(|b| b.decl)
+        {
             self.record_reference(use_id, decl_id);
         } else {
             self.record_item_reference_by_name(use_id, name);
@@ -900,13 +906,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> crate::name::FqTypeName {
+        self.qualified_receiver_name_owned(written, None)
+    }
+
+    /// [`Self::qualified_receiver_name`] for a receiver written inside the
+    /// `impl` block `owner` identifies — a blanket's receiver, which that
+    /// block names.
+    pub(super) fn qualified_receiver_name_owned(
+        &self,
+        written: &str,
+        owner: Option<crate::defs::DefId>,
+    ) -> crate::name::FqTypeName {
         if self
             .annotate_ctx
             .trait_ctx
             .type_params
             .contains_key(written)
         {
-            return crate::name::FqTypeName::binder(written);
+            return match owner {
+                Some(def) => self.impl_receiver_binder(def, written),
+                None => self.binder_in_scope(written),
+            };
         }
         if crate::name::is_builtin_shape_name(written) {
             return crate::name::FqTypeName::builtin(written);
@@ -916,6 +936,42 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // nothing, and the writing module is the only vantage left.
             || crate::name::FqTypeName::shape(&self.current_module_source, written),
             |def| crate::name::FqTypeName::of_head(self.tysys.resolutions.defs(), def),
+        )
+    }
+
+    /// The binder `written` names in the current type-param scope: owned by the
+    /// `impl` block in scope when it is that block's receiver, bare otherwise.
+    /// Matched on the binding, not the spelling — a method parameter may shadow
+    /// the receiver's letter (#1932).
+    pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
+        let ctx = &self.annotate_ctx.trait_ctx;
+        if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
+            && ctx.type_params.get(written).and_then(|b| b.decl) == Some(*receiver_decl)
+        {
+            return self.impl_receiver_binder(*owner, written);
+        }
+        crate::name::FqTypeName::binder(written)
+    }
+
+    /// The binder naming the receiver parameter `written` of the `impl` block
+    /// `owner` — every pass that names a blanket's receiver asks here.
+    pub(super) fn impl_receiver_binder(
+        &self,
+        owner: crate::defs::DefId,
+        written: &str,
+    ) -> crate::name::FqTypeName {
+        crate::name::FqTypeName::binder_of_impl(self.tysys.resolutions.defs(), owner, written)
+    }
+
+    /// The name an `impl` block's receiver registers under. One block, one
+    /// name: two spellings of it register two templates.
+    pub(super) fn impl_receiver_name(
+        &self,
+        impl_block: &crate::ast::ImplBlock,
+    ) -> crate::name::FqTypeName {
+        self.qualified_receiver_name_owned(
+            &self.get_type_name(&impl_block.ty),
+            self.tysys.resolutions.defs().of_ast_id(impl_block.id),
         )
     }
 
@@ -1188,7 +1244,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .trait_ctx
                 .type_params
                 .iter()
-                .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
+                .map(|(name, b)| (name.clone(), b.index, b.type_id))
                 .collect();
             self.record_pending_synthesis_request(tir::SynthesisRequest {
                 trait_ref,
@@ -1998,7 +2054,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // skipping concrete types (e.g., `impl<i32, T>` — skip "i32").
         // This handles both `impl<T> Trait for Struct<T>` and
         // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
+        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
         scope.register_impl_block_params(impl_block);
+        // The node the registration above bound the receiver to, so a method
+        // parameter shadowing the letter is a different binder.
+        let receiver_decl = scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(&struct_name)
+            .and_then(|b| b.decl);
+        scope.annotate_ctx.trait_ctx.impl_owner = impl_owner.map(|def| (def, receiver_decl));
 
         if impl_block.is_synthesize_request {
             scope.resolve_synthesize_request_marker(impl_block, &struct_name);
@@ -2096,10 +2162,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
             );
-            let qualified_struct_name = scope.qualified_receiver_name(&struct_name);
+            // Two names, two uses. `reify_impl_default_methods` recomputes a
+            // default method's name from `qualified_struct_name`, so it must be
+            // what this block's methods are recorded under — owned, or the
+            // block writes two templates. `receiver` keys `method_info` against
+            // receivers built elsewhere, so it stays plain.
+            let qualified_struct_name =
+                scope.qualified_receiver_name_owned(&struct_name, impl_owner);
             let receiver = match RefKind::from_ast(&impl_block.ty) {
                 Some(kind) => Receiver::Ref(kind),
-                None => Receiver::Type(qualified_struct_name.clone()),
+                None => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
             };
             // Concrete type args of the impl's trait reference
             // (`impl Future<i32>` → `[i32]`), resolved in the
@@ -2182,6 +2254,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 impl_is_concrete,
                 &impl_block.type_params,
                 Some(&recorded_sig),
+                impl_owner,
             );
         }
 
@@ -2246,6 +2319,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     impl_is_concrete,
                     &impl_block.type_params,
                     None,
+                    impl_owner,
                 );
 
                 // Swap back, take the populated synthetic out.

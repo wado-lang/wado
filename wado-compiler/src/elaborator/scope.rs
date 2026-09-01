@@ -16,6 +16,46 @@ use crate::tir::{ResolvedType, TypeId};
 use super::Elaborator;
 use super::trait_env::InheritedBound;
 
+/// A name bound in a type-parameter scope: its slot, the type it stands for,
+/// and the node that declares it.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct BinderInScope {
+    /// Slot in the enclosing item's parameter list.
+    pub(super) index: u32,
+    pub(super) type_id: TypeId,
+    /// Where the parameter is written, for jump-to-def on a use. `None` for a
+    /// name no parameter declares: `Self`, or one already bound to a concrete
+    /// type. Not what names a binder in a mangle — see
+    /// [`TraitContext::impl_owner`].
+    pub(super) decl: Option<ast::AstId>,
+}
+
+impl BinderInScope {
+    /// A binder the source declares, named by its own node.
+    pub(super) fn declared(index: u32, type_id: TypeId, decl: ast::AstId) -> Self {
+        Self {
+            index,
+            type_id,
+            decl: Some(decl),
+        }
+    }
+
+    /// A name in scope that no parameter declares — see [`Self::decl`].
+    pub(super) fn undeclared(index: u32, type_id: TypeId) -> Self {
+        Self {
+            index,
+            type_id,
+            decl: None,
+        }
+    }
+}
+
+/// The node in `params` that declares `name`, when one does. The caller picks
+/// the list, since only it knows which item bound the name (#1932).
+pub(super) fn param_decl(params: &[ast::GenericParam], name: &str) -> Option<ast::AstId> {
+    params.iter().find(|p| p.name == name).map(|p| p.id)
+}
+
 /// Mutable trait resolution context scoped to the current resolution site.
 ///
 /// Groups all state that changes when entering/leaving generic scopes
@@ -24,12 +64,9 @@ use super::trait_env::InheritedBound;
 /// with RAII restore on drop.
 #[derive(Clone, Default)]
 pub(super) struct TraitContext {
-    /// Type parameters currently in scope (name → (index, `TypeId`)).
-    /// Set when resolving generic structs, functions, or impl blocks.
-    pub(super) type_params: IndexMap<String, (u32, TypeId)>,
-    /// `AstId` of each type param's declaration site (for LSP jump-to-def on
-    /// type-parameter uses). Parallel to `type_params`, keyed by name.
-    pub(super) type_param_decls: IndexMap<String, ast::AstId>,
+    /// Type parameters currently in scope. Set when resolving generic structs,
+    /// functions, or impl blocks.
+    pub(super) type_params: IndexMap<String, BinderInScope>,
     /// Trait bounds on type parameters in scope (name → full bounds with assoc types).
     /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
     pub(super) type_param_bounds: IndexMap<String, Vec<ast::TraitBound>>,
@@ -42,6 +79,10 @@ pub(super) struct TraitContext {
     /// names. Qualifies `Self::Assoc` when `Self` is a concrete type, where
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<crate::defs::DefId>,
+    /// The `impl` block whose type parameters are in scope, paired with the
+    /// node declaring its receiver binder — what names that binder in a mangle.
+    /// The node, not the spelling: a method parameter may shadow the letter.
+    pub(super) impl_owner: Option<(crate::defs::DefId, Option<ast::AstId>)>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
     /// `EffectRef::Param` and to record its use→def edge.
@@ -310,10 +351,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .trait_ctx
             .type_params
             .iter()
-            .flat_map(|(name, &(index, tid))| {
-                let elem = matches!(tt.get(tid), ResolvedType::TypePack { .. })
-                    .then(|| tt.make_type_param(name.clone(), index));
-                std::iter::once(tid).chain(elem)
+            .flat_map(|(name, binder)| {
+                let elem = matches!(tt.get(binder.type_id), ResolvedType::TypePack { .. })
+                    .then(|| tt.make_type_param(name.clone(), binder.index));
+                std::iter::once(binder.type_id).chain(elem)
             })
             .collect()
     }
@@ -360,14 +401,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     true,
                 )
             };
-            self.annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(tp.name.clone(), (idx, type_id));
-            self.annotate_ctx
-                .trait_ctx
-                .type_param_decls
-                .insert(tp.name.clone(), tp.id);
+            self.annotate_ctx.trait_ctx.type_params.insert(
+                tp.name.clone(),
+                BinderInScope::declared(idx, type_id, tp.id),
+            );
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
@@ -417,10 +454,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             let resolved_arg = self.resolve_type(arg_ast);
             let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
-            self.annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(tp.name.clone(), (idx, resolved_arg));
+            self.annotate_ctx.trait_ctx.type_params.insert(
+                tp.name.clone(),
+                BinderInScope::declared(idx, resolved_arg, tp.id),
+            );
             if !tp.bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx

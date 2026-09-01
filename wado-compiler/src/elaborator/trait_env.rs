@@ -144,9 +144,10 @@ impl ImplTargetKey {
             ImplTargetKey::Undeclared(module, name) => {
                 name::Receiver::Type(name::FqTypeName::shape(module, name))
             }
-            // A type parameter names no declaration, so no module qualifies it.
-            ImplTargetKey::TypeParam(_, name) => {
-                name::Receiver::Type(name::FqTypeName::binder(name))
+            // Not a binder: the bucket every impl in this module binding this
+            // spelling as its own parameter shares.
+            ImplTargetKey::TypeParam(module, name) => {
+                name::Receiver::Type(name::FqTypeName::param_bucket(module, name))
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
             ImplTargetKey::Builtin(name) => name::Receiver::Type(name::FqTypeName::builtin(name)),
@@ -476,6 +477,14 @@ pub(crate) struct BlanketImpl {
     /// queries that have not been flipped; the answer is what a bound check
     /// compares, so an aliased bound reaches the trait it aliases.
     pub(crate) bounds: Vec<BlanketBound>,
+}
+
+impl BlanketImpl {
+    /// Where every template name for this blanket comes from — one built from
+    /// the spelling alone looks up a *different* template, silently.
+    pub(crate) fn receiver_binder(&self, defs: &crate::defs::DefTable) -> name::FqTypeName {
+        name::FqTypeName::binder_of_impl(defs, self.def, &self.param)
+    }
 }
 
 /// Classify a blanket impl's receiver, or `None` for a concrete/shape impl

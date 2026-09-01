@@ -1,0 +1,50 @@
+// A method type parameter may spell the impl's receiver letter. Inside that
+// method the letter is the method's binder, which heads no template, so
+// `T::limit()` dispatches on the argument's type (WEP 2026-09-01).
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Show {
+    fn show<T: Limit>(&self) -> i32;
+}
+
+impl<T: Limit> Show for T {
+    fn show<T: Limit>(&self) -> i32 {
+        return T::limit();
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+struct Other {
+    y: i32,
+}
+
+impl Limit for Other {
+    fn limit() -> i32 {
+        return 9;
+    }
+}
+
+test "the method's own binder wins over the impl's" {
+    let p = Point { x: 1 };
+    assert p.show::<Other>() == 9;
+}
+
+test "the receiver still selects the impl" {
+    let o = Other { y: 1 };
+    assert o.show::<Point>() == 7;
+}
+
+__DATA__
+{"test": {}}

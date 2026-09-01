@@ -14,13 +14,21 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::scope::Scope;
+use super::scope::{BinderInScope, Scope};
 use super::sig::TraitSig;
 use super::trait_env::InheritedBound;
 use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
+
+/// Whether a bound query may follow a newtype to its base. Dispatch does; rank
+/// 2 does not (`docs/wep-2026-09-01-trait-resolution.md`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum NewtypePeel {
+    Follow,
+    Here,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OnBoundTrait {
@@ -620,6 +628,46 @@ impl TypeSystem {
         result
     }
 
+    /// Whether `type_id` satisfies `trait_` at the type itself, without peeling
+    /// a newtype — rank 2's question, where [`Self::type_implements_trait`]
+    /// answers dispatch's (`docs/wep-2026-09-01-trait-resolution.md`).
+    pub(super) fn type_implements_trait_here(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        trait_: DefId,
+    ) -> bool {
+        let is_newtype = matches!(
+            self.type_table.borrow().get(type_id),
+            ResolvedType::Newtype { .. }
+        );
+        if !is_newtype {
+            return self.type_implements_trait(ctx, scope, type_id, trait_);
+        }
+        // A repeat answers `false` where `type_implements_trait` answers `true`
+        // on the same stack: that query descends into members, this one holds
+        // the subject fixed, so a repeat here is a bound grounding nothing.
+        {
+            let stack = ctx.trait_check_stack.borrow();
+            if stack.contains(&(type_id, trait_)) {
+                return false;
+            }
+        }
+        ctx.trait_check_stack.borrow_mut().push((type_id, trait_));
+        let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+        let result = self.find_trait_impl_for_subject(
+            ctx,
+            scope,
+            Some(type_id),
+            &receiver,
+            trait_,
+            NewtypePeel::Here,
+        );
+        ctx.trait_check_stack.borrow_mut().pop();
+        result
+    }
+
     /// Whether every member of `resolved` satisfies `trait_` under `tr`'s
     /// structural rule, and which one decided when they do not. One walk: the
     /// check takes the yes and the diagnostic the no, so they cannot disagree.
@@ -1148,6 +1196,7 @@ impl TypeSystem {
                 Some(type_id),
                 &Receiver::Type(FqTypeName::builtin(prim.as_str())),
                 trait_,
+                NewtypePeel::Follow,
             );
         }
 
@@ -1304,6 +1353,7 @@ impl TypeSystem {
                     &Receiver::Ref(RefKind::Shared),
                     trait_,
                     Some(&[inner_id]),
+                    NewtypePeel::Follow,
                 ) {
                     return true;
                 }
@@ -1325,6 +1375,7 @@ impl TypeSystem {
                     &Receiver::Ref(RefKind::Mut),
                     trait_,
                     Some(&[inner_id]),
+                    NewtypePeel::Follow,
                 ) {
                     return true;
                 }
@@ -1342,7 +1393,14 @@ impl TypeSystem {
             ResolvedType::Newtype { base_type, .. } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
                 let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-                if self.find_trait_impl_for_subject(ctx, scope, Some(type_id), &receiver, trait_) {
+                if self.find_trait_impl_for_subject(
+                    ctx,
+                    scope,
+                    Some(type_id),
+                    &receiver,
+                    trait_,
+                    NewtypePeel::Follow,
+                ) {
                     return true;
                 }
                 // Fall back to base type's trait implementation
@@ -1354,7 +1412,14 @@ impl TypeSystem {
             ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
             ResolvedType::Flags { .. } => {
                 let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-                if self.find_trait_impl_for_subject(ctx, scope, Some(type_id), &receiver, trait_) {
+                if self.find_trait_impl_for_subject(
+                    ctx,
+                    scope,
+                    Some(type_id),
+                    &receiver,
+                    trait_,
+                    NewtypePeel::Follow,
+                ) {
                     return true;
                 }
                 return self.type_implements_trait(ctx, scope, TypeTable::U32, trait_);
@@ -1369,6 +1434,7 @@ impl TypeSystem {
             &Receiver::Type(type_name),
             trait_,
             type_args.as_deref(),
+            NewtypePeel::Follow,
         )
     }
 
@@ -1382,8 +1448,9 @@ impl TypeSystem {
         subject: Option<TypeId>,
         type_key: &Receiver,
         trait_: DefId,
+        peel: NewtypePeel,
     ) -> bool {
-        self.find_trait_impl_for_type_with_args(ctx, scope, subject, type_key, trait_, None)
+        self.find_trait_impl_for_type_with_args(ctx, scope, subject, type_key, trait_, None, peel)
     }
 
     pub(super) fn has_real_trait_impl_for_type(
@@ -1396,7 +1463,14 @@ impl TypeSystem {
     ) -> bool {
         self.trait_env
             .has_any_methodful_impl_by_receiver(type_key, trait_)
-            || self.blanket_trait_impl_applies(ctx, scope, subject, type_key, trait_)
+            || self.blanket_trait_impl_applies(
+                ctx,
+                scope,
+                subject,
+                type_key,
+                trait_,
+                NewtypePeel::Follow,
+            )
     }
 
     /// Whether a bare bound on the header's trait selects it — see
@@ -1426,6 +1500,7 @@ impl TypeSystem {
         type_key: &Receiver,
         trait_: DefId,
         type_args: Option<&[TypeId]>,
+        peel: NewtypePeel,
     ) -> bool {
         let trait_env = self.trait_env.clone();
         {
@@ -1459,7 +1534,7 @@ impl TypeSystem {
         // `impl_index` above (the index is built from every loaded module,
         // including this one), so no separate current-module scan is needed.
 
-        self.blanket_trait_impl_applies(ctx, scope, subject, type_key, trait_)
+        self.blanket_trait_impl_applies(ctx, scope, subject, type_key, trait_, peel)
     }
 
     /// [`Self::type_implements_trait_inner`]'s primitive arm, asked of a
@@ -1501,6 +1576,40 @@ impl TypeSystem {
             .trait_item_of_decl(decl)
     }
 
+    /// Whether one of a blanket's receiver bounds holds at the level `peel`
+    /// names. `Follow` also asks the subject query, the one entry a
+    /// structurally derived `Eq` / `Ord` has; `Here` asks only the guarded one,
+    /// since an unguarded index lookup cannot stop a cycle among bounds.
+    fn blanket_bound_holds(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        subject: Option<TypeId>,
+        type_key: &Receiver,
+        bound_trait: DefId,
+        peel: NewtypePeel,
+    ) -> bool {
+        match (peel, subject) {
+            (NewtypePeel::Here, Some(id)) => {
+                self.type_implements_trait_here(ctx, scope, id, bound_trait)
+            }
+            (NewtypePeel::Here, None) => {
+                self.find_trait_impl_for_subject(ctx, scope, subject, type_key, bound_trait, peel)
+            }
+            (NewtypePeel::Follow, _) => {
+                subject.is_some_and(|id| self.type_implements_trait(ctx, scope, id, bound_trait))
+                    || self.find_trait_impl_for_subject(
+                        ctx,
+                        scope,
+                        subject,
+                        type_key,
+                        bound_trait,
+                        peel,
+                    )
+            }
+        }
+    }
+
     fn blanket_trait_impl_applies(
         &self,
         ctx: &Scope,
@@ -1508,6 +1617,7 @@ impl TypeSystem {
         subject: Option<TypeId>,
         type_key: &Receiver,
         trait_: DefId,
+        peel: NewtypePeel,
     ) -> bool {
         // A structural obligation is the member walk's to answer, so a
         // `Reflect*`-bounded blanket does not get to answer it: its bound holds
@@ -1538,13 +1648,8 @@ impl TypeSystem {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
                     || self.primitive_satisfies_builtin_trait(type_key, bound)
-                    || bound.decl_ref.is_some_and(|trait_| {
-                        // The one entry, so a structurally derived `Eq` / `Ord`
-                        // answers a blanket's bound as it answers a written one.
-                        // An impl-index scan alone sees no impl for a derive.
-                        subject.is_some_and(|id| self.type_implements_trait(ctx, scope, id, trait_))
-                            || self
-                                .find_trait_impl_for_subject(ctx, scope, subject, type_key, trait_)
+                    || bound.decl_ref.is_some_and(|bound_trait| {
+                        self.blanket_bound_holds(ctx, scope, subject, type_key, bound_trait, peel)
                     })
             });
             if bounds_satisfied && self.blanket_assoc_constraints_hold(subject, &blanket.bounds) {
@@ -2414,11 +2519,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // → set current_type_params["T"] = (0, u8_typeid)
             for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
                 if let Some(&concrete_arg) = concrete_type_args.get(i) {
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .insert(tp_name.clone(), (i as u32, concrete_arg));
+                    scope.annotate_ctx.trait_ctx.type_params.insert(
+                        tp_name.clone(),
+                        BinderInScope::undeclared(i as u32, concrete_arg),
+                    );
                 }
             }
             // Add bounds from type param declarations
@@ -2522,11 +2626,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
             scope.annotate_ctx.trait_ctx.self_type = Some(concrete_type_id);
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(info.blanket_param_name.clone(), (0, concrete_type_id));
+            scope.annotate_ctx.trait_ctx.type_params.insert(
+                info.blanket_param_name.clone(),
+                BinderInScope::undeclared(0, concrete_type_id),
+            );
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -2707,6 +2810,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info,
             impl_module_source,
             blanket_type_param: None,
+            blanket_binder: None,
+            blanket_bounds: None,
+            bound_depth: 0,
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
             is_blanket_ref_impl: false,

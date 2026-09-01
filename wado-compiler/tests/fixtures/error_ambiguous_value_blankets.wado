@@ -1,0 +1,44 @@
+// `Point` impls `Limit` and, as a struct, satisfies `ReflectStruct`, so both of
+// `Describe`'s value blankets apply and nothing ranks them. Rank 4 of the
+// selection order (WEP 2026-09-01): reported, not settled by declaration order.
+// A blanket has no name, so unlike the two-trait case
+// (`error_ambiguous_cross_trait_method.wado`) the call cannot pin one — only an
+// `impl Describe for Point` answers it. Issue #1932.
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+impl<T: ReflectStruct> Describe for T {
+    fn describe(&self) -> String {
+        return `struct:${Reflect::<T>::type_name()}`;
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "limit:7";
+}
+
+__DATA__
+{"compile_error": "ambiguous blanket impls of 'Describe' for 'Point'"}

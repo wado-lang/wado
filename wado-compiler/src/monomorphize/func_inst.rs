@@ -1544,7 +1544,7 @@ impl Monomorphizer {
                         // A tuple is module-independent, so its receiver form is
                         // the bare tuple name.
                         MethodName::format_local(
-                            &FqTypeName::binder(TypeTable::TUPLE_TYPE_NAME),
+                            &FqTypeName::builtin(TypeTable::TUPLE_TYPE_NAME),
                             info.trait_name.as_ref(),
                             &info.method_name,
                         )
@@ -1916,12 +1916,11 @@ impl Monomorphizer {
                     .iter()
                     .map(|&t| type_table.fq_type_name(t))
                     .collect();
-                // Blanket impl: struct name IS the type param (e.g., "I").
-                // Replace it with the concrete type name instead of appending type args.
-                let is_blanket = generic
-                    .impl_type_params
-                    .iter()
-                    .any(|p| p.name == info.base_struct_name());
+                // A blanket impl's receiver IS one of its type params (e.g.
+                // "I"): substitute the concrete name instead of appending args.
+                let is_blanket = info.receiver().is_declared_binder_of(
+                    generic.impl_type_params.iter().map(|p| p.name.as_str()),
+                );
                 if is_blanket && !impl_type_arg_names.is_empty() {
                     info.with_substituted_struct_name(&impl_type_arg_names[0])
                 } else {
@@ -2282,7 +2281,12 @@ impl Monomorphizer {
                                                 )
                                             },
                                         )
-                                        .map(|b| (b.module.clone(), b.param.clone()))
+                                        .map(|b| {
+                                            (
+                                                b.module.clone(),
+                                                b.receiver_binder(type_table.defs()),
+                                            )
+                                        })
                                 })
                             } else {
                                 None
@@ -2320,7 +2324,7 @@ impl Monomorphizer {
                                 .zip(new_info.trait_name.clone())
                                 .map(|((_, param), tn)| {
                                     LocalMethodName::new(
-                                        FqTypeName::binder(param),
+                                        param.clone(),
                                         Some(tn),
                                         new_info.method_name.clone(),
                                     )
@@ -3370,7 +3374,7 @@ impl Monomorphizer {
                     .map(|b| {
                         (
                             b.module.clone(),
-                            b.param.clone(),
+                            b.receiver_binder(type_table.defs()),
                             self.functions.trait_env.pack_assocs_of_blanket(b),
                         )
                     })
@@ -3457,7 +3461,7 @@ impl Monomorphizer {
                 new_func_name.clone()
             } else if let Some(param) = blanket_param {
                 LocalMethodName::new(
-                    FqTypeName::binder(&param),
+                    param,
                     new_info.trait_name.clone(),
                     new_info.method_name.clone(),
                 )

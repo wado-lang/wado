@@ -414,11 +414,10 @@ impl Monomorphizer {
             .map(|t| type_table.mangle_type_arg_for_generic(*t))
             .collect();
 
-        // Blanket impl: struct name IS the type param (e.g., "I").
-        // Detected by checking if base_struct_name matches an impl type param name.
-        let is_blanket = impl_type_params
-            .iter()
-            .any(|p| p.name == method_info.base_struct_name());
+        // A blanket impl's receiver IS one of its type params (e.g. "I").
+        let is_blanket = method_info
+            .receiver()
+            .is_declared_binder_of(impl_type_params.iter().map(|p| p.name.as_str()));
 
         let mangled_struct = if is_blanket && !impl_arg_names.is_empty() {
             // Replace struct name entirely: "I" → "StrCharIter"

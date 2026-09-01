@@ -971,7 +971,7 @@ pub(crate) fn blanket_dispatch_for(
     )?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(
-        FqTypeName::binder(&blanket.param),
+        blanket.receiver_binder(tt.defs()),
         Some(trait_name.clone()),
         method_name.to_string(),
     )

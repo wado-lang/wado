@@ -1,6 +1,7 @@
 //! Expression resolution (literals, identifiers, field access, index,
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
+use super::scope::BinderInScope;
 use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -4776,7 +4777,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let subject_name = &id.segments[0].name;
-        let &(index, tid) = self.annotate_ctx.trait_ctx.type_params.get(subject_name)?;
+        let &BinderInScope {
+            index,
+            type_id: tid,
+            ..
+        } = self.annotate_ctx.trait_ctx.type_params.get(subject_name)?;
         matches!(
             self.tysys.type_table.borrow().get(tid),
             ResolvedType::TypePack { .. }

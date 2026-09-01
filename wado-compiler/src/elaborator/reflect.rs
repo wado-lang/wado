@@ -560,7 +560,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_is_mut: Vec<bool>,
     ) {
         let mut method_info = LocalMethodName::new(
-            FqTypeName::binder(type_param_name),
+            self.binder_in_scope(type_param_name),
             Some(reflect_trait_name),
             method,
         );
