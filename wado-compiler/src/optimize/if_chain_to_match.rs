@@ -39,9 +39,10 @@ impl<'t> IfChainToMatchRule<'t> {
     }
 }
 
-/// One recognised `if K == x` statement.
+/// One recognised `if K == x` statement, and where it sits in its block.
 struct Case {
     stmt: StmtId,
+    at: usize,
     then_block: BlockId,
     key: i128,
 }
@@ -70,7 +71,9 @@ impl Rule for IfChainToMatchRule<'_> {
             let mut end = start;
             let mut cursor = start;
             while cursor < stmts.len() {
-                if let Some(case) = case_at(engine.body, self.type_table, stmts[cursor], local) {
+                if let Some(case) =
+                    case_at(engine.body, self.type_table, stmts[cursor], cursor, local)
+                {
                     // A repeated key is a second arm the chain would still run
                     // and a `Match` would not; stop the run before it.
                     if !keys.insert(case.key) {
@@ -88,8 +91,11 @@ impl Rule for IfChainToMatchRule<'_> {
                 // run: its value depends on nothing an arm writes, and being
                 // immutable nothing can reassign it. A second binding of the
                 // same local would — the unrolled copies shadow one name — so
-                // that ends the run instead.
+                // that ends the run instead, as does a binding of the scrutinee
+                // itself, which is the one write the hoist would carry ahead of
+                // the guards that read it.
                 if let Some(bound) = constant_let(engine.body, stmts[cursor])
+                    && bound != local
                     && hoisted_locals.insert(bound)
                 {
                     pending.push(stmts[cursor]);
@@ -100,8 +106,12 @@ impl Rule for IfChainToMatchRule<'_> {
             }
             // One arm is not a chain — the `Match` would lower back to the very
             // branch it replaced.
-            if cases.len() < 2 || writes_local(engine.body, &cases, local) {
+            if cases.len() < 2 {
                 start += 1;
+                continue;
+            }
+            if let Some(writer) = first_writing_case(engine.body, &cases, local) {
+                start = cases[writer].at + 1;
                 continue;
             }
             compiler_trace!(
@@ -122,8 +132,8 @@ impl Rule for IfChainToMatchRule<'_> {
     }
 }
 
-/// `stmt` as `if K == <local> { … }` for the run's local.
-fn case_at(body: &Body, table: &TypeTable, stmt: StmtId, local: u32) -> Option<Case> {
+/// The block's `at`th statement as `if K == <local> { … }` for the run's local.
+fn case_at(body: &Body, table: &TypeTable, stmt: StmtId, at: usize, local: u32) -> Option<Case> {
     let (found, key) = split_guard(body, table, stmt)?;
     if found != local {
         return None;
@@ -133,6 +143,7 @@ fn case_at(body: &Body, table: &TypeTable, stmt: StmtId, local: u32) -> Option<C
     };
     Some(Case {
         stmt,
+        at,
         then_block,
         key,
     })
@@ -253,36 +264,45 @@ fn constant_let(body: &Body, stmt: StmtId) -> Option<u32> {
     .then_some(local_index)
 }
 
-/// Whether any arm assigns `local`. A guard the arms can invalidate is not a
-/// guard, and only an unwritten scrutinee makes the constants exclusive.
-fn writes_local(body: &Body, cases: &[Case], local: u32) -> bool {
+/// The first arm that writes `local`, by assignment or by rebinding it. A guard
+/// the arms can invalidate is not a guard, and only an unwritten scrutinee makes
+/// the constants exclusive. Every run containing that arm is rejected, so the
+/// caller resumes past it rather than one statement on.
+fn first_writing_case(body: &Body, cases: &[Case], local: u32) -> Option<usize> {
     cases
         .iter()
-        .any(|c| node_writes_local(body, NodeRef::Block(c.then_block), local))
+        .position(|c| subtree_writes_local(body, NodeRef::Block(c.then_block), local))
+}
+
+fn subtree_writes_local(body: &Body, root: NodeRef, local: u32) -> bool {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if node_writes_local(body, node, local) {
+            return true;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    false
 }
 
 fn node_writes_local(body: &Body, node: NodeRef, local: u32) -> bool {
     match node {
         NodeRef::Expr(id) => {
-            if let ExprKind::Assign { target, .. } = &body.exprs[id].kind
-                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                && *index == local
-            {
-                return true;
-            }
+            let ExprKind::Assign { target, .. } = &body.exprs[id].kind else {
+                return false;
+            };
+            matches!(&body.exprs[*target].kind, ExprKind::Local { index, .. } if *index == local)
         }
+        // A `let` and a pattern binding are the same write: the scrutinee's
+        // index bound to something else. `for_each_child` yields both.
         NodeRef::Stmt(id) => {
-            if let StmtKind::Let { local_index, .. } = &body.stmts[id].kind
-                && *local_index == local
-            {
-                return true;
-            }
+            matches!(&body.stmts[id].kind, StmtKind::Let { local_index, .. } if *local_index == local)
         }
-        _ => {}
+        NodeRef::Pat(id) => {
+            matches!(&body.pats[id].kind, PatKind::Binding { local_index, .. } if *local_index == local)
+        }
+        NodeRef::Block(_) => false,
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    kids.into_iter().any(|c| node_writes_local(body, c, local))
 }
 
 /// Build `match local { K0 => { … }, …, _ => {} }` as one statement. The
