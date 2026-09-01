@@ -42,17 +42,19 @@ work; the two wasm backends; the Vibe Book.
 
 ### The self-application cross-check
 
-Two implementations of the semantics, and nothing holding them to one answer.
-The linear backend is the production default and the gc backend is unreachable
-from the compile CLI, so the disagreement between them is not load-bearing yet —
-which is also why it went unpaid: `Array::push` is in-place and growable on one
-and fixed-size on the other, and the memory contract records the debt rather
-than a gate against it. Compare the surveyed alternative, where two backends of
-comparable standing produced a contract ledger, a fixture corpus and a
-three-way oracle.
+There are two implementations of the semantics here too, and nothing holds them
+to one answer.
 
-On the axis that is load-bearing, vibe applies the strongest available form of
-this check: the compiler is written in the language.
+The linear backend is the production default, and the gc backend cannot be
+reached from the compile CLI at all. So the disagreement between them does not
+hurt yet — which is also why the bill has gone unpaid. `Array::push` is in-place
+and growable on one backend and fixed-size on the other, and the memory contract
+writes the debt down instead of gating against it. In the other surveyed
+language, two backends of equal standing produced a contract ledger, a fixture
+corpus and a three-way oracle.
+
+On the axis that does carry weight, vibe applies the strongest form of this
+check there is: the compiler is written in the language.
 
 | Measure                                                                    | Value                                                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -88,117 +90,138 @@ generator are all written this way.
 | B7 Self-reported violations | Yes                                   | `docs/known-issues.md`, plus decided-but-not-landed rules marked inline in `AGENTS.md` where a reader would otherwise take them for current behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | B8 Who decides              | No rule                               | Not stated                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
-B3 and B5 are the interesting entries, because they are refusals with reasons
-rather than gaps. vibe diagnoses precisely the failure this survey found in
-Almide — a gate that covers code and is blind to prose — and answers it by
-deleting the redundant surface instead of building a prose gate.
-`docs/language-tour/` was removed for exactly this: doctest compile-checked its
-code blocks and could not see that its prose still called `String` a UTF-16
-string after ADR-0098 made it a byte string, and still named `index.vibei` as
-the package boundary after ADR-0070 replaced it.
+B3 and B5 are the interesting rows, because they are refusals with reasons
+rather than things nobody got round to.
 
-The stable surface is recorded in `docs/spec/stable-surface.md` and is honest
-about not yet being in force — the freeze takes effect at the `0.1.0` tag,
-"until then this document describes the surface being frozen, not a promise
-already made".
+vibe diagnoses exactly the failure this survey found in Almide — a gate that
+covers code and is blind to prose — and answers it by deleting the redundant
+surface instead of building a gate for prose. `docs/language-tour/` was removed
+for precisely that reason. Doctest compile-checked its code blocks and could not
+see that the prose around them still called `String` a UTF-16 string, long after
+ADR-0098 made it a byte string, and still named `index.vibei` as the package
+boundary after ADR-0070 replaced it.
 
-The specification opens by declaring its own authority rather than assuming it:
-which document is canonical for surface syntax, which for the behaviour outside
-it, which for package boundaries and pinning, and that anything marked future,
-proposal or draft is non-normative. It then partitions the language a second
-way, into what the standard tutorial teaches and what is documented but left
-out of it — a statement of the subset a reader should generate from, distinct
-from the subset that is frozen.
+`docs/spec/stable-surface.md` records the stable surface, and is honest about
+not yet being in force. The freeze takes effect at the `0.1.0` tag, and until
+then, in its own words, "this document describes the surface being frozen, not a
+promise already made".
+
+The specification opens by declaring its own authority instead of assuming it.
+It says which document is canonical for surface syntax, which for the behaviour
+outside syntax, and which for package boundaries and pinning. It also says that
+anything marked future, proposal or draft is non-normative.
+
+Then it splits the language a second way: what the standard tutorial teaches,
+against what is documented but deliberately left out of it. That is a statement
+about which subset a reader should write from, and it is a different subset from
+the one that is frozen.
 
 ### The handler lowering, and what it costs
 
-`handle` is compiled by replay. The body is wrapped in a wasm `loop`, `perform`
-unwinds to the handler while recording resolved resume values into a fixed 128 KB
-region, and `resume(v)` appends to that memo and re-runs the body **from the
-top**, skipping already-resolved performs. Only the return value of a perform is
-memoized, so everything else in the body runs again per resume.
+`handle` is compiled by replay. The body is wrapped in a wasm `loop`. A `perform`
+unwinds to the handler, recording resolved resume values into a fixed 128 KB
+region on the way. Then `resume(v)` appends to that memo and re-runs the body
+**from the top**, skipping the performs it has already resolved.
 
-The consequence is measured, in their own review round: a body performing twice
-prints its first line three times, a `let mut` accumulator reads 23 against an
-expected 11, and the returned value is 29 against an expected 17. The value
-itself is wrong. The mitigation shipped was a cheatsheet sentence telling authors
-to keep a handle body pure until the last perform, and the defect was not pinned
-by a fixture. There is also a hard ceiling — 128 KB over 8 bytes is 16,382
-performs per handle — whose constant is duplicated across three files, and
-shrinking it once corrupted the heap.
+Only a perform's return value gets memoized. Everything else in the body runs
+again on every resume.
 
-ADR-0076 replaces all of it with Koka's generalized evidence passing, and the
+Their own review round measured what that does. A body that performs twice
+prints its first line three times. A `let mut` accumulator reads 23 where 11 was
+expected. The function returns 29 where 17 was expected. The value itself is
+wrong.
+
+What shipped as the fix was a sentence in the cheatsheet, telling authors to keep
+a handle body pure until the last perform. No fixture pins the defect. There is
+also a hard ceiling: 128 KB divided by 8 bytes is 16,382 performs per handle. The
+constant is duplicated across three files, and shrinking it once corrupted the
+heap.
+
+ADR-0076 replaces all of it with Koka's generalized evidence passing. The
 design's first move is reuse: vibe already passes trait dictionaries as implicit
-witness parameters for generic method calls, so the evidence vector is built as
-an application of that mechanism rather than a second one. Two things in the
-write-up are worth as much as the decision. It corrects the premise of the issue
-that requested it — the tail-resumptive fast path the issue assumed would be
-generalized existed only in the retired MoonBit host, so this is introduction,
-not generalization. And its phase 1 is to pin the existing corruption as a
-regression fixture _before_ fixing anything, so that "fixed" is later provable
-rather than asserted.
+witness parameters for generic method calls, so the evidence vector is built on
+that same mechanism instead of a second one.
 
-The plan then shrank on investigation. A CPS runtime was scheduled for phase 3
-and turned out to be unnecessary: the checker already rejects non-tail and
-multi-shot resume, which by the Xie and Leijen definition makes every handler
-tail-resumptive already, so the work reduces to widening the static coverage of
-the evidence pass. The document records that the phase evaporated.
+Two things in the write-up are worth as much as the decision itself.
+
+First, it corrects the premise of the issue that asked for it. The issue assumed
+there was a tail-resumptive fast path to generalize; that path only ever existed
+in the retired MoonBit host. So this is introducing a mechanism, not generalizing
+one.
+
+Second, phase 1 is to pin the existing corruption as a regression fixture
+_before_ fixing anything, so that "fixed" can later be proved rather than
+asserted.
+
+The plan then shrank once they investigated. A CPS runtime was scheduled for
+phase 3 and turned out to be unnecessary: the checker already rejects non-tail
+and multi-shot resume, which by the Xie and Leijen definition makes every handler
+tail-resumptive already. So the remaining work is just widening how much the
+evidence pass covers statically. The document records that the phase evaporated.
 
 ### Backends, and where wasm-gc actually is
 
-The gc backend is not what its name suggests. It enables the Wasm-GC feature set
-but does not emit `struct.new` or `array.new` for user values — tuples, structs,
-constructors and closures live in guest linear memory behind a bump allocator,
-so nothing exists for a tracing collector to reclaim. It is not reachable from
-the compile CLI at all: `compile --wasm-gc` throws, and the lane is entered only
-through test and bench environment variables for host-import-free cases.
+The gc backend is not what its name suggests. It turns on the Wasm-GC feature
+set, but it does not emit `struct.new` or `array.new` for user values. Tuples,
+structs, constructors and closures all live in guest linear memory behind a bump
+allocator, so there is nothing for a tracing collector to reclaim.
+
+It is also unreachable from the compile CLI: `compile --wasm-gc` throws. The only
+way in is through test and bench environment variables, for cases with no host
+imports.
 
 The production default is linear memory with Perceus reference counting.
-Reclamation is eager and deterministic, cycles leak permanently, and the
-compiler's own self-build is pinned away from RC to bump for performance — RC
-costs it roughly 1.7× wall clock and 2.9× output size.
+Reclamation is eager and deterministic. Cycles leak permanently. The compiler's
+own self-build is pinned away from RC and back to bump, for performance — RC
+costs it roughly 1.7× in wall clock and 2.9× in output size.
 
-The backends do not agree on the language. `Array::push` is in-place and growable
-on linear and fixed-size with a rebound local on gc, and the memory contract
-records that this "must be reconciled or documented before unifying defaults".
-The same document states what has to happen once the gc lane emits real GC
-allocations: eager RC against lazy GC is a fundamental difference, and the plan
-for holding observable behaviour identical across it is a differential test
-rather than an argument.
+The two backends do not agree on what the language means. `Array::push` is
+in-place and growable on linear, and fixed-size with a rebound local on gc. The
+memory contract records that this "must be reconciled or documented before
+unifying defaults".
+
+The same document says what happens once the gc lane emits real GC allocations.
+Eager RC against lazy GC is a fundamental difference, and the plan for keeping
+observable behaviour identical across it is a differential test rather than an
+argument.
 
 ### Oracle documents
 
-The module system is specified in a genre neither Wado nor the survey's axes
-account for. `docs/module-system-oracle.md` declares itself the executable canon
-of its ADR: a Lean model under `formal/VibeFormal/Module/` decides package
-boundary, ownership, visibility and hash input, and the compiler's loader
-refines that judgement onto a filesystem. The prose is the readable form of the
-model, and it says so — every other document that touches the subject "links
-here and holds no explanation of its own", and where a generation of documents
-disagree, this section and the Lean model win.
+The module system is written up in a genre that neither Wado nor this rubric's
+axes account for.
 
-Its table is the shape worth having. One row per observable rule, three columns:
-the Lean definition that decides it, the implementation function that refines
-it, and the test that pins the pair. `Boundary` / `Workspace.ownerOf` against
-`nearest_vpkg_path_fs`; `AllowedImport` against `enforce_incoming_boundary_fs`;
-`automaticallyIncludedInPackageHash` against
+`docs/module-system-oracle.md` declares itself the executable canon of its ADR. A
+Lean model under `formal/VibeFormal/Module/` decides package boundary, ownership,
+visibility and hash input. The compiler's loader then refines that judgement onto
+a real filesystem. The prose is the readable form of the model, and it says so:
+every other document touching the subject "links here and holds no explanation of
+its own", and where documents from different generations disagree, this section
+and the Lean model win.
+
+Its table is the shape worth stealing. One row per observable rule, and three
+columns: the Lean definition that decides it, the implementation function that
+refines it, and the test that pins the pair together. So `Boundary` and
+`Workspace.ownerOf` sit against `nearest_vpkg_path_fs`, `AllowedImport` against
+`enforce_incoming_boundary_fs`, and `automaticallyIncludedInPackageHash` against
 `collect_package_hash_source_closure_fs`.
 
-It closes with an `Epistemic status` section stating what the proof does not
-cover — filesystem path normalization, the parser, the cache, hash bytes and
-wasm codegen are not extracted from Lean — what holds those instead (regression
-tests and a fixpoint gate), and what would close the gap: a differential oracle
-turning fixture graphs into Lean inputs, and an inductive model of hash-closure
-reachability.
+It closes with an `Epistemic status` section. That section says what the proof
+does _not_ cover — filesystem path normalization, the parser, the cache, hash
+bytes and wasm codegen are none of them extracted from Lean. It says what holds
+those instead: regression tests and a fixpoint gate. And it says what would close
+the gap: a differential oracle that turns fixture graphs into Lean inputs, and an
+inductive model of hash-closure reachability.
 
 One decision inside the model is worth taking on its own. Transparent types
-declared in a package contract are ambient within the package, and rather than
-special-case how a sibling resolves an enum constructor, the loader materializes
-them as a content-keyed real source module under `_build/`, ownerless, which the
-facade re-exports and siblings import through the ordinary mechanism. The
-special case is turned into an instance of the general rule. What it prevents is
-a second definition site: two same-named enums become separate identities and
-trap at run time.
+declared in a package contract are ambient inside that package. Rather than
+special-case how a sibling module resolves an enum constructor, the loader writes
+those types out as a real source module under `_build/`, content-keyed and
+ownerless. The facade re-exports it, and siblings import it through the ordinary
+mechanism.
+
+That turns a special case into an instance of the general rule. What it prevents
+is a second definition site, because two same-named enums would become separate
+identities and trap at run time.
 
 ## C. Spin-off value
 

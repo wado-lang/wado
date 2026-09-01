@@ -107,7 +107,7 @@ Synthesised functions are skipped: CM bindings, effect-dispatch wrappers,
 monomorphisation clones, auto-derived impls.
 
 Two impls of the same trait for different `Self` are skipped as well, because an
-identical body there is normal. Two impls of *different* traits with the same
+identical body there is normal. Two impls of _different_ traits with the same
 body are compared.
 
 `#[allow(...)]` silences a finding on one item, or on every item in a file when

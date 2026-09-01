@@ -68,15 +68,15 @@ survey that admits no gaps is claiming to have read everything.
 
 What the language lets you write.
 
-| Axis                   | What to look at                                                                                                                                                                                                                        |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A1 Canonicity          | Is there one way to write each thing? Does the compiler enforce it, or does a document merely say so?                                                                                                                                   |
-| A2 Type vocabulary     | Did the language invent its type kinds, or take them from an outside standard?                                                                                                                                                         |
-| A3 Effects             | One bit (pure or effectful), named in the type, or dispatched to a handler?                                                                                                                                                            |
-| A4 Errors              | Values or exceptions? Is propagation written out or implicit? Does the error type get converted implicitly when it propagates? Is there a stated rule for when an error is worth branching on?                                          |
-| A5 Concurrency         | async/await, structured, or none? Does it give the same answer on every target and machine?                                                                                                                                             |
+| Axis                   | What to look at                                                                                                                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1 Canonicity          | Is there one way to write each thing? Does the compiler enforce it, or does a document merely say so?                                                                                                                                                                              |
+| A2 Type vocabulary     | Did the language invent its type kinds, or take them from an outside standard?                                                                                                                                                                                                     |
+| A3 Effects             | One bit (pure or effectful), named in the type, or dispatched to a handler?                                                                                                                                                                                                        |
+| A4 Errors              | Values or exceptions? Is propagation written out or implicit? Does the error type get converted implicitly when it propagates? Is there a stated rule for when an error is worth branching on?                                                                                     |
+| A5 Concurrency         | async/await, structured, or none? Does it give the same answer on every target and machine?                                                                                                                                                                                        |
 | A6 Boundary mechanisms | How does something from outside the language get in? Look for code generation at build time, a serialization framework at run time, and foreign interface import. Almost everyone refuses macros, so ask where generation went instead, and whether you can open what it produces. |
-| A7 Hidden operations   | Is there a list of what the compiler does behind your back?                                                                                                                                                                            |
+| A7 Hidden operations   | Is there a list of what the compiler does behind your back?                                                                                                                                                                                                                        |
 
 ### The cross-check: does the claim survive real use?
 
@@ -135,16 +135,16 @@ feature that Wado also has is the most useful thing a survey can bring back.
 
 Why the language is the way it is, and what keeps that honest.
 
-| Axis                        | What to look at                                                                                                                                     |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Axis                        | What to look at                                                                                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | B1 Arbiter                  | Is there one sentence saying what wins when two goals conflict? Note its shape: a single number to maximize, or a priority order over several values. |
-| B2 Accept/reject criteria   | Is there a stated bar for accepting a change, and is it a number or a judgement call?                                                                |
-| B3 The "why" record         | A roadmap says what is next and a spec says what is. Is the reasoning behind a decision written down anywhere?                                       |
-| B4 Falsifier                | Does the decision template make you state a condition — what would retract the decision, or what would move it out of "proposed"?                    |
-| B5 Rejection record         | Is there a list of designs that were considered and refused, with reasons, and a rule for when to cite it?                                           |
-| B6 Sync gate                | Does CI fail when a public claim stops being true? Over how much?                                                                                    |
-| B7 Self-reported violations | Does the project write down where it currently breaks its own rules, with file and line?                                                             |
-| B8 Who decides              | Does a human decide, or may an agent write a decision into the record?                                                                               |
+| B2 Accept/reject criteria   | Is there a stated bar for accepting a change, and is it a number or a judgement call?                                                                 |
+| B3 The "why" record         | A roadmap says what is next and a spec says what is. Is the reasoning behind a decision written down anywhere?                                        |
+| B4 Falsifier                | Does the decision template make you state a condition — what would retract the decision, or what would move it out of "proposed"?                     |
+| B5 Rejection record         | Is there a list of designs that were considered and refused, with reasons, and a rule for when to cite it?                                            |
+| B6 Sync gate                | Does CI fail when a public claim stops being true? Over how much?                                                                                     |
+| B7 Self-reported violations | Does the project write down where it currently breaks its own rules, with file and line?                                                              |
+| B8 Who decides              | Does a human decide, or may an agent write a decision into the record?                                                                                |
 
 Where B1 sits in the document matters. If the philosophy document opens with the
 arbiter, everything else was derived from it. If the arbiter only turns up in
@@ -177,9 +177,9 @@ than by building anything.
 
 | Kind        | What it is                                                                    |
 | ----------- | ----------------------------------------------------------------------------- |
-| C1 Artifact | A program that does a job: a compiler, a parser generator, a renderer          |
-| C2 Method   | A technique someone else could use: a way to decide, to measure, or to record  |
-| C3 Proof    | Machine-checked theorems, extracted checkers                                   |
+| C1 Artifact | A program that does a job: a compiler, a parser generator, a renderer         |
+| C2 Method   | A technique someone else could use: a way to decide, to measure, or to record |
+| C3 Proof    | Machine-checked theorems, extracted checkers                                  |
 | C4 Corpus   | Reusable data: fixtures, benchmark suites, grammars                           |
 
 Each entry gets two more columns:
