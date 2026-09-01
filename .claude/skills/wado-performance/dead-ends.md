@@ -111,10 +111,11 @@ mandelbrot goes slightly backwards, and every program pays for it in bytes:
 `-Os` output grows 41% on gale-gen (1.29 → 1.81 MB), 43% on json-twitter, 16%
 on syntax-highlight.
 
-So the budget is not a dial with a better setting — a serializer's hot loop is
-exactly what growing it damages. What the sweep says instead is that the
-threshold is doing two jobs, admitting a callee and pricing a loop body, and a
-gale-gen-shaped win needs the second priced apart from the first.
+So 20 is not a better setting — a serializer's hot loop is exactly what growing
+it that far damages. What the sweep says instead is that the threshold is doing
+two jobs, admitting a callee and pricing a loop body, and a gale-gen-shaped win
+needs the second priced apart from the first. 16 did land later, on the same
+rows; the budget this entry measures against is that, not the 13 above.
 
 ## A jump table in place of a compare cascade (gale, 2026-07/08)
 
@@ -266,8 +267,8 @@ function by its fast path and get it inlined at every field.
 It does not: the WIR A/B is byte-identical on the hot path — the same inlined
 `peek_byte`, the same two compares — and the call sites still call. The marker
 only stops `is_passthrough_tag` from being inlined into the arm nobody runs. The
-fast path alone is still over the 13-instruction budget, so the discount changes
-nothing to admit.
+fast path alone is still over `-O2`'s 16-instruction budget, so the discount
+changes nothing to admit.
 
 Generalizes: the cold discount decides admission, not size. Marking a slow path
 cold is worth doing when the hot path _would_ fit under the threshold without it;

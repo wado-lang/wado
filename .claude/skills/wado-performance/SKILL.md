@@ -48,9 +48,11 @@ The profile ranks candidates; it does not locate them.
 algorithmic blow-up read as GC-bound; sweep input size (faster-than-linear growth
 ⇒ the fix is the algorithm, not allocation) to tell them apart. Better still,
 sweep a _shape_ dimension with the total work held fixed: 2,000,000 struct fields
-decoded from ~270 KB of CBOR took 147 ms at 5 fields per record and 486 ms at 80,
-naming the declaration width — and no allocation, no GC, no byte count — as the
-cost.
+decoded from ~270 KB of CBOR took 147 ms at 5 fields per record and 486 ms at 80.
+Fixing the field total varies the record count inversely, so the arms differ in
+per-record cost and allocation too — 16× more of both in the arm that won, which
+is what leaves the declaration width holding the difference. Name the confound
+you did not control and which way it pushes; a sweep is only as good as that.
 
 ## 2. Read the WIR — allocations and copies first
 
@@ -155,9 +157,10 @@ three or four, alternating and with the order swapped once — the first run of 
 session reads high, so a fixed order silently taxes whichever arm goes second.
 Run on an **idle** host, nothing else building: an A/B taken beside a compiling
 test suite has put both arms inside each other's spread and flipped their
-ranking. Check `uptime`: another agent's session on the same machine put the same
-test target at 145 s and at 2499 s here, before the box OOM-killed the next
-command. Nothing in a number says whether its host was idle, so
+ranking. Check `ps` and `free` as well as `uptime` — a load average lags a
+session that just started and says nothing about memory, and another agent's on
+this box put the same test target at 145 s and at 2499 s before OOM-killing the
+command after it. Nothing in a number says whether its host was idle, so
 `benchmark/README.md` is a sanity check on the arm you just built, never the
 control for it — even on the machine that produced it; a HEAD build has measured
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
