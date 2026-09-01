@@ -50,7 +50,7 @@ pub(super) struct ScalarReflectSpec {
 }
 
 impl ScalarReflectSpec {
-    pub(super) const ENUM: Self = Self {
+    const ENUM: Self = Self {
         kind: ScalarReflectKind::Enum,
         on_bound: OnBoundTrait::ReflectEnum,
         trait_item: CompilerItem::ReflectEnum,
@@ -62,7 +62,7 @@ impl ScalarReflectSpec {
         members_assoc: crate::synthesis::traits::REFLECT_MEMBERS_ASSOC,
         value_type: TypeTable::I32,
     };
-    pub(super) const FLAGS: Self = Self {
+    const FLAGS: Self = Self {
         kind: ScalarReflectKind::Flags,
         on_bound: OnBoundTrait::ReflectFlags,
         trait_item: CompilerItem::ReflectFlags,
