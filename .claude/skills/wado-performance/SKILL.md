@@ -35,9 +35,24 @@ flat-CST rewrite that cut a benchmark ~3× on dev gained ~1.47× on release,
 because release GC was only ~⅓ of wall-clock to begin with. Pure compute does not
 inflate, so a compute-bound win carries over intact.
 
+**A sample lands on the next function entered, not where the time went.** The
+guest profiler samples on an epoch deadline, and wasmtime checks the epoch at
+function entries and loop headers, so a small leaf called once per unit of work
+absorbs the straight-line cost of whatever ran just before it. A derived
+deserializer's field-dispatch chain reported as **73% self in
+`deserialize_i32`** on an 80-field struct, and 19% in `deserialize_bool` on
+cbor-twitter — neither function is more than a bounds check and two compares.
+So read a hot small leaf as _"this is entered a great many times, and something
+upstream of it is paying"_, and go look at the caller. It ranks candidates; it
+does not locate them.
+
 **Rule out a super-linear pass before blaming GC** — that same inflation makes an
 algorithmic blow-up read as GC-bound; sweep input size (faster-than-linear growth
-⇒ the fix is the algorithm, not allocation) to tell them apart.
+⇒ the fix is the algorithm, not allocation) to tell them apart. Better still,
+sweep a _shape_ dimension with the total work held fixed, which leaves nothing
+else to explain the difference: 2,000,000 struct fields decoded from ~270 KB of
+CBOR took 147 ms at 5 fields per record and 486 ms at 80, naming the declaration
+width — and no allocation, no GC, no byte count — as the cost.
 
 ## 2. Read the WIR — allocations and copies first
 
@@ -87,6 +102,12 @@ for `Array<T>`-backed `String` / `List`).
   reasonable pre-size. Size it about right, or grow.
 - **GC-array access is bounds-checked, no unchecked variant.** A lookup table in
   a GC array adds a checked load per access — it lost to plain arithmetic.
+- **SROA is priced by the aggregate's width, not by the allocation it removes.**
+  Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
+  costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
+  across a call-heavy loop are forty spill slots reloaded at every call boundary,
+  plus a `ref.null` init apiece at entry. "The allocation is gone" says nothing
+  about which side won (`dead-ends.md`).
 - **`array.copy` is fast; leave it alone.** It has a fast path that does not call
   out to the runtime, and it beats a hand-written loop from a couple of bytes on
   — the loop pays the bounds check above on both the get and the set of every
@@ -136,8 +157,11 @@ three or four, alternating and with the order swapped once — the first run of 
 session reads high, so a fixed order silently taxes whichever arm goes second.
 Run on an **idle** host, nothing else building: an A/B taken beside a compiling
 test suite has put both arms inside each other's spread and flipped their
-ranking. Nothing in a number says whether its host was idle, so
-`benchmark/README.md` is a sanity check on the arm you just built, never the
+ranking. Check `uptime` — another agent's session on the same machine is
+invisible in every other way, and one running here took the same test target
+from 145 s to 827 s to 2499 s across three runs at load 55–125 before the box
+OOM-killed the next command. Nothing in a number says whether its host was idle,
+so `benchmark/README.md` is a sanity check on the arm you just built, never the
 control for it — even on the machine that produced it; a HEAD build has measured
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
 A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it.
@@ -178,6 +202,15 @@ done
 regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`
 sweeps a knob the same way, but the harness spends it on `wado run`, so a knob
 `compile` alone accepts is one no sweep reaches.
+
+**Give a threshold a temporary env override and sweep it, rather than
+rebuilding per value** — and reach for it the moment a change looks like it only
+pays above some size, because that shape usually means two rewrites are riding
+one knob. `if_chain_to_match` appeared to need a 12-arm floor; overriding its
+threshold and `match_to_switch`'s separately showed the fusion was never the
+cost at any width and the `br_table` past it always was, which turned a 3.6%
+regression on json-catalog into a 2.1% gain. Delete the overrides before
+committing: read per node visit, `std::env::var` is itself a compile-time cost.
 
 **What decides adoption**, in priority order:
 
