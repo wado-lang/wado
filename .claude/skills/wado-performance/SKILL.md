@@ -45,14 +45,15 @@ A hot small leaf is telling you how often it is entered, so go read its caller.
 The profile ranks candidates; it does not locate them.
 
 **Rule out a super-linear pass before blaming GC** — that same inflation makes an
-algorithmic blow-up read as GC-bound; sweep input size (faster-than-linear growth
-⇒ the fix is the algorithm, not allocation) to tell them apart. Better still,
-sweep a _shape_ dimension with the total work held fixed: 2,000,000 struct fields
-decoded from ~270 KB of CBOR took 147 ms at 5 fields per record and 486 ms at 80.
-Fixing the field total varies the record count inversely, so the arms differ in
-per-record cost and allocation too — 16× more of both in the arm that won, which
-is what leaves the declaration width holding the difference. Name the confound
-you did not control and which way it pushes; a sweep is only as good as that.
+algorithmic blow-up read as GC-bound; sweep input size to tell them apart.
+Faster-than-linear growth is a hypothesis and not a verdict, since a live set can
+grow that way too, so the WIR is what settles which.
+
+Sweeping a _shape_ dimension is sharper than size, and the one to vary is the one
+the suspect is indexed by. Decoding 1000 CBOR records of 5, 10, 20, 40 and 80
+`i32` fields cost 85, 80, 87, 129 and 221 ns a field: the record count is fixed,
+so no per-record term is left for that growth to be. Hold everything but the
+dimension under test — a sweep that varies two answers about neither.
 
 ## 2. Read the WIR — allocations and copies first
 
