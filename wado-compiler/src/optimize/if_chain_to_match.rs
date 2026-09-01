@@ -13,6 +13,11 @@
 //! guard is a constant against a local either way, and the local is what the
 //! write scan needs — so the shape answers the question with no analysis behind
 //! it, in a body of any size.
+//!
+//! Every chain is worth fusing: the `Match` lowers to an early-exit `else if`,
+//! which executes strictly fewer comparisons than the flat run whatever its
+//! length. The threshold that does exist is `match_to_switch`'s, which trades
+//! that cascade for one indirect branch and needs the arms to pay for it.
 
 use crate::compiler_trace;
 use crate::hashmap::IndexSet;
@@ -23,14 +28,6 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::{OpaqueSource, ValueKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
-
-/// Shorter runs are left alone. The chain a `Match` replaces is a compare
-/// cascade the branch predictor gets right, and the `br_table` that replaces it
-/// is one indirect branch it does not (`dead-ends.md`), so the quadratic has to
-/// be large enough to pay for it: at nine arms `json-catalog`'s `Event` /
-/// `Performance` lose 3.6% on deserialize, and the sweep only turns positive
-/// past ten.
-const MIN_RUN: usize = 12;
 
 pub(super) struct IfChainToMatchRule<'t> {
     type_table: &'t TypeTable,
@@ -53,7 +50,7 @@ impl Rule for IfChainToMatchRule<'_> {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
         let stmts = engine.body.blocks[block].stmts.clone();
         let mut start = 0;
-        while start + MIN_RUN <= stmts.len() {
+        while start < stmts.len() {
             let Some((local, _)) = split_guard(engine.body, self.type_table, stmts[start]) else {
                 start += 1;
                 continue;
@@ -101,7 +98,9 @@ impl Rule for IfChainToMatchRule<'_> {
                 }
                 break;
             }
-            if cases.len() < MIN_RUN || writes_local(engine.body, &cases, local) {
+            // One arm is not a chain — the `Match` would lower back to the very
+            // branch it replaced.
+            if cases.len() < 2 || writes_local(engine.body, &cases, local) {
                 start += 1;
                 continue;
             }

@@ -306,6 +306,13 @@ benchmark, spread over `peephole` (23 %) and `copy_prop` / `const_fold` / `licm`
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).
 
+- [ ] Price `match_to_switch` on something other than the arm count. Twelve is
+      where the `br_table` starts paying on the benchmarks, but the count is a
+      proxy: a 40-arm synthetic of plain `i32` fields prefers the `else if`
+      chain by 11 % where `cbor-twitter`'s 40-arm `User` prefers the table by
+      2 %. Whatever separates those two — arm body size, how well the scrutinee
+      sequence predicts — is what the threshold should be reading.
+
 Precision. All of it waits on one rule.
 
 ### The anchor rule
