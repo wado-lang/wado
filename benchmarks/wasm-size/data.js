@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788210730037,
+  "lastUpdate": 1788252769909,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52197,6 +52197,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/99ceeffdf286f05a679deaf0fbb9c68399b9fbf5"
         },
         "date": 1788210729075,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2026,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6425,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19611,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 278038,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "044ea8e6ceb88267bdc6a84b4efb703794f7379f",
+          "message": "Merge pull request #1934 from wado-lang/claude/json-schema-library-features-mikj5c\n\nfeat(reflect): `Reflect`, the identity root the four kinds sit under",
+          "timestamp": "2026-09-01T17:38:27+09:00",
+          "tree_id": "9a2418479e0386ba220baf662eba6ed4e36565ad",
+          "url": "https://github.com/wado-lang/wado/commit/044ea8e6ceb88267bdc6a84b4efb703794f7379f"
+        },
+        "date": 1788252769348,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
