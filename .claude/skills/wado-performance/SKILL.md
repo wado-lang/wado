@@ -121,11 +121,14 @@ for `Array<T>`-backed `String` / `List`).
   (`dead-ends.md`).
 - **Constant `/` and `%` are cheap** (Cranelift magic-multiply, `x/k` and `x%k`
   fused) — don't trade a divide for extra multiplies.
-- **A compare cascade is not a dispatch problem.** Cranelift lowers a short
+- **A short compare cascade is not a dispatch problem.** Cranelift lowers a short
   `else if` chain competitively, and a `match` over it (a `br_table`) adds an
   indirect branch: two separate rewrites to jump tables measured flat and
   slightly slower. Such a frame is usually call-frequency-bound, not
-  dispatch-bound — cut the calls, not the branch.
+  dispatch-bound — cut the calls, not the branch. What does answer to dispatch is
+  a cascade long enough to pay for that branch, or one that is not a cascade at
+  all: independent `if`s no arm leaves test every key whatever matched, which
+  `nir/if_chain_to_match` is what fixes.
 - **Write into the caller's buffer, not a temp.** `` `{v}` `` allocates a
   throwaway `String` and copies it in, per value; `buf.push_display(&v)` skips
   both. A run of adjacent `push` / `push_str` calls is fused into one capacity

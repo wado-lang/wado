@@ -134,6 +134,10 @@ call-frequency-bound, not dispatch-bound.
 Generalizes: a hot `match`-vs-cascade frame is telling you how often it is
 called. Cut the calls.
 
+Both cascades here were short and already early-exit. A run of independent `if`s
+that tests every key whatever matched is not that shape, and turning one into a
+`br_table` gained 10.7% on cbor-twitter deserialize (`nir/if_chain_to_match`).
+
 ## Index loops in place of `for x of &List<i32>` (gale, 2026-07)
 
 Iterating by reference boxes every element (WasmGC has no interior references),
