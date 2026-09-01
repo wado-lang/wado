@@ -141,9 +141,9 @@ two are the ones a search for documents will miss. Refusal is a decision — the
 same distinction the surface axes draw between unimplemented and rejected, so
 record the doctrine when there is one, because two projects can lack the same
 mechanism for opposite reasons. Practice is a rule that exists and has never
-been stated: Wado's specification ranked itself against 132 WEPs through forty
-links reading "see the WEP for rationale" and no sentence anywhere saying so,
-which is not the same finding as having no rule, and is closed by writing a
+been stated: Wado's specification ranked itself against its WEPs through link
+after link reading "see the WEP for rationale" and no sentence anywhere saying
+so, which is not the same finding as having no rule, and is closed by writing a
 paragraph rather than by building anything.
 
 ## C. Spin-off value
@@ -184,8 +184,11 @@ artifacts that fill C1 tend to be a boundary mechanism's first customer.
 
 The instrument is document-driven. Most rows are filled by reading what a
 project wrote about itself, and the self-application cross-check is the only one
-that can contradict a document. In both surveys so far it produced the largest
-finding, which is one measurement standing against a dozen readings.
+that can contradict a document — one measurement standing against a dozen
+readings. It has done so once so far, and that was the largest finding of that
+survey. In the other it confirmed the claims instead, and the largest finding
+there came out of a document that reported its own defect, which is not a thing
+the instrument can count on a project doing.
 
 Two failures follow. A project that documents itself poorly reads as absent
 where it is only quiet, and one that documents itself well reads as present on a

@@ -24,7 +24,9 @@ Generation is not the same thing, and is not refused: it is asked to produce ord
 
 ### Readable without context switching
 
-Knowing what a call does should not require opening a file you were not already reading. The mechanisms that would break that are all present — overloading, coercion, derivation — so what carries the principle is a requirement on each of them: they should be predictable.
+Knowing what a call does should not require opening a file you were not already reading.
+
+There is no function overloading: a name does not stand for a set of free functions to be chosen between. What does exist is operator overloading, and a method call resolving among trait candidates by the types at the site. Coercion and derivation are the same kind of thing. None of them is refused, and what is asked of each is that it be predictable.
 
 One spelling should reach one declaration. Resolution should follow a fixed ladder rather than a search over everything in scope, and no two candidates should be separated by a preference a reader has to have memorised. A distant file should at most be able to make a call legal that was not; it should never change what a legal call meant.
 
@@ -46,7 +48,7 @@ Compilation is the other half. Time spent waiting on a build is time not spent o
 
 ## Effects are WASI capabilities
 
-The most Wado-specific idea: every effect a function can perform is part of its type, and those effects are WASI's capabilities rather than a parallel invention. The platform's capability boundaries and the language's effects are the same thing.
+The most Wado-specific idea: every effect a function can perform is part of its type, and those effects are WASI's capabilities rather than a parallel invention. One `interface` is at once a WASI interface, a Component Model import or export, and a user-defined effect — the platform's capability boundaries and the language's effects are the same thing.
 
 ```wado
 use { println, Stdout } from "core:cli";

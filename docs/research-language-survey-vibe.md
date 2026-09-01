@@ -282,10 +282,10 @@ Learned:
   contract ledger maps each promise to a specification section and a fixture,
   gated in both directions. The second is a boundary map declaring where the
   guarantee stops — vibe's `Epistemic status`, Almide's `proven-vs-trusted.md`.
-- Wado has the parts and not the map. Roughly forty optimizer passes, a
-  NIR/WIR pipeline, EMI mutation, fuzzing and golden fixtures, and no document
-  saying which claim each of those backs. The cost of not having it is already
-  recorded: a tree that passed 12,542 e2e tests was miscompiling under `-O3`,
+- Wado has the parts and not the map. A long optimizer pass list, a NIR/WIR
+  pipeline, EMI mutation, fuzzing and golden fixtures, and no document saying
+  which claim each of those backs. The cost of not having it is already
+  recorded: a tree that passed the whole e2e suite was miscompiling under `-O3`,
   and Gale caught it. A boundary map is what says out loud that the `-O3`
   pipeline was backed by e2e tests and that e2e tests do not reach it.
 - A rule attached to the artifact it governs holds without a gate; a rule that
@@ -317,9 +317,6 @@ Take:
       the first one tractable is a skip marker that requires a reason, so an
       example of what not to write stays in the document without exempting the
       gate silently.
-- [ ] An authority header on `spec.md`. Wado has one specification and 132 WEPs
-      feeding it, and nothing states which wins where they disagree, or which
-      parts of a WEP are normative.
 - [ ] Gate self-tests and a gate registry. A check script with no test is a
       claim nobody checked; vibe pairs most of its gates with a `_test.sh` and
       keeps a registry gate over the set.
@@ -341,6 +338,11 @@ Refuse:
 - The `proposed` advancement rule. `docs/CLAUDE.md` already requires an
   unfinished mechanism to be a "Known gap" stating what is missing and what
   closing it takes, which is the same obligation.
+- An authority header on `spec.md` — taken and landed while this survey was
+  open, so it is no longer work to schedule. `spec.md` now opens by saying that
+  it is normative, that a disagreement with the implementation is a defect
+  belonging to whichever side is wrong, and where the WEPs, the cheatsheet and
+  the generated stdlib pages stand against it.
 - Citing vibe's program-wide shadowing measurement in
   [`wado lint`](./wep-2026-08-31-wado-lint.md) as evidence that a check must
   resolve declarations rather than spellings.

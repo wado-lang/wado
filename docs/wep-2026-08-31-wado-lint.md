@@ -7,7 +7,7 @@ shapes: proposing a design that was already refused, and writing a function
 that already exists. This WEP addresses the second.
 
 The compiler has no lint surface. Diagnostics today come from the elaborator —
-type errors, and the five unused-item lints of
+type errors, and the unused-item lints of
 [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) — all computed per
 module, before `reify`, and delivered through `CompilerHost` to both the CLI and
 the LSP.
@@ -17,11 +17,11 @@ not about a module, and the functions worth matching against are precisely the
 ones the program does not reference: a program that reinvents `core:temporal`
 never imported `core:temporal`, so nothing loads it and no elaborate-time pass
 can see it. Placing the check inside elaboration forces an index of the whole
-standard library compiled into the binary — `wado-lsp` is I/O-free and builds
-for `wasm32-unknown-unknown`, so it cannot read one from disk — plus a gate
-against that index going stale, and a per-compile cost for a diagnostic that is
-not useful per keystroke. A separate command pays none of it and can load
-whatever corpus it needs.
+standard library compiled into the binary — the language service also builds for
+`wasm32-unknown-unknown` to serve the browser playground, where there is no disk
+to read one from — plus a gate against that index going stale, and a per-compile
+cost for a diagnostic that is not useful per keystroke. A separate command pays
+none of it and can load whatever corpus it needs.
 
 Convention without mechanism does not hold. Almide's design philosophy states
 "one name per operation, no aliases" and its cheatsheet lists `string.length` as
@@ -63,7 +63,7 @@ Canonicalization of a body:
 
 - Binders — parameters, locals, pattern bindings — become positional indices in
   order of first occurrence, so two bodies differing only in names agree.
-- A callee reference becomes its `DeclId`, never its spelling
+- A callee reference becomes its `DefId`, never its spelling
   ([Declaration Identity](./wep-2026-08-12-declaration-identity.md)).
 - Types are part of the key, so `f(x: i32) -> i32 { x + 1 }` and
   `g(y: i64) -> i64 { y + 1 }` stay distinct.
@@ -73,16 +73,16 @@ Canonicalization of a body:
 The reinvention an agent actually writes is a generic instantiated by hand:
 
 ```wado
-fn max_i32(a: i32, b: i32) -> i32 { if a > b { return a; } return b; }
-pub fn max<T: Ord>(a: T, b: T) -> T   // core:prelude
+fn sort_scores(xs: &mut List<i32>) { ... }   // written
+impl<T: Ord> List<T> { pub fn sort(&mut self) { ... } }   // core:prelude/list.wado
 ```
 
-Types in the key make these disagree, and so do the callee `DeclId`s: the
-comparison in `max_i32` resolves to `i32`'s `Ord`, the one in `max` to the
-method reached through the `T: Ord` bound. Matching them is a unification
-question, not a hash lookup: does a substitution σ exist such that σ applied to
-the generic body is the concrete body, with each bound-driven call in the
-generic resolving to the impl selected at σ(T).
+Types in the key make these disagree, and so do the callee `DefId`s: the
+comparison inside the written body resolves to `i32`'s `Ord`, the one inside
+`sort` to the method reached through the `T: Ord` bound. Matching them is a
+unification question, not a hash lookup: does a substitution σ exist such that σ
+applied to the generic body is the concrete body, with each bound-driven call in
+the generic resolving to the impl selected at σ(T).
 
 Two stages keep that affordable. A coarse key — the body's structural shape
 alone, with every identifier and type erased — buckets candidates. Unification
@@ -151,9 +151,9 @@ follows from the same measurement.
 
 The near-duplicate threshold, and the minimum subtree size that feeds the
 fingerprint. Both are unmeasurable before the exact check runs on a real corpus.
-`package-gale` is the corpus to use: 61,342 lines of hand-written Wado ported
-from ANTLR4, so structurally similar functions are dense in it, which is the
-condition that makes a bad threshold visible.
+`package-gale` is the corpus to use: the largest body of hand-written Wado
+there is, ported from ANTLR4, so structurally similar functions are dense in it,
+which is the condition that makes a bad threshold visible.
 
 Sharing the canonicalization with a function-merging pass. The same canonical
 form identifies bodies that a NIR pass could merge after monomorphization, which
