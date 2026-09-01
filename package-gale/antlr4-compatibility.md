@@ -156,17 +156,21 @@ Test sources covering Stage A:
    and exercised by per-category
    `tests/antlr4-compat/<category>_test.wado` (`#![generated]`-tagged)
    for claim (a).
-3. **Per-descriptor drivers** under
-   `tests/antlr4-compat/stage_a/<Category>/<Name>_<variant>_test.wado`
-   for claims (b), (c), (d). The `<variant>` suffix is one of:
-   - `_parse_test.wado` — claim (b): assert `t::parse(&input)` returns
+3. **Descriptor drivers** under
+   `tests/antlr4-compat/stage_a/<Category>/<Category>_<k>_test.wado`
+   for claims (b), (c), (d). Each file carries up to
+   `DESCRIPTORS_PER_FILE` descriptors, each importing its grammar under
+   a namespace of its own (`t_<Name>`) — one whole-program `-O3` build
+   pays for the shared Gale runtime once per file rather than once per
+   descriptor. A descriptor's claim is one of:
+   - claim (b): assert `t_<N>::parse(&input)` returns
      `Ok`. Eligibility: `[type]` is `Parser`, non-empty `[input]`,
      empty `[errors]`, single grammar.
-   - `_err_test.wado` — claim (c): assert `t::parse(&input)` returns
-     `Err` (or `t::tokenize(&input)` produces a `TK_ERROR`).
+   - claim (c): assert `t_<N>::parse(&input)` returns
+     `Err` (or `t_<N>::tokenize(&input)` produces a `TK_ERROR`).
      Eligibility: category is `ParserErrors` or `LexerErrors`,
      non-empty `[input]` and `[errors]`, single grammar.
-   - `_tokens_test.wado` — claim (d): assert `t::to_lexer_string(...)`
+   - claim (d): assert `t_<N>::to_lexer_string(...)`
      matches the descriptor's `[output]`. Eligibility: `[type]` is
      `Lexer`, non-empty `[input]` and `[output]`, output contains at
      least one `[@…]` token-dump row. ANTLR's `showDFA` state table
@@ -178,11 +182,11 @@ Test sources covering Stage A:
      auto-`#[TODO]` here; every divergence is an explicit
      `[stage_a_todo]` entry.
 
-   The variants are **mutually exclusive** on `[type]` +
-   `[errors]`, so at most one variant per descriptor is emitted. A
+   The claims are **mutually exclusive** on `[type]` +
+   `[errors]`, so at most one per descriptor is emitted. A
    single `[stage_a_todo]` / `[stage_a_skip]` triage entry keyed by
-   `Category/Name` unambiguously addresses whichever variant fires.
-   All variants share `tests/generated/antlr4_compat_a/<C>/<N>/` for
+   `Category/Name` unambiguously addresses whichever claim fires.
+   All claims share `tests/generated/antlr4_compat_a/<C>/<N>/` for
    the generated parser/lexer.
 
 The rest of this document covers (2) and (3); (1) is just standard
@@ -201,7 +205,7 @@ Test sources covering Stage B:
    runs the resulting parser on sample input, and compares
    `to_string_tree()` against a hand-written expected tree.
 2. **Per-descriptor Stage B drivers** under
-   `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado`, emitted
+   `tests/antlr4-compat/stage_b/<Category>/<Category>_<k>_test.wado`, emitted
    by the descriptor extractor for every descriptor whose `[output]` is
    a clean parse tree (rejected by the Stage B output normalizer
    otherwise — action-body prints, token dumps, ATN traces). A tree
@@ -419,7 +423,7 @@ tree shape alone.
 **Stage C output-compare.** For a Parser descriptor whose `[output]` is
 action-print text (`<writeln(...)>` echoes — rejected by the Stage B
 output normalizer as a non-tree), the extractor emits
-`stage_c/<Category>/<Name>_output_test.wado`: it parses `[input]` and
+`stage_c/<Category>/<Category>_<k>_test.wado`: it parses `[input]` and
 asserts the parser's action-print output equals the descriptor
 `[output]`. This is what validates the `language = Java` parser-action
 translation. A descriptor whose actions do not execute or whose prints
@@ -972,16 +976,16 @@ tests/antlr4-compat/grammars/<Category>/<Name>.g4   (extracted grammar)
 tests/antlr4-compat/<category>_test.wado            (Stage A claim (a): one
                   │                                  test per descriptor,
                   │                                  `#![generated]`)
-tests/antlr4-compat/stage_a/<Category>/<Name>_<variant>_test.wado
+tests/antlr4-compat/stage_a/<Category>/<Category>_<k>_test.wado
                   │                                 (Stage A claims (b/c/d):
                   │                                  variant ∈ {parse,err,tokens};
                   │                                  exactly one variant per
                   │                                  eligible descriptor)
-tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado
+tests/antlr4-compat/stage_b/<Category>/<Category>_<k>_test.wado
                   │              │                  (Stage B: tree-shape equivalence
                   │              │                   — full-tree or sub-tree;
                   │              │                   one file per eligible descriptor)
-tests/antlr4-compat/stage_b_oracle/<Category>/<Name>_test.wado
+tests/antlr4-compat/stage_b_oracle/<Category>/<Category>_<k>_test.wado
                   │              │                  (Stage B′: expected tree comes from
                   │              │                   running scripts/antlr4-oracle.sh on
                   │              │                   the stripped grammar at extract time,
@@ -1038,7 +1042,7 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 | `scripts/extract-antlr4-descriptors.sh`    | Wrapper resolving the category list and forwarding to `wado run`                                                                            |
 | `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                                                                                           |
 | `tests/antlr4-compat/<category>_test.wado` | Stage A claim-(a) per-category tests (committed; `#![generated(by=…)]`)                                                                     |
-| `tests/antlr4-compat/stage_a/`             | Per-descriptor Stage A claims (b/c/d) drivers (committed). Each file ends in `_parse_test.wado`, `_err_test.wado`, or `_tokens_test.wado`.  |
+| `tests/antlr4-compat/stage_a/`             | Stage A claims (b/c/d) drivers (committed), grouped `<Category>_<k>_test.wado` — up to `DESCRIPTORS_PER_FILE` descriptors per entry module. |
 | `tests/antlr4-compat/stage_b/`             | Per-descriptor Stage B drivers (committed; full-tree or sub-tree per descriptor)                                                            |
 | `tests/antlr4-compat/stage_b_oracle/`      | Per-descriptor Stage B′ drivers (committed; expected parse tree derived from the ANTLR4 JVM oracle at extract time)                         |
 | `tests/generated/antlr4_compat_a/`         | Kiln-generated parsers/lexers for Stage A drivers (committed)                                                                               |

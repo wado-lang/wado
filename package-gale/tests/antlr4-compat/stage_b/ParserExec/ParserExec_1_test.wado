@@ -1,0 +1,67 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source category: ParserExec (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml
+
+use { normalize_tree } from "../../../support/tree_compare.wado";
+
+// Source descriptor: ParserExec/BuildParseTree_TRUE (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
+
+use t_BuildParseTree_TRUE from "../../grammars/ParserExec/BuildParseTree_TRUE.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat_b/ParserExec/BuildParseTree_TRUE",
+        },
+    };
+
+test "stage_b: ParserExec/BuildParseTree_TRUE" {
+    let input = "A B";
+    let expected = "(r (a A) (b B))";
+    let result = t_BuildParseTree_TRUE::parse_r(&input);
+    let actual = t_BuildParseTree_TRUE::to_string_tree(&result);
+    let norm = normalize_tree(&expected);
+    assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
+}
+
+// Source descriptor: ParserExec/PredictionIssue334 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
+
+use t_PredictionIssue334 from "../../grammars/ParserExec/PredictionIssue334.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat_b/ParserExec/PredictionIssue334",
+        },
+    };
+
+test "stage_b: ParserExec/PredictionIssue334" {
+    let input = "a";
+    let expected = "(file_ (item a))";
+    let result = t_PredictionIssue334::parse_file_(&input);
+    let actual = t_PredictionIssue334::to_string_tree(&result);
+    let norm = normalize_tree(&expected);
+    assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
+}
+
+// Source descriptor: ParserExec/PredictionMode_LL (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
+
+use t_PredictionMode_LL from "../../grammars/ParserExec/PredictionMode_LL.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat_b/ParserExec/PredictionMode_LL",
+        },
+    };
+
+test "stage_b: ParserExec/PredictionMode_LL" {
+    let input = "X Y";
+    let expected = "(r (a X) (b Y))";
+    let result = t_PredictionMode_LL::parse_r(&input);
+    let actual = t_PredictionMode_LL::to_string_tree(&result);
+    let norm = normalize_tree(&expected);
+    assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
+}
