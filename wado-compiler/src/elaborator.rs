@@ -913,13 +913,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> crate::name::FqTypeName {
+        self.qualified_receiver_name_owned(written, None)
+    }
+
+    /// [`Self::qualified_receiver_name`] for a receiver written inside the
+    /// `impl` block `owner` identifies — a blanket's receiver, which that
+    /// block names (#1932).
+    pub(super) fn qualified_receiver_name_owned(
+        &self,
+        written: &str,
+        owner: Option<crate::defs::DefId>,
+    ) -> crate::name::FqTypeName {
         if self
             .annotate_ctx
             .trait_ctx
             .type_params
             .contains_key(written)
         {
-            return self.binder_in_scope(written);
+            return match owner {
+                Some(def) => crate::name::FqTypeName::binder_owned(
+                    written,
+                    crate::name::BinderOwner::of_impl(
+                        &self.current_module_source,
+                        self.tysys.resolutions.defs().ast_id(def),
+                    ),
+                ),
+                None => crate::name::FqTypeName::binder(written),
+            };
         }
         if crate::name::is_builtin_shape_name(written) {
             return crate::name::FqTypeName::builtin(written);
@@ -2035,8 +2055,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // skipping concrete types (e.g., `impl<i32, T>` — skip "i32").
         // This handles both `impl<T> Trait for Struct<T>` and
         // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
-        scope.annotate_ctx.trait_ctx.impl_owner =
-            scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
+        // The block names its own receiver binder, both where the template is
+        // recorded (below) and for the `T::method()` calls its bodies write.
+        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
+        scope.annotate_ctx.trait_ctx.impl_owner = impl_owner;
         scope.register_impl_block_params(impl_block);
 
         if impl_block.is_synthesize_request {
@@ -2221,6 +2243,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 impl_is_concrete,
                 &impl_block.type_params,
                 Some(&recorded_sig),
+                impl_owner,
             );
         }
 
@@ -2285,6 +2308,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     impl_is_concrete,
                     &impl_block.type_params,
                     None,
+                    impl_owner,
                 );
 
                 // Swap back, take the populated synthetic out.

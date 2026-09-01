@@ -2537,6 +2537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
         recorded_sig: Option<&MethodSig>,
+        impl_def: Option<crate::defs::DefId>,
     ) -> Option<TirFunction> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -2590,7 +2591,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The receiver is named by the module that declares it — the written
         // name alone is not an identity. `display_name` below stays bare: it is
         // what diagnostics show, not what the registry keys on.
-        let qualified_struct_name = scope.qualified_receiver_name(struct_name);
+        let qualified_struct_name = scope.qualified_receiver_name_owned(struct_name, impl_def);
         let mangled_name = MethodName::format_local(&qualified_struct_name, trait_name, &func.name);
         scope
             .sem
