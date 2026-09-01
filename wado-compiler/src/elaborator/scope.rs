@@ -48,7 +48,6 @@ impl BinderInScope {
             decl: None,
         }
     }
-
 }
 
 /// The node in `params` that declares `name`, when one does.

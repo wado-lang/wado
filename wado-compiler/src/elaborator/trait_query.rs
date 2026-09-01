@@ -643,13 +643,18 @@ impl TypeSystem {
         if !is_newtype {
             return self.type_implements_trait(ctx, scope, type_id, trait_);
         }
-        // The same guard [`Self::type_implements_trait`] keeps, on the same
-        // stack and by the same optimistic convention: this arm answers without
-        // it, and two blankets whose bounds name each other recur forever.
+        // The guard [`Self::type_implements_trait`] keeps, on the same stack:
+        // without it two blankets whose bounds name each other recur forever.
+        //
+        // A repeat answers `false` here, where that query answers `true`. It
+        // recurses into members, so a repeat is the well-founded structural
+        // case; this walk holds the subject fixed, so a repeat is a bound that
+        // grounds nothing — and answering it `true` would let an unfounded
+        // bound hold at depth 0 and tie with one the newtype really carries.
         {
             let stack = ctx.trait_check_stack.borrow();
             if stack.contains(&(type_id, trait_)) {
-                return true;
+                return false;
             }
         }
         ctx.trait_check_stack.borrow_mut().push((type_id, trait_));
@@ -1594,25 +1599,35 @@ impl TypeSystem {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
                     || self.primitive_satisfies_builtin_trait(type_key, bound)
                     || bound.decl_ref.is_some_and(|trait_| {
-                        // The one entry, so a structurally derived `Eq` / `Ord`
-                        // answers a blanket's bound as it answers a written one.
-                        // An impl-index scan alone sees no impl for a derive.
                         //
                         // `peel` rides through: a blanket the subject reaches
-                        // only through its base is the base's, so under
-                        // `Here` its bound is asked of the subject alone —
-                        // a chained blanket would otherwise report the base's
-                        // bound as the subject's and flatten rank 2.
-                        subject.is_some_and(|id| match peel {
-                            NewtypePeel::Follow => {
-                                self.type_implements_trait(ctx, scope, id, trait_)
-                            }
-                            NewtypePeel::Here => {
+                        // only through its base is the base's, so under `Here`
+                        // its bound is asked of the subject alone — a chained
+                        // blanket would otherwise report the base's bound as
+                        // the subject's and flatten rank 2.
+                        match (peel, subject) {
+                            // The guarded query answers, and nothing else may:
+                            // it holds the subject fixed, so the bare lookup
+                            // below would re-enter this check on the same pair
+                            // with no frame to stop a cycle among bounds.
+                            (NewtypePeel::Here, Some(id)) => {
                                 self.type_implements_trait_here(ctx, scope, id, trait_)
                             }
-                        }) || self.find_trait_impl_for_subject(
-                            ctx, scope, subject, type_key, trait_, peel,
-                        )
+                            (NewtypePeel::Here, None) => self.find_trait_impl_for_subject(
+                                ctx, scope, subject, type_key, trait_, peel,
+                            ),
+                            // The one entry, so a structurally derived `Eq` /
+                            // `Ord` answers a blanket's bound as it answers a
+                            // written one: an impl-index scan alone sees no
+                            // impl for a derive.
+                            (NewtypePeel::Follow, _) => {
+                                subject.is_some_and(|id| {
+                                    self.type_implements_trait(ctx, scope, id, trait_)
+                                }) || self.find_trait_impl_for_subject(
+                                    ctx, scope, subject, type_key, trait_, peel,
+                                )
+                            }
+                        }
                     })
             });
             if bounds_satisfied && self.blanket_assoc_constraints_hold(subject, &blanket.bounds) {

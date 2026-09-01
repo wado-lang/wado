@@ -1,9 +1,8 @@
-// Two blankets whose bounds name each other, asked of a newtype. Rank 2 asks
-// each level of the chain, so its walk needs the cycle guard the peeling query
-// keeps — without it the pair recurs until the compiler overflows its stack.
-// The guard answers a repeat optimistically, so `Alpha` holds vacuously and
-// rank 2 still puts `Limit`, which `Wrapped` carries itself, first
-// (WEP 2026-09-01, issue #1932).
+// Two blankets whose bounds name each other, asked of a newtype. Rank 2 holds
+// the subject fixed while it asks each level, so a repeated `(type, trait)`
+// pair is a bound that grounds nothing: it answers `false`, and `Wrapped` takes
+// the `Limit` blanket it really carries. Unguarded, the pair recurs until the
+// compiler overflows its stack (WEP 2026-09-01, issue #1932).
 
 trait Alpha {
     fn alpha() -> i32;
