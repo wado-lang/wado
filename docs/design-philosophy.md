@@ -6,25 +6,27 @@ Why Wado is the way it is.
 
 Wado was born from a practical need: embedding small Wasm modules in JavaScript projects without the binary-size explosion that comes with existing Wasm-targeting languages. Those bundle their own memory-management runtime into every `.wasm` file, so even a trivial program ships a bloated binary. Wado targets Wasm GC and lets the host own the collector, so nothing ships inside the module but the program's own logic.
 
-That is not one principle among the ones below. It is the one they answer to: where a goal here conflicts with shipping no runtime, the runtime stays out.
+Targeting the Component Model and WASI and nothing else is what makes that affordable. There is no legacy backend to carry and no glue layer to retrofit, so the platform's collector, its calling convention and its capability model can be used as they are rather than approximated.
 
-Targeting the Component Model and WASI and nothing else is what makes it affordable. There is no legacy backend to carry and no glue layer to retrofit, so the platform's collector, its calling convention and its capability model can be used as they are rather than approximated.
+## Wasm in plain sight
+
+The principle the rest of the page descends from: Wado is in complete control of the wasm it emits. The code you read is the code that runs, and the emitted WAT is something you can reason about by looking at the source.
+
+Two things follow from it rather than having to be pursued separately.
+
+Binaries come out small. Nothing is in the module that the program did not ask for, because nothing was put there by a layer Wado does not own.
+
+Unpredictability has nowhere to enter. A construct that only the compiler can expand, a runtime that acts between the source and the machine, a cost that appears without being written — each of these is something the source no longer accounts for, and Wado does not have a place to keep one.
+
+Generation is not the same thing, and is not refused: it is asked to produce ordinary source you can open. See [Kiln](./wep-2026-04-12-kiln.md).
 
 ## Principles
-
-### Wasm in plain sight
-
-The code you read is the code that runs, so the emitted WAT is something you can reason about by looking at the source.
-
-Generation is asked for one thing: what it produces must be ordinary source you can open. [Kiln](./wep-2026-04-12-kiln.md) runs a generator in a sandbox and writes plain `.wado` to disk, so a whole dialect of Wado can live outside the language without any tool having to learn it, and the result is read the same way as the rest. A macro fails that — not because expanding code is wrong, but because its expansion exists nowhere you can open.
 
 ### Readable without context switching
 
 Knowing what a call does should not require opening a file you were not already reading. The mechanisms that would break that are all present — overloading, coercion, derivation — so what carries the principle is a requirement on each of them: they should be predictable.
 
 One spelling should reach one declaration. Resolution should follow a fixed ladder rather than a search over everything in scope, and no two candidates should be separated by a preference a reader has to have memorised. A distant file should at most be able to make a call legal that was not; it should never change what a legal call meant.
-
-Where the source does not show which rule fired, saying so is the diagnostic's job, and the language service's before the compiler is run.
 
 This is the least checkable principle here — it names a property nothing measures. It is kept because what it guards against costs more than a claim that could be checked is worth.
 
@@ -35,6 +37,12 @@ Strong static typing with no escape hatch type like `any`. That removes the reas
 ### Errors are values
 
 Errors are handled with `Result<T, E>` and `Option<T>`, not by unwinding exceptions. Control flow stays local and visible; there is no stack unwinding as a language feature.
+
+### Fast enough to be the reason
+
+Speed is a requirement, not a bonus. A language is chosen for what it can be used for, and being an order of magnitude off native takes options away — so Wado aims to be close enough to native that the choice is never made against it on that ground. Readable and fast are both required; a language that gives up either has given up a reason to exist.
+
+Compilation is the other half. Time spent waiting on a build is time not spent on the problem, and a slow compiler quietly reshapes how people work around it.
 
 ## Effects are WASI capabilities
 
@@ -66,12 +74,16 @@ It runs both directions: Wado synthesizes WIT from your declarations and bundles
 
 Wado takes Rust as its base and adapts it to this platform. Rust's shape without the parts that exist to manage memory by hand, since the collector is the host's; and the Component Model's type kinds where Rust has one, since that is the vocabulary the platform speaks. The surface borrows from TypeScript where TypeScript is the more familiar spelling.
 
-## Informed by agentic coding
+## Wado is not an AI language
 
-Wado is written by AI agents, with the human handling design and direction — as it was before Wado, which is where these came from, and as it still is, which is what keeps testing them.
+Wado is designed and directed by a human, and coding agents are among the tools used to build it.
 
-- Agents are fast but literal. Implicit behavior multiplies across a codebase, so predictable semantics work better — hence no macros, and an overloading whose winner is decided by a fixed ladder rather than by what happens to be in scope.
-- Agents drift toward defensive code. Without type safety they pile on runtime checks and nested error handling; strong static types remove the reason to.
-- Exceptions break their reasoning. Non-local control flow is hard to predict, so failures are values that stay visible at the call site.
+That work is where the following came from, and it is still going, which is what keeps testing them.
 
-These are constraints the language was shaped around, not conventions asked of the people using it.
+The more complexity a system carries, the more an AI gets it wrong. This is not a fact about AI. People get it wrong too, in the same places and for the same reason, and the AI merely reaches those places faster and more often.
+
+So Wado has no features for AI. Code that a person can read and write easily is code an AI can read and write easily, and the reverse holds as well — the ways a language can be made pleasant for a model are the ways it is made pleasant for a reader. Aiming at the model directly buys nothing that aiming at the reader does not already buy, and it costs the thing that matters most, which is that there is one audience to design for instead of two.
+
+AI-friendliness, as a design goal separate from readability, is an illusion. Build a language for people; where a model needs something further, that is a matter for the documentation and the tooling, not the language.
+
+The one exception at present is power-assert. Its output is there for the moment a program is wrong and someone has to find out why, and it serves whoever is reading — which is the shape an exception has to have to be worth making.
