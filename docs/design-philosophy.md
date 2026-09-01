@@ -74,16 +74,14 @@ It runs both directions: Wado synthesizes WIT from your declarations and bundles
 
 Wado takes Rust as its base and adapts it to this platform. Rust's shape without the parts that exist to manage memory by hand, since the collector is the host's; and the Component Model's type kinds where Rust has one, since that is the vocabulary the platform speaks. The surface borrows from TypeScript where TypeScript is the more familiar spelling.
 
-## Wado is not an AI language
+## Shaped by agentic coding
 
-Wado is designed and directed by a human, and coding agents are among the tools used to build it.
+Wado is designed and directed by a human and built with coding agents, and that has shaped the language — though not in the direction the phrase usually points.
 
-That work is where the following came from, and it is still going, which is what keeps testing them.
+The more complexity a system carries, the more an AI gets it wrong. This is not a fact about AI. People get it wrong too, in the same places and for the same reason; the agent merely arrives at those places sooner and more often, which is what makes it a good instrument for finding them.
 
-The more complexity a system carries, the more an AI gets it wrong. This is not a fact about AI. People get it wrong too, in the same places and for the same reason, and the AI merely reaches those places faster and more often.
+So what came of building this way is not features for AI. Code a person can read and write easily is code an agent can read and write easily, and the ways a language can be made pleasant for a model are the ways it is made pleasant for a reader. Aiming at the model directly buys nothing that aiming at the reader does not already buy, and it costs the thing that matters most: that there is one audience to design for instead of two.
 
-So Wado has no features for AI. Code that a person can read and write easily is code an AI can read and write easily, and the reverse holds as well — the ways a language can be made pleasant for a model are the ways it is made pleasant for a reader. Aiming at the model directly buys nothing that aiming at the reader does not already buy, and it costs the thing that matters most, which is that there is one audience to design for instead of two.
+AI-friendliness, as a goal held apart from readability, is an illusion. Build the language for people; where a model needs something further, that is the documentation's problem and the tooling's, not the language's.
 
-AI-friendliness, as a design goal separate from readability, is an illusion. Build a language for people; where a model needs something further, that is a matter for the documentation and the tooling, not the language.
-
-The one exception at present is power-assert. Its output is there for the moment a program is wrong and someone has to find out why, and it serves whoever is reading — which is the shape an exception has to have to be worth making.
+The one exception at present is power-assert. Its output exists for the moment a program is wrong and someone has to find out why, and it serves whoever is reading — which is the shape an exception has to have to be worth making.
