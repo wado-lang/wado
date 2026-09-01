@@ -1,0 +1,66 @@
+// Two blankets whose bounds name each other, asked of a newtype. Rank 2 asks
+// each level of the chain, so its walk needs the cycle guard the peeling query
+// keeps — without it the pair recurs until the compiler overflows its stack.
+// The guard answers a repeat optimistically, so `Alpha` holds vacuously and
+// rank 2 still puts `Limit`, which `Wrapped` carries itself, first
+// (WEP 2026-09-01, issue #1932).
+
+trait Alpha {
+    fn alpha() -> i32;
+}
+
+trait Beta {
+    fn beta() -> i32;
+}
+
+impl<T: Beta> Alpha for T {
+    fn alpha() -> i32 {
+        return T::beta();
+    }
+}
+
+impl<T: Alpha> Beta for T {
+    fn beta() -> i32 {
+        return T::alpha();
+    }
+}
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl<T: Alpha> Describe for T {
+    fn describe(&self) -> String {
+        return `alpha:${T::alpha()}`;
+    }
+}
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+struct Inner {
+    x: i32,
+}
+
+type Wrapped = Inner;
+
+impl Limit for Wrapped {
+    fn limit() -> i32 {
+        return 3;
+    }
+}
+
+test "a cycle among blanket bounds terminates" {
+    let w = Inner { x: 1 } as Wrapped;
+    assert w.describe() == "limit:3";
+}
+
+__DATA__
+{"test": {}}

@@ -643,15 +643,27 @@ impl TypeSystem {
         if !is_newtype {
             return self.type_implements_trait(ctx, scope, type_id, trait_);
         }
+        // The same guard [`Self::type_implements_trait`] keeps, on the same
+        // stack and by the same optimistic convention: this arm answers without
+        // it, and two blankets whose bounds name each other recur forever.
+        {
+            let stack = ctx.trait_check_stack.borrow();
+            if stack.contains(&(type_id, trait_)) {
+                return true;
+            }
+        }
+        ctx.trait_check_stack.borrow_mut().push((type_id, trait_));
         let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-        self.find_trait_impl_for_subject(
+        let result = self.find_trait_impl_for_subject(
             ctx,
             scope,
             Some(type_id),
             &receiver,
             trait_,
             NewtypePeel::Here,
-        )
+        );
+        ctx.trait_check_stack.borrow_mut().pop();
+        result
     }
 
     /// Whether every member of `resolved` satisfies `trait_` under `tr`'s

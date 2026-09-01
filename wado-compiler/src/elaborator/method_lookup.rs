@@ -1423,18 +1423,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Bind `name` in the current type-param scope, with the header node that
-    /// declares it — jump-to-def reads that node, and no caller may forget it.
+    /// Bind `name` in the current type-param scope as the binder `decl`
+    /// declares.
+    ///
+    /// The node is the caller's to state, never this helper's to find: a method
+    /// parameter may spell the impl's receiver letter, and a helper searching
+    /// one list for every caller records the impl's node for the method's
+    /// binder — which then reads back as the receiver (#1932).
     fn bind_type_param(
         scope: &mut super::scope::TypeParamScope<'_, '_, H>,
-        header: &ImplHeader,
+        decl: Option<ast::AstId>,
         name: &str,
         slot: u32,
         type_id: TypeId,
     ) {
         scope.annotate_ctx.trait_ctx.type_params.insert(
             name.to_string(),
-            BinderInScope::from_target(slot, type_id, &header.type_params, name),
+            BinderInScope {
+                index: slot,
+                type_id,
+                decl,
+            },
         );
     }
 
@@ -2020,7 +2029,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (name, idx) in &type_param_entries {
                 let i = *idx as usize;
                 if i < type_args.len() {
-                    Self::bind_type_param(&mut scope, header, name, *idx, type_args[i]);
+                    Self::bind_type_param(
+                        &mut scope,
+                        super::scope::param_decl(&header.type_params, name),
+                        name,
+                        *idx,
+                        type_args[i],
+                    );
                 }
             }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
@@ -2031,7 +2046,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow_mut()
                     .make_tuple(type_args.to_vec());
-                Self::bind_type_param(&mut scope, header, pack_name, *pack_idx, pack_type);
+                Self::bind_type_param(
+                    &mut scope,
+                    super::scope::param_decl(&header.type_params, pack_name),
+                    pack_name,
+                    *pack_idx,
+                    pack_type,
+                );
             }
         }
 
@@ -2051,14 +2072,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .filter(|p| p.is_real_type_param())
                     .position(|p| &p.name == name)
                     .unwrap_or(0) as u32;
-                Self::bind_type_param(&mut scope, header, name, slot, recv_id);
+                Self::bind_type_param(
+                    &mut scope,
+                    super::scope::param_decl(&header.type_params, name),
+                    name,
+                    slot,
+                    recv_id,
+                );
             } else {
                 let type_id = scope
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_type_param(name.clone(), 0);
-                Self::bind_type_param(&mut scope, header, name, 0, type_id);
+                Self::bind_type_param(
+                    &mut scope,
+                    super::scope::param_decl(&header.type_params, name),
+                    name,
+                    0,
+                    type_id,
+                );
             }
         }
 
@@ -2196,7 +2229,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | ResolvedType::TypePack { index, .. } => *index,
                     other => panic!("method slot is not a type parameter: {other:?}"),
                 };
-                Self::bind_type_param(&mut scope, header, &type_param.name, index, type_param_id);
+                Self::bind_type_param(
+                    &mut scope,
+                    Some(type_param.id),
+                    &type_param.name,
+                    index,
+                    type_param_id,
+                );
                 if !type_param.bounds.is_empty() {
                     scope
                         .annotate_ctx

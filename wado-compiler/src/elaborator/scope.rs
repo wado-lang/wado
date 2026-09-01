@@ -49,23 +49,13 @@ impl BinderInScope {
         }
     }
 
-    /// A binder bound from a target position (`impl<T> Tr for Pair<T>`), named
-    /// by whichever of `params` declares it.
-    pub(super) fn from_target(
-        index: u32,
-        type_id: TypeId,
-        params: &[ast::GenericParam],
-        name: &str,
-    ) -> Self {
-        Self {
-            index,
-            type_id,
-            decl: param_decl(params, name),
-        }
-    }
 }
 
 /// The node in `params` that declares `name`, when one does.
+///
+/// The caller chooses the list, because only the caller knows which item bound
+/// the name: a method parameter may spell the impl's receiver letter, and
+/// searching the impl's list for it records the wrong binder (#1932).
 pub(super) fn param_decl(params: &[ast::GenericParam], name: &str) -> Option<ast::AstId> {
     params.iter().find(|p| p.name == name).map(|p| p.id)
 }

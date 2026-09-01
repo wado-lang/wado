@@ -427,12 +427,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .make_type_param(name.clone(), index);
                                 scope.annotate_ctx.trait_ctx.type_params.insert(
                                     name.clone(),
-                                    BinderInScope::from_target(
+                                    BinderInScope {
                                         index,
                                         type_id,
-                                        &impl_block.type_params,
-                                        name,
-                                    ),
+                                        decl: super::scope::param_decl(
+                                            &impl_block.type_params,
+                                            name,
+                                        ),
+                                    },
                                 );
                             }
                         }
