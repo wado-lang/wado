@@ -200,8 +200,8 @@ pub enum CompilerItem {
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
-    /// `Reflect` — the identity root every reflected kind sits under
-    /// (WEP 2026-06-13); carries `type_name` for all of them.
+    /// `Reflect` — the identity root every reflected kind sits under, carrying
+    /// `type_name` for all of them (WEP 2026-06-13).
     Reflect,
     /// `ReflectStruct` — compile-time struct-introspection anchor; the
     /// per-struct `impl ReflectStruct for S` synthesis points at it.

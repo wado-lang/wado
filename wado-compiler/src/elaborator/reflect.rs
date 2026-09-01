@@ -1,7 +1,5 @@
-//! `ReflectStruct` / `ReflectVariant` / `ReflectEnum` / `ReflectFlags` static-call
-//! resolution (WEP 2026-06-13): the `Trait::<T>::method()` form that
-//! `resolve_static_method_call` intercepts and routes to the type's synthesized
-//! `T^Trait::method`.
+//! `Reflect` and its four kinds: the `Trait::<T>::method()` form
+//! `resolve_static_method_call` routes to `T`'s synthesized `T^Trait::method`.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -13,10 +11,8 @@ use super::Elaborator;
 use super::trait_query::OnBoundTrait;
 use super::types::{FunctionContext, TypeError};
 
-/// The two scalar-kind reflection traits share one static-call resolution shape
-/// (WEP 2026-06-13 §3b / §3c): four members — `type_name` / `<value>(&self)` /
-/// `from_<value>(raw)` / `members()` — differing only in the compiler items they
-/// name, the subject kind, and the scalar value type (`i32` / `u64`).
+/// The two payload-free kinds share one static-call resolution shape, differing
+/// only in their compiler items, subject kind, and scalar type (`i32` / `u64`).
 #[derive(Clone, Copy)]
 enum ScalarReflectKind {
     Enum,
@@ -833,9 +829,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         StructMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
     }
 
-    /// Whether `prefix::method` names a `Reflect` trait-qualified static call
-    /// (`Reflect::<T>::type_name`). Same scope discipline as
-    /// [`Self::is_reflect_trait_call`].
+    /// Whether `prefix::method` names `Reflect::<T>::type_name`. Same scope
+    /// discipline as [`Self::is_reflect_trait_call`].
     pub(super) fn is_reflect_root_trait_call(&self, prefix: &str, method: &str) -> bool {
         if self
             .tysys
@@ -851,10 +846,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .method_name(CompilerItem::ReflectTypeName)
     }
 
-    /// Resolve `Reflect::<T>::type_name()` to the synthesized
-    /// `T^Reflect::type_name`. The identity root asks nothing of `T`'s shape,
-    /// so — unlike a kind member — it admits every reflected kind, and a
-    /// generic subject needs no pack bound to source a member from.
+    /// Resolve `Reflect::<T>::type_name()` to `T^Reflect::type_name`. The root
+    /// asks nothing of `T`'s shape, so every kind answers and a generic subject
+    /// needs no pack bound.
     pub(super) fn resolve_reflect_root_static_call(
         &mut self,
         self_ty: TypeId,
@@ -894,17 +888,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         };
 
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .record_bound_driven_synth_request_for(
-                self_ty,
-                &module_source,
-                &root_trait_name
-                    .canonical()
-                    .expect("a compiler trait item names a declaration"),
-            );
-
         let func_ref = self.reflect_func_ref(
             self_ty,
             &base_name,
@@ -918,12 +901,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         string_type
     }
 
-    /// The declaration `Reflect::<T>` names: its base name, declaring module and
-    /// this instantiation's type args. `None` for a type that carries no
-    /// synthesized `Reflect` impl — every kind but the four reflected ones, and
-    /// a sealed member handle. The kind question is
-    /// [`has_reflect_kind`](crate::synthesis::template::has_reflect_kind)'s, the
-    /// one monomorphization asks of a reflect-bounded blanket.
+    /// The declaration `Reflect::<T>` names, and this instantiation's type args.
+    /// `None` where no `Reflect` impl is synthesized, which
+    /// [`has_reflect_kind`](crate::synthesis::template::has_reflect_kind)
+    /// decides — the same answer monomorphization gets for a bounded blanket.
     fn reflect_root_subject(
         &self,
         self_ty: TypeId,

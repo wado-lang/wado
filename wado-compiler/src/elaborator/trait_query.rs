@@ -1611,38 +1611,20 @@ impl TypeSystem {
             return false;
         };
         let subject = match on_bound {
-            // The identity root holds for every reflected kind: it asks for a
-            // name, not for a shape.
-            OnBoundTrait::Reflect => scope
-                .struct_fields_of(def)
-                .map(|info| info.module_source.clone())
-                .or_else(|| {
-                    scope
-                        .variant_cases_of(def)
-                        .map(|info| info.module_source.clone())
-                })
-                .or_else(|| {
-                    scope
-                        .enum_cases_of(def)
-                        .map(|info| info.module_source.clone())
-                })
-                .or_else(|| {
-                    scope
-                        .flags_members_of(def)
-                        .map(|info| info.module_source.clone())
-                }),
-            OnBoundTrait::ReflectStruct => scope
-                .struct_fields_of(def)
-                .map(|info| info.module_source.clone()),
-            OnBoundTrait::ReflectVariant => scope
-                .variant_cases_of(def)
-                .map(|info| info.module_source.clone()),
-            OnBoundTrait::ReflectEnum => scope
-                .enum_cases_of(def)
-                .map(|info| info.module_source.clone()),
-            OnBoundTrait::ReflectFlags => scope
-                .flags_members_of(def)
-                .map(|info| info.module_source.clone()),
+            // The root asks for a name, not for a shape, so whichever kind
+            // answers answers for it.
+            OnBoundTrait::Reflect => [
+                OnBoundTrait::ReflectStruct,
+                OnBoundTrait::ReflectVariant,
+                OnBoundTrait::ReflectEnum,
+                OnBoundTrait::ReflectFlags,
+            ]
+            .into_iter()
+            .find_map(|kind| declaring_module_of_kind(scope, def, kind)),
+            OnBoundTrait::ReflectStruct
+            | OnBoundTrait::ReflectVariant
+            | OnBoundTrait::ReflectEnum
+            | OnBoundTrait::ReflectFlags => declaring_module_of_kind(scope, def, on_bound),
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
@@ -1666,6 +1648,32 @@ impl TypeSystem {
             .borrow_mut()
             .record_bound_driven_synth_request(&head, &module_source, &key);
         true
+    }
+}
+
+/// The module declaring `def`, when `def` is the kind `on_bound` names.
+/// `None` for any other kind, and for a bound that is not a reflection kind.
+fn declaring_module_of_kind(
+    scope: &TypeLookup,
+    def: crate::defs::DefId,
+    on_bound: OnBoundTrait,
+) -> Option<ModuleSource> {
+    match on_bound {
+        OnBoundTrait::ReflectStruct => scope.struct_fields_of(def).map(|i| i.module_source.clone()),
+        OnBoundTrait::ReflectVariant => {
+            scope.variant_cases_of(def).map(|i| i.module_source.clone())
+        }
+        OnBoundTrait::ReflectEnum => scope.enum_cases_of(def).map(|i| i.module_source.clone()),
+        OnBoundTrait::ReflectFlags => scope.flags_members_of(def).map(|i| i.module_source.clone()),
+        OnBoundTrait::Reflect
+        | OnBoundTrait::Eq
+        | OnBoundTrait::Ord
+        | OnBoundTrait::Serialize
+        | OnBoundTrait::Deserialize
+        | OnBoundTrait::Default
+        | OnBoundTrait::Ref
+        | OnBoundTrait::RefMut
+        | OnBoundTrait::Inspect => None,
     }
 }
 

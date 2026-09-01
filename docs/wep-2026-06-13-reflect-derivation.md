@@ -215,30 +215,25 @@ impl TypeInfo {
 }
 ```
 
-Identity sits on the root rather than on each kind, which is what lets a type be
-named without being opened. A kind bound would gate a name behind
-[Visibility](#visibility) — every member visible — so a type whose fields are
-private (`TreeMap<String,i32>`) could not be named by the very library that must
-key it; and it would force a derivation to widen its own bound to a kind just to
-name its subject, which a schema library's `impl<T: Constrained + Reflect>
-JsonSchema for T` must not do, since a constrained type may be a newtype or the
-struct wrapper a type reaches for when its invariant must hold against
-in-process construction. `Reflect` admits both.
+Identity sits on the root rather than on each kind. A kind bound gates a name
+behind [Visibility](#visibility), so a type whose fields are private
+(`TreeMap<String,i32>`) could not be named by the library that must key it; and
+it would force a derivation to widen its bound to a kind just to name its
+subject, which a schema library's `impl<T: Constrained + Reflect> JsonSchema for
+T` cannot do — a constrained type may be a newtype or a struct wrapper, and
+`Reflect` admits both.
 
-`type_name()` sits beside `type_info()` on the root: it is the allocation-free
-shorthand serde's `begin_struct` calls, and it answers exactly
-`type_info().name()`.
+`type_name()` sits beside `type_info()` on the root: the allocation-free
+shorthand serde's `begin_struct` calls, answering `type_info().name()`.
 
 The parts are the identity; `canonical_name()` renders them in the canonical
 register of [Symbol Notation](./wep-2026-06-14-symbol-notation.md) (`MODULE`
-always quoted), the notation the compiler's own diagnostics and dumps read back.
-Which of the two is primary follows from the derivation running one way only: a
-consumer handed the parts renders the string, while one handed the string parses
-it to recover the parts. And no one rendering serves every consumer — a `$defs`
-key comes back through a `$ref`'s URI reference, where `<` and `>` must be
-escaped — so the parts are what a schema library builds its own key from. Type
-arguments are joined without a space (`Pair<String,i32>`), matching the spelling
-the compiler already renders internally, and a type with none is written bare.
+always quoted), the notation the compiler's diagnostics and dumps read back.
+Rendering runs one way, and no single rendering serves every consumer — a
+`$defs` key comes back through a `$ref`'s URI reference, where `<` and `>` must
+be escaped — so a schema library builds its key from the parts. Type arguments
+are joined without a space (`Pair<String,i32>`), matching the spelling the
+compiler renders internally; a type with none is written bare.
 
 ### What can be named
 
@@ -246,32 +241,28 @@ The types `Reflect` is synthesized for: the five kinds, and the tuple family.
 Naming an unnameable type is therefore an unsatisfied `T: Reflect`, reason-chained
 like any other bound, rather than a special case buried in an intrinsic.
 
-A tuple is anonymous but not homeless — the prelude declares `pub type [...T];`
-to own the family ([Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) §3), and that anchor is
-the identity. Its module is `core:prelude`, its name the family's spelling
-`[..]`, and its elements are its type arguments — the same family-plus-arguments
-split a generic struct takes. Rendering is where a tuple differs: the arguments
-sit between the brackets rather than after the name, so `canonical_name()` reads
-`core:prelude#[i32,String]`. Unit is that family at arity zero,
-`core:prelude#()`.
+A tuple is anonymous, but the prelude's `pub type [...T];` owns the family
+([Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) §3)
+and that anchor is its identity: module `core:prelude`, name `[..]`, elements as
+type arguments — a generic struct's family-plus-arguments split. Only the
+rendering differs, the arguments sitting between the brackets:
+`core:prelude#[i32,String]`, and `core:prelude#()` for the family at arity zero.
 
 A resource, a function type, and a reference carry no `Reflect` impl, rather
 than a name the design invents. A resource's identity is a Component Model
-coordinate
-(`wasi:io/streams.input-stream`), not a module symbol, so it waits on the CM
-naming rules; the two structural types have no owning declaration to anchor to at
-all. No consumer needs them yet — a schema library inlines a tuple's schema and
-never keys a handle.
+coordinate (`wasi:io/streams.input-stream`), not a module symbol, so it waits on
+the CM naming rules; the structural types have no owning declaration at all. No
+consumer needs them — a schema library inlines a tuple's schema and never keys a
+handle.
 
 ### Cost and shape
 
-`type_args()` hands back an owned `List`, not a view. A view would be `Slice<T>`,
-which holds an `&Array<T>` and so obliges its producer to name what it borrows in
-a `stores` clause — and what a constant tree borrows is a static global, which a
-`stores` clause has no way to name. The copy a `List` would
-seem to cost is the one [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md) already removes
-for `members()`: the whole tree is a closed constant expression, so the call is
-hoisted to a static global and read from there.
+`type_args()` hands back an owned `List`, not a view. A `Slice<T>` holds an
+`&Array<T>` and so obliges its producer to name what it borrows in a `stores`
+clause, which cannot name the static global a constant tree borrows. The copy it
+would save is the one [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md) already removes
+for `members()`: the tree is a closed constant expression, so the call is hoisted
+to a global and read from there.
 
 `TypeInfo` compares structurally (`Eq` over module, name, and arguments) because
 that is what a `$defs` key or a registry lookup needs, and it is `Inspect`-able
