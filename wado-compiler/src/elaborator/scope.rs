@@ -83,13 +83,11 @@ pub(super) struct TraitContext {
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<crate::defs::DefId>,
     /// The `impl` block whose type parameters are in scope, paired with the
-    /// node declaring its receiver binder — what names that binder in a mangle
-    /// (#1932).
+    /// node declaring its receiver binder — what names that binder in a mangle.
     ///
     /// The node, not the spelling: a method parameter may shadow the receiver's
-    /// letter, and inside that method the letter names the method's binder.
-    /// Only the receiver heads a template name — every other parameter is
-    /// substituted, so owning it would name nothing.
+    /// letter, and then the letter is the method's binder. Only the receiver
+    /// heads a template name, so no other parameter is owned.
     pub(super) impl_owner: Option<(crate::defs::DefId, Option<ast::AstId>)>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as

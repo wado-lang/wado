@@ -1,10 +1,7 @@
-// A blanket the newtype reaches only through a *chain* ranks as its base's.
-// `Wrapped` carries `impl Limit for Wrapped`; `Derived` reaches it only via
-// `impl<T: Base> Derived for T` over `Inner: Base`. Rank 2 asks at which
-// newtype level a bound first holds, so every step of the derivation is asked
-// of the same level (WEP 2026-09-01) — a bound reached by peeling inside a
-// chained blanket would report the base's as the newtype's and flatten the
-// rank. Issue #1932.
+// A blanket the newtype reaches only through a *chain* ranks as its base's:
+// `Wrapped` carries `impl Limit for Wrapped`, while `Derived` reaches it only
+// via `impl<T: Base> Derived for T` over `Inner: Base`. Rank 2 asks every step
+// of a derivation at the level being ranked (WEP 2026-09-01, issue #1932).
 
 trait Base {
     fn base() -> i32;

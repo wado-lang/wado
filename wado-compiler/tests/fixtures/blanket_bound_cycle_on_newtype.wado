@@ -1,8 +1,7 @@
 // Two blankets whose bounds name each other, asked of a newtype. Rank 2 holds
-// the subject fixed while it asks each level, so a repeated `(type, trait)`
-// pair is a bound that grounds nothing: it answers `false`, and `Wrapped` takes
-// the `Limit` blanket it really carries. Unguarded, the pair recurs until the
-// compiler overflows its stack (WEP 2026-09-01, issue #1932).
+// the subject fixed, so a repeated `(type, trait)` pair grounds nothing and
+// answers `false`: `Wrapped` takes the `Limit` blanket it really carries, and
+// the walk terminates (WEP 2026-09-01).
 
 trait Alpha {
     fn alpha() -> i32;

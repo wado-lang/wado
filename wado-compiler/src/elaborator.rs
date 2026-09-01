@@ -911,7 +911,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// [`Self::qualified_receiver_name`] for a receiver written inside the
     /// `impl` block `owner` identifies — a blanket's receiver, which that
-    /// block names (#1932).
+    /// block names.
     pub(super) fn qualified_receiver_name_owned(
         &self,
         written: &str,
@@ -945,10 +945,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The binder `written` names in the current type-param scope: owned by the
     /// `impl` block in scope when it is that block's receiver, bare otherwise.
     ///
-    /// So a blanket's template and the calls its body writes agree by
-    /// construction (#1932). Matched on the binding in scope rather than the
-    /// spelling: a method parameter may shadow the receiver's letter, and then
-    /// the letter is the method's binder, which heads no template.
+    /// Matched on the binding, not the spelling — a method parameter may shadow
+    /// the receiver's letter, and then the letter heads no template (#1932).
     pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
         let ctx = &self.annotate_ctx.trait_ctx;
         if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
@@ -960,7 +958,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The binder naming the receiver parameter `written` of the `impl` block
-    /// `owner` — every pass that names a blanket's receiver asks here (#1932).
+    /// `owner` — every pass that names a blanket's receiver asks here.
     pub(super) fn impl_receiver_binder(
         &self,
         owner: crate::defs::DefId,
@@ -974,7 +972,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The name an `impl` block's receiver registers under. One block, one
-    /// name: two spellings of it register two templates (#1932).
+    /// name: two spellings of it register two templates.
     pub(super) fn impl_receiver_name(
         &self,
         impl_block: &crate::ast::ImplBlock,
@@ -2177,7 +2175,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Two names, two uses. `reify_impl_default_methods` recomputes a
             // default method's name from `qualified_struct_name`, so it must be
             // the one this block's methods are recorded under — owned, or the
-            // block writes two templates (#1932). `receiver` keys `method_info`
+            // block writes two templates. `receiver` keys `method_info`
             // and is matched against receivers built elsewhere, so it stays
             // plain.
             let qualified_struct_name =

@@ -96,7 +96,7 @@ pub(super) struct DispatchedMethod {
 pub(super) struct BlanketStatic {
     pub trait_name: crate::name::FqTraitName,
     /// The receiver parameter as written (`T`), which the static-method
-    /// indices key on, and as the binder naming its template (#1932).
+    /// indices key on, and as the binder naming its template.
     pub param: String,
     pub binder: FqTypeName,
     pub module: ModuleSource,

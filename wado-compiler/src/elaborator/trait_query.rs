@@ -22,12 +22,8 @@ use super::types::{
 };
 use super::tysys::TypeSystem;
 
-/// Whether a bound query may follow a newtype to its base.
-///
-/// Dispatch follows: a newtype inherits its base's impls. Rank 2 of the
-/// selection order does not — it asks at which level a bound first holds, so
-/// every step of the derivation must be asked of the same level
-/// (`docs/wep-2026-09-01-trait-resolution.md`).
+/// Whether a bound query may follow a newtype to its base. Dispatch does; rank
+/// 2 does not (`docs/wep-2026-09-01-trait-resolution.md`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum NewtypePeel {
     Follow,
@@ -643,14 +639,10 @@ impl TypeSystem {
         if !is_newtype {
             return self.type_implements_trait(ctx, scope, type_id, trait_);
         }
-        // The guard [`Self::type_implements_trait`] keeps, on the same stack:
-        // without it two blankets whose bounds name each other recur forever.
-        //
-        // A repeat answers `false` here, where that query answers `true`. It
-        // recurses into members, so a repeat is the well-founded structural
-        // case; this walk holds the subject fixed, so a repeat is a bound that
-        // grounds nothing — and answering it `true` would let an unfounded
-        // bound hold at depth 0 and tie with one the newtype really carries.
+        // A repeat answers `false`, where [`Self::type_implements_trait`]
+        // answers `true` on the same stack: that query recurses into members,
+        // so a repeat is the well-founded structural case, while this one holds
+        // the subject fixed, so a repeat is a bound that grounds nothing.
         {
             let stack = ctx.trait_check_stack.borrow();
             if stack.contains(&(type_id, trait_)) {
@@ -1560,6 +1552,44 @@ impl TypeSystem {
             .trait_item_of_decl(decl)
     }
 
+    /// Whether one of a blanket's receiver bounds holds, at the level `peel`
+    /// names.
+    ///
+    /// `Follow` takes either answer: the subject query is the one entry a
+    /// structurally derived `Eq` / `Ord` has, since an impl-index scan sees no
+    /// impl for a derive. `Here` takes only the guarded query — it holds the
+    /// subject fixed, so the index lookup would re-enter this check on the same
+    /// pair with no frame to stop a cycle among bounds.
+    fn blanket_bound_holds(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        subject: Option<TypeId>,
+        type_key: &Receiver,
+        bound_trait: DefId,
+        peel: NewtypePeel,
+    ) -> bool {
+        match (peel, subject) {
+            (NewtypePeel::Here, Some(id)) => {
+                self.type_implements_trait_here(ctx, scope, id, bound_trait)
+            }
+            (NewtypePeel::Here, None) => {
+                self.find_trait_impl_for_subject(ctx, scope, subject, type_key, bound_trait, peel)
+            }
+            (NewtypePeel::Follow, _) => {
+                subject.is_some_and(|id| self.type_implements_trait(ctx, scope, id, bound_trait))
+                    || self.find_trait_impl_for_subject(
+                        ctx,
+                        scope,
+                        subject,
+                        type_key,
+                        bound_trait,
+                        peel,
+                    )
+            }
+        }
+    }
+
     fn blanket_trait_impl_applies(
         &self,
         ctx: &Scope,
@@ -1598,36 +1628,8 @@ impl TypeSystem {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
                     || self.primitive_satisfies_builtin_trait(type_key, bound)
-                    || bound.decl_ref.is_some_and(|trait_| {
-                        //
-                        // `peel` rides through: a blanket the subject reaches
-                        // only through its base is the base's, so under `Here`
-                        // its bound is asked of the subject alone — a chained
-                        // blanket would otherwise report the base's bound as
-                        // the subject's and flatten rank 2.
-                        match (peel, subject) {
-                            // The guarded query answers, and nothing else may:
-                            // it holds the subject fixed, so the bare lookup
-                            // below would re-enter this check on the same pair
-                            // with no frame to stop a cycle among bounds.
-                            (NewtypePeel::Here, Some(id)) => {
-                                self.type_implements_trait_here(ctx, scope, id, trait_)
-                            }
-                            (NewtypePeel::Here, None) => self.find_trait_impl_for_subject(
-                                ctx, scope, subject, type_key, trait_, peel,
-                            ),
-                            // The one entry, so a structurally derived `Eq` /
-                            // `Ord` answers a blanket's bound as it answers a
-                            // written one: an impl-index scan alone sees no
-                            // impl for a derive.
-                            (NewtypePeel::Follow, _) => {
-                                subject.is_some_and(|id| {
-                                    self.type_implements_trait(ctx, scope, id, trait_)
-                                }) || self.find_trait_impl_for_subject(
-                                    ctx, scope, subject, type_key, trait_, peel,
-                                )
-                            }
-                        }
+                    || bound.decl_ref.is_some_and(|bound_trait| {
+                        self.blanket_bound_holds(ctx, scope, subject, type_key, bound_trait, peel)
                     })
             });
             if bounds_satisfied && self.blanket_assoc_constraints_hold(subject, &blanket.bounds) {

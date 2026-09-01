@@ -1429,7 +1429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The node is the caller's to state, never this helper's to find: a method
     /// parameter may spell the impl's receiver letter, and a helper searching
     /// one list for every caller records the impl's node for the method's
-    /// binder — which then reads back as the receiver (#1932).
+    /// binder — which then reads back as the receiver.
     fn bind_type_param(
         scope: &mut super::scope::TypeParamScope<'_, '_, H>,
         decl: Option<ast::AstId>,

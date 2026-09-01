@@ -72,6 +72,11 @@ receiver satisfies. They are ranked:
    `T: Derived`) is at the level that blanket's own bound holds at, so a
    chained blanket does not report the base's bound as the newtype's.
 
+   The walk holds its subject fixed, so a `(type, trait)` pair it reaches twice
+   is a bound that grounds nothing, and answers no. Dispatch's query answers the
+   same repeat yes, because it descends into members and a repeat there is the
+   well-founded structural case.
+
 3. **A local impl beats a foreign one.** Between candidates otherwise equal, the
    one in the calling module wins. This is the tie-break of last resort, not a
    substantive rule: everything above it is about the impl's relation to the

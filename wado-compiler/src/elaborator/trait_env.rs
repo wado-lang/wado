@@ -485,7 +485,7 @@ pub(crate) struct BlanketImpl {
 impl BlanketImpl {
     /// The binder naming this blanket's receiver parameter — where every
     /// template name for the blanket comes from. A name built from the spelling
-    /// alone looks up a *different* template, silently (issue #1932).
+    /// alone looks up a *different* template, silently.
     pub(crate) fn receiver_binder(&self) -> name::FqTypeName {
         name::FqTypeName::binder_owned(
             &self.param,

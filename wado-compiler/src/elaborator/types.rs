@@ -2363,7 +2363,7 @@ pub(super) struct TraitMethodMatch {
     pub(super) blanket_type_param: Option<String>,
     /// [`Self::blanket_type_param`] as a binder named by the block that binds
     /// it, so two blankets of one trait are two templates whatever letter each
-    /// spells its parameter (issue #1932).
+    /// spells its parameter.
     pub(super) blanket_binder: Option<crate::name::FqTypeName>,
     /// The receiver parameter's bounds as source writes them (`T: Limit`) —
     /// what an ambiguity names two blankets by, neither having a name.
