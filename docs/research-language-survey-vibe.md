@@ -236,148 +236,159 @@ identities and trap at run time.
 | C3 Proof    | `formal/` — Lean 4 models of the effect row, the checked Error policy, capability and resource contracts, parallel scheduling, and the module system, driven by oracle scripts. Includes negative witnesses: a deliberately broken checker is modeled and shown to admit an undeclared `Fs` operation | High        | —                                              | —    |
 | C4 Corpus   | 1,266 fixture and test files, 42,467 lines                                                                                                                                                                                                                                                            | Medium      | —                                              | —    |
 
-C is thick in method and proof and empty in artifacts — the same shape as
-Almide, from a different arbiter, and bounded the same way by A6. A language
-whose only generation is a fixed `derive` set and whose only wire crossing is an
-untyped `Json::` API gives a foreign grammar or format no route in, so what can
-be built with it is what it is made of. The self-hosted compiler is not counted
-here: it is worth nothing if the language stops, which is what makes it an A
-cross-check rather than spin-off value.
+C is thick in method and proof and empty in artifacts. That is the same shape as
+Almide, arrived at from a different arbiter, and limited the same way by A6. The
+only generation here is a fixed `derive` set, and the only way values cross the
+wire is an untyped `Json::` API. A foreign grammar or format has no route in, so
+what you can build with the language is what the language is made of.
 
-The measured-pitfalls section states its purpose as keeping anyone from
-investigating the same question twice, and two of its entries record the section
-having been wrong. One had quoted a diagnostic's own enumeration as the rule;
-measuring it showed that four of the shapes the message named as rejected in
-fact compile, and that the two which fail do so for reasons the message never
-mentioned — the message was rewritten and a measured table replaced the
-enumeration. The other notes that the cheatsheet had the declaration separator
-backwards in the very place that explains it.
+The self-hosted compiler is deliberately not counted here. It would be worth
+nothing if the language stopped, which is exactly what makes it an A cross-check
+rather than spin-off value.
 
-Its lead entry shows what the format is for. A library that defines
-`fn String::index_of` replaces the builtin of that name across the whole linked
-program: a file that imports only some unrelated function from that library gets
-the replacement, nothing is reported either way, and the two readings of one
-source are indistinguishable without running it. The measured cost is 0.8 us
-against the builtin and 174 us against the shadowing definition, and the answers
-differ as well as the speed. A lexical scanner built to catch the hazard missed
-it three ways — a raw identifier, a preceding declaration attribute, and a
-declaration split across lines — from which the entry concludes that deciding
-what a declaration binds is the compiler's job.
+The measured-pitfalls section says its purpose is to stop anyone investigating
+the same question twice. Two of its entries record the section itself having been
+wrong.
 
-`docs/pl-survey-2026-07.md` is this document's own genre, done first, and it
-surveys Almide specifically — down to naming `almide-mir/src/alias_safety.rs` as
-ahead of vibe's own Perceus work, and recording that Almide's binary-size
-benchmark method and its modification survival rate were both adopted, with the
-issue numbers where they landed. The `eval/msr/` README states the borrowing
+One entry had quoted a diagnostic's own list of rejected shapes and used it as
+the rule. Measuring showed that four of the shapes the message called rejected
+actually compile, and that the two which do fail, fail for reasons the message
+never mentioned. The message was rewritten and a measured table replaced the
+list. The other entry notes that the cheatsheet had the declaration separator
+backwards, in the very place that explains it.
+
+The section's lead entry shows what the format is for. If a library defines
+`fn String::index_of`, that definition replaces the builtin of the same name
+across the entire linked program. A file that imports only some unrelated
+function from that library still gets the replacement. Nothing is reported either
+way, so you cannot tell the two readings of one source apart without running it.
+
+The measured cost is 0.8 us with the builtin against 174 us with the shadowing
+definition — and the answers differ too, not only the speed. They then built a
+lexical scanner to catch the hazard, and it missed three ways: a raw identifier,
+a declaration attribute in front, and a declaration split across lines. The entry
+concludes that working out what a declaration binds is the compiler's job.
+
+`docs/pl-survey-2026-07.md` is this document's own genre, done first. It surveys
+Almide specifically, down to naming `almide-mir/src/alias_safety.rs` as ahead of
+vibe's own Perceus work. It also records that Almide's binary-size benchmark
+method and its modification survival rate were both adopted, with the issue
+numbers where they landed. The `eval/msr/` README says where it came from
 outright.
 
 ## For Wado
 
 Learned:
 
-- Declining to build what the platform is going to provide leaves the fast path
-  as the only path. Wado lowers a tail-position `resume` to `return` and reaches
-  for Wasm stack switching only when code follows the `resume`, so no general
-  suspension machinery was ever written and none can be wrong. As of this
-  survey vibe has no tail-resumptive path at all, every perform goes through
-  replay, and ADR-0076 concludes that its checker's rejection of non-tail and
-  multi-shot resume already makes every handler tail-resumptive — arriving,
-  by a different route and later, at the lowering Wado has.
-- A bet is easier to price from outside it. Wado's founding one — let the host
-  own the collector, ship no runtime — reads as an obvious constraint from
-  within and as an escape from a long bill once the alternative is written down.
-  What both surveyed languages were paying at this date: reference counting over
-  linear memory, cycles leaking permanently as a stated limitation, a compiler
-  self-build pinned away from RC because it costs 1.7× wall and 2.9× size, a gc
-  backend that emits no `struct.new` and disagrees with the linear one about
-  what `Array::push` means. Neither had reached the target both name as primary.
-- Pin the defect before fixing it, at architecture scale. ADR-0076's phase 1 is
-  a regression fixture for the corruption its phase 2 removes, written so that
-  "fixed" becomes provable instead of asserted. This is the red/green rule
-  `AGENTS.md` already requires, applied to a migration long enough that nobody
-  would otherwise remember what the old behaviour was.
-- Both surveyed languages arrived independently at two documents Wado has
-  neither of, which is a stronger signal than either instance alone. The first
-  is a traceability table running claim → mechanism → evidence: vibe's oracle
-  maps each module rule to its Lean definition, its loader function and its
-  regression test; Almide's `edit-locality.md` §2 maps each language rule to the
-  role it plays in enforcing L1 and the `file:line` that implements it; its
-  contract ledger maps each promise to a specification section and a fixture,
-  gated in both directions. The second is a boundary map declaring where the
-  guarantee stops — vibe's `Epistemic status`, Almide's `proven-vs-trusted.md`.
-- Wado has the parts and not the map. A long optimizer pass list, a NIR/WIR
-  pipeline, EMI mutation, fuzzing and golden fixtures, and no document saying
-  which claim each of those backs. The cost of not having it is already
-  recorded: a tree that passed the whole e2e suite was miscompiling under `-O3`,
-  and Gale caught it. A boundary map is what says out loud that the `-O3`
-  pipeline was backed by e2e tests and that e2e tests do not reach it.
-- A rule attached to the artifact it governs holds without a gate; a rule that
-  must be recalled somewhere else needs one. Almide's mandatory falsifier is a
-  heading in the template the author already has open and all twelve ADRs have
-  it; its "no synonyms" rule has to surface at an unrelated keystroke months
-  later and the standard library has synonyms. Neither is enforced. This is the
-  test to apply before writing a rule down and expecting it to hold.
-- Gates are placed where the previous gate is blind, and vibe does this three
-  times: doctest compiles code blocks, so a signature gate covers the tables it
-  cannot see; the deleted language tour was the surface where nothing covered
-  the prose; the eighth review dimension exists because the other seven observe
-  through modes that cannot see a missing diagnostic. The question that produces
-  the next gate is what the current one cannot observe.
+- Refusing to build what the platform is going to give you leaves the fast path
+  as the only path. Wado lowers a tail-position `resume` to `return`, and only
+  reaches for Wasm stack switching when there is code after the `resume`. No
+  general suspension machinery was ever written, so none of it can be wrong. As
+  of this survey vibe has no tail-resumptive path at all and every perform goes
+  through replay. ADR-0076 concludes that its checker's rejection of non-tail
+  and multi-shot resume already makes every handler tail-resumptive — arriving,
+  by a different route and later, at the lowering Wado already has.
+- A bet is easier to price from outside it. Wado's founding bet is to let the
+  host own the collector and ship no runtime. From inside it reads as an obvious
+  constraint. It reads as an escape from a long bill once you write down what
+  the alternative costs. At the date of this survey, both surveyed languages were
+  paying: reference counting over linear memory, cycles leaking permanently as a
+  stated limitation, a compiler self-build pinned away from RC because RC costs
+  1.7× wall clock and 2.9× size, and a gc backend that emits no `struct.new` and
+  disagrees with the linear one about what `Array::push` means. Neither had
+  reached the target both of them name as primary.
+- Pin the defect before you fix it, even at the scale of an architecture change.
+  ADR-0076's phase 1 is a regression fixture for the corruption its phase 2
+  removes, written so that "fixed" can be proved later instead of asserted. This
+  is the red/green rule `AGENTS.md` already requires, applied to a migration long
+  enough that nobody would otherwise remember what the old behaviour was.
+- Both surveyed languages arrived independently at two documents Wado has neither
+  of. Two projects reaching the same answer separately is a stronger signal than
+  either one alone.
+
+  The first is a traceability table: claim, then the mechanism that decides it,
+  then the evidence. vibe's oracle maps each module rule to its Lean definition,
+  its loader function, and its regression test. Almide's `edit-locality.md` §2
+  maps each language rule to the role it plays in enforcing L1 and the
+  `file:line` that implements it, and its contract ledger maps each promise to a
+  specification section and a fixture, gated in both directions.
+
+  The second is a boundary map, which says where the guarantee stops. vibe's is
+  `Epistemic status`; Almide's is `proven-vs-trusted.md`.
+- Wado has the parts and not the map. There is a long list of optimizer passes, a
+  NIR/WIR pipeline, EMI mutation, fuzzing and golden fixtures — and no document
+  saying which claim any of them backs. What that costs is already on record: a
+  tree that passed the whole e2e suite was miscompiling under `-O3`, and Gale
+  caught it. A boundary map is the thing that would have said out loud that the
+  `-O3` pipeline was backed by e2e tests, and that e2e tests do not reach it.
+- A rule attached to the thing it governs holds without a gate. A rule you have
+  to remember somewhere else needs one. Almide's mandatory falsifier is a heading
+  in a template the author already has open, and all twelve ADRs have one. Its
+  "no synonyms" rule has to occur to someone at an unrelated keystroke months
+  later, and the standard library has synonyms. Neither rule is enforced by
+  anything. Apply this test before writing a rule down and expecting it to hold.
+- Put each new gate where the previous one is blind. vibe does this three times.
+  Doctest compiles code blocks, so a signature gate covers the tables doctest
+  cannot see. The language tour was deleted because nothing covered its prose.
+  The eighth review dimension exists because the other seven all observe through
+  modes that cannot see a missing diagnostic. The question that produces the next
+  gate is: what can the current one not observe?
 
 Take:
 
-- [ ] A measured-pitfalls section for the cheatsheet, in vibe's form rather than
-      Almide's. The difference is three writing rules: each entry states the
-      date it was measured against the compiler, names the fixture that pins it,
-      and, where an earlier version of the entry was wrong, says so. A list
-      written from memory decays into folklore; this one cannot, because every
-      row can be re-run.
+- [ ] A measured-pitfalls section for the cheatsheet, written vibe's way rather
+      than Almide's. The difference is three rules about how each entry is
+      written. State the date it was measured against the compiler. Name the
+      fixture that pins it. And where an earlier version of the entry turned out
+      to be wrong, say so. A list written from memory decays into folklore. This
+      kind cannot, because every row can be re-run.
 - [ ] Gates over documentation, not only over code. vibe compiles every code
       block in its docs against the current compiler, checks documented
-      signatures against the compiler, and verifies that file paths cited in
-      docs still exist. Wado's cheatsheet and spec have no such gate, and the
-      third of these is a shell script's worth of work. The mechanism that makes
-      the first one tractable is a skip marker that requires a reason, so an
-      example of what not to write stays in the document without exempting the
-      gate silently.
-- [ ] Gate self-tests and a gate registry. A check script with no test is a
-      claim nobody checked; vibe pairs most of its gates with a `_test.sh` and
-      keeps a registry gate over the set.
+      signatures against the compiler, and verifies that file paths cited in docs
+      still exist. Wado's cheatsheet and spec have no gate like this, and the
+      third one is a shell script's worth of work. What makes the first one
+      workable is a skip marker that requires a reason, so an example of what
+      *not* to write can stay in the document without quietly exempting itself
+      from the gate.
+- [ ] Gate self-tests and a gate registry. A check script with no test is a claim
+      nobody checked. vibe pairs most of its gates with a `_test.sh`, and keeps a
+      registry gate over the whole set.
 
 Refuse:
 
-- Errors in the effect row. Wado already carries effects in the signature, and
-  moving failure there too would collapse the distinction between "this
-  function touches the outside world" and "this function can fail". Almide
-  reached the opposite conclusion deliberately — fallibility and effect are
-  orthogonal axes — and Wado's split of `Result` from `with` agrees.
-- `#zero_alloc`, the attribute making any heap allocation in a function or a
-  transitively called one a compile error, in three modes. It is not clear whom
-  the assertion is addressed to. A caller cannot act on it, and the property it
+- Errors in the effect row. Wado already carries effects in the signature.
+  Moving failure there as well would erase the difference between "this function
+  touches the outside world" and "this function can fail". Almide reached the
+  opposite conclusion on purpose, treating fallibility and effect as separate
+  axes, and Wado's split of `Result` from `with` agrees with it.
+- `#zero_alloc` — the attribute that makes any heap allocation, in a function or
+  in anything it calls, a compile error, in three modes. It is not clear who the
+  assertion is addressed to. A caller cannot act on it. And the property it
   asserts is decided by the ownership analysis and the optimizer rather than by
-  the annotated code, so the annotation breaks for reasons its own body did not
-  cause. [Optimizer Remarks](./wep-2026-06-03-optimizer-remarks.md) reports the
-  same facts to the reader who can act on them.
+  the annotated code, so the annotation can break for reasons its own body did
+  not cause. [Optimizer Remarks](./wep-2026-06-03-optimizer-remarks.md) reports
+  the same facts to a reader who can actually act on them.
 - The `proposed` advancement rule. `docs/CLAUDE.md` already requires an
-  unfinished mechanism to be a "Known gap" stating what is missing and what
-  closing it takes, which is the same obligation.
-- An authority header on `spec.md` — taken and landed while this survey was
-  open, so it is no longer work to schedule. `spec.md` now opens by saying that
-  it is normative, that a disagreement with the implementation is a defect
-  belonging to whichever side is wrong, and where the WEPs, the cheatsheet and
-  the generated stdlib pages stand against it.
+  unfinished mechanism to be a "Known gap" stating what is missing and what it
+  would take to close. That is the same obligation.
+- An authority header on `spec.md`. Taken and landed while this survey was open,
+  so it is no longer work to schedule. `spec.md` now opens by saying that it is
+  normative, that a disagreement with the implementation is a defect belonging to
+  whichever side is wrong, and where the WEPs, the cheatsheet and the generated
+  stdlib pages stand relative to it.
 - Citing vibe's program-wide shadowing measurement in
-  [`wado lint`](./wep-2026-08-31-wado-lint.md) as evidence that a check must
+  [`wado lint`](./wep-2026-08-31-wado-lint.md), as evidence that a check has to
   resolve declarations rather than spellings.
-  [Declaration Identity](./wep-2026-08-12-declaration-identity.md) is that
-  evidence, recorded from Wado's own name-collision history.
+  [Declaration Identity](./wep-2026-08-12-declaration-identity.md) already is
+  that evidence, recorded from Wado's own history of name collisions.
 
 Hold:
 
-- The rejection record proposed in the Almide survey. vibe refuses it on a
-  stated doctrine — a superseded entry becomes a false statement about the
-  current build — and vibe's position is closer to Wado's existing WEP rule
-  than Almide's is. The two surveys disagree, so this is a real design choice
-  rather than an obvious import. The narrow version that survives both
-  objections: record the rejection, never the superseded design, and delete a
-  rejection only when the language's direction changes.
+- The rejection record proposed in the Almide survey. vibe refuses it on a stated
+  doctrine: a superseded entry becomes a false statement about the current build.
+  vibe's position is closer to Wado's existing WEP rule than Almide's is.
+
+  So the two surveys disagree, which makes this a real design choice rather than
+  an obvious import. There is a narrow version that survives both objections:
+  record the rejection, never the superseded design, and delete a rejection only
+  when the language's direction changes.
