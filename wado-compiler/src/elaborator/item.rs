@@ -872,7 +872,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         // The block's name-level facts. Answered here because this is the only
         // phase standing in the block's own frame.
-        let target_fq = scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
+        // Named the same way as when this block's methods are resolved: one
+        // impl block, one receiver name. Two spellings of it register two
+        // templates, and each instantiates the receiver separately (#1932).
+        let target_fq = scope.qualified_receiver_name_owned(
+            &scope.get_type_name(&impl_block.ty),
+            Some(scope.def_at(impl_block.id)),
+        );
         // The header's own site answers: `check_impl_trait_resolves` rejects a
         // header whose trait reaches no declaration, so a well-formed block has
         // an identity here and an erroneous one contributes none.
