@@ -15,13 +15,13 @@ available is leaving it standing as an accepted difference: one that is not
 resolved is a Known gap, recorded where the area is owned and saying what
 closing it takes.
 
-| Document               | Holds                                                              |
-| ---------------------- | ------------------------------------------------------------------ |
-| this file              | the rules                                                          |
-| `wep-*.md`             | the reasoning behind a rule, and the design it came from            |
-| `design-philosophy.md` | why the language is shaped this way                                 |
-| `cheatsheet.md`        | a quick reference; it promises nothing this file does not           |
-| `stdlib-*.md`          | generated from the compiler by `wado doc`; not edited by hand       |
+| Document               | Holds                                                         |
+| ---------------------- | ------------------------------------------------------------- |
+| this file              | the rules                                                     |
+| `wep-*.md`             | the reasoning behind a rule, and the design it came from      |
+| `design-philosophy.md` | why the language is shaped this way                           |
+| `cheatsheet.md`        | a quick reference; it promises nothing this file does not     |
+| `stdlib-*.md`          | generated from the compiler by `wado doc`; not edited by hand |
 
 ## Overview
 

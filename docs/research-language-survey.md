@@ -62,15 +62,15 @@ have read everything.
 
 What the language lets you write.
 
-| Axis | What to look at |
-| --- | --- |
-| A1 Canonicity | One way to write each concept? Enforced by the compiler, or asserted in prose? |
-| A2 Type vocabulary | Invented, or taken from an external standard? |
-| A3 Effects | One bit (pure/effectful), named in the type, or handler-dispatched? |
-| A4 Errors | Values or exceptions; propagation explicit or implicit; error type converted implicitly at propagation; is there a doctrine for when an error is branchable? |
-| A5 Concurrency | async/await, structured, or none. Deterministic across targets and machines? |
+| Axis                   | What to look at                                                                                                                                                                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1 Canonicity          | One way to write each concept? Enforced by the compiler, or asserted in prose?                                                                                                                                                                                            |
+| A2 Type vocabulary     | Invented, or taken from an external standard?                                                                                                                                                                                                                             |
+| A3 Effects             | One bit (pure/effectful), named in the type, or handler-dispatched?                                                                                                                                                                                                       |
+| A4 Errors              | Values or exceptions; propagation explicit or implicit; error type converted implicitly at propagation; is there a doctrine for when an error is branchable?                                                                                                              |
+| A5 Concurrency         | async/await, structured, or none. Deterministic across targets and machines?                                                                                                                                                                                              |
 | A6 Boundary mechanisms | How does something outside the language get in? Code generation at build time, a serialization framework at run time, foreign interface import. Macros are refused nearly everywhere; ask where generation was pushed instead, and whether what it produces can be opened |
-| A7 Hidden operations | Is there an inventory of what the compiler does behind your back? |
+| A7 Hidden operations   | Is there an inventory of what the compiler does behind your back?                                                                                                                                                                                                         |
 
 ### The self-application cross-check
 
@@ -116,16 +116,16 @@ the home language also has is the most valuable thing a survey can return.
 
 Why the language is the way it is, and what keeps that honest.
 
-| Axis | What to look at |
-| --- | --- |
-| B1 Arbiter | Is there one sentence settling what wins when goals conflict? Record its form — a single maximized metric, or a priority order over several values — and whether it opens the philosophy document or closes it |
-| B2 Accept/reject criteria | Numeric, or taste? |
-| B3 The "why" axis | Roadmap records what is next and the spec records what is; is the reasoning behind a decision recorded anywhere? |
-| B4 Falsifier | Does the decision template require a condition on the decision — what would retract it, or what would advance it out of "proposed"? |
-| B5 Rejection record | Is there a list of designs considered and refused, with reasons and an operating rule for citing it? |
-| B6 Sync gate | Does CI fail when a public claim stops being true? Over what scope? |
-| B7 Self-reported violations | Does the project document where it currently breaks its own invariants, with file and line? |
-| B8 Who decides | Is the human the decider, or may an agent write a decision into the record? |
+| Axis                        | What to look at                                                                                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1 Arbiter                  | Is there one sentence settling what wins when goals conflict? Record its form — a single maximized metric, or a priority order over several values — and whether it opens the philosophy document or closes it |
+| B2 Accept/reject criteria   | Numeric, or taste?                                                                                                                                                                                             |
+| B3 The "why" axis           | Roadmap records what is next and the spec records what is; is the reasoning behind a decision recorded anywhere?                                                                                               |
+| B4 Falsifier                | Does the decision template require a condition on the decision — what would retract it, or what would advance it out of "proposed"?                                                                            |
+| B5 Rejection record         | Is there a list of designs considered and refused, with reasons and an operating rule for citing it?                                                                                                           |
+| B6 Sync gate                | Does CI fail when a public claim stops being true? Over what scope?                                                                                                                                            |
+| B7 Self-reported violations | Does the project document where it currently breaks its own invariants, with file and line?                                                                                                                    |
+| B8 Who decides              | Is the human the decider, or may an agent write a decision into the record?                                                                                                                                    |
 
 B1's placement matters. A philosophy document that opens with the arbiter
 derives everything from it; one that arrives at it in the closing section is
@@ -150,12 +150,12 @@ paragraph rather than by building anything.
 
 > If this project stopped tomorrow, what would still be worth having?
 
-| Kind | What it is |
-| --- | --- |
+| Kind        | What it is                                                             |
+| ----------- | ---------------------------------------------------------------------- |
 | C1 Artifact | A program that does a job — a compiler, a parser generator, a renderer |
-| C2 Method | A technique reusable elsewhere — a way to decide, measure, or record |
-| C3 Proof | Machine-checked theorems, extracted checkers |
-| C4 Corpus | Reusable data — fixtures, benchmark suites, grammars |
+| C2 Method   | A technique reusable elsewhere — a way to decide, measure, or record   |
+| C3 Proof    | Machine-checked theorems, extracted checkers                           |
+| C4 Corpus   | Reusable data — fixtures, benchmark suites, grammars                   |
 
 Each entry carries two more columns.
 
