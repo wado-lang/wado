@@ -3372,7 +3372,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -3401,12 +3400,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };
@@ -3873,7 +3873,7 @@ fn "core:serde/value_copy_nested_array_helper_chain.wado/Item^core:serde/Deseria
                 index = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_45).payload_0;
                 taken = 0;
                 if index == 0 {
-                    if @unlikely(let __match_scrut_3: ref null "core:prelude/string.wado//String"; __match_scrut_3 = __sroa_slots_0; ref.is_null(__match_scrut_3) == 0) {
+                    if @unlikely(let __match_scrut_7: ref null "core:prelude/string.wado//String"; __match_scrut_7 = __sroa_slots_0; ref.is_null(__match_scrut_7) == 0) {
                         cold_path;
                         __local_46 = ref.as_non_null("core:serde/core:serde/DeserializeError::duplicate_field"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 }));
                         if @likely(ref.is_null(__local_46)) {
@@ -3901,9 +3901,8 @@ fn "core:serde/value_copy_nested_array_helper_chain.wado/Item^core:serde/Deseria
                     });
                     __sroa_slots_0 = value_17;
                     taken = 1;
-                }
-                if 1 == index {
-                    if @unlikely(let __match_scrut_6: ref null "value_copy_nested_array_helper_chain.wado//Geom"; __match_scrut_6 = __sroa_slots_1; ref.is_null(__match_scrut_6) == 0) {
+                } else if index == 1 {
+                    if @unlikely(let __match_scrut_4: ref null "value_copy_nested_array_helper_chain.wado//Geom"; __match_scrut_4 = __sroa_slots_1; ref.is_null(__match_scrut_4) == 0) {
                         cold_path;
                         __local_47 = ref.as_non_null("core:serde/core:serde/DeserializeError::duplicate_field"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(103, 101, 111, 109), used: 4 }));
                         if @likely(ref.is_null(__local_47)) {
@@ -3930,6 +3929,7 @@ fn "core:serde/value_copy_nested_array_helper_chain.wado/Item^core:serde/Deseria
                     });
                     __sroa_slots_1 = __local_35;
                     taken = 1;
+                } else {
                 }
                 if taken == 0 {
                     __local_48 = "core:json/core:json/JsonDeserializer::skip_value"(sd.de, sd.depth);
@@ -3953,13 +3953,13 @@ fn "core:serde/value_copy_nested_array_helper_chain.wado/Item^core:serde/Deseria
         cold_path;
         return 1, ref.null none, "value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError"(__qm_e_21);
     }
-    return 0, let __match_scrut_11: ref null "core:prelude/string.wado//String"; __match_scrut_11 = __sroa_slots_0; __sroa_fields_0 = (if ref.is_null(__match_scrut_11) == 0 -> ref "core:prelude/string.wado//String" {
-        value_25 = ref.as_non_null(__match_scrut_11);
+    return 0, let __match_scrut_12: ref null "core:prelude/string.wado//String"; __match_scrut_12 = __sroa_slots_0; __sroa_fields_0 = (if ref.is_null(__match_scrut_12) == 0 -> ref "core:prelude/string.wado//String" {
+        value_25 = ref.as_non_null(__match_scrut_12);
         value_25;
     } else {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: name"), used: 19 }, offset: -1_i64 };
-    }); let __match_scrut_12: ref null "value_copy_nested_array_helper_chain.wado//Geom"; __match_scrut_12 = __sroa_slots_1; __sroa_fields_1 = (if ref.is_null(__match_scrut_12) == 0 -> ref "value_copy_nested_array_helper_chain.wado//Geom" {
-        __local_43 = ref.as_non_null(__match_scrut_12);
+    }); let __match_scrut_13: ref null "value_copy_nested_array_helper_chain.wado//Geom"; __match_scrut_13 = __sroa_slots_1; __sroa_fields_1 = (if ref.is_null(__match_scrut_13) == 0 -> ref "value_copy_nested_array_helper_chain.wado//Geom" {
+        __local_43 = ref.as_non_null(__match_scrut_13);
         __local_43;
     } else {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: geom"), used: 19 }, offset: -1_i64 };

@@ -111,10 +111,11 @@ mandelbrot goes slightly backwards, and every program pays for it in bytes:
 `-Os` output grows 41% on gale-gen (1.29 → 1.81 MB), 43% on json-twitter, 16%
 on syntax-highlight.
 
-So the budget is not a dial with a better setting — a serializer's hot loop is
-exactly what growing it damages. What the sweep says instead is that the
-threshold is doing two jobs, admitting a callee and pricing a loop body, and a
-gale-gen-shaped win needs the second priced apart from the first.
+So 20 is not a better setting — a serializer's hot loop is exactly what growing
+it that far damages. What the sweep says instead is that the threshold is doing
+two jobs, admitting a callee and pricing a loop body, and a gale-gen-shaped win
+needs the second priced apart from the first. 16 did land later, on the same
+rows; the budget this entry measures against is that, not the 13 above.
 
 ## A jump table in place of a compare cascade (gale, 2026-07/08)
 
@@ -132,6 +133,10 @@ call-frequency-bound, not dispatch-bound.
 
 Generalizes: a hot `match`-vs-cascade frame is telling you how often it is
 called. Cut the calls.
+
+Both cascades here were short and already early-exit. A run of independent `if`s
+that tests every key whatever matched is not that shape, and turning one into a
+`br_table` gained 10.7% on cbor-twitter deserialize (`nir/if_chain_to_match`).
 
 ## Index loops in place of `for x of &List<i32>` (gale, 2026-07)
 
@@ -232,6 +237,46 @@ Each measured flat or negative, each with an obvious-sounding motivation:
 The generalization: stop when the floor is the representation. A store-bound
 loop over an `Array<T>`-backed `String` is near-optimal short of leaving GC
 arrays, and no scheme that keeps the array beats it.
+
+## SROA-ing the derived deserializer's slot tuple (2026-09-01)
+
+`ReflectStruct::empty_slots` returns `[Option<F_0>, …]` as a tuple literal, but
+out of line, so the caller's `let slots = empty_slots()` is bound to a _call_ and
+`sroa`'s direct-literal matcher never sees it: the slots stay one heap tuple,
+allocated per struct and written field by field for the whole decode. `defaults`
+already carries `InlineHint::Always` for exactly this reason, and giving
+`empty_slots` the same hint works — `wado dump -O2` on cbor-twitter goes from 516
+`slots.N` heap accesses to none.
+
+It is **6.5% slower**. cbor-twitter de, three alternating pairs, 212.1/212.0/214.9
+→ 198.3/197.2/201.4 MB/s; json-catalog, whose structs are 2–9 fields wide, is
+flat.
+
+Forty slots become forty `ref`-typed locals live across a loop full of calls, so
+the function trades one bump allocation for forty stack slots it reloads at every
+call boundary — plus a `ref.null` init apiece at entry. Reverted.
+
+Generalizes: SROA is priced by the aggregate's _width_, not by the allocation it
+removes. Past the register file, decomposing a wide aggregate whose live range
+spans calls is a pessimization, and "the allocation is gone" says nothing about
+which side won.
+
+## Marking the CBOR scalar decoders' slow paths cold (2026-09-01)
+
+`deserialize_bool` / `deserialize_string` are a two-byte fast path followed by a
+tolerant `loop` for tag-wrapped and indefinite encodings. `inline_cost` discounts
+what a `cold_path()` marker opens, so a marker before the loop should price each
+function by its fast path and get it inlined at every field.
+
+It does not: the WIR A/B is byte-identical on the hot path — the same inlined
+`peek_byte`, the same two compares — and the call sites still call. The marker
+only stops `is_passthrough_tag` from being inlined into the arm nobody runs. The
+fast path alone is still over `-O2`'s 16-instruction budget, so the discount
+changes nothing to admit.
+
+Generalizes: the cold discount decides admission, not size. Marking a slow path
+cold is worth doing when the hot path _would_ fit under the threshold without it;
+when it would not, the marker buys only cold-side bytes.
 
 ## Splitting `encode_char` at the ASCII boundary (2026-08-30)
 

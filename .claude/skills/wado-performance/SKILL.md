@@ -35,9 +35,30 @@ flat-CST rewrite that cut a benchmark ~3× on dev gained ~1.47× on release,
 because release GC was only ~⅓ of wall-clock to begin with. Pure compute does not
 inflate, so a compute-bound win carries over intact.
 
+**A sample lands at the next epoch check, not where the time went.** The guest
+profiler samples on an epoch deadline and wasmtime checks the epoch at function
+entries and loop headers, so straight-line code is charged to whichever it
+reaches next. A derived deserializer's field-dispatch chain reported as **73%
+self in `deserialize_i32`** on an 80-field struct, and 19% in `deserialize_bool`
+on cbor-twitter — neither function is more than a bounds check and two compares.
+A hot small leaf is telling you how often it is entered, so go read its caller.
+The profile ranks candidates; it does not locate them.
+
 **Rule out a super-linear pass before blaming GC** — that same inflation makes an
-algorithmic blow-up read as GC-bound; sweep input size (faster-than-linear growth
-⇒ the fix is the algorithm, not allocation) to tell them apart.
+algorithmic blow-up read as GC-bound; sweep input size to tell them apart.
+Faster-than-linear growth is a hypothesis and not a verdict, since a live set can
+grow that way too, so the WIR is what settles which.
+
+Sweeping a _shape_ dimension is sharper than size, and the one to vary is the one
+the suspect is indexed by. Decoding 1000 CBOR records, holding that count fixed
+so no per-record term is left for the growth to be:
+
+| `i32` fields per record | 5  | 10 | 20 | 40  | 80  |
+| ----------------------- | -- | -- | -- | --- | --- |
+| ns per field            | 85 | 80 | 87 | 129 | 221 |
+
+Hold everything but the dimension under test — a sweep that varies two answers
+about neither.
 
 ## 2. Read the WIR — allocations and copies first
 
@@ -87,6 +108,12 @@ for `Array<T>`-backed `String` / `List`).
   reasonable pre-size. Size it about right, or grow.
 - **GC-array access is bounds-checked, no unchecked variant.** A lookup table in
   a GC array adds a checked load per access — it lost to plain arithmetic.
+- **SROA is priced by the aggregate's width, not by the allocation it removes.**
+  Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
+  costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
+  across a call-heavy loop are forty spill slots reloaded at every call boundary,
+  plus a `ref.null` init apiece at entry. "The allocation is gone" says nothing
+  about which side won (`dead-ends.md`).
 - **`array.copy` is fast; leave it alone.** It has a fast path that does not call
   out to the runtime, and it beats a hand-written loop from a couple of bytes on
   — the loop pays the bounds check above on both the get and the set of every
@@ -94,11 +121,14 @@ for `Array<T>`-backed `String` / `List`).
   (`dead-ends.md`).
 - **Constant `/` and `%` are cheap** (Cranelift magic-multiply, `x/k` and `x%k`
   fused) — don't trade a divide for extra multiplies.
-- **A compare cascade is not a dispatch problem.** Cranelift lowers a short
+- **A short compare cascade is not a dispatch problem.** Cranelift lowers a short
   `else if` chain competitively, and a `match` over it (a `br_table`) adds an
   indirect branch: two separate rewrites to jump tables measured flat and
   slightly slower. Such a frame is usually call-frequency-bound, not
-  dispatch-bound — cut the calls, not the branch.
+  dispatch-bound — cut the calls, not the branch. What does answer to dispatch is
+  a cascade long enough to pay for that branch, or one that is not a cascade at
+  all: independent `if`s no arm leaves test every key whatever matched, which
+  `nir/if_chain_to_match` is what fixes.
 - **Write into the caller's buffer, not a temp.** `` `{v}` `` allocates a
   throwaway `String` and copies it in, per value; `buf.push_display(&v)` skips
   both. A run of adjacent `push` / `push_str` calls is fused into one capacity
@@ -136,7 +166,10 @@ three or four, alternating and with the order swapped once — the first run of 
 session reads high, so a fixed order silently taxes whichever arm goes second.
 Run on an **idle** host, nothing else building: an A/B taken beside a compiling
 test suite has put both arms inside each other's spread and flipped their
-ranking. Nothing in a number says whether its host was idle, so
+ranking. Check `ps` and `free` as well as `uptime` — a load average lags a
+session that just started and says nothing about memory, and another agent's on
+this box put the same test target at 145 s and at 2499 s before OOM-killing the
+command after it. Nothing in a number says whether its host was idle, so
 `benchmark/README.md` is a sanity check on the arm you just built, never the
 control for it — even on the machine that produced it; a HEAD build has measured
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
@@ -178,6 +211,15 @@ done
 regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`
 sweeps a knob the same way, but the harness spends it on `wado run`, so a knob
 `compile` alone accepts is one no sweep reaches.
+
+**Give a threshold a temporary env override and sweep it, rather than
+rebuilding per value** — and reach for it the moment a change looks like it only
+pays above some size, because that shape usually means two rewrites are riding
+one knob. `if_chain_to_match` appeared to need a 12-arm floor; overriding its
+threshold and `match_to_switch`'s separately showed the fusion was never the
+cost at any width and the `br_table` past it was the whole of it on the row that
+regressed, turning 3.6% down on cbor-catalog into 2.1% up. Delete the overrides before
+committing: read per node visit, `std::env::var` is itself a compile-time cost.
 
 **What decides adoption**, in priority order:
 

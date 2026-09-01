@@ -4,6 +4,7 @@
 //! earlier panic-guard, a `len() - k`. Matching is syntactic over the skeleton
 //! and value pool, with flow-correctness from a position-aware modification scan.
 
+use super::arena_query::local_written_by;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
 use crate::nir_engine::Engine;
@@ -129,31 +130,11 @@ pub(super) type Binds = crate::hashmap::IndexMap<u32, Operand>;
 /// so resolving through it can never read a stale value.
 pub(super) fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
     let mut reassigned = crate::hashmap::IndexSet::default();
-    let mut record = |node: NodeRef| {
-        if let NodeRef::Expr(e) = node {
-            match &body.exprs[e].kind {
-                ExprKind::Assign { target, .. } => {
-                    if let Some(r) = super::arena_query::storage_root(body, *target) {
-                        reassigned.insert(r);
-                    }
-                }
-                ExprKind::Unary {
-                    op: NirUnaryOp::MutRef,
-                    expr,
-                } => {
-                    if let Some(ie) = expr.as_expr()
-                        && let Some(r) = super::arena_query::storage_root(body, ie)
-                    {
-                        reassigned.insert(r);
-                    }
-                }
-                _ => {}
-            }
-        }
-    };
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(n) = stack.pop() {
-        record(n);
+        if let Some(r) = local_written_by(body, n) {
+            reassigned.insert(r);
+        }
         body.for_each_child(n, |c| stack.push(c));
     }
     let mut binds = Binds::default();

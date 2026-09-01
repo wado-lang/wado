@@ -45,6 +45,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 - Make every edit with the editing tools. They refuse a match that is not unique and a file the session has not read, and the harness tracks what they wrote, so each edit is checkable. Scripts — Node.js included — measure, extract, and generate data to read.
 - Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation: the harness announces the end of a job it owns. Chaining one behind a slow step puts both under a single timeout.
+- `test`, `test-wado` and `test-gale-o3` refuse to start while another of the same is running, naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there.
 - Have the job record its own completion — `cmd > run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> run.log` — and wait for it with `until grep -q "^exit=" run.log; do sleep 30; done`. The `&&`/`||` is what writes the marker on a failure too, which `set -e` would otherwise exit before.
 - Let a `wado test` run finish before editing sources: it pins each Kiln generator at its first resolve, and its verdict then describes neither tree.

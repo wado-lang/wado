@@ -23,6 +23,7 @@ mod elide_local;
 mod extract;
 mod field_scalarize;
 mod gate;
+mod if_chain_to_match;
 mod inline;
 mod labeled_block_fusion;
 mod let_block_flatten;

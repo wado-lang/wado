@@ -1,7 +1,9 @@
 // A dense integer match is rewritten to a Switch inside the same peephole
 // session that runs value_copy_elide; the elide rule must still see the
 // Switch arms' values, or the binding copy of a live local is stripped and
-// a later mutation of the source leaks into the binding.
+// a later mutation of the source leaks into the binding. The arms reach
+// `SWITCH_MIN_CASES` and the `wir_expect` holds them there, a match below it
+// taking the generic if-chain instead.
 
 #[inline(never)]
 fn pick(n: i32) -> i32 {
@@ -15,7 +17,11 @@ fn pick(n: i32) -> i32 {
         4 => a,
         5 => a,
         6 => a,
-        7 => b,
+        7 => a,
+        8 => a,
+        9 => a,
+        10 => a,
+        11 => b,
         _ => b,
     };
     a.push(999);
@@ -25,8 +31,8 @@ fn pick(n: i32) -> i32 {
 
 test "dense match arm binds an independent copy" {
     assert pick(0) == 3;
-    assert pick(7) == 3;
+    assert pick(11) == 3;
 }
 
 __DATA__
-{"test": {}}
+{"test": {}, "wir_expect:O2": ["br_table"]}

@@ -234,7 +234,6 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/__cm_stream_read_val_u32"(h
     let i: i32;
     let elem: u32;
     let used: i32;
-    let status: i32;
     byte_count = max * 4;
     ptr = "mem/realloc"(0, 0, 4, byte_count);
     result = "wasi/stream-read:val-u32"(handle, ptr, max);
@@ -260,12 +259,13 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/__cm_stream_read_val_u32"(h
     };
     drop("mem/realloc"(ptr, byte_count, 4, 0));
     return struct.new "core:prelude/types.wado//StreamChunk<u32>" { items: arr, result: __inline_cm_copy_result_4: block -> "core:prelude/types.wado//enum:CopyResult" {
-        status = result & 15;
-        if status == 0 {
+        let __match_scrut_0: i32;
+        __match_scrut_0 = result & 15;
+        if __match_scrut_0 == 0 {
             break __inline_cm_copy_result_4: 0;
-        }
-        if status == 1 {
+        } else if __match_scrut_0 == 1 {
             break __inline_cm_copy_result_4: 1;
+        } else {
         }
         break __inline_cm_copy_result_4: 2;
     } };
@@ -786,7 +786,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -815,12 +814,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };

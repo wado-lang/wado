@@ -12,9 +12,12 @@ global K6: i32 = 30;
 global K7: i32 = 31;
 global K8: i32 = 32;
 global K9: i32 = 33;
+global K10: i32 = 34;
+global K11: i32 = 35;
 
+// Twelve cases, the width at which `match_to_switch` takes a `br_table`.
 fn is_kw(k: i32) -> bool {
-    return k matches { K0 | K1 | K2 | K3 | K4 | K5 | K6 | K7 | K8 | K9 };
+    return k matches { K0 | K1 | K2 | K3 | K4 | K5 | K6 | K7 | K8 | K9 | K10 | K11 };
 }
 
 export fn run() with Stdout {
@@ -29,6 +32,6 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "10\n",
+    "stdout": "12\n",
     "wir_expect:O2": ["br_table"]
 }

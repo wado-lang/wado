@@ -1230,11 +1230,11 @@ fn "./sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
         } else {
             unreachable;
         }));
-        let __match_scrut_1: ref null "./sub/wir_xmodule_return_parser.wado//ParseError";
-        __match_scrut_1 = "./sub/wir_xmodule_return_parser.wado/_parse_expr"(p);
-        if @likely(ref.is_null(__match_scrut_1)) {
+        let __match_scrut_3: ref null "./sub/wir_xmodule_return_parser.wado//ParseError";
+        __match_scrut_3 = "./sub/wir_xmodule_return_parser.wado/_parse_expr"(p);
+        if @likely(ref.is_null(__match_scrut_3)) {
         } else {
-            __qm_e_7 = ref.as_non_null(__match_scrut_1);
+            __qm_e_7 = ref.as_non_null(__match_scrut_3);
             cold_path;
             return __qm_e_7;
         }
@@ -1252,8 +1252,7 @@ fn "./sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
             unreachable;
         }));
         return ref.null none;
-    }
-    if kind == 0 {
+    } else if kind == 0 {
         self_39 = p.b.events;
         value_40 = struct.new "./sub/wir_xmodule_return_parser.wado//BuildEvent::SetAlt" { discriminant: 5, payload_0: 1 };
         used_41 = self_39.used;
@@ -1277,6 +1276,7 @@ fn "./sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
             unreachable;
         }));
         return ref.null none;
+    } else {
     }
     return ref.as_non_null(span_50 = "./sub/wir_xmodule_return_parser.wado/./sub/wir_xmodule_return_parser.wado/TokenStream::span_at"(p.tokens, p.pos); elements_47 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TK_LIT_LPAREN"), used: 13 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TK_INT"), used: 6 }); expected_51 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_47, used: 2 }; let lc_mv_0: i32; let lc_mv_1: i32; multivalue_bind [lc_mv_0, lc_mv_1] = "./sub/wir_xmodule_return_parser.wado/line_col"(p.tokens.chars, span_50.start); struct.new "./sub/wir_xmodule_return_parser.wado//ParseError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected expr"), used: 13 }, span: span_50, expected: expected_51, line: lc_mv_0, col: lc_mv_1, rule_stack: ref.as_non_null(elements_60 = array.new_fixed<ref "core:prelude/string.wado//String">(); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_60, used: 0 }) });
 }
@@ -2206,7 +2206,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -2235,12 +2234,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };
