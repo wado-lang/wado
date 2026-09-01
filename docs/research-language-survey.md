@@ -28,7 +28,7 @@ gap between the two columns is usually the interesting part.
 
 A missing feature is one or the other. "Not built yet" will change with time and
 tells you nothing about the design. "Decided against" is the design. Every
-surface question has a column for which one it is.
+question in A has a column for which one it is.
 
 How finished the implementation is does not get its own question. It appears
 once, as a line in the header, and is never scored.
@@ -64,9 +64,9 @@ where you looked. So say where you looked. The header does the same thing for
 the survey as a whole: it lists what you examined and what you left alone. A
 survey that admits no gaps is claiming to have read everything.
 
-## A. Surface
+## A. The language
 
-What the language lets you write.
+What you can write, and what happens when you do.
 
 | Axis                   | What to look at                                                                                                                                                                                                                                                                    |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -131,9 +131,9 @@ having built the thing twice.
 This is not about scoring the other project down. A broken implementation of a
 feature that Wado also has is the most useful thing a survey can bring back.
 
-## B. Design and governance
+## B. The practice
 
-Why the language is the way it is, and what keeps that honest.
+How the project decides, and what keeps it honest.
 
 | Axis                        | What to look at                                                                                                                                       |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -171,7 +171,7 @@ already settled its rank against its own WEPs, through link after link saying
 not the same as having no rule, and it is fixed by writing one paragraph rather
 than by building anything.
 
-## C. Spin-off value
+## C. What outlives it
 
 > If this project stopped tomorrow, what would still be worth having?
 
@@ -245,15 +245,15 @@ Arbiter: "<one sentence, quoted>" (opens / closes the philosophy document)
 
 Examined: <what was read or run>. Not examined: <what was left>.
 
-## A. Surface
+## A. The language
 
 | Axis | Claim | Reality | Holds in self-application | Unimplemented / Rejected |
 
-## B. Design and governance
+## B. The practice
 
 | Axis | Present / Practised / Refused / Absent | Scope or doctrine |
 
-## C. Spin-off value
+## C. What outlives it
 
 | Kind | What | Externality | Contender | Wins |
 
