@@ -938,7 +938,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         self.tysys.resolutions.defs().ast_id(def),
                     ),
                 ),
-                None => crate::name::FqTypeName::binder(written),
+                // No caller-supplied block: the scope's own, when this name is
+                // the receiver of the `impl` being elaborated. A lookup inside
+                // the block must reach the template the block registered.
+                None => self.binder_in_scope(written),
             };
         }
         if crate::name::is_builtin_shape_name(written) {

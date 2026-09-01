@@ -274,20 +274,10 @@ impl TypeSystem {
             && let Some(self_type_id) = ctx.trait_ctx.self_type
         {
             let self_name = self.type_table.borrow().type_name(self_type_id);
-            // A blanket's `Self` *is* its receiver parameter, and an abstract
-            // one: rewriting it to the bare spelling names a function no
-            // module declares. The type-param path substitutes it at
-            // monomorphization, where the receiver is concrete (#1932).
-            if matches!(
-                self.type_table.borrow().get(self_type_id),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            ) {
-                return CalleeIdentKind::AbstractTypeParam {
-                    prefix: self_name,
-                    suffix: suffix.to_string(),
-                    type_param_type_id: self_type_id,
-                };
-            }
+            // `Self` names the receiver, not one of its bounds: an impl
+            // *provides* the trait whose default body this is, so the method
+            // is never found among the receiver's own bounds. The owner the
+            // name needs comes from `qualified_receiver_name` at lookup.
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
