@@ -2097,21 +2097,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        // The parameter's own declaration node names it — not the letter, which
-        // another blanket of the same trait may also spell.
+        // This block names the receiver — not the letter, which another blanket
+        // of the same trait may also spell.
         let blanket_binder = is_blanket_type_param.then(|| {
-            let param_id = header
-                .type_params
-                .iter()
-                .find(|p| p.name == impl_struct_name)
-                .map(|p| p.id);
-            match param_id {
-                Some(id) => crate::name::FqTypeName::binder_owned(
-                    &impl_struct_name,
-                    crate::name::BinderOwner::of_param(&impl_home, id),
+            crate::name::FqTypeName::binder_owned(
+                &impl_struct_name,
+                crate::name::BinderOwner::of_impl(
+                    &impl_home,
+                    scope.tysys.resolutions.defs().ast_id(impl_ref.0),
                 ),
-                None => crate::name::FqTypeName::binder(&impl_struct_name),
-            }
+            )
         });
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type

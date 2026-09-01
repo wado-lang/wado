@@ -2658,10 +2658,13 @@ impl std::fmt::Display for FqTypeName {
     }
 }
 
-/// The declaration site of a type-parameter binder — the parameter's own node,
-/// which is what [`crate::resolve::Resolution::Binder`] names it by. Equality
-/// and hashing read that node alone, so two items' `T` are two binders however
-/// they are spelled.
+/// The `impl` block a blanket's receiver binder belongs to. Equality and
+/// hashing read the block alone, so two blankets of one trait write two
+/// template names whatever letter each spells its parameter (#1932).
+///
+/// Only an `impl` block's receiver can head a template name, so only that
+/// binder carries an owner; every other parameter is substituted rather than
+/// named, and mangles bare as before.
 #[derive(Debug, Clone)]
 pub struct BinderOwner {
     id: crate::ast::AstId,
@@ -2687,9 +2690,9 @@ impl std::hash::Hash for BinderOwner {
 }
 
 impl BinderOwner {
-    /// The binder declared at `id` in `module`.
+    /// The receiver binder of the `impl` block declared at `id` in `module`.
     #[must_use]
-    pub fn of_param(module: &crate::module_source::ModuleSource, id: crate::ast::AstId) -> Self {
+    pub fn of_impl(module: &crate::module_source::ModuleSource, id: crate::ast::AstId) -> Self {
         Self {
             id,
             rendered: format!("{module}/{}", id.local()),
@@ -2702,7 +2705,7 @@ impl BinderOwner {
         &self.rendered
     }
 
-    /// The node declaring this binder. This is identity.
+    /// The `impl` block this binder belongs to. This is identity.
     #[must_use]
     pub fn id(&self) -> crate::ast::AstId {
         self.id

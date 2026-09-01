@@ -475,9 +475,9 @@ pub(crate) struct BlanketImpl {
     pub(crate) receiver: BlanketReceiver,
     /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
     pub(crate) param: String,
-    /// The receiver param's own declaration node — its identity, and what
-    /// [`Self::receiver_binder`] names it by.
-    pub(crate) param_id: ast::AstId,
+    /// The `impl` block's node — what [`Self::receiver_binder`] names the
+    /// receiver by, and the same one the elaborator carries in scope.
+    pub(crate) impl_id: ast::AstId,
     /// Bound trait names on the receiver param, each with the declaration its
     /// own reference site resolves to. The spelling stays for the by-name
     /// queries that have not been flipped; the answer is what a bound check
@@ -495,7 +495,7 @@ impl BlanketImpl {
     pub(crate) fn receiver_binder(&self) -> name::FqTypeName {
         name::FqTypeName::binder_owned(
             &self.param,
-            name::BinderOwner::of_param(&self.module, self.param_id),
+            name::BinderOwner::of_impl(&self.module, self.impl_id),
         )
     }
 }
@@ -1199,11 +1199,6 @@ impl TraitEnv {
                 if impl_block.trait_type.is_some() {
                     if let Some((receiver, param)) =
                         classify_blanket_receiver(&impl_block.ty, &impl_block.type_params)
-                        && let Some(param_id) = impl_block
-                            .type_params
-                            .iter()
-                            .find(|p| p.name == param)
-                            .map(|p| p.id)
                     {
                         let bounds: Vec<BlanketBound> = impl_block
                             .type_params
@@ -1236,7 +1231,7 @@ impl TraitEnv {
                                     def: impl_def,
                                     receiver,
                                     param,
-                                    param_id,
+                                    impl_id: impl_block.id,
                                     bounds,
                                 });
                         }

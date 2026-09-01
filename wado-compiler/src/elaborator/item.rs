@@ -834,6 +834,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     fn record_impl_sig(&mut self, impl_block: &ast::ImplBlock, impl_is_concrete: bool) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.impl_owner =
+            scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
         scope.enter_impl_frame(
             &impl_block.ty,
             impl_block.trait_type.as_ref(),

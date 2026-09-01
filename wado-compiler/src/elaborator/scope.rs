@@ -34,10 +34,14 @@ pub(super) struct BinderInScope {
     /// Slot in the enclosing item's parameter list.
     pub(super) index: u32,
     pub(super) type_id: TypeId,
-    /// The parameter's own declaration node, or `None` for a name in scope
-    /// that no parameter declares: `Self`, or a parameter already bound to a
-    /// concrete type by a lookup. `None` is a fact about the name — only a
-    /// declared binder can own a template name — not a writer that forgot.
+    /// Where the parameter is written, for jump-to-def on a use. `None` for a
+    /// name in scope that no parameter declares: `Self`, or a parameter a
+    /// lookup already bound to a concrete type.
+    ///
+    /// This is not what names a binder in a mangle — see
+    /// [`TraitContext::impl_owner`]. The two answer different questions, and
+    /// reading this one for the other made every declared parameter change its
+    /// mangled name.
     pub(super) decl: Option<ast::AstId>,
 }
 
@@ -83,6 +87,15 @@ pub(super) struct TraitContext {
     /// names. Qualifies `Self::Assoc` when `Self` is a concrete type, where
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<crate::defs::DefId>,
+    /// The `impl` block whose type parameters are in scope, when one is.
+    ///
+    /// This is what names a blanket's receiver binder in a mangle: two
+    /// blankets of one trait write two templates whatever letter each spells
+    /// its parameter (#1932). Only an `impl` block's parameter can head a
+    /// template name, so only that one is owned — a struct's, a function's or
+    /// a method's parameter is substituted, never a receiver, and owning it
+    /// changes names for nothing.
+    pub(super) impl_owner: Option<crate::defs::DefId>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
     /// `EffectRef::Param` and to record its use→def edge.
@@ -404,10 +417,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.annotate_ctx
                 .trait_ctx
                 .type_params
-                // A struct, variant, function or method parameter, never an
-                // impl block's receiver: it heads no template, so it has no
-                // name for a node to distinguish (see `binder_in_scope`).
-                .insert(tp.name.clone(), BinderInScope::undeclared(idx, type_id));
+                .insert(tp.name.clone(), BinderInScope::declared(idx, type_id, tp.id));
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
@@ -460,7 +470,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.annotate_ctx
                 .trait_ctx
                 .type_params
-                .insert(tp.name.clone(), BinderInScope::undeclared(idx, resolved_arg));
+                .insert(
+                    tp.name.clone(),
+                    BinderInScope::declared(idx, resolved_arg, tp.id),
+                );
             if !tp.bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx

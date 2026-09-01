@@ -934,26 +934,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The binder `written` names in the current type-param scope.
     ///
-    /// A declared parameter is named by its own node, so a blanket's template
-    /// and the calls into its body agree by construction — naming it by the
-    /// spelling alone made two blankets of one trait share a template, and the
-    /// second silently replaced the first (issue #1932). A name no parameter
-    /// declares (`Self`, a parameter a lookup already bound to a concrete
-    /// type) keeps its bare spelling: it owns no template, so there is nothing
-    /// for a node to distinguish it from.
+    /// Owned by the `impl` block whose parameters are in scope, so a blanket's
+    /// template and the calls into its body agree by construction — naming it
+    /// by the spelling alone made two blankets of one trait share a template,
+    /// and the second silently replaced the first (issue #1932). Outside an
+    /// `impl` block the name keeps its bare spelling: a struct's, a function's
+    /// or a method's parameter is substituted, never a receiver, so it heads
+    /// no template for an owner to distinguish.
     pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
-        match self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(written)
-            .and_then(|binder| binder.decl)
-        {
-            Some(id) => crate::name::FqTypeName::binder_owned(
-                written,
-                crate::name::BinderOwner::of_param(&self.current_module_source, id),
-            ),
-            None => crate::name::FqTypeName::binder(written),
+        match self.annotate_ctx.trait_ctx.impl_owner {
+            Some(owner) if self.annotate_ctx.trait_ctx.type_params.contains_key(written) => {
+                crate::name::FqTypeName::binder_owned(
+                    written,
+                    crate::name::BinderOwner::of_impl(
+                        &self.current_module_source,
+                        self.tysys.resolutions.defs().ast_id(owner),
+                    ),
+                )
+            }
+            _ => crate::name::FqTypeName::binder(written),
         }
     }
 
@@ -2036,6 +2035,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // skipping concrete types (e.g., `impl<i32, T>` — skip "i32").
         // This handles both `impl<T> Trait for Struct<T>` and
         // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
+        scope.annotate_ctx.trait_ctx.impl_owner =
+            scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
         scope.register_impl_block_params(impl_block);
 
         if impl_block.is_synthesize_request {
