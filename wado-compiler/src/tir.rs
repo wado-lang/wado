@@ -2620,13 +2620,31 @@ impl TypeTable {
         trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        self.assoc_type_resolutions
-            .get(&AssocTypeKey {
-                receiver: concrete_id,
-                trait_decl: *trait_key,
-                assoc_name: assoc_name.to_string(),
-            })?
-            .bare()
+        self.inheriting(concrete_id, |receiver| {
+            self.assoc_type_resolutions
+                .get(&AssocTypeKey {
+                    receiver,
+                    trait_decl: *trait_key,
+                    assoc_name: assoc_name.to_string(),
+                })?
+                .bare()
+        })
+    }
+
+    /// Answer a receiver-keyed lookup, falling back to what a newtype inherits.
+    /// A newtype registers only what it declares — `ReflectNewtype::Base` — and
+    /// inherits the rest from its base (WEP 2026-01-29), so the direct hit
+    /// answers first and the structure head answers for everything else.
+    fn inheriting<T>(
+        &self,
+        receiver: TypeId,
+        lookup: impl Fn(TypeId) -> Option<T>,
+    ) -> Option<T> {
+        if let Some(found) = lookup(receiver) {
+            return Some(found);
+        }
+        let head = self.reflect_structure_head(receiver);
+        (head != receiver).then(|| lookup(head)).flatten()
     }
 
     /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`
@@ -2656,12 +2674,14 @@ impl TypeTable {
     /// two make it a coin flip, so the caller must qualify with
     /// [`Self::resolve_assoc_type_of_trait`] instead.
     pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
-        one_assoc_answer(
-            self.assoc_type_resolutions
-                .iter()
-                .filter(move |(key, _)| key.receiver == concrete_id && key.assoc_name == assoc_name)
-                .flat_map(|(_, answers)| answers.tagged()),
-        )
+        self.inheriting(concrete_id, |receiver| {
+            one_assoc_answer(
+                self.assoc_type_resolutions
+                    .iter()
+                    .filter(move |(key, _)| key.receiver == receiver && key.assoc_name == assoc_name)
+                    .flat_map(|(_, answers)| answers.tagged()),
+            )
+        })
     }
 
     /// Register a generic associated type definition.
@@ -3324,6 +3344,21 @@ impl TypeTable {
         } else {
             None
         }
+    }
+
+    /// The declaration a `Reflect*` kind reads structure from: a newtype chain
+    /// peeled to what it wraps, any other type unchanged. A newtype inherits
+    /// its base's impls (WEP 2026-01-29) and a reflection kind is no exception,
+    /// so its members are the base's. Unlike [`Self::get_ultimate_base_type`]
+    /// the walk stops at a `flags` type, which is a member-carrying kind rather
+    /// than a stand-in for `u32`. Identity is *not* inherited — a newtype names
+    /// itself through `Reflect`, so this never answers for a type's name.
+    pub fn reflect_structure_head(&self, id: TypeId) -> TypeId {
+        let mut current = id;
+        while let ResolvedType::Newtype { base_type, .. } = self.get(current) {
+            current = *base_type;
+        }
+        current
     }
 
     /// Get the ultimate base type by following the chain of newtypes.

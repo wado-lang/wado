@@ -42,6 +42,7 @@ pub(super) enum OnBoundTrait {
     ReflectVariant,
     ReflectEnum,
     ReflectFlags,
+    ReflectNewtype,
     Ref,
     RefMut,
     Inspect,
@@ -63,6 +64,7 @@ impl OnBoundTrait {
             Self::ReflectVariant => CompilerItem::ReflectVariant,
             Self::ReflectEnum => CompilerItem::ReflectEnum,
             Self::ReflectFlags => CompilerItem::ReflectFlags,
+            Self::ReflectNewtype => CompilerItem::ReflectNewtype,
             Self::Ref => CompilerItem::Ref,
             Self::RefMut => CompilerItem::RefMut,
             Self::Inspect => CompilerItem::Inspect,
@@ -83,6 +85,7 @@ impl OnBoundTrait {
             CompilerItem::ReflectVariant => Self::ReflectVariant,
             CompilerItem::ReflectEnum => Self::ReflectEnum,
             CompilerItem::ReflectFlags => Self::ReflectFlags,
+            CompilerItem::ReflectNewtype => Self::ReflectNewtype,
             CompilerItem::Ref => Self::Ref,
             CompilerItem::RefMut => Self::RefMut,
             CompilerItem::Inspect => Self::Inspect,
@@ -116,6 +119,7 @@ impl OnBoundTrait {
                 | Self::ReflectVariant
                 | Self::ReflectEnum
                 | Self::ReflectFlags
+                | Self::ReflectNewtype
         )
     }
 }
@@ -644,6 +648,17 @@ impl TypeSystem {
         );
         if !is_newtype {
             return self.type_implements_trait(ctx, scope, type_id, trait_);
+        }
+        // The two facts a newtype owns rather than inherits: it has a name, and
+        // it is a newtype (WEP 2026-06-13). Both are synthesized, so no impl
+        // block exists for the index search below to find, and both hold at
+        // depth 0 — which is what makes a `ReflectNewtype`-keyed blanket
+        // outrank one the base satisfies.
+        if matches!(
+            self.on_bound_of(trait_),
+            Some(OnBoundTrait::Reflect | OnBoundTrait::ReflectNewtype)
+        ) {
+            return true;
         }
         // A repeat answers `false` where `type_implements_trait` answers `true`
         // on the same stack: that query descends into members, this one holds
@@ -1270,10 +1285,30 @@ impl TypeSystem {
             }
             (ResolvedType::Enum { .. }, Some(OnBoundTrait::ReflectEnum))
             | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => true,
+            // A newtype names itself through the root and is its own kind. The
+            // structure kinds it satisfies through the base it inherits from,
+            // which the recursion below answers.
+            (
+                ResolvedType::Newtype { .. },
+                Some(OnBoundTrait::Reflect | OnBoundTrait::ReflectNewtype),
+            ) => true,
             _ => false,
         };
         if plain_reflect_subject && self.is_reflect_eligible(type_id) {
             return true;
+        }
+
+        // A newtype inherits its base's impls (WEP 2026-01-29), so a structure
+        // kind holds for it exactly when it holds for what it wraps. Asked of
+        // the base, not of the ultimate one, so a chain answers a link at a
+        // time and each still names itself.
+        if let ResolvedType::Newtype { base_type, .. } = &resolved
+            && !matches!(on_bound, Some(OnBoundTrait::ReflectNewtype))
+            && on_bound.is_some_and(OnBoundTrait::is_reflect)
+        {
+            let base = *base_type;
+            let base_resolved = self.type_table.borrow().get(base).clone();
+            return self.type_implements_trait_inner(ctx, scope, base, &base_resolved, trait_);
         }
 
         // A generic instance reflects through its base declaration:
@@ -1697,6 +1732,18 @@ impl TypeSystem {
         })
     }
 
+    /// The module declaring `def`, when `def` is a newtype. The kind with no
+    /// members carries no member info to read a module off, so the declaration
+    /// answers directly.
+    fn newtype_declaring_module(
+        &self,
+        scope: &TypeLookup,
+        def: crate::defs::DefId,
+    ) -> Option<ModuleSource> {
+        scope.newtype_of(def)?;
+        Some(self.type_table.borrow().defs().module(def).clone())
+    }
+
     /// Whether `bound_name` is a synthesized reflection trait the subject is
     /// eligible for by kind. These have no impl blocks, so the name-based search
     /// misses them; a hit records the bound-driven synth request.
@@ -1725,11 +1772,13 @@ impl TypeSystem {
                 OnBoundTrait::ReflectFlags,
             ]
             .into_iter()
-            .find_map(|kind| declaring_module_of_kind(scope, def, kind)),
+            .find_map(|kind| declaring_module_of_kind(scope, def, kind))
+            .or_else(|| self.newtype_declaring_module(scope, def)),
             OnBoundTrait::ReflectStruct
             | OnBoundTrait::ReflectVariant
             | OnBoundTrait::ReflectEnum
             | OnBoundTrait::ReflectFlags => declaring_module_of_kind(scope, def, on_bound),
+            OnBoundTrait::ReflectNewtype => self.newtype_declaring_module(scope, def),
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
@@ -1771,6 +1820,7 @@ fn declaring_module_of_kind(
         OnBoundTrait::ReflectEnum => scope.enum_cases_of(def).map(|i| i.module_source.clone()),
         OnBoundTrait::ReflectFlags => scope.flags_members_of(def).map(|i| i.module_source.clone()),
         OnBoundTrait::Reflect
+        | OnBoundTrait::ReflectNewtype
         | OnBoundTrait::Eq
         | OnBoundTrait::Ord
         | OnBoundTrait::Serialize

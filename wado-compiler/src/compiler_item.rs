@@ -215,6 +215,10 @@ pub enum CompilerItem {
     /// `ReflectFlags` — compile-time flags-introspection anchor; the
     /// per-flags `impl ReflectFlags for F` synthesis points at it.
     ReflectFlags,
+    /// `ReflectNewtype` — compile-time newtype-introspection anchor; the
+    /// per-newtype `impl ReflectNewtype for N` synthesis points at it. The one
+    /// kind with no members: it carries a base (WEP 2026-06-13).
+    ReflectNewtype,
     /// `Member` — the sealed attr-reading face implemented by every
     /// `StructField<T, F>` member (WEP 2026-06-13).
     Member,
@@ -649,6 +653,7 @@ impl CompilerItem {
         Self::ByteSlice,
         Self::ReflectEnum,
         Self::ReflectFlags,
+        Self::ReflectNewtype,
         Self::Member,
         Self::Ref,
         Self::RefMut,
@@ -845,6 +850,7 @@ impl CompilerItem {
             Self::ByteSlice => "byte_slice",
             Self::ReflectEnum => "reflect_enum",
             Self::ReflectFlags => "reflect_flags",
+            Self::ReflectNewtype => "reflect_newtype",
             Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
@@ -1074,6 +1080,7 @@ impl CompilerItem {
             | Self::ByteSlice
             | Self::ReflectEnum
             | Self::ReflectFlags
+            | Self::ReflectNewtype
             | Self::Member
             | Self::Ref
             | Self::RefMut
@@ -1294,6 +1301,7 @@ impl CompilerItem {
             | Self::ReflectVariant
             | Self::ReflectEnum
             | Self::ReflectFlags
+            | Self::ReflectNewtype
             | Self::Member
             | Self::Ref
             | Self::RefMut

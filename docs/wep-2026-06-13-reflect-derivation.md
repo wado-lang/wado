@@ -54,7 +54,18 @@ carries a parallel metadata list or value accessor.
 
 A newtype is the one kind with no members: it has a base, and its value bridges
 are the bidirectional `From` the compiler already generates for it ([Conversion Traits](./wep-2026-03-16-conversion-traits.md) §7), so `ReflectNewtype` carries
-neither a member channel nor a bridge of its own.
+neither a member channel nor a bridge of its own. It carries no
+`wire_name_policy` either: a policy cases *member* names, and a newtype has
+none, so the method would have nothing to answer for and no caller.
+
+What a newtype does have is what its base has. Identity and structure part ways
+here: a newtype names *itself* through the root, and inherits its base's
+structure like every other impl ([Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)),
+so `ReflectStruct::<P>::members()` on `type P = Point` walks Point's fields
+while `Reflect::<P>::type_name()` answers `"P"`. The two are disjoint bounds at
+different depths — `ReflectNewtype` holds at the newtype, a structure kind only
+after the peel — which is rank 2 of [Trait Resolution](./wep-2026-09-01-trait-resolution.md),
+so a derivation keyed on the newtype kind wins over one keyed on its base's.
 
 ```wado
 internal trait Reflect {                         // identity — every nameable type
@@ -98,7 +109,6 @@ internal trait ReflectFlags: Reflect {           // flags
 
 internal trait ReflectNewtype: Reflect {         // newtype
     type Base;                                   // `type UserName = String` → String
-    fn wire_name_policy() -> CaseStyle;
 }
 ```
 
@@ -404,23 +414,24 @@ concept.
 
 ## Known gaps
 
+Every derive now runs through this layer: `Inspect`'s ` as Name` tag was the
+last one the compiler synthesized per declaration, and it is a blanket over
+`ReflectNewtype` — one instance per chain link, so `type A = i32; type B = A`
+renders `7 as A as B`.
+
 The reflection traits, the member handles, the wire-naming split, and the
 streaming struct build are implemented — `core:serde` derives every struct,
-variant, enum, and flags impl through them. So is the identity root: `Reflect`
-carries `type_name()` for every kind, a kind bound reaches it through the
-supertrait, and `T: Reflect` is a bound of its own. What remains is what a
-schema library reads and nothing else yet does.
+variant, enum, and flags impl through them, and a newtype reaches those
+derivations through the base whose structure it inherits. So is the identity
+root: `Reflect` carries `type_name()` for every kind, a kind bound reaches it
+through the supertrait, and `T: Reflect` is a bound of its own. What remains is
+what a schema library reads and nothing else yet does.
 
 - `Member::doc()`. The trait carries `name()` and `wire_name_override()` only,
   so `description` / `title` have no source. The fact is not lost — a doc
   comment lives in the `TriviaMap` that `wado doc` reads — so closing this is
   plumbing that string through `TirField` into the synthesized member, beside
   the wire-name override that already travels that path.
-- `ReflectNewtype` is unimplemented
-  ([#1933](https://github.com/wado-lang/wado/issues/1933)): reflection covers
-  four kinds, so a newtype is seen as its base and a derivation that must treat
-  it as itself has no handle. `Inspect` shows the fact is not missing from the
-  compiler — it renders the `as Name` tag today — only the surface is.
 - `TypeInfo` is designed above and unimplemented: the root answers `type_name()`
   but not yet `type_info()`, so an instantiation cannot be told from its
   declaration. Nothing in the tree needs a new mechanism — it is a sealed handle
@@ -428,13 +439,7 @@ schema library reads and nothing else yet does.
   per-instantiation, so it follows `type_name()`'s synthesis, where the resolved
   subject already carries the three facts it needs (its base name, module, and
   type arguments). The tuple family and `()` join the nameable set with it;
-  today only the four synthesized kinds carry the root.
-- A derivation reached through a bound-keyed blanket does not fire for a newtype
-  whose base has its own impl
-  ([#1932](https://github.com/wado-lang/wado/issues/1932)). Both fixes are
-  prerequisites for a library derivation over newtypes; until they land such a
-  derivation must be written directly on each newtype, where a hand-written impl
-  wins.
+  today only the five synthesized kinds carry the root.
 
 ## Related WEPs
 

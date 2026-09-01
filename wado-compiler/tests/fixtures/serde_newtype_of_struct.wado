@@ -1,0 +1,45 @@
+// A newtype over a struct serializes as that struct: serde's derivation is
+// keyed by `ReflectStruct`, which a newtype satisfies through its base
+// (WEP 2026-01-29). Before #1933 the bound admitted `P` but the walk was
+// computed from the newtype, so `to_string::<P>` reported that `Point` — a
+// type the program never named — has no `Serialize`, and serializing both
+// `Point` and `P` in one program minted the same mangled impl under two
+// module sources, tripping lower's extern-stub assertion.
+use { to_string, from_string } from "core:json";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+type P = Point;
+
+test "the base serializes" {
+    let q = Point { x: 1, y: 2 };
+    if let Ok(s) = to_string::<Point>(&q) {
+        assert s == `\{"x":1,"y":2\}`;
+    } else {
+        panic("serializing the base failed");
+    }
+}
+
+test "the newtype serializes as its base" {
+    let p = Point { x: 1, y: 2 } as P;
+    if let Ok(s) = to_string::<P>(&p) {
+        assert s == `\{"x":1,"y":2\}`;
+    } else {
+        panic("serializing the newtype failed");
+    }
+}
+
+test "the newtype deserializes as its base" {
+    if let Ok(p) = from_string::<P>(`\{"x":3,"y":4\}`) {
+        assert (p as Point).x == 3;
+        assert (p as Point).y == 4;
+    } else {
+        panic("deserializing the newtype failed");
+    }
+}
+
+__DATA__
+{"test": {}}

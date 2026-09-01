@@ -211,6 +211,21 @@ internal trait ReflectFlags: Reflect {
     fn wire_name_policy() -> CaseStyle;
 }
 
+/// Compile-time newtype introspection. The compiler synthesizes an impl for
+/// every newtype; it cannot be implemented in user code and is callable only
+/// in monomorphized contexts (`T` a concrete newtype).
+///
+/// The one kind with no members: a newtype has a base, and the value bridges
+/// both ways are the `From` the compiler already generates for it. Structure
+/// it inherits from that base — `ReflectStruct::<T>` on a newtype over a
+/// struct walks the struct's fields — so only the base is stated here.
+/// See WEP 2026-06-13.
+#[compiler_item("reflect_newtype")]
+internal trait ReflectNewtype: Reflect {
+    /// The type this newtype wraps: `type UserName = String` → `String`.
+    type Base;
+}
+
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
 /// is static, the case index is a value. `extract` / `construct` bridge a
 /// variant value and its payload in both directions.
@@ -853,6 +868,21 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
             f.write_str(&Reflect::<L>::type_name());
             f.write_str(&"::none()");
         }
+    }
+}
+
+/// Newtype debug formatting derived over `ReflectNewtype` (WEP 2026-06-13): the
+/// base's own rendering, tagged with the newtype's name. A newtype is a type
+/// distinct from its base, so `Inspect` is the one derivation that says which
+/// of the two it is looking at; every other kind's blanket holds for a newtype
+/// only after peeling to that base, and rank 2 of WEP 2026-09-01 puts this one
+/// first. A chain renders a link per instance: `7 as A as B`.
+impl<N: ReflectNewtype<Base = B>, B: Inspect> Inspect for N {
+    fn inspect(&self, f: &mut Formatter) {
+        let base = *self as B;
+        base.inspect(f);
+        f.write_str(&" as ");
+        f.write_str(&Reflect::<N>::type_name());
     }
 }
 

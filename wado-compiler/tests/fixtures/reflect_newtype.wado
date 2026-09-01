@@ -1,0 +1,78 @@
+// Reflection covers the newtype kind (issue #1933): a newtype has a name, a
+// module and a base, and `ReflectNewtype` is where a derivation reads the base.
+// The kind carries no member channel — a newtype has none — and no value
+// bridge: the cast is bidirectional and free, so a generic body opens and
+// rebuilds one with `as`.
+//
+// `Inspect`'s ` as Name` tag is the derivation that proves it: it was bespoke
+// compiler synthesis, and is now the stdlib blanket over this kind.
+
+type UserName = String;
+type Meters = f64;
+
+struct Point {
+    x: i32,
+}
+
+type P = Point;
+
+test "a newtype names itself" {
+    assert Reflect::<UserName>::type_name() == "UserName";
+    assert Reflect::<Meters>::type_name() == "Meters";
+    assert Reflect::<P>::type_name() == "P";
+}
+
+test "a chained newtype names the link, not the end of the chain" {
+    type Inner = i32;
+    type Outer = Inner;
+    assert Reflect::<Outer>::type_name() == "Outer";
+    assert Reflect::<Inner>::type_name() == "Inner";
+}
+
+// A derivation keyed on the kind: `Base` names what to open, and the cast
+// bridges both ways.
+trait Doubled {
+    fn doubled(&self) -> Self;
+}
+
+impl<N: ReflectNewtype<Base = B>, B: Add<Output = B>> Doubled for N {
+    fn doubled(&self) -> N {
+        let base = *self as B;
+        return (base + base) as N;
+    }
+}
+
+test "a blanket keyed on the newtype kind reads its base" {
+    let m = 2.5 as Meters;
+    assert m.doubled() == 5.0;
+    let u = "ab" as UserName;
+    assert u.doubled() == "abab";
+}
+
+test "the derived Inspect tags the newtype's own name" {
+    let u = "abc" as UserName;
+    let m = 100.5 as Meters;
+    let p = Point { x: 1 } as P;
+    assert `${u:?}` == "\"abc\" as UserName";
+    assert `${m:?}` == "100.5 as Meters";
+    assert `${p:?}` == "Point { x: 1 } as P";
+}
+
+test "a chained newtype tags every link" {
+    type A = i32;
+    type B2 = A;
+    let b = 7 as B2;
+    assert `${b:?}` == "7 as A as B2";
+}
+
+// A newtype is its own kind, so a kind-keyed blanket does not claim it and a
+// `ReflectNewtype`-keyed one does not claim a plain declaration.
+test "the base keeps its own rendering" {
+    let s = "abc";
+    let q = Point { x: 1 };
+    assert `${s:?}` == "\"abc\"";
+    assert `${q:?}` == "Point { x: 1 }";
+}
+
+__DATA__
+{"test": {}}

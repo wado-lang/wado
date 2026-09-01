@@ -1,0 +1,102 @@
+// A newtype inherits its base's trait impls (WEP 2026-01-29), and a `Reflect*`
+// kind is no exception: `type P = Point` reflects Point's structure. The bound
+// already admitted the newtype as a depth-1 candidate (WEP 2026-09-01 rank 2),
+// but the walk was computed from the newtype instead of the peeled base, so
+// `members()` came back empty and a derivation silently saw a fieldless struct.
+// Identity stays the newtype's own: structure is inherited, a name is not.
+// Issue #1933.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+flags Perm {
+    read,
+    write,
+}
+
+variant Shape {
+    Dot,
+    Line(i32),
+}
+
+type P = Point;
+type C = Color;
+type M = Perm;
+type S = Shape;
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F> Describe for T {
+    fn describe(&self) -> String {
+        let mut out = Reflect::<T>::type_name();
+        for let f of ReflectStruct::<T>::members() {
+            out = out + "." + f.name();
+        }
+        return out;
+    }
+}
+
+test "a struct blanket walks the base's fields through a newtype" {
+    let p = Point { x: 1, y: 2 } as P;
+    assert p.describe() == "P.x.y";
+}
+
+test "the base still walks its own fields" {
+    let q = Point { x: 1, y: 2 };
+    assert q.describe() == "Point.x.y";
+}
+
+test "the kind's members are reachable through the newtype directly" {
+    let mut names = "";
+    for let f of ReflectStruct::<P>::members() {
+        names = names + f.name();
+    }
+    assert names == "xy";
+}
+
+test "an enum newtype reflects the base's cases" {
+    let mut names = "";
+    for let c of ReflectEnum::<C>::members() {
+        names = names + c.name();
+    }
+    assert names == "RedGreen";
+    assert ReflectEnum::<C>::discriminant(&(Color::Green as C)) == 1;
+}
+
+test "a flags newtype reflects the base's bits" {
+    let mut names = "";
+    for let b of ReflectFlags::<M>::members() {
+        names = names + b.name();
+    }
+    assert names == "readwrite";
+}
+
+test "a variant newtype reflects the base's cases" {
+    let mut names = "";
+    for let c of ReflectVariant::<S>::members() {
+        names = names + c.name();
+    }
+    assert names == "DotLine";
+}
+
+// Identity is not inherited: a newtype names itself, while the structure above
+// is the base's.
+test "a newtype names itself through the root" {
+    assert Reflect::<P>::type_name() == "P";
+    assert Reflect::<C>::type_name() == "C";
+    assert Reflect::<M>::type_name() == "M";
+    assert Reflect::<S>::type_name() == "S";
+    assert Reflect::<Point>::type_name() == "Point";
+}
+
+__DATA__
+{"test": {}}

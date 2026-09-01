@@ -738,6 +738,10 @@ pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 /// under `Option`, the shape `defaults()` returns and a streaming build fills.
 pub(crate) const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
 
+/// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
+/// wraps. The kind with no members states a base instead.
+pub(crate) const REFLECT_BASE_ASSOC: &str = "Base";
+
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every struct's `ReflectStruct` synthesis in that
 /// module.
@@ -2536,6 +2540,93 @@ fn generate_enum_from_discriminant_fn(
     )
 }
 
+/// Generate the `ReflectNewtype` impl of every newtype (WEP 2026-06-13): the
+/// root's `type_name()` and the `Base` associated type. The kind with no
+/// members needs no member channel and no value bridge — a newtype's `From` is
+/// bidirectional and already generated. Declaration-driven like the struct
+/// kind, since every newtype is nameable.
+pub fn synthesize_reflect_newtype(project: &mut Package) {
+    let trait_name = reflect_trait_fq(project, CompilerItem::ReflectNewtype);
+    run_reflect_synthesis(
+        project,
+        &trait_name,
+        &SynthRequests::default(),
+        generate_newtype_reflect_impls,
+    );
+}
+
+/// Synthesize the `ReflectNewtype` impl of every newtype in `module`.
+fn generate_newtype_reflect_impls(
+    module: &mut TirModule,
+    ctx: &mut SynthesisCtx<'_, '_, '_>,
+    newtype_trait_name: &crate::name::FqTraitName,
+) {
+    let targets: Vec<(FqTypeName, String, TypeId, TypeId, Span)> = {
+        let tt = module.type_table.borrow();
+        module
+            .newtypes
+            .iter()
+            .filter_map(|nt| {
+                let ResolvedType::Newtype {
+                    def, base_type, ..
+                } = tt.get(nt.type_id)
+                else {
+                    unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
+                };
+                Some((
+                    tt.fq_base_type_name(nt.type_id),
+                    // The declaration's own name: `Reflect` answers `UserId`,
+                    // never the `UserId@<local>` spelling a local declaration
+                    // is stored under.
+                    tt.def_name(*def).to_string(),
+                    nt.type_id,
+                    *base_type,
+                    nt.span,
+                ))
+            })
+            .collect()
+    };
+    if targets.is_empty() {
+        return;
+    }
+
+    let (string_type, root_trait_name, type_name_method, newtype_trait_key) = {
+        let mut tt = module.type_table.borrow_mut();
+        let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let items = tt.compiler_items();
+        (
+            string_type,
+            items.trait_fq(CompilerItem::Reflect),
+            items.method_name(CompilerItem::ReflectTypeName).to_string(),
+            newtype_trait_name.canonical().expect(KEYED),
+        )
+    };
+
+    let mut generated = Vec::new();
+    for (receiver, display_name, newtype_type, base_type, span) in &targets {
+        module
+            .type_table
+            .borrow_mut()
+            .register_assoc_type_resolution(
+                *newtype_type,
+                crate::tir::TraitRef::bare(newtype_trait_key.clone()),
+                REFLECT_BASE_ASSOC.to_string(),
+                *base_type,
+            );
+        generated.push(Rc::new(RefCell::new(generate_type_name_fn(
+            receiver,
+            display_name,
+            string_type,
+            &root_trait_name,
+            &type_name_method,
+            *span,
+        ))));
+        ctx.record_impl(receiver, &newtype_trait_key);
+    }
+
+    module.functions.extend(generated);
+}
+
 /// Generate the `ReflectFlags` members for each requested flags type
 /// (WEP 2026-06-13 §3c): `type_name()`, `bits(&self)`, `from_bits(raw)` — the
 /// u64-normalized bit bridge — and `members()`.
@@ -3593,60 +3684,10 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
 
-    // Enum, variant, and flags types derive Inspect via their kind's blanket
-    // in `core:prelude/traits` (WEP 2026-06-13), so nothing is emitted for
-    // them here — nor for structs. What remains has no reflection: newtypes,
+    // Every reflected kind derives Inspect through its own blanket in
+    // `core:prelude/traits` (WEP 2026-06-13) — a newtype's ` as Name` tag
+    // included, over `ReflectNewtype`. What remains has no reflection:
     // parameterized types, resources, and `fn(..)` dispatch stubs.
-
-    // Newtypes (e.g., `type Meters = f64`)
-    for nt in &module.newtypes {
-        // Flags derive Inspect via the `ReflectFlags` blanket, not as newtypes.
-        if module.flags.iter().any(|f| f.type_id == nt.type_id) {
-            continue;
-        }
-        let receiver = &tt.fq_base_type_name(nt.type_id);
-        if ctx.has_methodful_impl_anywhere(receiver, &inspect_fq.canonical().expect(KEYED)) {
-            continue;
-        }
-        let ResolvedType::Newtype {
-            base_type,
-            def: newtype_def,
-            ..
-        } = tt.get(nt.type_id)
-        else {
-            unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
-        };
-        let base_type = *base_type;
-        let newtype_def = *newtype_def;
-        let ref_type = tt.make_ref(nt.type_id);
-        let span = synth_span();
-        let as_suffix = write_str_stmt(
-            // The declaration's own name: a user must see `as UserId`, never
-            // the `UserId@<local>` spelling a local declaration is stored
-            // under.
-            format!(" as {}", tt.def_name(newtype_def)),
-            local_expr(1, "f", fmt_type, span),
-            string_type,
-            ref_string_type,
-            span,
-            &ctx.names.formatter_fq,
-        );
-        generated.push(Rc::new(RefCell::new(generate_newtype_fmt_fn(
-            receiver,
-            nt.type_id,
-            base_type,
-            ref_type,
-            fmt_type,
-            ctx.trait_env,
-            &module_source,
-            &mut tt,
-            span,
-            &inspect_fq,
-            &inspect_method,
-            Some(as_suffix),
-        ))));
-        ctx.record_impl(receiver, &inspect_fq.canonical().expect(KEYED));
-    }
 
     // Parameterized types (tuples, generic resources). `Fn` signatures are
     // handled separately below via `collect_canonical_fn_signatures` because
@@ -3887,63 +3928,6 @@ fn generate_enum_display_fn(
         inspect_locals(ref_enum_type, fmt_type),
     )
 }
-/// Generate `NewtypeName^<Trait>::<method>(&self, &mut Formatter)` for a
-/// newtype: delegate to the base type's same method via `(self as Base).<method>(f)`,
-/// then append `suffix`.
-///
-/// `Inspect` passes `Some(write_str(" as NewtypeName"))` so debug output reads
-/// `100.5 as Meters`; `Display` passes `None` so it renders transparently like
-/// the base value.
-fn generate_newtype_fmt_fn(
-    receiver: &FqTypeName,
-    newtype_type: TypeId,
-    base_type: TypeId,
-    ref_newtype_type: TypeId,
-    fmt_type: TypeId,
-    trait_env: &TraitEnv,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-    fmt_trait: &crate::name::FqTraitName,
-    fmt_method: &str,
-    suffix: Option<TirStmt>,
-) -> TirFunction {
-    let method_info = trait_method_info(receiver, fmt_trait, fmt_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    let deref_self = deref_local(0, "self", ref_newtype_type, newtype_type, span);
-    let cast_to_base = TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(deref_self),
-            target_type: base_type,
-        },
-        base_type,
-        span,
-    );
-
-    let mut stmts = vec![inspect_call(
-        cast_to_base,
-        base_type,
-        local_expr(1, "f", fmt_type, span),
-        trait_env,
-        module_source,
-        tt,
-        span,
-        fmt_trait,
-        fmt_method,
-    )];
-    stmts.extend(suffix);
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        inspect_params(ref_newtype_type, fmt_type, span),
-        TypeTable::UNIT,
-        TirBlock::new(stmts, span),
-        inspect_locals(ref_newtype_type, fmt_type),
-    )
-}
-
 /// Generate `fn(..)^Inspect::inspect(&self, &mut Formatter)` as a dispatch
 /// stub with no TIR body — the entry exists only so call sites resolve, and
 /// being bodyless it bypasses the inliner and the other body walkers. WIR build

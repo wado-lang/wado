@@ -870,6 +870,7 @@ fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
         ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
         ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
         ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
+        ResolvedType::Newtype { .. } => Some(CompilerItem::ReflectNewtype),
         ResolvedType::GenericInstance { def, .. } => {
             let name = &tt.def_name(*def).to_string();
             let module_source = &tt.def_module(*def).clone();
@@ -888,21 +889,83 @@ fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
     }
 }
 
-/// Whether `type_id` is one of the four reflection kinds, i.e. whether a
+/// Whether `type_id` is one of the five reflection kinds, i.e. whether a
 /// `Reflect*`-bounded blanket can claim it.
 pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
     reflect_kind_of(type_id, tt).is_some()
 }
 
+/// How deep a kind bound may look for its subject. `Own` asks the receiver
+/// itself; `Inherited` also accepts what a newtype's base carries. Selection
+/// tries `Own` first, so a newtype's own blanket beats one only its base
+/// satisfies — WEP 2026-09-01 rank 2, at this layer.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BoundDepth {
+    Own,
+    Inherited,
+}
+
+/// The value blanket serving `receiver`, ranked: one whose bounds hold at the
+/// receiver itself outranks one that holds only after peeling a newtype
+/// (WEP 2026-09-01 rank 2). The single place monomorphization applies that
+/// order, so its several blanket lookups cannot disagree about which one a
+/// newtype takes. [`blanket_dispatch_for`] asks a narrower question and stops
+/// at `Own`.
+pub(crate) fn ranked_value_blanket<'a>(
+    trait_env: &'a TraitEnv,
+    trait_: crate::defs::DefId,
+    type_module: Option<&ModuleSource>,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<&'a crate::elaborator::trait_env::BlanketImpl> {
+    [BoundDepth::Own, BoundDepth::Inherited]
+        .into_iter()
+        .find_map(|depth| {
+            trait_env.value_blanket_for_receiver(trait_, type_module, &|bounds| {
+                receiver_satisfies_blanket_bounds(receiver, bounds, tt, depth)
+            })
+        })
+}
+
+/// The reflection trait `bound` names, or `None` for any other bound.
+fn reflect_bound_item(bound: &BlanketBound, tt: &TypeTable) -> Option<CompilerItem> {
+    let declared = bound.decl_ref.map(|decl| tt.defs().ast_id(decl))?;
+    let items = tt.compiler_items();
+    [
+        CompilerItem::Reflect,
+        CompilerItem::ReflectStruct,
+        CompilerItem::ReflectVariant,
+        CompilerItem::ReflectEnum,
+        CompilerItem::ReflectFlags,
+        CompilerItem::ReflectNewtype,
+    ]
+    .into_iter()
+    .find(|item| items.trait_decl(*item) == Some(declared))
+}
+
+/// Whether a blanket derives *over reflection* — at least one of its
+/// receiver-param bounds is a `Reflect*` trait. Being a claimable kind is not
+/// the same question: a newtype satisfies every non-reflect bound its base
+/// does, so without this an `impl<I: Iterator> IntoIterator for I` would claim
+/// a newtype over a list and name a per-type impl nothing mints.
+pub(crate) fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) -> bool {
+    bounds
+        .iter()
+        .any(|bound| reflect_bound_item(bound, tt).is_some())
+}
+
 /// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A kind
-/// bound holds exactly when the receiver is that kind, and the identity root
-/// `Reflect` when it is any of them; any other bound is treated as satisfiable —
-/// deciding one needs the elaborator's trait query, which monomorphization has
-/// no access to.
+/// bound holds when the receiver is that kind, or when the base it inherits
+/// from is (WEP 2026-09-01 rank 2 places the latter at depth 1, and selection
+/// there decides between them); the identity root `Reflect` holds for any kind,
+/// and `ReflectNewtype` for a newtype alone, since being a newtype is not
+/// inherited. Any other bound is treated as satisfiable — deciding one needs
+/// the elaborator's trait query, which monomorphization has no access to.
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: &[BlanketBound],
     tt: &TypeTable,
+    depth: BoundDepth,
 ) -> bool {
     if bounds.is_empty() {
         return true;
@@ -911,25 +974,19 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
     // `&self` method — every `Serialize::serialize` call — arrives as a
     // reference. Asking the reference for its reflection kind answers `None`
     // and rejects the blanket that should have served the call.
-    let kind = reflect_kind_of(tt.peel_refs(type_id), tt);
-    let items = tt.compiler_items();
-    let reflect_bounds = [
-        CompilerItem::Reflect,
-        CompilerItem::ReflectStruct,
-        CompilerItem::ReflectVariant,
-        CompilerItem::ReflectEnum,
-        CompilerItem::ReflectFlags,
-    ];
+    let receiver = tt.peel_refs(type_id);
+    let kind = reflect_kind_of(receiver, tt);
+    let inherited_kind = reflect_kind_of(tt.reflect_structure_head(receiver), tt);
     bounds.iter().all(|bound| {
-        let declared = bound.decl_ref.map(|decl| tt.defs().ast_id(decl));
-        match declared.and_then(|decl| {
-            reflect_bounds
-                .into_iter()
-                .find(|item| items.trait_decl(*item) == Some(decl))
-        }) {
+        match reflect_bound_item(bound, tt) {
             // The root asks for a name, not for a shape: any reflected kind.
             Some(CompilerItem::Reflect) => kind.is_some(),
-            Some(required) => kind == Some(required),
+            // Being a newtype is the one kind fact a base cannot supply.
+            Some(CompilerItem::ReflectNewtype) => kind == Some(CompilerItem::ReflectNewtype),
+            Some(required) => {
+                kind == Some(required)
+                    || (depth == BoundDepth::Inherited && inherited_kind == Some(required))
+            }
             None => true,
         }
     })
@@ -964,10 +1021,16 @@ pub(crate) fn blanket_dispatch_for(
     let type_module = type_module_hint_tt(type_id, tt);
     // Param and pack projections must come from the same blanket, or the
     // template name would name one kind and the args another.
+    // `Own` only, no peel: this asks which blanket *owns* the receiver's
+    // method, and rank 2 answers at the receiver itself. Admitting the base's
+    // bound here would hand a newtype over a struct to the `ReflectStruct`
+    // derive, losing the ` as Name` tag its own `ReflectNewtype` derive writes.
+    // The peel belongs to the pack projection, where the question is what the
+    // base's structure is, not whose impl this is.
     let blanket = trait_env.value_blanket_for_receiver(
         trait_name.canonical()?,
         type_module.as_ref(),
-        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds, tt),
+        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds, tt, BoundDepth::Own),
     )?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(
@@ -976,32 +1039,7 @@ pub(crate) fn blanket_dispatch_for(
         method_name.to_string(),
     )
     .to_mangled_name();
-    // `impl_type_args` is positional against the impl's type params, so it is
-    // built in declaration order — the receiver at the slot the impl gave it,
-    // each other parameter at its own. A blanket that projects one the receiver
-    // cannot supply does not apply: instantiating it with that argument missing
-    // would leave the body unable to bind it.
-    let mut impl_type_args = Vec::new();
-    for source in trait_env.blanket_param_sources(blanket) {
-        match source {
-            BlanketParamSource::Receiver => impl_type_args.push(type_id),
-            BlanketParamSource::Unresolved => return None,
-            BlanketParamSource::Projection(bound_trait, assoc) => {
-                let projected =
-                    tt.resolve_trait_assoc_type_of_instance(type_id, &bound_trait, &assoc)?;
-                // Substituting a pack needs interning, so a mutable table.
-                // Record it here, the one place that has one; later readers
-                // hold a shared borrow.
-                tt.register_assoc_type_resolution(
-                    type_id,
-                    crate::tir::TraitRef::bare(bound_trait),
-                    assoc,
-                    projected,
-                );
-                impl_type_args.push(projected);
-            }
-        }
-    }
+    let impl_type_args = blanket_impl_args(trait_env, blanket, type_id, tt)?;
     Some((
         MonomorphInfo {
             generic_name,
@@ -1011,6 +1049,43 @@ pub(crate) fn blanket_dispatch_for(
         },
         blanket_module,
     ))
+}
+
+/// The type args a value blanket's instance keys on for `receiver`: its
+/// parameters in declaration order — the receiver at the slot the impl gave it,
+/// each other projected off the receiver through the bound that names it. Every
+/// projection is recorded on the receiver, since substituting a pack needs a
+/// mutable table and later readers hold a shared borrow.
+///
+/// `None` when a projection cannot be resolved: a blanket that projects a
+/// parameter the receiver cannot supply does not apply, and a partial list
+/// would key the instance under an argument shape the template never declared.
+pub(crate) fn blanket_impl_args(
+    trait_env: &TraitEnv,
+    blanket: &crate::elaborator::trait_env::BlanketImpl,
+    receiver: TypeId,
+    tt: &mut TypeTable,
+) -> Option<Vec<TypeId>> {
+    let sources = trait_env.blanket_param_sources(blanket);
+    let mut args = Vec::with_capacity(sources.len());
+    for source in sources {
+        match source {
+            BlanketParamSource::Receiver => args.push(receiver),
+            BlanketParamSource::Unresolved => return None,
+            BlanketParamSource::Projection(bound_trait, assoc) => {
+                let projected =
+                    tt.resolve_trait_assoc_type_of_instance(receiver, &bound_trait, &assoc)?;
+                tt.register_assoc_type_resolution(
+                    receiver,
+                    crate::tir::TraitRef::bare(bound_trait),
+                    assoc,
+                    projected,
+                );
+                args.push(projected);
+            }
+        }
+    }
+    Some(args)
 }
 
 /// When no concrete or synthesized impl provides `trait_name` for `type_id` but
