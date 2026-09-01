@@ -2561,28 +2561,22 @@ fn generate_newtype_reflect_impls(
     ctx: &mut SynthesisCtx<'_, '_, '_>,
     newtype_trait_name: &crate::name::FqTraitName,
 ) {
-    let targets: Vec<(FqTypeName, String, TypeId, TypeId, Span)> = {
+    let targets: Vec<ReflectNewtypeTarget> = {
         let tt = module.type_table.borrow();
         module
             .newtypes
             .iter()
             .map(|nt| {
-                let ResolvedType::Newtype {
-                    def, base_type, ..
-                } = tt.get(nt.type_id)
-                else {
+                let ResolvedType::Newtype { def, base_type, .. } = tt.get(nt.type_id) else {
                     unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
                 };
-                (
-                    tt.fq_base_type_name(nt.type_id),
-                    // The declaration's own name: `Reflect` answers `UserId`,
-                    // never the `UserId@<local>` spelling a local declaration
-                    // is stored under.
-                    tt.def_name(*def).to_string(),
-                    nt.type_id,
-                    *base_type,
-                    nt.span,
-                )
+                ReflectNewtypeTarget {
+                    newtype_type: nt.type_id,
+                    base_type: *base_type,
+                    receiver: tt.fq_base_type_name(nt.type_id),
+                    display_name: tt.def_name(*def).to_string(),
+                    span: nt.span,
+                }
             })
             .collect()
     };
@@ -2603,28 +2597,40 @@ fn generate_newtype_reflect_impls(
     };
 
     let mut generated = Vec::new();
-    for (receiver, display_name, newtype_type, base_type, span) in &targets {
+    for target in &targets {
         module
             .type_table
             .borrow_mut()
             .register_assoc_type_resolution(
-                *newtype_type,
+                target.newtype_type,
                 crate::tir::TraitRef::bare(newtype_trait_key),
                 REFLECT_BASE_ASSOC.to_string(),
-                *base_type,
+                target.base_type,
             );
         generated.push(Rc::new(RefCell::new(generate_type_name_fn(
-            receiver,
-            display_name,
+            &target.receiver,
+            &target.display_name,
             string_type,
             &root_trait_name,
             &type_name_method,
-            *span,
+            target.span,
         ))));
-        ctx.record_impl(receiver, &newtype_trait_key);
+        ctx.record_impl(&target.receiver, &newtype_trait_key);
     }
 
     module.functions.extend(generated);
+}
+
+/// A newtype selected for `ReflectNewtype` synthesis.
+struct ReflectNewtypeTarget {
+    newtype_type: TypeId,
+    base_type: TypeId,
+    /// The head every synthesised method of this target hangs off.
+    receiver: FqTypeName,
+    /// The declaration's own name: `Reflect` answers `UserId`, never the
+    /// `UserId@<local>` spelling a local declaration is stored under.
+    display_name: String,
+    span: Span,
 }
 
 /// Generate the `ReflectFlags` members for each requested flags type

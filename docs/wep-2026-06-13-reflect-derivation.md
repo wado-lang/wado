@@ -55,17 +55,20 @@ carries a parallel metadata list or value accessor.
 A newtype is the one kind with no members: it has a base, and its value bridges
 are the bidirectional `From` the compiler already generates for it ([Conversion Traits](./wep-2026-03-16-conversion-traits.md) §7), so `ReflectNewtype` carries
 neither a member channel nor a bridge of its own. It carries no
-`wire_name_policy` either: a policy cases *member* names, and a newtype has
-none, so the method would have nothing to answer for and no caller.
+`wire_name_policy` either. A policy cases _member_ names, and a newtype has
+none, so the method would have nothing to answer and no caller.
 
-What a newtype does have is what its base has. Identity and structure part ways
-here: a newtype names *itself* through the root, and inherits its base's
-structure like every other impl ([Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)),
-so `ReflectStruct::<P>::members()` on `type P = Point` walks Point's fields
-while `Reflect::<P>::type_name()` answers `"P"`. The two are disjoint bounds at
-different depths — `ReflectNewtype` holds at the newtype, a structure kind only
-after the peel — which is rank 2 of [Trait Resolution](./wep-2026-09-01-trait-resolution.md),
-so a derivation keyed on the newtype kind wins over one keyed on its base's.
+Identity and structure part ways at a newtype. It names _itself_ through the
+root, and inherits its base's structure like every other impl ([Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)).
+So `Reflect::<P>::type_name()` answers `"P"` while `ReflectStruct::<P>::members()`
+on `type P = Point` walks Point's fields.
+
+The two bounds therefore hold at different depths: `ReflectNewtype` at the
+newtype itself, a structure kind only after peeling to the base. That is rank 2
+of [Trait Resolution](./wep-2026-09-01-trait-resolution.md), so a derivation
+keyed on the newtype kind beats one keyed on its base's. `Inspect` is the one
+that uses it — the `as Name` tag is a blanket over this kind, one instance per
+chain link, so `type A = i32; type B = A` renders `7 as A as B`.
 
 ```wado
 internal trait Reflect {                         // identity — every nameable type
@@ -414,15 +417,12 @@ concept.
 
 ## Known gaps
 
-Every derive now runs through this layer: `Inspect`'s ` as Name` tag was the
-last one the compiler synthesized per declaration, and it is a blanket over
-`ReflectNewtype` — one instance per chain link, so `type A = i32; type B = A`
-renders `7 as A as B`.
-
 The reflection traits, the member handles, the wire-naming split, and the
 streaming struct build are implemented — `core:serde` derives every struct,
 variant, enum, and flags impl through them, and a newtype reaches those
-derivations through the base whose structure it inherits. So is the identity
+derivations through the base whose structure it inherits. No derive is left to
+the compiler: `Inspect`'s `as Name` tag was the last one synthesized per
+declaration. So is the identity
 root: `Reflect` carries `type_name()` for every kind, a kind bound reaches it
 through the supertrait, and `T: Reflect` is a bound of its own. What remains is
 what a schema library reads and nothing else yet does.

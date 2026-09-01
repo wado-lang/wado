@@ -142,27 +142,9 @@ impl SubstitutionContext {
                     ) {
                         return resolved;
                     }
-                    let base_id = type_table.get_ultimate_base_type(concrete_id);
-                    if base_id != concrete_id
-                        && let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
-                            base_id,
-                            trait_key,
-                            &assoc_name,
-                        )
-                    {
-                        return resolved;
-                    }
                 }
                 if let Some(resolved) =
                     type_table.resolve_assoc_type_qualified(concrete_id, &owning_trait, &assoc_name)
-                {
-                    return resolved;
-                }
-                // Newtype fallback: newtypes inherit associated types from their base type.
-                let base_id = type_table.get_ultimate_base_type(concrete_id);
-                if base_id != concrete_id
-                    && let Some(resolved) =
-                        type_table.resolve_assoc_type_qualified(base_id, &owning_trait, &assoc_name)
                 {
                     return resolved;
                 }
@@ -2635,11 +2617,7 @@ impl TypeTable {
     /// A newtype registers only what it declares — `ReflectNewtype::Base` — and
     /// inherits the rest from its base (WEP 2026-01-29), so the direct hit
     /// answers first and the structure head answers for everything else.
-    fn inheriting<T>(
-        &self,
-        receiver: TypeId,
-        lookup: impl Fn(TypeId) -> Option<T>,
-    ) -> Option<T> {
+    fn inheriting<T>(&self, receiver: TypeId, lookup: impl Fn(TypeId) -> Option<T>) -> Option<T> {
         if let Some(found) = lookup(receiver) {
             return Some(found);
         }
@@ -2678,7 +2656,9 @@ impl TypeTable {
             one_assoc_answer(
                 self.assoc_type_resolutions
                     .iter()
-                    .filter(move |(key, _)| key.receiver == receiver && key.assoc_name == assoc_name)
+                    .filter(move |(key, _)| {
+                        key.receiver == receiver && key.assoc_name == assoc_name
+                    })
                     .flat_map(|(_, answers)| answers.tagged()),
             )
         })

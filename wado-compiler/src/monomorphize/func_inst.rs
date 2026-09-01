@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::trait_env::ReceiverCandidate;
-use crate::elaborator::trait_env::{BlanketParamSource, ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
@@ -180,6 +180,22 @@ pub(super) fn blanket_pack_dispatch_args(
         }
     }
     Some(out)
+}
+
+/// The mangled name of the template `blanket` provides for `method`: a
+/// blanket's body is keyed by its receiver *parameter*, never by the type that
+/// dispatches to it.
+fn blanket_template_name(
+    blanket: &BlanketImpl,
+    method: &LocalMethodName,
+    type_table: &TypeTable,
+) -> String {
+    LocalMethodName::new(
+        blanket.receiver_binder(type_table.defs()),
+        method.trait_name.clone(),
+        method.method_name.clone(),
+    )
+    .to_mangled_name()
 }
 
 /// The method type args an instantiation keys on.
@@ -817,6 +833,63 @@ impl Monomorphizer {
     /// `blanket_receiver` is the receiver's type where the call writes one. A
     /// value blanket is chosen by its receiver, so a lookup without it can land
     /// on a sibling blanket of the same trait.
+    /// Re-key a blanket instance whose call inherited another receiver's args.
+    ///
+    /// A blanket reached from inside an instance of *itself* — every link of a
+    /// newtype chain past the first — carries the outer link's arguments, which
+    /// would re-key that instance instead of minting this one. `None` for every
+    /// other call: its args are its own, and re-deriving them would rename the
+    /// instance the call site spells.
+    fn rekey_inner_newtype_link(
+        &self,
+        info: &LocalMethodName,
+        monomorph: &MonomorphInfo,
+        trait_: crate::defs::DefId,
+        module_source: &ModuleSource,
+        blanket_receiver: TypeId,
+        type_table: &mut TypeTable,
+    ) -> Option<Vec<TypeId>> {
+        // The value type: a `&self` method's receiver arrives as a reference,
+        // which answers for no kind and projects nothing.
+        let receiver = type_table.peel_refs(blanket_receiver);
+        let outer = *monomorph.impl_type_args.first()?;
+        if outer == receiver {
+            return None;
+        }
+        let mut link = outer;
+        while link != receiver {
+            let ResolvedType::Newtype { base_type, .. } = type_table.get(link) else {
+                return None;
+            };
+            link = *base_type;
+        }
+        let blanket = crate::synthesis::template::ranked_value_blanket(
+            &self.functions.trait_env,
+            trait_,
+            Some(module_source),
+            receiver,
+            type_table,
+        )?
+        .clone();
+        // Only the blanket this call dispatches: `ranked_value_blanket` answers
+        // for the value type, while a reference receiver dispatches the ref
+        // blanket. Re-keying that one off the pointee's blanket would name a
+        // template it never instantiates.
+        if blanket_template_name(&blanket, info, type_table) != monomorph.generic_name {
+            return None;
+        }
+        let args = crate::synthesis::template::blanket_impl_args(
+            &self.functions.trait_env,
+            &blanket,
+            receiver,
+            type_table,
+        )?;
+        // A blanket that projects nothing (`impl<I: Iterator> IntoIterator for
+        // I`) is already keyed by its receiver, and re-keying it off the peeled
+        // one mints a second instance under the same mangled name.
+        (args.len() > 1).then_some(args)
+    }
+
     fn queue_monomorph_instantiation(
         &mut self,
         generic_functions: &IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
@@ -861,67 +934,17 @@ impl Monomorphizer {
             // receiver alone underfills the key. Only a blanket dispatch is
             // re-keyed this way: a concrete impl whose single argument happens
             // to satisfy some blanket's bounds is not that blanket.
-            //
-            // The receiver decides, not the args the call carries: a blanket
-            // reached from inside an instance of *itself* — every link of a
-            // newtype chain past the first — inherits the outer instance's
-            // args, which would re-key that one instead of minting this.
             let blanket_trait = info.trait_decl().filter(|_| monomorph.is_blanket);
             let impl_type_args = blanket_trait
                 .and_then(|trait_| {
-                    // The value type: a `&self` method's receiver arrives as a
-                    // reference, which answers for no kind and projects nothing.
-                    let receiver = type_table.peel_refs(blanket_receiver?);
-                    // Exactly the case this exists for: a blanket reached from
-                    // inside an instance of *itself*, one link down a newtype
-                    // chain. There the call inherits the outer link's args,
-                    // which would re-key that instance instead of minting this
-                    // one. Any other args are this call's own — re-deriving
-                    // them renames the instance the call site spells.
-                    let outer = *monomorph.impl_type_args.first()?;
-                    let mut link = outer;
-                    while link != receiver {
-                        let ResolvedType::Newtype { base_type, .. } = type_table.get(link) else {
-                            return None;
-                        };
-                        link = *base_type;
-                    }
-                    if outer == receiver {
-                        return None;
-                    }
-                    let blanket = crate::synthesis::template::ranked_value_blanket(
-                        &self.functions.trait_env,
+                    self.rekey_inner_newtype_link(
+                        info,
+                        monomorph,
                         trait_,
-                        Some(module_source),
-                        receiver,
+                        module_source,
+                        blanket_receiver?,
                         type_table,
-                    )?
-                    .clone();
-                    // Only the blanket this call dispatches: `ranked_value_blanket`
-                    // answers for the value type, and a reference receiver
-                    // dispatches the ref blanket instead. Re-keying that one off
-                    // the pointee's blanket would name a template it never
-                    // instantiates.
-                    let dispatched = LocalMethodName::new(
-                        blanket.receiver_binder(type_table.defs()),
-                        info.trait_name.clone(),
-                        info.method_name.clone(),
                     )
-                    .to_mangled_name();
-                    if dispatched != monomorph.generic_name {
-                        return None;
-                    }
-                    let args = crate::synthesis::template::blanket_impl_args(
-                        &self.functions.trait_env,
-                        &blanket,
-                        receiver,
-                        type_table,
-                    )?;
-                    // A blanket that projects nothing (`impl<I: Iterator>
-                    // IntoIterator for I`) is already keyed by its receiver, and
-                    // re-keying it off the peeled one mints a second instance
-                    // under the same mangled name.
-                    (args.len() > 1).then_some(args)
                 })
                 // No receiver to read: a static call through a blanket
                 // (`T::from_wire(…)`) projects off the args it carries.
@@ -2354,18 +2377,12 @@ impl Monomorphizer {
                                         concrete_type_id,
                                         type_table,
                                     )
-                                        .map(|b| {
-                                            (
-                                                b.module.clone(),
-                                                b.receiver_binder(type_table.defs()),
-                                                b.clone(),
-                                            )
-                                        })
+                                    .cloned()
                                 })
                             } else {
                                 None
                             };
-                            let blanket_module = blanket.as_ref().map(|(m, _, _)| m.clone());
+                            let blanket_module = blanket.as_ref().map(|b| b.module.clone());
                             let concrete_impl_module = self
                                 .functions
                                 .impl_module(&new_info, receiver_module.as_ref());
@@ -2395,21 +2412,13 @@ impl Monomorphizer {
                             // below).
                             let blanket_generic_name = blanket
                                 .as_ref()
-                                .zip(new_info.trait_name.clone())
-                                .map(|((_, param, _), tn)| {
-                                    LocalMethodName::new(
-                                        param.clone(),
-                                        Some(tn),
-                                        new_info.method_name.clone(),
-                                    )
-                                    .to_mangled_name()
-                                });
+                                .map(|b| blanket_template_name(b, &new_info, type_table));
                             // The receiver, then whatever the blanket's bounds
                             // project off it. Keying by the receiver alone left
                             // a blanket reached from inside another instance's
                             // body — every link past the first of a newtype
                             // chain — with its other parameters unbound.
-                            let blanket_impl_args = blanket.as_ref().and_then(|(_, _, b)| {
+                            let blanket_impl_args = blanket.as_ref().and_then(|b| {
                                 crate::synthesis::template::blanket_impl_args(
                                     &self.functions.trait_env,
                                     b,
@@ -3461,19 +3470,12 @@ impl Monomorphizer {
                     recv_inner,
                     type_table,
                 )
-                    .map(|b| {
-                        (
-                            b.module.clone(),
-                            b.receiver_binder(type_table.defs()),
-                            b.clone(),
-                        )
-                    })
+                .cloned()
             })
         } else {
             None
         };
-        let blanket_module = blanket.as_ref().map(|(m, ..)| m.clone());
-        let blanket_param = blanket.as_ref().map(|(_, p, _)| p.clone());
+        let blanket_module = blanket.as_ref().map(|b| b.module.clone());
         let concrete_impl_module = self
             .functions
             .impl_module(&new_info, receiver_module.as_ref());
@@ -3514,7 +3516,7 @@ impl Monomorphizer {
             // `[T, T::Assoc, …]`, so its instance name matches the template's
             // arity. A plain one-arg blanket (`impl<I: Iterator> IntoIterator
             // for I`) projects nothing and stays keyed by the call-site args.
-            let projected = blanket.as_ref().and_then(|(_, _, b)| {
+            let projected = blanket.as_ref().and_then(|b| {
                 crate::synthesis::template::blanket_impl_args(
                     &self.functions.trait_env,
                     b,
@@ -3525,13 +3527,8 @@ impl Monomorphizer {
             let has_projected = projected.as_ref().is_some_and(|args| args.len() > 1);
             let blanket_name = if receiver_is_assoc_projection {
                 new_func_name.clone()
-            } else if let Some(param) = blanket_param {
-                LocalMethodName::new(
-                    param,
-                    new_info.trait_name.clone(),
-                    new_info.method_name.clone(),
-                )
-                .to_mangled_name()
+            } else if let Some(b) = blanket.as_ref() {
+                blanket_template_name(b, &new_info, type_table)
             } else {
                 old_func_name
             };

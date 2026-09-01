@@ -1285,8 +1285,8 @@ impl TypeSystem {
             }
             (ResolvedType::Enum { .. }, Some(OnBoundTrait::ReflectEnum))
             | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => true,
-            // A newtype names itself through the root and is its own kind. The
-            // structure kinds it satisfies through the base it inherits from,
+            // A newtype names itself through the root, and is its own kind. It
+            // satisfies the structure kinds through the base it inherits from,
             // which the recursion below answers.
             (
                 ResolvedType::Newtype { .. },

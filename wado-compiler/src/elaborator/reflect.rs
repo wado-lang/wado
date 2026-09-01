@@ -234,13 +234,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let method = static_call.method.clone();
-        // A newtype inherits its base's impls (WEP 2026-01-29), so a kind reads
-        // structure from the base and dispatches to the base's synthesized
-        // impl. `self_ty` stays as written: the `Self` positions a member
-        // signature carries substitute to the newtype, like every other
-        // inherited method. Identity is not inherited either — the root
-        // answers for the newtype itself.
-        let structure_ty = self.tysys.type_table.borrow().reflect_structure_head(self_ty);
+        // `self_ty` stays as written beside it: a member signature's `Self`
+        // positions substitute to the newtype, like every other inherited
+        // method (WEP 2026-01-29).
+        let structure_ty = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(self_ty);
 
         // Generic subject `T: ReflectStruct`: the concrete struct is unknown until
         // monomorphization. Resolve the value-free members here and record a
@@ -620,10 +621,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// a struct (the only reflectable kind).
     ///
     /// A newtype answers for what it wraps: structure is inherited
-    /// (WEP 2026-01-29), so the peel lives here rather than at each call site
-    /// and every consumer — the pack projection included — reads the same one.
+    /// (WEP 2026-01-29), and peeling here is what lets every consumer — the
+    /// pack projection included — read one answer.
     fn reflect_struct_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
-        let self_ty = self.tysys.type_table.borrow().reflect_structure_head(self_ty);
+        let self_ty = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(self_ty);
         let (base_name, module_source, type_args) =
             match self.tysys.type_table.borrow().get(self_ty).clone() {
                 ResolvedType::GenericInstance { type_args, .. } => {
@@ -670,7 +675,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `T` is not a variant. Peels a newtype like
     /// [`Self::reflect_struct_subject`].
     fn reflect_variant_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
-        let self_ty = self.tysys.type_table.borrow().reflect_structure_head(self_ty);
+        let self_ty = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(self_ty);
         let (base_name, module_source, type_args) =
             match self.tysys.type_table.borrow().get(self_ty).clone() {
                 ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
@@ -985,13 +994,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let method = static_call.method.clone();
-        // A newtype inherits its base's impls (WEP 2026-01-29), so a kind reads
-        // structure from the base and dispatches to the base's synthesized
-        // impl. `self_ty` stays as written: the `Self` positions a member
-        // signature carries substitute to the newtype, like every other
-        // inherited method. Identity is not inherited either — the root
-        // answers for the newtype itself.
-        let structure_ty = self.tysys.type_table.borrow().reflect_structure_head(self_ty);
+        // `self_ty` stays as written beside it: a member signature's `Self`
+        // positions substitute to the newtype, like every other inherited
+        // method (WEP 2026-01-29).
+        let structure_ty = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(self_ty);
 
         // Generic subject `T: ReflectVariant`: the concrete variant is unknown
         // until monomorphization; mirror `resolve_reflect_static_call`.
@@ -1257,16 +1267,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let method = static_call.method.clone();
-        // A newtype inherits its base's impls (WEP 2026-01-29), so a kind reads
-        // structure from the base and dispatches to the base's synthesized
-        // impl. `self_ty` stays as written: the `Self` positions a member
-        // signature carries substitute to the newtype, like every other
-        // inherited method. Identity is not inherited either — the root
-        // answers for the newtype itself.
-        let structure_ty = self.tysys.type_table.borrow().reflect_structure_head(self_ty);
+        // `self_ty` stays as written beside it: a member signature's `Self`
+        // positions substitute to the newtype, like every other inherited
+        // method (WEP 2026-01-29).
+        let structure_ty = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(self_ty);
 
-        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let ResolvedType::TypeParam { name, .. } = subject {
+        let written = self.tysys.type_table.borrow().get(self_ty).clone();
+        if let ResolvedType::TypeParam { name, .. } = written {
             return self.resolve_generic_reflect_scalar_static_call(
                 spec,
                 self_ty,
@@ -1602,7 +1613,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The subject's case (enum) / member (flags) count, off the declaration
     /// its own type names rather than its rendered head.
     fn scalar_member_count(&self, spec: ScalarReflectSpec, self_ty: TypeId) -> usize {
-        let structure_ty = self.tysys.type_table.borrow().reflect_structure_head(self_ty);
+        let structure_ty = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(self_ty);
         let Some(def) = self.tysys.type_table.borrow().nominal_def(structure_ty) else {
             return 0;
         };

@@ -1,10 +1,9 @@
 // A newtype inherits its base's trait impls (WEP 2026-01-29), and a `Reflect*`
 // kind is no exception: `type P = Point` reflects Point's structure. The bound
-// already admitted the newtype as a depth-1 candidate (WEP 2026-09-01 rank 2),
-// but the walk was computed from the newtype instead of the peeled base, so
-// `members()` came back empty and a derivation silently saw a fieldless struct.
-// Identity stays the newtype's own: structure is inherited, a name is not.
-// Issue #1933.
+// already admitted the newtype at depth 1 (WEP 2026-09-01 rank 2), but the walk
+// read the newtype instead of the peeled base, so `members()` came back empty
+// and a derivation saw a fieldless struct. Identity goes the other way:
+// structure is inherited, a name is not. Issue #1933.
 
 struct Point {
     x: i32,

@@ -1,10 +1,10 @@
 // A newtype over a struct serializes as that struct: serde's derivation is
 // keyed by `ReflectStruct`, which a newtype satisfies through its base
-// (WEP 2026-01-29). Before #1933 the bound admitted `P` but the walk was
-// computed from the newtype, so `to_string::<P>` reported that `Point` — a
-// type the program never named — has no `Serialize`, and serializing both
-// `Point` and `P` in one program minted the same mangled impl under two
-// module sources, tripping lower's extern-stub assertion.
+// (WEP 2026-01-29). Before #1933 the bound admitted `P` but the walk read the
+// newtype, so `to_string::<P>` reported that `Point` — a type the program never
+// named — has no `Serialize`, and serializing both `Point` and `P` in one
+// program minted the same mangled impl under two module sources, tripping
+// lower's extern-stub assertion.
 use { to_string, from_string } from "core:json";
 
 struct Point {

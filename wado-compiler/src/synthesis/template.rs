@@ -18,7 +18,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::{CompilerItem, FormatterField};
-use crate::elaborator::trait_env::{BlanketBound, BlanketParamSource, ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{
+    BlanketBound, BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv,
+};
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, RefKind};
@@ -917,7 +919,7 @@ pub(crate) fn ranked_value_blanket<'a>(
     type_module: Option<&ModuleSource>,
     receiver: TypeId,
     tt: &TypeTable,
-) -> Option<&'a crate::elaborator::trait_env::BlanketImpl> {
+) -> Option<&'a BlanketImpl> {
     [BoundDepth::Own, BoundDepth::Inherited]
         .into_iter()
         .find_map(|depth| {
@@ -1062,7 +1064,7 @@ pub(crate) fn blanket_dispatch_for(
 /// would key the instance under an argument shape the template never declared.
 pub(crate) fn blanket_impl_args(
     trait_env: &TraitEnv,
-    blanket: &crate::elaborator::trait_env::BlanketImpl,
+    blanket: &BlanketImpl,
     receiver: TypeId,
     tt: &mut TypeTable,
 ) -> Option<Vec<TypeId>> {
