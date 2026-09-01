@@ -2,10 +2,8 @@
 // position on and every later arm is dead. `match_to_switch` must not route a
 // dead literal arm's value to its own arm: `classify(12)` and `classify(13)`
 // must hit the wildcard (100), not the unreachable `12 => 999` / `13 => 999`
-// arms. The live arms above the wildcard keep the match dense enough to lower
-// to a `Switch`; the `wir_expect` is what holds it to that path rather than the
-// generic fallback, which a raised `SWITCH_MIN_CASES` would otherwise drop it to
-// while it stayed green.
+// arms. The live arms above the wildcard reach `SWITCH_MIN_CASES`, and the
+// `wir_expect` holds them there rather than on the generic fallback.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]

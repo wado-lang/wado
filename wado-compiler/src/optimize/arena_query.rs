@@ -223,14 +223,11 @@ pub(super) fn storage_root(body: &Body, expr: ExprId) -> Option<u32> {
 }
 
 /// The local `node` writes: the storage root of an `Assign` target, or of a
-/// `&mut` that hands the place to a callee. One definition of the write
-/// channels, so a whole-body scan and a subtree one cannot disagree.
+/// `&mut` handing the place to a callee. One definition of the write channels,
+/// so a whole-body scan and a subtree one cannot disagree.
 ///
-/// A `&mut self` receiver is a third channel with no `&mut` node to find it by,
-/// and `alias.rs` is where it is answered — precisely, from whole-program
-/// context this has none of. Reaching for it costs a caller that only compares
-/// unboxed scalars nothing but precision: such a local is never a `&mut self`
-/// receiver, since being one would have boxed it.
+/// Not the `&mut self` receiver, which carries no `&mut` node and takes the
+/// whole-program context `alias.rs` has to decide.
 pub(super) fn local_written_by(body: &Body, node: NodeRef) -> Option<u32> {
     let NodeRef::Expr(e) = node else {
         return None;

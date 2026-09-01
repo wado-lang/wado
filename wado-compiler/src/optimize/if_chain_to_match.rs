@@ -1,16 +1,7 @@
 //! Fuse a run of sibling `if K == x { … }` statements over one local into a
-//! single `Match`, so the dispatch stops at the arm that fired.
-//!
-//! A compile-time-unrolled variadic `for` guarding on its loop index — what a
-//! `ReflectStruct`-derived `Deserialize` does to route a field to its slot —
-//! expands to a flat chain no arm leaves, so a struct pays one comparison per
-//! declared field for *every* field on the wire. Distinct constants over a local
-//! no arm writes are what make the guards exclusive.
-//!
-//! No width threshold here: the `Match` lowers to an early-exit `else if`, which
-//! never tests more keys than the flat run and stops at the arm that fires.
-//! `match_to_switch` holds the one threshold, trading that cascade for a single
-//! indirect branch.
+//! single `Match`, so the dispatch stops at the arm that fired. A derived
+//! `Deserialize` routes a field through such a run, unrolled one arm per
+//! declared field and left by none of them.
 
 use super::arena_query::local_written_by;
 use crate::compiler_trace;
@@ -45,8 +36,7 @@ struct Case {
 
 impl Rule for IfChainToMatchRule<'_> {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
-        // Most blocks hold no guard at all, and the clone below is only needed
-        // to walk one while `engine` is borrowed mutably.
+        // The clone is for walking while `engine` is borrowed mutably.
         let Some(first) = engine.body.blocks[block]
             .stmts
             .iter()
@@ -61,8 +51,7 @@ impl Rule for IfChainToMatchRule<'_> {
                 start += 1;
                 continue;
             };
-            // A local whose address escapes can be written by any call an arm
-            // makes, so the constants would not stay mutually exclusive.
+            // An escaped local is one any call an arm makes could write.
             if engine.body_address_taken().contains(&local) {
                 start += 1;
                 continue;
@@ -79,8 +68,7 @@ impl Rule for IfChainToMatchRule<'_> {
                 if let Some(case) =
                     case_at(engine.body, self.type_table, stmts[cursor], cursor, local)
                 {
-                    // A repeated key is a second arm the chain would still run
-                    // and a `Match` would not; stop the run before it.
+                    // A repeated key is an arm the chain runs and a `Match` would not.
                     if !keys.insert(case.key) {
                         break;
                     }
@@ -90,11 +78,9 @@ impl Rule for IfChainToMatchRule<'_> {
                     end = cursor;
                     continue;
                 }
-                // The unrolled loop binds its index between the arms
-                // (`let i = 3; if i == index { … }`), so they are adjacent only
-                // up to those. Hoisting one is sound while it names neither the
-                // scrutinee nor a local already hoisted, either of which would
-                // move a value ahead of a guard that reads it.
+                // `let i = 3; if i == index { … }` — the unroll binds its index
+                // between the arms. Hoisting one past a guard that reads it, or
+                // past its own shadow, would not be sound.
                 if let Some(bound) = constant_let(engine.body, stmts[cursor])
                     && bound != local
                     && hoisted_locals.insert(bound)
@@ -105,14 +91,12 @@ impl Rule for IfChainToMatchRule<'_> {
                 }
                 break;
             }
-            // One arm is not a chain — the `Match` would lower back to the very
-            // branch it replaced.
+            // One arm is not a chain.
             if cases.len() < 2 {
                 start += 1;
                 continue;
             }
-            // A guard the arms can invalidate is not a guard. Every run holding
-            // that arm is doomed, so resume past it rather than one statement on.
+            // Every run holding that arm is doomed, so resume past it.
             if let Some(writer) = cases.iter().position(|c| {
                 subtree_writes_local(engine.body, NodeRef::Block(c.then_block), local)
             }) {
@@ -172,8 +156,7 @@ fn split_guard(body: &Body, table: &TypeTable, stmt: StmtId) -> Option<(u32, i12
     }
 }
 
-/// The two sides of an `==`, whether the comparison sits in the skeleton or was
-/// promoted into the value pool.
+/// The two sides of an `==`, promoted into the value pool or not.
 fn eq_operands(body: &Body, condition: Operand) -> Option<(Operand, Operand)> {
     match condition {
         Operand::Value(v) => match body.values.kind(v) {
@@ -213,8 +196,7 @@ fn local_of(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-/// The integer an operand holds, if it is an integer constant, widened by its
-/// own signedness so the arm key round-trips.
+/// An operand's integer constant, widened by its own signedness.
 fn int_key(body: &Body, table: &TypeTable, op: Operand) -> Option<i128> {
     let Operand::Value(v) = op else {
         return None;
@@ -232,8 +214,7 @@ fn int_key(body: &Body, table: &TypeTable, op: Operand) -> Option<i128> {
     })
 }
 
-/// The local an immutable `let` of a constant binds — one the hoist may move
-/// ahead of the run, since a constant reads nothing an arm writes.
+/// The local an immutable `let` of a constant binds — hoistable, reading nothing.
 fn constant_let(body: &Body, stmt: StmtId) -> Option<u32> {
     let StmtKind::Let {
         is_mut: false,
@@ -247,6 +228,8 @@ fn constant_let(body: &Body, stmt: StmtId) -> Option<u32> {
     body.values.kind(v).is_constant().then_some(local_index)
 }
 
+/// The channel `local_written_by` omits cannot reach a scrutinee: a `&mut self`
+/// receiver boxes its local, and `local_of` matches only a bare one.
 fn subtree_writes_local(body: &Body, root: NodeRef, local: u32) -> bool {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
@@ -277,9 +260,8 @@ fn binds_local(body: &Body, node: NodeRef, local: u32) -> bool {
     }
 }
 
-/// Build `match local { K0 => { … }, …, _ => {} }` as one statement. The
-/// trailing wildcard is what makes the arms exhaustive: the chain ran nothing
-/// when no key matched.
+/// Build `match local { K0 => { … }, …, _ => {} }` as one statement. The chain
+/// ran nothing when no key matched, so the wildcard arm is empty.
 fn build_match(engine: &mut Engine, local: u32, cases: &[Case]) -> StmtId {
     let span = cases[0].span;
     let (name, local_type) = {

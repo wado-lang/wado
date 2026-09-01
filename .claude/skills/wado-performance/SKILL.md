@@ -159,9 +159,9 @@ session reads high, so a fixed order silently taxes whichever arm goes second.
 Run on an **idle** host, nothing else building: an A/B taken beside a compiling
 test suite has put both arms inside each other's spread and flipped their
 ranking. Check `uptime` — another agent's session on the same machine is
-invisible in every other way, and one running here took the same test target
-from 145 s to 827 s to 2499 s across three runs at load 55–125 before the box
-OOM-killed the next command. Nothing in a number says whether its host was idle,
+invisible in every other way, and one running here put the same test target at
+145 s and at 2499 s before the box OOM-killed the next command. Nothing in a
+number says whether its host was idle,
 so `benchmark/README.md` is a sanity check on the arm you just built, never the
 control for it — even on the machine that produced it; a HEAD build has measured
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
