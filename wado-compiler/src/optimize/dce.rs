@@ -151,6 +151,9 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
 #[derive(Default)]
 pub(super) struct DescriptorCache {
     refs: Vec<FunctionRef>,
+    /// Where `assert_one_fresh` resumes its rotation.
+    #[cfg(debug_assertions)]
+    cursor: usize,
 }
 
 impl DescriptorCache {
@@ -164,16 +167,32 @@ impl DescriptorCache {
             self.refs
                 .push(FunctionRef::from_resolved(&f, f.module_source.clone()));
         }
-        debug_assert!(
-            self.refs.iter().zip(&project.functions).all(|(d, f)| {
-                let f = f.borrow();
-                d.name == f.name
-                    && d.method_info.as_ref().map(|i| &i.method_name)
-                        == f.method_info.as_ref().map(|i| &i.method_name)
-            }),
+        #[cfg(debug_assertions)]
+        self.assert_one_fresh(project);
+        &self.refs
+    }
+
+    /// A descriptor is keyed by store position, so it goes stale if a pass
+    /// renames a function in place. A caller may read this table once per
+    /// function — `cold_outline` does — so comparing every entry per read
+    /// would price the accessor at O(n) and its caller at O(n²). Compare one
+    /// entry per read and rotate: a pass that reads across the store still
+    /// covers the whole table.
+    #[cfg(debug_assertions)]
+    fn assert_one_fresh(&mut self, project: &NirPackage) {
+        if self.refs.is_empty() {
+            return;
+        }
+        self.cursor %= self.refs.len();
+        let descriptor = &self.refs[self.cursor];
+        let f = project.functions[self.cursor].borrow();
+        assert!(
+            descriptor.name == f.name
+                && descriptor.method_info.as_ref().map(|i| &i.method_name)
+                    == f.method_info.as_ref().map(|i| &i.method_name),
             "a cached descriptor went stale: a function was renamed in place"
         );
-        &self.refs
+        self.cursor += 1;
     }
 }
 
