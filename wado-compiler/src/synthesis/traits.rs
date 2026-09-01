@@ -2174,7 +2174,6 @@ enum ScalarKind {
 struct ScalarReflectItems {
     kind: ScalarKind,
     member_struct: CompilerItem,
-    type_name: CompilerItem,
     value: CompilerItem,
     from_value: CompilerItem,
     members: CompilerItem,
@@ -2184,7 +2183,6 @@ struct ScalarReflectItems {
 const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
     kind: ScalarKind::Enum,
     member_struct: CompilerItem::ReflectEnumCase,
-    type_name: CompilerItem::ReflectTypeName,
     value: CompilerItem::ReflectEnumDiscriminant,
     from_value: CompilerItem::ReflectEnumFromDiscriminant,
     members: CompilerItem::ReflectEnumMembers,
@@ -2194,7 +2192,6 @@ const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
 const REFLECT_FLAGS_ITEMS: ScalarReflectItems = ScalarReflectItems {
     kind: ScalarKind::Flags,
     member_struct: CompilerItem::ReflectFlagsBit,
-    type_name: CompilerItem::ReflectTypeName,
     value: CompilerItem::ReflectFlagsBits,
     from_value: CompilerItem::ReflectFlagsFromBits,
     members: CompilerItem::ReflectFlagsMembers,
@@ -2234,7 +2231,7 @@ impl ScalarReflectSynthEnv {
             member_struct_name,
             member_struct_def,
             root_trait_name: items.trait_fq(CompilerItem::Reflect),
-            type_name_method: items.method_name(kind.type_name).to_string(),
+            type_name_method: items.method_name(CompilerItem::ReflectTypeName).to_string(),
             value_method: items.method_name(kind.value).to_string(),
             from_value_method: items.method_name(kind.from_value).to_string(),
             members_method: items.method_name(kind.members).to_string(),

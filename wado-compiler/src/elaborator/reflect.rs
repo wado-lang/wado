@@ -167,13 +167,9 @@ impl VariantMethods {
     }
 
     fn declares(&self, method: &str) -> bool {
-        [
-            &self.discriminant,
-            &self.cases,
-            &self.wire_name_policy,
-        ]
-        .into_iter()
-        .any(|name| name == method)
+        [&self.discriminant, &self.cases, &self.wire_name_policy]
+            .into_iter()
+            .any(|name| name == method)
     }
 }
 
@@ -852,7 +848,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         let tt = self.tysys.type_table.borrow();
-        method == tt.compiler_items().method_name(CompilerItem::ReflectTypeName)
+        method
+            == tt
+                .compiler_items()
+                .method_name(CompilerItem::ReflectTypeName)
     }
 
     /// Resolve `Reflect::<T>::type_name()` to the synthesized
@@ -941,10 +940,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags { .. } => true,
             // A generic instance is reflected when its declaration is: only a
             // struct or a variant takes type parameters.
-            ResolvedType::GenericInstance { .. } => self.tysys.type_def(self_ty).is_some_and(|def| {
-                self.type_lookup().struct_fields_of(def).is_some()
-                    || self.type_lookup().variant_cases_of(def).is_some()
-            }),
+            ResolvedType::GenericInstance { .. } => {
+                self.tysys.type_def(self_ty).is_some_and(|def| {
+                    self.type_lookup().struct_fields_of(def).is_some()
+                        || self.type_lookup().variant_cases_of(def).is_some()
+                })
+            }
             _ => false,
         };
         if !reflected {
