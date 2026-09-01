@@ -1880,7 +1880,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        if let Some(m) = self.select_trait_match(found_traits, method_name, span, probe) {
+        let receiver_display = type_key
+            .display_name(self.tysys.resolutions.defs())
+            .to_string();
+        if let Some(m) =
+            self.select_trait_match(found_traits, method_name, &receiver_display, span, probe)
+        {
             return Some(m);
         }
 
@@ -2099,6 +2104,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // This block names the receiver — not the letter, which another blanket
         // of the same trait may also spell.
+        let blanket_bounds = is_blanket_type_param.then(|| {
+            let bounds = header
+                .type_params
+                .iter()
+                .find(|p| p.name == impl_struct_name)
+                .map(|p| {
+                    p.bounds
+                        .iter()
+                        .map(|b| b.name.clone())
+                        .collect::<Vec<_>>()
+                        .join(" + ")
+                })
+                .unwrap_or_default();
+            if bounds.is_empty() {
+                impl_struct_name.clone()
+            } else {
+                format!("{impl_struct_name}: {bounds}")
+            }
+        });
         let blanket_binder = is_blanket_type_param.then(|| {
             crate::name::FqTypeName::binder_owned(
                 &impl_struct_name,
@@ -2281,6 +2305,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
                 blanket_binder: blanket_binder.clone(),
+                blanket_bounds: blanket_bounds.clone(),
                 bound_depth,
                 impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
@@ -2354,6 +2379,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_module_source,
                     blanket_type_param,
                     blanket_binder: blanket_binder.clone(),
+                blanket_bounds: blanket_bounds.clone(),
                     bound_depth,
                     impl_struct_name,
                     impl_struct_fq,
@@ -2373,10 +2399,79 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// trait also has a non-variadic one (coherence Rule 1, WEP 2026-03-14 §5),
     /// prefer a trait impl in the current module, dedup `(trait, module)`
     /// pairs, take the first remaining.
+    /// Report two of one trait's value blankets whose bounds the receiver both
+    /// satisfies with nothing to rank them — the choice the `dedup_by` below
+    /// would otherwise make by whichever the sort left first, i.e. by
+    /// declaration order.
+    ///
+    /// Only for blankets of the *same* trait: two traits declaring one method
+    /// name is a different ambiguity, reported with the trait to name. And only
+    /// where no impl written for the receiver exists, since that outranks every
+    /// blanket and answers the call.
+    fn report_ambiguous_value_blankets(
+        &mut self,
+        found_traits: &[super::types::TraitMethodMatch],
+        receiver_display: &str,
+        span: Span,
+    ) {
+        let mut by_trait: IndexMap<(crate::defs::DefId, Vec<TypeId>), Vec<usize>> =
+            IndexMap::default();
+        for (i, m) in found_traits.iter().enumerate() {
+            by_trait
+                .entry((m.trait_decl, m.trait_args.clone()))
+                .or_default()
+                .push(i);
+        }
+        for candidates in by_trait.values() {
+            if candidates
+                .iter()
+                .any(|&i| found_traits[i].blanket_type_param.is_none())
+            {
+                continue;
+            }
+            let blankets: Vec<&super::types::TraitMethodMatch> = candidates
+                .iter()
+                .map(|&i| &found_traits[i])
+                .filter(|m| m.blanket_binder.is_some())
+                .collect();
+            let Some(first) = blankets.first() else {
+                continue;
+            };
+            // Distinct blankets, and nothing between them: a deeper one lost on
+            // the newtype rank already, and the sort put the winner first.
+            let tied: Vec<&super::types::TraitMethodMatch> = blankets
+                .iter()
+                .filter(|m| {
+                    m.bound_depth == first.bound_depth
+                        && m.impl_module_source == first.impl_module_source
+                })
+                .copied()
+                .collect();
+            let distinct: IndexSet<&crate::name::FqTypeName> = tied
+                .iter()
+                .filter_map(|m| m.blanket_binder.as_ref())
+                .collect();
+            if distinct.len() < 2 {
+                continue;
+            }
+            let bounds: Vec<String> = tied
+                .iter()
+                .filter_map(|m| m.blanket_bounds.clone())
+                .collect();
+            let _ = self.emit(super::types::TypeError::AmbiguousValueBlankets {
+                trait_name: first.trait_name.to_display(),
+                receiver: receiver_display.to_string(),
+                bounds,
+                span,
+            });
+        }
+    }
+
     fn select_trait_match(
         &mut self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
         method_name: &str,
+        receiver_display: &str,
         span: Span,
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
@@ -2415,6 +2510,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .then(a.bound_depth.cmp(&b.bound_depth))
                 .then(b_local.cmp(&a_local))
         });
+        self.report_ambiguous_value_blankets(&found_traits, receiver_display, span);
         found_traits.dedup_by(|a, b| {
             a.trait_decl == b.trait_decl
                 && a.trait_args == b.trait_args

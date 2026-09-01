@@ -339,6 +339,20 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Two of one trait's value blankets whose bounds the receiver both
+    /// satisfies, with nothing to rank them.
+    ///
+    /// A blanket has no name, so unlike [`Self::AmbiguousTraitMethod`] the call
+    /// cannot pin one — an impl written for the receiver is the only way to
+    /// answer, and it outranks every blanket.
+    AmbiguousValueBlankets {
+        trait_name: String,
+        receiver: String,
+        /// The receiver-parameter bounds of each blanket, in declaration order.
+        bounds: Vec<String>,
+        span: Span,
+    },
+
     /// An associated type name reachable through more than one of a type
     /// parameter's bounds, so `T::Output` names two types. Reported where it is
     /// written — the same two traits are unambiguous on another parameter.
@@ -1139,6 +1153,23 @@ impl TypeError {
                         .collect::<Vec<_>>()
                         .join(" and "),
                     traits.first().map(String::as_str).unwrap_or(assoc)
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousValueBlankets {
+                trait_name,
+                receiver,
+                bounds,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous blanket impls of '{trait_name}' for '{receiver}': {} both apply, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
+                    bounds
+                        .iter()
+                        .map(|b| format!("'{b}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and "),
                 ),
                 *span,
             ),
@@ -2334,6 +2365,10 @@ pub(super) struct TraitMethodMatch {
     /// node, so two blankets of one trait are two templates whatever letter
     /// each spells its parameter (issue #1932).
     pub(super) blanket_binder: Option<crate::name::FqTypeName>,
+    /// The receiver parameter's bounds, as source writes them (`T: Limit`).
+    /// What an ambiguity between two of one trait's blankets names them by:
+    /// a blanket has no name of its own.
+    pub(super) blanket_bounds: Option<String>,
     /// How far down the receiver's newtype chain this impl's target bounds
     /// hold: 0 at the receiver itself, 1 at its base. A newtype inherits its
     /// base's impls, so a blanket keyed by a bound only the base carries is
