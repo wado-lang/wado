@@ -2648,6 +2648,30 @@ fn run(x: char) -> bool {
 }
 
 #[test]
+fn test_roundtrip_postfix_base_keeps_parens() {
+    // `.`, `[]` and `()` bind tighter than a cast, a binary operator or a
+    // comparison, so a base spelled as one of those keeps the parens the
+    // parser needs: `p as Point.x` parses the field access into the cast's
+    // *type*, and `a + b.len()` reads the call off `b`.
+    assert_format_preserves_ast(
+        r#"
+struct Point {
+    x: i32,
+}
+
+type P = Point;
+
+fn run(p: P, a: List<i32>, b: List<i32>) -> i32 {
+    let f = (p as Point).x;
+    let g = (a.len() + b.len()).to_string().len();
+    let h = (if f > 0 { a } else { b })[0];
+    return f + g + h;
+}
+"#,
+    );
+}
+
+#[test]
 fn test_roundtrip_ast_all_fixtures() {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut failures = Vec::new();

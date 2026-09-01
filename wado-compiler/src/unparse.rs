@@ -2125,10 +2125,33 @@ impl<'a> Unparser<'a> {
     }
 
     /// Emit a postfix base expression, wrapping in parens if needed.
-    /// Prefix unary ops (*, -, !, &, ~) bind looser than postfix ops ([], ., ()),
-    /// so `(*p)[i]` must keep parens — `*p[i]` would mean `*(p[i])`.
+    ///
+    /// The postfix ops (`.`, `[]`, `()`) bind tightest, so a base spelled as
+    /// anything looser keeps the parens the parser needs: `(*p)[i]` would
+    /// otherwise read `*(p[i])`, and `(p as Point).x` would read the field
+    /// access into the cast's *type*. Listed the other way round — the forms
+    /// that need none are the postfix ones and the primaries — so a variant
+    /// added later is parenthesized until someone says it need not be.
     fn unparse_postfix_base(&mut self, expr: &Expr) {
-        self.with_parens_if(matches!(expr, Expr::Unary(_) | Expr::Matches(_)), |s| {
+        let binds_tighter = matches!(
+            expr,
+            Expr::Ident(_)
+                | Expr::Literal(_)
+                | Expr::Call(_)
+                | Expr::MethodCall(_)
+                | Expr::StaticMethodCall(_)
+                | Expr::FieldAccess(_)
+                | Expr::Index(_)
+                | Expr::TryOp(_)
+                | Expr::TemplateString(_)
+                | Expr::StructLiteral(_)
+                | Expr::TupleLiteral(_)
+                | Expr::TupleComprehension(_)
+                | Expr::Block(_)
+                | Expr::LabeledBlock(_)
+                | Expr::Error(_)
+        );
+        self.with_parens_if(!binds_tighter, |s| {
             s.unparse_expr(expr);
         });
     }
