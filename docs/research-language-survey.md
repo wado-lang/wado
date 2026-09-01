@@ -117,14 +117,13 @@ Ask how many implementations of the semantics there are. One is the quiet case.
 Two is not. It might be a native backend and a wasm backend, or a linear-memory
 backend and a GC backend. Either way the language is now whatever both of them
 do, and whatever keeps them agreeing is a major finding rather than a detail.
-One surveyed language holds its two together with a contract ledger and a
-three-way oracle. The other has nothing between them, and as a result
-`Array::push` means one thing on one backend and something else on the other;
-its own memory contract says the two "must be reconciled or documented before
-unifying defaults".
+Look for it in both directions: a project may hold the two together with ledgers,
+fixture corpora and oracles, or it may have nothing between them and a stdlib
+function that means different things on each.
 
 So: a lot of what looks like unusual zeal about process is really the bill for
-having built the thing twice.
+having built the thing twice. And where you find no zeal, ask whether the bill
+has simply not arrived yet.
 
 ### If the reality turns out to be a bug, write it down
 
@@ -213,10 +212,11 @@ This rubric mostly reads what a project wrote about itself. Only the
 cross-check can contradict a document, which puts one measurement against a
 dozen readings.
 
-So far it has contradicted a document once, and that was the biggest finding of
-that survey. In the other survey it confirmed the claims instead, and the biggest
-finding came from a document in which the project reported its own defect. That
-is not something this rubric can rely on a project doing.
+Sometimes it does contradict one, and when it does that tends to be the biggest
+finding of the survey. Sometimes it confirms the claims instead, and the biggest
+finding turns out to be a document in which the project reported its own defect.
+That second case is luck. No rubric can rely on a project being that honest about
+itself.
 
 Two failures follow from being document-driven:
 

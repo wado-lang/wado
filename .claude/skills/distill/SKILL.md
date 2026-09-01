@@ -58,13 +58,14 @@ and often a helper the codebase already had.
 The goal is prose a reader understands on the first pass. Everything below
 serves that.
 
-- Plain words, one idea per sentence, and the plain statement before the reason
-  for it. A clause hung off a dash, an abstract noun where a verb would do, the
-  clever phrasing of a point arriving ahead of the obvious one — each of these
-  makes the reader decode instead of read.
+- Plain words. One idea per sentence. The plain statement first, the reason for
+  it after.
+- Three habits make a reader decode instead of read: a second clause hung off a
+  dash, an abstract noun standing where a verb would do, and the clever phrasing
+  of a point arriving before the obvious one. Undo each where you find it.
 - Correct and fresh. Keep the facts.
-- Cutting narration and redundancy is one way to get there, not the point of the
-  exercise. A passage that came out shorter and harder to follow has failed.
+- Cutting narration and redundancy is one way to get there. It is not the point.
+  A passage that came out shorter and harder to follow has failed.
 
 ## Cycle
 

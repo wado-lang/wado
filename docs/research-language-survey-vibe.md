@@ -20,13 +20,16 @@ wrong above P1 = crashes.
 
 Examined: `README.md`, `AGENTS.md`, `docs/vibe.md`, roughly a fifth of the
 2,646-line cheatsheet, `docs/adr.md`, `docs/spec/decisions.md`,
-`docs/spec/stable-surface.md`, `docs/pl-survey-2026-07.md`,
-`eval/lang-review/rubric.md` and its latest findings, `formal/README.md`,
-`docs/cli-commands.md`, the `lib/` and `scripts/` trees by listing and count,
-and `lib/@vibe/builtin/` by reading. Not examined: the module system oracle and
-the content-addressed package and result-cache design, which is the most
-distinctive thing here and unread; the concurrency ADRs behind A5; the Perceus
-work; the two wasm backends; the Vibe Book.
+`docs/spec/stable-surface.md`, `docs/spec/memory-contract.md`,
+`docs/module-system-oracle.md`, `docs/effect-evidence-passing.md`,
+`docs/pl-survey-2026-07.md`, `eval/lang-review/rubric.md` and its latest
+findings, `eval/msr/README.md`, `formal/README.md`, `docs/cli-commands.md`,
+`scripts/check_cheatsheet_signatures.sh`, the `lib/` and `scripts/` trees by
+listing and count, and `lib/@vibe/builtin/` by reading.
+
+Not examined: `docs/concurrency.md` and the ADRs behind A5; `docs/perceus-reuse.md`;
+the incremental build and result-cache design, which the module oracle touches
+only at the hash closure; four fifths of the cheatsheet; the Vibe Book.
 
 ## A. The language
 

@@ -17,13 +17,16 @@ its tests after a series of AI-driven edits.
 
 Examined: `README.md`, `llms.txt`, `docs/CHEATSHEET.md`, the five files under
 `docs/design/`, `docs/adr/README.md`, `docs/specs/edit-locality.md`,
-`docs/STABILITY.md`, `demo/make-verify/README.md`,
-`research/grammar-lab/REPORT.md`, and the `stdlib/`, `runtime/` and `crates/`
-trees by listing, count and sampled reading. Not examined: the 1,607-line
-`SPEC.md` and the rest of `docs/specs/`; the contract ledger itself, cited here
-only by its count; the ADR bodies beyond their section structure and two sampled
-falsifiers; what the Lean belts prove, as against whether they prove it;
-`TRUST-SPINE.md`, taken from the claims made about it.
+`docs/STABILITY.md`, `docs/TRUST-SPINE.md`,
+`docs/contracts/proven-vs-trusted.md`, the header and schema of
+`docs/contracts/contracts.toml`, `docs/project/BENCHMARKS.md`,
+`demo/make-verify/README.md`, `research/grammar-lab/REPORT.md`, and the
+`stdlib/`, `runtime/` and `crates/` trees by listing, count and sampled reading.
+
+Not examined: the 1,607-line `SPEC.md` and the rest of `docs/specs/`; the 327
+contract entries themselves, as against the schema they follow; the ADR bodies
+beyond their section structure and two sampled falsifiers; what the Lean belts
+prove, as against the grep showing they prove it without `sorry`.
 
 ## A. The language
 
