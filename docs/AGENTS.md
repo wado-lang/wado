@@ -133,7 +133,7 @@ missing and what closing it takes. A deliberate omission goes in Decision.
 - [CBOR Standard Library (`core:cbor`)](./wep-2026-06-05-core-cbor.md)
 - [Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
 - [Jade — JSON Schema for Wado](./wep-2026-06-13-jade.md)
-- [Library-Defined Derivation: `ReflectStruct` Extensions and the `#[validate]` Attribute](./wep-2026-06-13-reflect-derivation.md)
+- [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md)
 - [Compile-Time Data Providers](./wep-2026-06-13-compile-time-data-providers.md)
 - [Symbol Notation](./wep-2026-06-14-symbol-notation.md)
 - [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)

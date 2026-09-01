@@ -13,7 +13,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
-use super::reflect::ScalarReflectSpec;
+use super::reflect::ReflectDispatch;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -1305,33 +1305,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        // `Reflect{Struct,Variant,Enum,Flags}::<T>::method()` — a reflect trait
-        // is a trait, not a type, so `target_type` would not resolve. Intercept
-        // and route to the concrete `T`'s synthesized `T^Trait::method` (WEP
-        // 2026-06-13 §1 / §3b–d). It is the only spelling: a bare
-        // `T::members()` never resolves, so type namespaces stay clean.
+        // A reflection trait is a trait, not a type, so `target_type` would not
+        // resolve: intercept and route to `T`'s synthesized `T^Trait::method`.
+        // It is the only spelling — a bare `T::members()` never resolves, so
+        // type namespaces stay the author's.
         if let ast::Type::Generic(g) = &static_call.target_type
-            && let Some(self_ty_ast) = g.args.first()
+            && let Some(dispatch) = self.reflect_dispatch_of(&g.name, &static_call.method)
         {
-            if self.is_reflect_trait_call(&g.name, &static_call.method) {
-                let self_ty = self.resolve_type(self_ty_ast);
-                return self.resolve_reflect_static_call(self_ty, static_call, ctx);
-            }
-            if self.is_reflect_variant_trait_call(&g.name, &static_call.method) {
-                let self_ty = self.resolve_type(self_ty_ast);
-                return self.resolve_reflect_variant_static_call(self_ty, static_call, ctx);
-            }
-            for spec in [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS] {
-                if self.is_reflect_scalar_trait_call(spec, &g.name, &static_call.method) {
-                    let self_ty = self.resolve_type(self_ty_ast);
-                    return self.resolve_reflect_scalar_static_call(
-                        spec,
-                        self_ty,
-                        static_call,
-                        ctx,
-                    );
+            let [self_ty_ast] = g.args.as_slice() else {
+                let _ = self.emit(TypeError::UnknownFunction {
+                    name: format!(
+                        "{}::<…>::{} (one subject type argument, found {})",
+                        g.name,
+                        static_call.method,
+                        g.args.len()
+                    ),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            };
+            let self_ty = self.resolve_type(self_ty_ast);
+            return match dispatch {
+                ReflectDispatch::Root => {
+                    self.resolve_reflect_root_static_call(self_ty, static_call, ctx)
                 }
-            }
+                ReflectDispatch::Struct => {
+                    self.resolve_reflect_static_call(self_ty, static_call, ctx)
+                }
+                ReflectDispatch::Variant => {
+                    self.resolve_reflect_variant_static_call(self_ty, static_call, ctx)
+                }
+                ReflectDispatch::Scalar(spec) => {
+                    self.resolve_reflect_scalar_static_call(spec, self_ty, static_call, ctx)
+                }
+            };
         }
 
         // Resolve the target type first to get struct name for parameter type lookup

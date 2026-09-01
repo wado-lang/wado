@@ -912,7 +912,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let members = ReflectStruct::<T>::members();
         let policy = ReflectStruct::<T>::wire_name_policy();
-        let mut st = s.begin_struct(&ReflectStruct::<T>::type_name(), members.len())?;
+        let mut st = s.begin_struct(&Reflect::<T>::type_name(), members.len())?;
         for let f of members {
             let name = wire_name(&f, policy);
             let value = f.get(self);
@@ -927,7 +927,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
 impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let policy = ReflectVariant::<V>::wire_name_policy();
-        let type_name = ReflectVariant::<V>::type_name();
+        let type_name = Reflect::<V>::type_name();
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
                 let name = wire_name(&case, policy);
@@ -955,7 +955,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
             if case.holds(self) {
                 let name = wire_name(&case, policy);
                 return s.serialize_unit_variant(
-                    &ReflectEnum::<E>::type_name(),
+                    &Reflect::<E>::type_name(),
                     &name,
                     case.discriminant(),
                 );
@@ -963,7 +963,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
         }
         return Result::Err(SerializeError {
             kind: SerializeErrorKind::UnsupportedValue,
-            message: `unknown discriminant of ${ReflectEnum::<E>::type_name()}`,
+            message: `unknown discriminant of ${Reflect::<E>::type_name()}`,
         });
     }
 }
@@ -1048,7 +1048,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
         // Starting empty is what makes a filled slot mean "the wire wrote
         // this", so a repeat needs no second record to detect.
         let mut slots = ReflectStruct::<T>::empty_slots();
-        let mut sd = d.begin_struct(&ReflectStruct::<T>::type_name(), slots.len())?;
+        let mut sd = d.begin_struct(&Reflect::<T>::type_name(), slots.len())?;
         while let Some(index) = sd.next_field::<T>()? {
             let mut taken = false;
             for let [i, _] of slots.enumerate() {
@@ -1093,7 +1093,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
 impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for V {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<V, DeserializeError> {
         let members = ReflectVariant::<V>::members();
-        let mut va = d.begin_variant(&ReflectVariant::<V>::type_name(), members.len())?;
+        let mut va = d.begin_variant(&Reflect::<V>::type_name(), members.len())?;
         let policy = ReflectVariant::<V>::wire_name_policy();
         let key = case_key(&mut va)?;
         for let case of members {
@@ -1122,7 +1122,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
 impl<E: ReflectEnum<Members = [..M]>, ..M> Deserialize for E {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<E, DeserializeError> {
         let members = ReflectEnum::<E>::members();
-        let mut va = d.begin_variant(&ReflectEnum::<E>::type_name(), members.len())?;
+        let mut va = d.begin_variant(&Reflect::<E>::type_name(), members.len())?;
         let policy = ReflectEnum::<E>::wire_name_policy();
         let key = case_key(&mut va)?;
         for let case of members {
@@ -1172,7 +1172,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Deserialize for L {
                     return Result::Ok(v);
                 }
                 return Result::Err(DeserializeError::invalid_value(
-                    `unknown bits of ${ReflectFlags::<L>::type_name()}`,
+                    `unknown bits of ${Reflect::<L>::type_name()}`,
                     -1,
                 ));
             }

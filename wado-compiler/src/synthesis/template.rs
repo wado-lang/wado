@@ -894,10 +894,11 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
     reflect_kind_of(type_id, tt).is_some()
 }
 
-/// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A
-/// `Reflect*` bound holds exactly when the receiver is that kind; any other
-/// bound is treated as satisfiable — deciding one needs the elaborator's
-/// trait query, which monomorphization has no access to.
+/// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A kind
+/// bound holds exactly when the receiver is that kind, and the identity root
+/// `Reflect` when it is any of them; any other bound is treated as satisfiable —
+/// deciding one needs the elaborator's trait query, which monomorphization has
+/// no access to.
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: &[BlanketBound],
@@ -913,6 +914,7 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
     let kind = reflect_kind_of(tt.peel_refs(type_id), tt);
     let items = tt.compiler_items();
     let reflect_bounds = [
+        CompilerItem::Reflect,
         CompilerItem::ReflectStruct,
         CompilerItem::ReflectVariant,
         CompilerItem::ReflectEnum,
@@ -925,6 +927,8 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
                 .into_iter()
                 .find(|item| items.trait_decl(*item) == Some(decl))
         }) {
+            // The root asks for a name, not for a shape: any reflected kind.
+            Some(CompilerItem::Reflect) => kind.is_some(),
             Some(required) => kind == Some(required),
             None => true,
         }

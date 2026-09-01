@@ -805,7 +805,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `base_name` is the name the frame files `base`'s bounds under.
     ///
     /// Two sources answer, in order: the bindings a projection carries
-    /// (`S::SeqSerializer` knowing its `Ok`), then the enclosing `where` clause
+    /// (`S::SeqSerializer` knowing its `Ok`), then the enclosing bound
     /// (`I: IntoIterator<Item = u8>` answers `I::Item`).
     pub(super) fn frame_projection(
         &mut self,

@@ -60,7 +60,7 @@ test "two instantiations of one generic struct walk independently" {
 test "a multi-param generic struct keeps field order and metadata" {
     let w: Wrap<i32, String> = Wrap { a: 5, b: "x" };
     assert w.row() == "a=5;b=x;";
-    assert ReflectStruct::<Wrap<i32, String>>::type_name() == "Wrap";
+    assert Reflect::<Wrap<i32, String>>::type_name() == "Wrap";
     for let f of ReflectStruct::<Wrap<i32, String>>::members() {
         if f.index() == 0 {
             assert f.wire_name_override() == Option::Some("first");

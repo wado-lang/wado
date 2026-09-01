@@ -250,11 +250,10 @@ its members are reached only as `ReflectStruct::<T>::members()` (see
 
 ```wado
 #[compiler_item("reflect_struct")]
-internal trait ReflectStruct {
+internal trait ReflectStruct: Reflect {   // `Reflect` carries `type_name()`
     type FieldTypes;
     type Members;
     fn members() -> Self::Members;
-    fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
 ```
@@ -266,37 +265,40 @@ struct with fields `f_0: F_0, f_1: F_1, …`:
 - `type Members = [StructField<S, F_0>, StructField<S, F_1>, …]`
 - `members()` returns one `StructField` per field, carrying its name, attributes and a
   `get(&self, v: &S) -> F_k` value accessor
-- `type_name()` returns the struct name as a string
+- `Reflect::<S>::type_name()` returns the struct name as a string (the identity
+  root, reached through `ReflectStruct`'s supertrait)
 
-**Why compiler-synthesized**: `ReflectStruct` returns `Self::Members`, which is a concrete tuple
-type specific to each struct. Without `any`, the compiler must generate the implementation
-at compile time for each struct individually.
+#### Why compiler-synthesized
 
-**Why only in monomorphized contexts**: `ReflectStruct::<T>::members()` and
-`ReflectStruct::<T>::type_name()` are only callable when `T` is a concrete struct type, because
-the implementation is generated per struct, not for a generic `T`.
+`ReflectStruct` returns `Self::Members`, which is a concrete tuple type specific to each
+struct. Without `any`, the compiler must generate the implementation at compile time for
+each struct individually.
 
-### 11. `where` Clause — Type Pack Pattern Matching
+#### Why only in monomorphized contexts
 
-A `where` clause may bind a type pack from an associated type:
+`ReflectStruct::<T>::members()` and `Reflect::<T>::type_name()` are only callable when `T`
+is a concrete struct type, because the implementation is generated per struct, not for a
+generic `T`.
+
+### 11. Pack Binding — Type Pack Pattern Matching
+
+A bound may bind a type pack from an associated type:
 
 ```wado
-impl<T, ..F: Inspect> Inspect for T
-where T: ReflectStruct<FieldTypes = [..F]>
-{
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
     fn inspect(&self) -> String {
         let mut parts: List<String> = [];
         for let f of ReflectStruct::<T>::members() {
             parts.push(`${f.name()}: ${f.get(self).inspect()}`);
         }
-        return `${ReflectStruct::<T>::type_name()} \{ ${parts.join(", ")} \}`;
+        return `${Reflect::<T>::type_name()} \{ ${parts.join(", ")} \}`;
     }
 }
 ```
 
 `T: ReflectStruct<FieldTypes = [..F]>` constrains `T` to be any type that implements `ReflectStruct`
-with a `Fields` associated type that matches the pack `F`. The compiler extracts `F` from
-the concrete `Fields` type at monomorphization. This is the mechanism that lets the
+with a `FieldTypes` associated type that matches the pack `F`. The compiler extracts `F` from
+the concrete `FieldTypes` type at monomorphization. This is the mechanism that lets the
 struct-inspect implementation be written entirely in Wado.
 
 ---
@@ -340,7 +342,7 @@ occurred.
       Selection, pack binding, and template naming all ignore the fixed
       elements, and a pack under a reference never reaches the impl's
       type-param scope
-- [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
+- [x] Pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
 - [ ] Standard library: add a variadic impl for `Default`
 

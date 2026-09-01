@@ -41,12 +41,6 @@ The clause sits between the trait's generic parameters and its block, and takes
 the same bound list generic parameters do, so `+` lists and associated-type
 constraints (`trait A: B<Item = i32>`) are included.
 
-There is no `where` form. It would add no expressive power: `trait C where
-Self: S` is Rust's own synonym for `trait C: S`, and every other `where` case is
-either already spelled inline in Wado (bounds on generic parameters, on a
-trait's own associated type, on a supertrait's) or concerns a feature Wado does
-not have (`dyn`, lifetimes).
-
 A `fn(...)` / `fn mut(...)` bound is rejected here: a callable signature is not a
 trait a type can be required to implement.
 

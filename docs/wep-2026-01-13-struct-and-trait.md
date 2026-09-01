@@ -189,12 +189,8 @@ fn process<T: Display + Default>(value: Option<T>) -> String {
     }
 }
 
-// Where clause for complex bounds
-fn merge<T, U>(a: T, b: U) -> String
-where
-    T: Display,
-    U: Display,
-{
+// Several bounded parameters
+fn merge<T: Display, U: Display>(a: T, b: U) -> String {
     return `${a.display()} and ${b.display()}`;
 }
 ```

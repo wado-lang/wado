@@ -1,0 +1,13 @@
+// A subject with no synthesized `Reflect` is rejected where it is substituted,
+// so an unbounded `T` never reaches a target that does not exist.
+
+fn name_of<T>() -> String {
+    return Reflect::<T>::type_name();
+}
+
+test "a non-reflectable substitution is rejected" {
+    assert name_of::<i32>() == "i32";
+}
+
+__DATA__
+{"test": {}, "compile_error": "type `i32` does not implement trait `Reflect`"}
