@@ -14,9 +14,15 @@ place for things you now understand but will not act on.
 
 ### Only ask what can be measured
 
-Every question says what to run, or what file to open. A question you answer by
-reading the README and forming an impression will cost a day on the next
-language, and the two answers will not be comparable.
+A question belongs here if it points at something specific you can go and look
+at in the project. The rubric cannot name the path, because the path is
+different in every language — it can only name the thing. "Is there a list of
+what the compiler does behind your back?" sends you looking for a document that
+either exists or does not, which is a different act from reading the README and
+forming an impression. The second one costs a day on the next language and
+produces an answer nobody can compare with this one.
+
+What you actually opened goes in the survey, under "Say how you looked".
 
 ### Keep the claim and the reality apart
 
@@ -93,9 +99,14 @@ against everything the language can be asked to express.
 Then measure how much of that program had to reach below the language:
 
 ```sh
-grep -rl '<privileged prefix>' <stdlib>/ | wc -l   # numerator
-ls <stdlib>/*.<ext> | wc -l                        # denominator
+find <stdlib> -name '*.<ext>' > /tmp/files
+xargs grep -l '<privileged prefix>' < /tmp/files | wc -l   # numerator
+wc -l < /tmp/files                                         # denominator
 ```
+
+Both counts have to come off the same list, or the ratio is measuring two
+different things. `grep -r` recurses and a bare `ls` does not, so a stdlib with
+subdirectories will give you a numerator larger than its own denominator.
 
 The privileged prefix is whatever that code may call and ordinary user code may
 not. It might be an intrinsic module, a raw-memory module, or an FFI escape. If
@@ -200,11 +211,15 @@ that picked a platform tends to build applications on it. If C and B1 point in
 different directions, that itself is the finding.
 
 Read C1 next to A6 before reading it next to anything else. If nothing outside
-the language can get in — no foreign grammar, no IDL, no wire format — then the
-only thing you can build with it is more of itself. An empty C1 next to an
-absent A6 is one finding, not two: nothing external could have been built, no
-matter how much effort went in. The programs that fill C1 are usually the first
-customer of some boundary mechanism.
+the language can get in, the only thing you can build with it is more of itself.
+An empty C1 next to an absent A6 is one finding, not two: nothing external could
+have been built, no matter how much effort went in. The programs that fill C1
+are usually the first customer of some boundary mechanism.
+
+Which kind of mechanism decides which programs. Serialization lets a wire format
+in at run time, and that is enough for an application. Generation lets a foreign
+grammar or IDL in at build time, and that is what a parser generator needs. A
+project can have the first and still be unable to produce the second.
 
 ## What this rubric cannot see
 

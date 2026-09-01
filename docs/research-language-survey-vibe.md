@@ -136,14 +136,17 @@ wrong.
 
 What shipped as the fix was a sentence in the cheatsheet, telling authors to keep
 a handle body pure until the last perform. No fixture pins the defect. There is
-also a hard ceiling: 128 KB divided by 8 bytes is 16,382 performs per handle. The
+also a hard ceiling. The memo region is 128 KB of 8-byte slots, which their own
+note puts at 16,382 performs per handle — two short of the round figure, and it
+does not say what the other two slots hold. The
 constant is duplicated across three files, and shrinking it once corrupted the
 heap.
 
-ADR-0076 replaces all of it with Koka's generalized evidence passing. The
-design's first move is reuse: vibe already passes trait dictionaries as implicit
-witness parameters for generic method calls, so the evidence vector is built on
-that same mechanism instead of a second one.
+ADR-0076 is the plan to replace all of it with Koka's generalized evidence
+passing. It has not landed: the ADR puts itself at phase 0, design only, no code
+changes. The design's first move is reuse — vibe already passes trait
+dictionaries as implicit witness parameters for generic method calls, so the
+evidence vector is built on that same mechanism instead of a second one.
 
 Two things in the write-up are worth as much as the decision itself.
 

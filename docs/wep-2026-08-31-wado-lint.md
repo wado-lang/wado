@@ -95,11 +95,15 @@ Two stages keep the cost down. First a coarse key — the body's shape alone, wi
 every identifier and type erased — sorts candidates into buckets. Unification
 then runs only inside a bucket.
 
-### The standard library is only ever the thing being matched against
+### The standard library never receives a finding
 
-The stdlib is indexed and compared against, but never receives a finding itself.
-Unused Diagnostics leaves it out of reporting for the same reason: it is not the
-reader's code to fix. This check keeps that exclusion and adds the second role.
+It is indexed and compared against, but a duplicate is always reported on the
+user's side of the pair. Unused Diagnostics leaves the stdlib out of reporting
+for the same reason: it is not the reader's code to fix. This check keeps that
+exclusion and adds the second role.
+
+Dependencies work the same way when the flag below turns them on: indexed,
+matched against, never reported.
 
 ### What is not compared
 
