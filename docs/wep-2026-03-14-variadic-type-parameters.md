@@ -137,55 +137,13 @@ if either `Trait` or the tuple type family (`type [...T]` from `core:prelude`) i
 by the current crate. Because `core:prelude` owns tuples, the standard library can write
 variadic tuple impls; downstream crates may write variadic impls only for their own traits.
 
-**Rule 3 — A bare-`T` overlap is a use-site error**: Rules 1 and 2 rank impls whose
-target is the tuple family. A trait may also carry several _value blankets_, whose
-target is a bare type parameter and whose bounds are what select them:
-
-```wado
-impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S { ... }
-impl<E: ReflectEnum<Members = [..M]>, ..M>               Inspect for E { ... }
-```
-
-Several are the point — the four reflection kinds each derive `Inspect` over their own
-`Reflect*` bound — so Rule 2's definition-time rejection cannot be lifted here. Nor can
-it be replaced by a disjointness test: whether `T: Limit` and `T: ReflectStruct` can
-both hold is not decidable in an open world, since another module may write
-`impl Limit` for a struct at any time.
-
-The one point where the question _is_ decidable is the use site, where the receiver is
-known. A receiver that satisfies two blankets' bounds with nothing to rank them is an
-error there:
-
-```wado
-impl<T: Limit> Describe for T { ... }
-impl<T: ReflectStruct> Describe for T { ... }
-
-struct Point { x: i32 }
-impl Limit for Point { ... }        // Point satisfies both
-
-p.describe()                        // ERROR: ambiguous blanket impls
-```
-
-A blanket has no name, so unlike the two-trait ambiguity (WEP 2026-07-31) the call
-cannot pin one. An impl written for the receiver outranks every blanket and is the
-answer the diagnostic points to. The four `Reflect*` kinds are structurally exclusive,
-so the standard library's blankets never reach this rule.
-
-Ranking runs concrete impl, then newtype depth (WEP 2026-06-25 — a newtype's own impls
-select for it before its base's), then locality; Rule 3 is what remains.
-
-**Known gap — specificity is not ranked.** Where one blanket's bounds _imply_ another's,
-an order exists and is not yet used: `impl<T: Ord>` is strictly narrower than
-`impl<T: Eq>` when `Ord: Eq`, as is `impl<T: A + B>` against `impl<T: A>`. Both are
-decidable from the trait declarations. Such a pair is reported as ambiguous today.
-
-The gap is left open deliberately. No standard-library trait carries two blankets with
-comparable bounds — all three that carry several (`Inspect`, `Serialize`, `Deserialize`)
-split on the mutually exclusive reflection kinds — so the rule would not yet fire, and a
-blanket may bind associated types (`ReflectStruct<FieldTypes = [..F]>`), which a
-narrower impl could bind differently. Deciding which binding a caller sees is the
-specialization soundness question, and it wants its own WEP. Rule 3 surfaces the demand
-with a concrete example when one appears.
+These two rules rank impls whose target is the tuple family. A trait's *value*
+blankets — target a bare type parameter, selected by their bounds — are ranked
+separately, and their overlap is a use-site error rather than a definition-time
+one: several per trait are the point, and whether two bounds can both hold is
+not decidable in an open world. See
+[Trait Resolution](./wep-2026-09-01-trait-resolution.md) for the full order and
+where these two rules sit in it.
 
 ### 6. Multi-Pack (Limited)
 

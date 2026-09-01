@@ -2475,9 +2475,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
-        // Rule 1 ranks the impls of *one* trait against each other, so it must
-        // not outrank locality between traits: a foreign blanket
-        // `impl<T> A for T` would otherwise beat a local `impl<..T> B for [..T]`.
+        // Rank 0: a variadic impl yields to a non-variadic one of the same
+        // trait at the same argument list. Scoped to one trait in both
+        // directions, so it must not outrank locality between traits — a
+        // foreign blanket `impl<T> A for T` would otherwise beat a local
+        // `impl<..T> B for [..T]` (WEP 2026-03-14 §5 Rule 1).
         let traits_with_non_variadic: IndexSet<(crate::defs::DefId, Vec<TypeId>)> = found_traits
             .iter()
             .filter(|m| !m.is_variadic_impl)
@@ -2488,17 +2490,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
         });
 
-        // Sort BEFORE dedup_by, since dedup_by only removes adjacent
-        // duplicates. A blanket is the general case and loses to any impl
-        // written for the receiver — even a local blanket to a foreign
-        // concrete impl — so concrete-vs-blanket ranks above locality.
+        // Ranks 1-3 of the selection order, which
+        // `docs/wep-2026-09-01-trait-resolution.md` states in full and this
+        // sort must not diverge from: a concrete impl over a blanket, then a
+        // bound that holds at the receiver over one that holds only after
+        // peeling to a newtype's base, then a local impl over a foreign one.
         //
-        // Between two blankets, the one whose bounds hold at the receiver
-        // itself beats one that only holds after peeling to a newtype's base:
-        // the newtype exists to be a type distinct from its base, so its own
-        // impls select for it first (WEP 2026-06-25). This ranks above
-        // locality, which is about where an impl is written rather than which
-        // type it was selected by.
+        // Sorted BEFORE dedup_by, which only removes adjacent duplicates.
         let current_module = &self.current_module_source;
         found_traits.sort_by(|a, b| {
             let a_concrete = a.blanket_type_param.is_none();

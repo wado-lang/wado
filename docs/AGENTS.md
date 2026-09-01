@@ -165,3 +165,4 @@ missing and what closing it takes. A deliberate omission goes in Decision.
 - [Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md)
 - [Markup Dialect — Where the Top Level Lives](./wep-2026-08-29-markup-dialect.md)
 - [Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)
+- [Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md)

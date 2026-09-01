@@ -163,6 +163,10 @@ emitted:
       for `flags` and newtypes. `tests/fixtures/eq_ord_manual_impl_todo.wado`
       pins the sites that already dispatch and marks the rest `#[TODO]`.
 
+Where this rule sits among the others a call is ranked by — and what happens
+when nothing ranks two candidates — is
+[Trait Resolution](./wep-2026-09-01-trait-resolution.md).
+
 A marker for any of the structurally-checkable traits (`Eq` / `Ord` /
 `Default` / `Serialize` / `Deserialize`) validates `T` at its own span and is
 a hard compile error if ineligible, then records the request exactly as a bare
