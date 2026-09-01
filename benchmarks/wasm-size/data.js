@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788260271776,
+  "lastUpdate": 1788265158722,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52329,6 +52329,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4a5485d9f5186b1f822c24f148632e54e70a7aff"
         },
         "date": 1788260270867,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2026,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6425,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19611,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 278038,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ff4fb0abc5d89cc49c699d1a476296ec274a4a4d",
+          "message": "Merge pull request #1935 from wado-lang/claude/newtype-blanket-impl-precedence-ubuid1\n\nfix(elaborator): select a newtype's own blanket over its base's (#1932)",
+          "timestamp": "2026-09-01T21:00:38+09:00",
+          "tree_id": "5da3452d3803cfcd5ee5b8f2eab744a8b1bbd72d",
+          "url": "https://github.com/wado-lang/wado/commit/ff4fb0abc5d89cc49c699d1a476296ec274a4a4d"
+        },
+        "date": 1788265158267,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
