@@ -170,6 +170,18 @@ narrower impl binds them differently is the specialization soundness question,
 and wants its own WEP. Rank 4 surfaces the demand with a concrete case when one
 appears.
 
+**An ungrounded bound cycle satisfies its own bounds.** `impl<T: A> B for T`
+beside `impl<T: B> A for T` grounds neither, but the dispatch query answers a
+repeated `(type, trait)` pair yes, so any type satisfies both and a blanket
+keyed by either becomes a candidate. Rank 2's walk refuses such a repeat, which
+is why a newtype is unaffected; a concrete receiver has no such walk and reaches
+the shared answer.
+
+One stack cannot separate the two recursions — descending into members is
+well-founded and must answer yes, a cycle at a fixed subject must answer no —
+so closing this needs a second stack for bound cycles, and the answer for a
+concrete receiver is a change to dispatch rather than to selection.
+
 **Rank 3 is undocumented elsewhere.** Locality was never proposed; it is
 recorded here as the behaviour that exists. Whether a tie should instead be an
 error — the reader's vantage deciding a program's meaning is exactly what
