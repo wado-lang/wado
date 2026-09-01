@@ -415,8 +415,10 @@ concept.
 
 The reflection traits, the member handles, the wire-naming split, and the
 streaming struct build are implemented — `core:serde` derives every struct,
-variant, enum, and flags impl through them. What remains is what a schema
-library reads and nothing else yet does.
+variant, enum, and flags impl through them. So is the identity root: `Reflect`
+carries `type_name()` for every kind, a kind bound reaches it through the
+supertrait, and `T: Reflect` is a bound of its own. What remains is what a
+schema library reads and nothing else yet does.
 
 - `Member::doc()`. The trait carries `name()` and `wire_name_override()` only,
   so `description` / `title` have no source. The fact is not lost — a doc
@@ -428,13 +430,14 @@ library reads and nothing else yet does.
   four kinds, so a newtype is seen as its base and a derivation that must treat
   it as itself has no handle. `Inspect` shows the fact is not missing from the
   compiler — it renders the `as Name` tag today — only the surface is.
-- `Reflect` and `TypeInfo` are designed above and unimplemented. Nothing in the
-  tree needs a new mechanism — `TypeInfo` is a sealed handle minted like a
-  member, and the root trait resolves through the same `Trait::<T>::method()`
-  path the kinds already take — but the body is per-instantiation, so it follows
-  `type_name()`'s synthesis path, where the resolved subject already carries the
-  three facts it needs (its base name, module, and type arguments). Moving
-  `type_name()` from the five kinds to the root is part of the same change.
+- `TypeInfo` is designed above and unimplemented: the root answers `type_name()`
+  but not yet `type_info()`, so an instantiation cannot be told from its
+  declaration. Nothing in the tree needs a new mechanism — it is a sealed handle
+  minted like a member, and it rides the root's resolution path — but the body is
+  per-instantiation, so it follows `type_name()`'s synthesis, where the resolved
+  subject already carries the three facts it needs (its base name, module, and
+  type arguments). The tuple family and `()` join the nameable set with it;
+  today only the four synthesized kinds carry the root.
 - A derivation reached through a bound-keyed blanket does not fire for a newtype
   whose base has its own impl
   ([#1932](https://github.com/wado-lang/wado/issues/1932)). Both fixes are
