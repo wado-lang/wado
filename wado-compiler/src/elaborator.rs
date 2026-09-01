@@ -2158,10 +2158,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
             );
-            let qualified_struct_name = scope.qualified_receiver_name(&struct_name);
+            // Two facts, two uses. `struct_name` is what
+            // `reify_impl_default_methods` recomputes a default method's name
+            // from, so it must be the name `resolve_method` records the block's
+            // own methods under — owned, or the block writes two templates
+            // (#1932). `receiver` keys `method_info` for every method and is
+            // matched against receivers built elsewhere, so it keeps the plain
+            // spelling.
+            let qualified_struct_name =
+                scope.qualified_receiver_name_owned(&struct_name, impl_owner);
             let receiver = match RefKind::from_ast(&impl_block.ty) {
                 Some(kind) => Receiver::Ref(kind),
-                None => Receiver::Type(qualified_struct_name.clone()),
+                None => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
             };
             // Concrete type args of the impl's trait reference
             // (`impl Future<i32>` → `[i32]`), resolved in the

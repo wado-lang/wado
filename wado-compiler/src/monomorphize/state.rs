@@ -416,9 +416,8 @@ impl Monomorphizer {
 
         // Blanket impl: struct name IS the type param (e.g., "I").
         // Detected by checking if base_struct_name matches an impl type param name.
-        let is_blanket = impl_type_params
-            .iter()
-            .any(|p| p.name == method_info.base_struct_name());
+        let param_names: Vec<&str> = impl_type_params.iter().map(|p| p.name.as_str()).collect();
+        let is_blanket = method_info.receiver().is_declared_binder_of(&param_names);
 
         let mangled_struct = if is_blanket && !impl_arg_names.is_empty() {
             // Replace struct name entirely: "I" → "StrCharIter"

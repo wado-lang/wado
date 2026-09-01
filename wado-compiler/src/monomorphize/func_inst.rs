@@ -1918,10 +1918,12 @@ impl Monomorphizer {
                     .collect();
                 // Blanket impl: struct name IS the type param (e.g., "I").
                 // Replace it with the concrete type name instead of appending type args.
-                let is_blanket = generic
+                let param_names: Vec<&str> = generic
                     .impl_type_params
                     .iter()
-                    .any(|p| p.name == info.base_struct_name());
+                    .map(|p| p.name.as_str())
+                    .collect();
+                let is_blanket = info.receiver().is_declared_binder_of(&param_names);
                 if is_blanket && !impl_type_arg_names.is_empty() {
                     info.with_substituted_struct_name(&impl_type_arg_names[0])
                 } else {

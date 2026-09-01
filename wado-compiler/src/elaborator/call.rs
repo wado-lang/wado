@@ -274,9 +274,38 @@ impl TypeSystem {
             && let Some(self_type_id) = ctx.trait_ctx.self_type
         {
             let self_name = self.type_table.borrow().type_name(self_type_id);
+            // A blanket's `Self` *is* its receiver parameter, and an abstract
+            // one: rewriting it to the bare spelling names a function no
+            // module declares. The type-param path substitutes it at
+            // monomorphization, where the receiver is concrete (#1932).
+            if matches!(
+                self.type_table.borrow().get(self_type_id),
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            ) {
+                return CalleeIdentKind::AbstractTypeParam {
+                    prefix: self_name,
+                    suffix: suffix.to_string(),
+                    type_param_type_id: self_type_id,
+                };
+            }
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
+        if ctx.trait_ctx.type_params.contains_key(prefix) {
+            return self.callee_ident_for_type_param(ctx, prefix, suffix);
+        }
+
+        CalleeIdentKind::AsIs(ident)
+    }
+
+    /// A `Param::method()` call, where `Param` is a type parameter in scope.
+    /// Reached for `Self` too: a blanket's `Self` *is* its receiver parameter.
+    fn callee_ident_for_type_param<'a>(
+        &self,
+        ctx: &Scope,
+        prefix: &str,
+        suffix: &str,
+    ) -> CalleeIdentKind<'a> {
         if let Some(&BinderInScope { type_id: type_param_type_id, .. }) =
             ctx.trait_ctx.type_params.get(prefix)
         {
@@ -308,7 +337,7 @@ impl TypeSystem {
             return CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"));
         }
 
-        CalleeIdentKind::AsIs(ident)
+        CalleeIdentKind::Rewritten(format!("{prefix}::{suffix}"))
     }
 }
 

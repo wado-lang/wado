@@ -576,6 +576,36 @@ impl Receiver {
         }
     }
 
+    /// Whether this receiver is the binder `impl_type_params` declares — the
+    /// one question "is this a blanket's receiver" is asked by, answered once.
+    ///
+    /// The comparison is on the written spelling: the mangle carries the block
+    /// that owns the binder, which no declaration list spells (#1932).
+    #[must_use]
+    pub fn is_declared_binder_of(&self, impl_type_params: &[impl AsRef<str>]) -> bool {
+        let spelling = match self.binder_spelling() {
+            Some(name) => name.to_string(),
+            None => self.head_key().into_string(),
+        };
+        impl_type_params.iter().any(|p| p.as_ref() == spelling)
+    }
+
+    /// The binder's written spelling, for matching a receiver against the
+    /// parameter list its own `impl` block declares. The mangle carries the
+    /// block that owns it, which no declaration list spells (#1932), so a
+    /// comparison against source names asks for this and never
+    /// [`Self::head_key`].
+    #[must_use]
+    pub fn binder_spelling(&self) -> Option<&str> {
+        match self {
+            Receiver::Type(fq) => match fq.head() {
+                TypeHead::Binder { name, .. } => Some(name),
+                TypeHead::Declared(_) | TypeHead::Shape { .. } | TypeHead::Builtin(_) | TypeHead::Tuple => None,
+            },
+            Receiver::Ref(_) | Receiver::Projection { .. } => None,
+        }
+    }
+
     /// Whether this receiver is a template's own type-parameter binder.
     ///
     /// A binder names no declaration, so it has no spelling in the declaration

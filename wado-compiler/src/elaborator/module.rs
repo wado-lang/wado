@@ -482,9 +482,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let _ = scope.resolve_type(&impl_block.ty);
 
                 // The receiver is named by the module that declares it — the
-                // written name alone is not an identity.
-                let struct_name =
-                    scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
+                // written name alone is not an identity. A blanket's receiver
+                // is named by its block, the same way every other pass names
+                // it: one impl block, one receiver name (#1932).
+                let struct_name = scope.qualified_receiver_name_owned(
+                    &scope.get_type_name(&impl_block.ty),
+                    scope.tysys.resolutions.defs().of_ast_id(impl_block.id),
+                );
                 let trait_name = impl_block
                     .trait_type
                     .as_ref()
