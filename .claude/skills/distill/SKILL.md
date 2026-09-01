@@ -1,11 +1,9 @@
 ---
+name: distill
 description: "Cut the branch down to what the code cannot say: reuse what exists, remove duplication, dead code, and wasted work, turn invariants into asserts, and delete the comments the code already speaks. Run it after answering review feedback too — a fix written to satisfy a reviewer is the least distilled code on the branch."
-argument-hint: "[extra instructions]"
 ---
 
 # Distill
-
-$ARGUMENTS
 
 ## Scope
 
@@ -57,7 +55,17 @@ and often a helper the codebase already had.
 
 ### Markdown
 
-- Correct and fresh. Cut the narration; keep the facts.
+The goal is prose a reader understands on the first pass. Everything below
+serves that.
+
+- Plain words. One idea per sentence. The plain statement first, the reason for
+  it after.
+- Three habits make a reader decode instead of read: a second clause hung off a
+  dash, an abstract noun standing where a verb would do, and the clever phrasing
+  of a point arriving before the obvious one. Undo each where you find it.
+- Correct and fresh. Keep the facts.
+- Cutting narration and redundancy is one way to get there. It is not the point.
+  A passage that came out shorter and harder to follow has failed.
 
 ## Cycle
 
