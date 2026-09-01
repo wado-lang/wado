@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788252769909,
+  "lastUpdate": 1788258833131,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52241,6 +52241,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/044ea8e6ceb88267bdc6a84b4efb703794f7379f"
         },
         "date": 1788252769348,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2026,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6425,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19611,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 278038,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "349cfe856e4559e7fae59fe4854f2ad9ee46865a",
+          "message": "Merge pull request #1936 from wado-lang/dependabot/github_actions/github-actions-f35333097b\n\nchore(deps): Bump the github-actions group with 3 updates",
+          "timestamp": "2026-09-01T19:20:08+09:00",
+          "tree_id": "cc6dbc778565286da87405277d6f8e018a7db557",
+          "url": "https://github.com/wado-lang/wado/commit/349cfe856e4559e7fae59fe4854f2ad9ee46865a"
+        },
+        "date": 1788258832139,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
