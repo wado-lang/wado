@@ -58,6 +58,11 @@ and often a helper the codebase already had.
 ### Markdown
 
 - Correct and fresh. Cut the narration; keep the facts.
+- Plain words. One idea per sentence, and the plain statement before the reason
+  for it. A clause hung off a dash, an abstract noun where a verb would do, and
+  the clever phrasing of a point reached before the obvious one are all the same
+  defect: the reader has to decode it. Short is not the goal — being understood
+  on the first read is.
 
 ## Cycle
 
