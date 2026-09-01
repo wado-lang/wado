@@ -50,10 +50,15 @@ Faster-than-linear growth is a hypothesis and not a verdict, since a live set ca
 grow that way too, so the WIR is what settles which.
 
 Sweeping a _shape_ dimension is sharper than size, and the one to vary is the one
-the suspect is indexed by. Decoding 1000 CBOR records of 5, 10, 20, 40 and 80
-`i32` fields cost 85, 80, 87, 129 and 221 ns a field: the record count is fixed,
-so no per-record term is left for that growth to be. Hold everything but the
-dimension under test — a sweep that varies two answers about neither.
+the suspect is indexed by. Decoding 1000 CBOR records, holding that count fixed
+so no per-record term is left for the growth to be:
+
+| `i32` fields per record | 5  | 10 | 20 | 40  | 80  |
+| ----------------------- | -- | -- | -- | --- | --- |
+| ns per field            | 85 | 80 | 87 | 129 | 221 |
+
+Hold everything but the dimension under test — a sweep that varies two answers
+about neither.
 
 ## 2. Read the WIR — allocations and copies first
 
