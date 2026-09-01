@@ -298,10 +298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
         } else {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_struct(CompilerItem::String)
+            unreachable!("is_reflect_trait_call admits only the trait's methods")
         };
 
         let func_ref = self.reflect_func_ref(
@@ -924,34 +921,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declaration `Reflect::<T>` names: its base name, declaring module and
     /// this instantiation's type args. `None` for a type that carries no
     /// synthesized `Reflect` impl — every kind but the four reflected ones, and
-    /// a sealed member handle.
+    /// a sealed member handle. The kind question is
+    /// [`has_reflect_kind`](crate::synthesis::template::has_reflect_kind)'s, the
+    /// one monomorphization asks of a reflect-bounded blanket.
     fn reflect_root_subject(
         &self,
         self_ty: TypeId,
     ) -> Option<(String, crate::module_source::ModuleSource, Vec<TypeId>)> {
-        if !self.tysys.type_table.borrow().is_reflect_eligible(self_ty) {
-            return None;
-        }
-        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        let reflected = match subject {
-            ResolvedType::Struct { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Flags { .. } => true,
-            // A generic instance is reflected when its declaration is: only a
-            // struct or a variant takes type parameters.
-            ResolvedType::GenericInstance { .. } => {
-                self.tysys.type_def(self_ty).is_some_and(|def| {
-                    self.type_lookup().struct_fields_of(def).is_some()
-                        || self.type_lookup().variant_cases_of(def).is_some()
-                })
-            }
-            _ => false,
-        };
-        if !reflected {
-            return None;
-        }
         let tt = self.tysys.type_table.borrow();
+        if !crate::synthesis::template::has_reflect_kind(self_ty, &tt) {
+            return None;
+        }
         let (base_name, module_source) = tt.nominal_head(self_ty)?;
         let type_args = tt.generic_type_args(self_ty).unwrap_or_default();
         Some((base_name, module_source, type_args))
@@ -1047,10 +1027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if method == methods.cases {
             self.payload_members_ty(CompilerItem::ReflectVariantCase, self_ty, &payloads)
         } else {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_struct(CompilerItem::String)
+            unreachable!("is_reflect_variant_trait_call admits only the trait's methods")
         };
 
         let func_ref = self.reflect_func_ref(
