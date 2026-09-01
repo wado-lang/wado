@@ -2284,7 +2284,7 @@ impl Monomorphizer {
                                         .map(|b| {
                                             (
                                                 b.module.clone(),
-                                                b.receiver_binder(),
+                                                b.receiver_binder(type_table.defs()),
                                             )
                                         })
                                 })
@@ -3374,7 +3374,7 @@ impl Monomorphizer {
                     .map(|b| {
                         (
                             b.module.clone(),
-                            b.receiver_binder(),
+                            b.receiver_binder(type_table.defs()),
                             self.functions.trait_env.pack_assocs_of_blanket(b),
                         )
                     })

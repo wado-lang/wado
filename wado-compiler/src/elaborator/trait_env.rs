@@ -472,9 +472,6 @@ pub(crate) struct BlanketImpl {
     pub(crate) receiver: BlanketReceiver,
     /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
     pub(crate) param: String,
-    /// [`Self::def`]'s node. Kept beside it because a mangle embeds the
-    /// module-local index, which only an `AstId` carries.
-    pub(crate) impl_id: ast::AstId,
     /// Bound trait names on the receiver param, each with the declaration its
     /// own reference site resolves to. The spelling stays for the by-name
     /// queries that have not been flipped; the answer is what a bound check
@@ -486,10 +483,13 @@ impl BlanketImpl {
     /// The binder naming this blanket's receiver parameter — where every
     /// template name for the blanket comes from. A name built from the spelling
     /// alone looks up a *different* template, silently.
-    pub(crate) fn receiver_binder(&self) -> name::FqTypeName {
+    ///
+    /// Both halves come off [`Self::def`], as they do wherever else this name is
+    /// built: a second source for either one is a second name.
+    pub(crate) fn receiver_binder(&self, defs: &crate::defs::DefTable) -> name::FqTypeName {
         name::FqTypeName::binder_owned(
             &self.param,
-            name::BinderOwner::of_impl(&self.module, self.impl_id),
+            name::BinderOwner::of_impl(defs.module(self.def), defs.ast_id(self.def)),
         )
     }
 }
@@ -1225,7 +1225,6 @@ impl TraitEnv {
                                     def: impl_def,
                                     receiver,
                                     param,
-                                    impl_id: impl_block.id,
                                     bounds,
                                 });
                         }

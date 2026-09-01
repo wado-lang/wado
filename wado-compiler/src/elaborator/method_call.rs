@@ -2518,7 +2518,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .trait_env
                             .fq_trait_of_impl(header, &self.tysys.resolutions)?,
                         param: b.param.clone(),
-                        binder: b.receiver_binder(),
+                        binder: b.receiver_binder(self.tysys.resolutions.defs()),
                         module: b.module.clone(),
                         def: b.def,
                     },
