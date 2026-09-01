@@ -387,9 +387,13 @@ fn display_path(p: &Path) -> String {
     } else {
         raw
     };
-    match normalised.strip_prefix("./") {
-        Some(stripped) => stripped.to_string(),
-        None => normalised,
+    let stripped = normalised.strip_prefix("./").unwrap_or(&normalised);
+    // A directory argument arrives with the separator shell completion appends,
+    // and `retain_under` matches that prefix against paths the walker writes
+    // without one. The root is the one path a trailing separator belongs to.
+    match stripped.strip_suffix('/') {
+        Some(trimmed) if !trimmed.is_empty() => trimmed.to_string(),
+        _ => stripped.to_string(),
     }
 }
 
@@ -2470,6 +2474,19 @@ mod tests {
         assert!(!todo_module_at(plain.to_str().expect("utf-8 path")));
         assert!(!todo_module_at(
             dir.join("absent.wado").to_str().expect("utf-8 path")
+        ));
+    }
+
+    // Shell completion writes `wado test some/dir/`, and `retain_under`
+    // compares that prefix against the walker's paths.
+    #[test]
+    fn a_trailing_separator_leaves_the_same_prefix() {
+        assert_eq!(display_path(Path::new("pkg/tests/")), "pkg/tests");
+        assert_eq!(display_path(Path::new("./pkg/tests/")), "pkg/tests");
+        assert_eq!(display_path(Path::new("/")), "/");
+        assert!(path_under(
+            "pkg/tests/a.wado",
+            &display_path(Path::new("pkg/tests/"))
         ));
     }
 
