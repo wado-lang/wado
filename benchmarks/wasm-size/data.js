@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788265158722,
+  "lastUpdate": 1788298553218,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52393,6 +52393,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 278038,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b32a526171ce4d998406cb7ae2e3402f30dfb080",
+          "message": "Merge pull request #1939 from wado-lang/perf/serde-field-dispatch\n\nperf(optimizer): cut the derived struct deserializer's quadratic field dispatch",
+          "timestamp": "2026-09-02T06:23:04+09:00",
+          "tree_id": "ae3185e77c6402a8d9c86a4e9a033b0f79026458",
+          "url": "https://github.com/wado-lang/wado/commit/b32a526171ce4d998406cb7ae2e3402f30dfb080"
+        },
+        "date": 1788298552559,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 278121,
             "unit": "bytes"
           }
         ]
