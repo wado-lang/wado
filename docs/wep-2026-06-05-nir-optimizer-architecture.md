@@ -290,12 +290,6 @@ benchmark, spread over `peephole` (23 %) and `copy_prop` / `const_fold` / `licm`
       per function, not earlier availability: the early freeze already walks
       every body before the loop, so the lazy first-query path is eager in
       practice.
-      It also retires `Engine::ensure_value_graph`'s `VG_MAX_EXPRS` gate, which
-      skips the graph for a body over 5000 expressions. Measured, the memory it
-      saves is not there — covering the one over-threshold body of
-      `driver_cst_sqlite_oracle_test` costs +3 MB peak RSS and 6 - 10 % compile
-      time for a byte-identical module. Retire it with this item and not before:
-      alone it is a pure regression, the graph it would build having no consumer.
 
 - [ ] Retire the remaining pure `ExprKind` variants, so every pure position is
       an `Operand::Value`. A compile-speed item as much as a saturation
@@ -307,8 +301,7 @@ benchmark, spread over `peephole` (23 %) and `copy_prop` / `const_fold` / `licm`
       Almost none of it is independently reachable. `Engine::value` recurses
       through operands, so arithmetic left in the skeleton has no value at all,
       bottoming out on a field load or a call result rather than being gated.
-      The one independent piece is the 19 % of unresolved arithmetic sitting in
-      a body `VG_MAX_EXPRS` skipped entirely; the rest waits on Precision below.
+      It waits on Precision below.
 
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).

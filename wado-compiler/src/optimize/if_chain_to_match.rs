@@ -9,9 +9,10 @@
 //! declaration's width. The guards are mutually exclusive by construction, which
 //! is what makes them one `Match`.
 //!
-//! Recognition reads the skeleton and the value pool, never the value graph:
-//! `Engine` size-gates the graph at 5000 expressions, and a struct wide enough
-//! for the chain to matter is exactly one that clears the gate.
+//! Recognition reads the skeleton and the value pool, never the value graph. A
+//! guard is a constant against a local either way, and the local is what the
+//! write scan needs — so the shape answers the question with no analysis behind
+//! it, in a body of any size.
 
 use crate::compiler_trace;
 use crate::hashmap::IndexSet;
