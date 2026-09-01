@@ -2,32 +2,35 @@
 
 ## Context
 
-An agent writing Wado reinvents what already exists. The failure has two
-shapes: proposing a design that was already refused, and writing a function
-that already exists. This WEP addresses the second.
+An agent writing Wado rewrites things that already exist. That happens two ways:
+proposing a design that was already refused, and writing a function that already
+exists. This WEP is about the second.
 
-The compiler has no lint surface. Diagnostics today come from the elaborator —
-type errors, and the unused-item lints of
-[Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) — all computed per
-module, before `reify`, and delivered through `CompilerHost` to both the CLI and
-the LSP.
+The compiler has no lint surface today. Its diagnostics all come from the
+elaborator — type errors, plus the unused-item lints of
+[Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md). Those are computed
+one module at a time, before `reify`, and delivered through `CompilerHost` to
+both the CLI and the LSP.
 
-Duplicate detection does not fit that shape. It is a question about a corpus,
-not about a module, and the functions worth matching against are precisely the
-ones the program does not reference: a program that reinvents `core:temporal`
-never imported `core:temporal`, so nothing loads it and no elaborate-time pass
-can see it. Placing the check inside elaboration forces an index of the whole
-standard library compiled into the binary — the language service also builds for
-`wasm32-unknown-unknown` to serve the browser playground, where there is no disk
-to read one from — plus a gate against that index going stale, and a per-compile
-cost for a diagnostic that is not useful per keystroke. A separate command pays
-none of it and can load whatever corpus it needs.
+Duplicate detection does not fit there, because it is a question about a whole
+corpus rather than about one module. Worse, the functions most worth matching
+against are exactly the ones the program never mentions. A program that rewrites
+`core:temporal` by hand never imported `core:temporal`, so nothing loads it, so
+no pass running during elaboration can see it.
 
-Convention without mechanism does not hold. Almide's design philosophy states
-"one name per operation, no aliases" and its cheatsheet lists `string.length` as
-wrong; its own standard library defines `string.length` as an alias of
-`string.len`, and `list.len` / `list.length` both resolve to one intrinsic.
-Nothing checked the rule, so the rule leaked. See
+Putting the check inside elaboration would mean compiling an index of the entire
+standard library into the binary. The language service also builds for
+`wasm32-unknown-unknown` to serve the browser playground, and there is no disk
+there to read an index from. It would also need a gate to catch that index going
+stale, and it would cost time on every compile for a diagnostic nobody needs on
+every keystroke. A separate command pays none of that and can load whatever
+corpus it wants.
+
+There is also a reason not to settle for a written rule. Almide's design
+philosophy says "one name per operation, no aliases", and its cheatsheet lists
+`string.length` as wrong. Its own standard library defines `string.length` as an
+alias of `string.len`, and `list.len` and `list.length` both resolve to a single
+intrinsic. Nothing checked the rule, so the rule leaked. See
 [the Almide survey](./research-language-survey-almide.md).
 
 ## Decision
@@ -54,109 +57,124 @@ save or from a code action later.
 
 ### The first check: duplicate implementations
 
-Two functions are reported when one is a reimplementation of the other. The
-comparison runs on TIR, after names resolve and types are known: on the AST,
-`a + b` and `a.add(b)` are different bodies, and `if !c { x } else { y }` and
-`if c { y } else { x }` are different again.
+Report two functions when one is a reimplementation of the other.
 
-Canonicalization of a body:
+The comparison runs on TIR, after names are resolved and types are known. On the
+AST it would not work: `a + b` and `a.add(b)` would look like different bodies,
+and so would `if !c { x } else { y }` and `if c { y } else { x }`.
 
-- Binders — parameters, locals, pattern bindings — become positional indices in
-  order of first occurrence, so two bodies differing only in names agree.
-- A callee reference becomes its `DefId`, never its spelling
+Before comparing, put each body into a canonical form:
+
+- Replace every binder — parameters, locals, pattern bindings — with its
+  position, numbered in order of first appearance. Two bodies that differ only
+  in names then agree.
+- Replace every callee reference with its `DefId`, never its spelling
   ([Declaration Identity](./wep-2026-08-12-declaration-identity.md)).
-- Types are part of the key, so `f(x: i32) -> i32 { x + 1 }` and
-  `g(y: i64) -> i64 { y + 1 }` stay distinct.
+- Keep types in the key, so `f(x: i32) -> i32 { x + 1 }` and
+  `g(y: i64) -> i64 { y + 1 }` stay separate.
 
 ### Matching a concrete function against a generic
 
-The reinvention an agent actually writes is a generic instantiated by hand:
+What an agent actually writes is a generic function instantiated by hand:
 
 ```wado
 fn sort_scores(xs: &mut List<i32>) { ... }   // written
 impl<T: Ord> List<T> { pub fn sort(&mut self) { ... } }   // core:prelude/list.wado
 ```
 
-Types in the key make these disagree, and so do the callee `DefId`s: the
-comparison inside the written body resolves to `i32`'s `Ord`, the one inside
-`sort` to the method reached through the `T: Ord` bound. Matching them is a
-unification question, not a hash lookup: does a substitution σ exist such that σ
-applied to the generic body is the concrete body, with each bound-driven call in
-the generic resolving to the impl selected at σ(T).
+These two do not match on the key. The types differ, and so do the callee
+`DefId`s: the comparison in the hand-written body resolves to `i32`'s `Ord`,
+while the one inside `sort` goes through the `T: Ord` bound.
 
-Two stages keep that affordable. A coarse key — the body's structural shape
-alone, with every identifier and type erased — buckets candidates. Unification
-runs only within a bucket.
+Matching them is a unification problem rather than a hash lookup. The question
+is whether some substitution σ turns the generic body into the concrete one,
+with every bound-driven call in the generic resolving to the impl that σ(T)
+selects.
 
-### The standard library is index-side only
+Two stages keep the cost down. First a coarse key — the body's shape alone, with
+every identifier and type erased — sorts candidates into buckets. Unification
+then runs only inside a bucket.
 
-The stdlib is indexed and matched against; it never receives a finding. Unused
-Diagnostics excludes it from reporting for the same reason — it is not the
-reader's code to fix — and this check adds the second role without the first.
+### The standard library is only ever the thing being matched against
 
-### Exclusions
+The stdlib is indexed and compared against, but never receives a finding itself.
+Unused Diagnostics leaves it out of reporting for the same reason: it is not the
+reader's code to fix. This check keeps that exclusion and adds the second role.
 
-Not compared: synthesised functions (CM bindings, effect-dispatch wrappers,
-monomorphisation clones, auto-derived impls), and two impls of the same trait
-for different `Self`, where an identical body is ordinary. Two impls of
-different traits with the same body are compared.
+### What is not compared
 
-`#[allow(...)]` suppresses a finding on an item, and as a module inner
-attribute on every item in a file, matching the mechanism Unused Diagnostics
+Synthesised functions are skipped: CM bindings, effect-dispatch wrappers,
+monomorphisation clones, auto-derived impls.
+
+Two impls of the same trait for different `Self` are skipped as well, because an
+identical body there is normal. Two impls of *different* traits with the same
+body are compared.
+
+`#[allow(...)]` silences a finding on one item, or on every item in a file when
+written as a module inner attribute. This is the mechanism Unused Diagnostics
 already implements for `dead_code`.
 
 By default the corpus is the current package plus the standard library.
-Dependencies are indexed only behind a flag: a duplicate of a dependency's
-function is not something the reader of the finding can fix.
+Dependencies are indexed only behind a flag, because a duplicate of a
+dependency's function is not something the reader of the finding can fix.
 
 ### Near-duplicates
 
-Exact structural equality misses the reimplementation that drifted. The second
-check compares bodies by subtree fingerprint: hash every subtree above a
-minimum size, sample the hashes by winnowing, and report pairs whose sampled
-sets overlap beyond a threshold. Tree edit distance is not used — it is
-quadratic over pairs, and the corpus is the whole standard library.
+Exact structural equality misses a reimplementation that has since drifted. So
+the second check compares bodies by subtree fingerprint: hash every subtree above
+some minimum size, sample those hashes by winnowing, and report pairs whose
+samples overlap past a threshold.
+
+Tree edit distance is not used. It is quadratic over pairs, and the corpus here
+is the entire standard library.
 
 ## Consequences
 
-An agent that writes `fn strip_leading_spaces` is told `String::trim_start`
-exists. The finding names the existing declaration and its location, and
-proposes the call that replaces it when the signatures allow.
+An agent that writes `fn strip_leading_spaces` gets told that
+`String::trim_start` exists. The finding names the existing declaration and where
+it lives, and where the signatures allow it, suggests the call that replaces the
+new function.
 
-The check is not available while typing. It runs from the CLI, from CI, and
-from the completion flow, and reaches the LSP only once the library is wired to
-it. A body mid-edit does not type-check and so cannot be canonicalized at all,
-so what is given up is a check on a function that is not finished.
+The check is not available while you type. It runs from the CLI, from CI, and
+from the completion flow. It reaches the LSP only once the library is wired up to
+it. That costs little: a body being edited does not type-check yet, so it cannot
+be canonicalized at all, and the only thing given up is checking a function that
+is not finished.
 
-`wado lint` is a new user-facing command and a new surface to keep. It is
-introduced as a container rather than as a single check so that the second
-check does not require a second command.
+`wado lint` is a new user-facing command and one more surface to maintain. It is
+built as a container rather than as a single check so that adding a second check
+later does not mean adding a second command.
 
-Elaborating the standard library on every run costs more than a compile that
-imports three of its modules. The command is not on the inner development loop.
+Elaborating the standard library on every run costs more than compiling a program
+that imports three of its modules. This command is not meant for the inner
+development loop.
 
 ## Known gaps
 
-Forwarders. A one-line function whose body is a call to another is the shape of
-the alias this check was motivated by (`string.len` against `string.length`),
-of every field getter, and of the internal-implementation-plus-public-facade
-pattern that [Visibility](./wep-2026-06-25-visibility-internal-pub-export.md)
-endorses through `pub use`. One rule has to separate them, and which rule is not
-decidable from the shape alone. Closing it takes running the exact check over
-`package-gale` and the standard library with no size floor, reading what the
-forwarder-shaped matches actually are, and writing the rule from that.
+Forwarders — what to do about a one-line function whose body is just a call to
+another one. That shape covers three different things: the alias this check was
+built for (`string.len` against `string.length`), every field getter, and the
+internal-implementation-with-public-facade pattern that
+[Visibility](./wep-2026-06-25-visibility-internal-pub-export.md) endorses through
+`pub use`. One rule has to tell them apart, and which rule cannot be worked out
+from the shape alone.
 
-The minimum body size. Below some node count every getter collides. The value
-follows from the same measurement.
+To close it: run the exact check over `package-gale` and the standard library
+with no size floor, look at what the forwarder-shaped matches actually turn out
+to be, and write the rule from that.
 
-The near-duplicate threshold, and the minimum subtree size that feeds the
-fingerprint. Both are unmeasurable before the exact check runs on a real corpus.
-`package-gale` is the corpus to use: the largest body of hand-written Wado
-there is, ported from ANTLR4, so structurally similar functions are dense in it,
-which is the condition that makes a bad threshold visible.
+The minimum body size is the same problem. Below some node count every getter
+collides with every other getter. The number comes out of the same measurement.
+
+The near-duplicate threshold and the minimum subtree size are also unmeasurable
+until the exact check has run on a real corpus. `package-gale` is the corpus to
+use, because it is the largest body of hand-written Wado there is and it was
+ported from ANTLR4, so structurally similar functions are dense in it. That
+density is what makes a bad threshold visible.
 
 Sharing the canonicalization with a function-merging pass. The same canonical
-form identifies bodies that a NIR pass could merge after monomorphization, which
-`wado-compiler/src/optimize/` has no pass for today. The policies are inverted —
-this check excludes monomorphization clones, a merging pass targets them — so
-only the canonicalization is shared, and the pass is not designed here.
+form would identify bodies that a NIR pass could merge after monomorphization,
+and `wado-compiler/src/optimize/` has no such pass today. The two want opposite
+policies, though: this check skips monomorphization clones and a merging pass
+would target them. So only the canonicalization could be shared, and the pass is
+not designed here.

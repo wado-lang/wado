@@ -1,204 +1,238 @@
 # Research: Language Survey Rubric
 
-A fixed set of axes for evaluating an emerging language, so each survey reuses
-the previous one's structure instead of starting from prose. Filled surveys are
-named `research-language-survey-<name>.md`.
+A fixed list of questions to ask about a new language. Using the same list every
+time means each survey can reuse the last one's shape instead of being invented
+from scratch. Filled surveys are named `research-language-survey-<name>.md`.
 
-The goal is never a verdict on the other language. It is what Wado learns, of
-which adopting something is only the narrowest kind. Reading a row for whether
-it produces a decision is how a survey ends up skipping the part that would have
-changed how a problem is seen, so the closing section has a place for an
-understanding that carries no action.
+The point is not to judge the other language. The point is what Wado learns.
+Adopting something is only one kind of learning, and the smallest kind. If you
+read each row asking "does this give us a decision?", you will skip the parts
+that would have changed how you see a problem. So the closing section has a
+place for things you now understand but will not act on.
 
 ## Rules
 
-### Measurable only
+### Only ask what can be measured
 
-Every axis names what to run or what file to open. An axis answered by reading
-the README and forming an impression costs a full day on the next language and
-produces nothing comparable.
+Every question says what to run, or what file to open. A question you answer by
+reading the README and forming an impression will cost a day on the next
+language, and the two answers will not be comparable.
 
-### Claim and reality are separate columns
+### Keep the claim and the reality apart
 
-Record what the project says, then what the code does, in different columns.
-Merging them turns the survey into an aggregation of marketing. The gap between
-the two columns is usually the finding.
+Write down what the project says. Then write down what the code does. Put them
+in different columns. If you merge them you are just collecting marketing. The
+gap between the two columns is usually the interesting part.
 
-### Unimplemented is not rejected
+### "Not built yet" is not "decided against"
 
-A missing feature is either "not built yet" or "decided against". The first
-resolves with time and says nothing about the design; the second is the design.
-Every surface axis carries this column.
+A missing feature is one or the other. "Not built yet" will change with time and
+tells you nothing about the design. "Decided against" is the design. Every
+surface question has a column for which one it is.
 
-Implementation maturity is not itself an axis. It appears once, as a context
-line in the header, and is never scored.
+How finished the implementation is does not get its own question. It appears
+once, as a line in the header, and is never scored.
 
 ### A survey is a snapshot
 
-It describes one commit on one day and is not maintained afterwards. Re-surveying
-rewrites the file whole; git keeps the one it replaced. The header's date is the
-part a later reader needs most.
+It describes one commit on one day. Nobody updates it afterwards. To survey the
+project again, rewrite the whole file; git still has the old one. The date in
+the header is the thing a later reader most needs to see.
 
-There is no document comparing the surveys to each other, and there should not
-be. A snapshot decays at one project's rate; a comparison decays at the sum of
-theirs, because any one of them moving invalidates a row — and the rows that
-compare are exactly the ones later quoted from memory. Everything a comparison
-would say belongs in the survey of the language whose evidence produced it,
-written so that it survives that evidence going stale.
+There is no document that compares the surveys to each other, and there should
+not be. A snapshot goes stale at one project's speed. A comparison goes stale at
+the speed of all of them put together, because any one of them can move and
+break a row. Worse, the rows that compare are exactly the ones people later
+quote from memory. Anything a comparison would say belongs in the survey of the
+language whose evidence produced it, written so it still holds after that
+evidence goes stale.
 
 ### Say how you looked
 
-There are four ways to fill a row and they are not equally strong: a count from
-a command, a statement read out of a document, a reading of the implementation,
-and an absence found by searching. The first three carry their own evidence —
-the numbers, the quotation, the file. The fourth does not.
+There are four ways to fill in a row, and they are not equally reliable:
 
-"There is no rejection record" is unfalsifiable until it says what was searched,
-so say it. The header does the same at the scale of the pass, by naming what was
-examined and what was left alone. A survey that lists no gaps is claiming to
-have read everything.
+1. Counting something with a command.
+2. Reading a statement in a document.
+3. Reading the implementation.
+4. Searching for something and not finding it.
+
+The first three bring their own evidence: the number, the quotation, the file
+path. The fourth brings nothing.
+
+"There is no rejection record" cannot be checked or disproved until you say
+where you looked. So say where you looked. The header does the same thing for
+the survey as a whole: it lists what you examined and what you left alone. A
+survey that admits no gaps is claiming to have read everything.
 
 ## A. Surface
 
 What the language lets you write.
 
-| Axis                   | What to look at                                                                                                                                                                                                                                                           |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A1 Canonicity          | One way to write each concept? Enforced by the compiler, or asserted in prose?                                                                                                                                                                                            |
-| A2 Type vocabulary     | Invented, or taken from an external standard?                                                                                                                                                                                                                             |
-| A3 Effects             | One bit (pure/effectful), named in the type, or handler-dispatched?                                                                                                                                                                                                       |
-| A4 Errors              | Values or exceptions; propagation explicit or implicit; error type converted implicitly at propagation; is there a doctrine for when an error is branchable?                                                                                                              |
-| A5 Concurrency         | async/await, structured, or none. Deterministic across targets and machines?                                                                                                                                                                                              |
-| A6 Boundary mechanisms | How does something outside the language get in? Code generation at build time, a serialization framework at run time, foreign interface import. Macros are refused nearly everywhere; ask where generation was pushed instead, and whether what it produces can be opened |
-| A7 Hidden operations   | Is there an inventory of what the compiler does behind your back?                                                                                                                                                                                                         |
+| Axis                   | What to look at                                                                                                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1 Canonicity          | Is there one way to write each thing? Does the compiler enforce it, or does a document merely say so?                                                                                                                                   |
+| A2 Type vocabulary     | Did the language invent its type kinds, or take them from an outside standard?                                                                                                                                                         |
+| A3 Effects             | One bit (pure or effectful), named in the type, or dispatched to a handler?                                                                                                                                                            |
+| A4 Errors              | Values or exceptions? Is propagation written out or implicit? Does the error type get converted implicitly when it propagates? Is there a stated rule for when an error is worth branching on?                                          |
+| A5 Concurrency         | async/await, structured, or none? Does it give the same answer on every target and machine?                                                                                                                                             |
+| A6 Boundary mechanisms | How does something from outside the language get in? Look for code generation at build time, a serialization framework at run time, and foreign interface import. Almost everyone refuses macros, so ask where generation went instead, and whether you can open what it produces. |
+| A7 Hidden operations   | Is there a list of what the compiler does behind your back?                                                                                                                                                                            |
 
-### The self-application cross-check
+### The cross-check: does the claim survive real use?
 
-Every A row carries one more column: does the claim hold in the hardest program
-written in the language. Such a program needs performance, needs abstraction,
-and cannot opt out, so a claim that breaks there is a surface claim.
+Every A row gets one more column. Take the hardest program written in the
+language and ask whether the claim still holds there. Such a program needs to be
+fast, needs real abstraction, and cannot opt out of anything. A claim that breaks
+there was never more than a surface claim.
 
-Find that program first. The floor is the standard library, which every
-language has. The ceiling is a self-hosted compiler, which is the strongest
-form of the check available — a claim that survives a lexer, a type checker and
-a code generator has been tested against everything the language can be asked
-to express.
+Find that program first. Every language has a standard library, so that is the
+floor. The strongest case is a compiler written in the language itself. A claim
+that survives a lexer, a type checker and a code generator has been tested
+against everything the language can be asked to express.
+
+Then measure how much of that program had to reach below the language:
 
 ```sh
 grep -rl '<privileged prefix>' <stdlib>/ | wc -l   # numerator
 ls <stdlib>/*.<ext> | wc -l                        # denominator
 ```
 
-The privileged prefix is whatever that code may call and user code may not: an
-intrinsic module, a raw-memory module, an FFI escape. A public API file whose
-functions all have empty bodies means the real implementation lives in another
-language or under that prefix; find it before filling the row. Read the floor
-too — a typed generic floor (`Array::get: (Array[T], Int) -> T`) and an
-address-based one (`load64(p + 12 + i * 8)`) score the same by ratio and are
-not the same finding.
+The privileged prefix is whatever that code may call and ordinary user code may
+not. It might be an intrinsic module, a raw-memory module, or an FFI escape. If
+a public API file's functions all have empty bodies, the real implementation is
+somewhere else — in another language, or under that prefix. Find it before
+filling in the row.
 
-An A row with only the claim column filled is not a finding.
+Read the prefix itself too, not just the ratio. A floor of typed generic
+operations like `Array::get: (Array[T], Int) -> T` and a floor of address
+arithmetic like `load64(p + 12 + i * 8)` can score the same and mean completely
+different things.
 
-Count the implementations of the semantics before filling any of them. One is
-the quiet case. Two — a native and a wasm backend, a linear and a gc backend —
-means the language is whatever both of them do, and what holds them to the same
-answer is a first-class finding rather than a detail: a contract ledger and a
-three-way oracle in one surveyed language, and in the other nothing, so that
-`Array::push` means one thing on each backend and the memory contract says the
-two "must be reconciled or documented before unifying defaults". Half of what
-looks like governance zeal is the price of a second implementation.
+A row with only the claim column filled in is not a finding.
 
-Where the reality column turns out to be a defect, record it. The point is not
-to score the other project down; it is that a broken implementation of a feature
-the home language also has is the most valuable thing a survey can return.
+### Count the implementations before you start
+
+Ask how many implementations of the semantics there are. One is the quiet case.
+
+Two is not. It might be a native backend and a wasm backend, or a linear-memory
+backend and a GC backend. Either way the language is now whatever both of them
+do, and whatever keeps them agreeing is a major finding rather than a detail.
+One surveyed language holds its two together with a contract ledger and a
+three-way oracle. The other has nothing between them, and as a result
+`Array::push` means one thing on one backend and something else on the other;
+its own memory contract says the two "must be reconciled or documented before
+unifying defaults".
+
+So: a lot of what looks like unusual zeal about process is really the bill for
+having built the thing twice.
+
+### If the reality turns out to be a bug, write it down
+
+This is not about scoring the other project down. A broken implementation of a
+feature that Wado also has is the most useful thing a survey can bring back.
 
 ## B. Design and governance
 
 Why the language is the way it is, and what keeps that honest.
 
-| Axis                        | What to look at                                                                                                                                                                                                |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| B1 Arbiter                  | Is there one sentence settling what wins when goals conflict? Record its form — a single maximized metric, or a priority order over several values — and whether it opens the philosophy document or closes it |
-| B2 Accept/reject criteria   | Numeric, or taste?                                                                                                                                                                                             |
-| B3 The "why" axis           | Roadmap records what is next and the spec records what is; is the reasoning behind a decision recorded anywhere?                                                                                               |
-| B4 Falsifier                | Does the decision template require a condition on the decision — what would retract it, or what would advance it out of "proposed"?                                                                            |
-| B5 Rejection record         | Is there a list of designs considered and refused, with reasons and an operating rule for citing it?                                                                                                           |
-| B6 Sync gate                | Does CI fail when a public claim stops being true? Over what scope?                                                                                                                                            |
-| B7 Self-reported violations | Does the project document where it currently breaks its own invariants, with file and line?                                                                                                                    |
-| B8 Who decides              | Is the human the decider, or may an agent write a decision into the record?                                                                                                                                    |
+| Axis                        | What to look at                                                                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1 Arbiter                  | Is there one sentence saying what wins when two goals conflict? Note its shape: a single number to maximize, or a priority order over several values. |
+| B2 Accept/reject criteria   | Is there a stated bar for accepting a change, and is it a number or a judgement call?                                                                |
+| B3 The "why" record         | A roadmap says what is next and a spec says what is. Is the reasoning behind a decision written down anywhere?                                       |
+| B4 Falsifier                | Does the decision template make you state a condition — what would retract the decision, or what would move it out of "proposed"?                    |
+| B5 Rejection record         | Is there a list of designs that were considered and refused, with reasons, and a rule for when to cite it?                                           |
+| B6 Sync gate                | Does CI fail when a public claim stops being true? Over how much?                                                                                    |
+| B7 Self-reported violations | Does the project write down where it currently breaks its own rules, with file and line?                                                             |
+| B8 Who decides              | Does a human decide, or may an agent write a decision into the record?                                                                               |
 
-B1's placement matters. A philosophy document that opens with the arbiter
-derives everything from it; one that arrives at it in the closing section is
-recording what was learned, not what was chosen.
+Where B1 sits in the document matters. If the philosophy document opens with the
+arbiter, everything else was derived from it. If the arbiter only turns up in
+the closing section, the document is recording something learned along the way
+rather than something chosen at the start.
 
-B6 must record scope, not just presence. A gate over numbers and contracts
-leaves prose unguarded, and prose is where a language's promises about its own
-surface usually live.
+For B6, record how much the gate covers, not just that one exists. A gate over
+numbers and contracts still leaves prose unchecked, and prose is usually where a
+language makes promises about its own surface.
 
-Every B row takes four states, not two. A mechanism is present, or practised
-without being written down, or refused with a doctrine, or absent. The middle
-two are the ones a search for documents will miss. Refusal is a decision — the
-same distinction the surface axes draw between unimplemented and rejected, so
-record the doctrine when there is one, because two projects can lack the same
-mechanism for opposite reasons. Practice is a rule that exists and has never
-been stated: Wado's specification ranked itself against its WEPs through link
-after link reading "see the WEP for rationale" and no sentence anywhere saying
-so, which is not the same finding as having no rule, and is closed by writing a
-paragraph rather than by building anything.
+Each B row has four possible answers, not two:
+
+- Present. The mechanism exists and is written down.
+- Practised. The rule is really followed but nobody has stated it.
+- Refused. There is no mechanism, on purpose, and the reason is written down.
+- Absent. There is nothing.
+
+Searching for documents will find the first and the last and miss the two in the
+middle. Both matter. A refusal is a decision, and two projects can be missing the
+same mechanism for opposite reasons, so record the reasoning when there is any.
+Practice matters because it changes what the fix is. Wado's specification had
+already settled its rank against its own WEPs, through link after link saying
+"see the WEP for rationale", with no sentence anywhere stating the rule. That is
+not the same as having no rule, and it is fixed by writing one paragraph rather
+than by building anything.
 
 ## C. Spin-off value
 
 > If this project stopped tomorrow, what would still be worth having?
 
-| Kind        | What it is                                                             |
-| ----------- | ---------------------------------------------------------------------- |
-| C1 Artifact | A program that does a job — a compiler, a parser generator, a renderer |
-| C2 Method   | A technique reusable elsewhere — a way to decide, measure, or record   |
-| C3 Proof    | Machine-checked theorems, extracted checkers                           |
-| C4 Corpus   | Reusable data — fixtures, benchmark suites, grammars                   |
+| Kind        | What it is                                                                    |
+| ----------- | ----------------------------------------------------------------------------- |
+| C1 Artifact | A program that does a job: a compiler, a parser generator, a renderer          |
+| C2 Method   | A technique someone else could use: a way to decide, to measure, or to record  |
+| C3 Proof    | Machine-checked theorems, extracted checkers                                   |
+| C4 Corpus   | Reusable data: fixtures, benchmark suites, grammars                           |
 
-Each entry carries two more columns.
+Each entry gets two more columns:
 
-- Externality: usable without adopting the language?
-- Contender: what incumbent does it compete with, and does it win?
+- Externality: can someone use this without adopting the language?
+- Contender: what does it compete with, and does it win?
 
-The language's own toolchain is not C1. A compiler, formatter, LSP, or editor
-plugin for a language nobody uses is worth nothing, which is what the question
-at the head of this section asks. A self-hosted compiler is the strongest entry
-in the A cross-check and belongs there; counting it twice flatters the project.
+The language's own toolchain does not count as C1. A compiler, formatter, LSP or
+editor plugin for a language nobody uses is worth nothing, and that is exactly
+what the question at the top of this section asks. A compiler written in its own
+language is the strongest entry in the A cross-check instead. Counting it in both
+places makes the project look better than it is.
 
-C is not a proxy for maturity. A young project can have a thick C2 and C3 and an
-empty C1; that is a choice about where surplus effort went, and it is visible
-from the first month. C should follow from B1 — a project that named a
-measurable arbiter tends to build measurement apparatus, one that named a
-platform tends to build applications on it. When C and B1 disagree, that is the
-finding.
+C is not a stand-in for how mature a project is. A young project can have a
+thick C2 and C3 and an empty C1. That is a choice about where the spare effort
+went, and it is visible from the first month. C should follow from B1: a project
+that picked a measurable arbiter tends to build measuring equipment, and one
+that picked a platform tends to build applications on it. If C and B1 point in
+different directions, that itself is the finding.
 
-Read C1 against A6 before reading it against anything else. A language with no
-way for a foreign grammar, IDL, or wire format to enter it can only be used to
-build its own parts, so an empty C1 beside an absent A6 is one finding rather
-than two: nothing external could have been built, whatever the effort. The
-artifacts that fill C1 tend to be a boundary mechanism's first customer.
+Read C1 next to A6 before reading it next to anything else. If nothing outside
+the language can get in — no foreign grammar, no IDL, no wire format — then the
+only thing you can build with it is more of itself. An empty C1 next to an
+absent A6 is one finding, not two: nothing external could have been built, no
+matter how much effort went in. The programs that fill C1 are usually the first
+customer of some boundary mechanism.
 
 ## What this rubric cannot see
 
-The instrument is document-driven. Most rows are filled by reading what a
-project wrote about itself, and the self-application cross-check is the only one
-that can contradict a document — one measurement standing against a dozen
-readings. It has done so once so far, and that was the largest finding of that
-survey. In the other it confirmed the claims instead, and the largest finding
-there came out of a document that reported its own defect, which is not a thing
-the instrument can count on a project doing.
+This rubric mostly reads what a project wrote about itself. Only the
+cross-check can contradict a document, which puts one measurement against a
+dozen readings.
 
-Two failures follow. A project that documents itself poorly reads as absent
-where it is only quiet, and one that documents itself well reads as present on a
-mechanism nobody ran. Prefer an axis that can be counted, and where a row rests
-on a document alone, say so.
+So far it has contradicted a document once, and that was the biggest finding of
+that survey. In the other survey it confirmed the claims instead, and the biggest
+finding came from a document in which the project reported its own defect. That
+is not something this rubric can rely on a project doing.
 
-There are no scores. A 1–5 ladder works for one language measured over time,
-where the arbiter is fixed and the question is which way the number moved.
-Across languages it prices a decision taken under one arbiter against another's,
-which is the comparison this rubric exists to avoid.
+Two failures follow from being document-driven:
+
+- A project that documents itself poorly looks like it is missing things, when
+  it is only quiet.
+- A project that documents itself well looks like it has mechanisms that nobody
+  has ever run.
+
+So prefer a question you can count, and where a row rests on a document alone,
+say so.
+
+There are no scores. A 1-to-5 scale works when you measure one language
+repeatedly over time: the arbiter stays fixed and the only question is which way
+the number moved. Across different languages it would put a price on a decision
+made under one arbiter using someone else's, which is the comparison this rubric
+exists to avoid.
 
 ## Recording template
 
@@ -231,22 +265,22 @@ Examined: <what was read or run>. Not examined: <what was left>.
 - Hold:
 ```
 
-Learned comes first because it is the largest of the four and the easiest to
-skip: what the survey changed about how a problem is seen, whether or not
-anything follows from it. A survey whose closing section is only a shopping list
-was read for procurement.
+Learned comes first because it is the biggest of the four and the easiest to
+skip. It holds whatever the survey changed about how you see a problem, whether
+or not anything follows from it. If the closing section is only a shopping list,
+the survey was read for procurement.
 
-Write each entry as the lesson, with the observation under it as dated evidence.
-The observation expires — the defect gets fixed, the backend lands, the gap
-closes — and an entry phrased as the observation expires with it, while the same
-entry phrased as the lesson survives being fixed. It is the only part of a
-snapshot meant to outlive its date.
+Write each entry as the lesson, and put the observation underneath as dated
+evidence. Observations expire: the bug gets fixed, the backend ships, the gap
+closes. An entry written as an observation expires with it. The same entry
+written as a lesson survives the fix. This is the only part of a snapshot meant
+to outlive its own date.
 
-Take carries open work and nothing else, so every box in it is unchecked.
-Anything settled the other way goes under Refuse with its reason — including
-what turned out to be already present, and what was checked and found
-unnecessary. A survey re-read a year on has to show which candidates were
-looked at and declined, not only which were adopted.
+Take holds open work and nothing else, so every box in it is unchecked. Anything
+that got settled the other way moves to Refuse with its reason. That includes
+things that turned out to already exist, and things you checked and found
+unnecessary. A year later, the survey has to show which candidates were looked at
+and put down, not only which were picked up.
 
 ## Surveys
 

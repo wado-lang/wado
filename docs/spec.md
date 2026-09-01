@@ -4,16 +4,17 @@ Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ## Status
 
-This document is normative. It states what the language is meant to be, and a
-program's meaning is read from here; it is not a record of what the compiler
-currently does.
+This document is normative. It says what the language is meant to be, and you
+read a program's meaning from here. It is not a record of what the compiler
+happens to do today.
 
-A disagreement between this document and the implementation is a defect, and
-not necessarily the implementation's. Either side can be the one that is wrong,
-and which one it is gets decided when the disagreement is found. What is not
-available is leaving it standing as an accepted difference: one that is not
-resolved is a Known gap, recorded where the area is owned and saying what
-closing it takes.
+So if this document and the implementation disagree, something is wrong. Which
+of the two is wrong is not decided in advance: the document can be the mistaken
+one. That gets settled when the disagreement is found.
+
+What is not allowed is leaving the disagreement in place as an accepted
+difference. If it is not resolved, it becomes a Known gap, recorded wherever
+that area is owned, saying what it would take to close it.
 
 | Document               | Holds                                                         |
 | ---------------------- | ------------------------------------------------------------- |
