@@ -2,6 +2,28 @@
 
 Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 
+## Status
+
+This document is normative. It says what the language is meant to be, and you
+read a program's meaning from here. It is not a record of what the compiler
+happens to do today.
+
+So if this document and the implementation disagree, something is wrong. Which
+of the two is wrong is not decided in advance: the document can be the mistaken
+one. That gets settled when the disagreement is found.
+
+What is not allowed is leaving the disagreement in place as an accepted
+difference. If it is not resolved, it becomes a Known gap, recorded wherever
+that area is owned, saying what it would take to close it.
+
+| Document               | Holds                                                         |
+| ---------------------- | ------------------------------------------------------------- |
+| this file              | the rules                                                     |
+| `wep-*.md`             | the reasoning behind a rule, and the design it came from      |
+| `design-philosophy.md` | why the language is shaped this way                           |
+| `cheatsheet.md`        | a quick reference; it promises nothing this file does not     |
+| `stdlib-*.md`          | generated from the compiler by `wado doc`; not edited by hand |
+
 ## Overview
 
 | Item      | Description               |
@@ -16,10 +38,9 @@ See also: [Cheatsheet](./cheatsheet.md) for quick syntax reference.
 
 ## Design Philosophy
 
-- Wasm only: Zero abstraction to Wasm
-- Explicitness: Make intent explicit
-- Colorless async: Eliminates async/await "color" problem via Wasm Stack Switching
-- Effect System: Side effect tracking and control, swappable via Handlers
+See [Design Philosophy](./design-philosophy.md). The rules those principles
+produced are stated here, each where it applies: [Memory Model](#memory-model),
+[Concurrency Model](#concurrency-model), [Effect System](#effect-system).
 
 ## Lexical Structure
 
@@ -1062,6 +1083,9 @@ fn translate(p: &mut Point, dx: i32, dy: i32) {
     p.y += dy;
 }
 ```
+
+These semantics are as-if. A program may rely on the value each expression
+denotes; it may not rely on the number of copies performed to produce it.
 
 ## Type System
 
@@ -4643,7 +4667,13 @@ fn load_data() -> Data with Http {
 }
 ```
 
-Note: Wado is fully colorless — the `async` keyword only appears in world declarations (the Component Model surface) to match WIT's `async func` signatures for exports. Effect declarations and function implementations never use `async`.
+Wado is colorless: a function's signature does not record whether it suspends,
+so an asynchronous callee imposes nothing on its caller and one implementation
+serves both. Suspension is Wasm stack switching, not a source-level transform.
+
+The `async` keyword appears only in world declarations, where the Component
+Model surface has to match WIT's `async func` signature for an export. Effect
+declarations and function implementations never use it.
 
 ## Effect System
 
