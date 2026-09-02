@@ -19,14 +19,13 @@ Two questions decide the shape of the module, and neither is about the math:
   OIDC ID token from an external identity provider never is: those are `RS256`
   or `ES256`, because a relying party cannot hold the issuer's secret.
   `RS256` needs bigint modular exponentiation, PKCS#1 v1.5, and a JWK/SPKI
-  parser; `ES256` needs P-256 field arithmetic. Measured on the wide-multiply
-  builtin (`builtin::i64_mul_wide_u`, 15.2 µs per 2048-bit schoolbook
-  multiply), `RS256` verification would land near 0.5–1 ms — the cost is the
-  implementation and its security review, not the runtime.
-- **How much of the token layer.** An `HS256` verifier is 8 KB of Wasm; adding
-  a typed claims struct through `core:json` costs 30 KB more. The JSON layer is
-  four times the crypto layer, so what the module forces on every caller
-  matters more than what it offers.
+  parser; `ES256` needs P-256 field arithmetic. Both are practical over the
+  wide-multiply builtin (`builtin::i64_mul_wide_u`) at verification speeds an
+  HTTP service can pay per request — the cost is the implementation and its
+  security review, not the runtime.
+- **How much of the token layer.** Decoding claims through `core:json` costs
+  several times what verifying a signature does, in code size. What the module
+  forces on every caller therefore matters more than what it offers.
 
 ## Decision
 
@@ -60,13 +59,8 @@ here, signing and verifying with HMAC-SHA256 (RFC 2104).
 `verify` returns the payload bytes. A caller that wants typed claims
 deserializes them itself — into its own struct, or into `RegisteredClaims`
 (`iss`, `sub`, `exp`, `nbf`, `iat`). Because a program links only what it
-calls, the signature-only path never pulls in `core:json`:
-
-| Program                                           | Wasm (`-Os`) |
-| ------------------------------------------------- | ------------ |
-| hello world                                       | 2.0 KB       |
-| `verify_signature` only                           | 9.8 KB       |
-| `verify` + `RegisteredClaims` through `core:json` | 39.5 KB      |
+calls, a caller that verifies a signature and reads the payload its own way
+never pulls `core:json` into its component.
 
 ### Time is an argument
 
@@ -95,8 +89,9 @@ failure, and an assert fires at key construction — startup — not per request
 
 ## Consequences
 
-- A program that verifies self-issued tokens costs 7.8 KB over hello world and
-  verifies in 26 µs (measured end to end, including claims decode).
+- A program that verifies self-issued tokens carries little beyond SHA-256 and
+  base64, and verifies a token in well under the cost of the request that
+  carries it.
 - `RS256` / `ES256` can be added as a package, or promoted into `core:jwt`
   later, without a breaking change to callers.
 - The module carries no clock, no network, and no key-set logic, so it neither
@@ -112,11 +107,11 @@ failure, and an assert fires at key construction — startup — not per request
 - **`aud`** is a string _or_ an array of strings on the wire.
   `RegisteredClaims` omits it rather than picking one; closing this takes an
   untagged-union deserializer for that field.
-- **`HS384` / `HS512`** need SHA-384/512 in `core:digest` (~150 lines, 64-bit
-  word variants of the existing SHA-256).
+- **`HS384` / `HS512`** need SHA-384/512 in `core:digest`, the 64-bit word
+  variants of the existing SHA-256.
 - **`RS256` / `ES256`**: bigint with Montgomery multiplication over the
-  wide-multiply builtin, PKCS#1 v1.5 or PSS, and JWK/SPKI parsing (~1500
-  lines); P-256 field and group arithmetic on top of the same bigint.
+  wide-multiply builtin, PKCS#1 v1.5 or PSS, and JWK/SPKI parsing; P-256 field
+  and group arithmetic on top of the same bigint.
 - **A mixed key set.** Wado has no dynamic dispatch, so selecting among several
   algorithms at runtime — a JWKS carrying both RSA and EC keys — needs a
   closed `match` at the call site. Generic `verify` covers the static case
