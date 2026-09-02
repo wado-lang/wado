@@ -45,16 +45,17 @@ impl Rule for DropValueRule {
         let mut changed = false;
         let mut new_stmts = Vec::with_capacity(stmts.len());
         for s in stmts {
+            let Some((label, block)) = discarded(s)
+                .then(|| plan_labeled_block(engine, s))
+                .flatten()
+            else {
+                new_stmts.push(s);
+                continue;
+            };
             let span = engine.body.stmts[s].span;
-            if !discarded(s) {
-                new_stmts.push(s);
-            } else if let Some((label, block)) = plan_labeled_block(engine, s) {
-                strip_exits(engine, block, &label);
-                new_stmts.push(engine.alloc_stmt(StmtKind::LabeledBlock { label, block }, span));
-                changed = true;
-            } else {
-                new_stmts.push(s);
-            }
+            strip_exits(engine, block, &label);
+            new_stmts.push(engine.alloc_stmt(StmtKind::LabeledBlock { label, block }, span));
+            changed = true;
         }
         if changed {
             engine.set_block_stmts(id, new_stmts);
@@ -164,17 +165,24 @@ fn operand_breaks_to(engine: &Engine, op: Operand, label: &str) -> bool {
 }
 
 /// Drop the operand of every `break <label>` in `block`, keeping one that still
-/// has an effect to run as the statement ahead of the break.
-fn strip_exits(engine: &mut Engine, block: BlockId, label: &str) {
+/// has an effect to run as the statement ahead of the break. Reports whether it
+/// rewrote anything, so a subtree holding no such break is left untouched rather
+/// than written back identical — the engine re-runs every rule over a block it
+/// is told changed.
+fn strip_exits(engine: &mut Engine, block: BlockId, label: &str) -> bool {
     let stmts = engine.body.blocks[block].stmts.clone();
     let mut out = Vec::with_capacity(stmts.len());
+    let mut changed = false;
     for s in stmts {
-        strip_stmt(engine, s, label, &mut out);
+        changed |= strip_stmt(engine, s, label, &mut out);
     }
-    engine.set_block_stmts(block, out);
+    if changed {
+        engine.set_block_stmts(block, out);
+    }
+    changed
 }
 
-fn strip_stmt(engine: &mut Engine, s: StmtId, label: &str, out: &mut Vec<StmtId>) {
+fn strip_stmt(engine: &mut Engine, s: StmtId, label: &str, out: &mut Vec<StmtId>) -> bool {
     let value = match &engine.body.stmts[s].kind {
         StmtKind::Break {
             label: Some(l),
@@ -186,26 +194,24 @@ fn strip_stmt(engine: &mut Engine, s: StmtId, label: &str, out: &mut Vec<StmtId>
             ..
         } => {
             let (then_block, else_block) = (*then_block, *else_block);
-            strip_exits(engine, then_block, label);
+            let mut changed = strip_exits(engine, then_block, label);
             if let Some(eb) = else_block {
-                strip_exits(engine, eb, label);
+                changed |= strip_exits(engine, eb, label);
             }
             out.push(s);
-            return;
+            return changed;
         }
         StmtKind::Loop { body } => {
             let body = *body;
-            strip_exits(engine, body, label);
+            let changed = strip_exits(engine, body, label);
             out.push(s);
-            return;
+            return changed;
         }
         StmtKind::LabeledBlock { label: l, block } => {
             let (shadows, block) = (l == label, *block);
-            if !shadows {
-                strip_exits(engine, block, label);
-            }
+            let changed = !shadows && strip_exits(engine, block, label);
             out.push(s);
-            return;
+            return changed;
         }
         StmtKind::Break { .. }
         | StmtKind::Return { .. }
@@ -214,7 +220,7 @@ fn strip_stmt(engine: &mut Engine, s: StmtId, label: &str, out: &mut Vec<StmtId>
         | StmtKind::LetDestructure { .. }
         | StmtKind::Expr(_) => {
             out.push(s);
-            return;
+            return false;
         }
     };
     let span = engine.body.stmts[s].span;
@@ -226,4 +232,5 @@ fn strip_stmt(engine: &mut Engine, s: StmtId, label: &str, out: &mut Vec<StmtId>
         },
         span,
     ));
+    true
 }
