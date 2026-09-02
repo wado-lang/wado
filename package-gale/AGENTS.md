@@ -87,6 +87,8 @@ wado test package-gale/src/codegen_test.wado   # one file
 
 Pass the package directory and let the CLI discover the files. A hand-written glob is the thing that goes wrong: the descriptor corpus sits one directory deeper (`tests/antlr4-compat/stage_{a,b,b_oracle,c}/<Category>/`), so a flat `tests/antlr4-compat/*.wado` reaches about a third of the suite, passes, and says nothing about the rest — including the corpus that exists to catch compatibility regressions. The fixtures it never reaches also keep whatever the generator emitted the last time something did run them, so the committed corpus drifts behind the generator with every green run.
 
+Each corpus file carries up to `DESCRIPTORS_PER_FILE` descriptors, each importing its grammar as `t_<Name>`. Grouping is what bounds the corpus's compile time: every entry module is a whole-program `-O3` build, so the shared Gale runtime is compiled once per file rather than once per descriptor.
+
 Test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus:
 
 1. g4 parse tests (`src/g4/integration_test.wado`) — real `.g4` files parse into `Grammar` IR.

@@ -118,14 +118,14 @@ fn find_region(
     exits: Exits,
     descriptor_cache: &mut DescriptorCache,
 ) -> Option<Region> {
-    let descriptors = descriptor_cache.descriptors(project);
     let func = project.functions[fi].borrow();
     if func.is_dead || !is_splittable(&func) {
         return None;
     }
     let body = func.body.as_ref()?;
     // Nearly every function has no marker, so settle that with one linear scan
-    // of the arena before classifying its blocks.
+    // of the arena before classifying its blocks. The descriptor table is read
+    // after it, since only the pricing below needs one.
     if !body
         .exprs
         .values()
@@ -133,6 +133,7 @@ fn find_region(
     {
         return None;
     }
+    let descriptors = descriptor_cache.descriptors(project);
     let params = func.params.len();
     let type_table = project.type_table.borrow();
     for (block, under_loop) in valueless_blocks(body, &type_table) {

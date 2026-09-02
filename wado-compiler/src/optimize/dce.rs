@@ -151,6 +151,9 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
 #[derive(Default)]
 pub(super) struct DescriptorCache {
     refs: Vec<FunctionRef>,
+    /// Where `assert_one_fresh` resumes its rotation.
+    #[cfg(debug_assertions)]
+    cursor: usize,
 }
 
 impl DescriptorCache {
@@ -164,16 +167,29 @@ impl DescriptorCache {
             self.refs
                 .push(FunctionRef::from_resolved(&f, f.module_source.clone()));
         }
-        debug_assert!(
-            self.refs.iter().zip(&project.functions).all(|(d, f)| {
-                let f = f.borrow();
-                d.name == f.name
-                    && d.method_info.as_ref().map(|i| &i.method_name)
-                        == f.method_info.as_ref().map(|i| &i.method_name)
-            }),
+        #[cfg(debug_assertions)]
+        self.assert_one_fresh(project);
+        &self.refs
+    }
+
+    /// A descriptor is keyed by store position, so a rename in place goes
+    /// stale. One entry per read, rotating: a whole-table check costs its
+    /// caller O(n²), since a pass may read once per function.
+    #[cfg(debug_assertions)]
+    fn assert_one_fresh(&mut self, project: &NirPackage) {
+        if self.refs.is_empty() {
+            return;
+        }
+        self.cursor %= self.refs.len();
+        let descriptor = &self.refs[self.cursor];
+        let f = project.functions[self.cursor].borrow();
+        assert!(
+            descriptor.name == f.name
+                && descriptor.method_info.as_ref().map(|i| &i.method_name)
+                    == f.method_info.as_ref().map(|i| &i.method_name),
             "a cached descriptor went stale: a function was renamed in place"
         );
-        &self.refs
+        self.cursor += 1;
     }
 }
 
