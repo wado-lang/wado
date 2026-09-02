@@ -99,27 +99,28 @@ An optimizer fix reaches every Wado program; the stdlib edit that routes around
 it reaches one call site and hides the gap that produced it. So when the shape
 you are about to rewrite by hand is one a pass exists for, name the pass and
 read its precondition first — that is where the fix belongs, and the win is the
-whole language's. Three found this way while cutting `fts`, all still live in
-`short`, the path every `${x}` on a float takes:
+whole language's. Three found this way while cutting `fts`, every one of them
+also live in `short`, the path every `${x}` on a float takes — which is why the
+first, fixed as a pass, paid on a benchmark `fts` never touched:
 
-- **`sroa` matches only a direct literal binding.** An inlined `get_pow10`
-  leaves `let pm = <block with two exits>` — one `struct.new`, one call — with
-  `pm.hi` / `pm.lo` the only uses, so the `PmHiLo` is a heap object per
-  conversion. `slot_temp_sroa` already does the fix for the `[tag, slots…]`
-  shape: a local per field ahead of the block, which each exit assigns instead
-  of building the aggregate.
+- **`sroa` matches only a direct literal binding.** An inlined `get_pow10` left
+  `let pm = <block with two exits>` — one `struct.new`, one call — with
+  `pm.hi` / `pm.lo` the only uses, so the `PmHiLo` was a heap object per
+  conversion. Fixed by extending `slot_temp_sroa`, which already scalarized the
+  `[tag, slots…]` shape, to a struct literal and to an exit that hands over the
+  aggregate: **json-canada de +12.7%, ser +7.2%**, and `uscale_pow10` deleted.
 - **`multi_value_return` is all-or-nothing per callee.** It wants _every_ call
   site to be `let __tmp = Call(f)` whose only uses are field accesses.
-  `mul_pow10` has seven sites, six of them exactly that; the one that yields the
-  call as a block value disqualifies all seven, so each returns a heap struct.
+  `mul_pow10` had seven sites, six of them exactly that; the one yielding the
+  call as a block value disqualified all seven. Fixing the first gap retired
+  this one — the offending site is now a `let` — but the precondition still is
+  all-or-nothing, so the next callee to hit it pays the same way.
 - **`cold_outline` refuses a region containing a `return`** (`control_escapes`),
   which is every rare slow path there is. Leaving `fixed_width_for_prec`'s
   out-of-range tail inline cost json-canada ser 6.5% against a byte-identical
   serialize path — a hot function's growth moves everything downstream of it in
   the module — and hand-splitting it into a function restored the row.
-
-`uscale_pow10` and `fixed_width_out_of_range` in `fpfmt.wado` are the
-hand-written first and third. Both should be deletable.
+  `fixed_width_out_of_range` in `fpfmt.wado` is that split, still hand-written.
 
 ## 3. WasmGC cost facts
 
