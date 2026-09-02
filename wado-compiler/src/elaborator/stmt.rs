@@ -521,8 +521,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         // A stmt-position block yields no value, but it is still a break
         // target: its frame keeps an inner `break LABEL` from landing on an
-        // outer labeled-block expression that reuses the name. The collected
-        // types are discarded — nothing consumes a dropped block's value.
+        // outer block expression reusing the name. Its collected types are
+        // dropped with the block's value.
         ctx.push_labeled_block_frame(labeled_block.label.clone(), expected_type);
         // resolve_block already handles scope entry/exit
         self.resolve_block_with_position(&labeled_block.block, ctx, expected_type, tail_value);
@@ -2842,14 +2842,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Record the type this break yields to its labeled block expression. A
-        // valueless `break label` yields unit, and is a branch like any other:
-        // recording nothing let a value-position block take its type from the
-        // other exits alone, and codegen then emitted a `br` leaving the stack
-        // empty against that type. Scan innermost-first so a `break label`
-        // inside a nested block that reuses the same label name is attributed
-        // to the inner target — consistent with the `expected_type` lookup
-        // above and with WIR `br` depth resolution.
+        // Record the branch this break contributes to its labeled block; a
+        // valueless one yields unit. Scan innermost-first, matching the
+        // `expected_type` lookup above and WIR `br` depth resolution.
         if let Some(label) = &break_stmt.label {
             let branch_type = value.unwrap_or(TypeTable::UNIT);
             for target in ctx.labeled_block_targets.iter_mut().rev() {

@@ -52,11 +52,8 @@ pub(super) fn block_always_exits(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bo
     block_always_exits_past(ctx, block, &[])
 }
 
-/// Whether control can fall off the end of a labeled block's body — the
-/// question that decides whether its trailing statement is a branch of the
-/// block at all. A `break` to the block's own label leaves the whole block, so
-/// a trailing loop escaped only that way never reaches the tail; treating it as
-/// a `()` branch rejected `blk: { loop { break blk: v; } }`.
+/// Whether control can reach the end of a labeled block's body, which decides
+/// whether its trailing statement is a branch of the block.
 pub(super) fn labeled_block_falls_through(
     ctx: CtrlFlowCtx<'_>,
     block: &ast::Block,
@@ -65,9 +62,8 @@ pub(super) fn labeled_block_falls_through(
     !block_always_exits_past(ctx, block, &[label])
 }
 
-/// `exit_labels` name blocks a `break` leaves along with the region being
-/// analysed, so such a break never reaches the statement after a loop it sits
-/// in. Empty for every caller but [`labeled_block_falls_through`].
+/// `exit_labels` name blocks a `break` leaves along with the region analysed,
+/// so such a break never reaches the statement after a loop it sits in.
 fn block_always_exits_past(ctx: CtrlFlowCtx<'_>, block: &ast::Block, exit_labels: &[&str]) -> bool {
     block
         .stmts
@@ -359,9 +355,7 @@ trait AstTreeProbe {
 
 /// Searches a loop body for a `break` that reaches the statement after the
 /// loop. `inner_labels` holds the labels whose `break` does not: those declared
-/// by `LabeledBlock` (stmt or expr) nodes we enter, which land inside the loop,
-/// and the seeded labels of blocks enclosing the loop that a `break` leaves
-/// along with the region being analysed.
+/// inside the body, and the seeded `exit_labels`.
 struct LoopEscape {
     inner_labels: Vec<String>,
 }
@@ -479,8 +473,7 @@ pub(super) fn collect_unresolved_null_breaks(
 }
 
 /// Searches for an unlabeled `break` / `continue` that no loop binds. A loop
-/// construct binds every such jump inside it, so the walk stops at one; a
-/// closure body has its own label stack and is walked as its own function.
+/// binds every such jump inside it, so the walk stops at one.
 struct UnboundLoopJump {
     found: Option<(LoopJump, Span)>,
 }
@@ -505,8 +498,7 @@ impl AstTreeProbe for UnboundLoopJump {
 }
 
 /// Kind and span of the first `break` / `continue` in `block` that no enclosing
-/// loop binds. WIR resolves such a jump against the innermost loop on its label
-/// stack and panics with none, so it has to be rejected here.
+/// loop binds. WIR panics on one, so it has to be rejected here.
 pub(super) fn find_unbound_loop_jump(
     ctx: CtrlFlowCtx<'_>,
     block: &ast::Block,

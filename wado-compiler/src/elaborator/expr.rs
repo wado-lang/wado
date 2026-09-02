@@ -5,7 +5,9 @@ use super::scope::BinderInScope;
 use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, MatchArm};
+use crate::ast::{
+    self, AstId, AstVisitor, Condition, Expr, IfExpr, LabeledBlockExpr, Literal, MatchArm,
+};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
@@ -373,70 +375,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 let target = ctx.pop_labeled_block_frame();
 
-                // Unify every `break label: expr` with the fall-through path,
-                // whose value is the trailing statement's. The use-site expected
-                // type wins when present; otherwise pick a representative branch
-                // type, skipping `never`, `unit` and any still holding UNKNOWN
-                // so a diverging, valueless or unresolved branch cannot mask the
-                // real one — a block mixing the two is a value block whose
-                // valueless branches are the error to report.
-                // The tail is a branch only on the path that reaches it. A
-                // block whose end is unreachable — a trailing `loop` left only
-                // by `break label` — has no fall-through value and contributes
-                // `never`, like a tail that is itself a `break`.
-                let tail_type = if self.ast_labeled_block_falls_through(&lb.block, &lb.label) {
-                    self.ast_block_result_type(&lb.block)
-                } else {
-                    TypeTable::NEVER
-                };
-                let mut branch_types = target.break_types.clone();
-                branch_types.push(tail_type);
-                let result_type = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    let tt = self.tysys.type_table.borrow();
-                    branch_types
-                        .iter()
-                        .copied()
-                        .find(|&t| {
-                            t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t)
-                        })
-                        .or_else(|| {
-                            branch_types
-                                .iter()
-                                .copied()
-                                .find(|&t| t != TypeTable::NEVER)
-                        })
-                        // Every branch diverges: the block's value is `never`.
-                        .unwrap_or(branch_types[0])
-                };
-
-                // Report any `break label: null` whose `Option<...>` inner
-                // could not be inferred against a resolved non-`Option`
-                // result — AST mirror of the old `NullBreakPatcher` pass
-                // (whose TIR mutation was dead). When the type stayed UNKNOWN
-                // (every break a bare `null`) `report_uninferable_result`
-                // already fired and the null pass is skipped.
-                if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
-                    self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
-                }
-
-                // Report any branch whose type disagrees with the unified
-                // result. The tail is one of them: a tail that is not a value
-                // yields unit, which agrees only with a unit block. Exempting
-                // it let a value block fall off its end and trap instead.
-                for &break_type in &target.break_types {
-                    self.check_branch_type(break_type, result_type, lb.span);
-                }
-                if tail_type != TypeTable::NEVER {
-                    self.check_branch_type(tail_type, result_type, lb.span);
-                }
-
-                // Reify rebuilds the `LabeledBlock` from the AST,
-                // re-running the same break-type unification. The body walk
-                // resolved the body and ran break-type / null diagnostics for
-                // their side effects; project only the unified result type.
-                result_type
+                // Reify rebuilds the `LabeledBlock` from the AST, re-running
+                // the same unification; project only the result type.
+                self.unify_labeled_block(lb, &target.break_types, expected_type)
             }
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
@@ -450,6 +391,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // reported, so resolve to the error type to suppress cascades.
             Expr::Error(_e) => TypeTable::ERROR,
         }
+    }
+
+    /// The type of a labeled block expression: its `break` values and its
+    /// fall-through tail unified into one, every disagreement reported.
+    fn unify_labeled_block(
+        &mut self,
+        lb: &LabeledBlockExpr,
+        break_types: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        let tail_type = self.labeled_block_tail_type(lb);
+        let branch_types: Vec<TypeId> = break_types
+            .iter()
+            .copied()
+            .chain(std::iter::once(tail_type))
+            .collect();
+        let result_type =
+            expected_type.unwrap_or_else(|| self.representative_branch_type(&branch_types));
+
+        // Report a `break label: null` whose `Option<...>` inner could not be
+        // inferred against a resolved non-`Option` result. A type still UNKNOWN
+        // means every break was a bare `null`, which the first call reports.
+        if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
+            self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
+        }
+
+        for &branch_type in &branch_types {
+            if branch_type != TypeTable::NEVER {
+                self.check_branch_type(branch_type, result_type, lb.span);
+            }
+        }
+        result_type
+    }
+
+    /// What the path reaching the block's end yields, or `never` when no path
+    /// does — a trailing `loop` left only by `break label` reaches no tail.
+    fn labeled_block_tail_type(&self, lb: &LabeledBlockExpr) -> TypeId {
+        if self.ast_labeled_block_falls_through(&lb.block, &lb.label) {
+            self.ast_block_result_type(&lb.block)
+        } else {
+            TypeTable::NEVER
+        }
+    }
+
+    /// The branch that types a block the use site expects nothing from: the
+    /// first carrying a real value. A diverging (`never`), valueless (`unit`)
+    /// or still-unresolved branch steps aside so it cannot mask one, and a
+    /// block holding only those takes its first branch.
+    fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
+        let tt = self.tysys.type_table.borrow();
+        branch_types
+            .iter()
+            .copied()
+            .find(|&t| t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t))
+            .or_else(|| {
+                branch_types
+                    .iter()
+                    .copied()
+                    .find(|&t| t != TypeTable::NEVER)
+            })
+            .unwrap_or(branch_types[0])
     }
 
     /// Range-check an integer literal against the `i32` it defaults to, the

@@ -673,10 +673,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
     }
 
-    /// Reject an unlabeled `break` / `continue` that no enclosing loop binds:
-    /// WIR resolves one against the innermost loop on its label stack, and
-    /// panics with none. Called per function, method, and closure body — each
-    /// has its own label stack, so a loop around a closure binds nothing in it.
+    /// Reject an unlabeled `break` / `continue` that no enclosing loop binds.
+    /// Called per function, method, and closure body: each is its own label
+    /// stack, so a loop around a closure binds nothing written inside it.
     pub(super) fn validate_loop_jumps_ast(&self, body: Option<&crate::ast::Block>) {
         let Some(body) = body else {
             return;

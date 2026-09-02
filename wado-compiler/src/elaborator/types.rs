@@ -2054,11 +2054,8 @@ pub(super) struct FunctionContext {
 }
 
 impl FunctionContext {
-    /// Enter a labeled block, statement- or expression-position: a
-    /// break-collection frame plus the label itself, so a `break LABEL` inside
-    /// resolves to the innermost block of that name. Pushing only the label
-    /// let a valueless `break` cross an inner block that reuses the name and
-    /// land on an outer block *expression* as a spurious unit branch.
+    /// Enter a labeled block in either position, so a `break LABEL` inside
+    /// resolves to the innermost block of that name.
     pub(super) fn push_labeled_block_frame(
         &mut self,
         label: String,
@@ -2073,8 +2070,12 @@ impl FunctionContext {
     }
 
     pub(super) fn pop_labeled_block_frame(&mut self) -> LabeledBlockTarget {
-        self.active_labels.pop();
-        self.labeled_block_targets.pop().unwrap()
+        self.active_labels
+            .pop()
+            .expect("labeled block frame pushed before pop");
+        self.labeled_block_targets
+            .pop()
+            .expect("labeled block frame pushed before pop")
     }
 
     pub(super) fn new(return_type: TypeId, function_name: String) -> Self {

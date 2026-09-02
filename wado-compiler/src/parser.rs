@@ -2779,11 +2779,8 @@ impl Parser {
     }
 
     /// Parse break statement: `break;`, `break ()`, `break label;`, or
-    /// `break label: expr;`.
-    ///
-    /// An unlabeled `break` targets a loop, which yields no value, so unit is
-    /// the only value it can carry: `break ()` is spelled differently from
-    /// `break;` and means the same, and both parse to no value at all.
+    /// `break label: expr;`. An unlabeled break targets a loop, which yields no
+    /// value, so `break ()` says what `break;` says and both parse to no value.
     fn parse_break_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();

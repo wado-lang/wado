@@ -734,9 +734,10 @@ for let mut i = 0; i < 10; i = i + 1 {
 }
 ```
 
-Both `break` and `continue` work with `while`, `for`, and `loop`. Neither takes
-a label, and neither is valid outside a loop — a labeled block is left with
-`break LABEL`, and a closure body is its own loop scope. To leave more than the
+Both `break` and `continue` work with `while`, `for`, and `loop`, and neither
+takes a label. Outside a loop both are errors. A labeled block is left with
+`break LABEL` instead, and a closure body starts its own loop scope, so a loop
+around a closure binds nothing written inside it. To leave more than the
 innermost loop, wrap the nest in a labeled block and break to its label.
 
 ### Labeled Blocks
@@ -862,7 +863,7 @@ A labeled block fits any expression position, such as an argument, an operand,
 or a field value. It is not limited to the right-hand side of a `let`.
 
 A trailing statement that is not a value yields `()`, which is a branch like
-any other. A block whose branches all yield `()` has the type `()`; one mixing
+any other. A block whose branches all yield `()` has the type `()`. One mixing
 `()` with a value is the same type error as any other disagreement:
 
 ```wado
@@ -874,9 +875,9 @@ let v = blk: {
 };
 ```
 
-A path that cannot reach the end is no branch at all. A block whose trailing
-statement is a loop that only `break LABEL` leaves takes its type from the
-breaks alone — the shape a loop computing a value takes:
+A path that cannot reach the end is no branch at all. When the trailing
+statement is a loop that only `break LABEL` leaves, nothing reaches the tail, so
+the breaks alone type the block. This is how a loop computes a value:
 
 ```wado
 let found = scan: {
