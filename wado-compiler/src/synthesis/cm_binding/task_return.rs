@@ -31,8 +31,8 @@ use crate::synthesis::common::{
 use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
 use super::export_adapter::{synthesize_lower_to_flat, synthesize_variant_lower_to_flat};
 use super::types::{
-    CmStdlibNames, LiftContext, cm_val_type_to_type_id, cm_zero, find_variant_decl,
-    flat_types_from_type_id,
+    CmStdlibNames, LiftContext, cm_val_type_to_type_id, cm_zero, flat_types_from_type_id,
+    variant_decl_of,
 };
 
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
@@ -311,12 +311,8 @@ fn generate_inline_task_return(
             i32_const(1),
         )));
         let err_resolved = type_table.borrow().get(err_type_id).clone();
-        let err_variant_name = match &err_resolved {
-            ResolvedType::Variant { def } => Some(type_table.borrow().def_name(*def).to_string()),
-            _ => None,
-        };
-        if let Some(name) = &err_variant_name {
-            if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
+        if let ResolvedType::Variant { def } = &err_resolved {
+            if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
                 synthesize_variant_lower_to_flat(
                     err_payload_local,
                     err_type_id,

@@ -603,12 +603,12 @@ fn check_cm_boundary_representable_inner(
                 }
                 Ok(())
             }
-            R::Struct { def, .. } => {
+            R::Struct { def, type_args } => {
                 let name = type_table.struct_head_name(*def);
                 if name == names.string {
                     return Ok(());
                 }
-                match find_struct_decl(&name, tir_modules) {
+                match struct_decl_of(*def, type_args, tir_modules) {
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
                          Component Model representation — add at least one field"
@@ -628,19 +628,16 @@ fn check_cm_boundary_representable_inner(
                     None => Ok(()),
                 }
             }
-            R::Variant { def } => {
-                let name = type_table.def_name(*def).to_string();
-                match find_variant_decl(&name, tir_modules) {
-                    Some(decl) => {
-                        let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
-                        for p in payloads {
-                            recurse(p, visited)?;
-                        }
-                        Ok(())
+            R::Variant { def } => match variant_decl_of(*def, tir_modules) {
+                Some(decl) => {
+                    let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
+                    for p in payloads {
+                        recurse(p, visited)?;
                     }
-                    None => Ok(()),
+                    Ok(())
                 }
-            }
+                None => Ok(()),
+            },
             R::GenericInstance { def, type_args } => {
                 let name = &type_table.def_name(*def).to_string();
                 // Option/List/Tuple were handled above by the `as_*` accessors;
@@ -1089,12 +1086,12 @@ fn flat_types_from_type_id_inner(
             }
         },
         ResolvedType::Unit => {} // no flat values
-        ResolvedType::Struct { def, .. } => {
+        ResolvedType::Struct { def, type_args } => {
             let name = &type_table.struct_head_name(*def);
             if name == &names.string {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
-            } else if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
+            } else if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
                 flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
             } else {
                 // A record with no TIR declaration has no known field layout;
@@ -1107,8 +1104,7 @@ fn flat_types_from_type_id_inner(
         ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Variant { def } => {
-            let name = &type_table.def_name(*def).to_string();
-            if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
+            if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
                 flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
             } else {
                 out.push(cm_abi::CmValType::I32);
@@ -1163,34 +1159,68 @@ fn flat_types_from_type_id_inner(
     }
 }
 
-/// Find a variant declaration by name across all TIR modules.
+/// The variant declaration `def` names. A resolved type carries its
+/// declaration, so the search is keyed by that: a same-named variant in
+/// another module answers for nothing (WEP 2026-08-12).
+pub(super) fn variant_decl_of(
+    def: crate::defs::DefId,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Option<TirVariantDecl> {
+    tir_modules
+        .values()
+        .flat_map(|module| &module.variants)
+        .find(|variant| variant.def == def)
+        .cloned()
+}
+
+/// The struct declaration `def` names, at `type_args` where the module holds
+/// that instantiation and at the declaration otherwise. Keyed by identity, for
+/// the reason [`variant_decl_of`] is.
+pub(super) fn struct_decl_of(
+    def: crate::tir::StructDef,
+    type_args: &[TypeId],
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Option<TirStruct> {
+    let mut declaration = None;
+    for s in tir_modules.values().flat_map(|module| &module.structs) {
+        if s.def != def {
+            continue;
+        }
+        if s.type_args == type_args {
+            return Some(s.clone());
+        }
+        if s.type_args.is_empty() {
+            declaration.get_or_insert(s);
+        }
+    }
+    declaration.cloned()
+}
+
+/// Find a variant declaration by name across all TIR modules. For a name off
+/// an AST type, which names no declaration on its own; every caller holding a
+/// resolved type keys on [`variant_decl_of`] instead.
 pub(super) fn find_variant_decl(
     name: &str,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Option<TirVariantDecl> {
-    for module in tir_modules.values() {
-        for variant in &module.variants {
-            if variant.name == name {
-                return Some(variant.clone());
-            }
-        }
-    }
-    None
+    tir_modules
+        .values()
+        .flat_map(|module| &module.variants)
+        .find(|variant| variant.name == name)
+        .cloned()
 }
 
-/// Find a struct declaration by name across all TIR modules.
+/// Find a struct declaration by name across all TIR modules — the name-keyed
+/// counterpart of [`struct_decl_of`], for an AST type's spelling.
 pub(super) fn find_struct_decl(
     name: &str,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Option<TirStruct> {
-    for module in tir_modules.values() {
-        for s in &module.structs {
-            if s.name == name {
-                return Some(s.clone());
-            }
-        }
-    }
-    None
+    tir_modules
+        .values()
+        .flat_map(|module| &module.structs)
+        .find(|s| s.name == name)
+        .cloned()
 }
 
 /// Find the `TypeId` of a newtype declaration by name across all TIR modules.
