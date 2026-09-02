@@ -335,8 +335,8 @@ fn discover_in_dir(dir: &Path, extra_excludes: &[String]) -> Result<Vec<PackageR
     }
 }
 
-// Both `path` and `dir` must go through the same `display_path` normalisation
-// (forward slashes, no `./` prefix) before the prefix test below is valid.
+// The prefix test below is only valid if `path` and `dir` both came through
+// `display_path`, which is what gives them the same shape.
 fn retain_under(runs: Vec<PackageRun>, dir: &Path) -> Vec<PackageRun> {
     let prefix = display_path(dir);
     runs.into_iter()
@@ -377,9 +377,9 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
     )
 }
 
-// Canonical path shape: forward-slashes, no leading `./`, regardless of
-// OS or invocation root. `--filter` and `[test].exclude` patterns are
-// documented as forward-slash globs and rely on this.
+// Canonical path shape: forward-slashes, no leading `./`, no trailing one,
+// regardless of OS or invocation root. `--filter` and `[test].exclude` patterns
+// are documented as forward-slash globs and rely on this.
 fn display_path(p: &Path) -> String {
     let raw = p.display().to_string();
     let normalised = if cfg!(windows) {
@@ -387,10 +387,15 @@ fn display_path(p: &Path) -> String {
     } else {
         raw
     };
-    match normalised.strip_prefix("./") {
-        Some(stripped) => stripped.to_string(),
-        None => normalised,
+    let stripped = normalised.strip_prefix("./").unwrap_or(&normalised);
+    // Shell completion appends the separator to a directory argument, and a
+    // path joined from one already ending in it arrives with several. The root
+    // is the one path a separator belongs to.
+    let trimmed = stripped.trim_end_matches('/');
+    if trimmed.is_empty() {
+        return stripped.to_string();
     }
+    trimmed.to_string()
 }
 
 // Directories are walked with the discovery rules; files pass through.
@@ -2470,6 +2475,20 @@ mod tests {
         assert!(!todo_module_at(plain.to_str().expect("utf-8 path")));
         assert!(!todo_module_at(
             dir.join("absent.wado").to_str().expect("utf-8 path")
+        ));
+    }
+
+    // Shell completion writes `wado test some/dir/`, and `retain_under`
+    // compares that prefix against the walker's paths.
+    #[test]
+    fn a_trailing_separator_leaves_the_same_prefix() {
+        assert_eq!(display_path(Path::new("pkg/tests/")), "pkg/tests");
+        assert_eq!(display_path(Path::new("./pkg/tests/")), "pkg/tests");
+        assert_eq!(display_path(Path::new("pkg/tests//")), "pkg/tests");
+        assert_eq!(display_path(Path::new("/")), "/");
+        assert!(path_under(
+            "pkg/tests/a.wado",
+            &display_path(Path::new("pkg/tests/"))
         ));
     }
 

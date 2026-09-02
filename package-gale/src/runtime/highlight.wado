@@ -18,9 +18,8 @@ pub struct HighlightCapture {
     pub end: i32,
 }
 
-struct ResolvedOverride {
+struct RuleCapture {
     rule_id: i32,
-    token_kind: i32,
     capture_id: i32,
 }
 
@@ -28,10 +27,29 @@ pub struct HighlightVisitor {
     pub capture_names: List<String>,
     pub capture_classes: List<String>,
     default_ids: List<i32>,
-    overrides: List<ResolvedOverride>,
+    overrides_by_kind: List<List<RuleCapture>>,
     rule_stack: List<i32>,
     visited: List<bool>,
     pub captures: List<HighlightCapture>,
+}
+
+fn name_index(names: &List<String>, value: &String) -> i32 {
+    for let mut i = 0; i < names.len(); i += 1 {
+        if names[i] == *value {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn capture_id_of(names: &mut List<String>, classes: &mut List<String>, capture: &String) -> i32 {
+    let found = name_index(names, capture);
+    if found >= 0 {
+        return found;
+    }
+    classes.push(class_text(capture));
+    names.push(*capture);
+    return names.len() - 1;
 }
 
 impl HighlightVisitor {
@@ -43,33 +61,26 @@ impl HighlightVisitor {
             if d.is_empty() {
                 default_ids.push(-1);
             } else {
-                default_ids.push(capture_names.len());
-                capture_classes.push(class_text(d));
-                capture_names.push(*d);
+                default_ids.push(capture_id_of(&mut capture_names, &mut capture_classes, d));
             }
         }
-        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
+        let mut overrides_by_kind: List<List<RuleCapture>> = [];
         for let ov of &mapping.overrides {
-            let mut id: i32 = -1;
-            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
-                if mapping.rule_names[i] == ov.rule_name {
-                    id = i;
-                    break;
-                }
-            }
-            if id < 0 {
+            let rule_id = name_index(&mapping.rule_names, &ov.rule_name);
+            if rule_id < 0 {
                 continue;
             }
-            let capture_id = capture_names.len();
-            capture_classes.push(class_text(&ov.capture));
-            capture_names.push(ov.capture);
-            overrides.push(ResolvedOverride { rule_id: id, token_kind: ov.token_kind, capture_id });
+            let capture_id = capture_id_of(&mut capture_names, &mut capture_classes, &ov.capture);
+            while overrides_by_kind.len() <= ov.token_kind {
+                overrides_by_kind.push([]);
+            }
+            overrides_by_kind[ov.token_kind].push(RuleCapture { rule_id, capture_id });
         }
         return HighlightVisitor {
             capture_names,
             capture_classes,
             default_ids,
-            overrides,
+            overrides_by_kind,
             rule_stack: [],
             visited: [],
             captures: [],
@@ -77,11 +88,11 @@ impl HighlightVisitor {
     }
 
     fn classify(&self, kind: i32) -> i32 {
-        for let ov of &self.overrides {
-            if ov.token_kind == kind {
+        if kind >= 0 && kind < self.overrides_by_kind.len() {
+            for let candidate of &self.overrides_by_kind[kind] {
                 for let rule_id of &self.rule_stack {
-                    if *rule_id == ov.rule_id {
-                        return ov.capture_id;
+                    if *rule_id == candidate.rule_id {
+                        return candidate.capture_id;
                     }
                 }
             }
@@ -107,6 +118,10 @@ impl HighlightVisitor {
             self.visited.push(false);
         }
         self.visited[idx] = true;
+        self.hl_capture_token(toks, idx);
+    }
+
+    fn hl_capture_token(&mut self, toks: &TokenStream, idx: i32) {
         for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
             let id = self.classify(toks.triv_kinds[t]);
             if id >= 0 {
@@ -127,15 +142,16 @@ impl HighlightVisitor {
     }
 
     pub fn hl_cover_unvisited(&mut self, toks: &TokenStream) {
-        let before = self.captures.len();
+        let walked = self.captures.len();
         self.rule_stack = [];
         for let mut i = 0; i < toks.len(); i += 1 {
             if i < self.visited.len() && self.visited[i] {
                 continue;
             }
-            self.hl_visit_token(toks, i);
+            self.hl_capture_token(toks, i);
         }
-        if self.captures.len() != before {
+        self.visited = List::filled(toks.len(), true);
+        if walked > 0 && self.captures.len() != walked {
             self.captures.sort_by(|a: &HighlightCapture, b: &HighlightCapture| {
                 return a.start.cmp(&b.start);
             });
@@ -143,14 +159,47 @@ impl HighlightVisitor {
     }
 }
 
-fn escape_html_char(out: &mut String, c: char) {
-    match c {
-        '&' => out.push_str(&"&amp;"),
-        '<' => out.push_str(&"&lt;"),
-        '>' => out.push_str(&"&gt;"),
-        '"' => out.push_str(&"&quot;"),
-        _ => out.push(c),
+struct HtmlCursor {
+    byte_index: i32,
+    char_index: i32,
+}
+
+fn push_escaped_upto(out: &mut String, source: &String, cur: &mut HtmlCursor, target: i32) {
+    let n = source.len();
+    let mut bi = cur.byte_index;
+    let mut pos = cur.char_index;
+    let mut run = bi;
+    while pos < target && bi < n {
+        let b = source.get_byte_unchecked(bi);
+        if b >= b'\x80' {
+            if b < b'\xe0' {
+                bi += 2;
+            } else if b < b'\xf0' {
+                bi += 3;
+            } else {
+                bi += 4;
+            }
+        } else {
+            if b == b'&' || b == b'<' || b == b'>' || b == b'"' {
+                out.push_str_range_unchecked(source, run, bi);
+                if b == b'&' {
+                    out.push_str(&"&amp;");
+                } else if b == b'<' {
+                    out.push_str(&"&lt;");
+                } else if b == b'>' {
+                    out.push_str(&"&gt;");
+                } else {
+                    out.push_str(&"&quot;");
+                }
+                run = bi + 1;
+            }
+            bi += 1;
+        }
+        pos += 1;
     }
+    out.push_str_range_unchecked(source, run, bi);
+    cur.byte_index = bi;
+    cur.char_index = pos;
 }
 
 fn class_text(capture: &String) -> String {
@@ -167,29 +216,15 @@ fn class_text(capture: &String) -> String {
 
 pub fn highlight_html(source: &String, captures: &List<HighlightCapture>, classes: &List<String>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
-    let mut pos = 0;
-    let mut iter = source.chars();
+    let mut cur = HtmlCursor { byte_index: 0, char_index: 0 };
     for let cap of captures {
-        while pos < cap.start {
-            if let Some(c) = iter.next() {
-                escape_html_char(&mut out, c);
-            }
-            pos += 1;
-        }
+        push_escaped_upto(&mut out, source, &mut cur, cap.start);
         out.push_str(&"<span class=\"");
         out.push_str(&classes[cap.capture_id]);
         out.push_str(&"\">");
-        let end = cap.end;
-        while pos < end {
-            if let Some(c) = iter.next() {
-                escape_html_char(&mut out, c);
-            }
-            pos += 1;
-        }
+        push_escaped_upto(&mut out, source, &mut cur, cap.end);
         out.push_str(&"</span>");
     }
-    while let Some(c) = iter.next() {
-        escape_html_char(&mut out, c);
-    }
+    push_escaped_upto(&mut out, source, &mut cur, source.len());
     return out;
 }

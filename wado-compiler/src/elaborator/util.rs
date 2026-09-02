@@ -14,7 +14,7 @@ pub(super) fn check_int_range_positive(
     type_table: &TypeTable,
     repr: &str,
 ) -> Option<String> {
-    let base_id = type_table.get_ultimate_base_type(target_type);
+    let base_id = type_table.representation_head(target_type);
     let in_range = match type_table.get(base_id) {
         ResolvedType::Primitive(prim) => match prim {
             PrimitiveType::I8 => value <= i8::MAX as u128,
@@ -49,7 +49,7 @@ pub(super) fn check_int_range_negative(
     type_table: &TypeTable,
     repr: &str,
 ) -> Option<String> {
-    let base_id = type_table.get_ultimate_base_type(target_type);
+    let base_id = type_table.representation_head(target_type);
     let in_range = match type_table.get(base_id) {
         ResolvedType::Primitive(prim) => match prim {
             PrimitiveType::I8 => pos_value <= u128::from(i8::MIN.unsigned_abs()),

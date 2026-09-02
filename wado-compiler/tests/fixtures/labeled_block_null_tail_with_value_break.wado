@@ -1,0 +1,27 @@
+// A labeled block's fall-through tail reifies against the block's unified
+// type, not the use site's expectation alone. With no expectation there, a
+// `null` tail has only the block's type to resolve its `Option<T>`; without it
+// the tail reified to a bare nullref and the module failed validation.
+
+use { println, Stdout } from "core:cli";
+
+fn pick(c: bool) -> Option<i32> {
+    let v = blk: {
+        if c {
+            break blk: Option::Some(1);
+        }
+        null
+    };
+    return v;
+}
+
+export fn run() with Stdout {
+    let taken = pick(builtin::black_box(true));
+    let fell_through = pick(builtin::black_box(false));
+    assert taken matches { Some(1) };
+    assert fell_through matches { None };
+    println(`${taken:?} ${fell_through:?}`);
+}
+
+__DATA__
+{"stdout": "Option::Some(1) Option::None\n"}

@@ -70,19 +70,6 @@ impl Cx<'_> {
     }
 }
 
-/// `Result<_, _>` recognised by name; the only structural carrier of an owned
-/// resource that the fixtures exercise (`Fields::from_list`).
-fn result_args(tt: &TypeTable, type_id: TypeId) -> Option<(TypeId, TypeId)> {
-    match tt.get(tt.get_ultimate_base_type(type_id)) {
-        ResolvedType::GenericInstance { def, type_args }
-            if tt.def_name(*def) == "Result" && type_args.len() == 2 =>
-        {
-            Some((type_args[0], type_args[1]))
-        }
-        _ => None,
-    }
-}
-
 /// Fields of each struct `(name, module)`, in declaration order, as
 /// `(index, name, type_id)`. Built once so the drop walk can recurse into
 /// struct fields without holding the `TirModule`s.
@@ -128,7 +115,7 @@ fn carries_resource_rec(
     type_id: TypeId,
     visited: &mut Vec<TypeId>,
 ) -> bool {
-    let base = tt.get_ultimate_base_type(type_id);
+    let base = tt.representation_head(type_id);
     if visited.contains(&base) {
         return false;
     }
@@ -156,7 +143,7 @@ fn carries_resource_rec(
         _ => {
             if let Some(elems) = tt.as_tuple(base) {
                 elems
-            } else if let Some((ok, err)) = result_args(tt, base) {
+            } else if let Some((ok, err)) = tt.as_result(base) {
                 vec![ok, err]
             } else {
                 Vec::new()
@@ -382,7 +369,7 @@ fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
 /// Build the statements that release every Component Model resource reachable
 /// from `scrutinee` (a value of type `type_id`).
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
-    let base = cx.tt.get_ultimate_base_type(type_id);
+    let base = cx.tt.representation_head(type_id);
     match cx.tt.get(base).clone() {
         ResolvedType::Resource { def } if cx.tt.is_extern_handle_resource(def) => Vec::new(),
         ResolvedType::Resource { def } => match cx
@@ -413,7 +400,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
                     .map(|(i, ty)| (i as u32, i.to_string(), ty))
                     .collect();
                 drop_projected(scrutinee, &fields, cx)
-            } else if let Some((ok_ty, err_ty)) = result_args(cx.tt, type_id) {
+            } else if let Some((ok_ty, err_ty)) = cx.tt.as_result(type_id) {
                 drop_result(scrutinee, type_id, ok_ty, err_ty, cx)
             } else {
                 Vec::new()

@@ -1,0 +1,60 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source category: ParseTrees (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml
+
+use { strip_skip_markers } from "../../../support/tree_compare.wado";
+
+// Source descriptor: ParseTrees/ExtraTokensAndAltLabels (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_c_*]).
+//
+// Stage C claim: the generated parser's action-print output
+// (result.output, the p.emit buffer) equals the descriptor's [output].
+//
+// The descriptor deletes a token, which ANTLR4 renders bare and Gale
+// wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the
+// token) so the compare is over the recovery decision, not the marker.
+
+use t_ExtraTokensAndAltLabels from "../../grammars/ParseTrees/ExtraTokensAndAltLabels.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat_a/ParseTrees/ExtraTokensAndAltLabels",
+        },
+    };
+
+// triage: recovery diverges, not just rendering: ANTLR4 deletes both extraneous `?` and keeps `(v ? a)`, Gale abandons `v` and prints `(s ${ v)`. The `<skip>` marker is already normalised away here, so this is the recovery decision itself.
+#[TODO]
+test "stage_c_output: ParseTrees/ExtraTokensAndAltLabels" {
+    let input = "${ ? a ?}";
+    let expected = "(s ${ (v ? a) ? })
+";
+    let result = t_ExtraTokensAndAltLabels::parse_s(&input);
+    let actual = strip_skip_markers(&result.output);
+    assert actual == expected, `output:\n${actual}\nexpected:\n${expected}`;
+}
+
+// Source descriptor: ParseTrees/TokenAndRuleContextString (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_c_*]).
+//
+// Stage C claim: the generated parser's action-print output
+// (result.output, the p.emit buffer) equals the descriptor's [output].
+
+use t_TokenAndRuleContextString from "../../grammars/ParseTrees/TokenAndRuleContextString.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat_a/ParseTrees/TokenAndRuleContextString",
+        },
+    };
+
+test "stage_c_output: ParseTrees/TokenAndRuleContextString" {
+    let input = "x";
+    let expected = "[a, s]
+(a x)
+";
+    let result = t_TokenAndRuleContextString::parse_s(&input);
+    let actual = result.output;
+    assert actual == expected, `output:\n${actual}\nexpected:\n${expected}`;
+}

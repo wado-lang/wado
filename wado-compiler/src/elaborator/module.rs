@@ -81,6 +81,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             field_defaults,
                             type_param_bounds,
                             type_param_type_ids,
+                            type_param_defaults: super::types::type_param_defaults_of(
+                                &struct_decl.type_params,
+                            ),
                         },
                     );
 
@@ -118,6 +121,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             GenericNewtypeInfo {
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
+                                type_param_defaults: super::types::type_param_defaults_of(
+                                    &newtype_decl.type_params,
+                                ),
                             },
                         );
                     }
@@ -179,6 +185,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             type_params,
                             cases,
                             type_param_type_ids,
+                            type_param_defaults: super::types::type_param_defaults_of(
+                                &variant_decl.type_params,
+                            ),
                         },
                     );
 

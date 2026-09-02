@@ -37,8 +37,8 @@ use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
     cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
     compute_export_flat_return_types, export_needs_param_lifting, field_access, find_struct_decl,
-    find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type,
-    type_id_to_ast_type, variant_payload, variant_tag, variant_test,
+    find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type, struct_decl_of,
+    type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
 
 /// Build the export binding function name for a world export.
@@ -576,7 +576,7 @@ fn lower_to_flat_inner(
             // the Canonical ABI. Reuses the same discriminant-plus-Match
             // lowering the memory path uses; a payload-less variant flattens
             // to the bare discriminant.
-            let Some(variant_decl) = find_variant_decl(name, tir_modules) else {
+            let Some(variant_decl) = variant_decl_of(*def, tir_modules) else {
                 panic!("variant `{name}` has no TIR declaration; cannot lower it to flat CM values")
             };
             let flat_types: Vec<cm_abi::CmValType> = {
@@ -621,12 +621,12 @@ fn lower_to_flat_inner(
                 })
                 .collect()
         }
-        ResolvedType::Struct { def, .. }
+        ResolvedType::Struct { def, type_args }
             if ctx.type_table.borrow().struct_head_name(*def) != names.string =>
         {
             let name = &ctx.type_table.borrow().struct_head_name(*def);
             // Struct: concatenation of field flat types
-            if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
+            if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
                 let mut result = Vec::new();
 
                 // Save value to a local
@@ -2002,8 +2002,7 @@ fn lower_result_arm(
 
     let payload_resolved = lift_ctx.type_table.borrow().get(payload_type_id).clone();
     if let ResolvedType::Variant { def } = &payload_resolved {
-        let name = &lift_ctx.type_table.borrow().def_name(*def).to_string();
-        if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
+        if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
             synthesize_variant_lower_to_flat(
                 payload_local,
                 payload_type_id,

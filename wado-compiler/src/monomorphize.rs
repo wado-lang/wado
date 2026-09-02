@@ -191,23 +191,11 @@ fn dispatch_receiver_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
     }
 }
 
-/// The declared identity `type_id` names, when erasure has replaced it with a
-/// representation. `fq_base_type_name` reads the erased view, which answers
-/// `u32` for every `flags` type and so names a template no impl declares —
-/// impls on a `flags` type are written against the flags name.
-fn dispatch_receiver_identity(tt: &TypeTable, type_id: TypeId) -> Option<crate::name::FqTypeName> {
-    match tt.get_unerased(type_id) {
-        ResolvedType::Flags { def } => Some(crate::name::FqTypeName::declared(tt.defs(), *def)),
-        _ => None,
-    }
-}
-
 /// The receiver *head* a dispatch template is named after: no type arguments,
 /// for keys that carry them in `impl_type_args`. Prefer it over a
 /// struct-instantiation key's `name`, which carries no module.
 fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
-    let tid = dispatch_receiver_type(tt, type_id);
-    dispatch_receiver_identity(tt, tid).unwrap_or_else(|| tt.fq_base_type_name(tid))
+    tt.fq_base_type_name(dispatch_receiver_type(tt, type_id))
 }
 
 /// The receiver's full instantiated name, for keys whose `impl_type_args` are
@@ -217,7 +205,14 @@ fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTyp
 /// carries the impl's type parameters.
 fn dispatch_receiver_name(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
     let tid = dispatch_receiver_type(tt, type_id);
-    dispatch_receiver_identity(tt, tid).unwrap_or_else(|| tt.fq_type_name(tid))
+    // `fq_type_name` spells the representation, which answers `u32` for a
+    // `flags` type and names a template no impl declares — impls on a `flags`
+    // type are written against the flags name. The head form reads the identity
+    // itself, so only this one needs the step.
+    match tt.get_unerased(tid) {
+        ResolvedType::Flags { .. } => tt.fq_base_type_name(tid),
+        _ => tt.fq_type_name(tid),
+    }
 }
 
 /// Determine the module where trait implementations for a concrete type are defined.

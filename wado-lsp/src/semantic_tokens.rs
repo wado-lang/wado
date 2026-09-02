@@ -334,12 +334,15 @@ struct AstSpans {
     /// recovered structurally here). Declaration and use sites share the
     /// binding's definition id, so one set covers both.
     param_ids: IndexSet<AstId>,
-    /// byte start -> class for the contextual keywords that double as names,
-    /// which lex as plain identifiers and are only keywords where they sit:
-    /// `test`, `do`, `resume`, `task`, `trap`, and `forward`. Kept apart from
-    /// `map` because it outranks symbol resolution. `self` is not here — the
-    /// language reserves it, so [`classify_token`] recognises it lexically.
-    contextual: IndexMap<usize, (u32, u32)>,
+    /// byte start of every field name. A field name outranks symbol resolution
+    /// rather than being refined by it: the shorthand `{ state }` resolves to
+    /// the binding it reads, which would colour it `variable` wherever a
+    /// snapshot exists.
+    field_names: IndexSet<usize>,
+    /// byte start of every token the parse read against its lexical class: an
+    /// identifier read as a keyword (`test "…" { }`), or a keyword read as a
+    /// name (`let type = 1`). Every other token is what it lexes as.
+    contextual: IndexSet<usize>,
 }
 
 impl AstSpans {
@@ -359,12 +362,16 @@ impl AstSpans {
         self.param_ids.contains(&id)
     }
 
-    fn mark_contextual(&mut self, start: usize, class: (u32, u32)) {
-        self.contextual.insert(start, class);
+    fn mark_field_name(&mut self, start: usize) {
+        self.field_names.insert(start);
     }
 
-    fn contextual_at(&self, start: usize) -> Option<(u32, u32)> {
-        self.contextual.get(&start).copied()
+    fn is_field_name(&self, start: usize) -> bool {
+        self.field_names.contains(&start)
+    }
+
+    fn is_contextual(&self, start: usize) -> bool {
+        self.contextual.contains(&start)
     }
 }
 
@@ -374,6 +381,13 @@ impl AstSpans {
 /// by construction rather than silently skipped.
 fn collect_ast_spans(module: &ast::Module) -> AstSpans {
     let mut collector = SpanCollector::default();
+    // Only the parse tells a contextual keyword's two readings apart:
+    // `let type = 1` and `type Alias = i32;` spell that token the same.
+    collector.spans.contextual = module
+        .contextual_keywords()
+        .iter()
+        .map(|span| span.start)
+        .collect();
     for item in &module.items {
         collector.visit_item(item);
     }
@@ -385,17 +399,51 @@ struct SpanCollector {
     spans: AstSpans,
 }
 
+impl SpanCollector {
+    /// An effect named in a `with` clause reads as its declaration does:
+    /// `effect E` is a type, and every mention of `E` is the same name.
+    fn mark_effect_names(&mut self, effects: &[(AstId, Span)]) {
+        for (_, span) in effects {
+            self.spans.insert(span.start, token_type::TYPE);
+        }
+    }
+
+    /// Every key of an attribute object and of the objects nested in it, under
+    /// an array element as much as under another key.
+    fn mark_attr_keys(&mut self, object: &ast::AttrObject) {
+        for entry in object.values() {
+            self.mark_field_name(entry.key_span);
+            self.mark_attr_value(&entry.value);
+        }
+    }
+
+    fn mark_attr_value(&mut self, value: &ast::AttrValue) {
+        match value {
+            ast::AttrValue::Object(nested) => self.mark_attr_keys(nested),
+            ast::AttrValue::Array(items) => {
+                for item in items {
+                    self.mark_attr_value(item);
+                }
+            }
+            ast::AttrValue::String(_)
+            | ast::AttrValue::Int(_)
+            | ast::AttrValue::Float(_)
+            | ast::AttrValue::Bool(_) => {}
+        }
+    }
+
+    fn mark_field_name(&mut self, span: Span) {
+        self.spans.mark_field_name(span.start);
+    }
+}
+
 impl AstVisitor for SpanCollector {
     fn visit_item(&mut self, item: &Item) {
-        // The contextual keywords lex as identifiers, so the declaration's own
-        // span is the only place each can be recognised.
-        if let Item::Test(t) = item {
-            self.spans.mark_contextual(t.span.start, KEYWORD);
-        }
-        if let Item::Impl(b) = item
-            && let Some(rest) = b.rest
+        // Attribute keys are not expressions, so no other walk reaches them.
+        if let Item::Use(decl) = item
+            && let Some(attributes) = &decl.attributes
         {
-            self.spans.mark_contextual(rest.keyword_span.start, KEYWORD);
+            self.mark_attr_keys(&attributes.entries);
         }
         ast::walk_item(self, item);
     }
@@ -404,15 +452,8 @@ impl AstVisitor for SpanCollector {
         for param in &func.params {
             self.spans.mark_param(param.id);
         }
+        self.mark_effect_names(&func.effect_ids);
         ast::walk_function(self, func);
-    }
-
-    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
-        // `task` in `task return expr;` — the statement span opens on it.
-        if let ast::Stmt::TaskReturn(t) = stmt {
-            self.spans.mark_contextual(t.span.start, KEYWORD);
-        }
-        ast::walk_stmt(self, stmt);
     }
 
     fn visit_expr(&mut self, expr: &Expr) {
@@ -421,20 +462,30 @@ impl AstVisitor for SpanCollector {
                 self.spans.mark_param(param.id);
             }
         }
-        // `resume` and `do`, two more contextual keywords.
-        if let Expr::Resume(r) = expr {
-            self.spans.mark_contextual(r.span.start, KEYWORD);
-        }
-        if let Expr::WithHandler(w) = expr {
-            self.spans.mark_contextual(w.do_span.start, KEYWORD);
+        if let Expr::StructLiteral(literal) = expr {
+            for field in &literal.fields {
+                self.mark_field_name(field.name_span);
+            }
         }
         ast::walk_expr(self, expr);
     }
 
+    fn visit_pattern(&mut self, pat: &ast::Pattern) {
+        // A field's span starts at its name, in `x: inner` as much as `x`.
+        if let ast::Pattern::Struct { fields, .. } = pat {
+            for field in fields {
+                self.mark_field_name(field.span);
+            }
+        }
+        ast::walk_pattern(self, pat);
+    }
+
     fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
         for param in params {
+            // `name_span`, not `span`: a pack parameter's `span` starts at its
+            // `..`, and classification keys on the identifier's own offset.
             self.spans
-                .insert(param.span.start, token_type::TYPE_PARAMETER);
+                .insert(param.name_span.start, token_type::TYPE_PARAMETER);
         }
         ast::walk_generic_params(self, params);
     }
@@ -442,6 +493,14 @@ impl AstVisitor for SpanCollector {
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
             self.spans.insert(bound.span.start, token_type::TYPE);
+            // `Output` in `Builder<Output = T>` names an associated type.
+            for assoc in &bound.assoc_types {
+                self.spans.insert(assoc.span.start, token_type::TYPE);
+            }
+            // A closure bound's own `with` clause: `F: fn() with Stdout`.
+            if let Some(signature) = &bound.fn_signature {
+                self.mark_effect_names(&signature.effect_ids);
+            }
         }
         ast::walk_trait_bounds(self, bounds);
     }
@@ -450,14 +509,19 @@ impl AstVisitor for SpanCollector {
         match ty {
             Type::Named(t) => self.spans.insert(t.span.start, token_type::TYPE),
             Type::Generic(t) => self.spans.insert(t.span.start, token_type::TYPE),
-            // `ns::Value` and `Self::Item` parse to the same node, so the head
-            // is not knowably a namespace; leave it to the symbol map.
-            Type::NamespacedGeneric(_)
-            | Type::Function(_)
-            | Type::Tuple(_)
+            // Both segments sit in a type position. The head is not knowably a
+            // namespace (`ns::Value` and `Self::Item` parse to the same node),
+            // so the symbol map refines it where it resolves one, and `type`
+            // beats the `enumMember` the `::` heuristic would otherwise land on.
+            Type::NamespacedGeneric(t) => {
+                self.spans.insert(t.span.start, token_type::TYPE);
+                self.spans.insert(t.name_span.start, token_type::TYPE);
+            }
+            Type::TypePackSpread(_, span) => self.spans.insert(span.start, token_type::TYPE),
+            Type::Function(f) => self.mark_effect_names(&f.effect_ids),
+            Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _)
             | Type::Infer(_)
             | Type::Error(_) => {}
         }
@@ -480,6 +544,12 @@ fn classify_token(
     }
 
     let class = match token.kind.keyword_category() {
+        // A keyword token the parse read as a name (`let type = 1`). It lexes
+        // as a keyword, so nothing else would reach the identifier path.
+        Some(_) if ast_spans.is_contextual(token.span.start) => {
+            classify_name(tokens, index, ast_spans, sem_classes)
+        }
+
         // Keywords, coloured by their editorial category rather than by being
         // keyword *tokens*: `true` / `false` / `null` are constants and
         // `matches` is an operator.
@@ -493,14 +563,11 @@ fn classify_token(
             // as the parameter binding it resolves to.
             TokenKind::Ident(name) if name == "self" => CONSTANT,
 
-            // Identifiers. A contextual keyword outranks whatever else would
-            // classify the name; everything else prefers the resolved symbol
-            // classification (precomputed in `sem_classes`, keyed by byte
-            // start) and falls back to the lexer/AST heuristics.
-            TokenKind::Ident(_) => ast_spans
-                .contextual_at(token.span.start)
-                .or_else(|| sem_classes.and_then(|classes| classes.get(&token.span.start).copied()))
-                .unwrap_or_else(|| classify_ident(tokens, index, ast_spans)),
+            // The mirror case: `test`, `do`, `resume`, `task`, `trap` and
+            // `forward` lex as identifiers and are read as keywords here.
+            TokenKind::Ident(_) if ast_spans.is_contextual(token.span.start) => KEYWORD,
+
+            TokenKind::Ident(_) => classify_name(tokens, index, ast_spans, sem_classes),
 
             // Literals
             TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
@@ -519,6 +586,23 @@ fn classify_token(
         },
     };
     Some(class)
+}
+
+/// The class of a name, in precedence order: a field name, then the resolved
+/// symbol class from `sem_classes`, then the lexer/AST heuristics.
+fn classify_name(
+    tokens: &[Token],
+    index: usize,
+    ast_spans: &AstSpans,
+    sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
+) -> (u32, u32) {
+    let start = tokens[index].span.start;
+    if ast_spans.is_field_name(start) {
+        return (token_type::PROPERTY, 0);
+    }
+    sem_classes
+        .and_then(|classes| classes.get(&start).copied())
+        .unwrap_or_else(|| classify_ident(tokens, index, ast_spans))
 }
 
 /// Build the `byte start → (token type, modifiers)` classification map for
@@ -642,19 +726,17 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
             | TokenKind::World
             | TokenKind::Effect => return (token_type::TYPE, 0),
             TokenKind::Dot => {
-                // After `.`: method if followed by `(`, else property
-                if next_is(tokens, index, &TokenKind::LParen) {
+                if calls(tokens, index) {
                     return (token_type::METHOD, 0);
                 }
                 return (token_type::PROPERTY, 0);
             }
             TokenKind::ColonColon => {
-                // After `::`: could be enum member or static method
-                if next_is(tokens, index, &TokenKind::LParen) {
+                if calls(tokens, index) {
                     return (token_type::FUNCTION, 0);
                 }
-                if next_is(tokens, index, &TokenKind::ColonColon) {
-                    // Middle of a path like `A::B::C` - treat as type
+                // More path after it: a middle segment like `B` in `A::B::C`.
+                if follows(tokens, index, 1, &TokenKind::ColonColon) {
                     return (token_type::TYPE, 0);
                 }
                 return (token_type::ENUM_MEMBER, 0);
@@ -663,8 +745,8 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
         }
     }
 
-    // 3. Check if followed by `(` → function call
-    if next_is(tokens, index, &TokenKind::LParen) {
+    // 3. A call. A `::` onto a name is a path instead, classified in step 2.
+    if calls(tokens, index) {
         return (token_type::FUNCTION, 0);
     }
 
@@ -680,10 +762,41 @@ fn prev_significant(tokens: &[Token], index: usize) -> Option<&Token> {
     }
 }
 
-fn next_is(tokens: &[Token], index: usize, kind: &TokenKind) -> bool {
+/// Whether the token `ahead` positions past `index` is of `kind`, counting
+/// from 1 for the next one.
+fn follows(tokens: &[Token], index: usize, ahead: usize, kind: &TokenKind) -> bool {
     tokens
-        .get(index + 1)
+        .get(index + ahead)
         .is_some_and(|t| std::mem::discriminant(&t.kind) == std::mem::discriminant(kind))
+}
+
+/// Whether the name at `index` is called: `f(`, or `f::<T>(` past a turbofish.
+/// `::<` opens `Opt::<i32>::None` too, so the `(` must follow the close.
+fn calls(tokens: &[Token], index: usize) -> bool {
+    if follows(tokens, index, 1, &TokenKind::LParen) {
+        return true;
+    }
+    if !follows(tokens, index, 1, &TokenKind::ColonColon)
+        || !follows(tokens, index, 2, &TokenKind::Lt)
+    {
+        return false;
+    }
+    // `<` never opens a comparison in type-argument position, so nesting is
+    // decidable by counting. A `>>` closes two levels: the lexer emits one
+    // token for the pair that `List<List<i32>>` ends on.
+    let mut depth = 0usize;
+    for (at, token) in tokens.iter().enumerate().skip(index + 2) {
+        depth = match token.kind {
+            TokenKind::Lt => depth + 1,
+            TokenKind::Gt => depth.saturating_sub(1),
+            TokenKind::GtGt => depth.saturating_sub(2),
+            _ => continue,
+        };
+        if depth == 0 {
+            return follows(tokens, at, 1, &TokenKind::LParen);
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -935,6 +1048,150 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 1, "Tall"), token_type::TYPE);
     }
 
+    /// No symbol resolves a literal's field name, so the AST alone settles it.
+    #[test]
+    fn struct_literal_field_names_are_properties() {
+        let src = "struct Gen {\n    state: i32,\n}\nfn run() {\n    let g = Gen {\n        state: 1,\n    };\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 5, "state"), token_type::PROPERTY);
+    }
+
+    /// Attribute keys are not expressions, so only the `use` item's own walk
+    /// reaches them — the nested ones included.
+    #[test]
+    fn import_attribute_keys_are_properties() {
+        let src = "use { f } from \"./m.wado\"\n    with {\n        generator: {\n            module: \"lib:gale\",\n        },\n    };\nfn run() {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 2, "generator"), token_type::PROPERTY);
+        assert_eq!(kind_of(&tokens, src, 3, "module"), token_type::PROPERTY);
+    }
+
+    #[test]
+    fn import_attribute_keys_under_an_array_are_properties() {
+        let src = "use { f } from \"./m.wado\"\n    with {\n        options: {\n            rules: [\n                { name: \"expr\" },\n            ],\n        },\n    };\nfn run() {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 4, "name"), token_type::PROPERTY);
+    }
+
+    #[test]
+    fn a_shorthand_struct_literal_field_is_a_property() {
+        let src = "struct Gen {\n    state: i32,\n}\nfn run() {\n    let state = 1;\n    let g = Gen {\n        state,\n    };\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 6, "state"), token_type::PROPERTY);
+    }
+
+    #[test]
+    fn a_struct_pattern_field_is_a_property() {
+        let src = "fn run() {\n    let p = { x: 1, y: 2 };\n    let {\n        x,\n        y: renamed,\n    } = p;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 3, "x"), token_type::PROPERTY);
+        assert_eq!(kind_of(&tokens, src, 4, "y"), token_type::PROPERTY);
+    }
+
+    #[test]
+    fn a_closure_type_bound_signature_is_types() {
+        let src =
+            "effect E {\n    fn e();\n}\nfn apply<\n    T: fn(i32) -> f64 with E,\n>(f: T) {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 4, "i32"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 4, "f64"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 4, "E"), token_type::TYPE);
+    }
+
+    /// An effect named in a `with` clause reads as the type its declaration
+    /// does — on the function's own clause and inside an `fn(…) with E` type.
+    #[test]
+    fn an_effect_named_in_a_with_clause_is_a_type() {
+        let src = "effect E {\n    fn f();\n}\nfn run<\n    T,\n>(\n    body: fn mut() -> T with E,\n) -> T with E {\n    return body();\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 6, "E"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 7, "E"), token_type::TYPE);
+    }
+
+    /// `Opt::<i32>::None` is a path, not a call. Its arguments are types, and
+    /// its head is no callee: only the `(` a turbofish closes onto says which.
+    #[test]
+    fn a_path_prefix_turbofish_argument_is_a_type() {
+        let src = "variant Opt<V> {\n    None,\n    Some(V),\n}\nfn run() {\n    let b = Opt::<i32>::None;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 5, "i32"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 5, "Opt"), token_type::VARIABLE);
+    }
+
+    /// The same path one segment in: a `::` before the name makes it a path
+    /// middle, and the turbofish after it still does not make it a callee.
+    #[test]
+    fn a_path_middle_before_a_turbofish_is_not_a_function() {
+        let src = "fn run() {\n    let b = ns::Opt::<i32>::None;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "Opt"), token_type::TYPE);
+    }
+
+    /// `Output` in `Builder<Output = T>` names an associated type.
+    #[test]
+    fn an_associated_type_binding_is_a_type() {
+        let src = "fn f<\n    B: Builder<Output = i32>,\n>() {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "Output"), token_type::TYPE);
+    }
+
+    /// A type pack's member sits in a type position and is one — at its
+    /// declaration, where the `..` starts the parameter's span, as much as at
+    /// its use.
+    #[test]
+    fn a_type_pack_spread_member_is_a_type() {
+        let src = "fn f<\n    ..T,\n>(\n    items: [..T],\n) {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "T"), token_type::TYPE_PARAMETER);
+        assert_eq!(kind_of(&tokens, src, 3, "T"), token_type::TYPE);
+    }
+
+    /// Both segments of `ns::Value` are in a type position. The head is not
+    /// knowably a namespace — `Self::Item` parses the same — so it takes the
+    /// class the position gives it rather than the one resolution would.
+    #[test]
+    fn a_namespaced_type_is_a_type_on_both_segments() {
+        let src = "fn f(\n    v: ns::Value,\n) {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "ns"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 1, "Value"), token_type::TYPE);
+    }
+
+    /// `::<` is a turbofish, so the name before it is the callee, not the
+    /// middle of a path like `A::B::C`.
+    #[test]
+    fn a_turbofish_callee_is_a_function_not_a_path_middle() {
+        let src = "fn run() {\n    let x = builtin::array_new::<u8>(1);\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "array_new"), token_type::FUNCTION);
+    }
+
+    /// An unqualified callee carries its turbofish the same way, with no `.`
+    /// or `::` ahead of it to classify it first.
+    #[test]
+    fn a_turbofish_call_on_a_bare_name_is_a_function() {
+        let src = "fn identity<T>(x: T) -> T {\n    return x;\n}\nfn run() {\n    let n = identity::<i32>(1);\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 4, "identity"), token_type::FUNCTION);
+    }
+
+    /// A `::` onto a name is a path, not a call: the head stays a plain name.
+    #[test]
+    fn a_path_head_is_not_a_function() {
+        let src = "fn run() {\n    let x = builtin::array_new::<u8>(1);\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "builtin"), token_type::VARIABLE);
+    }
+
+    /// The same turbofish after a `.`: type arguments do not make a call a
+    /// field read.
+    #[test]
+    fn a_turbofish_method_call_is_a_method() {
+        let src = "fn run() {\n    let d = \"h\".bytes().collect::<List<u8>>();\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "collect"), token_type::METHOD);
+    }
+
     #[test]
     fn test_block_closure_parameter_is_a_parameter() {
         let src =
@@ -1131,6 +1388,96 @@ mod tests {
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 5, "resume"), token_type::KEYWORD);
         assert_eq!(kind_of(&tokens, src, 9, "do"), token_type::KEYWORD);
+    }
+
+    /// `type`, `from`, `of` and `flags` lex as *keyword* tokens, and the parse
+    /// reads each as a name wherever one is expected. `classify_token` matches
+    /// the keyword category first, so only that reading keeps these occurrences
+    /// out of the keyword branch.
+    #[test]
+    fn contextual_keywords_bound_as_names_are_variables() {
+        let src = concat!(
+            "fn run() -> i32 {\n",
+            "    let type = 1;\n",
+            "    let mut flags = 2;\n",
+            "    let from = 3;\n",
+            "    let of = 4;\n",
+            "    flags = flags + type;\n",
+            "    return flags + from + of;\n",
+            "}\n",
+        );
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "type"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 2, "flags"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 3, "from"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 4, "of"), token_type::VARIABLE);
+        // `mut` is a real keyword: it opens the binding's span but is not the
+        // name in it.
+        assert_eq!(kind_of(&tokens, src, 2, "mut"), token_type::KEYWORD);
+        // A local's use site carries no use→def edge, so the parse's reading
+        // classifies it too.
+        assert_eq!(kind_of(&tokens, src, 5, "flags"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 5, "type"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 6, "from"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 6, "of"), token_type::VARIABLE);
+    }
+
+    /// A member name is a name whichever word it is: the parser accepts every
+    /// keyword after a `.`, and reading one as a keyword there coloured
+    /// `item.type` differently from `item.count`.
+    #[test]
+    fn a_keyword_used_as_a_member_name_is_a_property() {
+        let src = concat!(
+            "struct Item {\n",
+            "    type: i32,\n",
+            "    match: i32,\n",
+            "}\n",
+            "fn run(item: Item) -> i32 {\n",
+            "    return item.type + item.match;\n",
+            "}\n",
+        );
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "type"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 5, "type"), token_type::PROPERTY);
+        assert_eq!(kind_of(&tokens, src, 5, "match"), token_type::PROPERTY);
+    }
+
+    /// A label is a name too: any word an expression may start with can carry
+    /// a block, and the `break` that leaves it names the same label.
+    #[test]
+    fn a_keyword_used_as_a_label_is_a_variable() {
+        let src = concat!(
+            "fn run() {\n",
+            "    of: {\n",
+            "        break of;\n",
+            "    }\n",
+            "}\n",
+        );
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "of"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 2, "of"), token_type::VARIABLE);
+    }
+
+    /// The same words in the positions that make them keywords.
+    #[test]
+    fn contextual_keywords_in_keyword_position_stay_keywords() {
+        let src = concat!(
+            "use { x } from \"./m.wado\";\n",
+            "type Alias = i32;\n",
+            "flags F {\n",
+            "    A,\n",
+            "}\n",
+            "fn run(items: List<i32>) {\n",
+            "    for let item of items {\n",
+            "        let _ = item;\n",
+            "    }\n",
+            "}\n",
+        );
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 0, "from"), token_type::KEYWORD);
+        assert_eq!(kind_of(&tokens, src, 1, "type"), token_type::KEYWORD);
+        assert_eq!(kind_of(&tokens, src, 2, "flags"), token_type::KEYWORD);
+        assert_eq!(kind_of(&tokens, src, 6, "of"), token_type::KEYWORD);
     }
 
     #[test]

@@ -196,9 +196,12 @@ let b = if c { 1; } else { 2; };       // also 1 or 2
 let u = if c { g(); () } else { () };  // ()
 ```
 
-Only `if`, `match`, `loop` and labelled blocks produce a block value. A brace
-in value position is a struct literal: `let x = { 1 };` is an error, and
+Only `if`, `match` and [labeled blocks](#labeled-blocks) produce a block value.
+A brace in value position is a struct literal: `let x = { 1 };` is an error, and
 `let p = { x: 1, y: 2 };` is an implicit struct literal.
+
+`loop` is a statement, not an expression. A loop that computes a value goes
+inside a labeled block, which `break LABEL: expr` leaves with the result.
 
 ### Variable Mutability
 
@@ -731,54 +734,67 @@ for let mut i = 0; i < 10; i = i + 1 {
 }
 ```
 
-Both `break` and `continue` work with `while`, `for`, and `loop`.
+Both `break` and `continue` work with `while`, `for`, and `loop`, and a loop
+carries no label. An unlabeled `break` or `continue` acts on the innermost loop,
+and outside a loop both are errors. `continue` never takes a label.
+`break LABEL` is a different statement: it leaves an enclosing labeled block,
+needs no loop of its own, and is how to leave more than the innermost loop. A
+closure body starts its own loop scope, so a loop around a closure binds nothing
+written inside it.
 
 ### Labeled Blocks
 
-Labeled blocks create a new scope for variable bindings. The label is required to avoid syntactic ambiguity with struct literals.
-
-```wado
-let x = 10;
-
-scope: {
-    let x = 20;  // shadows outer x
-    println(`x = ${x}`);  // prints "x = 20"
-}
-
-println(`x = ${x}`);  // prints "x = 10" (outer x unchanged)
-```
+A labeled block is a named block that `break LABEL` leaves from anywhere inside
+it. It is Wado's only non-local jump, and it replaces loop labels, labeled
+`continue`, and `goto`. It is also the block form that carries a value.
 
 #### Syntax
 
-`LABEL: { ... }`
+`LABEL: { ... }`, in statement or expression position.
 
-- The label must be a valid identifier followed by a colon
-- A label cannot start with `__`, which is reserved for the blocks the compiler
-  synthesises (an expanded template string, a desugared `for`, an inlined call)
-- The block creates a new variable scope
-- Variables declared inside are not accessible outside
-- Shadowing is allowed within the block
+- The label is an identifier followed by a colon, and cannot start with `__`,
+  which is reserved for the blocks the compiler synthesises
+- `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value
+- `()` is a value like any other, so `break LABEL: ()` says what `break LABEL`
+  says, and `break ()` says what `break` says
+- Nested blocks may reuse a label name; a `break` targets the innermost match
+- The block opens a new scope, and a name declared inside may shadow an outer
+  one
 
-#### Nested Blocks
+The label is mandatory to tell a block apart from a struct literal, since
+`{ field: value }` on its own could be either. An unlabeled `{ ... }` block is
+therefore a parse error.
+
+#### Escaping and Early Exit
+
+`break` alone leaves the innermost loop. A labeled block around a nest leaves
+all of it at once, and its tail is the path no `break` took. Inside a block,
+`break LABEL` skips the rest, so a chain of guards stays flat instead of nesting
+one inside the next. A `break` may also leave an effect handler's `do` block,
+which restores the outer handler either way.
 
 ```wado
-outer: {
-    let a = 1;
-    inner: {
-        let b = 2;
-        let sum = a + b;  // a is visible from outer scope
-        println(`${sum}`);
+search: {
+    for let r of 0..<grid.len() {
+        for let c of 0..<grid[r].len() {
+            if grid[r][c] == needle {
+                hit = [r, c];
+                break search;   // leaves both loops
+            }
+        }
     }
-    // b is not visible here
-    println(`${a}`);
+    hit = [-1, -1];             // reached only when no break was taken
 }
 ```
 
 #### As an Expression
 
-A labeled block used as a value yields through `break LABEL: expr`, and through
-its trailing statement on the path that reaches the end. Both are branches of
-the block and must agree on one type:
+A labeled block used as a value yields two ways: through `break LABEL: expr`,
+and through its trailing statement on the path that reaches the end. Both are
+branches, so every path must agree on one type. They unify against the type
+expected where the block sits, so a literal coerces to that rather than to its
+own default. Any expression position takes one, not only the right-hand side of
+a `let`.
 
 ```wado
 let found = search: {
@@ -791,12 +807,22 @@ let found = search: {
 };
 ```
 
-A block whose trailing statement is not a value has none to yield on that path,
-so reaching the end traps; write `break LABEL: expr` on every path instead.
+A trailing statement that is not a value yields `()`. A block whose branches all
+yield `()` has the type `()`, and one mixing `()` with a value is the same type
+error as any other disagreement.
 
-#### Design Rationale
+A path that cannot reach the end is no branch at all. When the trailing
+statement is a loop that only `break LABEL` leaves, nothing reaches the tail, so
+the breaks alone type the block. This is how a loop computes a value:
 
-The label is mandatory because `{ field: value }` without context could be either a block with a labeled statement or a struct literal. Requiring the label removes this ambiguity.
+```wado
+let found = scan: {
+    loop {
+        let line = next();
+        if line.is_match() { break scan: line; }
+    }
+};
+```
 
 ### Match Expression
 
@@ -4949,9 +4975,7 @@ let t = [..make_pair(), 30];
 
 ### Reference Storage (`stores[...]`)
 
-> Not yet implemented. See [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md) for the design.
-
-The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion.
+The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion. See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md) for the design rationale.
 
 #### Syntax
 
@@ -4973,6 +4997,19 @@ fn process(data: &Data) -> Result {
 fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
     println("Storing data...");
     return register(data);
+}
+```
+
+Every reference parameter follows this rule, `self` included. A method that
+returns or stores `self` declares `with stores[self]`.
+
+A reference reached _through_ a parameter is a different reference. Copying it
+out is not that parameter escaping, and the code that put it there already
+declared it, so it needs no declaration here:
+
+```wado
+fn rebase(c: &Cursor, at: i32) -> Cursor {   // no stores[c]
+    return Cursor { chars: c.chars, pos: at };
 }
 ```
 
@@ -5335,6 +5372,20 @@ struct Foo {
     pub name: String,
     #[secret]
     password: String, // excluded from `${foo:?}` output
+}
+```
+
+#### `#[allow(dead_code)]`
+
+Waives the unused / test-only diagnostic on the item carrying it. As the module
+inner attribute `#![allow(dead_code)]` it waives the lint for every item in the
+file. `dead_code` is the only lint this takes, and there is no `#[deny(...)]`.
+See [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+
+```wado
+#[allow(dead_code)]
+fn scaffolding() -> i32 {  // no "function `scaffolding` is never used"
+    return 0;
 }
 ```
 

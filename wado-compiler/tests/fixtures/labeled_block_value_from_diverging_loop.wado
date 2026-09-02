@@ -1,0 +1,50 @@
+// A labeled block's trailing statement is a branch only on the path that
+// reaches it. A trailing loop that only a `break LABEL` leaves has no such
+// path, so the block's value comes from the breaks alone. Counting the
+// unreachable tail as a `()` branch rejected the loop-that-computes-a-value,
+// which is the shape Wado offers in place of a `loop` expression.
+
+test "a value comes out of a trailing `loop`" {
+    let mut i = builtin::black_box(0);
+    let v = blk: {
+        loop {
+            i += 1;
+            if i > 4 {
+                break blk: i * 10;
+            }
+        }
+    };
+    assert v == 50;
+}
+
+test "a trailing `while true` is a loop too" {
+    let mut i = builtin::black_box(0);
+    let v: i64 = blk: {
+        while true {
+            i += 1;
+            if i == 3 {
+                break blk: 7;
+            }
+        }
+    };
+    assert v == 7;
+}
+
+// A loop the block can also walk past keeps its `()` tail, so the block is
+// still a unit block.
+test "a terminating loop leaves a unit tail" {
+    let mut seen = 0;
+    let v: () = blk: {
+        for let x of 0..<3 {
+            seen += x;
+            if seen > 100 {
+                break blk;
+            }
+        }
+    };
+    assert seen == 3;
+    assert `${v}` == "()";
+}
+
+__DATA__
+{"test": {}}

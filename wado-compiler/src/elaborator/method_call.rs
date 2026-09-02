@@ -266,7 +266,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_args_source_id = {
             let tt = self.tysys.type_table.borrow();
             if matches!(tt.get(base_type_id), ResolvedType::Newtype { .. }) {
-                tt.get_ultimate_base_type(base_type_id)
+                tt.representation_head(base_type_id)
             } else {
                 base_type_id
             }
@@ -3664,7 +3664,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys
                             .type_table
                             .borrow()
-                            .get_ultimate_base_type(newtype_id),
+                            .representation_head(newtype_id),
                     ),
                     _ => None,
                 };

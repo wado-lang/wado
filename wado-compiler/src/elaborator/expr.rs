@@ -5,7 +5,9 @@ use super::scope::BinderInScope;
 use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, MatchArm};
+use crate::ast::{
+    self, AstId, AstVisitor, Condition, Expr, IfExpr, LabeledBlockExpr, Literal, MatchArm,
+};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
@@ -17,7 +19,7 @@ use super::call::turbofish_holes;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
-use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
+use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
 
 /// Outcome of trying to derive type arguments for a generic function
@@ -361,12 +363,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
             Expr::LabeledBlock(lb) => {
-                ctx.labeled_block_targets.push(LabeledBlockTarget {
-                    label: lb.label.clone(),
-                    break_types: Vec::new(),
-                    expected_type,
-                });
-                ctx.active_labels.push(lb.label.clone());
+                ctx.push_labeled_block_frame(lb.label.clone(), expected_type);
 
                 ctx.enter_scope();
                 // A labeled block yields via `break label: value`, not a tail
@@ -376,59 +373,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_block(&lb.block, ctx, expected_type);
                 ctx.exit_scope();
 
-                ctx.active_labels.pop();
-                let target = ctx.labeled_block_targets.pop().unwrap();
+                let target = ctx.pop_labeled_block_frame();
 
-                // Unify every `break label: expr` with the fall-through path,
-                // whose value is the trailing statement's. The use-site expected
-                // type wins when present; otherwise pick a representative branch
-                // type, skipping `never` and any still holding UNKNOWN so a
-                // diverging or unresolved branch cannot mask the real one.
-                let tail_type = self.ast_block_result_type(&lb.block);
-                let mut branch_types = target.break_types.clone();
-                branch_types.push(tail_type);
-                let result_type = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    let tt = self.tysys.type_table.borrow();
-                    branch_types
-                        .iter()
-                        .copied()
-                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
-                        .or_else(|| {
-                            branch_types
-                                .iter()
-                                .copied()
-                                .find(|&t| t != TypeTable::NEVER)
-                        })
-                        // Every branch diverges: the block's value is `never`.
-                        .unwrap_or(branch_types[0])
-                };
-
-                // Report any `break label: null` whose `Option<...>` inner
-                // could not be inferred against a resolved non-`Option`
-                // result — AST mirror of the old `NullBreakPatcher` pass
-                // (whose TIR mutation was dead). When the type stayed UNKNOWN
-                // (every break a bare `null`) `report_uninferable_result`
-                // already fired and the null pass is skipped.
-                if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
-                    self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
-                }
-
-                // Report any branch whose type disagrees with the unified
-                // result — the tail included, when it carries a value.
-                for &break_type in &target.break_types {
-                    self.check_branch_type(break_type, result_type, lb.span);
-                }
-                if tail_type != TypeTable::UNIT && tail_type != TypeTable::NEVER {
-                    self.check_branch_type(tail_type, result_type, lb.span);
-                }
-
-                // Reify rebuilds the `LabeledBlock` from the AST,
-                // re-running the same break-type unification. The body walk
-                // resolved the body and ran break-type / null diagnostics for
-                // their side effects; project only the unified result type.
-                result_type
+                // Reify rebuilds the `LabeledBlock` from the AST, re-running
+                // the same unification; project only the result type.
+                self.unify_labeled_block(lb, &target.break_types, expected_type)
             }
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
@@ -442,6 +391,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // reported, so resolve to the error type to suppress cascades.
             Expr::Error(_e) => TypeTable::ERROR,
         }
+    }
+
+    /// The type of a labeled block expression: its `break` values and its
+    /// fall-through tail unified into one, every disagreement reported.
+    fn unify_labeled_block(
+        &mut self,
+        lb: &LabeledBlockExpr,
+        break_types: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        let tail_type = self.labeled_block_tail_type(lb);
+        let branch_types: Vec<TypeId> = break_types
+            .iter()
+            .copied()
+            .chain(std::iter::once(tail_type))
+            .collect();
+        let result_type =
+            expected_type.unwrap_or_else(|| self.representative_branch_type(&branch_types));
+
+        // Report a `break label: null` whose `Option<...>` inner could not be
+        // inferred against a resolved non-`Option` result. A type still UNKNOWN
+        // means every break was a bare `null`, which the first call reports.
+        if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
+            self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
+        }
+
+        for &branch_type in &branch_types {
+            if branch_type != TypeTable::NEVER {
+                self.check_branch_type(branch_type, result_type, lb.span);
+            }
+        }
+        result_type
+    }
+
+    /// What the path reaching the block's end yields, or `never` when no path
+    /// does. A trailing `loop` left only by `break label` reaches no tail.
+    fn labeled_block_tail_type(&self, lb: &LabeledBlockExpr) -> TypeId {
+        if self.ast_labeled_block_falls_through(&lb.block, &lb.label) {
+            self.ast_block_result_type(&lb.block)
+        } else {
+            TypeTable::NEVER
+        }
+    }
+
+    /// The branch that types a block the use site expects nothing from: the
+    /// first carrying a real value. A `never`, `unit` or unresolved branch
+    /// steps aside, and a block holding only those takes its first.
+    fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
+        let tt = self.tysys.type_table.borrow();
+        branch_types
+            .iter()
+            .copied()
+            .find(|&t| t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t))
+            .or_else(|| {
+                branch_types
+                    .iter()
+                    .copied()
+                    .find(|&t| t != TypeTable::NEVER)
+            })
+            .unwrap_or(branch_types[0])
     }
 
     /// Range-check an integer literal against the `i32` it defaults to, the
@@ -887,6 +896,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `ns::Color::Red` — and the resolve walk answered for it in the
         // module that wrote it. So a reference inside a foreign default
         // resolves in the declaring module without a second, module-scoped
+<<<<<<< HEAD
         // lookup beside the first. A bare case (`None`, `Leaf`) has no such
         // segment: the walk answered for the case itself.
         let (owner, spelled) = if let Some(i) = ident.segments.len().checked_sub(2) {
@@ -901,6 +911,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let pos = spelled.find("::")?;
         let prefix = &spelled[..pos];
         let suffix = &spelled[pos + 2..];
+||||||| b32a52617
+        // lookup beside the first.
+        let owner = ident
+            .segments
+            .len()
+            .checked_sub(2)
+            .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
+=======
+        // lookup beside the first.
+        let owner = ident
+            .segments
+            .len()
+            .checked_sub(2)
+            .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
+        // A newtype reaches its base's members and keeps its own identity, so
+        // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
+        // the implicit form of `Color::Green as C`.
+        let through_newtype = owner.and_then(|def| {
+            super::types::newtype_member_owner(&self.type_lookup(), &self.tysys, def)
+        });
+        let owner = through_newtype.map(|(base, _)| base).or(owner);
+>>>>>>> origin/main
         macro_rules! lookup_case {
             ($of:ident) => {
                 owner.and_then(|def| self.type_lookup().$of(def)).cloned()
@@ -983,7 +1015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Reify rebuilds the payload-less
                 // `VariantConstruct` from the AST + recorded generic
                 // instantiation. Not an l-value.
-                return Some(variant_type);
+                return Some(through_newtype.map_or(variant_type, |(_, named)| named));
             }
         }
 
@@ -1001,7 +1033,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_id_of_decl(enum_info.defined_at);
 
             // Reify rebuilds the `EnumConstruct`. Not an l-value.
-            return Some(enum_type);
+            return Some(through_newtype.map_or(enum_type, |(_, named)| named));
         }
 
         // Check for flags member: PathFlags::SymlinkFollow
@@ -1016,7 +1048,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
             self.check_case_turbofish_arity(ident, prefix, 0);
-            return Some(flags_info.type_id);
+            return Some(through_newtype.map_or(flags_info.type_id, |(_, named)| named));
         }
         None
     }
@@ -3182,8 +3214,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         source_type: TypeId,
         target_type: TypeId,
     ) -> Option<&'static str> {
-        let source_base = tt.get_ultimate_base_type(source_type);
-        let target_base = tt.get_ultimate_base_type(target_type);
+        let source_base = tt.representation_head(source_type);
+        let target_base = tt.representation_head(target_type);
         let slice_elem = |id| match tt.get(id) {
             ResolvedType::GenericInstance { def, type_args }
                 if tt.compiler_item_def(crate::compiler_item::CompilerItem::Slice)
@@ -3276,10 +3308,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
-        let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
+        //
+        // Which pair of words the literal has to fit is how the value is
+        // stored, so the representation answers: `type Signed = i128` is that
+        // pair too, and reading the name instead let an oversized literal
+        // through it with no diagnostic. The cast still yields `target_type`.
+        let repr_target = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(target_type);
+        let struct_name = match self.tysys.type_table.borrow().get(repr_target).clone() {
             ResolvedType::Struct { .. } => {
                 let tt = self.tysys.type_table.borrow();
-                tt.nominal_def(target_type).map(|def| {
+                tt.nominal_def(repr_target).map(|def| {
                     (
                         FqTypeName::declared(tt.defs(), def),
                         tt.def_name(def).to_string(),
@@ -3371,11 +3413,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `i128` / `u128` are structs here; their rules below cover a
             // wide-int source only, so such a target never exempts an aggregate.
             let wide_int = |id| {
-                matches!(tt.get(tt.get_ultimate_base_type(id)), ResolvedType::Struct { def, .. }
+                matches!(tt.get(tt.representation_head(id)), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
             };
             // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
-            let source_base = tt.get_ultimate_base_type(source_type);
+            let source_base = tt.representation_head(source_type);
             let source_is_aggregate = !wide_int(source_type)
                 && matches!(
                     tt.get(source_base),
@@ -3383,7 +3425,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Variant { .. }
                 );
-            source_is_aggregate && source_base != tt.get_ultimate_base_type(target_type)
+            source_is_aggregate && source_base != tt.representation_head(target_type)
         };
         if unrelated_aggregate {
             let tt = self.tysys.type_table.borrow();
@@ -3422,12 +3464,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             use crate::tir::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
-                tt.get(tt.get_ultimate_base_type(source_type)),
+                tt.get(tt.representation_head(source_type)),
                 ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
             );
             let target_supported = !source_is_wide_int
-                || match tt.get(tt.get_ultimate_base_type(target_type)) {
+                || match tt.get(tt.representation_head(target_type)) {
                     ResolvedType::Primitive(
                         PrimitiveType::F64
                         | PrimitiveType::F32
@@ -3465,12 +3507,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(source_type);
+            .representation_head(source_type);
         let target_base = self
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(target_type);
+            .representation_head(target_type);
         if target_base == TypeTable::CHAR
             && source_base != TypeTable::CHAR
             && source_base != TypeTable::U8
@@ -4323,6 +4365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_defaults: vec![None; effective_fields.len()],
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
+            type_param_defaults: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 

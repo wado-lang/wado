@@ -78,7 +78,7 @@ pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Opti
 /// A WIT alias has no representation of its own. The AST classifier's
 /// `resolve_type` peels too, and the two must agree.
 ///
-/// Newtypes only: `TypeTable::resolve_newtype_base` also collapses `flags` to
+/// Newtypes only: `TypeTable::representation_head` also collapses `flags` to
 /// `u32`, and a CM `flags` is its own type, one byte wide at ≤8 labels.
 pub fn peel_newtypes(type_table: &TypeTable, type_id: TypeId) -> TypeId {
     let mut id = type_id;
@@ -129,7 +129,7 @@ fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
         return false;
     };
     matches!(
-        type_table.get(type_table.get_ultimate_base_type(inner)),
+        type_table.get(type_table.representation_head(inner)),
         ResolvedType::Resource { .. }
     )
 }
@@ -3520,13 +3520,14 @@ impl CmInterfaceRegistry {
                     .iter()
                     .map(|arg| self.resolve_type_impl(arg, preserve_local))
                     .collect();
-                Type::NamespacedGeneric(crate::ast::NamespacedGenericType {
+                Type::NamespacedGeneric(Box::new(crate::ast::NamespacedGenericType {
                     id: ng.id,
                     namespace: ng.namespace.clone(),
                     name: ng.name.clone(),
+                    name_span: ng.name_span,
                     args: resolved_args,
                     span: ng.span,
-                })
+                }))
             }
             // TypePackSpread is only valid inside tuple types — pass through
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => ty.clone(),

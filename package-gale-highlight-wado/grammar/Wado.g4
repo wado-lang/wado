@@ -100,7 +100,7 @@ identifier
     | 'from' | 'of' | 'type' | 'matches' | 'stores' | 'world'
     | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
     | 'unique' | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
-    | 'test' | 'do' | 'task'
+    | 'test' | 'do' | 'task' | 'extends'
     ;
 
 paramList
@@ -278,6 +278,20 @@ path
     : IDENTIFIER ('::' IDENTIFIER)*
     ;
 
+// `memberName` is the token set. Each use site wraps it in a rule naming what
+// the name is there, and the query captures those wrappers rather than
+// `memberName`, which would fire under every use site at once.
+
+// The name in `.name(...)`.
+methodName
+    : memberName
+    ;
+
+// The name in `.name`, a struct literal's `name:`, and a pattern's `name:`.
+fieldName
+    : memberName
+    ;
+
 memberName
     : IDENTIFIER
     | 'use' | 'from' | 'as' | 'fn' | 'with' | 'let' | 'mut' | 'return'
@@ -287,7 +301,7 @@ memberName
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'stores' | 'true' | 'false' | 'null' | 'trap' | 'forward'
-    | 'test' | 'do' | 'task'
+    | 'test' | 'do' | 'task' | 'extends' | 'internal' | 'resume' | 'self'
     ;
 
 block
@@ -328,7 +342,7 @@ localItemKind
     ;
 
 labeledBlock
-    : IDENTIFIER ':' block
+    : identifier ':' block
     ;
 
 letStatement
@@ -387,7 +401,7 @@ loopStatement
     ;
 
 breakStatement
-    : 'break' (IDENTIFIER (':' expression)?)?
+    : 'break' (identifier (':' expression)? | '(' ')')?
     ;
 
 continueStatement
@@ -437,7 +451,9 @@ postfix
 postfixOp
     : '(' argumentList? ')'
     | '::' typeArgs '(' argumentList? ')'
-    | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER | FLOAT)
+    // A turbofish after a `.` belongs to a call: the parser demands the `(`
+    // after it, so a field read carries no type arguments.
+    | '.' (methodName ('::' typeArgs)? '(' argumentList? ')' | fieldName | INTEGER | FLOAT)
     | '[' expression ']'
     | '?'
     ;
@@ -478,7 +494,14 @@ braceLiteral
     ;
 
 exprPath
-    : identifier ('::' (typeArgs | memberName))*
+    : identifier ('::' (typeArgs | pathSegment))*
+    ;
+
+// A `::` segment: a variant case, a static method, or the middle of a module
+// path. It has its own rule so no capture on `fieldName` or `methodName`
+// reaches it; nothing captures this one, matching `patternPath` and `path`.
+pathSegment
+    : memberName
     ;
 
 compileTimeExpr
@@ -535,7 +558,7 @@ fieldInitList
     ;
 
 fieldInit
-    : (memberName | STRING_LITERAL) (':' expression)?
+    : (fieldName | STRING_LITERAL) (':' expression)?
     | '..' expression
     ;
 
@@ -622,7 +645,7 @@ patternFieldList
     ;
 
 patternField
-    : (memberName | STRING_LITERAL) (':' pattern)?
+    : (fieldName | STRING_LITERAL) (':' pattern)?
     ;
 
 literal

@@ -2140,20 +2140,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
 }
 
 fn "serde_synth_propagates_begin_struct_error.wado/serde_synth_propagates_begin_struct_error.wado/Foo^core:serde/FieldSchema::lookup"(__key) {
-    if (if (if (if (__key.end - __key.start) == 3 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 98;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 114;
-    } else {
-        0;
-    }) {
-        return 0, 0;
+    if (__key.end - __key.start) == 3 {
+        if (if (if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 98 -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 114;
+        } else {
+            0;
+        }) {
+            return 0, 0;
+        }
+        return 1, 0;
     }
     return 1, 0;
 }

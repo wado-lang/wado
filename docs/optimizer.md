@@ -58,6 +58,7 @@ Allocation and aggregate:
 - `sroa_param` — replace a struct reference parameter with the one field the callee reads, unwrapping the box that `&T` values allocate. A multi-field struct is scalarized on a clone, so the callers that pass a whole struct keep the original; how the callee holds the field decides whether the scalar arrives by value or by reference, and a call site that would have to read the field ahead of an effectful later argument is refused.
 - `sroa_variant_return` — rewrite a variant return into a `[tag, slots…]` tuple, so a `Result`-returning call stops being one opaque boxed value to every later pass. The return-position dual of `sroa_param`; `multi_value_return` then flattens the tuple to the Wasm multi-value ABI. See [WEP: Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md).
 - `elide_box_local` — collapse a box bound once and read once into its inner value.
+- `drop_value` — a value in discarded position keeps only its effects: a value-producing `ExprKind::LabeledBlock` in statement position becomes the value-discarding `StmtKind::LabeledBlock`, and every `break L: v` targeting it gives up its operand, decomposed into the statements its own operands' effects need. `let _ = xs.pop()` is the shape it is for. `elide_local` demotes the dead binding to `Expr(block)` and stops there, because the element read inside the `Option` may trap and so the aggregate around it is not deletable whole. A statement counts as discarded only when something follows it in its block, or when that block is the function root: WIR decides "value region" by a block expression's own type, so a `match` arm whose result is dropped still expects its last statement to leave a value. Not extended to a discarded `Expr(aggregate)` statement, which does not converge against `sroa_variant_return`; the pass's module doc says why.
 - `string_push` — expand a short `push_str("…")` literal into per-byte pushes, specialize a constant-ASCII `push` to `push_ascii_unchecked` (skipping `encode_char`'s UTF-8 width dispatch), and fuse the run of adjacent appends that leaves behind: one `internal_reserve_uninit` for the whole run, then raw byte and string writes into the space it claimed. A run-time length is read at the start of its own group and passed to the write, since the source may be the buffer itself (`buf.push_str(&buf)`) — hoisting that read over an earlier write in the same run would measure a buffer the run itself grew, so a group covers only the pieces after it.
 - `value_copy_demote` — demote a deep list value-copy to a shallow spine copy when its elements are provably never mutated through the binding.
 - `clone_forward` — collapse `array_clone(&array_clone(&place))` into a single clone, where inlining plus globalization left a read-only binding whose only reader is the outer clone.
@@ -186,6 +187,12 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       each through nothing but field access, and costs ~5% of the json-canada
       deserialize phase. Inlining that pair also buys caller-specific dead-field
       elimination, which promotion alone would not recover.
+- [ ] Factoring a conjunctive if-chain into a decision tree. `if_chain_to_match`
+      fuses a run whose guards are one `K == x`. A run of
+      `K0 == x0 && K1 == x1 && …` could be split on the atom that discriminates
+      best, then nested. That reaches the hand-written dispatchers the
+      synthesised `FieldSchema::lookup` tree does not. An atom that guards
+      another's operand range has to be tested first, or a miss becomes a trap.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known

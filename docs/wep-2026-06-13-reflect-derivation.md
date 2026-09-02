@@ -54,12 +54,27 @@ carries a parallel metadata list or value accessor.
 
 A newtype is the one kind with no members: it has a base, and its value bridges
 are the bidirectional `From` the compiler already generates for it ([Conversion Traits](./wep-2026-03-16-conversion-traits.md) §7), so `ReflectNewtype` carries
-neither a member channel nor a bridge of its own.
+neither a member channel nor a bridge of its own. Its `#[wire(name_policy)]`
+names the newtype itself, which is why the policy sits on the root: it states a
+fact about the declaration rather than about anything under it.
+
+Identity and structure part ways at a newtype. It names _itself_ through the
+root, and inherits its base's structure like every other impl ([Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)).
+So `Reflect::<P>::type_name()` answers `"P"` while `ReflectStruct::<P>::members()`
+on `type P = Point` walks Point's fields.
+
+The two bounds therefore hold at different depths: `ReflectNewtype` at the
+newtype itself, a structure kind only after peeling to the base. That is rank 2
+of [Trait Resolution](./wep-2026-09-01-trait-resolution.md), so a derivation
+keyed on the newtype kind beats one keyed on its base's. `Inspect` is the one
+that uses it. Its `as Name` tag is a blanket over this kind, instantiated once
+per chain link, so `type A = i32; type B = A` renders `7 as A as B`.
 
 ```wado
 internal trait Reflect {                         // identity — every nameable type
     fn type_name() -> String;                    // the declaration's name
     fn type_info() -> TypeInfo;                  // + module + this instantiation's args
+    fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
 internal trait ReflectStruct: Reflect {          // struct
@@ -69,7 +84,6 @@ internal trait ReflectStruct: Reflect {          // struct
     fn members() -> Self::Members;
     fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
     fn defaults() -> Self::FieldSlots;           // declared `f: T = expr` per field
-    fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
 internal trait ReflectVariant: Reflect {         // variant
@@ -77,7 +91,6 @@ internal trait ReflectVariant: Reflect {         // variant
     type Members;                                // [VariantCase<Self, P_0>, …]
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
-    fn wire_name_policy() -> CaseStyle;
 }
 
 internal trait ReflectEnum: Reflect {            // enum
@@ -85,7 +98,6 @@ internal trait ReflectEnum: Reflect {            // enum
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
     fn from_discriminant(disc: i32) -> Option<Self>;
-    fn wire_name_policy() -> CaseStyle;
 }
 
 internal trait ReflectFlags: Reflect {           // flags
@@ -93,12 +105,10 @@ internal trait ReflectFlags: Reflect {           // flags
     fn members() -> Self::Members;
     fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
-    fn wire_name_policy() -> CaseStyle;
 }
 
 internal trait ReflectNewtype: Reflect {         // newtype
     type Base;                                   // `type UserName = String` → String
-    fn wire_name_policy() -> CaseStyle;
 }
 ```
 
@@ -237,7 +247,8 @@ compiler renders internally; a type with none is written bare.
 
 ### What can be named
 
-The types `Reflect` is synthesized for: the five kinds, and the tuple family.
+The types `Reflect` is synthesized for: the five kinds, and the tuple family,
+which is the one still to come (Known gaps).
 Naming an unnameable type is therefore an unsatisfied `T: Reflect`, reason-chained
 like any other bound, rather than a special case buried in an intrinsic.
 
@@ -387,7 +398,7 @@ layout, so the receiver must be the instance.
 
 The reflection layer exposes only the authored facts — a member's `rename`
 override (`Member::wire_name_override`) and the type's `name_policy`
-(`wire_name_policy` as a `CaseStyle`, on every kind). A resolved wire name is policy, and
+(`Reflect::wire_name_policy` as a `CaseStyle`). A resolved wire name is policy, and
 casing is serialization vocabulary, not type structure, so it lives in
 `core:serde`; any schema library (Jade) calls the same helper, so wire names never
 diverge.
@@ -406,21 +417,19 @@ concept.
 
 The reflection traits, the member handles, the wire-naming split, and the
 streaming struct build are implemented — `core:serde` derives every struct,
-variant, enum, and flags impl through them. So is the identity root: `Reflect`
-carries `type_name()` for every kind, a kind bound reaches it through the
-supertrait, and `T: Reflect` is a bound of its own. What remains is what a
-schema library reads and nothing else yet does.
+variant, enum, and flags impl through them, and a newtype reaches those
+derivations through the base whose structure it inherits. So is the identity
+root: `Reflect` carries `type_name()` for every kind, a kind bound reaches it
+through the supertrait, and `T: Reflect` is a bound of its own. No format trait
+is derived per declaration any more: `Inspect`'s `as Name` tag is a blanket over
+the newtype kind. What remains is what a schema library reads and
+nothing else yet does.
 
 - `Member::doc()`. The trait carries `name()` and `wire_name_override()` only,
   so `description` / `title` have no source. The fact is not lost — a doc
   comment lives in the `TriviaMap` that `wado doc` reads — so closing this is
   plumbing that string through `TirField` into the synthesized member, beside
   the wire-name override that already travels that path.
-- `ReflectNewtype` is unimplemented
-  ([#1933](https://github.com/wado-lang/wado/issues/1933)): reflection covers
-  four kinds, so a newtype is seen as its base and a derivation that must treat
-  it as itself has no handle. `Inspect` shows the fact is not missing from the
-  compiler — it renders the `as Name` tag today — only the surface is.
 - `TypeInfo` is designed above and unimplemented: the root answers `type_name()`
   but not yet `type_info()`, so an instantiation cannot be told from its
   declaration. Nothing in the tree needs a new mechanism — it is a sealed handle
@@ -428,13 +437,7 @@ schema library reads and nothing else yet does.
   per-instantiation, so it follows `type_name()`'s synthesis, where the resolved
   subject already carries the three facts it needs (its base name, module, and
   type arguments). The tuple family and `()` join the nameable set with it;
-  today only the four synthesized kinds carry the root.
-- A derivation reached through a bound-keyed blanket does not fire for a newtype
-  whose base has its own impl
-  ([#1932](https://github.com/wado-lang/wado/issues/1932)). Both fixes are
-  prerequisites for a library derivation over newtypes; until they land such a
-  derivation must be written directly on each newtype, where a hand-written impl
-  wins.
+  today only the five synthesized kinds carry the root.
 
 ## Related WEPs
 

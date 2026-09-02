@@ -13,7 +13,7 @@ struct S {
 }
 
 test "wire_name resolves override then policy" {
-    let policy = ReflectStruct::<S>::wire_name_policy();
+    let policy = Reflect::<S>::wire_name_policy();
     let mut out = "";
     for let f of ReflectStruct::<S>::members() {
         out = `${out}${wire_name(&f, policy)};`;

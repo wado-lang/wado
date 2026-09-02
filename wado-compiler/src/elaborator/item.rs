@@ -1323,7 +1323,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !visited.insert(type_id) {
             return false;
         }
-        let base = type_table.get_ultimate_base_type(type_id);
+        let base = type_table.representation_head(type_id);
         if base != type_id && self.type_contains_slice_view_inner(type_table, base, visited) {
             return true;
         }
@@ -2389,6 +2389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
+        scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params
         // still in scope). `<F: fn(...)>` / `<F: fn mut(...)>` bounds are
@@ -2723,6 +2724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
+        scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params still
         // in scope). Mirror the free-function path in `resolve_function`:

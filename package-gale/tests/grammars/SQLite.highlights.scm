@@ -39,6 +39,12 @@
 "<>" @operator
 "~" @operator
 
+; A keyword used as a name. `any_name : IDENTIFIER | keyword | ...` accepts
+; every keyword as an identifier, and the `keyword` rule is where those go, so
+; `SELECT key FROM t` names a column. The capture reads the set off the grammar:
+; a keyword added to the rule needs no edit here.
+(keyword) @variable
+
 ; Keywords
 (K_ABORT) @keyword
 (K_ACTION) @keyword

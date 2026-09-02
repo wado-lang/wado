@@ -226,7 +226,15 @@ The compiler reports this at the use site, the one place the question can be
 answered. Rejecting the overlap where the impls are written would mean deciding
 whether two bounds can both hold. An open world cannot decide that, since
 another module may write `impl Limit` for a struct at any time. So nothing is
+<<<<<<< HEAD
 rejected at definition time.
+||||||| b32a52617
+rejected at definition time. The standard library never reaches this rule: the
+four reflection kinds are mutually exclusive, so no receiver satisfies two.
+=======
+rejected at definition time. The standard library never reaches this rule: the
+five reflection kinds are mutually exclusive, so no receiver satisfies two.
+>>>>>>> origin/main
 
 The report covers one trait declaration at one argument list. Two blankets of
 _different_ traits are the two-trait ambiguity above.

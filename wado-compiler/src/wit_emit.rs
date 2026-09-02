@@ -296,7 +296,10 @@ impl<'a> Emitter<'a> {
             for fl in &module.flags {
                 decls.flags.insert(fl.name.clone(), fl);
             }
-            for nt in &module.newtypes {
+            // A generic declaration names no single type and has no WIT form —
+            // WIT takes no type parameters — so it never enters the map, where
+            // it would shadow a concrete declaration of the same name.
+            for nt in module.newtypes.iter().filter(|nt| nt.type_id.is_some()) {
                 decls.newtypes.insert(nt.name.clone(), nt);
             }
         }
@@ -860,12 +863,18 @@ impl<'a> Emitter<'a> {
             let members = fl.members.iter().map(|m| Flag::new(to_kebab(&m.name)));
             return Ok(Some(TypeDef::flags(kebab, members)));
         }
-        if let Some(nt) = self.decls.newtypes.get(name).copied() {
-            // `nt.type_id` is the newtype itself; emit an alias to its base, not
+        if let Some(type_id) = self
+            .decls
+            .newtypes
+            .get(name)
+            .copied()
+            .and_then(|nt| nt.type_id)
+        {
+            // `type_id` is the newtype itself; emit an alias to its base, not
             // a self-referential `type x = x`.
-            let base_id = match self.types.get(nt.type_id) {
+            let base_id = match self.types.get(type_id) {
                 ResolvedType::Newtype { base_type, .. } => *base_type,
-                _ => nt.type_id,
+                _ => type_id,
             };
             let base = self.map_type(base_id)?;
             return Ok(Some(TypeDef::type_(kebab, base)));

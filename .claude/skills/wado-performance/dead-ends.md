@@ -36,27 +36,6 @@ so no division was ever issued. The ~28% in these frames is the per-byte
 Reverted; the digit-boundary tests were kept. Generalizes to any "replace a
 constant divide/modulo" idea in guest code.
 
-## Bucketing `FieldSchema::lookup` by wire-name length (2026-08-16)
-
-The synthesized `lookup` (`serde_synth.rs`) is a flat chain of
-`__len == N && key[0] == b0 && …`. Bucketing by length, then dispatching on a
-discriminating byte, mirrors `json_catalog_v2.wado`'s hand-written parser.
-
-Not pursued. `lookup` is **0.71%** of the json-catalog profile (`next_field`
-another 0.50%); it is a real function there, not inlined away. Also:
-
-- Zero gain when name lengths are distinct — the `&&` chain already
-  short-circuits on length. Only same-length-heavy structs benefit (`Event`:
-  16 comparisons → 13).
-- Byte-at-a-time is irreducible: WasmGC has no multi-byte load or compare over
-  `Array<u8>` (`builtin.wado` has only `array_get_value_u8`/`array_copy`/`array_fill`).
-- v2's discriminating-byte shortcut is unsound here — an unknown key matching
-  on length and that byte would silently capture a real field's value.
-
-Where the time actually is: `whitespace_end` 12.5% (`citm_catalog.json` is 71%
-whitespace), and on ser `push_str` 6.6%, `write_plain_key` 5.1%,
-`String::grow` 5.1%.
-
 ## Sharing list elements instead of deep-copying them (2026-08-20)
 
 Lifting `value_copy_demote`'s variant-deep-copy gate is a no-op: the candidate
@@ -314,3 +293,25 @@ every call site, and a region reached once behind a branch has nothing to give
 back. "The traversal has a blind spot" is a claim about the code, not about what
 closing it is worth — and bytes alone would have retired this for the wrong
 reason, since they do not track speed.
+
+## Hoisting `HighlightVisitor::classify`'s common path to get it inlined (2026-09-02)
+
+`classify` is one call per token and per trivia, ~5300 on syntax-highlight, and
+`package-gale/perf.md` named it a lever: it walks the override list before the
+`default_ids[kind]` lookup, and SQLite has no overrides at all. Splitting the
+scan into `classify_override` leaves a fast path of two compares and one indexed
+load, which reads like it should fit `-O2`'s 16-instruction budget.
+
+It does not fit. `wado dump -O2` still shows both call sites, and the benchmark
+is flat to slightly negative: 1.537–1.561 ms/iter against 1.525–1.536. Writing
+the guard as `overrides.len() > 0` rather than `!is_empty()` changed neither,
+though it did remove a non-inlined `List<ResolvedOverride>::len` call the WIR
+had kept.
+
+What paid on the same frame was deleting the caller. With no override nothing
+reads the rule stack, so the CST walk that maintains it is unobservable, and
+`gen_highlight` stops emitting it (+6.5%).
+
+Generalizes: a fast path you shrink is still a call until it is under the
+budget, and "under the budget" is a WIR question, not an eyeball one. Ask what
+makes the call unnecessary before asking what makes it cheap.

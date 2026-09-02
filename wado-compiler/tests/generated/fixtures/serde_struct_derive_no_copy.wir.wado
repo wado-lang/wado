@@ -2553,37 +2553,35 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
 }
 
 fn "serde_struct_derive_no_copy.wado/serde_struct_derive_no_copy.wado/Bag^core:serde/FieldSchema::lookup"(__key) {
-    let __len: i32;
-    __len = __key.end - __key.start;
-    if (if (if (if (if __len == 4 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 116;
+    let __match_scrut_0: i32;
+    __match_scrut_0 = __key.end - __key.start;
+    if __match_scrut_0 == 4 {
+        if (if (if (if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 116 -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 103;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 115;
+        } else {
+            0;
+        }) {
+            return 0, 0;
+        }
+        return 1, 0;
+    } else if __match_scrut_0 == 2 {
+        if (if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 105 -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 100;
+        } else {
+            0;
+        }) {
+            return 0, 1;
+        }
+        return 1, 0;
     } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 103;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 115;
-    } else {
-        0;
-    }) {
-        return 0, 0;
-    }
-    if (if (if __len == 2 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 105;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 100;
-    } else {
-        0;
-    }) {
-        return 0, 1;
     }
     return 1, 0;
 }

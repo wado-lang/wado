@@ -316,6 +316,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().flags_members_at(site, name)
     }
 
+    /// [`Self::lookup_flags_members_at`] through a newtype: the base's members
+    /// paired with the type the qualifier named, so `M::none()` on
+    /// `type M = Perm` reads Perm's members and yields an `M`. The second slot
+    /// is `None` when the qualifier owns the members itself.
+    pub(super) fn flags_members_through_newtype(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<(FlagsInfo, Option<TypeId>)> {
+        let lookup = self.type_lookup();
+        if let Some(def) = lookup.declaration_at(site, name)
+            && let Some((base, named)) = types::newtype_member_owner(&lookup, &self.tysys, def)
+        {
+            return Some((lookup.flags_members_of(base)?.clone(), Some(named)));
+        }
+        Some((lookup.flags_members_at(site, name)?.clone(), None))
+    }
+
     pub(super) fn lookup_newtype(&self, name: &str) -> Option<TypeId> {
         self.type_lookup().newtype(name)
     }
@@ -675,6 +693,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     pub(super) fn ast_block_always_exits(&self, block: &crate::ast::Block) -> bool {
         control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
+    }
+
+    /// Reject an unlabeled `break` / `continue` that no enclosing loop binds.
+    /// Called per function, method, and closure body: each is its own label
+    /// stack.
+    pub(super) fn validate_loop_jumps_ast(&self, body: Option<&crate::ast::Block>) {
+        let Some(body) = body else {
+            return;
+        };
+        if let Some((jump, span)) = control_flow::find_unbound_loop_jump(self.ctrl_flow_ctx(), body)
+        {
+            let _ = self.emit(types::TypeError::LoopJumpOutsideLoop { jump, span });
+        }
+    }
+
+    /// Whether a labeled block's body can reach its own end, so its trailing
+    /// statement is a branch of the block.
+    pub(super) fn ast_labeled_block_falls_through(
+        &self,
+        block: &crate::ast::Block,
+        label: &str,
+    ) -> bool {
+        control_flow::labeled_block_falls_through(self.ctrl_flow_ctx(), block, label)
     }
 
     /// Result type of an AST block, read from `expression_types` rather

@@ -184,7 +184,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
         let table = self.tysys.type_table.borrow();
         let peeled_ref = table.peel_refs(type_id);
-        let base = table.get_ultimate_base_type(peeled_ref);
+        let base = table.representation_head(peeled_ref);
         match table.get(base) {
             ResolvedType::Function {
                 is_mut,
@@ -965,8 +965,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
-            else if let Some(flags_info) =
-                self.lookup_flags_members_at(receiver_site, prefix).cloned()
+            // A newtype reaches its base's constants and keeps its own type:
+            // `M::none()` on `type M = Perm` is `Perm::none() as M`.
+            else if let Some((flags_info, named)) =
+                self.flags_members_through_newtype(receiver_site, prefix)
                 && matches!(suffix, "none" | "all")
             {
                 if let Some(prefix_seg) = ident.segments.first() {
@@ -975,7 +977,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Reify rebuilds the flags `none()` / `all()`
                 // constant from the AST + flags info; the body walk
                 // projects only the result type.
-                return flags_info.type_id;
+                return named.unwrap_or(flags_info.type_id);
             }
             // Check if this is a variant case construction (Color::Red)
             else if let Some(variant_info) =

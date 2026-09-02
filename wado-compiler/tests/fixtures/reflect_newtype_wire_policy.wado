@@ -1,0 +1,22 @@
+// A newtype has no members to rename, so its `#[wire(name_policy)]` names the
+// type itself, and a schema keys its `$defs` entry by that name (issue #1933).
+// The policy sits on the root because it states a fact about the declaration
+// rather than about anything under it.
+
+use { CaseStyle } from "core:prelude";
+
+#[wire(name_policy = "kebab-case")]
+type UserName = String;
+
+type PlainName = String;
+
+test "a newtype answers its declared wire policy" {
+    assert Reflect::<UserName>::wire_name_policy() == CaseStyle::Kebab;
+}
+
+test "a newtype with no policy answers Identity" {
+    assert Reflect::<PlainName>::wire_name_policy() == CaseStyle::Identity;
+}
+
+__DATA__
+{"test": {}}

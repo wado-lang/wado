@@ -65,6 +65,12 @@ internal trait Reflect {
     /// Returns the declaration's name.
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
+
+    /// The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
+    /// kind carries the attribute, and it says the same thing on each: the
+    /// root answers so a caller need not know which kind it holds.
+    #[compiler_item("reflect_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time struct introspection. The compiler synthesizes an impl for
@@ -101,10 +107,6 @@ internal trait ReflectStruct: Reflect {
     /// wire wrote this", so a repeat is visible without a second record.
     #[compiler_item("reflect_struct_empty_slots")]
     fn empty_slots() -> Self::FieldSlots;
-
-    /// The struct's `#[wire(name_policy)]` (`Identity` if none).
-    #[compiler_item("reflect_struct_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
 }
 
 /// The wire-naming policy declared by `#[wire(name_policy = "...")]` (casing
@@ -152,10 +154,6 @@ internal trait ReflectVariant: Reflect {
     /// Returns the per-case members.
     #[compiler_item("reflect_variant_members")]
     fn members() -> Self::Members;
-
-    /// The variant's `#[wire(name_policy)]` (`Identity` if none).
-    #[compiler_item("reflect_variant_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time enum introspection. The compiler synthesizes an impl for
@@ -178,10 +176,6 @@ internal trait ReflectEnum: Reflect {
     /// Returns the per-case members.
     #[compiler_item("reflect_enum_members")]
     fn members() -> Self::Members;
-
-    /// The enum's `#[wire(name_policy)]` (`Identity` if none).
-    #[compiler_item("reflect_enum_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time flags introspection. The compiler synthesizes an impl for
@@ -205,10 +199,21 @@ internal trait ReflectFlags: Reflect {
     /// Returns the per-bit members.
     #[compiler_item("reflect_flags_members")]
     fn members() -> Self::Members;
+}
 
-    /// The flags type's `#[wire(name_policy)]` (`Identity` if none).
-    #[compiler_item("reflect_flags_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
+/// Compile-time newtype introspection. The compiler synthesizes an impl for
+/// every newtype; it cannot be implemented in user code and is callable only
+/// in monomorphized contexts (`T` a concrete newtype).
+///
+/// The one kind with no members: a newtype has a base, and the value bridges
+/// both ways are the `From` the compiler already generates for it. Structure
+/// it inherits from that base — `ReflectStruct::<T>` on a newtype over a
+/// struct walks the struct's fields — so only the base is stated here.
+/// See WEP 2026-06-13.
+#[compiler_item("reflect_newtype")]
+internal trait ReflectNewtype: Reflect {
+    /// The type this newtype wraps: `type UserName = String` → `String`.
+    type Base;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
@@ -853,6 +858,21 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
             f.write_str(&Reflect::<L>::type_name());
             f.write_str(&"::none()");
         }
+    }
+}
+
+/// Newtype debug formatting derived over `ReflectNewtype` (WEP 2026-06-13): the
+/// base's own rendering, tagged with the newtype's name. A newtype is a type
+/// distinct from its base, so `Inspect` is the one derivation that says which
+/// of the two it is looking at; every other kind's blanket holds for a newtype
+/// only after peeling to that base, and rank 2 of WEP 2026-09-01 puts this one
+/// first. A chain renders a link per instance: `7 as A as B`.
+impl<N: ReflectNewtype<Base = B>, B: Inspect> Inspect for N {
+    fn inspect(&self, f: &mut Formatter) {
+        let base = *self as B;
+        base.inspect(f);
+        f.write_str(&" as ");
+        f.write_str(&Reflect::<N>::type_name());
     }
 }
 
