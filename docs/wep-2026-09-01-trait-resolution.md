@@ -322,6 +322,9 @@ questions of the same shape, and that search is what needs the cycle rule below.
 Precomputing it is not an option either: whether a blanket applies is the
 question, so a lowering that answered it would be running the solver.
 
+One of the six is not a property of one type, and the split does not hold as
+stated — see "Structural derivation is not a leaf".
+
 A fact carries the derivation requests its answer depends on. "This struct
 satisfies `Eq`" is also "emit `Eq` for this struct", and an answer that arrives
 without the request loses the body.
@@ -362,11 +365,13 @@ Nothing flips at once. The fixture corpus is the drift detector, as
 - [x] `holds`, with the impls, the traits' supertraits, the derivation facts and
       the bounds in force, and the cycle rule under unit test. Called by nothing
       yet.
-- [ ] Lower the facts — every non-recursive way a bound holds, with the
-      derivation requests each owes — and put `holds` under the differential
-      against `type_implements_trait` over every fixture. Flip once they agree.
-- [ ] `candidates`, then `rank`, the same way: unit tests first, then the
-      differential, then the flip.
+- [x] `rank`, with ranks 0-3 and every shape they leave, under unit test.
+- [ ] `candidates` — which impls a call has, and at which level of the
+      receiver's newtype chain each was selected.
+- [ ] Lower the facts and put `holds` under the differential against
+      `type_implements_trait` over every fixture, once "Structural derivation is
+      not a leaf" is settled: the boundary it asks about is what a fact is.
+- [ ] The differential for `candidates` and `rank`, then the flip.
 
 `coherence_errors` went first because it reads the shallowest part of `Program` —
 impls alone, no bounds in force and no receiver — so it fixed the lowering's
@@ -510,14 +515,38 @@ trait holding at the same level, one written in the calling module — because a
 duplicate pair is rejected where it is written, a newtype and its base are
 separated by rank 1, and two traits' blankets are the cross-trait ambiguity.
 
-### The structural derivation rules stay outside the unit tests
+### Structural derivation is not a leaf
 
-`holds` reads the derivation facts rather than deriving them, so "a struct whose
-members all satisfy `Eq` satisfies `Eq`" is the lowering's rule and the fixture
-corpus is what holds it. Moving it in later is an addition to `Program`, not a
-rewrite of the solver; what it would buy is those rules under unit test, and
-what it costs is every type's members and their visibility in the
-representation.
+The boundary above holds for five of the six: a trait that holds for everything,
+a plain `enum`'s `Display`, a reference identity, a primitive's built-in traits,
+and a declaration's own reflection kind are each read off one type.
+
+The sixth is not. `structural_conformance` walks the receiver's members and asks
+the _full_ question of each: `struct Wrapper { inner: List<Point> }` satisfies
+`Eq` if `List<Point>` does, which the prelude's `impl<T: Eq> Eq for List<T>`
+answers, which asks whether `Point` does, which is structural again. Derivation
+and impl search are mutually recursive, so neither is a leaf of the other.
+
+That rules out a precomputed table for it twice over. The answers are not
+properties of a type the lowering can read off, and the pairs are not known in
+advance: a structurally derived generic instance gets its `TypeId` during
+elaboration, after any table would have been built.
+
+Two ways to redraw it, and the choice decides how much `Program` weighs:
+
+- `Program` carries each type's kind, members and member visibility, and `holds`
+  walks them. Member descent then needs a second recursion stack: a repeat at a
+  fixed subject is the ungrounded cycle and answers no, while a repeat reached
+  through members is a recursive type (`struct Node { next: Option<Node> }`) and
+  answers yes. That is the gap "An ungrounded bound cycle satisfies its own
+  bounds" describes, and in the solver it is a rule with unit tests rather than
+  a change to dispatch.
+- The derivation answers arrive as a query the caller supplies rather than a
+  table, so the compiler answers them from the code that answers them today and
+  a test answers them from a table. `Program` stays small; the mutual recursion
+  then crosses the boundary, and the cycle stack lives on one side of it.
+
+The first is the honest shape and the larger change. Nothing is decided.
 
 ### `spec.md` overstates coherence
 
