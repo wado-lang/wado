@@ -212,9 +212,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(68)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(69)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<u8>", ref "core:prelude/format.wado//Formatter");  // TypeId(69)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<u8>", ref "core:prelude/format.wado//Formatter");  // TypeId(70)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(70)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(71)
 
@@ -1603,6 +1603,17 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let self_2: i32;
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<u8>"(self.repr, 0, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: block -> i32 {
+        self_2 = f.precision;
+        if self_2 == -2 {
+            break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: 256;
+        }
+        break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: self_2;
+    });
+}
+
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, data) {
     let repr_2: ref Array<u8>;
     let end_3: i32;
@@ -1631,7 +1642,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_40 + (_av_41 - _av_40);
     offset = data.start;
     block {
-        l140: loop {
+        l141: loop {
             v = __inline___effect_dispatch__StreamWritable_u8___write_raw_6: block -> ref "core:prelude/types.wado//StreamWrite" {
                 data_13 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr_2, start: offset, end: end_3 };
                 __local_2 = global:effect_handler_resource_stream.wado::__effect_StreamWritable<u8>;
@@ -1674,20 +1685,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
                 return __sroa_written_result;
             }
-            continue l140;
+            continue l141;
         };
     };
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<u8>"(self.repr, 0, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: block -> i32 {
-        self_2 = f.precision;
-        if self_2 == -2 {
-            break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: 256;
-        }
-        break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: self_2;
-    });
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {

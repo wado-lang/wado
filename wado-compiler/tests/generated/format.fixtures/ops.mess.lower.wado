@@ -1489,10 +1489,6 @@ pub struct "Box<fn(char)->char>" {
     value: fn(char) -> char,
 }
 
-pub struct "Box<i32>" {
-    value: i32,
-}
-
 pub struct "Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>>" {
     value: Result<String, String>,
 }
@@ -3149,19 +3145,16 @@ pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(c
 
 pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
-pub fn "core:prelude/bytes.wado/ByteArray^core:prelude/traits.wado/Inspect::inspect"(self: &Array<u8>, f: &mut Formatter) {
-    *self as Array<u8>."Array<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as ByteArray", used: 13 });
+pub fn "core:prelude/bytes.wado/ByteArray^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"ByteArray", used: 9 };
 }
 
-pub fn "core:prelude/bytes.wado/ByteList^core:prelude/traits.wado/Inspect::inspect"(self: &List<u8>, f: &mut Formatter) {
-    *self as List<u8>."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as ByteList", used: 12 });
+pub fn "core:prelude/bytes.wado/ByteList^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"ByteList", used: 8 };
 }
 
-pub fn "core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect"(self: &Slice<u8>, f: &mut Formatter) {
-    *self as Slice<u8>."core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as ByteSlice", used: 13 });
+pub fn "core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"ByteSlice", used: 9 };
 }
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -9777,9 +9770,8 @@ pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum:
     return CaseStyle::Identity;
 }
 
-pub fn "core:prelude/types.wado/Waitable^core:prelude/traits.wado/Inspect::inspect"(self: Box<i32>, f: &mut Formatter) {
-    Box<i32> { value: self.value as i32 }."i32^core:prelude/traits.wado/Inspect::inspect"(f);
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as Waitable", used: 12 });
+pub fn "core:prelude/types.wado/Waitable^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"Waitable", used: 8 };
 }
 
 pub fn "core:prelude/types.wado/StreamWritable<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -11984,18 +11976,6 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
     return self.repr."Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
 
-pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Slice<u8>, f: &mut Formatter) {
-    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self.repr, self.start, self.end, f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
-}
-
-pub fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &List<u8>, f: &mut Formatter) {
-    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(&self.repr, 0, self.used, f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
-}
-
-pub fn "Array<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Array<u8>, f: &mut Formatter) {
-    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self, 0, core::builtin::array_len::<u8>(self), f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
-}
-
 fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(self: Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>>, f: &mut Formatter) {
     __tuple_for_of_2: {
         let __tuple_2: [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>] = "core::prelude/types.wado::core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/ReflectVariant::members"();
@@ -12142,42 +12122,6 @@ pub fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prel
     return [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> { index: 0, case_name: String { repr: packed"Ok", used: 2 }, wire_override: Option<String>::None, is_unit: false }, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> { index: 1, case_name: String { repr: packed"Err", used: 3 }, wire_override: Option<String>::None, is_unit: false }];
 }
 
-fn "core/prelude/array.wado/write_seq_inspect<u8>"(repr: &Array<u8>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if f.alternate {
-        "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr, start, end, f, marker, limit);
-        return;
-    }
-    f."core:prelude/format.wado/Formatter::write_char"('[');
-    let mut shown: i32 = 0;
-    let mut truncated: bool = false;
-    let mut i: i32 = start;
-    loop {
-        if !(i < end) {
-            break;
-        }
-        __for_0_body: {
-            if ((limit >= 0) && (shown >= limit)) {
-                truncated = true;
-                break;
-            }
-            if (shown > 0) {
-                f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ", used: 2 });
-            }
-            Box<u8> { value: repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i) }."u8^core:prelude/traits.wado/Inspect::inspect"(f);
-            shown = (shown + 1);
-        }
-        i = (i + 1);
-    }
-    if (marker && truncated) {
-        if (shown > 0) {
-            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ...", used: 5 });
-        } else {
-            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"...", used: 3 });
-        }
-    }
-    f."core:prelude/format.wado/Formatter::write_char"(']');
-}
-
 fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
     return core::builtin::array_get_value::<u64>(self, index);
 }
@@ -12234,38 +12178,6 @@ fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::in
             }
         }
     }
-}
-
-fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if (start >= end) {
-        f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"[]", used: 2 });
-        return;
-    }
-    f."core:prelude/format.wado/Formatter::open_brace"(String { repr: packed"[", used: 1 });
-    let mut shown: i32 = 0;
-    let mut truncated: bool = false;
-    let mut i: i32 = start;
-    loop {
-        if !(i < end) {
-            break;
-        }
-        __for_0_body: {
-            if ((limit >= 0) && (shown >= limit)) {
-                truncated = true;
-                break;
-            }
-            f."core:prelude/format.wado/Formatter::write_newline_indent"();
-            Box<u8> { value: repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i) }."u8^core:prelude/traits.wado/Inspect::inspect"(f);
-            f."core:prelude/format.wado/Formatter::write_char"(',');
-            shown = (shown + 1);
-        }
-        i = (i + 1);
-    }
-    if (marker && truncated) {
-        f."core:prelude/format.wado/Formatter::write_newline_indent"();
-        f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"...", used: 3 });
-    }
-    f."core:prelude/format.wado/Formatter::close_brace"(String { repr: packed"]", used: 1 });
 }
 
 fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter: &mut SliceValueIter<u8>) -> List<u8> {
