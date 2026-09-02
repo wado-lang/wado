@@ -697,6 +697,38 @@ outer: {
 }
 ```
 
+### Branch Hints
+
+`builtin::cold_path()` marks the path containing it as rarely executed. It is a
+plain statement with no runtime effect: the engine lays out the other side of
+the branch as predicted-taken, and the inliner leaves the cold path out of its
+cost estimate. See [the spec](./spec.md#branch-hints).
+
+```wado
+// The taken branch is cold.
+if i >= self.len {
+    builtin::cold_path();
+    panic("index out of bounds");
+}
+
+// Being a statement, not a condition wrapper, it also works where no boolean
+// is available — a `match` or `if let` arm.
+match command {
+    Run => execute(),
+    Crash => {
+        builtin::cold_path();
+        panic("crashed");
+    }
+}
+
+// On the fall-through after a diverging guard, it hints the guard as likely.
+if let Some(v) = self.fast_path(key) {
+    return v;
+}
+builtin::cold_path();          // the slow path below is rarely reached
+return self.slow_path(key);
+```
+
 ## Assert
 
 `assert` behaves like power-assert.
@@ -898,12 +930,24 @@ fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
     println(`Storing: ${data.value}`);
     return Container { data };
 }
+
+// `self` is a reference parameter like any other, so a method letting it
+// escape declares stores[self].
+fn wrap(&self) -> Ref with stores[self] {
+    return Ref { inner: self };
+}
+
+// A reference reached through a parameter is a different reference: copying
+// it out is not that parameter escaping, and needs no declaration.
+fn rebase(c: &Cursor, at: i32) -> Cursor {
+    return Cursor { chars: c.chars, pos: at };
+}
 ```
 
 Rules:
 
 - `stores[param]` declares that the function may store the reference parameter
-- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`
+- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`, `self` included
 - Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
 - In function type position, use positional indices: `fn(&Data) with stores[0]`
 
@@ -1343,6 +1387,13 @@ test "panics on invalid input" {
 #[TODO]
 test "not yet implemented" {
     panic("TODO: implement this");
+}
+
+// Timeout override. The default is 1000ms; a test that exceeds its budget
+// is interrupted and fails.
+#[timeout_ms(5000)]
+test "large data processing" {
+    process_large_dataset();
 }
 
 // Synopsis test: runs like any test; `wado doc` renders its body as the

@@ -5037,9 +5037,7 @@ let t = [..make_pair(), 30];
 
 ### Reference Storage (`stores[...]`)
 
-> Not yet implemented. See [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md) for the design.
-
-The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion.
+The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion. See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md) for the design rationale.
 
 #### Syntax
 
@@ -5061,6 +5059,19 @@ fn process(data: &Data) -> Result {
 fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
     println("Storing data...");
     return register(data);
+}
+```
+
+Every reference parameter follows this rule, `self` included: a method that
+returns `self` or stores it declares `with stores[self]`.
+
+A reference reached _through_ a parameter is a different reference, and copying
+it out is not that parameter escaping. Its own escape was declared wherever it
+entered, so no further declaration is needed:
+
+```wado
+fn rebase(c: &Cursor, at: i32) -> Cursor {   // no stores[c]
+    return Cursor { chars: c.chars, pos: at };
 }
 ```
 
