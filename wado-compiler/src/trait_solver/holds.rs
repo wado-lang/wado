@@ -912,8 +912,8 @@ mod tests {
         );
     }
 
-    /// `impl<..T> Alpha for (..T)` answers for every tuple, the unit `()`
-    /// included: the pack takes whatever the tuple has.
+    /// `impl<..T> Alpha for (..T)` answers for every tuple, the empty tuple
+    /// `[]` included: the pack takes whatever the tuple has.
     #[test]
     fn a_pack_target_matches_a_tuple_of_any_arity() {
         let p = Builder::default()

@@ -724,10 +724,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return assoc.ty;
         }
 
-        // Check for qualified variant case names like Color::Red (without parentheses)
-        if ident.name.contains("::")
-            && let Some(result) = self.resolve_qualified_case(ident, expected_type)
-        {
+        // A qualified case name like `Color::Red` (without parentheses), or a
+        // bare built-in one like `None`.
+        if let Some(result) = self.resolve_qualified_case(ident, expected_type) {
             return result;
         }
 
@@ -884,21 +883,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
-        let pos = ident.name.find("::")?;
-        let prefix = &ident.name[..pos];
-        let suffix = &ident.name[pos + 2..];
+        // A bare built-in case (`None`) is its qualified spelling.
+        let spelled = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .bare_case_path(&ident.name)
+            .unwrap_or_else(|| ident.name.clone());
+        let pos = spelled.find("::")?;
+        let prefix = &spelled[..pos];
+        let suffix = &spelled[pos + 2..];
 
         // The type a case is qualified with is the segment just before the
         // case's own name — the head for `Color::Red`, the second segment for
         // `ns::Color::Red` — and the resolve walk answered for it in the
         // module that wrote it. So a reference inside a foreign default
         // resolves in the declaring module without a second, module-scoped
-        // lookup beside the first.
-        let owner = ident
-            .segments
-            .len()
-            .checked_sub(2)
-            .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
+        // lookup beside the first. A bare case has no such segment; its
+        // variant is a prelude name.
+        let owner = match ident.segments.len().checked_sub(2) {
+            Some(i) => self.tysys.resolutions.declared(ident.segments[i].id),
+            None => self.type_lookup().declaration(prefix),
+        };
         macro_rules! lookup_case {
             ($of:ident) => {
                 owner.and_then(|def| self.type_lookup().$of(def)).cloned()

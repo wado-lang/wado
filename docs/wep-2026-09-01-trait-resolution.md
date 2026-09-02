@@ -85,6 +85,10 @@ impl naming the container.
 
 All three lists are then gated on scope, below.
 
+`()` is the unit type, not the empty tuple `[]`, so an impl for `[..T]` is
+never a candidate for it. Its traits are implemented for `()` directly
+(`trait_unit_eq_ord.wado`).
+
 Two impls of one `(Trait, Type)` pair are rejected where the second is written.
 Coherence claims the pair cannot exist, no rank distinguishes them, and a
 package compiles whole, so the check needs no open-world reasoning: the two are
@@ -564,16 +568,6 @@ for the `Ref` / `RefMut` identities, so a bound on any of them is answered by
 the compiler's path alone and the differential skips it. Each is one more
 thing the lowering reads off a type, in the shape the section above gives the
 others.
-
-### `()` is not a tuple
-
-`()` is indexed apart from the tuples, so the prelude's
-`impl<..T: Eq> Eq for [..T]` does not answer for it, and no `impl Eq for ()`
-exists: `() == ()` is an error, and so is comparing a struct with a `()` member
-(`trait_unit_eq_ord.wado`). The solver lowers `()` the same way, so the two
-agree; whether `()` should be the empty tuple to trait resolution — every
-`[..T]` impl answering for it, an `impl Tr for ()` outranking one at rank 0 —
-is open.
 
 ### `spec.md` overstates coherence
 

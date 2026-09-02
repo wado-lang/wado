@@ -1991,6 +1991,20 @@ impl Inspect for () {
     }
 }
 
+/// `()` is the unit type, not the empty tuple `[]`, so the tuple impls do not
+/// answer for it: it has one value, equal to and ordered with itself.
+impl Eq for () {
+    pub fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}
+
+impl Ord for () {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        return Ordering::Equal;
+    }
+}
+
 /// Debug representation for the raw 128-bit SIMD register: 32 hex digits,
 /// most-significant lane first. The lane-typed aliases are all the same `v128`,
 /// so no canonical lane interpretation exists to print.

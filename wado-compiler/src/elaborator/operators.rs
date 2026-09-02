@@ -233,8 +233,9 @@ impl TypeSystem {
             // (there is no `Eq`/`Ord`/`Add`/… impl for `v128`).
             ResolvedType::Primitive(PrimitiveType::V128) => true,
             // `()` pushes nothing, so the `i32.eq` below it underflows the
-            // stack, and there is no `Eq` impl for it either. `Never` is
-            // deliberately absent: `panic("boom") + 1` is legal.
+            // stack; its `Eq` / `Ord` are the prelude's impls for `()`, and
+            // the other operators have none. `Never` is deliberately absent:
+            // `panic("boom") + 1` is legal.
             ResolvedType::Unit => true,
             _ => false,
         }
@@ -332,9 +333,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }
                 | ResolvedType::Variant { .. }
-                // `fq_base_type_name` spells a raw GC array `Array`, the name its
-                // `Eq` / `Ord` impls attach to.
-                | ResolvedType::BuiltinArray(_) => Some(
+                // `fq_base_type_name` spells a raw GC array `Array` and the
+                // unit type `()`, the names their `Eq` / `Ord` impls attach to.
+                | ResolvedType::BuiltinArray(_)
+                | ResolvedType::Unit => Some(
                     self.tysys
                         .type_table
                         .borrow()

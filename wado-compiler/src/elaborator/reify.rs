@@ -440,6 +440,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(ident.segments[owner].id)
     }
 
+    /// The `Type::Case` spelling an identifier stands for: its own, or the
+    /// qualified form of a bare built-in case (`Some` is `Option::Some`), so
+    /// both reify through one path.
+    fn qualified_case_spelling(&self, ident: &ast::IdentExpr) -> String {
+        self.tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .bare_case_path(&ident.name)
+            .unwrap_or_else(|| ident.name.clone())
+    }
+
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
@@ -7768,10 +7780,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // ctor there too, but that shape would lower to a
         // `Call` against a function that doesn't exist.
         if let ast::Expr::Ident(ident) = &call.callee
-            && let Some(pos) = ident.name.find("::")
+            && let spelled = self.qualified_case_spelling(ident)
+            && let Some(pos) = spelled.find("::")
         {
-            let prefix = &ident.name[..pos];
-            let suffix = &ident.name[pos + 2..];
+            let prefix = &spelled[..pos];
+            let suffix = &spelled[pos + 2..];
             if !suffix.contains("::") {
                 let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
@@ -9029,12 +9042,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // 5. Free function reference — the ident names a function in
         //    the current module or imported via a `use` declaration.
         //    Emit `TirExprKind::FuncRef` with the recorded
-        //    instantiation's type_args when present.
-        if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(&ident.name)
+        //    instantiation's type_args when present. A bare built-in case
+        //    (`None`) resolves to its case declaration, which is no function;
+        //    it is the qualified case below.
+        let spelled = self.qualified_case_spelling(ident);
+        let is_bare_case = spelled != ident.name;
+        if !is_bare_case
+            && self
+                .sem
+                .decls
+                .function_return_types
+                .contains_key(&ident.name)
         {
             let type_args = self
                 .ann_generic_instantiations(ident.id)
@@ -9050,7 +9068,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.span,
             );
         }
-        if let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
+        if !is_bare_case && let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
             let (import_src, original_name) = {
                 let defs = self.tysys.resolutions.defs();
                 (defs.module(def).clone(), defs.name(def).to_string())
@@ -9104,9 +9122,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    namespace-import form `ns::Type::Case` (two `::`
         //    separators) is handled by a dedicated branch in the
         //    elaborator that resolves the namespace alias first.
-        if let Some(pos) = ident.name.find("::") {
-            let prefix = &ident.name[..pos];
-            let suffix = &ident.name[pos + 2..];
+        if let Some(pos) = spelled.find("::") {
+            let prefix = &spelled[..pos];
+            let suffix = &spelled[pos + 2..];
 
             // Two-segment qualified path is "Type::Case". Anything with
             // a further `::` is `ns::Type::Case` (namespace path) —

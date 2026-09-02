@@ -187,9 +187,9 @@ impl Lowering {
                 DeclKey::Builtin(TypeTable::ARRAY_TYPE_NAME.to_string()),
                 vec![self.type_id(table, *elem, param)?],
             ),
-            // `()` is keyed apart from the tuples: an `impl Tr for ()` is
-            // its own, and `[..T]` does not answer for it (WEP 2026-09-01,
-            // "`()` is not a tuple").
+            // `()` is the unit type, not the empty tuple `[]`: an
+            // `impl Tr for ()` is its own, and `[..T]` does not answer for it
+            // (WEP 2026-09-01, "The candidates").
             ResolvedType::Unit => decl(DeclKey::Builtin(TypeTable::UNIT_TYPE_NAME.into()), vec![]),
             ResolvedType::Struct { def, type_args } => {
                 let def = def.decl()?;

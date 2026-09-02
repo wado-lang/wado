@@ -507,18 +507,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// directly at `case_ast_id` (its module is intrinsic to the id).
     ///
     /// Used for variant cases, enum cases, and flags members reached via
-    /// a two-segment qualified ident.
+    /// a two-segment qualified ident, and for a bare built-in case (`Some`),
+    /// whose one segment is the case.
     pub(super) fn record_qualified_case(
         &mut self,
         ident: &crate::ast::IdentExpr,
         type_name: &str,
         case_ast_id: crate::ast::AstId,
     ) {
-        if let Some(prefix_seg) = ident.segments.first() {
-            self.record_item_reference_by_name(prefix_seg.id, type_name);
-        }
-        if let Some(suffix_seg) = ident.segments.get(1) {
-            self.record_reference_to_def(suffix_seg.id, case_ast_id);
+        match ident.segments.as_slice() {
+            [case] => self.record_reference_to_def(case.id, case_ast_id),
+            [prefix, case, ..] => {
+                self.record_item_reference_by_name(prefix.id, type_name);
+                self.record_reference_to_def(case.id, case_ast_id);
+            }
+            [] => {}
         }
     }
 

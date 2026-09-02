@@ -264,7 +264,16 @@ impl TypeSystem {
         ident: &'a ast::IdentExpr,
     ) -> CalleeIdentKind<'a> {
         let Some(pos) = ident.name.find("::") else {
-            return CalleeIdentKind::AsIs(ident);
+            // A bare built-in case (`Some(x)`) is its qualified constructor.
+            return match self
+                .type_table
+                .borrow()
+                .compiler_items()
+                .bare_case_path(&ident.name)
+            {
+                Some(path) => CalleeIdentKind::Rewritten(path),
+                None => CalleeIdentKind::AsIs(ident),
+            };
         };
         let prefix = &ident.name[..pos];
         let suffix = &ident.name[pos + 2..];
@@ -330,22 +339,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<crate::defs::DefId> {
         let def = self.tysys.resolutions.declared(site?)?;
         self.is_effect_or_resource_decl(def).then_some(def)
-    }
-
-    /// Whether the name spells a built-in variant case (`Ok`, `Err`, `Some`,
-    /// `None`). Read from the `CompilerItem` registry, so a stdlib rename
-    /// carries here without re-editing a literal set.
-    fn names_result_or_option_case(&self, name: &str) -> bool {
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        [
-            crate::compiler_item::CompilerItem::ResultOk,
-            crate::compiler_item::CompilerItem::ResultErr,
-            crate::compiler_item::CompilerItem::OptionSome,
-            crate::compiler_item::CompilerItem::OptionNone,
-        ]
-        .into_iter()
-        .any(|item| name == items.variant_case_name(item))
     }
 
     pub(super) fn resolve_call(
@@ -1432,18 +1425,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else if matches!(effective_name, "panic" | "unreachable") {
             (
                 self.callee_in_module(&ModuleSource::rt(), effective_name),
-                effective_name.to_string(),
-            )
-        }
-        // A built-in type constructor — a variant case, not a function, so the
-        // site above declines it.
-        else if self.names_result_or_option_case(effective_name) {
-            self.record_item_reference_by_name(ident.id, effective_name);
-            (
-                Some(CalleeRef::rendered(
-                    self.current_module_source.clone(),
-                    effective_name,
-                )),
                 effective_name.to_string(),
             )
         } else {
