@@ -127,7 +127,7 @@ impl HighlightVisitor {
     }
 
     pub fn hl_cover_unvisited(&mut self, toks: &TokenStream) {
-        let before = self.captures.len();
+        let walked = self.captures.len();
         self.rule_stack = [];
         for let mut i = 0; i < toks.len(); i += 1 {
             if i < self.visited.len() && self.visited[i] {
@@ -135,7 +135,7 @@ impl HighlightVisitor {
             }
             self.hl_visit_token(toks, i);
         }
-        if self.captures.len() != before {
+        if walked > 0 && self.captures.len() != walked {
             self.captures.sort_by(|a: &HighlightCapture, b: &HighlightCapture| {
                 return a.start.cmp(&b.start);
             });

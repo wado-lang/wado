@@ -30,6 +30,18 @@ test "highlight contains keyword span for true" {
     let html = json_hl::highlight(&"true");
     assert html.contains("class=\"constant builtin\""), `missing constant.builtin class in: ${html}`;
 }
+test "highlight applies a rule-context capture" {
+    // `(arr (NUMBER) @constant)` — only the CST walk supplies the rule stack
+    // this override reads, so a grammar carrying one keeps the walk.
+    let html = json_hl::highlight(&"[1, 2]");
+    assert html.contains("class=\"constant\""), `missing rule-context class in: ${html}`;
+    assert !html.contains("class=\"number\""), `array number kept the default class: ${html}`;
+}
+test "highlight keeps the default capture outside the override's rule" {
+    let html = json_hl::highlight(&"{\"key\": 42}");
+    assert html.contains("class=\"number\""), `missing number class in: ${html}`;
+    assert !html.contains("class=\"constant\""), `non-array number took the override: ${html}`;
+}
 test "highlight escapes HTML entities" {
     let html = json_hl::highlight(&"\"<script>\"");
     assert html.contains("&lt;"), `missing escaped < in: ${html}`;

@@ -121,6 +121,25 @@ B : 'b' ;
     assert index_of(&out, "\"keyword\",  // ") >= 0, out;
 }
 
+test "highlight fn: a query without a rule context skips the CST walk" {
+    // Nothing reads the rule stack, so `hl_cover_unvisited`'s token sweep
+    // reaches every capture the walk would have.
+    let out = highlight_output_q("grammar T;
+r : B ;
+B : 'b' ;
+", "(B) @keyword");
+    assert index_of(&out, "highlight_walk(") == -1, out;
+    assert index_of(&out, "hl_cover_unvisited(") >= 0, out;
+}
+
+test "highlight fn: a rule-context override keeps the CST walk" {
+    let out = highlight_output_q("grammar T;
+r : B ;
+B : 'b' ;
+", "(r (B) @string)");
+    assert index_of(&out, "highlight_walk(&mut visitor") >= 0, out;
+}
+
 test "query override emits a HighlightOverride row" {
     let out = highlight_output_q("grammar T;
 r : B ;
