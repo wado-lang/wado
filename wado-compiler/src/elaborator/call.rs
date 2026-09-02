@@ -109,6 +109,13 @@ enum CalleeIdentKind<'a> {
     /// parameter currently bound to a concrete type. Holds the fully
     /// resolved `Concrete::suffix` name.
     Rewritten(String),
+    /// A bare case call (`Some(x)`), the walk having answered the site with
+    /// the case. `owner` is the variant declaring it and `spelled` its
+    /// `Variant::Case` form, so the qualified constructor path serves it.
+    Case {
+        owner: crate::defs::DefId,
+        spelled: String,
+    },
     /// `T::suffix(...)` where `T` is still an abstract type parameter
     /// constrained only by trait bounds. Dispatched independently via
     /// `resolve_type_param_static_call`.
@@ -127,10 +134,19 @@ impl CalleeIdentKind<'_> {
     fn effective_name(&self) -> &str {
         match self {
             Self::AsIs(ident) => &ident.name,
-            Self::Rewritten(name) => name,
+            Self::Rewritten(name) | Self::Case { spelled: name, .. } => name,
             Self::AbstractTypeParam { .. } => {
                 unreachable!("AbstractTypeParam takes the type-param dispatch path")
             }
+        }
+    }
+
+    /// The variant a bare case call constructs; `None` for every other shape,
+    /// whose receiver is read from its own segment.
+    fn case_owner(&self) -> Option<crate::defs::DefId> {
+        match self {
+            Self::Case { owner, .. } => Some(*owner),
+            Self::AsIs(_) | Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
         }
     }
 
@@ -140,7 +156,7 @@ impl CalleeIdentKind<'_> {
     fn callee_site(&self) -> Option<ast::AstId> {
         match self {
             Self::AsIs(ident) => Some(ident.id),
-            Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
+            Self::Rewritten(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
         }
     }
 
@@ -264,14 +280,16 @@ impl TypeSystem {
         ident: &'a ast::IdentExpr,
     ) -> CalleeIdentKind<'a> {
         let Some(pos) = ident.name.find("::") else {
-            // A bare built-in case (`Some(x)`) is its qualified constructor.
-            return match self
-                .type_table
-                .borrow()
-                .compiler_items()
-                .bare_case_path(&ident.name)
-            {
-                Some(path) => CalleeIdentKind::Rewritten(path),
+            // A bare case (`Some(x)`, `Circle(r)`) is its variant's
+            // constructor, reached by the walk's answer for the site.
+            return match self.bare_case_at(ident.id) {
+                Some((owner, case)) => {
+                    let defs = self.resolutions.defs();
+                    CalleeIdentKind::Case {
+                        owner,
+                        spelled: format!("{}::{}", defs.name(owner), defs.name(case)),
+                    }
+                }
                 None => CalleeIdentKind::AsIs(ident),
             };
         };
@@ -339,6 +357,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<crate::defs::DefId> {
         let def = self.tysys.resolutions.declared(site?)?;
         self.is_effect_or_resource_decl(def).then_some(def)
+    }
+
+    /// The variant a `Variant::Case(...)` callee constructs: the one the walk
+    /// answered for a bare case, else the one `prefix` names at its site.
+    fn variant_of_callee(
+        &self,
+        callee_kind: &CalleeIdentKind<'_>,
+        receiver_site: Option<ast::AstId>,
+        prefix: &str,
+    ) -> Option<&super::types::VariantInfo> {
+        match callee_kind.case_owner() {
+            Some(owner) => self.type_lookup().variant_cases_of(owner),
+            None => self.lookup_variant_cases_at(receiver_site, prefix),
+        }
     }
 
     pub(super) fn resolve_call(
@@ -511,7 +543,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
-        if let Some((struct_name, _)) = effective_name.rsplit_once("::") {
+        // A case is reachable wherever its type is; only a static method has
+        // a visibility of its own to check.
+        if callee_kind.case_owner().is_none()
+            && let Some((struct_name, _)) = effective_name.rsplit_once("::")
+        {
             let receiver = self.impl_target_at(receiver_site, struct_name);
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
         }
@@ -580,7 +616,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let prefix = &effective_name[..pos];
             let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self.lookup_variant_cases_at(receiver_site, prefix).cloned()
+            if let Some(variant_info) = self
+                .variant_of_callee(&callee_kind, receiver_site, prefix)
+                .cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
                     .iter()
@@ -948,7 +986,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return flags_info.type_id;
             }
             // Check if this is a variant case construction (Color::Red)
-            else if let Some(variant_info) = self.lookup_variant_cases_at(receiver_site, prefix) {
+            else if let Some(variant_info) =
+                self.variant_of_callee(&callee_kind, receiver_site, prefix)
+            {
                 // Clone needed data to release the borrow on self
                 let variant_info = variant_info.clone();
                 let case_match = variant_info

@@ -2149,23 +2149,6 @@ impl CompilerItems {
         self.require_variant_case(item).2
     }
 
-    /// The qualified spelling a bare built-in case stands for: `Some` is
-    /// `Option::Some`, `Err` is `Result::Err`. These four construct and match
-    /// without their variant's name; every other case is written qualified.
-    pub fn bare_case_path(&self, name: &str) -> Option<String> {
-        [
-            CompilerItem::OptionSome,
-            CompilerItem::OptionNone,
-            CompilerItem::ResultOk,
-            CompilerItem::ResultErr,
-        ]
-        .into_iter()
-        .find_map(|item| {
-            let (_, parent, case, _) = self.require_variant_case(item);
-            (case == name).then(|| format!("{parent}::{case}"))
-        })
-    }
-
     /// Zero-based case index of a [`CompilerItemKind::VariantCase`] item.
     pub fn variant_case_index(&self, item: CompilerItem) -> u32 {
         self.require_variant_case(item).3

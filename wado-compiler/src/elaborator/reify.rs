@@ -440,16 +440,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(ident.segments[owner].id)
     }
 
+    /// A bare case identifier (`Some`, `Leaf`), as the walk answered it: the
+    /// declaration it is a member of, and its `Type::Case` spelling, so it
+    /// reifies through the qualified path with its type read off the
+    /// declaration rather than looked up by name.
+    fn bare_case(&self, ident: &ast::IdentExpr) -> Option<(crate::defs::DefId, String)> {
+        let (owner, case) = self.tysys.bare_case_at(ident.id)?;
+        let defs = self.tysys.resolutions.defs();
+        Some((owner, format!("{}::{}", defs.name(owner), defs.name(case))))
+    }
+
     /// The `Type::Case` spelling an identifier stands for: its own, or the
-    /// qualified form of a bare built-in case (`Some` is `Option::Some`), so
-    /// both reify through one path.
+    /// qualified form of a bare case.
     fn qualified_case_spelling(&self, ident: &ast::IdentExpr) -> String {
-        self.tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .bare_case_path(&ident.name)
-            .unwrap_or_else(|| ident.name.clone())
+        self.bare_case(ident)
+            .map_or_else(|| ident.name.clone(), |(_, spelled)| spelled)
     }
 
     /// The symbol row behind a reference site — see
@@ -7787,8 +7792,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let suffix = &spelled[pos + 2..];
             if !suffix.contains("::") {
                 let owner = self.qualified_owner_site(ident);
+                let bare_owner = self.bare_case(ident).map(|(owner, _)| owner);
                 let lookup = self.type_lookup();
-                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
+                if let Some(variant_info) = bare_owner
+                    .and_then(|owner| lookup.variant_cases_of(owner))
+                    .or_else(|| lookup.variant_cases_at(owner, prefix))
+                    .cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -9131,10 +9140,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // defer to a later branch.
             if !suffix.contains("::") {
                 let owner = self.qualified_owner_site(ident);
+                let bare_owner = self.bare_case(ident).map(|(owner, _)| owner);
                 let lookup = self.type_lookup();
 
                 // Variant case.
-                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
+                if let Some(variant_info) = bare_owner
+                    .and_then(|owner| lookup.variant_cases_of(owner))
+                    .or_else(|| lookup.variant_cases_at(owner, prefix))
+                    .cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -9169,7 +9182,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Enum case.
-                if let Some(enum_info) = lookup.enum_cases_at(owner, prefix).cloned()
+                if let Some(enum_info) = bare_owner
+                    .and_then(|owner| lookup.enum_cases_of(owner))
+                    .or_else(|| lookup.enum_cases_at(owner, prefix))
+                    .cloned()
                     && let Some(case_data) = enum_info.find_case(suffix).cloned()
                 {
                     let enum_type = self
@@ -9189,7 +9205,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Flags member.
-                if let Some(flags_info) = lookup.flags_members_at(owner, prefix).cloned()
+                if let Some(flags_info) = bare_owner
+                    .and_then(|owner| lookup.flags_members_of(owner))
+                    .or_else(|| lookup.flags_members_at(owner, prefix))
+                    .cloned()
                     && let Some(member) = flags_info
                         .members
                         .iter()

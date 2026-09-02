@@ -883,29 +883,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
-        // A bare built-in case (`None`) is its qualified spelling.
-        let spelled = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .bare_case_path(&ident.name)
-            .unwrap_or_else(|| ident.name.clone());
-        let pos = spelled.find("::")?;
-        let prefix = &spelled[..pos];
-        let suffix = &spelled[pos + 2..];
-
         // The type a case is qualified with is the segment just before the
         // case's own name — the head for `Color::Red`, the second segment for
         // `ns::Color::Red` — and the resolve walk answered for it in the
         // module that wrote it. So a reference inside a foreign default
         // resolves in the declaring module without a second, module-scoped
-        // lookup beside the first. A bare case has no such segment; its
-        // variant is a prelude name.
-        let owner = match ident.segments.len().checked_sub(2) {
-            Some(i) => self.tysys.resolutions.declared(ident.segments[i].id),
-            None => self.type_lookup().declaration(prefix),
+        // lookup beside the first. A bare case (`None`, `Leaf`) has no such
+        // segment: the walk answered for the case itself, and its type is
+        // the declaration the case is a member of.
+        let (owner, spelled) = if let Some(i) = ident.segments.len().checked_sub(2) {
+            (
+                self.tysys.resolutions.declared(ident.segments[i].id),
+                ident.name.clone(),
+            )
+        } else {
+            let (owner, case) = self.tysys.bare_case_at(ident.id)?;
+            let defs = self.tysys.resolutions.defs();
+            (
+                Some(owner),
+                format!("{}::{}", defs.name(owner), defs.name(case)),
+            )
         };
+        let pos = spelled.find("::")?;
+        let prefix = &spelled[..pos];
+        let suffix = &spelled[pos + 2..];
         macro_rules! lookup_case {
             ($of:ident) => {
                 owner.and_then(|def| self.type_lookup().$of(def)).cloned()

@@ -3516,6 +3516,8 @@ enum Color {
 
 // Construction
 let c = Color::Red;
+let d = Red;    // a case is reachable unqualified wherever its type is in
+                // scope, in value position; a type of the same name shadows it
 
 // Pattern matching: match, if let, matches
 let name = match c {
