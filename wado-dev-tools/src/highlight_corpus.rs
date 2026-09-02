@@ -6,10 +6,14 @@
 //! under `wado run`, `scripts/check-highlight.sh` driving both.
 //!
 //! Both vocabularies project onto [`Class`], and the projection is where the
-//! comparison stays honest about what a context-free grammar can know: every
-//! class but `Ident` is decidable without name resolution and is gated, while
-//! `Ident` covers the dozen resolved kinds Gale cannot tell apart and is only
-//! reported. Files Gale reports diagnostics for are skipped and counted:
+//! comparison stays honest about what a context-free grammar can know. A token
+//! class is decidable from the token stream, so the grammar must carry it and
+//! any disagreement is a defect. An identifier class it may leave plain —
+//! telling a function from a variable takes name resolution — but a span it
+//! does colour has to agree, so the two sides naming one differently is a
+//! defect too. Only silence on an identifier is a capability gap, and that is
+//! reported rather than gated. Files Gale reports diagnostics for are skipped
+//! and counted:
 //! `check-grammar` owns that failure. The two recoveries agree closely — what
 //! comparing them anyway adds is a divergence on the broken token itself.
 
@@ -22,8 +26,10 @@ use wado_lsp::semantic_tokens::{
     ClassifiedToken, TOKEN_TYPES, classify_all, token_modifier, token_type,
 };
 
-/// The vocabulary both sides are projected onto. Everything above `Ident` is
-/// decidable from syntax alone; `Ident` is where semantics starts.
+/// The vocabulary both sides are projected onto: the token classes, then the
+/// identifier classes the grammar can place from its parse alone. The kinds
+/// below those — a function against a variable — take name resolution, so
+/// both sides' leftovers land in `Name`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Class {
     Comment,
@@ -32,14 +38,26 @@ enum Class {
     Keyword,
     Constant,
     Operator,
-    Ident,
+    Type,
+    Property,
+    EnumMember,
+    Name,
 }
 
 impl Class {
-    /// Whether disagreement on this class is a defect rather than a capability
-    /// gap. See the module docs.
-    fn is_gated(self) -> bool {
-        self != Self::Ident
+    /// Whether the grammar has to colour this class at all. See the module
+    /// docs: silence on a token class is a defect, silence on an identifier is
+    /// a capability gap.
+    fn is_required(self) -> bool {
+        match self {
+            Self::Comment
+            | Self::String
+            | Self::Number
+            | Self::Keyword
+            | Self::Constant
+            | Self::Operator => true,
+            Self::Type | Self::Property | Self::EnumMember | Self::Name => false,
+        }
     }
 
     fn name(self) -> &'static str {
@@ -50,14 +68,17 @@ impl Class {
             Self::Keyword => "keyword",
             Self::Constant => "constant",
             Self::Operator => "operator",
-            Self::Ident => "ident",
+            Self::Type => "type",
+            Self::Property => "property",
+            Self::EnumMember => "enumMember",
+            Self::Name => "name",
         }
     }
 }
 
-/// Project one LSP semantic token onto [`Class`]. Every resolved identifier
-/// kind collapses to `Ident`: the distinctions below it are exactly the ones
-/// Gale cannot make.
+/// Project one LSP semantic token onto [`Class`]. Every legend entry is named,
+/// so a token type added to the legend fails here rather than defaulting into
+/// the ungated `Name` and silently leaving the comparison.
 fn class_of_token(token: &ClassifiedToken) -> Class {
     const CONSTANT_MODIFIERS: u32 = token_modifier::READONLY | token_modifier::DEFAULT_LIBRARY;
     match token.token_type {
@@ -69,7 +90,23 @@ fn class_of_token(token: &ClassifiedToken) -> Class {
         token_type::VARIABLE if token.modifiers & CONSTANT_MODIFIERS == CONSTANT_MODIFIERS => {
             Class::Constant
         }
-        _ => Class::Ident,
+        token_type::TYPE
+        | token_type::TYPE_PARAMETER
+        | token_type::STRUCT
+        | token_type::ENUM
+        | token_type::INTERFACE
+        | token_type::CLASS => Class::Type,
+        token_type::PROPERTY => Class::Property,
+        token_type::ENUM_MEMBER => Class::EnumMember,
+        token_type::NAMESPACE
+        | token_type::PARAMETER
+        | token_type::VARIABLE
+        | token_type::FUNCTION
+        | token_type::METHOD => Class::Name,
+        other => panic!(
+            "the classifier emits token type {other} ('{}'), which this comparison has no class for",
+            TOKEN_TYPES[other as usize]
+        ),
     }
 }
 
@@ -83,7 +120,9 @@ fn class_of_capture(capture: &str) -> Class {
         "keyword" => Class::Keyword,
         "constant.builtin" => Class::Constant,
         "operator" => Class::Operator,
-        "variable" | "type" | "property" => Class::Ident,
+        "type" => Class::Type,
+        "property" => Class::Property,
+        "variable" => Class::Name,
         other => panic!(
             "the highlight query emits capture '{other}', which this comparison has no class for"
         ),
@@ -142,13 +181,21 @@ struct Divergence {
 impl Divergence {
     /// The pattern this divergence is an instance of. Thousands of
     /// divergences collapse onto a handful of these, which is what makes the
-    /// report triageable.
-    fn pattern(&self) -> (Relation, Option<Class>, Option<Class>) {
-        (self.relation, self.compiler, self.gale)
+    /// report triageable. [`Self::kind`] is part of it: `name` against
+    /// `property` is a method call or a struct field depending on it, and
+    /// which side is wrong differs between the two.
+    fn pattern(&self) -> (Relation, Option<Class>, Option<Class>, &'static str) {
+        (self.relation, self.compiler, self.gale, self.kind)
     }
 
+    /// Whether this divergence is a defect rather than a capability gap. A
+    /// required class on either side is one the grammar must carry, so any
+    /// relation on it fails; below those, only a span both sides classified —
+    /// and classified differently — does.
     fn is_gated(&self) -> bool {
-        self.compiler.is_some_and(Class::is_gated) || self.gale.is_some_and(Class::is_gated)
+        self.compiler.is_some_and(Class::is_required)
+            || self.gale.is_some_and(Class::is_required)
+            || (self.compiler.is_some() && self.gale.is_some())
     }
 }
 
@@ -421,8 +468,8 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
         return;
     }
     eprintln!(
-        "\nerror: the grammar and the compiler colour {} pattern(s) differently on a class \
-         neither needs semantics for:\n",
+        "\nerror: the grammar and the compiler disagree on {} pattern(s) neither needs \
+         semantics to settle:\n",
         gated.len()
     );
     for (count, example) in &gated {
@@ -438,11 +485,14 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
 /// A `type` or `typeParameter` sits in a syntactic position the query could
 /// name (`(typeRef (IDENTIFIER) @type)`). A `function` or `parameter` does
 /// not: telling one from a plain variable takes name resolution, which is
-/// exactly what a context-free grammar cannot do. Reported, never gated.
+/// exactly what a context-free grammar cannot do. Leaving either uncoloured is
+/// reported, never gated — what is gated is colouring one as the wrong class.
 fn render_capability_gap(divergences: &[Divergence]) -> String {
     let mut counts: IndexMap<&'static str, usize> = IndexMap::default();
     for divergence in divergences {
-        if divergence.relation == Relation::Uncovered && divergence.compiler == Some(Class::Ident) {
+        if divergence.relation == Relation::Uncovered
+            && divergence.compiler.is_some_and(|class| !class.is_required())
+        {
             *counts.entry(divergence.kind).or_insert(0) += 1;
         }
     }
@@ -462,8 +512,10 @@ fn render_capability_gap(divergences: &[Divergence]) -> String {
 /// Collapse divergences onto their patterns, most frequent first, keeping one
 /// example each.
 fn group(divergences: &[Divergence]) -> Vec<(usize, Divergence)> {
-    let mut grouped: IndexMap<(Relation, Option<Class>, Option<Class>), (usize, Divergence)> =
-        IndexMap::default();
+    let mut grouped: IndexMap<
+        (Relation, Option<Class>, Option<Class>, &'static str),
+        (usize, Divergence),
+    > = IndexMap::default();
     for divergence in divergences {
         grouped
             .entry(divergence.pattern())
@@ -484,10 +536,11 @@ fn class_name(class: Option<Class>) -> &'static str {
 
 fn render_pattern(count: usize, example: &Divergence) -> String {
     format!(
-        "{count}x {}: compiler={} gale={} e.g. {}:{} {:?}",
+        "{count}x {}: compiler={} gale={} ({}) e.g. {}:{} {:?}",
         example.relation.name(),
         class_name(example.compiler),
         class_name(example.gale),
+        example.kind,
         example.path,
         example.line,
         example.text,
@@ -498,17 +551,19 @@ fn render_report(patterns: &[(usize, Divergence)]) -> String {
     let mut out = String::from(
         "# Where the two Wado highlighters disagree. Generated, not committed.\n#\n\
          # Grouped by pattern, most frequent first, one example each. A pattern\n\
-         # naming `ident` on either side is a capability gap, not a defect: Gale\n\
-         # is context-free and cannot resolve a name.\n#\n\
-         # count<TAB>relation<TAB>compiler<TAB>gale<TAB>path<TAB>line<TAB>text\n",
+         # with a `-` for the Gale side on an identifier class is a capability\n\
+         # gap, not a defect: Gale is context-free and cannot resolve a name.\n\
+         # Every other pattern is a defect.\n#\n\
+         # count<TAB>relation<TAB>compiler<TAB>gale<TAB>kind<TAB>path<TAB>line<TAB>text\n",
     );
     for (count, example) in patterns {
         writeln!(
             out,
-            "{count}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{count}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             example.relation.name(),
             class_name(example.compiler),
             class_name(example.gale),
+            example.kind,
             example.path,
             example.line,
             example.text,
@@ -561,6 +616,40 @@ mod tests {
         assert_eq!(found[0].relation, Relation::ClassDiffers);
         assert_eq!(found[0].compiler, Some(Class::Comment));
         assert_eq!(found[0].gale, Some(Class::Operator));
+    }
+
+    /// An identifier the grammar colours has to carry the class the compiler
+    /// gave it: `Color::Red` is an `enumMember`, and capturing it `@property`
+    /// is a defect the old flat `Ident` swallowed.
+    #[test]
+    fn two_identifier_classes_on_one_span_is_a_defect() {
+        let mine = [piece(0, 3, Class::EnumMember)];
+        let theirs = [piece(0, 3, Class::Property)];
+        let (found, _) = diverge("t.wado", "Red", &mine, &theirs);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].relation, Relation::ClassDiffers);
+        assert!(found[0].is_gated());
+    }
+
+    /// Leaving an identifier plain stays a capability gap: the grammar cannot
+    /// tell a function from a variable, and is not asked to.
+    #[test]
+    fn an_uncoloured_identifier_is_a_capability_gap() {
+        let mine = [piece(0, 3, Class::Name)];
+        let (found, _) = diverge("t.wado", "foo", &mine, &[]);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].relation, Relation::Uncovered);
+        assert!(!found[0].is_gated());
+    }
+
+    /// A token class is decidable from the token stream, so leaving one plain
+    /// is a defect rather than a gap.
+    #[test]
+    fn an_uncoloured_token_class_is_a_defect() {
+        let mine = [piece(0, 3, Class::Keyword)];
+        let (found, _) = diverge("t.wado", "let", &mine, &[]);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].is_gated());
     }
 
     /// Gale's spans are codepoint offsets; the compiler's are bytes. They agree
