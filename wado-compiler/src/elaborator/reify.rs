@@ -953,6 +953,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
+    /// A newtype's parameters as the impls written over the declaration see
+    /// them: names in order. A newtype constrains none of them — its base does
+    /// — so no bound or default travels with them.
+    fn declared_type_params(params: &[ast::GenericParam]) -> Vec<crate::tir::TirTypeParam> {
+        params
+            .iter()
+            .enumerate()
+            .map(|(index, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                is_effect: false,
+                is_pack: false,
+                bounds: Vec::new(),
+                default: None,
+                index: index as u32,
+                projected_from: None,
+            })
+            .collect()
+    }
+
     /// Reify a `type N = T;` declaration. A generic one names no single type —
     /// each instantiation is its own, minted on demand by
     /// `make_newtype_instance` — so it lands here without one, carrying the
@@ -969,20 +988,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             module_source: self.current_module_source.clone(),
             visibility: newtype_decl.visibility,
             def,
-            type_params: newtype_decl
-                .type_params
-                .iter()
-                .enumerate()
-                .map(|(index, p)| crate::tir::TirTypeParam {
-                    name: p.name.clone(),
-                    is_effect: false,
-                    is_pack: false,
-                    bounds: Vec::new(),
-                    default: None,
-                    index: index as u32,
-                    projected_from: None,
-                })
-                .collect(),
+            type_params: Self::declared_type_params(&newtype_decl.type_params),
             type_id: type_id.filter(|_| !generic),
             span: newtype_decl.span,
         })
@@ -1176,23 +1182,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// fact `resolve_local_newtype` recorded under this declaration's own
     /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
-        if !newtype_decl.type_params.is_empty() {
-            // Generic local newtypes are unresolved (see `resolve_local_newtype`).
-            return;
-        }
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
             return;
         };
-        let Some(&type_id) = self.sem.decls.local_newtypes.get(&def) else {
+        let generic = !newtype_decl.type_params.is_empty();
+        let type_id = self.sem.decls.local_newtypes.get(&def).copied();
+        if !generic && type_id.is_none() {
             return;
-        };
+        }
         self.pending_local_newtypes.push(TirNewtype {
             name: crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
             def,
-            type_params: Vec::new(),
-            type_id: Some(type_id),
+            type_params: Self::declared_type_params(&newtype_decl.type_params),
+            type_id: type_id.filter(|_| !generic),
             span: newtype_decl.span,
         });
     }

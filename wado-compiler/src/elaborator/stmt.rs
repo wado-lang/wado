@@ -455,15 +455,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `UNKNOWN` is indistinguishable from a real one, and the next round of
     /// the caller's fixpoint would bind a dependent to it and keep it.
     fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) -> bool {
+        // A generic one names no single type: each instantiation resolves the
+        // base AST with its arguments substituted, so what is recorded is the
+        // declaration — the same entry a module-level generic newtype makes.
         if !newtype_decl.type_params.is_empty() {
-            // Generic local newtypes (`type Wrapper<T> = List<T>;`) are a
-            // follow-up, unlike generic local structs (see
-            // `resolve_local_struct`): they go through a different
-            // mechanism (`GenericNewtypeInfo` + AST-level substitution in
-            // `resolve_generic_type`, keyed by `local_generic_newtypes`,
-            // rather than a `TirStruct` template the monomorphizer expands)
-            // that this WEP hasn't wired up. Left unresolved — a reference
-            // still surfaces the ordinary "unknown type" error.
+            let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
+                return true;
+            };
+            self.sem.decls.local_generic_newtypes.insert(
+                def,
+                crate::elaborator::types::GenericNewtypeInfo {
+                    type_params: newtype_decl
+                        .type_params
+                        .iter()
+                        .map(|p| p.name.clone())
+                        .collect(),
+                    base_type_ast: newtype_decl.ty.clone(),
+                },
+            );
+            self.sem
+                .decls
+                .fn_local_items
+                .insert(newtype_decl.name.clone(), def);
             return true;
         }
         let base_type_id = self.resolve_type(&newtype_decl.ty);

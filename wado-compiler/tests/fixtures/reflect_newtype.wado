@@ -9,6 +9,7 @@
 
 type UserName = String;
 type Meters = f64;
+type Boxed<T> = List<T>;
 
 struct Point {
     x: i32,
@@ -20,6 +21,24 @@ test "a newtype names itself" {
     assert Reflect::<UserName>::type_name() == "UserName";
     assert Reflect::<Meters>::type_name() == "Meters";
     assert Reflect::<P>::type_name() == "P";
+}
+
+// A generic newtype is a newtype: one impl written over the declaration,
+// instantiated per use, the way a generic struct's is. It used to get none —
+// `Reflect::<Boxed<i32>>::type_name()` was an unknown function, and a local
+// declaration did not even resolve.
+test "a generic newtype names itself" {
+    let b = [1] as Boxed<i32>;
+    assert Reflect::<Boxed<i32>>::type_name() == "Boxed";
+    assert `${b:?}` == "[1] as Boxed";
+}
+
+test "a local generic newtype resolves and names itself" {
+    type Wrapper<T> = List<T>;
+    let w = [1] as Wrapper<i32>;
+    assert (w as List<i32>)[0] == 1;
+    assert Reflect::<Wrapper<i32>>::type_name() == "Wrapper";
+    assert `${w:?}` == "[1] as Wrapper";
 }
 
 test "a chained newtype names the link, not the end of the chain" {
