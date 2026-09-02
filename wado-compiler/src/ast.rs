@@ -557,12 +557,10 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::World(w) => {
             v.visit_id(w.id, w.span);
-            // An exported signature is types like any other.
+            // An exported signature declares parameters like any other.
             for export in &w.exports {
                 if let WorldExport::Function(f) = export {
-                    for param in &f.params {
-                        v.visit_type(&param.ty);
-                    }
+                    walk_params(v, &f.params);
                     if let Some(return_type) = &f.return_type {
                         v.visit_type(return_type);
                     }
@@ -582,10 +580,10 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     }
 }
 
-pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
-    v.visit_id(func.id, func.span);
-    v.visit_generic_params(&func.type_params);
-    for param in &func.params {
+/// A parameter list, wherever one is declared: its bindings, their types, and
+/// the default arguments beside them.
+fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
+    for param in params {
         v.visit_id(param.id, param.span);
         v.visit_type(&param.ty);
         // A default argument is an expression written in the declaring
@@ -595,6 +593,12 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
             v.visit_expr(default);
         }
     }
+}
+
+pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
+    v.visit_id(func.id, func.span);
+    v.visit_generic_params(&func.type_params);
+    walk_params(v, &func.params);
     if let Some(ret) = &func.return_type {
         v.visit_type(ret);
     }

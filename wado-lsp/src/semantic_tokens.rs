@@ -750,8 +750,12 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
         }
     }
 
-    // 3. Check if followed by `(` → function call
-    if follows(tokens, index, 1, &TokenKind::LParen) {
+    // 3. A call follows, directly or past its turbofish: `f(`, `f::<T>(`. A
+    // `::` onto a name instead is a path, and step 2 classifies its segments.
+    if follows(tokens, index, 1, &TokenKind::LParen)
+        || (follows(tokens, index, 1, &TokenKind::ColonColon)
+            && follows(tokens, index, 2, &TokenKind::Lt))
+    {
         return (token_type::FUNCTION, 0);
     }
 
@@ -1130,6 +1134,23 @@ mod tests {
         let src = "fn run() {\n    let x = builtin::array_new::<u8>(1);\n}\n";
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 1, "array_new"), token_type::FUNCTION);
+    }
+
+    /// An unqualified callee carries its turbofish the same way, with no `.`
+    /// or `::` ahead of it to classify it first.
+    #[test]
+    fn a_turbofish_call_on_a_bare_name_is_a_function() {
+        let src = "fn identity<T>(x: T) -> T {\n    return x;\n}\nfn run() {\n    let n = identity::<i32>(1);\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 4, "identity"), token_type::FUNCTION);
+    }
+
+    /// A `::` onto a name is a path, not a call: the head stays a plain name.
+    #[test]
+    fn a_path_head_is_not_a_function() {
+        let src = "fn run() {\n    let x = builtin::array_new::<u8>(1);\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "builtin"), token_type::VARIABLE);
     }
 
     /// The same turbofish after a `.`: type arguments do not make a call a
