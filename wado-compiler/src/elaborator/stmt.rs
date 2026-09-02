@@ -286,6 +286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 field_defaults: Vec::new(),
                 type_param_bounds: Self::type_param_bounds_of(&struct_decl.type_params),
                 type_param_type_ids,
+                type_param_defaults: super::types::type_param_defaults_of(&struct_decl.type_params),
             },
         );
     }
@@ -455,15 +456,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `UNKNOWN` is indistinguishable from a real one, and the next round of
     /// the caller's fixpoint would bind a dependent to it and keep it.
     fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) -> bool {
+        // A generic one names no single type: each instantiation resolves the
+        // base AST with its arguments substituted, so what is recorded is the
+        // declaration — the same entry a module-level generic newtype makes.
         if !newtype_decl.type_params.is_empty() {
-            // Generic local newtypes (`type Wrapper<T> = List<T>;`) are a
-            // follow-up, unlike generic local structs (see
-            // `resolve_local_struct`): they go through a different
-            // mechanism (`GenericNewtypeInfo` + AST-level substitution in
-            // `resolve_generic_type`, keyed by `local_generic_newtypes`,
-            // rather than a `TirStruct` template the monomorphizer expands)
-            // that this WEP hasn't wired up. Left unresolved — a reference
-            // still surfaces the ordinary "unknown type" error.
+            let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
+                return true;
+            };
+            self.sem.decls.local_generic_newtypes.insert(
+                def,
+                crate::elaborator::types::GenericNewtypeInfo {
+                    type_params: newtype_decl
+                        .type_params
+                        .iter()
+                        .map(|p| p.name.clone())
+                        .collect(),
+                    base_type_ast: newtype_decl.ty.clone(),
+                    type_param_defaults: super::types::type_param_defaults_of(
+                        &newtype_decl.type_params,
+                    ),
+                },
+            );
+            self.sem
+                .decls
+                .fn_local_items
+                .insert(newtype_decl.name.clone(), def);
             return true;
         }
         let base_type_id = self.resolve_type(&newtype_decl.ty);
@@ -963,7 +980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let (bound, base) = {
                     let tt = self.tysys.type_table.borrow();
-                    let base = tt.get_ultimate_base_type(type_id);
+                    let base = tt.representation_head(type_id);
                     (tt.get(type_id).clone(), tt.get(base).clone())
                 };
                 if is_scalar(&bound) || is_scalar(&base) {
@@ -1155,10 +1172,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 // Every lookup below asks the scrutinee's head, which an
                 // anonymous shape and a function-local `struct` both have and
-                // neither of them can be reached by spelling.
-                let struct_head = match self.tysys.type_table.borrow().get(type_id) {
-                    ResolvedType::Struct { def, .. } => Some(*def),
-                    _ => None,
+                // neither of them can be reached by spelling. A newtype's head
+                // is its base's: it inherits the fields it wraps.
+                let struct_head = {
+                    let tt = self.tysys.type_table.borrow();
+                    match tt.get(tt.reflect_structure_head(type_id)) {
+                        ResolvedType::Struct { def, .. } => Some(*def),
+                        _ => None,
+                    }
                 };
 
                 let type_name_matches = match (type_name, struct_head) {
@@ -1645,6 +1666,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return vec![(qualified_variant_name, index, binding_type)];
                 }
 
+                // A newtype's cases are its base's, so classify by the
+                // structure the scrutinee wraps rather than by its identity.
+                let scrutinee_type = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .reflect_structure_head(scrutinee_type);
                 let resolved_type = self.tysys.type_table.borrow().get(scrutinee_type).clone();
                 if !self
                     .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())

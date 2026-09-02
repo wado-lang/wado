@@ -42,6 +42,7 @@ pub(super) enum OnBoundTrait {
     ReflectVariant,
     ReflectEnum,
     ReflectFlags,
+    ReflectNewtype,
     Ref,
     RefMut,
     Inspect,
@@ -63,6 +64,7 @@ impl OnBoundTrait {
             Self::ReflectVariant => CompilerItem::ReflectVariant,
             Self::ReflectEnum => CompilerItem::ReflectEnum,
             Self::ReflectFlags => CompilerItem::ReflectFlags,
+            Self::ReflectNewtype => CompilerItem::ReflectNewtype,
             Self::Ref => CompilerItem::Ref,
             Self::RefMut => CompilerItem::RefMut,
             Self::Inspect => CompilerItem::Inspect,
@@ -83,6 +85,7 @@ impl OnBoundTrait {
             CompilerItem::ReflectVariant => Self::ReflectVariant,
             CompilerItem::ReflectEnum => Self::ReflectEnum,
             CompilerItem::ReflectFlags => Self::ReflectFlags,
+            CompilerItem::ReflectNewtype => Self::ReflectNewtype,
             CompilerItem::Ref => Self::Ref,
             CompilerItem::RefMut => Self::RefMut,
             CompilerItem::Inspect => Self::Inspect,
@@ -116,6 +119,7 @@ impl OnBoundTrait {
                 | Self::ReflectVariant
                 | Self::ReflectEnum
                 | Self::ReflectFlags
+                | Self::ReflectNewtype
         )
     }
 }
@@ -645,6 +649,17 @@ impl TypeSystem {
         if !is_newtype {
             return self.type_implements_trait(ctx, scope, type_id, trait_);
         }
+        // The two facts a newtype owns rather than inherits: it has a name, and
+        // it is a newtype (WEP 2026-06-13). Both are synthesized, so no impl
+        // block exists for the index search below to find, and both hold at
+        // depth 0 — which is what makes a `ReflectNewtype`-keyed blanket
+        // outrank one the base satisfies.
+        if matches!(
+            self.on_bound_of(trait_),
+            Some(OnBoundTrait::Reflect | OnBoundTrait::ReflectNewtype)
+        ) {
+            return true;
+        }
         // A repeat answers `false` where `type_implements_trait` answers `true`
         // on the same stack: that query descends into members, this one holds
         // the subject fixed, so a repeat here is a bound grounding nothing.
@@ -774,6 +789,36 @@ impl TypeSystem {
             .all(|(_, _, vis)| vis.reachable_from(same_package))
     }
 
+    /// Whether the members `kind` exposes can be enumerated at `scope`: a
+    /// struct needs every field reachable, a variant needs its cases known
+    /// here. The other kinds expose members no visibility hides, and a
+    /// declaration this scope cannot name exposes nothing.
+    fn reflect_members_visible(
+        &self,
+        scope: &TypeLookup,
+        resolved: &ResolvedType,
+        kind: CompilerItem,
+    ) -> bool {
+        match kind {
+            // Through the head, so an anonymous shape answers from
+            // `anon_struct_fields` — it declares fields like any other struct,
+            // and `walk_structural_derive_members` reads it the same way.
+            CompilerItem::ReflectStruct => match resolved {
+                ResolvedType::Struct { def, .. } => scope.struct_fields_of_head(*def),
+                ResolvedType::GenericInstance { def, .. } => scope.struct_fields_of(*def),
+                _ => None,
+            }
+            .is_some_and(|info| self.has_visible_fields(scope, info)),
+            CompilerItem::ReflectVariant => match resolved {
+                ResolvedType::Variant { def } | ResolvedType::GenericInstance { def, .. } => {
+                    scope.variant_cases_of(*def).is_some()
+                }
+                _ => false,
+            },
+            _ => true,
+        }
+    }
+
     /// Whether a declaration can be reflected, via the shared eligibility
     /// predicate reflect synthesis reads.
     fn is_reflect_eligible(&self, type_id: TypeId) -> bool {
@@ -834,6 +879,8 @@ impl TypeSystem {
                 of(CompilerItem::ReflectEnum, OnBoundTrait::ReflectEnum)
             } else if trait_name == items.trait_name(CompilerItem::ReflectFlags) {
                 of(CompilerItem::ReflectFlags, OnBoundTrait::ReflectFlags)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectNewtype) {
+                of(CompilerItem::ReflectNewtype, OnBoundTrait::ReflectNewtype)
             } else if trait_name == items.trait_name(CompilerItem::Ref) {
                 of(CompilerItem::Ref, OnBoundTrait::Ref)
             } else if trait_name == items.trait_name(CompilerItem::RefMut) {
@@ -1244,67 +1291,24 @@ impl TypeSystem {
             return true;
         }
 
-        // A plain declaration satisfies its kind's reflection bound when the
-        // shared eligibility predicate accepts it, so nothing needs recording
-        // for synthesis to find later.
-        let plain_reflect_subject = match (&resolved, on_bound) {
-            // The identity root holds for every kind, and unlike a kind bound it
-            // is ungated by field visibility: naming a type is not enumerating
-            // it (WEP 2026-06-13).
-            (
-                ResolvedType::Struct { .. }
-                | ResolvedType::Variant { .. }
-                | ResolvedType::Enum { .. }
-                | ResolvedType::Flags { .. },
-                Some(OnBoundTrait::Reflect),
-            ) => true,
-            (ResolvedType::Struct { def, .. }, Some(OnBoundTrait::ReflectStruct)) => def
-                .decl()
-                .and_then(|d| scope.struct_fields_of(d))
-                .is_some_and(|info| self.has_visible_fields(scope, info)),
-            // Kinds are disjoint, so a variant never satisfies `ReflectStruct` —
-            // its payload layout registers struct-shaped fields under its own
-            // name and would otherwise answer the struct query too.
-            (ResolvedType::Variant { def }, Some(OnBoundTrait::ReflectVariant)) => {
-                scope.variant_cases_of(*def).is_some()
-            }
-            (ResolvedType::Enum { .. }, Some(OnBoundTrait::ReflectEnum))
-            | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => true,
-            _ => false,
-        };
-        if plain_reflect_subject && self.is_reflect_eligible(type_id) {
-            return true;
-        }
-
-        // A generic instance reflects through its base declaration:
-        // `Pair<String>` is a struct because `Pair` is, and inherits the
-        // declaration's impl by substitution.
-        if let ResolvedType::GenericInstance { def, .. } = &resolved
-            && match on_bound {
-                Some(OnBoundTrait::ReflectStruct) => {
-                    // Kinds are disjoint: a generic variant instance registers
-                    // struct-shaped fields for its payload under the same name,
-                    // so the struct query alone would claim it.
-                    scope.variant_cases_of(*def).is_none()
-                        && scope
-                            .struct_fields_of(*def)
-                            .is_some_and(|info| self.has_visible_fields(scope, info))
-                        && self.is_reflect_eligible(type_id)
-                }
-                Some(OnBoundTrait::ReflectVariant) => {
-                    scope.variant_cases_of(*def).is_some() && self.is_reflect_eligible(type_id)
-                }
-                // Only a struct or a variant takes type parameters, so an
-                // instance of either names itself through the root.
-                Some(OnBoundTrait::Reflect) => {
-                    (scope.variant_cases_of(*def).is_some()
-                        || scope.struct_fields_of(*def).is_some())
-                        && self.is_reflect_eligible(type_id)
-                }
-                _ => false,
-            }
+        // Which kind the type is has one answer, `TypeTable::reflect_kind`;
+        // this adds what the type table cannot see, whether the members the
+        // kind exposes are visible here (WEP 2026-06-13). The identity root
+        // skips that gate — naming a type is not enumerating it — and a kind
+        // a newtype does not own is left to the recursion below.
+        let reflect_kind = self.type_table.borrow().reflect_kind(type_id);
+        if let Some(bound) = on_bound.filter(|b| b.is_reflect())
+            && let Some(kind) = reflect_kind
+            && (bound == OnBoundTrait::Reflect
+                || (kind == bound.compiler_item()
+                    && self.reflect_members_visible(scope, resolved, kind)))
+            && self.is_reflect_eligible(type_id)
         {
-            if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
+            // A declaration's impl is synthesized in the module walk; an
+            // instance's is minted on request, so record one here.
+            if matches!(resolved, ResolvedType::GenericInstance { .. })
+                && let Some(key) = self.synth_trait_key(bound)
+            {
                 let (_, module_source) = self
                     .type_table
                     .borrow()
@@ -1315,6 +1319,19 @@ impl TypeSystem {
                     .record_bound_driven_synth_request_for(type_id, &module_source, &key);
             }
             return true;
+        }
+
+        // A newtype inherits its base's impls (WEP 2026-01-29), so a structure
+        // kind holds for it exactly when it holds for what it wraps. Asked of
+        // the base, not of the ultimate one, so a chain answers a link at a
+        // time and each still names itself.
+        if let ResolvedType::Newtype { base_type, .. } = &resolved
+            && !matches!(on_bound, Some(OnBoundTrait::ReflectNewtype))
+            && on_bound.is_some_and(OnBoundTrait::is_reflect)
+        {
+            let base = *base_type;
+            let base_resolved = self.type_table.borrow().get(base).clone();
+            return self.type_implements_trait_inner(ctx, scope, base, &base_resolved, trait_);
         }
 
         // Get the type name and type args for looking up implementations
@@ -1697,6 +1714,23 @@ impl TypeSystem {
         })
     }
 
+    /// The module declaring `def`, when `def` is a newtype. The kind with no
+    /// members carries no member info to read a module off, so the declaration
+    /// answers directly.
+    fn newtype_declaring_module(
+        &self,
+        scope: &TypeLookup,
+        def: crate::defs::DefId,
+    ) -> Option<ModuleSource> {
+        // A generic declaration is a newtype too, and it is recorded in its own
+        // table: each instantiation resolves the base afresh, so there is no
+        // single type to key it by.
+        if scope.newtype_of(def).is_none() && scope.generic_newtype_of(def).is_none() {
+            return None;
+        }
+        Some(self.type_table.borrow().defs().module(def).clone())
+    }
+
     /// Whether `bound_name` is a synthesized reflection trait the subject is
     /// eligible for by kind. These have no impl blocks, so the name-based search
     /// misses them; a hit records the bound-driven synth request.
@@ -1725,11 +1759,13 @@ impl TypeSystem {
                 OnBoundTrait::ReflectFlags,
             ]
             .into_iter()
-            .find_map(|kind| declaring_module_of_kind(scope, def, kind)),
+            .find_map(|kind| declaring_module_of_kind(scope, def, kind))
+            .or_else(|| self.newtype_declaring_module(scope, def)),
             OnBoundTrait::ReflectStruct
             | OnBoundTrait::ReflectVariant
             | OnBoundTrait::ReflectEnum
             | OnBoundTrait::ReflectFlags => declaring_module_of_kind(scope, def, on_bound),
+            OnBoundTrait::ReflectNewtype => self.newtype_declaring_module(scope, def),
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
@@ -1771,6 +1807,7 @@ fn declaring_module_of_kind(
         OnBoundTrait::ReflectEnum => scope.enum_cases_of(def).map(|i| i.module_source.clone()),
         OnBoundTrait::ReflectFlags => scope.flags_members_of(def).map(|i| i.module_source.clone()),
         OnBoundTrait::Reflect
+        | OnBoundTrait::ReflectNewtype
         | OnBoundTrait::Eq
         | OnBoundTrait::Ord
         | OnBoundTrait::Serialize
@@ -2427,7 +2464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolve e.g. `MyBytes::Iter` when `MyBytes` is a newtype over `List<u8>`.
         let (type_name, concrete_type_args) = {
             let tt = self.tysys.type_table.borrow();
-            let effective_id = tt.get_ultimate_base_type(concrete_type_id);
+            let effective_id = tt.representation_head(concrete_type_id);
             let list_name = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::List);
             match tt.get(effective_id).clone() {
                 ResolvedType::GenericInstance { type_args, .. } => {

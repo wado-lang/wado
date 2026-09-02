@@ -12,7 +12,7 @@ use { wire_name } from "core:serde";
 
 /// The set bits joined by `|`, or `-` when none is set.
 fn render<L: ReflectFlags<Members = [..M]>, ..M>(value: &L) -> String {
-    let policy = ReflectFlags::<L>::wire_name_policy();
+    let policy = Reflect::<L>::wire_name_policy();
     let mut out = "";
     for let bit of ReflectFlags::<L>::members() {
         if bit.is_set(value) {
@@ -31,7 +31,7 @@ fn render<L: ReflectFlags<Members = [..M]>, ..M>(value: &L) -> String {
 /// The inverse. An unknown name names the type it is missing from. `L` only
 /// appears in the return type, so the caller pins it with a turbofish.
 fn parse<L: ReflectFlags<Members = [..M]>, ..M>(text: String) -> Result<L, String> {
-    let policy = ReflectFlags::<L>::wire_name_policy();
+    let policy = Reflect::<L>::wire_name_policy();
     let mut raw: u64 = 0;
     if text != "-" {
         for let name of text.split("|") {

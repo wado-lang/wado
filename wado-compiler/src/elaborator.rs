@@ -315,6 +315,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().flags_members_at(site, name)
     }
 
+    /// [`Self::lookup_flags_members_at`] through a newtype: the base's members
+    /// paired with the type the qualifier named, so `M::none()` on
+    /// `type M = Perm` reads Perm's members and yields an `M`. The second slot
+    /// is `None` when the qualifier owns the members itself.
+    pub(super) fn flags_members_through_newtype(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<(FlagsInfo, Option<TypeId>)> {
+        let lookup = self.type_lookup();
+        if let Some(def) = lookup.declaration_at(site, name)
+            && let Some((base, named)) = types::newtype_member_owner(&lookup, &self.tysys, def)
+        {
+            return Some((lookup.flags_members_of(base)?.clone(), Some(named)));
+        }
+        Some((lookup.flags_members_at(site, name)?.clone(), None))
+    }
+
     pub(super) fn lookup_newtype(&self, name: &str) -> Option<TypeId> {
         self.type_lookup().newtype(name)
     }

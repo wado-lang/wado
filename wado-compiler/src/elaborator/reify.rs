@@ -953,22 +953,45 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// Reify a `newtype N = T;` declaration (concrete only). Generic
-    /// newtypes are instantiated on demand by `make_newtype_instance`;
-    /// the concrete decl shape is what lands in TIR.
+    /// A newtype's parameters as the impls written over the declaration see
+    /// them, read off what the declaration states. A default is the one fact
+    /// left behind: resolving it needs the declaration's own parameters in
+    /// scope, which is where the base type is resolved, not here.
+    fn declared_type_params(params: &[ast::GenericParam]) -> Vec<crate::tir::TirTypeParam> {
+        params
+            .iter()
+            .enumerate()
+            .map(|(index, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.real_bounds().iter().map(|b| b.name.clone()).collect(),
+                default: None,
+                index: index as u32,
+                projected_from: None,
+            })
+            .collect()
+    }
+
+    /// Reify a `type N = T;` declaration. A generic one names no single type —
+    /// each instantiation is its own, minted on demand by
+    /// `make_newtype_instance` — so it lands here without one, carrying the
+    /// parameters its synthesized impls are written over.
     fn reify_newtype(&self, newtype_decl: &ast::Newtype) -> Option<TirNewtype> {
-        if !newtype_decl.type_params.is_empty() {
-            // Generic newtypes have no concrete TIR decl emitted at the
-            // module level; they materialise per-instantiation.
+        let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
+        let generic = !newtype_decl.type_params.is_empty();
+        let type_id = self.tysys.all_newtypes.get(&def).copied();
+        if !generic && type_id.is_none() {
             return None;
         }
-        let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
-        let type_id = *self.tysys.all_newtypes.get(&def)?;
         Some(TirNewtype {
             name: newtype_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: newtype_decl.visibility,
-            type_id,
+            def,
+            type_params: Self::declared_type_params(&newtype_decl.type_params),
+            type_id: type_id.filter(|_| !generic),
+            wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
             span: newtype_decl.span,
         })
     }
@@ -1161,24 +1184,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// fact `resolve_local_newtype` recorded under this declaration's own
     /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
-        if !newtype_decl.type_params.is_empty() {
-            // Generic local newtypes are unresolved (see `resolve_local_newtype`).
-            return;
-        }
-        let Some(&type_id) = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(newtype_decl.id)
-            .and_then(|def| self.sem.decls.local_newtypes.get(&def))
-        else {
+        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
             return;
         };
+        let generic = !newtype_decl.type_params.is_empty();
+        let type_id = self.sem.decls.local_newtypes.get(&def).copied();
+        if !generic && type_id.is_none() {
+            return;
+        }
         self.pending_local_newtypes.push(TirNewtype {
             name: crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
-            type_id,
+            def,
+            type_params: Self::declared_type_params(&newtype_decl.type_params),
+            type_id: type_id.filter(|_| !generic),
+            wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
             span: newtype_decl.span,
         });
     }
@@ -6537,7 +6558,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // feeds the return type only (Step 4).
         let expected_fn_type = expected_type.map(|t| {
             let table = self.tysys.type_table.borrow();
-            table.get_ultimate_base_type(table.peel_refs(t))
+            table.representation_head(table.peel_refs(t))
         });
         let params: Vec<(String, TypeId)> = closure
             .params
@@ -7735,7 +7756,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .decls
             .lookup_global(name, &self.current_module_source)?;
         let table = self.tysys.type_table.borrow();
-        let base = table.get_ultimate_base_type(table.peel_refs(ty));
+        let base = table.representation_head(table.peel_refs(ty));
         matches!(table.get(base), crate::tir::ResolvedType::Function { .. }).then_some((
             module_source,
             global_name,
@@ -8009,7 +8030,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // peel references and the ultimate base type before
                 // checking for `Function`.
                 let table = self.tysys.type_table.borrow();
-                let base = table.get_ultimate_base_type(table.peel_refs(local.type_id));
+                let base = table.representation_head(table.peel_refs(local.type_id));
                 matches!(table.get(base), crate::tir::ResolvedType::Function { .. })
             }
         {
@@ -8102,7 +8123,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let callee_expr = self.reify_expr(&call.callee, ctx, None);
             let is_fn = {
                 let table = self.tysys.type_table.borrow();
-                let base = table.get_ultimate_base_type(table.peel_refs(callee_expr.type_id));
+                let base = table.representation_head(table.peel_refs(callee_expr.type_id));
                 matches!(table.get(base), crate::tir::ResolvedType::Function { .. })
             };
             if is_fn {
@@ -8273,7 +8294,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let suffix = &ident.name[pos + 2..];
 
             let owner = self.qualified_owner_site(ident);
-            let flags = self.type_lookup().flags_members_at(owner, prefix).cloned();
+            // A newtype reaches its base's constants and keeps its own type.
+            let through_newtype = self.newtype_member_owner(owner, prefix);
+            let flags = match through_newtype {
+                Some((base, _)) => self.type_lookup().flags_members_of(base).cloned(),
+                None => self.type_lookup().flags_members_at(owner, prefix).cloned(),
+            };
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
             {
@@ -8288,7 +8314,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         value,
                         repr: value.to_string(),
                     },
-                    flags_info.type_id,
+                    through_newtype.map_or(flags_info.type_id, |(_, named)| named),
                     span,
                 );
             }
@@ -8565,7 +8591,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     tt.get(raw_receiver.type_id),
                     crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
                 ) && matches!(
-                    tt.get(tt.get_ultimate_base_type(raw_receiver.type_id)),
+                    tt.get(tt.representation_head(raw_receiver.type_id)),
                     crate::tir::ResolvedType::Primitive(_) | crate::tir::ResolvedType::Enum { .. }
                 )
             };
@@ -9109,8 +9135,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
 
+                // A newtype reaches its base's members and keeps its own type:
+                // `C::Green` is the implicit `Color::Green as C`.
+                let through_newtype = self.newtype_member_owner(owner, prefix);
+
                 // Variant case.
-                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
+                let variant_info = match through_newtype {
+                    Some((base, _)) => lookup.variant_cases_of(base).cloned(),
+                    None => lookup.variant_cases_at(owner, prefix).cloned(),
+                };
+                if let Some(variant_info) = variant_info
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -9139,13 +9173,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             case_name: case_data.name,
                             payload: None,
                         },
-                        variant_type,
+                        through_newtype.map_or(variant_type, |(_, named)| named),
                         ident.span,
                     );
                 }
 
                 // Enum case.
-                if let Some(enum_info) = lookup.enum_cases_at(owner, prefix).cloned()
+                let enum_info = match through_newtype {
+                    Some((base, _)) => lookup.enum_cases_of(base).cloned(),
+                    None => lookup.enum_cases_at(owner, prefix).cloned(),
+                };
+                if let Some(enum_info) = enum_info
                     && let Some(case_data) = enum_info.find_case(suffix).cloned()
                 {
                     let enum_type = self
@@ -9159,13 +9197,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             case_index: case_data.index,
                             case_name: case_data.name,
                         },
-                        enum_type,
+                        through_newtype.map_or(enum_type, |(_, named)| named),
                         ident.span,
                     );
                 }
 
                 // Flags member.
-                if let Some(flags_info) = lookup.flags_members_at(owner, prefix).cloned()
+                let flags_info = match through_newtype {
+                    Some((base, _)) => lookup.flags_members_of(base).cloned(),
+                    None => lookup.flags_members_at(owner, prefix).cloned(),
+                };
+                if let Some(flags_info) = flags_info
                     && let Some(member) = flags_info
                         .members
                         .iter()
@@ -9177,7 +9219,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             value: u64::from(member.bitmask),
                             repr: member.bitmask.to_string(),
                         },
-                        flags_info.type_id,
+                        through_newtype.map_or(flags_info.type_id, |(_, named)| named),
                         ident.span,
                     );
                 }
@@ -9270,7 +9312,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(target_type);
+            .representation_head(target_type);
         let name = match self.tysys.type_table.borrow().get(target_base).clone() {
             crate::tir::ResolvedType::Struct { def, .. }
                 if matches!(
@@ -9399,8 +9441,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (source_base, target_base) = {
             let tt = self.tysys.type_table.borrow();
             (
-                tt.get_ultimate_base_type(source_type),
-                tt.get_ultimate_base_type(target_type),
+                tt.representation_head(source_type),
+                tt.representation_head(target_type),
             )
         };
         let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
@@ -9593,7 +9635,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .get_ultimate_base_type(recorded_type);
+                    .representation_head(recorded_type);
                 // A float-only literal (`1.0`, `0.0`, `1e2`) is a float
                 // regardless of the recorded type: when the recorded type is
                 // missing/UNKNOWN (e.g. a stdlib const body whose
@@ -9889,14 +9931,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         pattern_endpoint_to_i128(endpoint)
     }
 
-    /// Discriminant index of `case_name` when `scrutinee_type` is an
-    /// enum that declares it. Drives lowering a bare/qualified enum-case
-    /// pattern to `TirPattern::Enum`.
+    /// [`super::types::newtype_member_owner`] for the declaration `prefix`
+    /// names at `site`.
+    pub(super) fn newtype_member_owner(
+        &self,
+        site: Option<ast::AstId>,
+        prefix: &str,
+    ) -> Option<(crate::defs::DefId, TypeId)> {
+        let lookup = self.type_lookup();
+        let def = lookup.declaration_at(site, prefix)?;
+        super::types::newtype_member_owner(&lookup, &self.tysys, def)
+    }
+
+    /// Whose cases a pattern names: the scrutinee's structure, with references
+    /// and newtype links peeled. A newtype inherits its base's cases (WEP
+    /// 2026-01-29), so `match c { Color::Green => … }` holds for a `C` too —
+    /// reading the identity here dropped an enum into the variant branch, and
+    /// WIR build then had a variant pattern over an `Enum`.
+    pub(super) fn scrutinee_structure_head(&self, scrutinee_type: TypeId) -> TypeId {
+        let tt = self.tysys.type_table.borrow();
+        tt.reflect_structure_head(tt.peel_refs(scrutinee_type))
+    }
+
+    /// Discriminant index of `case_name` when `scrutinee_type` is an enum that
+    /// declares it. Drives lowering an enum-case pattern to `TirPattern::Enum`.
     fn scrutinee_enum_case_index(&self, scrutinee_type: TypeId, case_name: &str) -> Option<u32> {
         use crate::tir::ResolvedType;
         // Peel references for match ergonomics: `match &c { Red => … }`
         // presents the scrutinee as `&Color`.
-        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let peeled = self.scrutinee_structure_head(scrutinee_type);
         if !matches!(
             self.tysys.type_table.borrow().get(peeled),
             ResolvedType::Enum { .. }
@@ -9914,7 +9977,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// instance) whose cases include `case_name`.
     fn scrutinee_has_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> bool {
         use crate::tir::ResolvedType;
-        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let peeled = self.scrutinee_structure_head(scrutinee_type);
         if !matches!(
             self.tysys.type_table.borrow().get(peeled),
             ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. }
@@ -10045,7 +10108,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // known case first, then immutable global, then binding.
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
                     return TirPattern::Enum {
-                        enum_type: self.tysys.type_table.borrow().peel_refs(scrutinee_type),
+                        enum_type: self.scrutinee_structure_head(scrutinee_type),
                         case_name: name.clone(),
                         case_index,
                     };
@@ -10218,7 +10281,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, &case_name)
                 {
                     return TirPattern::Enum {
-                        enum_type: self.tysys.type_table.borrow().peel_refs(scrutinee_type),
+                        enum_type: self.scrutinee_structure_head(scrutinee_type),
                         case_name,
                         case_index,
                     };
@@ -10230,7 +10293,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // variant decl + payload type resolve through the
                 // underlying `Option<T>` rather than falling to the
                 // unknown-payload `_` arm.
-                let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+                let peeled_scrutinee = self.scrutinee_structure_head(scrutinee_type);
                 let payload_type = {
                     use crate::tir::ResolvedType;
                     let type_args =
@@ -10364,7 +10427,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Destructuring through a reference (`let { x, y } = &p`)
         // presents the scrutinee as `&Point`; peel references so the
         // struct decl resolves (fields inherit the reference kind below).
-        let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let peeled_scrutinee = self.scrutinee_structure_head(scrutinee_type);
 
         // A field index is a fact about the value being destructured, so the
         // scrutinee's head answers and the pattern's qualifier — which annotate

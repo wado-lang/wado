@@ -908,6 +908,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .len()
             .checked_sub(2)
             .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
+        // A newtype reaches its base's members and keeps its own identity, so
+        // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
+        // the implicit form of `Color::Green as C`.
+        let through_newtype = owner.and_then(|def| {
+            super::types::newtype_member_owner(&self.type_lookup(), &self.tysys, def)
+        });
+        let owner = through_newtype.map(|(base, _)| base).or(owner);
         macro_rules! lookup_case {
             ($of:ident) => {
                 owner.and_then(|def| self.type_lookup().$of(def)).cloned()
@@ -990,7 +997,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Reify rebuilds the payload-less
                 // `VariantConstruct` from the AST + recorded generic
                 // instantiation. Not an l-value.
-                return Some(variant_type);
+                return Some(through_newtype.map_or(variant_type, |(_, named)| named));
             }
         }
 
@@ -1008,7 +1015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_id_of_decl(enum_info.defined_at);
 
             // Reify rebuilds the `EnumConstruct`. Not an l-value.
-            return Some(enum_type);
+            return Some(through_newtype.map_or(enum_type, |(_, named)| named));
         }
 
         // Check for flags member: PathFlags::SymlinkFollow
@@ -1023,7 +1030,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
             self.check_case_turbofish_arity(ident, prefix, 0);
-            return Some(flags_info.type_id);
+            return Some(through_newtype.map_or(flags_info.type_id, |(_, named)| named));
         }
         None
     }
@@ -3189,8 +3196,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         source_type: TypeId,
         target_type: TypeId,
     ) -> Option<&'static str> {
-        let source_base = tt.get_ultimate_base_type(source_type);
-        let target_base = tt.get_ultimate_base_type(target_type);
+        let source_base = tt.representation_head(source_type);
+        let target_base = tt.representation_head(target_type);
         let slice_elem = |id| match tt.get(id) {
             ResolvedType::GenericInstance { def, type_args }
                 if tt.compiler_item_def(crate::compiler_item::CompilerItem::Slice)
@@ -3283,10 +3290,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
-        let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
+        //
+        // Which pair of words the literal has to fit is how the value is
+        // stored, so the representation answers: `type Signed = i128` is that
+        // pair too, and reading the name instead let an oversized literal
+        // through it with no diagnostic. The cast still yields `target_type`.
+        let repr_target = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(target_type);
+        let struct_name = match self.tysys.type_table.borrow().get(repr_target).clone() {
             ResolvedType::Struct { .. } => {
                 let tt = self.tysys.type_table.borrow();
-                tt.nominal_def(target_type).map(|def| {
+                tt.nominal_def(repr_target).map(|def| {
                     (
                         FqTypeName::declared(tt.defs(), def),
                         tt.def_name(def).to_string(),
@@ -3378,11 +3395,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `i128` / `u128` are structs here; their rules below cover a
             // wide-int source only, so such a target never exempts an aggregate.
             let wide_int = |id| {
-                matches!(tt.get(tt.get_ultimate_base_type(id)), ResolvedType::Struct { def, .. }
+                matches!(tt.get(tt.representation_head(id)), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
             };
             // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
-            let source_base = tt.get_ultimate_base_type(source_type);
+            let source_base = tt.representation_head(source_type);
             let source_is_aggregate = !wide_int(source_type)
                 && matches!(
                     tt.get(source_base),
@@ -3390,7 +3407,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Variant { .. }
                 );
-            source_is_aggregate && source_base != tt.get_ultimate_base_type(target_type)
+            source_is_aggregate && source_base != tt.representation_head(target_type)
         };
         if unrelated_aggregate {
             let tt = self.tysys.type_table.borrow();
@@ -3429,12 +3446,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             use crate::tir::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
-                tt.get(tt.get_ultimate_base_type(source_type)),
+                tt.get(tt.representation_head(source_type)),
                 ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
             );
             let target_supported = !source_is_wide_int
-                || match tt.get(tt.get_ultimate_base_type(target_type)) {
+                || match tt.get(tt.representation_head(target_type)) {
                     ResolvedType::Primitive(
                         PrimitiveType::F64
                         | PrimitiveType::F32
@@ -3472,12 +3489,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(source_type);
+            .representation_head(source_type);
         let target_base = self
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(target_type);
+            .representation_head(target_type);
         if target_base == TypeTable::CHAR
             && source_base != TypeTable::CHAR
             && source_base != TypeTable::U8
@@ -4330,6 +4347,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_defaults: vec![None; effective_fields.len()],
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
+            type_param_defaults: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 

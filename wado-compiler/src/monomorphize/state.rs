@@ -509,18 +509,21 @@ impl Monomorphizer {
         method_name: &str,
         trait_name: Option<&crate::name::FqTraitName>,
     ) -> Option<FqTypeName> {
-        self.newtype_own_link(type_id, type_table, |_, tid| match trait_name {
-            Some(trait_name) => self
-                .functions
-                .trait_env
-                .trait_def_of_fq(trait_name)
-                .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_)),
-            None => self
-                .functions
-                .trait_env
-                .has_inherent_method_by_receiver(&type_table.impl_receiver_key(tid), method_name),
-        })
-        .map(|(name, _)| name)
+        type_table
+            .newtype_link_owning(type_id, |tid| match trait_name {
+                Some(trait_name) => self
+                    .functions
+                    .trait_env
+                    .trait_def_of_fq(trait_name)
+                    .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_)),
+                None => self.functions.trait_env.has_inherent_method_by_receiver(
+                    &type_table.impl_receiver_key(tid),
+                    method_name,
+                ),
+            })
+            // The head an `impl` header writes: the declaration, with any
+            // arguments left beside it rather than fused in.
+            .map(|tid| type_table.fq_base_type_name(tid))
     }
 
     /// Whether the declaration `tid` names carries its own `impl <trait> for`
@@ -539,49 +542,16 @@ impl Monomorphizer {
     }
 
     /// The first newtype link at or below `type_id` writing its own impl of
-    /// `trait_`. A link's impl serves every level above it, so the chain — not
-    /// the receiver alone — says which type a call dispatches to.
+    /// `trait_`.
     pub(super) fn newtype_link_with_trait_impl(
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
         trait_: crate::defs::DefId,
     ) -> Option<TypeId> {
-        self.newtype_own_link(type_id, type_table, |_, tid| {
+        type_table.newtype_link_owning(type_id, |tid| {
             self.has_own_trait_impl(type_table, tid, trait_)
         })
-        .map(|(_, tid)| tid)
-    }
-
-    /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
-    /// (evaluated on that level's name and its `TypeId`), returning both.
-    ///
-    /// Reads the unerased view: erasure redirects a newtype id to its base
-    /// before monomorphize, so the erased view never reports a `Newtype` level
-    /// at all and every newtype would look like one without its own impl.
-    fn newtype_own_link(
-        &self,
-        type_id: TypeId,
-        type_table: &TypeTable,
-        has_own_impl: impl Fn(&FqTypeName, TypeId) -> bool,
-    ) -> Option<(FqTypeName, TypeId)> {
-        let mut tid = type_id;
-        loop {
-            match type_table.get_unerased(tid) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
-                ResolvedType::Newtype { base_type, def, .. } => {
-                    let base = *base_type;
-                    // The head an `impl` header writes: the declaration, with
-                    // any arguments left beside it rather than fused in.
-                    let own = FqTypeName::declared(type_table.defs(), *def);
-                    if has_own_impl(&own, tid) {
-                        return Some((own, tid));
-                    }
-                    tid = base;
-                }
-                _ => return None,
-            }
-        }
     }
 
     pub fn receiver_keeps_newtype_own_impl(

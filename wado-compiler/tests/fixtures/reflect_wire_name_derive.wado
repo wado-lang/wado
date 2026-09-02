@@ -11,7 +11,7 @@ trait WireRow {
 
 impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> WireRow for T {
     fn wire_row(&self) -> String {
-        let policy = ReflectStruct::<T>::wire_name_policy();
+        let policy = Reflect::<T>::wire_name_policy();
         let mut out = "";
         for let f of ReflectStruct::<T>::members() {
             out = `${out}${wire_name(&f, policy)}=${f.get(self):?};`;

@@ -255,7 +255,6 @@ internal trait ReflectStruct: Reflect {   // `Reflect` carries `type_name()`
     type FieldTypes;
     type Members;
     fn members() -> Self::Members;
-    fn wire_name_policy() -> CaseStyle;
 }
 ```
 

@@ -36,6 +36,31 @@ pub(crate) struct StructFieldInfo {
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
+    /// What each type parameter wrote after `=`, parallel to
+    /// `type_param_bounds`. See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
+}
+
+/// Where a qualified prefix's members live when the prefix names a newtype,
+/// paired with the type the prefix itself names. A newtype inherits its base's
+/// members and keeps its own identity, so `C::Green` on `type C = Color` reads
+/// Color's cases and yields a `C` — the implicit `Color::Green as C`. `None`
+/// when the prefix names something that owns its members.
+pub(super) fn newtype_member_owner(
+    lookup: &TypeLookup<'_>,
+    tysys: &super::tysys::TypeSystem,
+    def: crate::defs::DefId,
+) -> Option<(crate::defs::DefId, TypeId)> {
+    let newtype_id = lookup.newtype_of(def)?;
+    let head = tysys.type_table.borrow().reflect_structure_head(newtype_id);
+    Some((tysys.type_def(head)?, newtype_id))
+}
+
+/// What each type parameter declares as its default, in declaration order:
+/// `Some(ty)` where the parameter wrote `= ty`. A use site that omits the
+/// argument takes it.
+pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option<ast::Type>> {
+    params.iter().map(|p| p.default.clone()).collect()
 }
 
 /// A trait bound as a declaration digest records it: the site that wrote it,
@@ -77,6 +102,9 @@ pub(crate) struct VariantInfo {
     /// Used by `infer_variant_type_args` to fill type params from payload args
     /// and expected type context.
     pub(super) type_param_type_ids: Vec<TypeId>,
+    /// What each type parameter wrote after `=`, parallel to `type_params`.
+    /// See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Enum case info: case name and discriminant index
@@ -155,6 +183,9 @@ pub(crate) struct ResourceInfo {
 pub(crate) struct GenericNewtypeInfo {
     pub(super) type_params: Vec<String>,
     pub(super) base_type_ast: ast::Type,
+    /// What each type parameter wrote after `=`, parallel to `type_params`.
+    /// See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Which kind of inherent impl member a visibility violation names.
@@ -2542,6 +2573,78 @@ impl<'a> TypeLookup<'a> {
     /// The newtype (or `flags` type) `name` names here.
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
         self.newtype_of(self.declaration(name)?)
+    }
+
+    /// `def`'s type parameters in declaration order, each with the default it
+    /// declared. `None` where `def` takes no type parameters.
+    ///
+    /// The three kinds that take type parameters are asked of one declaration,
+    /// so "how many does it take" and "whose defaults are these" can never be
+    /// about two of them.
+    pub(super) fn declared_type_params(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<Vec<(String, Option<ast::Type>)>> {
+        fn zip(
+            names: impl IntoIterator<Item = String>,
+            defaults: &[Option<ast::Type>],
+        ) -> Vec<(String, Option<ast::Type>)> {
+            names.into_iter().zip(defaults.iter().cloned()).collect()
+        }
+        if let Some(info) = self.struct_fields_of(def)
+            && !info.type_param_bounds.is_empty()
+        {
+            let names = info.type_param_bounds.iter().map(|(n, _)| n.clone());
+            return Some(zip(names, &info.type_param_defaults));
+        }
+        if let Some(info) = self.variant_cases_of(def)
+            && !info.type_params.is_empty()
+        {
+            return Some(zip(
+                info.type_params.iter().cloned(),
+                &info.type_param_defaults,
+            ));
+        }
+        if let Some(info) = self.generic_newtype_of(def)
+            && !info.type_params.is_empty()
+        {
+            return Some(zip(
+                info.type_params.iter().cloned(),
+                &info.type_param_defaults,
+            ));
+        }
+        None
+    }
+
+    /// `args` extended with the declared default of each parameter the site
+    /// left out. `None` when nothing was omitted, or an omitted parameter
+    /// declares no default — the arity diagnostics answer for that.
+    ///
+    /// A default may name a parameter to its left (`struct Both<A, B = A>`),
+    /// which stands for that parameter's *argument*, not for whatever the use
+    /// site happens to call `A`. So each default is substituted against the
+    /// arguments already settled before it resolves.
+    pub(super) fn type_args_with_defaults(
+        &self,
+        def: crate::defs::DefId,
+        args: &[ast::Type],
+    ) -> Option<Vec<ast::Type>> {
+        let params = self.declared_type_params(def)?;
+        if args.len() >= params.len() {
+            return None;
+        }
+        let names: Vec<String> = params.iter().map(|(name, _)| name.clone()).collect();
+        let mut filled = args.to_vec();
+        for (_, default) in &params[args.len()..] {
+            let default = default.clone()?;
+            let settled = filled.clone();
+            filled.push(super::type_resolution::substitute_type_params(
+                &default,
+                &names[..settled.len()],
+                &settled,
+            ));
+        }
+        Some(filled)
     }
 
     /// The fields of the struct `def` declares.

@@ -1323,7 +1323,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !visited.insert(type_id) {
             return false;
         }
-        let base = type_table.get_ultimate_base_type(type_id);
+        let base = type_table.representation_head(type_id);
         if base != type_id && self.type_contains_slice_view_inner(type_table, base, visited) {
             return true;
         }

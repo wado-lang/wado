@@ -501,13 +501,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if let Some(def) = self.type_decl_at(site, name) {
-            if enforce_arity && let Some(expected) = self.bare_generic_type_arity(def) {
-                let _ = self.emit(TypeError::MissingTypeArguments {
-                    name: name.to_string(),
-                    expected,
-                    span,
-                });
-                return TypeTable::ERROR;
+            if let Some(expected) = self.bare_generic_type_arity(def) {
+                // Every parameter declaring a default makes the bare name the
+                // defaulted instantiation; otherwise the site must write them.
+                if let Some(args) = self.type_lookup().type_args_with_defaults(def, &[]) {
+                    return self.resolve_generic_type_at(site, name, &args, span);
+                }
+                if enforce_arity {
+                    let _ = self.emit(TypeError::MissingTypeArguments {
+                        name: name.to_string(),
+                        expected,
+                        span,
+                    });
+                    return TypeTable::ERROR;
+                }
             }
             if let Some(type_id) = self.lookup_newtype_of_decl(def) {
                 return type_id;
@@ -674,6 +681,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(def) = self.type_decl_at(site, name) else {
                     return self.resolve_generic_type_out_of_scope(site, name, args, span);
                 };
+                // A trailing argument the site left out takes its default.
+                let filled = self.type_lookup().type_args_with_defaults(def, args);
+                let args = filled.as_deref().unwrap_or(args);
                 let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
                 if struct_info
                     .as_ref()
