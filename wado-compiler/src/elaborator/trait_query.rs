@@ -799,18 +799,22 @@ impl TypeSystem {
         resolved: &ResolvedType,
         kind: CompilerItem,
     ) -> bool {
-        let decl = match resolved {
-            ResolvedType::Struct { def, .. } => def.decl(),
-            ResolvedType::Variant { def } | ResolvedType::GenericInstance { def, .. } => Some(*def),
-            _ => None,
-        };
         match kind {
-            CompilerItem::ReflectStruct => decl
-                .and_then(|d| scope.struct_fields_of(d))
-                .is_some_and(|info| self.has_visible_fields(scope, info)),
-            CompilerItem::ReflectVariant => {
-                decl.is_some_and(|d| scope.variant_cases_of(d).is_some())
+            // Through the head, so an anonymous shape answers from
+            // `anon_struct_fields` — it declares fields like any other struct,
+            // and `walk_structural_derive_members` reads it the same way.
+            CompilerItem::ReflectStruct => match resolved {
+                ResolvedType::Struct { def, .. } => scope.struct_fields_of_head(*def),
+                ResolvedType::GenericInstance { def, .. } => scope.struct_fields_of(*def),
+                _ => None,
             }
+            .is_some_and(|info| self.has_visible_fields(scope, info)),
+            CompilerItem::ReflectVariant => match resolved {
+                ResolvedType::Variant { def } | ResolvedType::GenericInstance { def, .. } => {
+                    scope.variant_cases_of(*def).is_some()
+                }
+                _ => false,
+            },
             _ => true,
         }
     }
@@ -875,6 +879,8 @@ impl TypeSystem {
                 of(CompilerItem::ReflectEnum, OnBoundTrait::ReflectEnum)
             } else if trait_name == items.trait_name(CompilerItem::ReflectFlags) {
                 of(CompilerItem::ReflectFlags, OnBoundTrait::ReflectFlags)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectNewtype) {
+                of(CompilerItem::ReflectNewtype, OnBoundTrait::ReflectNewtype)
             } else if trait_name == items.trait_name(CompilerItem::Ref) {
                 of(CompilerItem::Ref, OnBoundTrait::Ref)
             } else if trait_name == items.trait_name(CompilerItem::RefMut) {
@@ -1716,7 +1722,12 @@ impl TypeSystem {
         scope: &TypeLookup,
         def: crate::defs::DefId,
     ) -> Option<ModuleSource> {
-        scope.newtype_of(def)?;
+        // A generic declaration is a newtype too, and it is recorded in its own
+        // table: each instantiation resolves the base afresh, so there is no
+        // single type to key it by.
+        if scope.newtype_of(def).is_none() && scope.generic_newtype_of(def).is_none() {
+            return None;
+        }
         Some(self.type_table.borrow().defs().module(def).clone())
     }
 

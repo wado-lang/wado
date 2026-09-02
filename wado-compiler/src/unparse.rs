@@ -3052,8 +3052,14 @@ fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
     match slot {
         OperandSlot::Callee => postfix && !matches!(expr, Expr::FieldAccess(_)),
         OperandSlot::Postfix => postfix,
-        // `a as T as U` is left-associative, and unary binds tighter than `as`.
-        OperandSlot::Cast => postfix || matches!(expr, Expr::Cast(_) | Expr::Unary(_)),
+        // `a as T as U` is left-associative, and a value-producing unary binds
+        // tighter than `as`. Logical `!` does not — it sits above `matches`, so
+        // `!x as i32` reads as `!(x as i32)` and the operand keeps its parens.
+        OperandSlot::Cast => {
+            postfix
+                || matches!(expr, Expr::Cast(_))
+                || matches!(expr, Expr::Unary(u) if u.op != UnaryOp::Not)
+        }
     }
 }
 

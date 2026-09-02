@@ -12,10 +12,16 @@ impl<T: Display> MyArray<T> {
     }
 }
 
+// Two instantiations in one program: one impl is written over the declaration,
+// so each use has to instantiate it for its own arguments.
 test "a generic newtype inherits its base's Inspect" {
     let a: MyArray<i32> = [1, 2];
     assert `${a:?}` == "[1, 2] as MyArray";
     assert a.first_label() == "1";
+
+    let s: MyArray<String> = ["x", "y"];
+    assert `${s:?}` == "[\"x\", \"y\"] as MyArray";
+    assert s.first_label() == "x";
 }
 
 __DATA__

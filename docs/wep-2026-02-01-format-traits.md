@@ -167,8 +167,8 @@ through one blanket impl per reflection kind in `core:prelude/traits`:
 Each branches on `alternate` where the two forms differ, calling out to the
 outlined alternate body, so a struct, variant, enum, flags or newtype type
 needs no synthesised impl of its own. What reflection does
-not cover — resources and the `fn(..)` dispatch stubs — the compiler
-still emits per type. See
+not cover — parameterized types, resources and the `fn(..)` dispatch stubs —
+the compiler still emits per type. See
 [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) and
 [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md).
 

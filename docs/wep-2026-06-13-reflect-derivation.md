@@ -250,7 +250,8 @@ compiler renders internally; a type with none is written bare.
 
 ### What can be named
 
-The types `Reflect` is synthesized for: the five kinds, and the tuple family.
+The types `Reflect` is synthesized for: the five kinds, and the tuple family,
+which is the one still to come (Known gaps).
 Naming an unnameable type is therefore an unsatisfied `T: Reflect`, reason-chained
 like any other bound, rather than a special case buried in an intrinsic.
 

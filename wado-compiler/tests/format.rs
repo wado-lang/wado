@@ -2676,16 +2676,18 @@ fn test_roundtrip_cast_operand_keeps_parens() {
     // ` as T` binds looser than the postfix operators and tighter than every
     // binary one, so an operand looser than a cast keeps its parens:
     // `a < b < c as bool` casts `c`, and `x matches { 200 } as bool` does not
-    // parse at all. A unary operand and a chained cast bind tighter and stay
-    // bare.
+    // parse at all. Logical `!` is looser too — `!y as i32` reads as
+    // `!(y as i32)`. A value-producing unary operand and a chained cast bind
+    // tighter and stay bare.
     assert_format_preserves_ast(
         r"
-fn run(a: i32, b: i32, c: i32, x: i32) -> bool {
+fn run(a: i32, b: i32, c: i32, x: i32, y: bool) -> bool {
     let t = (a < b < c) as bool;
     let u = (x matches { 200 }) as bool;
     let v = -a as i64;
     let w = a as i64 as i32;
-    return t && u && v == w as i64;
+    let n = (!y) as i32;
+    return t && u && v == w as i64 && n == 0;
 }
 ",
     );
