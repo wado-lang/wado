@@ -55,8 +55,7 @@ carries a parallel metadata list or value accessor.
 A newtype is the one kind with no members: it has a base, and its value bridges
 are the bidirectional `From` the compiler already generates for it ([Conversion Traits](./wep-2026-03-16-conversion-traits.md) §7), so `ReflectNewtype` carries
 neither a member channel nor a bridge of its own. It carries no
-`wire_name_policy` either. A policy cases _member_ names, and a newtype has
-none, so the method would have nothing to answer and no caller.
+`wire_name_policy` either: a policy cases member names, and a newtype has none.
 
 Identity and structure part ways at a newtype. It names _itself_ through the
 root, and inherits its base's structure like every other impl ([Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)).
@@ -67,8 +66,8 @@ The two bounds therefore hold at different depths: `ReflectNewtype` at the
 newtype itself, a structure kind only after peeling to the base. That is rank 2
 of [Trait Resolution](./wep-2026-09-01-trait-resolution.md), so a derivation
 keyed on the newtype kind beats one keyed on its base's. `Inspect` is the one
-that uses it — the `as Name` tag is a blanket over this kind, one instance per
-chain link, so `type A = i32; type B = A` renders `7 as A as B`.
+that uses it. Its `as Name` tag is a blanket over this kind, instantiated once
+per chain link, so `type A = i32; type B = A` renders `7 as A as B`.
 
 ```wado
 internal trait Reflect {                         // identity — every nameable type
@@ -423,9 +422,9 @@ streaming struct build are implemented — `core:serde` derives every struct,
 variant, enum, and flags impl through them, and a newtype reaches those
 derivations through the base whose structure it inherits. So is the identity
 root: `Reflect` carries `type_name()` for every kind, a kind bound reaches it
-through the supertrait, and `T: Reflect` is a bound of its own. Nothing is left
-derived by the compiler either — `Inspect`'s `as Name` tag was the last one
-synthesized per declaration. What remains is what a schema library reads and
+through the supertrait, and `T: Reflect` is a bound of its own. No format trait
+is derived per declaration any more: `Inspect`'s `as Name` tag is a blanket over
+the newtype kind. What remains is what a schema library reads and
 nothing else yet does.
 
 - `Member::doc()`. The trait carries `name()` and `wire_name_override()` only,

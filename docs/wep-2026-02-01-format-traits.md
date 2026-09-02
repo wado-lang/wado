@@ -165,10 +165,11 @@ through one blanket impl per reflection kind in `core:prelude/traits`:
 | `ReflectNewtype` | the base's rendering, then `as Name`              |
 
 Each branches on `alternate` where the two forms differ, calling out to the
-outlined alternate body, so a struct, variant, enum, flags or newtype type
-needs no synthesised impl of its own. What reflection does
-not cover — parameterized types, resources and the `fn(..)` dispatch stubs —
-the compiler still emits per type. See
+outlined alternate body, so a struct, variant, enum, flags or newtype type needs
+no synthesised impl of its own. A generic newtype needs none either: the blanket
+covers its declaration and instantiates per use. The compiler still emits an
+impl per type for what carries no kind — tuples, generic resource instances,
+resources, and the `fn(..)` dispatch stubs. See
 [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) and
 [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md).
 
