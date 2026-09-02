@@ -301,6 +301,35 @@ receiver's members are visible at the use site, and scope gates candidates by
 what that module imported, so `Program` carries member visibility and no query is
 a function of types alone.
 
+### What `holds` answers from
+
+Answering a bound is not an impl lookup. `T: Tr` holds nine ways: `Inspect`
+holds for everything; a plain `enum` derives `Display`; a generic body's
+parameter holds by its own signature; a reference satisfies the reference
+identities; a primitive carries `Eq` / `Ord` and the operator items; a struct or
+variant satisfies `Eq` / `Ord` / `Default` / serde when its members do; a
+declaration satisfies its own reflection kind; an impl is written; or a blanket
+answers and its bound is asked in turn.
+
+The last two are the only recursive ones, and they are the solver's. The rest
+are read off a type and are resolved by the lowering into facts the `Program`
+carries — "this type satisfies `Eq` structurally", "this type is a
+`ReflectStruct` when asked from this module".
+
+The split is where the recursion is, not where the difficulty is. A fact is a
+property of one type; an impl and a blanket are a search whose steps are other
+questions of the same shape, and that search is what needs the cycle rule below.
+Precomputing it is not an option either: whether a blanket applies is the
+question, so a lowering that answered it would be running the solver.
+
+A fact carries the derivation requests its answer depends on. "This struct
+satisfies `Eq`" is also "emit `Eq` for this struct", and an answer that arrives
+without the request loses the body.
+
+Two things a bound can say are not carried yet: a trait's own arguments — no
+bound can spell them (WEP 2026-07-31) — and an associated-type constraint
+(`T: Mul<Output = T>`), which today gates a blanket separately.
+
 ### The four questions
 
 | Function                                            | Rules it owns                                                                          |
@@ -330,10 +359,14 @@ Nothing flips at once. The fixture corpus is the drift detector, as
 - [x] Lower the impl headers into a `Program` and report what it finds. It has
       no path in use to differ against — the checks it answers did not exist —
       so it is authoritative from the start.
-- [ ] `holds`, then `candidates`, then `rank`, each on a representation the step
-      before it proved. Each replaces a path already in use, so each lands under
-      the differential first: lower, assert the solver's answer against the path
-      in use over every fixture, and flip only once they agree everywhere.
+- [x] `holds`, with the impls, the traits' supertraits, the derivation facts and
+      the bounds in force, and the cycle rule under unit test. Called by nothing
+      yet.
+- [ ] Lower the facts — every non-recursive way a bound holds, with the
+      derivation requests each owes — and put `holds` under the differential
+      against `type_implements_trait` over every fixture. Flip once they agree.
+- [ ] `candidates`, then `rank`, the same way: unit tests first, then the
+      differential, then the flip.
 
 `coherence_errors` went first because it reads the shallowest part of `Program` —
 impls alone, no bounds in force and no receiver — so it fixed the lowering's
@@ -477,25 +510,14 @@ trait holding at the same level, one written in the calling module — because a
 duplicate pair is rejected where it is written, a newtype and its base are
 separated by rank 1, and two traits' blankets are the cross-trait ambiguity.
 
-### What `holds` may answer from is open
+### The structural derivation rules stay outside the unit tests
 
-Answering a bound is not an impl lookup. `type_implements_trait` answers from the
-primitive operator items, a plain `enum`'s derived `Display`, the structural
-conformance of `Eq` / `Ord` / `Default` / serde over a type's members, the four
-`Reflect*` kinds, and reference identity. Which side of the lowering that
-knowledge sits on decides how much `Program` weighs:
-
-- The solver models it, and `Program` carries every type's kind and members. The
-  differential check then covers the derivation rules too, and the
-  representation grows to the size of the rules it restates.
-- Lowering resolves it, and `Program` carries the conclusion — this type
-  satisfies this trait — as a fact. The solver stays small, and the differential
-  covers less, because the part most likely to disagree was computed by the old
-  code on the way in.
-
-The proposal is the second: what selection needs is that a bound holds, not why.
-It is a decision either way, and the first `holds` written settles it, so it is
-worth settling before that.
+`holds` reads the derivation facts rather than deriving them, so "a struct whose
+members all satisfy `Eq` satisfies `Eq`" is the lowering's rule and the fixture
+corpus is what holds it. Moving it in later is an addition to `Program`, not a
+rewrite of the solver; what it would buy is those rules under unit test, and
+what it costs is every type's members and their visibility in the
+representation.
 
 ### `spec.md` overstates coherence
 

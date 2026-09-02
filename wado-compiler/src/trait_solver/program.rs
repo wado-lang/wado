@@ -65,10 +65,43 @@ pub struct ImplDef {
     pub is_derivation_request: bool,
 }
 
+/// A module, as the asking side of a question.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct ModuleId(pub u32);
+
+/// A trait declaration, reduced to what the rules read.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct TraitDef {
+    /// The traits an implementor must also implement, so a bound naming this
+    /// one answers for them too.
+    pub supertraits: Vec<TraitDeclId>,
+}
+
+/// A body the answer depends on: "this type satisfies `Eq`" is also "emit `Eq`
+/// for this type". An answer that arrives without its requests loses the body.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct DerivationRequest {
+    pub ty: SolverType,
+    pub trait_: TraitDeclId,
+}
+
+/// One way a bound holds that is a property of the type rather than a search:
+/// a primitive's built-in traits, a plain `enum`'s `Display`, a reference
+/// identity, a structural derivation over the members, a declaration's own
+/// reflection kind. The lowering resolves those and states them here; the
+/// solver's own work is the impls and the blanket recursion over them.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct Fact {
+    /// Where the fact holds. `None` — everywhere. `Some(modules)` — only when
+    /// asked from one of them, which is how a `Reflect*` bound's visibility gate
+    /// arrives: naming a type is not enumerating it.
+    pub visible_from: Option<Vec<ModuleId>>,
+    pub requests: Vec<DerivationRequest>,
+}
+
 /// What the solver is asked about.
 ///
-/// It holds the impls today. Type and trait declarations, and each module's
-/// imported declarations, join it as `holds` and `candidates` land — see
+/// Each module's imported declarations join it as `candidates` lands — see
 /// "How the order is guaranteed" in
 /// `docs/wep-2026-09-01-trait-resolution.md`.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
@@ -76,6 +109,19 @@ pub struct Program {
     /// Insertion order is the order every answer is reported in, so a caller
     /// that builds it deterministically gets deterministic diagnostics.
     pub impls: IndexMap<ImplId, ImplDef>,
+    pub traits: IndexMap<TraitDeclId, TraitDef>,
+    /// The non-recursive ways a bound holds, keyed by the pair they answer.
+    pub facts: IndexMap<(SolverType, TraitDeclId), Fact>,
+}
+
+/// The bounds in force where a question was asked.
+///
+/// A generic body's `T: Tr` holds because its own signature says so, not because
+/// any impl exists, so no question is a function of the program alone. Indexed
+/// by the position [`SolverType::Param`] carries.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct Env {
+    pub param_bounds: Vec<Vec<TraitDeclId>>,
 }
 
 impl Program {
@@ -91,5 +137,26 @@ impl Program {
             self.impls.insert(id, def).is_none(),
             "{id:?} was added twice"
         );
+    }
+
+    /// The traits a bound on `trait_` answers for: itself and its supertraits,
+    /// transitively. A cycle among supertraits is rejected where the traits are
+    /// declared; the walk refuses to hang on one regardless.
+    pub(super) fn bound_reaches(&self, bound: TraitDeclId, wanted: TraitDeclId) -> bool {
+        let mut stack = vec![bound];
+        let mut seen: Vec<TraitDeclId> = Vec::new();
+        while let Some(next) = stack.pop() {
+            if next == wanted {
+                return true;
+            }
+            if seen.contains(&next) {
+                continue;
+            }
+            seen.push(next);
+            if let Some(def) = self.traits.get(&next) {
+                stack.extend(def.supertraits.iter().copied());
+            }
+        }
+        false
     }
 }
