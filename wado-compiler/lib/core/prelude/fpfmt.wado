@@ -311,10 +311,8 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
     return FormatResult { digits: d, exponent: -p, n_digits: n };
 }
 
-// Compute fixed_width result for fixed-point formatting with given precision.
-// Cost: 1×unpack64 + 1×uscale, against the short() + fixed_width() two-pass this
-// replaced; the rare shapes split off below need one more scaling to pin the
-// decimal position.
+// Fixed-point form of f at the given precision: 1×unpack64 + 1×uscale, against
+// the short() + fixed_width() two-pass this replaced.
 pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let unpack = unpack64(f);
     let m = unpack.mantissa;
@@ -323,10 +321,10 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let log10_e63 = log10_pow2(e + 63);
 
     // Scaling by exactly 10^precision puts the digits at the 10^-precision
-    // place, which is what a fixed-point format asks for — so the digit count
-    // is only needed to bound the result. log10_pow2 is floor(log10 f) or one
-    // less, so the true count is `n_est` or `n_est + 1`, and one more for a
-    // rounding carry; reading it back off `d` needs no second scaling at all.
+    // place, which is what a fixed-point format asks for. The digit count is
+    // then only needed to bound the result. log10_pow2 is floor(log10 f) or one
+    // less, so the true count is `n_est` or `n_est + 1`, and one more again on a
+    // rounding carry. Reading it back off `d` needs no second scaling.
     let n_est = 1 + log10_e63 + precision;
     if n_est < 1 || n_est > 17 {
         builtin::cold_path();

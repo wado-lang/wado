@@ -6,8 +6,10 @@
 // shape: a fast arm that builds the pair inline and a slow arm that calls out
 // for it, paid once per float conversion.
 //
-// The aggregate-valued block itself is what must go, so the expectations name
-// its printed result type rather than any one exit.
+// The aggregate-valued block itself is what goes, so every expectation names a
+// printed result type rather than any one exit — the two that must survive
+// (`Half`, `Boxed`) as much as the two that must not. Each surviving one is held
+// by a single precondition, so removing that precondition fails this fixture.
 
 struct HiLo {
     hi: u64,
@@ -74,6 +76,34 @@ fn use_half(p: i32) -> u64 {
     return x.kept;
 }
 
+struct Boxed {
+    a: Option<String>,
+    b: u64,
+}
+
+#[inline("never")]
+fn wide_boxed(p: i32) -> Boxed {
+    return Boxed { a: Option::Some(`w${p}`), b: p as u64 * 5 };
+}
+
+fn pick_boxed(p: i32) -> Boxed {
+    if p >= 0 && p < 8 {
+        return Boxed { a: Option::Some("fast"), b: 7 };
+    }
+    return wide_boxed(p);
+}
+
+// Every field is read, so the arity rule admits it — but a slot holding a GC
+// reference does not survive the projection a materializing exit synthesises:
+// `$value_copy$T` insertion is long past, so the assignment would alias what
+// value semantics deep-copy. The block stays.
+#[inline("never")]
+fn use_boxed(p: i32) -> String {
+    let x = pick_boxed(p);
+    let head = if let Option::Some(v) = x.a { v } else { "" };
+    return `${head}/${x.b}`;
+}
+
 export fn run() {
     assert use_literal(builtin::black_box(3)) == 10;
     assert use_literal(builtin::black_box(90)) == 275;
@@ -81,6 +111,8 @@ export fn run() {
     assert use_call(builtin::black_box(90)) == 720;
     assert use_half(builtin::black_box(3)) == 3;
     assert use_half(builtin::black_box(90)) == 270;
+    assert use_boxed(builtin::black_box(3)) == "fast/7";
+    assert use_boxed(builtin::black_box(90)) == "w90/450";
 }
 
 __DATA__
@@ -88,7 +120,8 @@ __DATA__
     "stdout": "",
     "wir_expect:O2": [
         "__sroa_slot_",
-        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//Half\""
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//Half\"",
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//Boxed\""
     ],
     "wir_not_expect:O2": [
         "block -> ref \"opt_slot_temp_sroa_struct_block.wado//HiLo\"",

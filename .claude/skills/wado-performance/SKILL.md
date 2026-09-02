@@ -80,7 +80,7 @@ element** in a loop:
   `&T` as a box). A tuple is a GC struct too, so retyping a two-field struct as
   `[u64, u64]` allocates the same. Two things remove the allocation: multivalue
   on a return the caller destructures, and SROA on a literal whose fields the
-  optimizer can split into locals — and a merge point defeats both preconditions,
+  optimizer can split into locals. A merge point defeats both preconditions,
   which is a pass to fix rather than a call site to rewrite (below).
 - **`array.new` / `array.new_default`** — a fresh GC array (`_default`
   zero-fills); watch for one per call where a buffer could be reused.
@@ -95,32 +95,34 @@ for `Array<T>`-backed `String` / `List`).
 
 ### A stdlib workaround is a bug report about a pass
 
-An optimizer fix reaches every Wado program; the stdlib edit that routes around
-it reaches one call site and hides the gap that produced it. So when the shape
-you are about to rewrite by hand is one a pass exists for, name the pass and
-read its precondition first — that is where the fix belongs, and the win is the
-whole language's. Three found this way while cutting `fts`, every one of them
-also live in `short`, the path every `${x}` on a float takes — which is why the
-first, fixed as a pass, paid on a benchmark `fts` never touched:
+An optimizer fix reaches every Wado program. The stdlib edit that routes around
+one reaches a single call site, and hides the gap that produced it. So when the
+shape you are about to rewrite by hand is one a pass exists for, name the pass
+and read its precondition first. That is where the fix belongs.
+
+Three turned up this way while cutting `fts`. All three are also live in
+`short`, the path every `${x}` on a float takes, which is why fixing the first
+paid on a benchmark `fts` never touched.
 
 - **`sroa` matches only a direct literal binding.** An inlined `get_pow10` left
-  `let pm = <block with two exits>` — one `struct.new`, one call — with
-  `pm.hi` / `pm.lo` the only uses, so the `PmHiLo` was a heap object per
-  conversion. Fixed by extending `slot_temp_sroa`, which already scalarized the
-  `[tag, slots…]` shape, to a struct literal and to an exit that hands over the
-  aggregate: **json-canada de +12.7%, ser +7.2%**, and `uscale_pow10` deleted.
+  `let pm = <block with two exits>`, one building the struct and one calling out
+  for it, with `pm.hi` / `pm.lo` the only uses. The `PmHiLo` was a heap object
+  per conversion. Fixed by extending `slot_temp_sroa`, which already scalarized
+  the `[tag, slots…]` shape, to a struct literal and to an exit that hands over
+  the aggregate: **json-canada de +12.7%, ser +7.2%**, and `uscale_pow10`
+  deleted.
 - **`multi_value_return` is all-or-nothing per callee.** It wants _every_ call
   site to be `let __tmp = Call(f)` whose only uses are field accesses.
-  `mul_pow10` had seven sites, six of them exactly that; the one yielding the
+  `mul_pow10` had seven sites and six were exactly that; the one yielding the
   call as a block value disqualified all seven. Fixing the first gap retired
-  this one — the offending site is now a `let` — but the precondition still is
-  all-or-nothing, so the next callee to hit it pays the same way.
+  this one, since the offending site is now a `let`. The precondition is
+  unchanged, so the next callee to hit it pays the same way.
 - **`cold_outline` refuses a region containing a `return`** (`control_escapes`),
   which is every rare slow path there is. Leaving `fixed_width_for_prec`'s
   out-of-range tail inline cost json-canada ser 6.5% against a byte-identical
-  serialize path — a hot function's growth moves everything downstream of it in
-  the module — and hand-splitting it into a function restored the row.
-  `fixed_width_out_of_range` in `fpfmt.wado` is that split, still hand-written.
+  serialize path: growing a hot function moves everything downstream of it in
+  the module. Hand-splitting it into a function restored the row, and
+  `fixed_width_out_of_range` in `fpfmt.wado` is that split.
 
 ## 3. WasmGC cost facts
 

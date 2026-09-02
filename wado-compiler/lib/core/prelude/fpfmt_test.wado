@@ -263,10 +263,8 @@ test "format_decimal_prec with precision" {
     assert format_decimal_prec(1, 0, 1, 2) == "1.00";
 }
 
-// The two-phase algorithm `fixed_width_for_prec`'s single-scaling fast path
-// replaces: pin the decimal position with a one-digit scaling, then scale
-// again for the digits. Kept here so a sweep can hold the two against each
-// other over every magnitude.
+// The two-phase algorithm the single-scaling fast path replaces: pin the
+// decimal position with a one-digit scaling, then scale again for the digits.
 fn fixed_width_for_prec_ref(f: f64, precision: i32) -> FormatResult {
     let unpack = unpack64(f);
     let m = unpack.mantissa;
@@ -311,6 +309,19 @@ fn fixed_width_for_prec_ref(f: f64, precision: i32) -> FormatResult {
 
 // A carry or a low `log10_pow2` estimate changes which `FormatResult` encodes a
 // value, so the two are compared by what they render, not by their fields.
+fn assert_matches_reference(f: f64) {
+    for let mut prec = 0; prec <= 17; prec += 1 {
+        let got = fixed_width_for_prec(f, prec);
+        let want = fixed_width_for_prec_ref(f, prec);
+        assert format_decimal_prec(got.digits, got.exponent, got.n_digits, prec) == format_decimal_prec(
+            want.digits,
+            want.exponent,
+            want.n_digits,
+            prec,
+        );
+    }
+}
+
 test "fixed_width_for_prec matches the two-phase reference over every magnitude" {
     let mut state: u64 = 0x243F6A8885A308D3;
     for let mut i = 0; i < 600; i += 1 {
@@ -318,17 +329,7 @@ test "fixed_width_for_prec matches the two-phase reference over every magnitude"
         let mantissa = state >> 12 & 0x000FFFFFFFFFFFFF;
         // Biased exponents 1 (smallest normal) through 2046 (largest finite).
         let biased_exp = (i * 743 % 2046 + 1) as u64;
-        let f = f64::from_bits((biased_exp << 52 | mantissa) as i64);
-        for let mut prec = 0; prec <= 17; prec += 1 {
-            let got = fixed_width_for_prec(f, prec);
-            let want = fixed_width_for_prec_ref(f, prec);
-            assert format_decimal_prec(got.digits, got.exponent, got.n_digits, prec) == format_decimal_prec(
-                want.digits,
-                want.exponent,
-                want.n_digits,
-                prec,
-            );
-        }
+        assert_matches_reference(f64::from_bits((biased_exp << 52 | mantissa) as i64));
     }
 }
 
@@ -341,17 +342,7 @@ test "fixed_width_for_prec matches the two-phase reference at decade boundaries"
     ];
     for let mut p = -40; p <= 40; p += 1 {
         for let s of &significands {
-            let f = parse(*s, p);
-            for let mut prec = 0; prec <= 17; prec += 1 {
-                let got = fixed_width_for_prec(f, prec);
-                let want = fixed_width_for_prec_ref(f, prec);
-                assert format_decimal_prec(got.digits, got.exponent, got.n_digits, prec) == format_decimal_prec(
-                    want.digits,
-                    want.exponent,
-                    want.n_digits,
-                    prec,
-                );
-            }
+            assert_matches_reference(parse(*s, p));
         }
     }
 }

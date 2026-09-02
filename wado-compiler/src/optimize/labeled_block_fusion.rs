@@ -1320,9 +1320,9 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
             slots: slots
                 .into_iter()
                 .map(|slot| {
-                    let next = engine.locals().len() as u32;
-                    let local_index = engine.alloc_local(
-                        format!("__fused_slot_{next}"),
+                    let (local_index, _) = alloc_indexed_local(
+                        engine,
+                        "__fused_slot_",
                         slot.type_id,
                         /* is_mut */ false,
                     );
@@ -2631,12 +2631,8 @@ fn plan_slot_temp_sroa(
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
         let zero = materialize_pad(engine, pad, span);
-        let next = engine.locals().len() as u32;
-        let local_index = engine.alloc_local(
-            format!("__sroa_slot_{next}"),
-            type_id,
-            /* is_mut */ true,
-        );
+        let (local_index, _) =
+            alloc_indexed_local(engine, "__sroa_slot_", type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
             local_index,
@@ -2682,9 +2678,12 @@ impl SlotExitChecker<'_> {
     /// `String`, whose `repr` a `s.len()` consumer never reads — and taking
     /// half of one leaves the object alive with the shape they look for gone.
     ///
-    /// A materializing exit needs a literal sibling for the arity, which also
-    /// makes it worth doing: a block whose every exit calls out allocates on
-    /// each of them either way, so there would be no merge to remove.
+    /// A materializing exit is admitted only beside a struct literal. Beside
+    /// nothing it is pointless — a block whose every exit calls out allocates on
+    /// each of them either way, so there is no merge to remove. Beside a tuple
+    /// it would be sound, since `widest` already proves the tuple carries every
+    /// projected slot; that case is refused for want of one to measure, not for
+    /// want of an argument.
     fn admissible(&self) -> bool {
         match self.struct_arity {
             Some(arity) => arity == self.wanted.len(),
@@ -2906,6 +2905,24 @@ fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut
     out.push(brk);
 }
 
+/// Allocate a local named after the index it lands at, so its declared name and
+/// every later mention rebuilt from `local_index` agree by construction.
+fn alloc_indexed_local(
+    engine: &mut Engine,
+    prefix: &str,
+    type_id: TypeId,
+    is_mut: bool,
+) -> (u32, String) {
+    let index = engine.locals().len() as u32;
+    let name = format!("{prefix}{index}");
+    let allocated = engine.alloc_local(name.clone(), type_id, is_mut);
+    assert_eq!(
+        allocated, index,
+        "a local lands at the index it was named for"
+    );
+    (index, name)
+}
+
 /// `__sroa_slot_N = value`, the statement every exit form ends up emitting.
 fn slot_assign(engine: &mut Engine, slot: &BoundSlot, value: Operand, span: Span) -> StmtKind {
     let target = engine.alloc_expr(
@@ -2934,12 +2951,8 @@ fn scalarize_materialized_exit(
     out: &mut Vec<StmtId>,
 ) {
     let agg_type = engine.body.exprs[exit].type_id;
-    let index = engine.alloc_local(
-        format!("__sroa_agg_{}", engine.locals().len()),
-        agg_type,
-        /* is_mut */ false,
-    );
-    let name = format!("__sroa_agg_{index}");
+    let (index, name) =
+        alloc_indexed_local(engine, "__sroa_agg_", agg_type, /* is_mut */ false);
     out.push(engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),
