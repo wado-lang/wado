@@ -5062,12 +5062,12 @@ fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
 }
 ```
 
-Every reference parameter follows this rule, `self` included: a method that
-returns `self` or stores it declares `with stores[self]`.
+Every reference parameter follows this rule, `self` included. A method that
+returns or stores `self` declares `with stores[self]`.
 
-A reference reached _through_ a parameter is a different reference, and copying
-it out is not that parameter escaping. Its own escape was declared wherever it
-entered, so no further declaration is needed:
+A reference reached _through_ a parameter is a different reference. Copying it
+out is not that parameter escaping, and the code that put it there already
+declared it, so it needs no declaration here:
 
 ```wado
 fn rebase(c: &Cursor, at: i32) -> Cursor {   // no stores[c]

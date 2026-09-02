@@ -675,7 +675,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Reject an unlabeled `break` / `continue` that no enclosing loop binds.
     /// Called per function, method, and closure body: each is its own label
-    /// stack, so a loop around a closure binds nothing written inside it.
+    /// stack.
     pub(super) fn validate_loop_jumps_ast(&self, body: Option<&crate::ast::Block>) {
         let Some(body) = body else {
             return;

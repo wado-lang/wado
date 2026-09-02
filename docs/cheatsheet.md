@@ -700,19 +700,19 @@ outer: {
 ### Branch Hints
 
 `builtin::cold_path()` marks the path containing it as rarely executed. It is a
-plain statement with no runtime effect: the engine lays out the other side of
-the branch as predicted-taken, and the inliner leaves the cold path out of its
-cost estimate. See [the spec](./spec.md#branch-hints).
+plain statement and emits no code. The engine lays out the other side of the
+branch as the predicted-taken path, and the inliner leaves the cold path out of
+its cost estimate. See [the spec](./spec.md#branch-hints).
 
 ```wado
 // The taken branch is cold.
-if i >= self.len {
+if i >= len {
     builtin::cold_path();
     panic("index out of bounds");
 }
 
-// Being a statement, not a condition wrapper, it also works where no boolean
-// is available — a `match` or `if let` arm.
+// It is a statement, not a condition wrapper, so it also works in a `match`
+// or `if let` arm, where no boolean is available.
 match command {
     Run => execute(),
     Crash => {
@@ -722,11 +722,11 @@ match command {
 }
 
 // On the fall-through after a diverging guard, it hints the guard as likely.
-if let Some(v) = self.fast_path(key) {
+if let Some(v) = fast_path(key) {
     return v;
 }
 builtin::cold_path();          // the slow path below is rarely reached
-return self.slow_path(key);
+return slow_path(key);
 ```
 
 ## Assert
@@ -933,12 +933,14 @@ fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
 
 // `self` is a reference parameter like any other, so a method letting it
 // escape declares stores[self].
-fn wrap(&self) -> Ref with stores[self] {
-    return Ref { inner: self };
+impl Node {
+    fn wrap(&self) -> Ref with stores[self] {
+        return Ref { inner: self };
+    }
 }
 
-// A reference reached through a parameter is a different reference: copying
-// it out is not that parameter escaping, and needs no declaration.
+// A reference reached through a parameter is a different reference. Copying
+// it out is not that parameter escaping, so it needs no declaration.
 fn rebase(c: &Cursor, at: i32) -> Cursor {
     return Cursor { chars: c.chars, pos: at };
 }
@@ -1389,8 +1391,8 @@ test "not yet implemented" {
     panic("TODO: implement this");
 }
 
-// Timeout override. The default is 1000ms; a test that exceeds its budget
-// is interrupted and fails.
+// Timeout override. The default is 1000ms, and a test that runs longer is
+// interrupted and fails.
 #[timeout_ms(5000)]
 test "large data processing" {
     process_large_dataset();

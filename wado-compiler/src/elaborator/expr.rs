@@ -426,7 +426,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What the path reaching the block's end yields, or `never` when no path
-    /// does — a trailing `loop` left only by `break label` reaches no tail.
+    /// does. A trailing `loop` left only by `break label` reaches no tail.
     fn labeled_block_tail_type(&self, lb: &LabeledBlockExpr) -> TypeId {
         if self.ast_labeled_block_falls_through(&lb.block, &lb.label) {
             self.ast_block_result_type(&lb.block)
@@ -436,9 +436,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The branch that types a block the use site expects nothing from: the
-    /// first carrying a real value. A diverging (`never`), valueless (`unit`)
-    /// or still-unresolved branch steps aside so it cannot mask one, and a
-    /// block holding only those takes its first branch.
+    /// first carrying a real value. A `never`, `unit` or unresolved branch
+    /// steps aside, and a block holding only those takes its first.
     fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
         let tt = self.tysys.type_table.borrow();
         branch_types
