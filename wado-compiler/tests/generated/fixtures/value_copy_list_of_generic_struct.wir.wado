@@ -53,12 +53,18 @@ array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut 
 
 array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>");  // TypeId(12)
 
-struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,i32> {  // TypeId(13)
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,i32> {  // TypeId(13)
+    mut key: ref "core:prelude/string.wado//String",
+    mut value: i32,
+    mut deleted: bool,
+}
+
+struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,i32> {  // TypeId(14)
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
     mut index: i32,
 }
 
-struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(14)
+struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(15)
     mut root: ref "core:prelude/types.wado//Option<i32>",
     mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
@@ -66,24 +72,18 @@ struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // Type
     mut deleted_count: i32,
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(15)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(16)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(16)
+struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(17)
     mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
     mut level: i32,
     mut left: ref "core:prelude/types.wado//Option<i32>",
     mut right: ref "core:prelude/types.wado//Option<i32>",
-}
-
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,i32> {  // TypeId(17)
-    mut key: ref "core:prelude/string.wado//String",
-    mut value: i32,
-    mut deleted: bool,
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(18)
