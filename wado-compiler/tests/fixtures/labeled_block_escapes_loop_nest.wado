@@ -1,9 +1,8 @@
-// `break` alone leaves the innermost loop. A labeled block wrapped around a
-// loop nest is how a single `break` leaves all of it — Wado has no loop labels
-// — and the block's tail is the path no `break` took.
+// Wado has no loop labels: a labeled block around a loop nest is how one
+// `break` leaves every loop in it.
 
 fn find(grid: List<List<i32>>, needle: i32) -> [i32, i32] {
-    let mut hit = [-1, -1];
+    let mut hit = [-9, -9];
     search: {
         for let r of 0..<grid.len() {
             for let c of 0..<grid[r].len() {
@@ -13,13 +12,16 @@ fn find(grid: List<List<i32>>, needle: i32) -> [i32, i32] {
                 }
             }
         }
-        hit = [-2, -2];
+        hit = [-1, -1];
     }
+    assert hit.0 != -9;
     return hit;
 }
 
+// The needle repeats in a later row, so a `break` that left only the inner
+// loop would overwrite the first hit with the second.
 test "a labeled break leaves every enclosing loop" {
-    let grid: List<List<i32>> = [[1, 2], [3, 4], [5, 6]];
+    let grid: List<List<i32>> = [[1, 2], [3, 4], [5, 4]];
     let [r, c] = find(grid, 4);
     assert r == 1;
     assert c == 1;
@@ -28,8 +30,8 @@ test "a labeled break leaves every enclosing loop" {
 test "the tail runs only when no break was taken" {
     let grid: List<List<i32>> = [[1, 2], [3, 4]];
     let [r, c] = find(grid, 9);
-    assert r == -2;
-    assert c == -2;
+    assert r == -1;
+    assert c == -1;
 }
 
 test "a value-carrying break leaves the loop nest too" {

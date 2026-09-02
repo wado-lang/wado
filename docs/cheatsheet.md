@@ -574,8 +574,7 @@ loop {
     continue;
 }
 
-// `break`/`continue` take no label; see Labeled Blocks below to leave more
-// than the innermost loop.
+// `break`/`continue` take no label. To leave a loop nest, see Labeled Blocks.
 
 // Match expression
 let result = match opt {
@@ -647,20 +646,20 @@ let b = if cond() { 1; } else { 2; }; // ditto
 
 ### Labeled Blocks
 
-A named block that `break LABEL` leaves from any depth inside it. Wado's only
-non-local jump: it stands in for loop labels, labeled `continue`, and `goto`,
-and it is also the block form that carries a value. See
+A named block that `break LABEL` leaves from any depth inside it. It is Wado's
+only non-local jump, and it replaces loop labels, labeled `continue`, and
+`goto`. It is also the block form that carries a value. See
 [the spec](./spec.md#labeled-blocks).
 
 ```wado
 // A named scope. The label is required: an unlabeled `{ ... }` is a struct
-// literal. Labels starting with `__` are reserved for the compiler.
+// literal. Labels starting with `__` are reserved for the compiler. A nested
+// block may reuse a label; `break` targets the innermost one.
 scope: {
     let x = 20;                     // new scope; gone after the block
 }
 
-// `break LABEL` leaves the block from any depth — a loop nest included.
-// The block's tail is the path no `break` took.
+// Leave a whole loop nest with one break.
 search: {
     for let r of 0..<grid.len() {
         for let c of 0..<grid[r].len() {
@@ -681,8 +680,8 @@ attempt: {
 }
 
 // As an expression: `break LABEL: expr` yields, and so does the trailing
-// statement on the path reaching the end. All of them must agree on one type,
-// and they coerce to the type expected at the use site.
+// statement on the path reaching the end. Every such path must agree on one
+// type, and a literal coerces to the type expected at the use site.
 let first_even = find: {
     for let x of xs {
         if x % 2 == 0 { break find: x; }
@@ -690,7 +689,6 @@ let first_even = find: {
     -1                              // the value when no break is taken
 };
 
-// Nested blocks may reuse a label; `break` targets the innermost one.
 // A `break` may also leave an effect handler's `do` block.
 outer: {
     with Counter => &inner do {

@@ -732,26 +732,14 @@ for let mut i = 0; i < 10; i = i + 1 {
 ```
 
 Both `break` and `continue` work with `while`, `for`, and `loop`. Neither takes
-a label; to leave more than the innermost loop, wrap the nest in a labeled
-block and break to that.
+a label. To leave more than the innermost loop, wrap the nest in a labeled
+block and break to its label.
 
 ### Labeled Blocks
 
-A labeled block is a named block that `break LABEL` leaves from anywhere
-inside it, at any depth. It is Wado's only non-local jump, and it subsumes
-what other languages spell as loop labels, labeled `continue`, and `goto`. It
-is also the block form that carries a value.
-
-```wado
-let x = 10;
-
-scope: {
-    let x = 20;  // shadows outer x
-    println(`x = ${x}`);  // prints "x = 20"
-}
-
-println(`x = ${x}`);  // prints "x = 10" (outer x unchanged)
-```
+A labeled block is a named block that `break LABEL` leaves from anywhere inside
+it. It is Wado's only non-local jump, and it replaces loop labels, labeled
+`continue`, and `goto`. It is also the block form that carries a value.
 
 #### Syntax
 
@@ -762,19 +750,15 @@ println(`x = ${x}`);  // prints "x = 10" (outer x unchanged)
   synthesises (an expanded template string, a desugared `for`, an inlined call)
 - `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value
 - Nested blocks may reuse a label name; a `break` targets the innermost match
-- The block creates a new variable scope
-- Variables declared inside are not accessible outside
-- Shadowing is allowed within the block
 
-The label is mandatory because a brace in value position is a struct literal:
-`{ field: value }` on its own could be either a struct literal or a block
-opening with a labeled statement. Requiring the label removes the ambiguity, so
-an unlabeled `{ ... }` block is a parse error.
+The label is mandatory to tell a block apart from a struct literal, since
+`{ field: value }` on its own could be either. An unlabeled `{ ... }` block is
+therefore a parse error.
 
 #### Scoping
 
-An inner block sees the enclosing scope; the enclosing scope does not see into
-it.
+The block opens a new scope: it sees the enclosing one, but the enclosing one
+does not see into it. A name declared inside may shadow an outer name.
 
 ```wado
 outer: {
@@ -792,7 +776,7 @@ outer: {
 #### Escaping Nested Loops
 
 `break` alone leaves the innermost loop. A labeled block around the nest leaves
-all of it at once, and the block's tail is the path no `break` took:
+all of it at once:
 
 ```wado
 search: {
@@ -810,8 +794,8 @@ search: {
 
 #### Early Exit
 
-`break LABEL` skips the rest of its block, so a chain of guards reads top to
-bottom instead of nesting, with one exit and no repeated cleanup:
+`break LABEL` skips the rest of its block, so a chain of guards stays flat
+instead of nesting one inside the next:
 
 ```wado
 attempt: {
@@ -821,8 +805,8 @@ attempt: {
 }
 ```
 
-A `break` may also leave an effect handler's `do` block; the handler in scope
-after the block is the outer one, on that path as on fall-through.
+A `break` may also leave an effect handler's `do` block. The outer handler is
+restored either way, whether the block exits by `break` or by falling through.
 
 ```wado
 outer: {
@@ -834,9 +818,9 @@ outer: {
 
 #### As an Expression
 
-A labeled block used as a value yields through `break LABEL: expr`, and through
-its trailing statement on the path that reaches the end. Both are branches of
-the block and must agree on one type:
+A labeled block used as a value yields two ways: through `break LABEL: expr`,
+and through its trailing statement on the path that reaches the end. Both are
+branches of the block, so every path must agree on one type:
 
 ```wado
 let found = search: {
@@ -849,8 +833,8 @@ let found = search: {
 };
 ```
 
-The branches unify against the type expected where the block sits, so integer
-and float literals coerce like any other literal instead of defaulting:
+The branches unify against the type expected where the block sits, so a literal
+coerces to that type rather than to its own default of `i32` or `f64`:
 
 ```wado
 let wide: i64 = compute: {
@@ -859,11 +843,11 @@ let wide: i64 = compute: {
 };
 ```
 
-Any expression position takes one — an argument, an operand, a field value —
-not only the right-hand side of a `let`.
+A labeled block fits any expression position, such as an argument, an operand,
+or a field value. It is not limited to the right-hand side of a `let`.
 
-A block whose trailing statement is not a value has none to yield on that path,
-so reaching the end traps; write `break LABEL: expr` on every path instead.
+If the trailing statement is not a value, the path reaching the end has nothing
+to yield and traps at run time. Write `break LABEL: expr` on every path instead.
 
 ### Match Expression
 
