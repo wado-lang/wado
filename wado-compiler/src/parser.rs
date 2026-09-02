@@ -291,10 +291,9 @@ impl Parser {
         self.contextual_keywords.push(span);
     }
 
-    /// Record the current token when it is a keyword the parse is about to
-    /// read as a *name* — `type` in `let type = 1`, `from` in `fn from(…)`.
-    /// Call it immediately before consuming a name token; a keyword token no
-    /// call covers keeps the role its lexing gives it.
+    /// Record the current token when it is a keyword the parse is about to read
+    /// as a *name* (`type` in `let type = 1`). Call it immediately before
+    /// consuming a name; a keyword no call covers keeps its lexical role.
     fn mark_keyword_name(&mut self) {
         let token = self.peek();
         if matches!(token.kind, TokenKind::Ident(_)) {

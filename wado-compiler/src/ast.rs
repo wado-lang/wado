@@ -168,13 +168,10 @@ pub struct Module {
     /// complete.
     has_syntax_errors: bool,
     /// Span of every token the parse read against its lexical class, in source
-    /// order: an identifier read as a keyword (`test "…" { }`, `resume`, `do`,
-    /// `task return`, `..trap`, `..forward`), and a keyword read as a name
-    /// (`let type = 1`, `fn from(…)`, `x.match`). Both are the contextual
-    /// keywords, and only the parse tells the two readings apart, so it records
-    /// its decision rather than leaving each consumer to rediscover it.
-    /// Everywhere else a token's lexical class is its role. Consumed by the
-    /// highlighter (`wado_lsp::semantic_tokens`).
+    /// order: an identifier read as a keyword (`test "…" { }`, `..trap`), or a
+    /// keyword read as a name (`let type = 1`, `x.match`). Only the parse tells
+    /// those two readings apart, so it records its own, and every other token's
+    /// lexical class is its role. Read by `wado_lsp::semantic_tokens`.
     contextual_keywords: Vec<Span>,
 }
 

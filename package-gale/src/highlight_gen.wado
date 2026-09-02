@@ -6,17 +6,11 @@ use { GenContext } from "./gen_context.wado";
 use { DiagnosticKind, DiagnosticOwner } from "./gir.wado";
 use { TreeMap } from "core:collections";
 
-/// `highlight`: build the token/rule mapping from the parsed highlight query,
-/// then drive `highlight_walk` over the parsed CST store. `parse` always
-/// returns a tree (partial on broken input), so there is no parse-failure /
-/// tokenize-only branch — a broken input still highlights from its partial
-/// tree. `hl_cover_unvisited` then sweeps whatever the tree left out.
-///
-/// The walk is what gives the visitor its rule stack. A query with no
-/// rule-context capture reaches the same captures without one, since an empty
-/// override table never reads the stack, but it is walked all the same: the
-/// saving is one traversal on a highlight, and a second path to reason about
-/// costs more than it.
+/// `highlight`: the token/rule mapping compiled from the query, then
+/// `highlight_walk` over the CST with `hl_cover_unvisited` for what the tree
+/// left out. `parse` always returns a tree, partial on broken input, so there
+/// is no tokenize-only fallback. A query with no rule-context capture is
+/// walked all the same: an empty override table never reads the rule stack.
 pub fn gen_highlight(
     w: &mut CodeWriter,
     grammar: &Grammar,
@@ -128,16 +122,22 @@ fn selector_desc(sel: &TokenSelector) -> String {
     };
 }
 
-fn parser_rule_exists(parser_rules: &List<ParserRule>, name: &String) -> bool {
-    return parser_rules.iter_ref().any(|r| r.name == *name);
+/// Position of the named parser rule, or -1. An index rather than a reference:
+/// the caller reads the rule out of the list it already holds.
+fn parser_rule_index(parser_rules: &List<ParserRule>, name: &String) -> i32 {
+    for let mut i = 0; i < parser_rules.len(); i += 1 {
+        if parser_rules[i].name == *name {
+            return i;
+        }
+    }
+    return -1;
 }
 
 /// `(rule) @capture` — every token the rule accepts, captured within it. The
-/// runtime keys an override by (rule, token kind), so the rule has to be one
-/// whose alternatives are each a single token, or a wrapper around such a rule:
-/// a naming rule listing the contextual keywords it accepts alongside
-/// `IDENTIFIER`. Reading the set off the grammar is the point — a query that
-/// spelled the keywords out instead would drift the moment the rule gained one.
+/// runtime keys an override by (rule, token kind), so each alternative has to
+/// be one token, or a delegation to a rule that is. Reading the set off the
+/// grammar is the point: a query spelling the keywords out would drift the
+/// moment the rule gained one.
 fn expand_rule_capture(
     overrides: &mut List<ResolvedOverride>,
     rule: &ParserRule,
@@ -170,7 +170,9 @@ fn rule_token_kinds(
     idx: &KindIndex,
     depth: i32,
 ) -> Option<List<i32>> {
-    assert depth <= MAX_RULE_CAPTURE_DEPTH;
+    if depth > MAX_RULE_CAPTURE_DEPTH {
+        return null;
+    }
     let mut kinds: List<i32> = [];
     for let alt of &rule.alternatives {
         if alt.elements.len() != 1 {
@@ -179,33 +181,35 @@ fn rule_token_kinds(
         match &alt.elements[0] {
             TokenRef(t) => match idx.by_name.get(t.name) {
                 Some(k) => kinds.push(k),
-                None => return null,
+                None => {
+                    return null;
+                },
             },
             Literal(l) => match idx.by_literal.get(l.text) {
                 Some(k) => kinds.push(k),
-                None => return null,
+                None => {
+                    return null;
+                },
             },
             RuleRef(r) => {
-                if depth == MAX_RULE_CAPTURE_DEPTH {
+                let at = parser_rule_index(parser_rules, &r.name);
+                if at < 0 {
                     return null;
                 }
-                let mut delegated: Option<List<i32>> = null;
-                for let named of parser_rules {
-                    if named.name == r.name {
-                        delegated = rule_token_kinds(named, parser_rules, idx, depth + 1);
-                        break;
-                    }
-                }
-                match delegated {
+                match rule_token_kinds(&parser_rules[at], parser_rules, idx, depth + 1) {
                     Some(inner) => {
                         for let k of &inner {
                             kinds.push(*k);
                         }
                     },
-                    None => return null,
+                    None => {
+                        return null;
+                    },
                 }
             },
-            _ => return null,
+            _ => {
+                return null;
+            },
         }
     }
     return Option::Some(kinds);
@@ -264,19 +268,17 @@ fn gen_highlight_mapping(
         let mut expanded = false;
         if rule.rule_context matches { None } {
             if let Name(name) = &rule.selector {
-                for let named of parser_rules {
-                    if named.name == *name {
-                        expand_rule_capture(
-                            &mut overrides,
-                            named,
-                            parser_rules,
-                            &idx,
-                            rule.capture,
-                            ctx,
-                        );
-                        expanded = true;
-                        break;
-                    }
+                let at = parser_rule_index(parser_rules, name);
+                if at >= 0 {
+                    expand_rule_capture(
+                        &mut overrides,
+                        &parser_rules[at],
+                        parser_rules,
+                        &idx,
+                        rule.capture,
+                        ctx,
+                    );
+                    expanded = true;
                 }
             }
         }
@@ -299,7 +301,7 @@ fn gen_highlight_mapping(
                 default_by_kind[kind] = rule.capture;
             },
             Some(rctx) => {
-                if !parser_rule_exists(parser_rules, rctx) {
+                if parser_rule_index(parser_rules, rctx) < 0 {
                     ctx.warn(
                         &DiagnosticOwner::host(&"highlight"),
                         DiagnosticKind::HighlightQuery,

@@ -334,12 +334,11 @@ struct AstSpans {
     /// recovered structurally here). Declaration and use sites share the
     /// binding's definition id, so one set covers both.
     param_ids: IndexSet<AstId>,
-    /// byte start -> class for the names the AST settles outright: field
-    /// names. These outrank symbol resolution rather than being refined by it,
-    /// so they stay apart from `map`: a shorthand `{ state }` resolves to the
-    /// binding it reads, which would colour it `variable` wherever a snapshot
-    /// exists.
-    overrides: IndexMap<usize, (u32, u32)>,
+    /// byte start of every field name. A field name outranks symbol resolution
+    /// rather than being refined by it: the shorthand `{ state }` resolves to
+    /// the binding it reads, which would colour it `variable` wherever a
+    /// snapshot exists.
+    field_names: IndexSet<usize>,
     /// byte start of every token the parse read against its lexical class: an
     /// identifier read as a keyword (`test "…" { }`), or a keyword read as a
     /// name (`let type = 1`). Every other token is what it lexes as.
@@ -363,12 +362,12 @@ impl AstSpans {
         self.param_ids.contains(&id)
     }
 
-    fn mark_override(&mut self, start: usize, class: (u32, u32)) {
-        self.overrides.insert(start, class);
+    fn mark_field_name(&mut self, start: usize) {
+        self.field_names.insert(start);
     }
 
-    fn override_at(&self, start: usize) -> Option<(u32, u32)> {
-        self.overrides.get(&start).copied()
+    fn is_field_name(&self, start: usize) -> bool {
+        self.field_names.contains(&start)
     }
 
     fn is_contextual(&self, start: usize) -> bool {
@@ -382,9 +381,8 @@ impl AstSpans {
 /// by construction rather than silently skipped.
 fn collect_ast_spans(module: &ast::Module) -> AstSpans {
     let mut collector = SpanCollector::default();
-    // Which occurrences of a contextual keyword read as keywords and which as
-    // names is the parse's verdict, and only the parse holds it: `let type = 1`
-    // and `type Alias = i32;` differ by nothing the AST spells at that token.
+    // Only the parse tells a contextual keyword's two readings apart:
+    // `let type = 1` and `type Alias = i32;` spell that token the same.
     collector.spans.contextual = module
         .contextual_keywords()
         .iter()
@@ -435,8 +433,7 @@ impl SpanCollector {
     }
 
     fn mark_field_name(&mut self, span: Span) {
-        self.spans
-            .mark_override(span.start, (token_type::PROPERTY, 0));
+        self.spans.mark_field_name(span.start);
     }
 }
 
@@ -547,9 +544,8 @@ fn classify_token(
     }
 
     let class = match token.kind.keyword_category() {
-        // A keyword token the parse read as a name: `let type = 1` binds a
-        // variable, `fn from(…)` declares a function. It lexes as a keyword,
-        // so without this it never reaches the identifier path at all.
+        // A keyword token the parse read as a name (`let type = 1`). It lexes
+        // as a keyword, so nothing else would reach the identifier path.
         Some(_) if ast_spans.is_contextual(token.span.start) => {
             classify_name(tokens, index, ast_spans, sem_classes)
         }
@@ -567,9 +563,8 @@ fn classify_token(
             // as the parameter binding it resolves to.
             TokenKind::Ident(name) if name == "self" => CONSTANT,
 
-            // The contextual keywords that lex as identifiers — `test`, `do`,
-            // `resume`, `task`, `trap`, `forward` — where the parse read one
-            // as a keyword.
+            // The mirror case: `test`, `do`, `resume`, `task`, `trap` and
+            // `forward` lex as identifiers and are read as keywords here.
             TokenKind::Ident(_) if ast_spans.is_contextual(token.span.start) => KEYWORD,
 
             TokenKind::Ident(_) => classify_name(tokens, index, ast_spans, sem_classes),
@@ -593,9 +588,8 @@ fn classify_token(
     Some(class)
 }
 
-/// The class of a name, in precedence order: the one the AST settles outright
-/// (a field name), then the resolved symbol class from `sem_classes`, then the
-/// lexer/AST heuristics.
+/// The class of a name, in precedence order: a field name, then the resolved
+/// symbol class from `sem_classes`, then the lexer/AST heuristics.
 fn classify_name(
     tokens: &[Token],
     index: usize,
@@ -603,9 +597,11 @@ fn classify_name(
     sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
 ) -> (u32, u32) {
     let start = tokens[index].span.start;
-    ast_spans
-        .override_at(start)
-        .or_else(|| sem_classes.and_then(|classes| classes.get(&start).copied()))
+    if ast_spans.is_field_name(start) {
+        return (token_type::PROPERTY, 0);
+    }
+    sem_classes
+        .and_then(|classes| classes.get(&start).copied())
         .unwrap_or_else(|| classify_ident(tokens, index, ast_spans))
 }
 
@@ -1394,10 +1390,10 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 9, "do"), token_type::KEYWORD);
     }
 
-    /// `type`, `from`, `of` and `flags` lex as *keyword* tokens, and the
-    /// parser takes each as a name wherever one is expected. `classify_token`
-    /// matches the keyword category first, so only the AST's name spans keep
-    /// these occurrences out of that branch.
+    /// `type`, `from`, `of` and `flags` lex as *keyword* tokens, and the parse
+    /// reads each as a name wherever one is expected. `classify_token` matches
+    /// the keyword category first, so only that reading keeps these occurrences
+    /// out of the keyword branch.
     #[test]
     fn contextual_keywords_bound_as_names_are_variables() {
         let src = concat!(
@@ -1418,8 +1414,8 @@ mod tests {
         // `mut` is a real keyword: it opens the binding's span but is not the
         // name in it.
         assert_eq!(kind_of(&tokens, src, 2, "mut"), token_type::KEYWORD);
-        // Use sites carry no use→def edge for a local, so they are named by
-        // the same spans.
+        // A local's use site carries no use→def edge, so the parse's reading
+        // classifies it too.
         assert_eq!(kind_of(&tokens, src, 5, "flags"), token_type::VARIABLE);
         assert_eq!(kind_of(&tokens, src, 5, "type"), token_type::VARIABLE);
         assert_eq!(kind_of(&tokens, src, 6, "from"), token_type::VARIABLE);

@@ -41,16 +41,17 @@ Every AST walk goes through `wado_compiler::ast::AstVisitor` and its `walk_*`
 functions — never a hand-written traversal, which silently skips whatever a
 later AST node adds.
 
-A contextual keyword is whichever the parse read it as, and the parse is the
-only thing that knows: `Module::contextual_keywords` records every token read
-against its lexical class — `test` / `do` / `resume` / `task` / `trap` /
-`forward` read as keywords though they lex as identifiers, and `type` / `from`
-/ `of` / `flags` / `extends` read as names (`let type = 1`, `fn from(…)`,
-`x.match`) though they lex as keywords. `classify_token` consults that set
-before the keyword category, so every other token keeps the role its lexing
-gives it. Nothing else can answer it: `type Alias = i32;` and `let type = 1;`
-put the same token in the same position of the same shape, and a name has no
-node of its own for a walk to find it by.
+A contextual keyword is whichever the parse read it as.
+`Module::contextual_keywords` records every token read against its lexical
+class: `test`, `do`, `resume`, `task`, `trap` and `forward` lex as identifiers
+and are read as keywords; `type`, `from`, `of`, `flags`, `extends` and every
+keyword after a `.` lex as keywords and are read as names (`let type = 1`,
+`fn from(…)`, `x.match`). `classify_token` checks that set before the keyword
+category, so every other token keeps the role its lexing gives it.
+
+Only the parse can answer this. `type Alias = i32;` and `let type = 1;` spell
+the same token the same way in the same position, and a name binds no node for
+the walk to find it by.
 
 A field name is in `AstSpans::overrides`, which outranks symbol resolution
 rather than being refined by it: the shorthand `{ state }` resolves to the

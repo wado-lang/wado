@@ -123,8 +123,8 @@ B : 'b' ;
 
 test "highlight fn: a grammar with a parser walks the CST, query or not" {
     // The walk carries the rule stack a rule-context override reads. A query
-    // without one reaches the same captures either way — an empty override
-    // table never reads the stack — and is walked all the same, so the
+    // with no override reaches the same captures without it, since an empty
+    // override table never reads the stack, and is walked all the same, so the
     // highlight fn has one shape.
     let plain = highlight_output_q("grammar T;
 r : B ;
@@ -154,7 +154,7 @@ IDENTIFIER : [a-z]+ ;
 
 test "rule capture follows a rule that delegates to a naming rule" {
     // A grammar wraps a naming rule once per use site so a query can capture
-    // that site alone — `fieldName : memberName` in `Wado.g4`. The wrapper
+    // that site alone (`fieldName : memberName` in `Wado.g4`). The wrapper
     // accepts what it delegates to, so the capture covers the same tokens.
     let out = highlight_output_q("grammar T;
 r : field ;

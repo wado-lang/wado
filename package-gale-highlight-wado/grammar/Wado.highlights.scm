@@ -63,20 +63,15 @@
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
 ; `.method()`, and `.field` with a struct literal's and a pattern's field name.
-; A `::` segment's IDENTIFIER is deliberately absent: it goes through
-; `pathSegment`, which nothing captures, because `Option::None` and `Foo::new`
-; are one shape that only name resolution splits. Only its keywords are
-; captured, below, since leaving one alone colours it as a keyword.
-;
-; A member name is a name whichever word it is: `memberName` accepts ~45,
-; keywords included, and the compiler reads every one of them through the same
-; classifier as any other name. So the whole rule carries the capture rather
-; than the handful of words that lex as identifiers.
+; A member name is a name whichever word it is: `memberName` accepts ~45 of
+; them, keywords included, so the whole rule carries the capture and the
+; compiler reads every one of them through its ordinary name path.
 (methodName) @function.method
 (fieldName) @property
-; `Instant::from(x)`, the shape every `From` impl is called through. Listed word
-; by word: an IDENTIFIER segment stays silent, and the compiler accepts only the
-; words its `identifier` rule holds as a path segment.
+; A `::` segment's IDENTIFIER stays uncoloured: `Option::None` and `Foo::new`
+; are one shape that only name resolution splits. Its contextual keywords are
+; names all the same, and `Instant::from(x)` is the shape every `From` impl is
+; called through. Only the words `identifier` holds reach a segment.
 (pathSegment "from" @variable)
 (pathSegment "of" @variable)
 (pathSegment "type" @variable)
@@ -85,11 +80,11 @@
 ; above give them and nothing more. Painting the rest `@variable` would colour
 ; inside a template what the same name is left plain outside one.
 
-; Every contextual keyword the `identifier` rule accepts as a name. In that
-; position none of them is a keyword — `let type = 1` binds a variable and
-; `fn from(…)` declares a function — and the compiler agrees: it colours these
-; words by the position the parse read them in, not by how they lex. (`self` is
-; absent from `identifier`: the language reserves it.)
+; Every contextual keyword the `identifier` rule accepts as a name. None of them
+; is a keyword there: `let type = 1` binds a variable and `fn from(…)` declares
+; a function. The compiler agrees, colouring these words by the position the
+; parse read them in rather than by how they lex. (`self` is absent from
+; `identifier`: the language reserves it.)
 ;
 ; Listed word by word rather than as `(identifier) @variable`, which would also
 ; claim the IDENTIFIER token and outrank `typeRef` / `pathSegment` from further

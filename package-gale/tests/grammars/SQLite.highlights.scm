@@ -40,9 +40,9 @@
 "~" @operator
 
 ; A keyword used as a name. `any_name : IDENTIFIER | keyword | ...` accepts
-; every keyword as an identifier, and the `keyword` rule is where they go —
-; `SELECT key FROM t` names a column. The rule capture reads the set off the
-; grammar, so a keyword added there needs no edit here.
+; every keyword as an identifier, and the `keyword` rule is where those go, so
+; `SELECT key FROM t` names a column. The capture reads the set off the grammar:
+; a keyword added to the rule needs no edit here.
 (keyword) @variable
 
 ; Keywords
