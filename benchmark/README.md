@@ -55,9 +55,9 @@ row turn on whether a runtime's allocator got transparent huge pages.
 
 | Implementation   |     Throughput |   ms/iter | vs best |
 | ---------------- | -------------: | --------: | ------- |
-| **Wado**         | 21.26 M conv/s | 47.032 ms | 1.00x   |
-| Rust (core::fmt) | 20.71 M conv/s | 48.282 ms | 1.03x   |
-| C (printf)       | 11.16 M conv/s | 89.595 ms | 1.90x   |
+| **Wado**         | 27.14 M conv/s | 36.843 ms | 1.00x   |
+| Rust (core::fmt) | 21.42 M conv/s | 46.676 ms | 1.27x   |
+| C (printf)       | 11.68 M conv/s | 85.616 ms | 2.32x   |
 
 ## Serialization & Compression
 
