@@ -1121,6 +1121,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::ReflectVariant,
             CompilerItem::ReflectEnum,
             CompilerItem::ReflectFlags,
+            CompilerItem::ReflectNewtype,
             CompilerItem::Member,
             CompilerItem::Ref,
             CompilerItem::RefMut,
@@ -3501,8 +3502,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 _ => {
                     let head = lookup.declaration_at(Some(generic.id), &generic.name);
-                    let type_args: Vec<TypeId> = generic
-                        .args
+                    // An argument the site left out takes its declared default,
+                    // the same as in `type_resolution`; otherwise a field type
+                    // here would carry a half-applied instantiation.
+                    let filled =
+                        head.and_then(|def| lookup.type_args_with_defaults(def, &generic.args));
+                    let args = filled.as_deref().unwrap_or(&generic.args);
+                    let type_args: Vec<TypeId> = args
                         .iter()
                         .map(|arg| {
                             Self::resolve_type_static_with_params(

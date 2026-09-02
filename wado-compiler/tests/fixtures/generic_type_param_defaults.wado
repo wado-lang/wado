@@ -26,6 +26,25 @@ struct Both<A, B = String> {
     b: B,
 }
 
+// A default naming a parameter to its left stands for that parameter's
+// argument, not for whatever the use site calls `A`.
+struct Mirror<A, B = A> {
+    a: A,
+    b: B,
+}
+
+struct Chain<A = i32, B = A> {
+    a: A,
+    b: B,
+}
+
+// A field type resolves through a second path, which has to answer the same
+// way: a half-applied `Both<i32>` here would reach the field as one argument.
+struct Holder {
+    p: Pair,
+    b: Both<i32>,
+}
+
 test "a struct takes its declared default" {
     let p: Pair = Pair { a: 7 };
     assert p.a == 7;
@@ -56,6 +75,27 @@ test "the omitted tail takes its default" {
 test "both arguments written" {
     let b: Both<i32, i32> = Both { a: 1, b: 2 };
     assert b.b == 2;
+}
+
+test "a dependent default takes the earlier argument" {
+    let m: Mirror<i32> = Mirror { a: 1, b: 2 };
+    assert m.a == 1;
+    assert m.b == 2;
+}
+
+test "a dependent default resolves through another default" {
+    let c: Chain = Chain { a: 1, b: 2 };
+    assert c.a == 1;
+    assert c.b == 2;
+}
+
+test "a field type takes the same defaults" {
+    let h = Holder {
+        p: Pair { a: 5 },
+        b: Both { a: 6, b: "s" },
+    };
+    assert h.p.a == 5;
+    assert h.b.b == "s";
 }
 
 __DATA__
