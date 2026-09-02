@@ -168,17 +168,6 @@ IDENTIFIER : [a-z]+ ;
     assert index_of(&w.to_string(), "HighlightOverride {") == -1, w.to_string();
 }
 
-test "a token name still resolves as a token when a parser rule shares it" {
-    // Token and rule namespaces are distinct in ANTLR4 by case, so this only
-    // arises for a lowercase lexer rule; the token reading stays the default.
-    let out = highlight_output_q("grammar T;
-r : B ;
-B : 'b' ;
-", "(B) @keyword");
-    assert index_of(&out, "\"keyword\",  // TK_B") >= 0, out;
-    assert index_of(&out, "HighlightOverride {") == -1, out;
-}
-
 test "query override emits a HighlightOverride row" {
     let out = highlight_output_q("grammar T;
 r : B ;

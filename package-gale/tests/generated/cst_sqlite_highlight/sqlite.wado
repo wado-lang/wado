@@ -1249,6 +1249,7 @@ impl HighlightVisitor {
             }
             self.hl_capture_token(toks, i);
         }
+        self.visited = List::filled(toks.len(), true);
         if walked > 0 && self.captures.len() != walked {
             self.captures.sort_by(|a: &HighlightCapture, b: &HighlightCapture| {
                 return a.start.cmp(&b.start);
