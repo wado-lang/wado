@@ -167,6 +167,15 @@ pub struct Module {
     /// so `Semantics::is_complete` can refuse to treat a partial parse as
     /// complete.
     has_syntax_errors: bool,
+    /// Span of every token the parse read against its lexical class, in source
+    /// order: an identifier read as a keyword (`test "…" { }`, `resume`, `do`,
+    /// `task return`, `..trap`, `..forward`), and a keyword read as a name
+    /// (`let type = 1`, `fn from(…)`, `x.match`). Both are the contextual
+    /// keywords, and only the parse tells the two readings apart, so it records
+    /// its decision rather than leaving each consumer to rediscover it.
+    /// Everywhere else a token's lexical class is its role. Consumed by the
+    /// highlighter (`wado_lsp::semantic_tokens`).
+    contextual_keywords: Vec<Span>,
 }
 
 /// Inner attribute like `#![no_prelude]`, `#![wasm_module("mem")]`, or
@@ -225,6 +234,7 @@ impl Module {
             ast_id_space: AstIdSpace::next(),
             ast_id_count: 0,
             has_syntax_errors: false,
+            contextual_keywords: Vec::new(),
         }
     }
 
@@ -238,6 +248,7 @@ impl Module {
         ast_id_space: AstIdSpace,
         ast_id_count: u32,
         has_syntax_errors: bool,
+        contextual_keywords: Vec<Span>,
     ) -> Self {
         Self {
             items,
@@ -248,7 +259,14 @@ impl Module {
             ast_id_space,
             ast_id_count,
             has_syntax_errors,
+            contextual_keywords,
         }
+    }
+
+    /// Span of every token this module's parse read against its lexical class:
+    /// an identifier read as a keyword, or a keyword read as a name.
+    pub fn contextual_keywords(&self) -> &[Span] {
+        &self.contextual_keywords
     }
 
     /// True if parsing recovered from one or more syntax errors.

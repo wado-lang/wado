@@ -151,6 +151,20 @@ IDENTIFIER : [a-z]+ ;
     assert count_occurrences(&out, "capture: \"variable\"") == 3, out;
 }
 
+test "rule capture follows a rule that delegates to a naming rule" {
+    // A grammar wraps a naming rule once per use site so a query can capture
+    // that site alone — `fieldName : memberName` in `Wado.g4`. The wrapper
+    // accepts what it delegates to, so the capture covers the same tokens.
+    let out = highlight_output_q("grammar T;
+r : field ;
+field : name ;
+name : IDENTIFIER | 'test' | 'task' ;
+IDENTIFIER : [a-z]+ ;
+", "(field) @property");
+    assert count_occurrences(&out, "rule_name: \"field\"") == 3, out;
+    assert count_occurrences(&out, "capture: \"property\"") == 3, out;
+}
+
 test "rule capture on a multi-token rule warns instead of half-covering it" {
     let g = parse_grammar("grammar T;
 r : pair ;

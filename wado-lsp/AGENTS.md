@@ -41,16 +41,21 @@ Every AST walk goes through `wado_compiler::ast::AstVisitor` and its `walk_*`
 functions — never a hand-written traversal, which silently skips whatever a
 later AST node adds.
 
-The contextual keywords lex as identifiers. `test`, `do`, `resume`, `task`,
-`trap`, and `forward` are also usable as names, so only their declaring node's
-span can classify them: `TestDecl::span`, `ResumeExpr::span`,
-`WithHandlerExpr::do_span`, `TaskReturnStmt::span`, and
-`RestClauseDecl::keyword_span`. `AstSpans::overrides` keeps those apart from
-the type spans because they outrank symbol resolution.
+A contextual keyword is whichever the parse read it as, and the parse is the
+only thing that knows: `Module::contextual_keywords` records every token read
+against its lexical class — `test` / `do` / `resume` / `task` / `trap` /
+`forward` read as keywords though they lex as identifiers, and `type` / `from`
+/ `of` / `flags` / `extends` read as names (`let type = 1`, `fn from(…)`,
+`x.match`) though they lex as keywords. `classify_token` consults that set
+before the keyword category, so every other token keeps the role its lexing
+gives it. Nothing else can answer it: `type Alias = i32;` and `let type = 1;`
+put the same token in the same position of the same shape, and a name has no
+node of its own for a walk to find it by.
 
-A field name is in `overrides` for the same reason. The shorthand `{ state }`
-resolves to the binding it reads, so deferring to the symbol would colour it
-`variable` wherever a snapshot exists and `property` wherever one does not.
+A field name is in `AstSpans::overrides`, which outranks symbol resolution
+rather than being refined by it: the shorthand `{ state }` resolves to the
+binding it reads, so deferring to the symbol would colour it `variable`
+wherever a snapshot exists and `property` wherever one does not.
 
 `self` is the exception: the language reserves it (it is absent from
 `Wado.g4`'s `identifier` rule), so `classify_token` recognises it lexically and

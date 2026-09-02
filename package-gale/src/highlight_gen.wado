@@ -132,50 +132,89 @@ fn parser_rule_exists(parser_rules: &List<ParserRule>, name: &String) -> bool {
     return parser_rules.iter_ref().any(|r| r.name == *name);
 }
 
-/// `(rule) @capture` — every token the rule spells out, captured within it.
-/// The runtime keys an override by (rule, token kind), so the rule has to be
-/// one whose alternatives are each a single token: a naming rule listing the
-/// contextual keywords it accepts alongside `IDENTIFIER`. Reading the set off
-/// the grammar is the point — a query that spelled the keywords out instead
-/// would drift the moment the rule gained one.
+/// `(rule) @capture` — every token the rule accepts, captured within it. The
+/// runtime keys an override by (rule, token kind), so the rule has to be one
+/// whose alternatives are each a single token, or a wrapper around such a rule:
+/// a naming rule listing the contextual keywords it accepts alongside
+/// `IDENTIFIER`. Reading the set off the grammar is the point — a query that
+/// spelled the keywords out instead would drift the moment the rule gained one.
 fn expand_rule_capture(
     overrides: &mut List<ResolvedOverride>,
     rule: &ParserRule,
+    parser_rules: &List<ParserRule>,
     idx: &KindIndex,
     capture: String,
     ctx: &mut GenContext,
 ) {
+    match rule_token_kinds(rule, parser_rules, idx, 0) {
+        Some(kinds) => {
+            for let kind of &kinds {
+                push_override(overrides, rule.name, *kind, capture);
+            }
+        },
+        None => ctx.warn(
+            &DiagnosticOwner::host(&"highlight"),
+            DiagnosticKind::HighlightQuery,
+            `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token`,
+        ),
+    }
+}
+
+/// Every token kind `rule` accepts, or `null` where an alternative is anything
+/// but one token. A rule that delegates to another (`fieldName : memberName`)
+/// is followed: a grammar gives a use site its own wrapper rule so a query can
+/// capture that site alone, and the wrapper accepts what it delegates to.
+fn rule_token_kinds(
+    rule: &ParserRule,
+    parser_rules: &List<ParserRule>,
+    idx: &KindIndex,
+    depth: i32,
+) -> Option<List<i32>> {
+    assert depth <= MAX_RULE_CAPTURE_DEPTH;
     let mut kinds: List<i32> = [];
     for let alt of &rule.alternatives {
         if alt.elements.len() != 1 {
-            ctx.warn(
-                &DiagnosticOwner::host(&"highlight"),
-                DiagnosticKind::HighlightQuery,
-                `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token`,
-            );
-            return;
+            return null;
         }
-        let kind = match &alt.elements[0] {
-            TokenRef(t) => idx.by_name.get(t.name),
-            Literal(l) => idx.by_literal.get(l.text),
-            _ => null,
-        };
-        match kind {
-            Some(k) => kinds.push(k),
-            None => {
-                ctx.warn(
-                    &DiagnosticOwner::host(&"highlight"),
-                    DiagnosticKind::HighlightQuery,
-                    `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token`,
-                );
-                return;
+        match &alt.elements[0] {
+            TokenRef(t) => match idx.by_name.get(t.name) {
+                Some(k) => kinds.push(k),
+                None => return null,
             },
+            Literal(l) => match idx.by_literal.get(l.text) {
+                Some(k) => kinds.push(k),
+                None => return null,
+            },
+            RuleRef(r) => {
+                if depth == MAX_RULE_CAPTURE_DEPTH {
+                    return null;
+                }
+                let mut delegated: Option<List<i32>> = null;
+                for let named of parser_rules {
+                    if named.name == r.name {
+                        delegated = rule_token_kinds(named, parser_rules, idx, depth + 1);
+                        break;
+                    }
+                }
+                match delegated {
+                    Some(inner) => {
+                        for let k of &inner {
+                            kinds.push(*k);
+                        }
+                    },
+                    None => return null,
+                }
+            },
+            _ => return null,
         }
     }
-    for let kind of &kinds {
-        push_override(overrides, rule.name, *kind, capture);
-    }
+    return Option::Some(kinds);
 }
+
+/// How far `(rule) @capture` follows a delegation. A naming rule is wrapped
+/// once per use site (`fieldName : memberName`); the bound is what stops a
+/// mutually recursive pair.
+global MAX_RULE_CAPTURE_DEPTH: i32 = 4;
 
 /// Record an override for (rule, token), last-wins: a later query rule for the
 /// same pair replaces an earlier one (matching the default table's last-wins
@@ -227,7 +266,14 @@ fn gen_highlight_mapping(
             if let Name(name) = &rule.selector {
                 for let named of parser_rules {
                     if named.name == *name {
-                        expand_rule_capture(&mut overrides, named, &idx, rule.capture, ctx);
+                        expand_rule_capture(
+                            &mut overrides,
+                            named,
+                            parser_rules,
+                            &idx,
+                            rule.capture,
+                            ctx,
+                        );
                         expanded = true;
                         break;
                     }
