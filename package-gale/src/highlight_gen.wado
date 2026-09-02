@@ -242,8 +242,8 @@ fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &Li
     };
 }
 
-/// Returns whether the query resolved a rule-context override, which is what
-/// decides whether the generated `highlight_result` needs the CST walk.
+/// `highlight_mapping`: the query compiled to a defaults table keyed by token
+/// kind and a list of (rule, token kind) overrides, both last-wins.
 fn gen_highlight_mapping(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,

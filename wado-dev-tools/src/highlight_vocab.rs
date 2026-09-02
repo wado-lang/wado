@@ -6,7 +6,7 @@
 //! mapping, and the `TextMate` grammar all generate from it, while `Wado.g4`
 //! and `Wado.highlights.scm` are hand-written and wired to nothing.
 //!
-//! Four invariants, over vocabularies rather than files, so no corpus:
+//! Five invariants, over vocabularies rather than files, so no corpus:
 //!
 //! 1. Every keyword in the registries is a literal in `Wado.g4`. A keyword the
 //!    grammar cannot match is a parse gap, not just a colour gap.
@@ -18,12 +18,19 @@
 //! 4. The query captures `@operator` on exactly the operators the compiler
 //!    highlights as one — the spellings that double as punctuation (`&`, `|`,
 //!    `::`, `?`, `..`, `...`) stay uncoloured on both sides.
+//! 5. Every keyword the parser accepts as a name is a name in `Wado.g4` too:
+//!    `NAME_KEYWORDS` under `identifier`, and every keyword under `memberName`,
+//!    which is where a `.name` goes. One-directional — the grammar accepts
+//!    more words as names than the parser does, and `check-grammar` owns that
+//!    half.
 
 use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 
-use wado_compiler::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, KeywordCategory, OPERATORS};
+use wado_compiler::syntax::{
+    CONTEXTUAL_KEYWORDS, KEYWORDS, KeywordCategory, NAME_KEYWORDS, OPERATORS,
+};
 
 const GRAMMAR: &str = "../package-gale-highlight-wado/grammar/Wado.g4";
 const QUERY: &str = "../package-gale-highlight-wado/grammar/Wado.highlights.scm";
@@ -54,6 +61,9 @@ pub enum Drift {
     /// An operator the compiler deliberately leaves uncoloured, captured
     /// anyway.
     PunctuationCaptured { text: String, found: String },
+    /// A keyword the parser accepts as a name that a grammar name rule does
+    /// not, so that program parses on one side only.
+    MissingFromNameRule { text: String, rule: String },
 }
 
 impl Drift {
@@ -76,6 +86,9 @@ impl Drift {
             Self::PunctuationCaptured { text, found } => format!(
                 "{text}\tcaptured @{found}; the compiler highlights it as punctuation, not an operator"
             ),
+            Self::MissingFromNameRule { text, rule } => {
+                format!("{text}\tWado.g4's `{rule}` does not accept it as a name")
+            }
         }
     }
 }
@@ -139,6 +152,24 @@ fn literal_captures(query: &str) -> Vec<(String, String)> {
         out.push((text.to_string(), capture.trim().to_string()));
     }
     out
+}
+
+/// The `'literal'` alternatives of one grammar rule.
+fn rule_literals(grammar: &str, rule: &str) -> Vec<String> {
+    let head = format!("\n{rule}\n");
+    let start = grammar
+        .find(&head)
+        .unwrap_or_else(|| panic!("Wado.g4 no longer declares `{rule}`"));
+    let end = grammar[start..]
+        .find("\n    ;")
+        .map(|at| start + at)
+        .expect("a grammar rule ends with `;`");
+    grammar[start..end]
+        .split('\'')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect()
 }
 
 /// Every keyword the compiler knows, real and contextual, with its category.
@@ -218,6 +249,28 @@ pub fn check() -> Vec<Drift> {
                 found: found.clone(),
             }),
             Some(_) => {}
+        }
+    }
+
+    // A name position on one side and a keyword on the other is a parse gap,
+    // and the corpus cannot report it: the file the grammar rejects is dropped
+    // from the comparison rather than compared.
+    let names: [(&str, Vec<&str>); 2] = [
+        ("identifier", NAME_KEYWORDS.to_vec()),
+        (
+            "memberName",
+            KEYWORDS.iter().map(|(text, _)| *text).collect(),
+        ),
+    ];
+    for (rule, words) in &names {
+        let accepted = rule_literals(&grammar, rule);
+        for text in words {
+            if !accepted.iter().any(|literal| literal == text) {
+                drift.push(Drift::MissingFromNameRule {
+                    text: (*text).to_string(),
+                    rule: (*rule).to_string(),
+                });
+            }
         }
     }
 

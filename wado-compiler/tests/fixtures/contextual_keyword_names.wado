@@ -5,6 +5,11 @@
 
 use { println, Stdout } from "core:cli";
 
+struct Fields {
+    type: i32,
+    extends: i32,
+}
+
 fn contextual() -> i32 {
     let type = 1;
     let from = 2;
@@ -15,14 +20,22 @@ fn contextual() -> i32 {
     let task = 7;
     let trap = 8;
     let forward = 9;
-    return type + from + of + flags + test + do + task + trap + forward;
+    let extends = 10;
+    return type + from + of + flags + test + do + task + trap + forward + extends;
+}
+
+// A member name is a name too, and reaches the classifier through a different
+// rule than a binding does.
+fn members() -> i32 {
+    let f = Fields { type: 11, extends: 12 };
+    return f.type + f.extends;
 }
 
 export fn run() with Stdout {
-    println(`${contextual()}`);
+    println(`${contextual() + members()}`);
 }
 
 __DATA__
 {
-    "stdout": "45\n"
+    "stdout": "78\n"
 }

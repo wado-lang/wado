@@ -53,7 +53,7 @@ Only the parse can answer this. `type Alias = i32;` and `let type = 1;` spell
 the same token the same way in the same position, and a name binds no node for
 the walk to find it by.
 
-A field name is in `AstSpans::overrides`, which outranks symbol resolution
+A field name is in `AstSpans::field_names`, which outranks symbol resolution
 rather than being refined by it: the shorthand `{ state }` resolves to the
 binding it reads, so deferring to the symbol would colour it `variable`
 wherever a snapshot exists and `property` wherever one does not.

@@ -76,6 +76,7 @@
 (pathSegment "of" @variable)
 (pathSegment "type" @variable)
 (pathSegment "flags" @variable)
+(pathSegment "extends" @variable)
 ; An interpolation holds ordinary code, so its names take the classes the rules
 ; above give them and nothing more. Painting the rest `@variable` would colour
 ; inside a template what the same name is left plain outside one.
@@ -91,6 +92,7 @@
 ; in, painting every type name and enum case a variable.
 (identifier "from" @variable)
 (identifier "of" @variable)
+(identifier "extends" @variable)
 (identifier "type" @variable)
 (identifier "matches" @variable)
 (identifier "stores" @variable)

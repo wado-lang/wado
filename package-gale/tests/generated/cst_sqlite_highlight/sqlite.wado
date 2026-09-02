@@ -1128,9 +1128,8 @@ pub struct HighlightCapture {
     pub end: i32,
 }
 
-struct ResolvedOverride {
+struct RuleCapture {
     rule_id: i32,
-    token_kind: i32,
     capture_id: i32,
 }
 
@@ -1138,10 +1137,30 @@ pub struct HighlightVisitor {
     pub capture_names: List<String>,
     pub capture_classes: List<String>,
     default_ids: List<i32>,
-    overrides: List<ResolvedOverride>,
+    overrides_by_kind: List<List<RuleCapture>>,
     rule_stack: List<i32>,
     visited: List<bool>,
     pub captures: List<HighlightCapture>,
+}
+
+fn capture_id_of(names: &mut List<String>, classes: &mut List<String>, capture: &String) -> i32 {
+    for let mut i = 0; i < names.len(); i += 1 {
+        if names[i] == *capture {
+            return i;
+        }
+    }
+    classes.push(class_text(capture));
+    names.push(*capture);
+    return names.len() - 1;
+}
+
+fn rule_id_of(rule_names: &List<String>, name: &String) -> i32 {
+    for let mut i = 0; i < rule_names.len(); i += 1 {
+        if rule_names[i] == *name {
+            return i;
+        }
+    }
+    return -1;
 }
 
 impl HighlightVisitor {
@@ -1153,33 +1172,26 @@ impl HighlightVisitor {
             if d.is_empty() {
                 default_ids.push(-1);
             } else {
-                default_ids.push(capture_names.len());
-                capture_classes.push(class_text(d));
-                capture_names.push(*d);
+                default_ids.push(capture_id_of(&mut capture_names, &mut capture_classes, d));
             }
         }
-        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
+        let mut overrides_by_kind: List<List<RuleCapture>> = [];
         for let ov of &mapping.overrides {
-            let mut id: i32 = -1;
-            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
-                if mapping.rule_names[i] == ov.rule_name {
-                    id = i;
-                    break;
-                }
-            }
-            if id < 0 {
+            let rule_id = rule_id_of(&mapping.rule_names, &ov.rule_name);
+            if rule_id < 0 {
                 continue;
             }
-            let capture_id = capture_names.len();
-            capture_classes.push(class_text(&ov.capture));
-            capture_names.push(ov.capture);
-            overrides.push(ResolvedOverride { rule_id: id, token_kind: ov.token_kind, capture_id });
+            let capture_id = capture_id_of(&mut capture_names, &mut capture_classes, &ov.capture);
+            while overrides_by_kind.len() <= ov.token_kind {
+                overrides_by_kind.push([]);
+            }
+            overrides_by_kind[ov.token_kind].push(RuleCapture { rule_id, capture_id });
         }
         return HighlightVisitor {
             capture_names,
             capture_classes,
             default_ids,
-            overrides,
+            overrides_by_kind,
             rule_stack: [],
             visited: [],
             captures: [],
@@ -1187,11 +1199,11 @@ impl HighlightVisitor {
     }
 
     fn classify(&self, kind: i32) -> i32 {
-        for let ov of &self.overrides {
-            if ov.token_kind == kind {
+        if kind >= 0 && kind < self.overrides_by_kind.len() {
+            for let candidate of &self.overrides_by_kind[kind] {
                 for let rule_id of &self.rule_stack {
-                    if *rule_id == ov.rule_id {
-                        return ov.capture_id;
+                    if *rule_id == candidate.rule_id {
+                        return candidate.capture_id;
                     }
                 }
             }

@@ -93,8 +93,10 @@ example/
   and fails on disagreement; those are reported as a capability gap instead.
 - `mise run check-highlight-vocab` — the vocabulary half of that check, over
   the registries rather than a corpus, so it runs in milliseconds: every
-  keyword carries the capture its `KeywordCategory` implies, and nothing else
-  is captured as one.
+  keyword carries the capture its `KeywordCategory` implies, nothing else is
+  captured as one, and every keyword the parser takes as a name is a name in
+  the grammar too. That last one a corpus cannot report: a file the grammar
+  rejects is dropped from the comparison rather than compared.
 
 ## The gale-highlight framework
 

@@ -244,6 +244,13 @@ pub const CONTEXTUAL_KEYWORDS: &[(&str, KeywordCategory)] = &[
     ("self", KeywordCategory::Constant),
 ];
 
+/// Keywords the parser also accepts as a name, wherever it expects one:
+/// `let type = 1`, `fn from(…)`. [`crate::token::TokenKind::as_ident_name`] is
+/// the parser's side of this list, and `contextual_name_keywords_match_the_registry`
+/// holds the two together. Every keyword is accepted as a *member* name
+/// (`x.match`), which needs no list.
+pub const NAME_KEYWORDS: &[&str] = &["flags", "type", "of", "from", "extends"];
+
 /// Spellings of every keyword (real + contextual) in the given category.
 fn keywords_in(category: KeywordCategory) -> Vec<&'static str> {
     KEYWORDS
@@ -457,6 +464,24 @@ mod tests {
                 r.tokens[0].kind,
                 TokenKind::Ident(_),
                 "contextual keyword '{text}' should lex as an identifier"
+            );
+        }
+    }
+
+    /// [`NAME_KEYWORDS`] is the registry's copy of what
+    /// [`TokenKind::as_ident_name`] accepts. The parser matches on token
+    /// variants, so the two are written apart and held together here.
+    #[test]
+    fn contextual_name_keywords_match_the_registry() {
+        for (text, _cat) in KEYWORDS {
+            let accepted = TokenKind::from_keyword(text)
+                .expect("a registry keyword is a lexer keyword")
+                .as_ident_name()
+                .is_some();
+            assert_eq!(
+                accepted,
+                NAME_KEYWORDS.contains(text),
+                "'{text}': as_ident_name and NAME_KEYWORDS disagree",
             );
         }
     }
