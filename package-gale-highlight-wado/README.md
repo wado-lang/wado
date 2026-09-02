@@ -35,7 +35,7 @@ the tree-sitter capture vocabulary, so any tree-sitter theme applies:
 | `keyword`          | `fn`, `let`, `if`, …                         |
 | `operator`         | `matches`, `+`, `==`, `->`, …                |
 | `type`             | type references and type parameters          |
-| `property`         | `.field`, struct literal fields              |
+| `property`         | `.field`, literal and pattern field names    |
 | `function method`  | `.method()`                                  |
 | `variable`         | `stores[p]`, a contextual keyword as a name  |
 | `constant builtin` | `true` / `false` / `null` / `self`           |

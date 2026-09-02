@@ -279,10 +279,8 @@ path
     ;
 
 // `memberName` is the token set. Each use site wraps it in a rule naming what
-// the name is there, and the query captures those wrappers. A capture on
-// `memberName` itself would fire under every use site at once, because an
-// override matches anywhere below its rule. Each wrapper holds one token, so
-// no capture on it reaches the argument list or type arguments beside it.
+// the name is there, and the query captures those wrappers rather than
+// `memberName`, which would fire under every use site at once.
 
 // The name in `.name(...)`.
 methodName

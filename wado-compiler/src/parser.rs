@@ -4665,8 +4665,7 @@ impl Parser {
     fn parse_type_or_pack(&mut self) -> ParseResult<Type> {
         if self.check_dot_dot_or_ellipsis() {
             self.consume_dot_dot()?;
-            // The name's span, not the `..`, so the span starts at the token
-            // being named — as it does on every other type node.
+            // The span starts at the name, not the `..`, as on every type node.
             let (name, span) = self.consume_ident_with_span()?;
             return Ok(Type::TypePackSpread(name, span));
         }

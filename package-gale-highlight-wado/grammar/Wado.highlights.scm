@@ -44,15 +44,14 @@
 ; `matches` lexes as a keyword but is a binary pattern-test operator.
 "matches" @operator
 
-; Identifiers the grammar can classify on its own, most specific first: an
-; override matches anywhere *under* its rule and the first one declared wins,
-; so a rule nested inside another has to be listed above it. `formatSpec` is
-; above these for that reason; `interpolation` is below them.
+; Identifiers the grammar can classify on its own, most specific first. An
+; override matches anywhere under its rule and the first one declared wins, so
+; a rule nested inside another is listed above it.
 ;
 ; Only a rule whose whole subtree is of one nature can carry an override.
-; `typeRef` and `genericParam` hold nothing but types, and `memberName` is a
-; leaf; the call and index forms are out, because `postfixOp` contains the
-; argument list and `@function` there would repaint every argument.
+; `typeRef` and `genericParam` hold nothing but types. For a member name the
+; subtree is whatever `postfixOp` holds beside it, so `Wado.g4` wraps each use
+; site in a one-token rule and those carry the captures instead.
 ;
 ; Telling a function from a variable takes name resolution, which no
 ; context-free grammar has. `mise run check-highlight` reports what stays
@@ -64,10 +63,9 @@
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
 ; `.method()`, and `.field` with a struct literal's and a pattern's field name.
-; Each captures its use-site wrapper rather than the shared `memberName`; see
-; `Wado.g4`. A `::` segment goes through `pathSegment` and nothing captures it,
-; because `Option::None` and `Foo::new` are one shape that only name resolution
-; splits. The call form is a fact instead: the grammar matches its `(`.
+; A `::` segment is deliberately absent: it goes through `pathSegment`, which
+; nothing captures, because `Option::None` and `Foo::new` are one shape that
+; only name resolution splits.
 ;
 ; Each wrapper also spells out the contextual keywords usable as a name; only
 ; those need listing, because they are the ones the compiler lexes as plain
@@ -85,9 +83,8 @@
 (fieldName "trap" @property)
 (fieldName "forward" @property)
 ; An interpolation holds ordinary code, so its names take the classes the rules
-; above give them and nothing more. Painting the rest `@variable` would reach
-; every identifier under `${…}`, the `::` segments included, and colour inside
-; a template what the same name is left plain outside one.
+; above give them and nothing more. Painting the rest `@variable` would colour
+; inside a template what the same name is left plain outside one.
 
 ; The contextual keywords the `identifier` rule also accepts as names. In that
 ; position they are not keywords — the compiler lexes them as identifiers and

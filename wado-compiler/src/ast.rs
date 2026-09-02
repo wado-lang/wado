@@ -941,7 +941,7 @@ pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
 
 /// The types and effect names a function signature carries, whether it stands
 /// as a [`Type::Function`] or as a trait bound's `fn_signature`.
-pub fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
+fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
     for p in &ft.params {
         v.visit_type(p);
     }

@@ -126,10 +126,8 @@ fn f() {
     assert_ne!(c.modifiers & token_modifier::READONLY, 0);
 }
 
-/// A shorthand field also reads a binding, and the snapshot resolves it. The
-/// field name wins anyway, so the class does not depend on whether a snapshot
-/// was available — which is what the unit tests, running without one, cannot
-/// say.
+/// A snapshot resolves a shorthand field to the binding it reads, and the
+/// field name wins anyway. The unit tests run without one and cannot say that.
 #[test]
 fn a_shorthand_field_is_a_property_with_a_snapshot_too() {
     let src = "\

@@ -439,12 +439,8 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
         let Some(theirs) = gale.get(path) else {
             panic!("the Gale side dumped nothing for '{path}' — the two corpora differ");
         };
-        if theirs.diagnostics != 0 {
-            skipped += 1;
-            continue;
-        }
         let source = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
-        if !wado_compiler::parse(&source).errors.is_empty() {
+        if theirs.diagnostics != 0 || !wado_compiler::parse(&source).errors.is_empty() {
             skipped += 1;
             continue;
         }
