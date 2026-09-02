@@ -196,9 +196,9 @@ let b = if c { 1; } else { 2; };       // also 1 or 2
 let u = if c { g(); () } else { () };  // ()
 ```
 
-Only `if`, `match`, `loop` and labelled blocks produce a block value. A brace
-in value position is a struct literal: `let x = { 1 };` is an error, and
-`let p = { x: 1, y: 2 };` is an implicit struct literal.
+Only `if`, `match`, `loop` and [labeled blocks](#labeled-blocks) produce a block
+value. A brace in value position is a struct literal: `let x = { 1 };` is an
+error, and `let p = { x: 1, y: 2 };` is an implicit struct literal.
 
 ### Variable Mutability
 
@@ -731,11 +731,16 @@ for let mut i = 0; i < 10; i = i + 1 {
 }
 ```
 
-Both `break` and `continue` work with `while`, `for`, and `loop`.
+Both `break` and `continue` work with `while`, `for`, and `loop`. Neither takes
+a label; to leave more than the innermost loop, wrap the nest in a labeled
+block and break to that.
 
 ### Labeled Blocks
 
-Labeled blocks create a new scope for variable bindings. The label is required to avoid syntactic ambiguity with struct literals.
+A labeled block is a named block that `break LABEL` leaves from anywhere
+inside it, at any depth. It is Wado's only non-local jump, and it subsumes
+what other languages spell as loop labels, labeled `continue`, and `goto`. It
+is also the block form that carries a value.
 
 ```wado
 let x = 10;
@@ -750,16 +755,26 @@ println(`x = ${x}`);  // prints "x = 10" (outer x unchanged)
 
 #### Syntax
 
-`LABEL: { ... }`
+`LABEL: { ... }`, in statement or expression position.
 
 - The label must be a valid identifier followed by a colon
 - A label cannot start with `__`, which is reserved for the blocks the compiler
   synthesises (an expanded template string, a desugared `for`, an inlined call)
+- `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value
+- Nested blocks may reuse a label name; a `break` targets the innermost match
 - The block creates a new variable scope
 - Variables declared inside are not accessible outside
 - Shadowing is allowed within the block
 
-#### Nested Blocks
+The label is mandatory because a brace in value position is a struct literal:
+`{ field: value }` on its own could be either a struct literal or a block
+opening with a labeled statement. Requiring the label removes the ambiguity, so
+an unlabeled `{ ... }` block is a parse error.
+
+#### Scoping
+
+An inner block sees the enclosing scope; the enclosing scope does not see into
+it.
 
 ```wado
 outer: {
@@ -771,6 +786,49 @@ outer: {
     }
     // b is not visible here
     println(`${a}`);
+}
+```
+
+#### Escaping Nested Loops
+
+`break` alone leaves the innermost loop. A labeled block around the nest leaves
+all of it at once, and the block's tail is the path no `break` took:
+
+```wado
+search: {
+    for let r of 0..<grid.len() {
+        for let c of 0..<grid[r].len() {
+            if grid[r][c] == needle {
+                hit = [r, c];
+                break search;   // leaves both loops
+            }
+        }
+    }
+    hit = [-1, -1];             // reached only when no break was taken
+}
+```
+
+#### Early Exit
+
+`break LABEL` skips the rest of its block, so a chain of guards reads top to
+bottom instead of nesting, with one exit and no repeated cleanup:
+
+```wado
+attempt: {
+    if !consume(&toks, &mut pos, TK_A) { break attempt; }
+    if !consume(&toks, &mut pos, TK_B) { break attempt; }
+    matched = pos;
+}
+```
+
+A `break` may also leave an effect handler's `do` block; the handler in scope
+after the block is the outer one, on that path as on fall-through.
+
+```wado
+outer: {
+    with Counter => &inner do {
+        if early { break outer; }
+    }
 }
 ```
 
@@ -791,12 +849,21 @@ let found = search: {
 };
 ```
 
+The branches unify against the type expected where the block sits, so integer
+and float literals coerce like any other literal instead of defaulting:
+
+```wado
+let wide: i64 = compute: {
+    if ready { break compute: 10; }
+    break compute: 20;
+};
+```
+
+Any expression position takes one — an argument, an operand, a field value —
+not only the right-hand side of a `let`.
+
 A block whose trailing statement is not a value has none to yield on that path,
 so reaching the end traps; write `break LABEL: expr` on every path instead.
-
-#### Design Rationale
-
-The label is mandatory because `{ field: value }` without context could be either a block with a labeled statement or a struct literal. Requiring the label removes this ambiguity.
 
 ### Match Expression
 

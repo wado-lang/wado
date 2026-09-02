@@ -574,18 +574,8 @@ loop {
     continue;
 }
 
-// Labeled block — all blocks require a label
-scope: {
-    let x = 20;  // new scope
-}
-
-// Labeled break — exit a named block early
-outer: {
-    if condition {
-        break outer;  // jump past the block
-    }
-    // skipped if break taken
-}
+// `break`/`continue` take no label; see Labeled Blocks below to leave more
+// than the innermost loop.
 
 // Match expression
 let result = match opt {
@@ -655,6 +645,60 @@ let a = if cond() { 1 } else { 2 };   // either 1 or 2
 let b = if cond() { 1; } else { 2; }; // ditto
 ```
 
+### Labeled Blocks
+
+A named block that `break LABEL` leaves from any depth inside it. Wado's only
+non-local jump: it stands in for loop labels, labeled `continue`, and `goto`,
+and it is also the block form that carries a value. See
+[the spec](./spec.md#labeled-blocks).
+
+```wado
+// A named scope. The label is required: an unlabeled `{ ... }` is a struct
+// literal. Labels starting with `__` are reserved for the compiler.
+scope: {
+    let x = 20;                     // new scope; gone after the block
+}
+
+// `break LABEL` leaves the block from any depth — a loop nest included.
+// The block's tail is the path no `break` took.
+search: {
+    for let r of 0..<grid.len() {
+        for let c of 0..<grid[r].len() {
+            if grid[r][c] == needle {
+                hit = [r, c];
+                break search;       // leaves both loops
+            }
+        }
+    }
+    hit = [-1, -1];                 // reached only when no break was taken
+}
+
+// Guard chain: `break LABEL` skips the rest, so the guards stay flat.
+attempt: {
+    if !consume(&toks, &mut pos, TK_A) { break attempt; }
+    if !consume(&toks, &mut pos, TK_B) { break attempt; }
+    matched = pos;
+}
+
+// As an expression: `break LABEL: expr` yields, and so does the trailing
+// statement on the path reaching the end. All of them must agree on one type,
+// and they coerce to the type expected at the use site.
+let first_even = find: {
+    for let x of xs {
+        if x % 2 == 0 { break find: x; }
+    }
+    -1                              // the value when no break is taken
+};
+
+// Nested blocks may reuse a label; `break` targets the innermost one.
+// A `break` may also leave an effect handler's `do` block.
+outer: {
+    with Counter => &inner do {
+        if early { break outer; }
+    }
+}
+```
+
 ## Assert
 
 `assert` behaves like power-assert.
@@ -692,6 +736,28 @@ connect("localhost");           // → connect("localhost", 8080)
 ```
 
 A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults.
+
+### Local Items
+
+`struct` and `type` (newtype) may be declared inside a function body, scoped to
+the declaring block. See [WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
+
+```wado
+fn area(width: i32, height: i32) -> i32 {
+    struct Size { width: i32, height: i32 }   // always private, never `pub`
+    let s = Size { width, height };
+    return s.width * s.height;
+}
+
+fn hoisted() -> i32 {
+    let b = Box { value: 1 };  // in scope before its declaration, unlike `let`
+    struct Box<T> { value: T }
+    return b.value;
+}
+```
+
+A local item shadows a same-named module-level one. `enum`/`variant`/`flags`, a
+local `impl`/`trait`, and a generic local `type` are not yet supported.
 
 ### Methods
 
