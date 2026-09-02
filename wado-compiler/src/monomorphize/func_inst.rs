@@ -855,17 +855,6 @@ impl Monomorphizer {
         // The value type: a `&self` method's receiver arrives as a reference,
         // which answers for no kind and projects nothing.
         let receiver = type_table.peel_refs(blanket_receiver);
-        let outer = *monomorph.impl_type_args.first()?;
-        if outer == receiver {
-            return None;
-        }
-        let mut link = outer;
-        while link != receiver {
-            let ResolvedType::Newtype { base_type, .. } = type_table.get(link) else {
-                return None;
-            };
-            link = *base_type;
-        }
         let blanket = crate::synthesis::template::ranked_value_blanket(
             &self.functions.trait_env,
             trait_,
@@ -880,6 +869,25 @@ impl Monomorphizer {
         // template it never instantiates.
         if blanket_template_name(&blanket, info, type_table) != monomorph.generic_name {
             return None;
+        }
+        // Declaration order, so the receiver sits at the slot the impl gave it
+        // — a blanket may write a projected parameter before it.
+        let slot = self
+            .functions
+            .trait_env
+            .blanket_param_sources(&blanket)
+            .iter()
+            .position(|source| matches!(source, BlanketParamSource::Receiver))?;
+        let outer = *monomorph.impl_type_args.get(slot)?;
+        if outer == receiver {
+            return None;
+        }
+        let mut link = outer;
+        while link != receiver {
+            let ResolvedType::Newtype { base_type, .. } = type_table.get(link) else {
+                return None;
+            };
+            link = *base_type;
         }
         let args = crate::synthesis::template::blanket_impl_args(
             &self.functions.trait_env,

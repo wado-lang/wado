@@ -296,7 +296,10 @@ impl<'a> Emitter<'a> {
             for fl in &module.flags {
                 decls.flags.insert(fl.name.clone(), fl);
             }
-            for nt in &module.newtypes {
+            // A generic declaration names no single type and has no WIT form —
+            // WIT takes no type parameters — so it never enters the map, where
+            // it would shadow a concrete declaration of the same name.
+            for nt in module.newtypes.iter().filter(|nt| nt.type_id.is_some()) {
                 decls.newtypes.insert(nt.name.clone(), nt);
             }
         }
@@ -860,8 +863,6 @@ impl<'a> Emitter<'a> {
             let members = fl.members.iter().map(|m| Flag::new(to_kebab(&m.name)));
             return Ok(Some(TypeDef::flags(kebab, members)));
         }
-        // A generic declaration is skipped: WIT has no type parameters, so it
-        // has no emittable form.
         if let Some(type_id) = self
             .decls
             .newtypes

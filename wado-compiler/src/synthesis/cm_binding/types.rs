@@ -1198,13 +1198,14 @@ pub(super) fn find_newtype_type_id(
     name: &str,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Option<TypeId> {
-    // A generic declaration names no single type, so it answers for no name a
-    // CM binding can write.
+    // A generic declaration names no single type, so it is not a candidate at
+    // all — reading its `None` after matching the name would let it shadow a
+    // concrete declaration of the same name and flatten that one as `i32`.
     tir_modules
         .values()
         .flat_map(|module| &module.newtypes)
-        .find(|nt| nt.name == name)
-        .and_then(|nt| nt.type_id)
+        .filter(|nt| nt.name == name)
+        .find_map(|nt| nt.type_id)
 }
 
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
