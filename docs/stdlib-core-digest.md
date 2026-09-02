@@ -63,7 +63,7 @@ A value must not be used after `finalize`.
 
 #### `fn block_len(&self) -> i32`
 
-The algorithm's compression block width in bytes — 64 for SHA-256.
+The algorithm's compression block width in bytes, 64 for SHA-256.
 [`hmac`] pads its key to it.
 
 #### `fn update<S: AsByteSlice>(&mut self, data: &S)`

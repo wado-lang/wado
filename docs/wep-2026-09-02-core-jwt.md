@@ -118,9 +118,10 @@ the entry point.
   in a package first and be promoted here later, and callers see no
   difference: both spell `verify(token, &key)`.
 - A JWKS-shaped API, where a `kid` in the header selects a key before
-  verification, needs a way to read an unverified header. That is a real need
-  and a sharp edge, so it should arrive with the algorithms that motivate it,
-  named for what it hands back rather than offered as a second `verify`.
+  verification, needs a way to read an unverified header. That is a real need,
+  and a sharp edge. It should arrive with the algorithms that motivate it,
+  named for the unverified bytes it hands back rather than offered as a second
+  `verify`.
 - `aud` is a string _or_ an array of strings on the wire. `RegisteredClaims`
   omits it rather than picking one, and closing this takes an untagged-union
   deserializer for that field.
@@ -129,8 +130,8 @@ the entry point.
 
 ### The threat model
 
-The attacker writes the whole token — header, payload and signature — and
-sends as many as it likes. It does not hold the key. Under that, `verify`
+The attacker writes the whole token, header and payload and signature alike,
+and sends as many as it likes. It does not hold the key. Under that, `verify`
 promises one thing: it returns a payload only for a token whose signature is
 this key's over these exact bytes.
 
@@ -141,8 +142,8 @@ decision is undone.
 
 - Algorithm confusion, including `alg: none` and an RSA public key replayed as
   an HMAC secret. The key selects the verifier, so a header cannot.
-- A signature the key did not write, including a stripped one: a token is
-  three segments, and the third is checked before anything else is believed.
+- A signature the key did not write, including a stripped one. A token is
+  three segments, and the third is checked before the first two are parsed.
 - A second spelling of the same token. Canonical base64url gives one byte
   string one encoding, which matters wherever a token is a cache key, a
   revocation-list key or a deduplication key.
@@ -153,8 +154,8 @@ decision is undone.
 - A `crit` header naming extensions this module does not implement.
 
 The order of checks is part of this. `verify` reaches the JSON parser only
-after the signature holds, so attacker-controlled JSON is never parsed on the
-strength of the attacker's say-so.
+after the signature holds, so an attacker cannot feed the parser without the
+key.
 
 ### What it does not cover
 
@@ -163,8 +164,8 @@ strength of the attacker's say-so.
 - Replay. A valid token stays valid until `exp`; there is no `jti` ledger and
   no nonce.
 - Claims semantics. `iss`, `aud` and scopes mean what the application says
-  they mean. `exp` is checked only when the caller calls `validate_time`,
-  which is the one place the module trusts its caller to finish the job.
+  they mean. `exp` is checked only when the caller calls `validate_time`; the
+  module never checks it on its own.
 - Resource bounds. A token is base64-decoded before its MAC is checked, so an
   oversized request should be refused before it reaches `verify`.
 - Side channels beyond that one comparison. Neither the optimizer nor Wasm

@@ -4,10 +4,10 @@
 # core:base64
 
 Base64 encoding and decoding (RFC 4648): standard and URL-safe alphabets,
-configurable padding via `Encoding` flags, and two decoders — [`decode`]
-accepts either alphabet with or without padding, [`decode_url_strict`] accepts
-only the canonical URL-safe unpadded spelling. Entry points accept any
-`AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, or `String`).
+configurable padding via `Encoding` flags, and two decoders. [`decode`]
+accepts either alphabet with or without padding; [`decode_url_strict`]
+accepts only the canonical URL-safe unpadded spelling. Entry points accept
+any `AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, or `String`).
 
 ## Synopsis
 
