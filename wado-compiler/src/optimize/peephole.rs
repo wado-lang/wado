@@ -13,6 +13,7 @@ use crate::nir_package::NirPackage;
 use super::aggregate_forward::AggregateForwardRule;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
+use super::drop_value::DropValueRule;
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
@@ -117,6 +118,11 @@ pub(super) fn run_peephole(
         // after fusion, which produces the better code where it applies and
         // whose shape this rule would otherwise consume.
         let slot_temp_sroa_rule = (!pre_inline).then(|| build_slot_temp_sroa(&type_table));
+        // Post-inline only: the value-producing labeled block in statement
+        // position is what `inline` leaves where a caller discarded the result.
+        // Ordered after fusion, whose shapes it would otherwise flatten first,
+        // and before `elide_rule`, which reclaims what it strips.
+        let drop_value_rule = (!pre_inline).then_some(DropValueRule);
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
         let NirFunction { body, locals, .. } = &mut *func;
@@ -140,6 +146,9 @@ pub(super) fn run_peephole(
         }
         if let Some(slot_temp_sroa_rule) = slot_temp_sroa_rule.as_ref() {
             rules.push(slot_temp_sroa_rule);
+        }
+        if let Some(drop_value_rule) = drop_value_rule.as_ref() {
+            rules.push(drop_value_rule);
         }
         rules.extend([
             &aggregate_forward_rule as &dyn Rule,

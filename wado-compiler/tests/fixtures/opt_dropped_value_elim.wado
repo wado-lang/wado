@@ -1,0 +1,29 @@
+// Test: a discarded value keeps only its effects.
+// `let _ = xs.pop()` inlines to a block that breaks with `Option::Some { … }`
+// on one path and `Option::None` on the other. Nothing reads the result, so
+// both allocations — and the bounds-checked element read that fills one — are
+// dead; the `used` decrement is all that must survive.
+
+use { println, Stdout } from "core:cli";
+
+fn drain(n: i32) -> i32 {
+    let mut xs: List<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        xs.push(i);
+    }
+    let _ = xs.pop();
+    let _ = xs.pop();
+    return xs.len();
+}
+
+export fn run() with Stdout {
+    println(`${drain(builtin::black_box(5))}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n",
+    "wir_not_expect:O2": [
+        "Option<i32>"
+    ]
+}
