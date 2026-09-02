@@ -2004,7 +2004,7 @@ fn parameterize_stream_cm_name(
             // `module_source` is the loader identity (a `.wado` path); the
             // registry bridges it to the versioned `#[cm(...)]` key.
             let elem_source = tt
-                .nominal_head(tt.get_ultimate_base_type(elem))
+                .nominal_head(tt.representation_head(elem))
                 .map(|(_, m)| m.to_string());
             let cm_elem = elem_source
                 .as_deref()

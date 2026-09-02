@@ -36,6 +36,31 @@ pub(crate) struct StructFieldInfo {
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
+    /// What each type parameter wrote after `=`, parallel to
+    /// `type_param_bounds`. See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
+}
+
+/// Where a qualified prefix's members live when the prefix names a newtype,
+/// paired with the type the prefix itself names. A newtype inherits its base's
+/// members and keeps its own identity, so `C::Green` on `type C = Color` reads
+/// Color's cases and yields a `C` — the implicit `Color::Green as C`. `None`
+/// when the prefix names something that owns its members.
+pub(super) fn newtype_member_owner(
+    lookup: &TypeLookup<'_>,
+    tysys: &super::tysys::TypeSystem,
+    def: crate::defs::DefId,
+) -> Option<(crate::defs::DefId, TypeId)> {
+    let newtype_id = lookup.newtype_of(def)?;
+    let head = tysys.type_table.borrow().reflect_structure_head(newtype_id);
+    Some((tysys.type_def(head)?, newtype_id))
+}
+
+/// What each type parameter declares as its default, in declaration order:
+/// `Some(ty)` where the parameter wrote `= ty`. A use site that omits the
+/// argument takes it.
+pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option<ast::Type>> {
+    params.iter().map(|p| p.default.clone()).collect()
 }
 
 /// A trait bound as a declaration digest records it: the site that wrote it,
@@ -77,6 +102,9 @@ pub(crate) struct VariantInfo {
     /// Used by `infer_variant_type_args` to fill type params from payload args
     /// and expected type context.
     pub(super) type_param_type_ids: Vec<TypeId>,
+    /// What each type parameter wrote after `=`, parallel to `type_params`.
+    /// See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Enum case info: case name and discriminant index
@@ -155,6 +183,9 @@ pub(crate) struct ResourceInfo {
 pub(crate) struct GenericNewtypeInfo {
     pub(super) type_params: Vec<String>,
     pub(super) base_type_ast: ast::Type,
+    /// What each type parameter wrote after `=`, parallel to `type_params`.
+    /// See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Which kind of inherent impl member a visibility violation names.
@@ -178,6 +209,13 @@ impl ImplMemberKind {
             Self::AssociatedConstant => "read",
         }
     }
+}
+
+/// The unlabeled jumps a loop binds.
+#[derive(Debug, Clone, Copy)]
+pub enum LoopJump {
+    Break,
+    Continue,
 }
 
 /// Errors from the type resolution phase
@@ -235,6 +273,19 @@ pub enum TypeError {
     /// Unknown variable
     UnknownIdentifier {
         name: String,
+        span: Span,
+    },
+
+    /// `break LABEL` naming no enclosing labeled block
+    UnknownBreakLabel {
+        label: String,
+        span: Span,
+    },
+
+    /// Unlabeled `break` / `continue` with no enclosing loop. WIR resolves such
+    /// a jump against the innermost loop on its label stack and has none.
+    LoopJumpOutsideLoop {
+        jump: LoopJump,
         span: Span,
     },
 
@@ -1001,6 +1052,22 @@ impl TypeError {
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{name}'"),
+                *span,
+            ),
+            TypeError::UnknownBreakLabel { label, span } => (
+                Code::UndefinedVariable,
+                format!("labeled break target not found: no enclosing block labeled '{label}'"),
+                *span,
+            ),
+            TypeError::LoopJumpOutsideLoop { jump, span } => (
+                Code::InvalidSyntax,
+                match jump {
+                    LoopJump::Break => {
+                        "`break` outside of a loop; a labeled block is left with `break LABEL`"
+                            .to_string()
+                    }
+                    LoopJump::Continue => "`continue` outside of a loop".to_string(),
+                },
                 *span,
             ),
 
@@ -2018,6 +2085,30 @@ pub(super) struct FunctionContext {
 }
 
 impl FunctionContext {
+    /// Enter a labeled block in either position, so a `break LABEL` inside
+    /// resolves to the innermost block of that name.
+    pub(super) fn push_labeled_block_frame(
+        &mut self,
+        label: String,
+        expected_type: Option<TypeId>,
+    ) {
+        self.labeled_block_targets.push(LabeledBlockTarget {
+            label: label.clone(),
+            break_types: Vec::new(),
+            expected_type,
+        });
+        self.active_labels.push(label);
+    }
+
+    pub(super) fn pop_labeled_block_frame(&mut self) -> LabeledBlockTarget {
+        self.active_labels
+            .pop()
+            .expect("labeled block frame pushed before pop");
+        self.labeled_block_targets
+            .pop()
+            .expect("labeled block frame pushed before pop")
+    }
+
     pub(super) fn new(return_type: TypeId, function_name: String) -> Self {
         Self {
             scopes: vec![IndexMap::default()], // Start with one scope for function parameters
@@ -2482,6 +2573,78 @@ impl<'a> TypeLookup<'a> {
     /// The newtype (or `flags` type) `name` names here.
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
         self.newtype_of(self.declaration(name)?)
+    }
+
+    /// `def`'s type parameters in declaration order, each with the default it
+    /// declared. `None` where `def` takes no type parameters.
+    ///
+    /// The three kinds that take type parameters are asked of one declaration,
+    /// so "how many does it take" and "whose defaults are these" can never be
+    /// about two of them.
+    pub(super) fn declared_type_params(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<Vec<(String, Option<ast::Type>)>> {
+        fn zip(
+            names: impl IntoIterator<Item = String>,
+            defaults: &[Option<ast::Type>],
+        ) -> Vec<(String, Option<ast::Type>)> {
+            names.into_iter().zip(defaults.iter().cloned()).collect()
+        }
+        if let Some(info) = self.struct_fields_of(def)
+            && !info.type_param_bounds.is_empty()
+        {
+            let names = info.type_param_bounds.iter().map(|(n, _)| n.clone());
+            return Some(zip(names, &info.type_param_defaults));
+        }
+        if let Some(info) = self.variant_cases_of(def)
+            && !info.type_params.is_empty()
+        {
+            return Some(zip(
+                info.type_params.iter().cloned(),
+                &info.type_param_defaults,
+            ));
+        }
+        if let Some(info) = self.generic_newtype_of(def)
+            && !info.type_params.is_empty()
+        {
+            return Some(zip(
+                info.type_params.iter().cloned(),
+                &info.type_param_defaults,
+            ));
+        }
+        None
+    }
+
+    /// `args` extended with the declared default of each parameter the site
+    /// left out. `None` when nothing was omitted, or an omitted parameter
+    /// declares no default — the arity diagnostics answer for that.
+    ///
+    /// A default may name a parameter to its left (`struct Both<A, B = A>`),
+    /// which stands for that parameter's *argument*, not for whatever the use
+    /// site happens to call `A`. So each default is substituted against the
+    /// arguments already settled before it resolves.
+    pub(super) fn type_args_with_defaults(
+        &self,
+        def: crate::defs::DefId,
+        args: &[ast::Type],
+    ) -> Option<Vec<ast::Type>> {
+        let params = self.declared_type_params(def)?;
+        if args.len() >= params.len() {
+            return None;
+        }
+        let names: Vec<String> = params.iter().map(|(name, _)| name.clone()).collect();
+        let mut filled = args.to_vec();
+        for (_, default) in &params[args.len()..] {
+            let default = default.clone()?;
+            let settled = filled.clone();
+            filled.push(super::type_resolution::substitute_type_params(
+                &default,
+                &names[..settled.len()],
+                &settled,
+            ));
+        }
+        Some(filled)
     }
 
     /// The fields of the struct `def` declares.

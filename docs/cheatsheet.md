@@ -574,18 +574,8 @@ loop {
     continue;
 }
 
-// Labeled block — all blocks require a label
-scope: {
-    let x = 20;  // new scope
-}
-
-// Labeled break — exit a named block early
-outer: {
-    if condition {
-        break outer;  // jump past the block
-    }
-    // skipped if break taken
-}
+// A loop carries no label: `continue` takes none, and `break LABEL` names a
+// labeled block. To leave a loop nest, see Labeled Blocks.
 
 // Match expression
 let result = match opt {
@@ -655,6 +645,68 @@ let a = if cond() { 1 } else { 2 };   // either 1 or 2
 let b = if cond() { 1; } else { 2; }; // ditto
 ```
 
+### Labeled Blocks
+
+A named block that `break LABEL` leaves from any depth inside it. Wado's only
+non-local jump: it replaces loop labels, labeled `continue`, and `goto`, and it
+is the block form that carries a value. See
+[the spec](./spec.md#labeled-blocks).
+
+The label is required, since an unlabeled `{ ... }` is a struct literal, and it
+cannot start with `__`. A nested block may reuse a label, and `break` takes the
+innermost. `break LABEL: ()` says what `break LABEL` says.
+
+```wado
+// Leave a whole loop nest with one break; the tail is the path no break took.
+search: {
+    for let r of 0..<grid.len() {
+        for let c of 0..<grid[r].len() {
+            if grid[r][c] == needle { hit = [r, c]; break search; }
+        }
+    }
+    hit = [-1, -1];
+}
+
+// Guard chain: `break LABEL` skips the rest, so the guards stay flat.
+attempt: {
+    if !consume(&toks, &mut pos, TK_A) { break attempt; }
+    if !consume(&toks, &mut pos, TK_B) { break attempt; }
+    matched = pos;
+}
+
+// As an expression: `break LABEL: expr` and the trailing statement are both
+// branches, must agree on one type, and coerce to the type expected at the
+// use site. A tail that is not a value yields `()`.
+let first_even = find: {
+    for let x of xs {
+        if x % 2 == 0 { break find: x; }
+    }
+    -1
+};
+```
+
+### Branch Hints
+
+`builtin::cold_path()` marks the path containing it as rarely executed, and
+emits no code. The engine predicts the other side of the branch, and the inliner
+leaves the cold path out of its cost estimate. It is a statement rather than a
+condition wrapper, so it also works in a `match` or `if let` arm, where no
+boolean is available. See [the spec](./spec.md#branch-hints).
+
+```wado
+if i >= len {
+    builtin::cold_path();
+    panic("index out of bounds");
+}
+
+// On the fall-through after a diverging guard, it hints the guard as likely.
+if let Some(v) = fast_path(key) {
+    return v;
+}
+builtin::cold_path();
+return slow_path(key);
+```
+
 ## Assert
 
 `assert` behaves like power-assert.
@@ -692,6 +744,23 @@ connect("localhost");           // → connect("localhost", 8080)
 ```
 
 A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults.
+
+### Local Items
+
+`struct` and `type` (newtype) may be declared inside a function body, scoped to
+the declaring block. See [WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
+
+```wado
+fn area(width: i32, height: i32) -> i32 {
+    let s = Size { width, height };            // in scope before its
+    struct Size { width: i32, height: i32 }    // declaration, unlike `let`
+    return s.width * s.height;
+}
+```
+
+Always private, and shadows a same-named module-level item.
+`enum`/`variant`/`flags`, a local `impl`/`trait`, and a generic local `type`
+are not yet supported.
 
 ### Methods
 
@@ -834,12 +903,25 @@ fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
     println(`Storing: ${data.value}`);
     return Container { data };
 }
+
+// `self` is a reference parameter like any other.
+impl Node {
+    fn wrap(&self) -> Ref with stores[self] {
+        return Ref { inner: self };
+    }
+}
+
+// A reference reached through a parameter is a different reference: copying
+// it out is not that parameter escaping.
+fn rebase(c: &Cursor, at: i32) -> Cursor {
+    return Cursor { chars: c.chars, pos: at };
+}
 ```
 
 Rules:
 
 - `stores[param]` declares that the function may store the reference parameter
-- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`
+- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`, `self` included
 - Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
 - In function type position, use positional indices: `fn(&Data) with stores[0]`
 
@@ -1279,6 +1361,13 @@ test "panics on invalid input" {
 #[TODO]
 test "not yet implemented" {
     panic("TODO: implement this");
+}
+
+// Timeout override. The default is 1000ms, and a test that runs longer is
+// interrupted and fails.
+#[timeout_ms(5000)]
+test "large data processing" {
+    process_large_dataset();
 }
 
 // Synopsis test: runs like any test; `wado doc` renders its body as the

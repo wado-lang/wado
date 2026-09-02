@@ -1489,10 +1489,6 @@ pub struct "Box<fn(char)->char>" {
     value: fn(char) -> char,
 }
 
-pub struct "Box<i32>" {
-    value: i32,
-}
-
 pub struct "Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>>" {
     value: Result<String, String>,
 }
@@ -3149,6 +3145,7 @@ pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(c
 
 pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
+<<<<<<< HEAD
 fn "core:prelude/bytes.wado/ByteSlice^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &Slice<u8>) -> Slice<u8> with stores[self] {
     return *self;
 }
@@ -3168,16 +3165,34 @@ fn "core:prelude/string.wado/String^core:prelude/bytes.wado/AsByteSlice::as_byte
 pub fn "core:prelude/bytes.wado/ByteArray^core:prelude/traits.wado/Inspect::inspect"(self: &Array<u8>, f: &mut Formatter) {
     *self as Array<u8>."Array<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
     f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as ByteArray", used: 13 });
+||||||| b4b9c0ef2
+pub fn "core:prelude/bytes.wado/ByteArray^core:prelude/traits.wado/Inspect::inspect"(self: &Array<u8>, f: &mut Formatter) {
+    *self as Array<u8>."Array<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
+    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as ByteArray", used: 13 });
+=======
+pub fn "core:prelude/bytes.wado/ByteArray^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"ByteArray", used: 9 };
+>>>>>>> origin/main
 }
 
-pub fn "core:prelude/bytes.wado/ByteList^core:prelude/traits.wado/Inspect::inspect"(self: &List<u8>, f: &mut Formatter) {
-    *self as List<u8>."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as ByteList", used: 12 });
+pub fn "core:prelude/bytes.wado/ByteArray^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
+    return CaseStyle::Identity;
 }
 
-pub fn "core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect"(self: &Slice<u8>, f: &mut Formatter) {
-    *self as Slice<u8>."core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as ByteSlice", used: 13 });
+pub fn "core:prelude/bytes.wado/ByteList^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"ByteList", used: 8 };
+}
+
+pub fn "core:prelude/bytes.wado/ByteList^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
+    return CaseStyle::Identity;
+}
+
+pub fn "core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"ByteSlice", used: 9 };
+}
+
+pub fn "core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
+    return CaseStyle::Identity;
 }
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -4120,7 +4135,7 @@ pub fn "core:prelude/fpfmt.wado/UnpackResult^core:prelude/traits.wado/ReflectStr
     return [Option<u64>::None, Option<i32>::None];
 }
 
-pub fn "core:prelude/fpfmt.wado/UnpackResult^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/fpfmt.wado/UnpackResult^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -4159,7 +4174,7 @@ pub fn "core:prelude/fpfmt.wado/PmHiLo^core:prelude/traits.wado/ReflectStruct::e
     return [Option<u64>::None, Option<u64>::None];
 }
 
-pub fn "core:prelude/fpfmt.wado/PmHiLo^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/fpfmt.wado/PmHiLo^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -4192,7 +4207,7 @@ pub fn "core:prelude/fpfmt.wado/FormatResult^core:prelude/traits.wado/ReflectStr
     return [Option<u64>::None, Option<i32>::None, Option<i32>::None];
 }
 
-pub fn "core:prelude/fpfmt.wado/FormatResult^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/fpfmt.wado/FormatResult^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -4239,7 +4254,7 @@ pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/ReflectEnum
     return [EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 0, value: SpecialKind::NotSpecial, case_name: String { repr: packed"NotSpecial", used: 10 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 1, value: SpecialKind::Zero, case_name: String { repr: packed"Zero", used: 4 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 2, value: SpecialKind::Inf, case_name: String { repr: packed"Inf", used: 3 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 3, value: SpecialKind::NaN, case_name: String { repr: packed"NaN", used: 3 }, wire_override: Option<String>::None }];
 }
 
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -5141,7 +5156,7 @@ pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/ReflectStruct::em
     return [Option<u64>::None, Option<u64>::None];
 }
 
-pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -5174,7 +5189,7 @@ pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/ReflectStruct::em
     return [Option<u64>::None, Option<i64>::None];
 }
 
-pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -5439,7 +5454,7 @@ pub fn "core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/Reflec
     return [Option<IntErrorKind>::None];
 }
 
-pub fn "core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -5471,7 +5486,7 @@ pub fn "core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/Refl
     return [Option<FloatErrorKind>::None];
 }
 
-pub fn "core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -5510,7 +5525,7 @@ pub fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Reflect
     return [EnumCase<core:prelude/intparse.wado/IntErrorKind> { discriminant: 0, value: IntErrorKind::Empty, case_name: String { repr: packed"Empty", used: 5 }, wire_override: Option<String>::None }, EnumCase<core:prelude/intparse.wado/IntErrorKind> { discriminant: 1, value: IntErrorKind::InvalidDigit, case_name: String { repr: packed"InvalidDigit", used: 12 }, wire_override: Option<String>::None }, EnumCase<core:prelude/intparse.wado/IntErrorKind> { discriminant: 2, value: IntErrorKind::PosOverflow, case_name: String { repr: packed"PosOverflow", used: 11 }, wire_override: Option<String>::None }, EnumCase<core:prelude/intparse.wado/IntErrorKind> { discriminant: 3, value: IntErrorKind::NegOverflow, case_name: String { repr: packed"NegOverflow", used: 11 }, wire_override: Option<String>::None }];
 }
 
-pub fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -5536,7 +5551,7 @@ pub fn "core:prelude/intparse.wado/FloatErrorKind^core:prelude/traits.wado/Refle
     return [EnumCase<core:prelude/intparse.wado/FloatErrorKind> { discriminant: 0, value: FloatErrorKind::Empty, case_name: String { repr: packed"Empty", used: 5 }, wire_override: Option<String>::None }, EnumCase<core:prelude/intparse.wado/FloatErrorKind> { discriminant: 1, value: FloatErrorKind::Invalid, case_name: String { repr: packed"Invalid", used: 7 }, wire_override: Option<String>::None }];
 }
 
-pub fn "core:prelude/intparse.wado/FloatErrorKind^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/intparse.wado/FloatErrorKind^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9243,7 +9258,7 @@ pub fn "core:prelude/string.wado/Utf8Scalar^core:prelude/traits.wado/ReflectStru
     return [Option<u32>::None, Option<i32>::None, Option<bool>::None];
 }
 
-pub fn "core:prelude/string.wado/Utf8Scalar^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/Utf8Scalar^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9289,7 +9304,7 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/ReflectStruct::
     return [Option<Array<u8>>::None, Option<i32>::None];
 }
 
-pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9328,7 +9343,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Reflec
     return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None];
 }
 
-pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9368,7 +9383,7 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/ReflectStr
     return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None];
 }
 
-pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9408,7 +9423,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ref
     return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None];
 }
 
-pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9448,7 +9463,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/ReflectSt
     return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None, Option<Array<u8>>::None, Option<i32>::None, Option<bool>::None];
 }
 
-pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9503,7 +9518,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/ReflectS
     return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None, Option<Array<u8>>::None, Option<i32>::None, Option<i32>::None, Option<bool>::None];
 }
 
-pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9559,7 +9574,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None];
 }
 
-pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9599,7 +9614,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/ReflectSt
     return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None, Option<bool>::None];
 }
 
-pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9722,7 +9737,7 @@ pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStru
     return [Option<i32>::None, Option<CopyResult>::None];
 }
 
-pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9761,7 +9776,7 @@ pub fn "core:prelude/types.wado/WaitEvent^core:prelude/traits.wado/ReflectStruct
     return [Option<i32>::None, Option<i32>::None, Option<u32>::None];
 }
 
-pub fn "core:prelude/types.wado/WaitEvent^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/types.wado/WaitEvent^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -9805,13 +9820,16 @@ pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum:
     return [EnumCase<core:prelude/types.wado/CopyResult> { discriminant: 0, value: CopyResult::Completed, case_name: String { repr: packed"Completed", used: 9 }, wire_override: Option<String>::None }, EnumCase<core:prelude/types.wado/CopyResult> { discriminant: 1, value: CopyResult::Dropped, case_name: String { repr: packed"Dropped", used: 7 }, wire_override: Option<String>::None }, EnumCase<core:prelude/types.wado/CopyResult> { discriminant: 2, value: CopyResult::Cancelled, case_name: String { repr: packed"Cancelled", used: 9 }, wire_override: Option<String>::None }];
 }
 
-pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
-pub fn "core:prelude/types.wado/Waitable^core:prelude/traits.wado/Inspect::inspect"(self: Box<i32>, f: &mut Formatter) {
-    Box<i32> { value: self.value as i32 }."i32^core:prelude/traits.wado/Inspect::inspect"(f);
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" as Waitable", used: 12 });
+pub fn "core:prelude/types.wado/Waitable^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"Waitable", used: 8 };
+}
+
+pub fn "core:prelude/types.wado/Waitable^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
+    return CaseStyle::Identity;
 }
 
 pub fn "core:prelude/types.wado/StreamWritable<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -11024,7 +11042,7 @@ pub fn "wasi:cli/types.wado/ErrorCode^core:prelude/traits.wado/ReflectEnum::memb
     return [EnumCase<wasi:cli/types.wado/ErrorCode> { discriminant: 0, value: ErrorCode::Io, case_name: String { repr: packed"Io", used: 2 }, wire_override: Option<String>::None }, EnumCase<wasi:cli/types.wado/ErrorCode> { discriminant: 1, value: ErrorCode::IllegalByteSequence, case_name: String { repr: packed"IllegalByteSequence", used: 19 }, wire_override: Option<String>::None }, EnumCase<wasi:cli/types.wado/ErrorCode> { discriminant: 2, value: ErrorCode::Pipe, case_name: String { repr: packed"Pipe", used: 4 }, wire_override: Option<String>::None }];
 }
 
-pub fn "wasi:cli/types.wado/ErrorCode^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+pub fn "wasi:cli/types.wado/ErrorCode^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -11489,7 +11507,7 @@ pub fn "core:prelude/format.wado/Formatter^core:prelude/traits.wado/ReflectStruc
     return [Option<char>::None, Option<Alignment>::None, Option<bool>::None, Option<bool>::None, Option<bool>::None, Option<i32>::None, Option<i32>::None, Option<i32>::None, Option<&mut String>::None];
 }
 
-pub fn "core:prelude/format.wado/Formatter^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/format.wado/Formatter^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -11557,7 +11575,7 @@ pub fn "core:prelude/format.wado/Alignment^core:prelude/traits.wado/ReflectEnum:
     return [EnumCase<core:prelude/format.wado/Alignment> { discriminant: 0, value: Alignment::Left, case_name: String { repr: packed"Left", used: 4 }, wire_override: Option<String>::None }, EnumCase<core:prelude/format.wado/Alignment> { discriminant: 1, value: Alignment::Center, case_name: String { repr: packed"Center", used: 6 }, wire_override: Option<String>::None }, EnumCase<core:prelude/format.wado/Alignment> { discriminant: 2, value: Alignment::Right, case_name: String { repr: packed"Right", used: 5 }, wire_override: Option<String>::None }];
 }
 
-pub fn "core:prelude/format.wado/Alignment^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/format.wado/Alignment^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -11692,7 +11710,7 @@ pub fn "core:prelude/traits.wado/ConvertError^core:prelude/traits.wado/ReflectSt
     return [Option<String>::None];
 }
 
-pub fn "core:prelude/traits.wado/ConvertError^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/traits.wado/ConvertError^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -11724,7 +11742,7 @@ pub fn "core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/Refl
     return [Option<String>::None];
 }
 
-pub fn "core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -11760,7 +11778,7 @@ pub fn "core:prelude/traits.wado/Ordering^core:prelude/traits.wado/ReflectEnum::
     return [EnumCase<core:prelude/traits.wado/Ordering> { discriminant: 0, value: Ordering::Less, case_name: String { repr: packed"Less", used: 4 }, wire_override: Option<String>::None }, EnumCase<core:prelude/traits.wado/Ordering> { discriminant: 1, value: Ordering::Equal, case_name: String { repr: packed"Equal", used: 5 }, wire_override: Option<String>::None }, EnumCase<core:prelude/traits.wado/Ordering> { discriminant: 2, value: Ordering::Greater, case_name: String { repr: packed"Greater", used: 7 }, wire_override: Option<String>::None }];
 }
 
-pub fn "core:prelude/traits.wado/Ordering^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -11801,7 +11819,7 @@ pub fn "core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/ReflectEnum:
     return [EnumCase<core:prelude/traits.wado/CaseStyle> { discriminant: 0, value: CaseStyle::Identity, case_name: String { repr: packed"Identity", used: 8 }, wire_override: Option<String>::None }, EnumCase<core:prelude/traits.wado/CaseStyle> { discriminant: 1, value: CaseStyle::Camel, case_name: String { repr: packed"Camel", used: 5 }, wire_override: Option<String>::None }, EnumCase<core:prelude/traits.wado/CaseStyle> { discriminant: 2, value: CaseStyle::Snake, case_name: String { repr: packed"Snake", used: 5 }, wire_override: Option<String>::None }, EnumCase<core:prelude/traits.wado/CaseStyle> { discriminant: 3, value: CaseStyle::ScreamingSnake, case_name: String { repr: packed"ScreamingSnake", used: 14 }, wire_override: Option<String>::None }, EnumCase<core:prelude/traits.wado/CaseStyle> { discriminant: 4, value: CaseStyle::Pascal, case_name: String { repr: packed"Pascal", used: 6 }, wire_override: Option<String>::None }, EnumCase<core:prelude/traits.wado/CaseStyle> { discriminant: 5, value: CaseStyle::Kebab, case_name: String { repr: packed"Kebab", used: 5 }, wire_override: Option<String>::None }, EnumCase<core:prelude/traits.wado/CaseStyle> { discriminant: 6, value: CaseStyle::ScreamingKebab, case_name: String { repr: packed"ScreamingKebab", used: 14 }, wire_override: Option<String>::None }];
 }
 
-pub fn "core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/ReflectEnum::wire_name_policy"() -> CaseStyle {
+pub fn "core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
@@ -12016,6 +12034,7 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
     return self.repr."Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
 
+<<<<<<< HEAD
 pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Slice<u8>, f: &mut Formatter) {
     "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self.repr, self.start, self.end, f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
 }
@@ -12036,6 +12055,21 @@ fn "core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"(s
     return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&self.repr, 0, self.used);
 }
 
+||||||| b4b9c0ef2
+pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Slice<u8>, f: &mut Formatter) {
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self.repr, self.start, self.end, f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
+}
+
+pub fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &List<u8>, f: &mut Formatter) {
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(&self.repr, 0, self.used, f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
+}
+
+pub fn "Array<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Array<u8>, f: &mut Formatter) {
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self, 0, core::builtin::array_len::<u8>(self), f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
+}
+
+=======
+>>>>>>> origin/main
 fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(self: Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>>, f: &mut Formatter) {
     __tuple_for_of_2: {
         let __tuple_2: [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>] = "core::prelude/types.wado::core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/ReflectVariant::members"();
@@ -12178,42 +12212,6 @@ pub fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prel
     return [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> { index: 0, case_name: String { repr: packed"Ok", used: 2 }, wire_override: Option<String>::None, is_unit: false }, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> { index: 1, case_name: String { repr: packed"Err", used: 3 }, wire_override: Option<String>::None, is_unit: false }];
 }
 
-fn "core/prelude/array.wado/write_seq_inspect<u8>"(repr: &Array<u8>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if f.alternate {
-        "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr, start, end, f, marker, limit);
-        return;
-    }
-    f."core:prelude/format.wado/Formatter::write_char"('[');
-    let mut shown: i32 = 0;
-    let mut truncated: bool = false;
-    let mut i: i32 = start;
-    loop {
-        if !(i < end) {
-            break;
-        }
-        __for_0_body: {
-            if ((limit >= 0) && (shown >= limit)) {
-                truncated = true;
-                break;
-            }
-            if (shown > 0) {
-                f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ", used: 2 });
-            }
-            Box<u8> { value: repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i) }."u8^core:prelude/traits.wado/Inspect::inspect"(f);
-            shown = (shown + 1);
-        }
-        i = (i + 1);
-    }
-    if (marker && truncated) {
-        if (shown > 0) {
-            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ...", used: 5 });
-        } else {
-            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"...", used: 3 });
-        }
-    }
-    f."core:prelude/format.wado/Formatter::write_char"(']');
-}
-
 fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
     return core::builtin::array_get_value::<u64>(self, index);
 }
@@ -12270,38 +12268,6 @@ fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::in
             }
         }
     }
-}
-
-fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if (start >= end) {
-        f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"[]", used: 2 });
-        return;
-    }
-    f."core:prelude/format.wado/Formatter::open_brace"(String { repr: packed"[", used: 1 });
-    let mut shown: i32 = 0;
-    let mut truncated: bool = false;
-    let mut i: i32 = start;
-    loop {
-        if !(i < end) {
-            break;
-        }
-        __for_0_body: {
-            if ((limit >= 0) && (shown >= limit)) {
-                truncated = true;
-                break;
-            }
-            f."core:prelude/format.wado/Formatter::write_newline_indent"();
-            Box<u8> { value: repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i) }."u8^core:prelude/traits.wado/Inspect::inspect"(f);
-            f."core:prelude/format.wado/Formatter::write_char"(',');
-            shown = (shown + 1);
-        }
-        i = (i + 1);
-    }
-    if (marker && truncated) {
-        f."core:prelude/format.wado/Formatter::write_newline_indent"();
-        f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"...", used: 3 });
-    }
-    f."core:prelude/format.wado/Formatter::close_brace"(String { repr: packed"]", used: 1 });
 }
 
 fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter: &mut SliceValueIter<u8>) -> List<u8> {

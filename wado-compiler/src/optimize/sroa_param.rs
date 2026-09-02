@@ -337,9 +337,9 @@ fn candidate_info_for(
 /// reference is transparent at the WIR level, so `&()` leaves nothing on the
 /// stack just as `()` does, and a newtype stands for whatever it wraps.
 fn is_sroa_eligible_inner_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    let mut ty = type_table.get_ultimate_base_type(type_id);
+    let mut ty = type_table.representation_head(type_id);
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(ty) {
-        ty = type_table.get_ultimate_base_type(*inner);
+        ty = type_table.representation_head(*inner);
     }
     ty != TypeTable::UNIT && ty != TypeTable::NEVER
 }

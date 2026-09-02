@@ -157,6 +157,16 @@ fn assert_format_preserves_ast(source: &str) {
             "Formatter changed AST semantics!\n\n{diff_context}\n\nOriginal source:\n{source}\n\nFormatted source:\n{formatted}"
         );
     }
+
+    // A rule that wraps an already-wrapped operand keeps the AST equal while
+    // adding a layer per pass, so every round-trip case asserts the fixed point
+    // too.
+    let again = wado_compiler::format(&formatted)
+        .unwrap_or_else(|e| panic!("formatted code failed to format: {e:?}\n\n{formatted}"));
+    assert_eq!(
+        formatted, again,
+        "format is not idempotent\n\nFirst pass:\n{formatted}\n\nSecond pass:\n{again}"
+    );
 }
 
 #[test]
@@ -1897,6 +1907,15 @@ fn test_format_deref_method_preserves_parens() {
     );
 }
 
+/// A tuple type declaration names its own pack, so the formatter has to print
+/// the one that was written rather than a fixed `T`.
+#[test]
+fn test_format_tuple_type_decl_keeps_its_pack_name() {
+    let source = "pub type [..Args];\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
 #[test]
 fn test_format_doc_comment_before_attribute_no_extra_blank() {
     // Doc comment immediately before an attribute must not grow a blank line
@@ -2642,6 +2661,65 @@ fn run(x: char) -> bool {
     let b = (x as u32) - ('a' as u32) < 26;
     let c = 0 < (x as u32) < 26;
     return a && b && c;
+}
+",
+    );
+}
+
+#[test]
+fn test_roundtrip_postfix_base_keeps_parens() {
+    // `.`, `[]` and `()` bind tighter than a cast, a binary operator or a
+    // comparison, so a base spelled as one of those keeps the parens the
+    // parser needs: `p as Point.x` parses the field access into the cast's
+    // *type*, and `a + b.len()` reads the call off `b`.
+    assert_format_preserves_ast(
+        r#"
+struct Point {
+    x: i32,
+}
+
+type P = Point;
+
+fn run(p: P, a: List<i32>, b: List<i32>) -> i32 {
+    let f = (p as Point).x;
+    let g = (a.len() + b.len()).to_string().len();
+    let h = (if f > 0 { a } else { b })[0];
+    return f + g + h;
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_cast_operand_keeps_parens() {
+    // ` as T` binds looser than the postfix operators and tighter than every
+    // binary one, so an operand looser than a cast keeps its parens:
+    // `a < b < c as bool` casts `c`, and `x matches { 200 } as bool` does not
+    // parse at all. Logical `!` is looser too — `!y as i32` reads as
+    // `!(y as i32)`. A value-producing unary operand and a chained cast bind
+    // tighter and stay bare.
+    assert_format_preserves_ast(
+        r"
+fn run(a: i32, b: i32, c: i32, x: i32, y: bool) -> bool {
+    let t = (a < b < c) as bool;
+    let u = (x matches { 200 }) as bool;
+    let v = -a as i64;
+    let w = a as i64 as i32;
+    let n = (!y) as i32;
+    return t && u && v == w as i64 && n == 0;
+}
+",
+    );
+}
+
+#[test]
+fn test_roundtrip_method_receiver_keeps_parens() {
+    // A comparison chain as a method receiver reads the call off the chain's
+    // last operand: `a < b < c.to_string()` compares `c.to_string()`.
+    assert_format_preserves_ast(
+        r"
+fn run(a: i32, b: i32, c: i32) -> String {
+    return (a < b < c).to_string();
 }
 ",
     );

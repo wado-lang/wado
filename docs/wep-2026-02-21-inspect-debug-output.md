@@ -28,8 +28,8 @@ The `Formatter` and the rest of the trait family are in
 | Source                               | Covers                                                                                                     |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | Hand-written in `core:prelude`       | primitives, `()`, `!`, `String`, `char`, `&T` / `&mut T`, sequences, tuples, `TreeMap`, `TreeSet`, `Value` |
-| Blanket impl over a `Reflect*` bound | struct, variant, enum, flags                                                                               |
-| Synthesised per type                 | newtype, resource, `fn(..)` dispatch stub                                                                  |
+| Blanket impl over a `Reflect*` bound | struct, variant, enum, flags, newtype                                                                      |
+| Synthesised per type                 | resource, `fn(..)` dispatch stub                                                                           |
 
 ### Output format
 
@@ -120,13 +120,13 @@ call and no inspect-specific pipeline phase: trait resolution, the
 monomorphizer, lowering and DCE handle it as they handle any other trait call,
 so an unreached inspect path is dropped like any other dead code.
 
-The derived impls come from two places. Struct, variant, enum and flags types
-are covered by the blanket impls over `ReflectStruct` / `ReflectVariant` /
-`ReflectEnum` / `ReflectFlags` in `core:prelude/traits`, so nothing is emitted
-per type. What reflection does not reach — newtypes, resources, tuple and
-generic-resource instances, and the `fn(..)` dispatch stubs — `synthesis::traits`
-emits alongside the other auto-derived traits, skipping any receiver that has
-a methodful impl of its own.
+The derived impls come from two places. Struct, variant, enum, flags and
+newtype types are covered by the blanket impls over `ReflectStruct` /
+`ReflectVariant` / `ReflectEnum` / `ReflectFlags` / `ReflectNewtype` in
+`core:prelude/traits`, so nothing is emitted per type. What reflection does not
+reach — resources, tuple and generic-resource instances, and the `fn(..)`
+dispatch stubs — `synthesis::traits` emits alongside the other auto-derived
+traits, skipping any receiver that has a methodful impl of its own.
 
 ### Closure inspect via runtime dispatch
 

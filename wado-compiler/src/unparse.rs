@@ -63,18 +63,25 @@ fn attr_value_depth(v: &crate::ast::AttrValue) -> usize {
             1 + items.iter().map(attr_value_depth).max().unwrap_or(0)
         }
         AttrValue::Object(obj) if !obj.is_empty() => {
-            1 + obj.values().map(attr_value_depth).max().unwrap_or(0)
+            1 + obj
+                .values()
+                .map(|entry| attr_value_depth(&entry.value))
+                .max()
+                .unwrap_or(0)
         }
         _ => 0,
     }
 }
 
 /// Whether the `with { ... }` attribute object must be expanded multi-line by
-/// the depth rule — i.e. it holds at least one nested container.
+/// the depth rule: it holds at least one nested container.
 fn attrs_force_multiline(u: &UseDecl) -> bool {
-    u.attributes
-        .as_ref()
-        .is_some_and(|attrs| attrs.entries.values().any(|v| attr_value_depth(v) >= 1))
+    u.attributes.as_ref().is_some_and(|attrs| {
+        attrs
+            .entries
+            .values()
+            .any(|entry| attr_value_depth(&entry.value) >= 1)
+    })
 }
 
 /// Append each item separated by `", "` via `emit`.
@@ -559,10 +566,10 @@ impl<'a> Unparser<'a> {
             return;
         }
         self.output.push_str(" with { ");
-        self.comma_sep(&attrs.entries, |s, (k, v)| {
+        self.comma_sep(&attrs.entries, |s, (k, entry)| {
             s.output.push_str(k);
             s.output.push_str(": ");
-            s.unparse_attr_value(v);
+            s.unparse_attr_value(&entry.value);
         });
         self.output.push_str(" }");
     }
@@ -592,10 +599,10 @@ impl<'a> Unparser<'a> {
             }
             crate::ast::AttrValue::Object(obj) => {
                 self.output.push_str("{ ");
-                self.comma_sep(obj, |s, (k, v)| {
+                self.comma_sep(obj, |s, (k, entry)| {
                     s.output.push_str(k);
                     s.output.push_str(": ");
-                    s.unparse_attr_value(v);
+                    s.unparse_attr_value(&entry.value);
                 });
                 self.output.push_str(" }");
             }
@@ -652,17 +659,14 @@ impl<'a> Unparser<'a> {
 
     /// Emit `{` then one `key: value,` per line (recursively wrapping each
     /// value as needed), then a closing `}` on its own indented line.
-    fn unparse_attr_object_multiline(
-        &mut self,
-        obj: &crate::hashmap::IndexMap<String, crate::ast::AttrValue>,
-    ) {
+    fn unparse_attr_object_multiline(&mut self, obj: &crate::ast::AttrObject) {
         self.output.push_str("{\n");
         self.indent_level += 1;
-        for (k, v) in obj {
+        for (k, entry) in obj {
             self.write_indent();
             self.output.push_str(k);
             self.output.push_str(": ");
-            self.unparse_attr_value_wrapped(v);
+            self.unparse_attr_value_wrapped(&entry.value);
             self.output.push_str(",\n");
         }
         self.indent_level -= 1;
@@ -948,7 +952,9 @@ impl<'a> Unparser<'a> {
     fn unparse_tuple_type_decl(&mut self, d: &TupleTypeDecl) {
         self.emit_outer_attrs(&d.attrs);
         self.emit_visibility(d.visibility);
-        self.output.push_str("type [..T];\n");
+        self.output.push_str("type ");
+        self.unparse_type(&d.head);
+        self.output.push_str(";\n");
     }
 
     fn unparse_builtin_type_decl(&mut self, d: &BuiltinTypeDecl) {
@@ -1991,46 +1997,15 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_call(&mut self, c: &CallExpr) {
-        // Parenthesize a callee that would re-parse differently bare: anything
-        // above the postfix level, whose `(args)` would bind tighter, plus
-        // `FieldAccess` (re-parses as a method call), `Closure` (an expression
-        // body swallows the call), and `Cast`. `If` / `Match` / `Block` and
-        // friends end with `}`, which terminates the expression cleanly.
-        let needs_parens = matches!(
-            &c.callee,
-            Expr::FieldAccess(_)
-                | Expr::Closure(_)
-                | Expr::Cast(_)
-                | Expr::Unary(_)
-                | Expr::Binary(_)
-                | Expr::Assign(_)
-                | Expr::CompoundAssign(_)
-                | Expr::ComparisonChain(_)
-                | Expr::Range(_)
-                | Expr::Matches(_)
-        );
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&c.callee));
+        self.with_parens_if(!binds_tighter_than(&c.callee, OperandSlot::Callee), |s| {
+            s.unparse_expr(&c.callee);
+        });
         self.unparse_turbofish(&c.type_args);
         self.unparse_call_args(&c.args, c.has_trailing_comma);
     }
 
     fn unparse_method_call(&mut self, m: &MethodCallExpr) {
-        // Expressions with lower operator precedence than `.` need parentheses
-        // when used as a method receiver, otherwise the formatter produces
-        // semantically different code:
-        //   `-128.to_string()`    → parsed as `-(128.to_string())`  (wrong)
-        //   `127 as i8.to_string()` → parsed as `127 as (i8.to_string())` (wrong)
-        let needs_parens = matches!(
-            &m.receiver,
-            Expr::Unary(_)
-                | Expr::Binary(_)
-                | Expr::Cast(_)
-                | Expr::Assign(_)
-                | Expr::CompoundAssign(_)
-                | Expr::Range(_)
-                | Expr::Matches(_)
-        );
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&m.receiver));
+        self.unparse_postfix_base(&m.receiver);
         self.output.push('.');
         self.output.push_str(&m.method);
         self.unparse_turbofish(&m.type_args);
@@ -2125,10 +2100,15 @@ impl<'a> Unparser<'a> {
     }
 
     /// Emit a postfix base expression, wrapping in parens if needed.
-    /// Prefix unary ops (*, -, !, &, ~) bind looser than postfix ops ([], ., ()),
-    /// so `(*p)[i]` must keep parens — `*p[i]` would mean `*(p[i])`.
+    ///
+    /// The postfix ops (`.`, `[]`, `()`) bind tightest, so a base spelled as
+    /// anything looser keeps the parens the parser needs: `(*p)[i]` would
+    /// otherwise read `*(p[i])`, and `(p as Point).x` would read the field
+    /// access into the cast's *type*. Listed the other way round — the forms
+    /// that need none are the postfix ones and the primaries — so a variant
+    /// added later is parenthesized until someone says it need not be.
     fn unparse_postfix_base(&mut self, expr: &Expr) {
-        self.with_parens_if(matches!(expr, Expr::Unary(_) | Expr::Matches(_)), |s| {
+        self.with_parens_if(!binds_tighter_than(expr, OperandSlot::Postfix), |s| {
             s.unparse_expr(expr);
         });
     }
@@ -2437,11 +2417,9 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_cast(&mut self, c: &CastExpr) {
-        let needs_parens = matches!(
-            &c.expr,
-            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_)
-        );
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&c.expr));
+        self.with_parens_if(!binds_tighter_than(&c.expr, OperandSlot::Cast), |s| {
+            s.unparse_expr(&c.expr);
+        });
         self.output.push_str(" as ");
         self.unparse_type(&c.target_type);
     }
@@ -3029,6 +3007,65 @@ fn ends_in_trailing_cast(expr: &Expr) -> bool {
         Expr::Cast(_) => true,
         Expr::Binary(b) => !needs_parens(&b.right, b.op, false) && ends_in_trailing_cast(&b.right),
         _ => false,
+    }
+}
+
+/// The operator an operand is about to be joined to, ordered by how tightly it
+/// binds. Each slot admits what the one above it does, and a little more.
+#[derive(Clone, Copy)]
+enum OperandSlot {
+    /// Callee of `(args)`. Like [`Self::Postfix`], except that a field access
+    /// re-parses as a method call, so `(v.f)(x)` keeps its parens.
+    Callee,
+    /// Base of `.field`, `[index]`, or `.method(args)`.
+    Postfix,
+    /// Operand of ` as T`, which binds looser than the postfix operators and
+    /// tighter than every binary one.
+    Cast,
+}
+
+/// Whether `expr` unparses tightly enough to sit in `slot` without parens.
+///
+/// Stated as what needs *no* parens, so a variant added to [`Expr`] later is
+/// parenthesized until someone says it need not be. The four deny-lists this
+/// replaces each silently admitted whatever nobody had written yet:
+/// `(p as Point).x` lost its parens and re-parsed the field access into the
+/// cast's type, and `(a < b < c).to_string()` read the call off `c`.
+fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
+    let postfix = matches!(
+        expr,
+        Expr::Ident(_)
+            | Expr::Literal(_)
+            | Expr::Call(_)
+            | Expr::MethodCall(_)
+            | Expr::StaticMethodCall(_)
+            | Expr::FieldAccess(_)
+            | Expr::Index(_)
+            | Expr::TryOp(_)
+            | Expr::TemplateString(_)
+            | Expr::StructLiteral(_)
+            | Expr::TupleLiteral(_)
+            | Expr::TupleComprehension(_)
+            // Closes with `}`, which ends the expression as cleanly as a
+            // `)` would. `Matches` closes the same way and still needs parens:
+            // its scrutinee sits to the left of the brace.
+            | Expr::Block(_)
+            | Expr::LabeledBlock(_)
+            | Expr::If(_)
+            | Expr::Match(_)
+            | Expr::Error(_)
+    );
+    match slot {
+        OperandSlot::Callee => postfix && !matches!(expr, Expr::FieldAccess(_)),
+        OperandSlot::Postfix => postfix,
+        // `a as T as U` is left-associative, and a value-producing unary binds
+        // tighter than `as`. Logical `!` does not — it sits above `matches`, so
+        // `!x as i32` reads as `!(x as i32)` and the operand keeps its parens.
+        OperandSlot::Cast => {
+            postfix
+                || matches!(expr, Expr::Cast(_))
+                || matches!(expr, Expr::Unary(u) if u.op != UnaryOp::Not)
+        }
     }
 }
 

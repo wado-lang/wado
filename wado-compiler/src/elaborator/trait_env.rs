@@ -289,44 +289,6 @@ impl ImplHeader {
     }
 }
 
-/// The pack-bound associated types each blanket impl projects, keyed by the
-/// blanket's `(module, ast_id)`.
-///
-/// The bound's own reference site says which trait declares the associated
-/// type, so two modules' same-named bounds stay apart — the spelling the
-/// blanket wrote cannot answer that.
-fn blanket_pack_assocs(
-    impl_headers: &IndexMap<DefId, ImplHeader>,
-    blanket_impls: &IndexMap<DefId, Vec<BlanketImpl>>,
-    resolutions: &crate::resolve::Resolutions,
-) -> IndexMap<DefId, Vec<(DefId, String)>> {
-    let mut out: IndexMap<DefId, Vec<(DefId, String)>> = IndexMap::default();
-    for blanket in blanket_impls.values().flatten() {
-        let Some(header) = impl_headers.get(&blanket.def) else {
-            continue;
-        };
-        let pairs: Vec<(DefId, String)> = header
-            .type_params
-            .iter()
-            .flat_map(|tp| &tp.bounds)
-            .flat_map(|bound| bound.assoc_types.iter().map(move |a| (bound, a)))
-            .filter(|(_, assoc)| {
-                matches!(&assoc.ty, ast::Type::Tuple(elems)
-                    if elems
-                        .iter()
-                        .any(|e| matches!(e, ast::Type::TypePackSpread(..))))
-            })
-            .filter_map(|(bound, assoc)| {
-                Some((resolutions.declared(bound.id)?, assoc.name.clone()))
-            })
-            .collect();
-        if !pairs.is_empty() {
-            out.insert(blanket.def, pairs);
-        }
-    }
-    out
-}
-
 /// What fixes one of a blanket impl's type parameters.
 #[derive(Clone, Debug)]
 pub(crate) enum BlanketParamSource {
@@ -785,14 +747,10 @@ pub struct TraitEnv {
     /// [`DefId`]. Trait/method queries read this instead of re-fetching the
     /// impl block AST from `loaded_modules`. See [`ImplHeader`].
     pub(super) impl_headers: IndexMap<DefId, ImplHeader>,
-    /// Per blanket impl, the `(declaring trait, associated type)` pairs whose
-    /// binding is a type pack. Resolved once at build time from each bound's
-    /// own reference site, so the trait is a declaration rather than the
-    /// spelling the blanket wrote (WEP 2026-08-12).
-    pub(super) blanket_pack_assocs: IndexMap<DefId, Vec<(DefId, String)>>,
     /// Per blanket impl, what determines each of its parameters, in
     /// declaration order. Resolved once at build time from each bound's own
-    /// reference site.
+    /// reference site, so the trait is a declaration rather than the spelling
+    /// the blanket wrote (WEP 2026-08-12).
     pub(super) blanket_param_sources: IndexMap<DefId, Vec<BlanketParamSource>>,
     /// Digested headers for every `trait` declaration, keyed by its
     /// [`DefId`]. Lets method-lookup queries read trait
@@ -1331,11 +1289,6 @@ impl TraitEnv {
                 defs: resolutions.defs().clone(),
                 effect_decl_index,
                 resource_decl_index,
-                blanket_pack_assocs: blanket_pack_assocs(
-                    &impl_headers,
-                    &blanket_impls,
-                    resolutions,
-                ),
                 blanket_param_sources: blanket_param_sources(
                     &impl_headers,
                     &blanket_impls,
@@ -1651,19 +1604,6 @@ impl TraitEnv {
     /// order — see [`blanket_param_sources`].
     pub(crate) fn blanket_param_sources(&self, blanket: &BlanketImpl) -> Vec<BlanketParamSource> {
         self.blanket_param_sources
-            .get(&blanket.def)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// The `(declaring trait, associated type)` pairs a value blanket projects
-    /// into type packs, in the order the impl declares them —
-    /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
-    /// one pair, keyed by `Bound`'s declaration. The trait is carried because a bare assoc name
-    /// is ambiguous: the reflection kinds all spell their member channel
-    /// `Members`.
-    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(DefId, String)> {
-        self.blanket_pack_assocs
             .get(&blanket.def)
             .cloned()
             .unwrap_or_default()

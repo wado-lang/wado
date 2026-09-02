@@ -1,0 +1,14 @@
+// A newtype over `i128` holds the same pair of words, so the same literals fit.
+// The cast read the target's name, found a newtype rather than the `i128`
+// struct, and skipped the range check: an oversized literal passed through
+// `Signed` with no diagnostic.
+
+type Signed = i128;
+
+test "an oversized literal is rejected through a newtype over i128" {
+    let x = 170141183460469231731687303715884105728 as Signed;
+    assert `${x:?}` != "";
+}
+
+__DATA__
+{"compile_error": "invalid core:prelude/int128.wado/i128 literal: 170141183460469231731687303715884105728"}

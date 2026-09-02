@@ -1,0 +1,36 @@
+// An anonymous struct declares fields like any other struct, so it satisfies a
+// `ReflectStruct` bound: the visibility gate reads the shape's fields through
+// its head, the way a field walk does. Reading it through a declaration alone
+// answers `None` for a shape, and the bound then holds for no anonymous struct
+// at all.
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F> Describe for T {
+    fn describe(&self) -> String {
+        let mut out = "";
+        for let f of ReflectStruct::<T>::members() {
+            out = out + f.name();
+        }
+        return out;
+    }
+}
+
+struct Named {
+    a: i32,
+}
+
+test "an anonymous struct satisfies a ReflectStruct-keyed blanket" {
+    let anon = { x: 1, y: "s" };
+    assert anon.describe() == "xy";
+}
+
+test "a declared struct still answers for itself" {
+    let named = Named { a: 1 };
+    assert named.describe() == "a";
+}
+
+__DATA__
+{"test": {}}

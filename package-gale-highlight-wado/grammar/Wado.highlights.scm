@@ -44,45 +44,83 @@
 ; `matches` lexes as a keyword but is a binary pattern-test operator.
 "matches" @operator
 
-; Identifiers the grammar can classify on its own, most specific first: an
-; override matches anywhere *under* its rule and the first one declared wins,
-; so a rule nested inside another has to be listed above it. `formatSpec` is
-; above these for that reason; `interpolation` is below them.
+; Identifiers the grammar can classify on its own, most specific first. An
+; override matches anywhere under its rule and the first one declared wins, so
+; a rule nested inside another is listed above it.
 ;
 ; Only a rule whose whole subtree is of one nature can carry an override.
-; `typeRef` and `genericParam` hold nothing but types, and `memberName` is a
-; leaf; the call and index forms are out, because `postfixOp` contains the
-; argument list and `@function` there would repaint every argument.
+; `typeRef` and `genericParam` hold nothing but types. For a member name the
+; subtree is whatever `postfixOp` holds beside it, so `Wado.g4` wraps each use
+; site in a one-token rule and those carry the captures instead.
 ;
 ; Telling a function from a variable takes name resolution, which no
 ; context-free grammar has. `mise run check-highlight` reports what stays
 ; uncoloured, by the kind the compiler resolved it to.
 (formatSpec (IDENTIFIER) @comment)
+; `stores[b]` names a parameter, not a type. It sits inside the `fn(…) with
+; stores[b]` type that the rule below would otherwise paint.
+(storesItem (IDENTIFIER) @variable)
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
-; `.field`, `.method()`, a struct literal's field names, and — the minority
-; case this over-reaches on — the `::Case` of a variant path. `memberName`
-; also spells out every keyword usable as a member name; only the contextual
-; ones need listing, because those are the ones the compiler lexes as plain
-; identifiers (a real keyword stays a keyword on both sides).
-(memberName (IDENTIFIER) @property)
-(memberName "test" @property)
-(memberName "do" @property)
-(memberName "task" @property)
-(memberName "trap" @property)
-(memberName "forward" @property)
-; The rest of an interpolation is a name the grammar cannot place further.
-(interpolation (IDENTIFIER) @variable)
+; `.method()`, and `.field` with a struct literal's and a pattern's field name.
+; A member name is a name whichever word it is, and `memberName` accepts ~47 of
+; them, keywords included. The whole rule carries the capture: the compiler
+; reads every one of those words through its ordinary name path. `self` is the
+; exception it reads lexically, wherever it stands.
+(fieldName "self" @constant.builtin)
+(methodName "self" @constant.builtin)
+(methodName) @function.method
+(fieldName) @property
+; A `::` segment's IDENTIFIER stays uncoloured: `Option::None` and `Foo::new`
+; are one shape that only name resolution splits. Its keywords are names all
+; the same, and `Instant::from(x)` is the shape every `From` impl is called
+; through. Listed are the words the compiler accepts as a segment: `identifier`
+; holds the ones that lex as keywords, and the rest lex as identifiers there.
+(pathSegment "from" @variable)
+(pathSegment "of" @variable)
+(pathSegment "type" @variable)
+(pathSegment "flags" @variable)
+(pathSegment "extends" @variable)
+(pathSegment "test" @variable)
+(pathSegment "do" @variable)
+(pathSegment "task" @variable)
+(pathSegment "trap" @variable)
+(pathSegment "forward" @variable)
+(pathSegment "resume" @variable)
+; An interpolation holds ordinary code, so its names take the classes the rules
+; above give them and nothing more. Painting the rest `@variable` would colour
+; inside a template what the same name is left plain outside one.
 
-; The contextual keywords the `identifier` rule also accepts as names. In that
-; position they are not keywords — the compiler lexes them as identifiers and
-; only recognises them by where they sit — so `let test = |…|` must not colour
-; `test`. (`self` is absent from `identifier`: the language reserves it.)
+; Every contextual keyword the `identifier` rule accepts as a name. None of them
+; is a keyword there: `let type = 1` binds a variable and `fn from(…)` declares
+; a function. The compiler agrees, colouring these words by the position the
+; parse read them in rather than by how they lex. (`self` is absent from
+; `identifier`: the language reserves it.)
+;
+; Listed word by word rather than as `(identifier) @variable`, which would also
+; claim the IDENTIFIER token and outrank `typeRef` / `pathSegment` from further
+; in, painting every type name and enum case a variable.
+(identifier "from" @variable)
+(identifier "of" @variable)
+(identifier "type" @variable)
+(identifier "matches" @variable)
+(identifier "stores" @variable)
+(identifier "world" @variable)
+(identifier "interface" @variable)
+(identifier "resource" @variable)
+(identifier "import" @variable)
+(identifier "export" @variable)
+(identifier "reactive" @variable)
+(identifier "unique" @variable)
+(identifier "forward" @variable)
+(identifier "trap" @variable)
+(identifier "effect" @variable)
+(identifier "flags" @variable)
+(identifier "variant" @variable)
 (identifier "test" @variable)
 (identifier "do" @variable)
 (identifier "task" @variable)
-(identifier "trap" @variable)
-(identifier "forward" @variable)
+(identifier "extends" @variable)
 
 ; Operators, matching the compiler's `is_highlight_operator` set. `&` / `|`
 ; (references, unions, closure params) and `::` / `?` / `..` / `...` double as

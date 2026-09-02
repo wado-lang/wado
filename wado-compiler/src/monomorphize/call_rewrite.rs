@@ -325,8 +325,10 @@ impl Monomorphizer {
                         super::func_inst::blanket_pack_dispatch_args(
                             &monomorph.impl_type_args,
                             &self.functions.trait_env,
+                            info,
                             trait_,
                             &func.module_source,
+                            &monomorph.generic_name,
                             type_table,
                         )
                     })
@@ -671,11 +673,13 @@ impl Monomorphizer {
             {
                 let info = method_func.method_info.as_ref();
                 let impl_ta = match (info.and_then(LocalMethodName::trait_decl), info) {
-                    (Some(trait_), Some(_)) => super::func_inst::blanket_pack_dispatch_args(
+                    (Some(trait_), Some(method)) => super::func_inst::blanket_pack_dispatch_args(
                         &mono.impl_type_args,
                         &self.functions.trait_env,
+                        method,
                         trait_,
                         &method_func.module_source,
+                        &mono.generic_name,
                         type_table,
                     ),
                     _ => None,

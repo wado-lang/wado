@@ -13,6 +13,7 @@ use crate::nir_package::NirPackage;
 use super::aggregate_forward::AggregateForwardRule;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
+use super::drop_value::DropValueRule;
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
@@ -140,6 +141,13 @@ pub(super) fn run_peephole(
         }
         if let Some(slot_temp_sroa_rule) = slot_temp_sroa_rule.as_ref() {
             rules.push(slot_temp_sroa_rule);
+        }
+        // Post-inline only: a value-producing labeled block in statement position
+        // is what `inline` leaves where a caller discarded the result. After
+        // fusion, whose shapes it would otherwise flatten, and before
+        // `elide_rule`, which reclaims what it strips.
+        if !pre_inline {
+            rules.push(&DropValueRule);
         }
         rules.extend([
             &aggregate_forward_rule as &dyn Rule,

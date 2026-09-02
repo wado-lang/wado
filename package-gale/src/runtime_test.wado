@@ -339,6 +339,44 @@ test "HighlightVisitor applies context overrides" {
     assert visitor.capture_names[visitor.captures[1].capture_id] == "string";
 }
 
+test "hl_cover_unvisited sweeps every token, and only once" {
+    let mapping = HighlightMapping {
+        defaults: ["string", "number"],
+        rule_names: ["root"],
+        overrides: [],
+    };
+    let ts = stream_of("01234567", [
+        [0, 0, 3],
+        [1, 4, 7],
+    ]);
+    let mut visitor = HighlightVisitor::new(mapping);
+    visitor.hl_cover_unvisited(&ts);
+    assert visitor.captures.len() == 2;
+    // It is a finishing pass: running it again must add nothing.
+    visitor.hl_cover_unvisited(&ts);
+    assert visitor.captures.len() == 2;
+}
+
+test "hl_cover_unvisited keeps what the walk took and sorts the merge" {
+    let mapping = HighlightMapping {
+        defaults: ["string", "number"],
+        rule_names: ["root"],
+        overrides: [],
+    };
+    let ts = stream_of("01234567", [
+        [0, 0, 3],
+        [1, 4, 7],
+    ]);
+    let mut visitor = HighlightVisitor::new(mapping);
+    // The walk reaches the later token first, so the sweep's capture for the
+    // earlier one lands out of order and the merge has to be sorted.
+    visitor.hl_visit_token(&ts, 1);
+    visitor.hl_cover_unvisited(&ts);
+    assert visitor.captures.len() == 2;
+    assert visitor.captures[0].start == 0;
+    assert visitor.captures[1].start == 4;
+}
+
 test "HighlightVisitor handles trivia" {
     let mapping = HighlightMapping {
         defaults: ["comment", "keyword"],

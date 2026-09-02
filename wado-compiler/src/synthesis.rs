@@ -19,7 +19,7 @@ use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::ResolvedType;
 
-/// The four reflection kinds' metadata (WEP 2026-06-13 §1, §3b–d). Driven by
+/// The five reflection kinds' metadata (WEP 2026-06-13 §1, §3b–d). Driven by
 /// the declarations themselves, not by demand, so it runs exactly once: a
 /// second run would re-emit every member function.
 fn synthesize_reflect_metadata(project: &mut Package) {
@@ -27,12 +27,13 @@ fn synthesize_reflect_metadata(project: &mut Package) {
     traits::synthesize_reflect_variant(project);
     traits::synthesize_reflect_enum(project);
     traits::synthesize_reflect_flags(project);
+    traits::synthesize_reflect_newtype(project);
 }
 
 /// Run pre-monomorphize synthesis phases on the project.
 ///
 /// Execution order:
-/// 1. Reflection metadata — `Reflect{Struct,Variant,Enum,Flags}` members, which
+/// 1. Reflection metadata — `Reflect{Struct,Variant,Enum,Flags,Newtype}`, which
 ///    the auto-derived bodies dispatch through
 /// 2. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
 /// 3. Template expansion — expands `TemplateString` nodes into trait method calls

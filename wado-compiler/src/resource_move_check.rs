@@ -14,7 +14,7 @@ use crate::token::Span;
 /// aggregate set stays in step with `resource_cleanup::carries_resource`, so
 /// nothing is move-only that the cleanup pass would then leak.
 fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
-    let base = sem.types.get_ultimate_base_type(type_id);
+    let base = sem.types.representation_head(type_id);
     if visited.contains(&base) {
         return false;
     }

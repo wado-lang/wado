@@ -14,3 +14,6 @@
 "]" @punctuation.bracket
 "," @punctuation.delimiter
 ":" @punctuation.delimiter
+
+; A rule-context capture: a number inside an array reads as a constant.
+(arr (NUMBER) @constant)

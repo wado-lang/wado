@@ -41,7 +41,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // See through newtype layers so a closure assigned to a `type Handler =
         // fn(...)` newtype still gets its parameter types inferred from the
         // underlying fn signature.
-        let base_id = tt.get_ultimate_base_type(tid);
+        let base_id = tt.representation_head(tid);
         match tt.get(base_id) {
             ResolvedType::Function {
                 params,
@@ -208,6 +208,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 declared_return,
             },
         );
+
+        // A closure body is its own label stack: a loop around the closure
+        // binds no `break` / `continue` written inside it.
+        if let ast::Expr::Block(ref block) = closure.body {
+            self.validate_loop_jumps_ast(Some(block));
+        }
 
         // Diagnose missing returns / type mismatches on block-bodied
         // closures via the AST-walker, gating on the AST block shape so an
