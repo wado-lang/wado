@@ -162,11 +162,12 @@ through one blanket impl per reflection kind in `core:prelude/traits`:
 | `ReflectVariant` | `Type::Case(payload)`, a unit case bare           |
 | `ReflectEnum`    | `Type::Case`                                      |
 | `ReflectFlags`   | set bits joined by `\|`, else `Type::none()`      |
+| `ReflectNewtype` | the base's rendering, then `as Name`              |
 
 Each branches on `alternate` where the two forms differ, calling out to the
-outlined alternate body, so a struct, variant, enum or flags type needs no
-synthesised impl of its own. What reflection does
-not cover — newtypes, resources, and the `fn(..)` dispatch stubs — the compiler
+outlined alternate body, so a struct, variant, enum, flags or newtype type
+needs no synthesised impl of its own. What reflection does
+not cover — resources and the `fn(..)` dispatch stubs — the compiler
 still emits per type. See
 [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) and
 [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md).

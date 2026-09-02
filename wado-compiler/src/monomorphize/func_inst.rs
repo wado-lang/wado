@@ -836,12 +836,6 @@ impl Monomorphizer {
         }
     }
 
-    /// Queue the instance a call's monomorph info names, for a static call and
-    /// a blanket-dispatched method call alike.
-    ///
-    /// `blanket_receiver` is the receiver's type where the call writes one. A
-    /// value blanket is chosen by its receiver, so a lookup without it can land
-    /// on a sibling blanket of the same trait.
     /// Re-key a blanket instance whose call inherited another receiver's args.
     ///
     /// A blanket reached from inside an instance of *itself* — every link of a
@@ -899,6 +893,12 @@ impl Monomorphizer {
         (args.len() > 1).then_some(args)
     }
 
+    /// Queue the instance a call's monomorph info names, for a static call and
+    /// a blanket-dispatched method call alike.
+    ///
+    /// `blanket_receiver` is the receiver's type where the call writes one. A
+    /// value blanket is chosen by its receiver, so a lookup without it can land
+    /// on a sibling blanket of the same trait.
     fn queue_monomorph_instantiation(
         &mut self,
         generic_functions: &IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
@@ -1785,8 +1785,10 @@ impl Monomorphizer {
         // the root and the newtype kind are synthesized per newtype and carry
         // no AST header, so the checks below would peel past them and a
         // derivation would answer with the base's name. Every other trait does
-        // inherit, and peeling is how it is reached.
-        {
+        // inherit, and peeling is how it is reached. Only a declared newtype
+        // carries that synthesis — a generic instance has none, and keeping
+        // identity there would name a `type_name` nothing generates.
+        if type_table.is_reflected_newtype(tid) {
             let items = type_table.compiler_items();
             if [CompilerItem::Reflect, CompilerItem::ReflectNewtype]
                 .into_iter()

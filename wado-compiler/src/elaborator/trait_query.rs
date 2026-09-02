@@ -653,11 +653,14 @@ impl TypeSystem {
         // it is a newtype (WEP 2026-06-13). Both are synthesized, so no impl
         // block exists for the index search below to find, and both hold at
         // depth 0 — which is what makes a `ReflectNewtype`-keyed blanket
-        // outrank one the base satisfies.
-        if matches!(
-            self.on_bound_of(trait_),
-            Some(OnBoundTrait::Reflect | OnBoundTrait::ReflectNewtype)
-        ) {
+        // outrank one the base satisfies. Synthesized per declaration, so a
+        // generic newtype instance owns neither and inherits both.
+        if self.type_table.borrow().is_reflected_newtype(type_id)
+            && matches!(
+                self.on_bound_of(trait_),
+                Some(OnBoundTrait::Reflect | OnBoundTrait::ReflectNewtype)
+            )
+        {
             return true;
         }
         // A repeat answers `false` where `type_implements_trait` answers `true`
@@ -1287,11 +1290,12 @@ impl TypeSystem {
             | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => true,
             // A newtype names itself through the root, and is its own kind. It
             // satisfies the structure kinds through the base it inherits from,
-            // which the recursion below answers.
+            // which the recursion below answers. A generic newtype instance
+            // gets no synthesis, so it inherits the root too.
             (
-                ResolvedType::Newtype { .. },
+                ResolvedType::Newtype { type_args, .. },
                 Some(OnBoundTrait::Reflect | OnBoundTrait::ReflectNewtype),
-            ) => true,
+            ) if type_args.is_empty() => true,
             _ => false,
         };
         if plain_reflect_subject && self.is_reflect_eligible(type_id) {

@@ -127,7 +127,7 @@ answered. Rejecting the overlap where the impls are written would mean deciding
 whether two bounds can both hold. An open world cannot decide that, since
 another module may write `impl Limit` for a struct at any time. So nothing is
 rejected at definition time. The standard library never reaches this rule: the
-four reflection kinds are mutually exclusive, so no receiver satisfies two.
+five reflection kinds are mutually exclusive, so no receiver satisfies two.
 
 ### What eligibility is, and is not
 

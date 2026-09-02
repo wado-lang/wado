@@ -134,14 +134,14 @@ impl SubstitutionContext {
                 // declaring the same associated-type name on one implementor
                 // stay apart (WEP-2026-08-12). The name-keyed chain below gives
                 // up on exactly that case, so it must not be reached first.
-                if let Some(trait_key) = &owning_trait {
-                    if let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
+                if let Some(trait_key) = &owning_trait
+                    && let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
                         concrete_id,
                         trait_key,
                         &assoc_name,
-                    ) {
-                        return resolved;
-                    }
+                    )
+                {
+                    return resolved;
                 }
                 if let Some(resolved) =
                     type_table.resolve_assoc_type_qualified(concrete_id, &owning_trait, &assoc_name)
@@ -3340,6 +3340,15 @@ impl TypeTable {
             current = *base_type;
         }
         current
+    }
+
+    /// Whether `id` is a newtype the compiler synthesized reflection for: one
+    /// written as a declaration. A generic newtype materializes per
+    /// instantiation, after synthesis has run, so it carries neither the root's
+    /// `type_name` nor a `ReflectNewtype` impl — claiming either for it names a
+    /// method nothing generates. It reflects through its base instead.
+    pub fn is_reflected_newtype(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::Newtype { type_args, .. } if type_args.is_empty())
     }
 
     /// Get the ultimate base type by following the chain of newtypes.

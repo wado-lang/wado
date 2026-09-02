@@ -747,13 +747,10 @@ pub struct TraitEnv {
     /// [`DefId`]. Trait/method queries read this instead of re-fetching the
     /// impl block AST from `loaded_modules`. See [`ImplHeader`].
     pub(super) impl_headers: IndexMap<DefId, ImplHeader>,
-    /// Per blanket impl, the `(declaring trait, associated type)` pairs whose
-    /// binding is a type pack. Resolved once at build time from each bound's
-    /// own reference site, so the trait is a declaration rather than the
-    /// spelling the blanket wrote (WEP 2026-08-12).
     /// Per blanket impl, what determines each of its parameters, in
     /// declaration order. Resolved once at build time from each bound's own
-    /// reference site.
+    /// reference site, so the trait is a declaration rather than the spelling
+    /// the blanket wrote (WEP 2026-08-12).
     pub(super) blanket_param_sources: IndexMap<DefId, Vec<BlanketParamSource>>,
     /// Digested headers for every `trait` declaration, keyed by its
     /// [`DefId`]. Lets method-lookup queries read trait

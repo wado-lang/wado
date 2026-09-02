@@ -1992,7 +1992,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_call(&mut self, c: &CallExpr) {
         self.with_parens_if(!binds_tighter_than(&c.callee, OperandSlot::Callee), |s| {
-            s.unparse_expr(&c.callee)
+            s.unparse_expr(&c.callee);
         });
         self.unparse_turbofish(&c.type_args);
         self.unparse_call_args(&c.args, c.has_trailing_comma);
@@ -2412,7 +2412,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_cast(&mut self, c: &CastExpr) {
         self.with_parens_if(!binds_tighter_than(&c.expr, OperandSlot::Cast), |s| {
-            s.unparse_expr(&c.expr)
+            s.unparse_expr(&c.expr);
         });
         self.output.push_str(" as ");
         self.unparse_type(&c.target_type);

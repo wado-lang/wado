@@ -30,6 +30,12 @@ type C = Color;
 type M = Perm;
 type S = Shape;
 
+// A generic newtype materializes per instantiation, after synthesis has run, so
+// it carries neither the root's `type_name` nor a `ReflectNewtype` of its own.
+// Claiming either for it would name a method nothing generates; it inherits
+// both from its base, like every other structure fact.
+type Wrapped<T> = Point;
+
 trait Describe {
     fn describe(&self) -> String;
 }
@@ -85,6 +91,12 @@ test "a variant newtype reflects the base's cases" {
         names = names + c.name();
     }
     assert names == "DotLine";
+}
+
+test "a generic newtype reflects through its base" {
+    let w = Point { x: 1, y: 2 } as Wrapped<i32>;
+    let d = w.describe();
+    assert d == "Point.x.y";
 }
 
 // Identity is not inherited: a newtype names itself, while the structure above

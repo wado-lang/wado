@@ -872,7 +872,11 @@ fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
         ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
         ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
         ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
-        ResolvedType::Newtype { .. } => Some(CompilerItem::ReflectNewtype),
+        // Only a declared one: a generic newtype instance carries no
+        // synthesized `ReflectNewtype`, so it reflects through its base.
+        ResolvedType::Newtype { type_args, .. } if type_args.is_empty() => {
+            Some(CompilerItem::ReflectNewtype)
+        }
         ResolvedType::GenericInstance { def, .. } => {
             let name = &tt.def_name(*def).to_string();
             let module_source = &tt.def_module(*def).clone();
