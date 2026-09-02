@@ -209,6 +209,19 @@ struct GaleFile {
     pieces: Vec<Piece>,
 }
 
+/// The source of a file both sides accept, or `None` when either rejects it.
+/// Gale's verdict comes first, so a file it rejected is never read.
+fn accepted_source(path: &str, theirs: &GaleFile) -> Option<String> {
+    if theirs.diagnostics != 0 {
+        return None;
+    }
+    let source = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
+    wado_compiler::parse(&source)
+        .errors
+        .is_empty()
+        .then_some(source)
+}
+
 pub fn run(mut parser: lexopt::Parser) {
     let mut emit_corpus: Option<String> = None;
     let mut compare: Option<String> = None;
@@ -442,11 +455,10 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
         let Some(theirs) = gale.get(path) else {
             panic!("the Gale side dumped nothing for '{path}' — the two corpora differ");
         };
-        let source = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
-        if theirs.diagnostics != 0 || !wado_compiler::parse(&source).errors.is_empty() {
+        let Some(source) = accepted_source(path, theirs) else {
             skipped += 1;
             continue;
-        }
+        };
         compared += 1;
         let gale_pieces = to_byte_offsets(&source, &theirs.pieces);
         let (found, refined) = diverge(path, &source, &compiler_pieces(&source), &gale_pieces);
