@@ -1,0 +1,15 @@
+// Which pair of words a 128-bit literal has to fit is how the value is stored,
+// so a newtype over `i128` is that pair too. Reading the cast target's name
+// instead of its representation skipped the literal path entirely, and an
+// oversized literal went through `Signed` with no diagnostic while the same
+// literal cast to `i128` was rejected.
+
+type Signed = i128;
+
+test "an oversized literal is rejected through a newtype over i128" {
+    let x = 170141183460469231731687303715884105728 as Signed;
+    assert `${x:?}` != "";
+}
+
+__DATA__
+{"compile_error": "invalid core:prelude/int128.wado/i128 literal: 170141183460469231731687303715884105728"}

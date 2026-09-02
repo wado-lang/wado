@@ -3281,10 +3281,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
-        let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
+        //
+        // Which pair of words the literal has to fit is how the value is
+        // stored, so the representation answers: `type Signed = i128` is that
+        // pair too, and reading the name instead let an oversized literal
+        // through it with no diagnostic. The cast still yields `target_type`.
+        let repr_target = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(target_type);
+        let struct_name = match self.tysys.type_table.borrow().get(repr_target).clone() {
             ResolvedType::Struct { .. } => {
                 let tt = self.tysys.type_table.borrow();
-                tt.nominal_def(target_type).map(|def| {
+                tt.nominal_def(repr_target).map(|def| {
                     (
                         FqTypeName::declared(tt.defs(), def),
                         tt.def_name(def).to_string(),
