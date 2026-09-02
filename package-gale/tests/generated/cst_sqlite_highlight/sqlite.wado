@@ -1143,24 +1143,23 @@ pub struct HighlightVisitor {
     pub captures: List<HighlightCapture>,
 }
 
-fn capture_id_of(names: &mut List<String>, classes: &mut List<String>, capture: &String) -> i32 {
+fn name_index(names: &List<String>, value: &String) -> i32 {
     for let mut i = 0; i < names.len(); i += 1 {
-        if names[i] == *capture {
-            return i;
-        }
-    }
-    classes.push(class_text(capture));
-    names.push(*capture);
-    return names.len() - 1;
-}
-
-fn rule_id_of(rule_names: &List<String>, name: &String) -> i32 {
-    for let mut i = 0; i < rule_names.len(); i += 1 {
-        if rule_names[i] == *name {
+        if names[i] == *value {
             return i;
         }
     }
     return -1;
+}
+
+fn capture_id_of(names: &mut List<String>, classes: &mut List<String>, capture: &String) -> i32 {
+    let found = name_index(names, capture);
+    if found >= 0 {
+        return found;
+    }
+    classes.push(class_text(capture));
+    names.push(*capture);
+    return names.len() - 1;
 }
 
 impl HighlightVisitor {
@@ -1177,7 +1176,7 @@ impl HighlightVisitor {
         }
         let mut overrides_by_kind: List<List<RuleCapture>> = [];
         for let ov of &mapping.overrides {
-            let rule_id = rule_id_of(&mapping.rule_names, &ov.rule_name);
+            let rule_id = name_index(&mapping.rule_names, &ov.rule_name);
             if rule_id < 0 {
                 continue;
             }

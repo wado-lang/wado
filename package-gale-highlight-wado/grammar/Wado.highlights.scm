@@ -63,15 +63,15 @@
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
 ; `.method()`, and `.field` with a struct literal's and a pattern's field name.
-; A member name is a name whichever word it is: `memberName` accepts ~45 of
-; them, keywords included, so the whole rule carries the capture and the
-; compiler reads every one of them through its ordinary name path.
+; A member name is a name whichever word it is, and `memberName` accepts ~45 of
+; them, keywords included. The whole rule carries the capture: the compiler
+; reads every one of those words through its ordinary name path.
 (methodName) @function.method
 (fieldName) @property
 ; A `::` segment's IDENTIFIER stays uncoloured: `Option::None` and `Foo::new`
-; are one shape that only name resolution splits. Its contextual keywords are
-; names all the same, and `Instant::from(x)` is the shape every `From` impl is
-; called through. Only the words `identifier` holds reach a segment.
+; are one shape that only name resolution splits. Its keywords are names all
+; the same, and `Instant::from(x)` is the shape every `From` impl is called
+; through. Only the words `identifier` accepts can appear in a segment.
 (pathSegment "from" @variable)
 (pathSegment "of" @variable)
 (pathSegment "type" @variable)
@@ -92,7 +92,6 @@
 ; in, painting every type name and enum case a variable.
 (identifier "from" @variable)
 (identifier "of" @variable)
-(identifier "extends" @variable)
 (identifier "type" @variable)
 (identifier "matches" @variable)
 (identifier "stores" @variable)
@@ -111,6 +110,7 @@
 (identifier "test" @variable)
 (identifier "do" @variable)
 (identifier "task" @variable)
+(identifier "extends" @variable)
 
 ; Operators, matching the compiler's `is_highlight_operator` set. `&` / `|`
 ; (references, unions, closure params) and `::` / `?` / `..` / `...` double as

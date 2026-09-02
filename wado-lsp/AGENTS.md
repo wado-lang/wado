@@ -50,8 +50,8 @@ keyword after a `.` lex as keywords and are read as names (`let type = 1`,
 category, so every other token keeps the role its lexing gives it.
 
 Only the parse can answer this. `type Alias = i32;` and `let type = 1;` spell
-the same token the same way in the same position, and a name binds no node for
-the walk to find it by.
+the same token the same way in the same position, and no AST node records which
+reading it got.
 
 A field name is in `AstSpans::field_names`, which outranks symbol resolution
 rather than being refined by it: the shorthand `{ state }` resolves to the

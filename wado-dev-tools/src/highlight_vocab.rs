@@ -252,23 +252,20 @@ pub fn check() -> Vec<Drift> {
         }
     }
 
-    // A name position on one side and a keyword on the other is a parse gap,
-    // and the corpus cannot report it: the file the grammar rejects is dropped
-    // from the comparison rather than compared.
-    let names: [(&str, Vec<&str>); 2] = [
-        ("identifier", NAME_KEYWORDS.to_vec()),
-        (
-            "memberName",
-            KEYWORDS.iter().map(|(text, _)| *text).collect(),
-        ),
-    ];
-    for (rule, words) in &names {
+    // A name on one side and a keyword on the other is a parse gap the corpus
+    // cannot report: the file the grammar rejects is dropped from the
+    // comparison rather than compared.
+    let member_names: Vec<&str> = KEYWORDS.iter().map(|(text, _)| *text).collect();
+    for (rule, words) in [
+        ("identifier", NAME_KEYWORDS),
+        ("memberName", &member_names[..]),
+    ] {
         let accepted = rule_literals(&grammar, rule);
         for text in words {
             if !accepted.iter().any(|literal| literal == text) {
                 drift.push(Drift::MissingFromNameRule {
                     text: (*text).to_string(),
-                    rule: (*rule).to_string(),
+                    rule: rule.to_string(),
                 });
             }
         }

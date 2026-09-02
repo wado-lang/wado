@@ -8796,10 +8796,8 @@ line 2
         );
     }
 
-    /// Which occurrences of a contextual keyword read as keywords and which as
-    /// names is the parse's verdict, so the parse records it. Nothing
-    /// downstream can re-derive it: `type Alias` and `let type` put the same
-    /// token in the same shape of statement.
+    /// The parse records its reading because nothing downstream can re-derive
+    /// it: `type Alias` and `let type` put the same token in the same shape.
     #[test]
     fn contextual_keyword_readings_are_recorded() {
         let source = concat!(

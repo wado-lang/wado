@@ -46,10 +46,10 @@ name resolution, which no context-free grammar has.
 A `::` segment naming an identifier stays uncoloured for the same reason.
 `Option::None` and `Foo::new` are one shape to the grammar, and the call's `(`
 sits outside the path rule, so it cannot tell a variant case from a static
-method. A segment spelled with a contextual keyword is a name all the same, so those
-words are captured there: `Instant::from(x)` is the shape every `From` impl is
-called through. `.method()` is not the same case: there the grammar matches the
-`(` alongside the name, so the call is certain.
+method. A segment spelled with a contextual keyword is a name all the same, so
+those words are captured there: `Instant::from(x)` is the shape every `From`
+impl is called through. `.method()` is not the same case: there the grammar
+matches the `(` alongside the name, so the call is certain.
 
 A dotted capture like `constant.builtin` becomes `class="constant builtin"`.
 See [`example/standalone.wado`](./example/standalone.wado) for a full styled

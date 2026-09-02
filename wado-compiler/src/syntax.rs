@@ -244,11 +244,10 @@ pub const CONTEXTUAL_KEYWORDS: &[(&str, KeywordCategory)] = &[
     ("self", KeywordCategory::Constant),
 ];
 
-/// Keywords the parser also accepts as a name, wherever it expects one:
-/// `let type = 1`, `fn from(…)`. [`crate::token::TokenKind::as_ident_name`] is
-/// the parser's side of this list, and `contextual_name_keywords_match_the_registry`
-/// holds the two together. Every keyword is accepted as a *member* name
-/// (`x.match`), which needs no list.
+/// Keywords the parser also accepts as a name (`let type = 1`), which
+/// [`crate::token::TokenKind::as_ident_name`] decides and
+/// `contextual_name_keywords_match_the_registry` holds to this list. A *member*
+/// name (`x.match`) takes any keyword, so it needs none.
 pub const NAME_KEYWORDS: &[&str] = &["flags", "type", "of", "from", "extends"];
 
 /// Spellings of every keyword (real + contextual) in the given category.
