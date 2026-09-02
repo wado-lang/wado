@@ -19,10 +19,10 @@
 //!    highlights as one — the spellings that double as punctuation (`&`, `|`,
 //!    `::`, `?`, `..`, `...`) stay uncoloured on both sides.
 //! 5. Every keyword the parser accepts as a name is a name in `Wado.g4` too:
-//!    `NAME_KEYWORDS` under `identifier`, and every keyword under `memberName`,
-//!    which is where a `.name` goes. It is one-directional: the grammar
-//!    accepts more words as names than the parser does, and `check-grammar`
-//!    owns that half.
+//!    `NAME_KEYWORDS` under `identifier`, and every keyword — contextual ones
+//!    included — under `memberName`, which is where a `.name` goes. It is
+//!    one-directional: the grammar accepts more words as names than the parser
+//!    does, and `check-grammar` owns that half.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -250,7 +250,10 @@ pub fn check() -> Vec<Drift> {
     // A name on one side and a keyword on the other is a parse gap the corpus
     // cannot report: the file the grammar rejects is dropped from the
     // comparison rather than compared.
-    let member_names: Vec<&str> = KEYWORDS.iter().map(|(text, _)| *text).collect();
+    // Contextual keywords included: they lex as identifiers for the compiler
+    // and as literal tokens for the grammar, so `x.resume` needs the rule to
+    // spell them out.
+    let member_names: Vec<&str> = keywords.iter().map(|(text, _)| *text).collect();
     for (rule, words) in [
         ("identifier", NAME_KEYWORDS),
         ("memberName", &member_names[..]),

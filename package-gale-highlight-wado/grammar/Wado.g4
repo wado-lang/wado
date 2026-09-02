@@ -301,7 +301,7 @@ memberName
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'stores' | 'true' | 'false' | 'null' | 'trap' | 'forward'
-    | 'test' | 'do' | 'task' | 'extends' | 'internal'
+    | 'test' | 'do' | 'task' | 'extends' | 'internal' | 'resume' | 'self'
     ;
 
 block

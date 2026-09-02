@@ -63,20 +63,30 @@
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
 ; `.method()`, and `.field` with a struct literal's and a pattern's field name.
-; A member name is a name whichever word it is, and `memberName` accepts ~45 of
+; A member name is a name whichever word it is, and `memberName` accepts ~47 of
 ; them, keywords included. The whole rule carries the capture: the compiler
-; reads every one of those words through its ordinary name path.
+; reads every one of those words through its ordinary name path. `self` is the
+; exception it reads lexically, wherever it stands.
+(fieldName "self" @constant.builtin)
+(methodName "self" @constant.builtin)
 (methodName) @function.method
 (fieldName) @property
 ; A `::` segment's IDENTIFIER stays uncoloured: `Option::None` and `Foo::new`
 ; are one shape that only name resolution splits. Its keywords are names all
 ; the same, and `Instant::from(x)` is the shape every `From` impl is called
-; through. Only the words `identifier` accepts can appear in a segment.
+; through. Listed are the words the compiler accepts as a segment: `identifier`
+; holds the ones that lex as keywords, and the rest lex as identifiers there.
 (pathSegment "from" @variable)
 (pathSegment "of" @variable)
 (pathSegment "type" @variable)
 (pathSegment "flags" @variable)
 (pathSegment "extends" @variable)
+(pathSegment "test" @variable)
+(pathSegment "do" @variable)
+(pathSegment "task" @variable)
+(pathSegment "trap" @variable)
+(pathSegment "forward" @variable)
+(pathSegment "resume" @variable)
 ; An interpolation holds ordinary code, so its names take the classes the rules
 ; above give them and nothing more. Painting the rest `@variable` would colour
 ; inside a template what the same name is left plain outside one.
