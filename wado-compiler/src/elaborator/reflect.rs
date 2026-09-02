@@ -40,7 +40,6 @@ pub(super) struct ScalarReflectSpec {
     value_method_item: CompilerItem,
     from_method_item: CompilerItem,
     members_method_item: CompilerItem,
-    wire_name_policy_item: CompilerItem,
     member_struct_item: CompilerItem,
     /// The `Members` associated-type name, read off a generic derivation's
     /// bound to source the member pack's arity.
@@ -57,7 +56,6 @@ impl ScalarReflectSpec {
         value_method_item: CompilerItem::ReflectEnumDiscriminant,
         from_method_item: CompilerItem::ReflectEnumFromDiscriminant,
         members_method_item: CompilerItem::ReflectEnumMembers,
-        wire_name_policy_item: CompilerItem::ReflectEnumWireNamePolicy,
         member_struct_item: CompilerItem::ReflectEnumCase,
         members_assoc: crate::synthesis::traits::REFLECT_MEMBERS_ASSOC,
         value_type: TypeTable::I32,
@@ -69,7 +67,6 @@ impl ScalarReflectSpec {
         value_method_item: CompilerItem::ReflectFlagsBits,
         from_method_item: CompilerItem::ReflectFlagsFromBits,
         members_method_item: CompilerItem::ReflectFlagsMembers,
-        wire_name_policy_item: CompilerItem::ReflectFlagsWireNamePolicy,
         member_struct_item: CompilerItem::ReflectFlagsBit,
         members_assoc: crate::synthesis::traits::REFLECT_MEMBERS_ASSOC,
         value_type: TypeTable::U64,
@@ -88,7 +85,6 @@ impl ScalarReflectSpec {
             value: items.method_name(self.value_method_item).to_string(),
             from: items.method_name(self.from_method_item).to_string(),
             members: items.method_name(self.members_method_item).to_string(),
-            wire_name_policy: items.method_name(self.wire_name_policy_item).to_string(),
         }
     }
 }
@@ -101,7 +97,6 @@ struct StructMethods {
     from_fields: String,
     defaults: String,
     empty_slots: String,
-    wire_name_policy: String,
 }
 
 impl StructMethods {
@@ -120,9 +115,6 @@ impl StructMethods {
             empty_slots: items
                 .method_name(CompilerItem::ReflectStructEmptySlots)
                 .to_string(),
-            wire_name_policy: items
-                .method_name(CompilerItem::ReflectStructWireNamePolicy)
-                .to_string(),
         }
     }
 
@@ -132,7 +124,6 @@ impl StructMethods {
             &self.from_fields,
             &self.defaults,
             &self.empty_slots,
-            &self.wire_name_policy,
         ]
         .into_iter()
         .any(|name| name == method)
@@ -143,7 +134,6 @@ impl StructMethods {
 struct VariantMethods {
     discriminant: String,
     cases: String,
-    wire_name_policy: String,
 }
 
 impl VariantMethods {
@@ -156,14 +146,11 @@ impl VariantMethods {
             cases: items
                 .method_name(CompilerItem::ReflectVariantMembers)
                 .to_string(),
-            wire_name_policy: items
-                .method_name(CompilerItem::ReflectVariantWireNamePolicy)
-                .to_string(),
         }
     }
 
     fn declares(&self, method: &str) -> bool {
-        [&self.discriminant, &self.cases, &self.wire_name_policy]
+        [&self.discriminant, &self.cases]
             .into_iter()
             .any(|name| name == method)
     }
@@ -174,19 +161,13 @@ struct ScalarMethods {
     value: String,
     from: String,
     members: String,
-    wire_name_policy: String,
 }
 
 impl ScalarMethods {
     fn declares(&self, method: &str) -> bool {
-        [
-            &self.value,
-            &self.from,
-            &self.members,
-            &self.wire_name_policy,
-        ]
-        .into_iter()
-        .any(|name| name == method)
+        [&self.value, &self.from, &self.members]
+            .into_iter()
+            .any(|name| name == method)
     }
 }
 
@@ -195,7 +176,6 @@ pub(super) enum ReflectDispatch {
     Root,
     Struct,
     Variant,
-    Newtype,
     Scalar(ScalarReflectSpec),
 }
 
@@ -305,11 +285,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             tt.make_tuple(slots)
         } else if method == methods.members {
             self.payload_members_ty(CompilerItem::ReflectStructField, self_ty, &field_types)
-        } else if method == methods.wire_name_policy {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_enum(CompilerItem::CaseStyle)
         } else {
             unreachable!("is_reflect_trait_call admits only the trait's methods")
         };
@@ -394,9 +369,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve `ReflectStruct::<T>::method()` where `T` is a generic type parameter
-    /// (inside an `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: …>` derivation). The
-    /// value-free members (`type_name` / `wire_name_policy`) resolve to their
-    /// fixed return types; `members()` resolves to the constructor-mapped
+    /// (inside an `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: …>` derivation).
+    /// `members()` resolves to the constructor-mapped
     /// member pack `[..StructField<T, F>]` read off `T`'s `ReflectStruct<FieldTypes = [..F]>`
     /// bound. Each is recorded as a type-param-receiver dispatch so
     /// monomorphization redirects it to the concrete struct's synthesized
@@ -427,12 +401,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        let return_type = if method == methods.wire_name_policy {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_enum(CompilerItem::CaseStyle)
-        } else if method == methods.defaults || method == methods.empty_slots {
+        let return_type = if method == methods.defaults || method == methods.empty_slots {
             let Some(slots_ty) =
                 self.struct_defaults_bound_ty(type_param_name, reflect_trait_name.base_name())
             else {
@@ -877,35 +846,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.is_reflect_variant_trait_call(prefix, method) {
             return Some(ReflectDispatch::Variant);
         }
-        if self.is_reflect_newtype_trait_call(prefix, method) {
-            return Some(ReflectDispatch::Newtype);
-        }
         [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS]
             .into_iter()
             .find(|spec| self.is_reflect_scalar_trait_call(*spec, prefix, method))
             .map(ReflectDispatch::Scalar)
     }
 
-    /// Whether `prefix::method` names `ReflectNewtype::<T>::wire_name_policy`.
-    /// Same scope discipline as [`Self::is_reflect_trait_call`]. `Base` is an
-    /// associated type, not a call, so the kind declares one method here.
-    fn is_reflect_newtype_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(super::trait_query::OnBoundTrait::ReflectNewtype)
-        {
-            return false;
-        }
-        let tt = self.tysys.type_table.borrow();
-        method
-            == tt
-                .compiler_items()
-                .method_name(CompilerItem::ReflectNewtypeWireNamePolicy)
-    }
-
-    /// Whether `prefix::method` names `Reflect::<T>::type_name`. Same scope
-    /// discipline as [`Self::is_reflect_trait_call`].
+    /// Whether `prefix::method` names one of `Reflect::<T>`'s members —
+    /// `type_name` or `wire_name_policy`. Same scope discipline as
+    /// [`Self::is_reflect_trait_call`].
     fn is_reflect_root_trait_call(&self, prefix: &str, method: &str) -> bool {
         if self
             .tysys
@@ -915,65 +864,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         let tt = self.tysys.type_table.borrow();
-        method
-            == tt
-                .compiler_items()
-                .method_name(CompilerItem::ReflectTypeName)
+        let items = tt.compiler_items();
+        method == items.method_name(CompilerItem::ReflectTypeName)
+            || method == items.method_name(CompilerItem::ReflectWireNamePolicy)
     }
 
-    /// Resolve `Reflect::<T>::type_name()` to `T^Reflect::type_name`. The root
-    /// asks nothing of `T`'s shape, so every kind answers and a generic subject
-    /// needs no pack bound.
+    /// Resolve a `Reflect::<T>` member to `T^Reflect::<method>`. The root reads
+    /// a fact about `T` itself rather than walking anything under it — its name,
+    /// its wire-name policy — so there is no shape to check, every kind answers,
+    /// and a generic subject needs no pack bound.
     pub(super) fn resolve_reflect_root_static_call(
         &mut self,
-        self_ty: TypeId,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
-        let string_type = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_struct(CompilerItem::String);
-        self.resolve_shapeless_reflect_static_call(
-            CompilerItem::Reflect,
-            string_type,
-            self_ty,
-            static_call,
-            ctx,
-        )
-    }
-
-    /// Resolve `ReflectNewtype::<T>::wire_name_policy()`. The kind with no
-    /// members asks nothing of `T` beyond being a newtype, which the trait
-    /// prefix already said.
-    pub(super) fn resolve_reflect_newtype_static_call(
-        &mut self,
-        self_ty: TypeId,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
-        let case_style = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_enum(CompilerItem::CaseStyle);
-        self.resolve_shapeless_reflect_static_call(
-            CompilerItem::ReflectNewtype,
-            case_style,
-            self_ty,
-            static_call,
-            ctx,
-        )
-    }
-
-    /// A reflection static call that reads a fact about `T` itself rather than
-    /// walking anything under it, so there is no shape to check and no pack to
-    /// bind: the trait names the impl, `result` is what the method answers.
-    fn resolve_shapeless_reflect_static_call(
-        &mut self,
-        trait_item: CompilerItem,
-        result: TypeId,
         self_ty: TypeId,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
@@ -983,12 +884,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_fq(trait_item);
+        let (trait_name, is_policy) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_fq(CompilerItem::Reflect),
+                method == items.method_name(CompilerItem::ReflectWireNamePolicy),
+            )
+        };
+        let result = {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            if is_policy {
+                tt.make_compiler_enum(CompilerItem::CaseStyle)
+            } else {
+                tt.make_compiler_struct(CompilerItem::String)
+            }
+        };
 
         let subject = self.tysys.type_table.borrow().get(self_ty).clone();
         if let ResolvedType::TypeParam { name, .. } = subject {
@@ -1131,11 +1042,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let return_type = if is_discriminant {
             TypeTable::I32
-        } else if method == methods.wire_name_policy {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_enum(CompilerItem::CaseStyle)
         } else if method == methods.cases {
             self.payload_members_ty(CompilerItem::ReflectVariantCase, self_ty, &payloads)
         } else {
@@ -1179,12 +1085,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let is_discriminant = method == methods.discriminant;
-        let return_type = if method == methods.wire_name_policy {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_enum(CompilerItem::CaseStyle)
-        } else if is_discriminant {
+        let return_type = if is_discriminant {
             TypeTable::I32
         } else if method == methods.cases {
             let Some(members_ty) = self.payload_member_pack_bound_ty(
@@ -1482,15 +1383,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         let methods = spec.methods(&self.tysys.type_table.borrow());
 
-        if *method == methods.wire_name_policy {
-            self.reject_reflect_metadata_args(static_call, ctx)
-                .then(|| {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_compiler_enum(CompilerItem::CaseStyle)
-                })
-        } else if *method == methods.members {
+        if *method == methods.members {
             if !self.reject_reflect_metadata_args(static_call, ctx) {
                 return None;
             }

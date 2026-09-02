@@ -1,6 +1,6 @@
-// `wire_name_policy()` is on every reflect kind, not just struct: a library
-// derivation that resolves wire names for a variant / enum / flags needs the
-// type-level `#[wire(name_policy)]` the same way it does for a struct.
+// `#[wire(name_policy)]` says the same thing on every kind, so the root states
+// it once: `Reflect::<T>::wire_name_policy()` answers whatever kind `T` is. A
+// library derivation reads the policy without knowing which kind it holds.
 
 #[wire(name_policy = "camelCase")]
 variant Shape {
@@ -32,15 +32,26 @@ flags Plainflags {
     only_bit,
 }
 
-test "wire_name_policy is exposed by every reflect kind" {
-    assert ReflectVariant::<Shape>::wire_name_policy() == CaseStyle::Camel;
-    assert ReflectVariant::<Plain>::wire_name_policy() == CaseStyle::Identity;
+#[wire(name_policy = "PascalCase")]
+struct Boxed {
+    inner: i32,
+}
 
-    assert ReflectEnum::<Color>::wire_name_policy() == CaseStyle::Kebab;
-    assert ReflectEnum::<Bare>::wire_name_policy() == CaseStyle::Identity;
+#[wire(name_policy = "snake_case")]
+type Wrapped = i32;
 
-    assert ReflectFlags::<Perms>::wire_name_policy() == CaseStyle::ScreamingSnake;
-    assert ReflectFlags::<Plainflags>::wire_name_policy() == CaseStyle::Identity;
+test "the root answers the wire-name policy for every kind" {
+    assert Reflect::<Shape>::wire_name_policy() == CaseStyle::Camel;
+    assert Reflect::<Plain>::wire_name_policy() == CaseStyle::Identity;
+
+    assert Reflect::<Color>::wire_name_policy() == CaseStyle::Kebab;
+    assert Reflect::<Bare>::wire_name_policy() == CaseStyle::Identity;
+
+    assert Reflect::<Perms>::wire_name_policy() == CaseStyle::ScreamingSnake;
+    assert Reflect::<Plainflags>::wire_name_policy() == CaseStyle::Identity;
+
+    assert Reflect::<Boxed>::wire_name_policy() == CaseStyle::Pascal;
+    assert Reflect::<Wrapped>::wire_name_policy() == CaseStyle::Snake;
 }
 
 __DATA__

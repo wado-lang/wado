@@ -658,7 +658,7 @@ fn generate_struct_reflect_methods(
         receiver,
         env.case_style_type,
         name_policy,
-        reflect_trait_name,
+        &env.root_trait_name,
         &env.wire_name_policy_method,
         span,
     );
@@ -798,7 +798,7 @@ impl ReflectSynthEnv {
                 .method_name(CompilerItem::ReflectStructEmptySlots)
                 .to_string(),
             wire_name_policy_method: items
-                .method_name(CompilerItem::ReflectStructWireNamePolicy)
+                .method_name(CompilerItem::ReflectWireNamePolicy)
                 .to_string(),
         }
     }
@@ -1520,7 +1520,7 @@ impl ReflectVariantSynthEnv {
                 .to_string(),
             case_style_type,
             wire_name_policy_method: items
-                .method_name(CompilerItem::ReflectVariantWireNamePolicy)
+                .method_name(CompilerItem::ReflectWireNamePolicy)
                 .to_string(),
         }
     }
@@ -1612,7 +1612,7 @@ fn generate_variant_reflect_methods(
         &target.receiver,
         env.case_style_type,
         &target.wire_name_policy,
-        variant_trait_name,
+        &env.root_trait_name,
         &env.wire_name_policy_method,
         span,
     );
@@ -2168,16 +2168,15 @@ enum ScalarKind {
 }
 
 /// The compiler items one payload-free reflect kind names. `ReflectEnum` and
-/// `ReflectFlags` declare the same five members — differing only in the scalar
-/// they bridge through (`i32` discriminant / `u64` bits) — so one env serves
-/// both, as `ScalarReflectSpec` does on the elaborator side.
+/// `ReflectFlags` declare the same members — differing only in the scalar they
+/// bridge through (`i32` discriminant / `u64` bits) — so one env serves both,
+/// as `ScalarReflectSpec` does on the elaborator side.
 struct ScalarReflectItems {
     kind: ScalarKind,
     member_struct: CompilerItem,
     value: CompilerItem,
     from_value: CompilerItem,
     members: CompilerItem,
-    wire_name_policy: CompilerItem,
 }
 
 const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
@@ -2186,7 +2185,6 @@ const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
     value: CompilerItem::ReflectEnumDiscriminant,
     from_value: CompilerItem::ReflectEnumFromDiscriminant,
     members: CompilerItem::ReflectEnumMembers,
-    wire_name_policy: CompilerItem::ReflectEnumWireNamePolicy,
 };
 
 const REFLECT_FLAGS_ITEMS: ScalarReflectItems = ScalarReflectItems {
@@ -2195,7 +2193,6 @@ const REFLECT_FLAGS_ITEMS: ScalarReflectItems = ScalarReflectItems {
     value: CompilerItem::ReflectFlagsBits,
     from_value: CompilerItem::ReflectFlagsFromBits,
     members: CompilerItem::ReflectFlagsMembers,
-    wire_name_policy: CompilerItem::ReflectFlagsWireNamePolicy,
 };
 
 /// Module-level types and method names resolved once from the compiler-item
@@ -2235,7 +2232,9 @@ impl ScalarReflectSynthEnv {
             value_method: items.method_name(kind.value).to_string(),
             from_value_method: items.method_name(kind.from_value).to_string(),
             members_method: items.method_name(kind.members).to_string(),
-            wire_name_policy_method: items.method_name(kind.wire_name_policy).to_string(),
+            wire_name_policy_method: items
+                .method_name(CompilerItem::ReflectWireNamePolicy)
+                .to_string(),
         }
     }
 }
@@ -2314,7 +2313,7 @@ fn generate_enum_reflect_methods(
         &target.receiver,
         env.case_style_type,
         &target.wire_name_policy,
-        enum_trait_name,
+        &env.root_trait_name,
         &env.wire_name_policy_method,
         span,
     );
@@ -2593,7 +2592,7 @@ fn generate_newtype_reflect_impls(
             items.trait_fq(CompilerItem::Reflect),
             items.method_name(CompilerItem::ReflectTypeName).to_string(),
             items
-                .method_name(CompilerItem::ReflectNewtypeWireNamePolicy)
+                .method_name(CompilerItem::ReflectWireNamePolicy)
                 .to_string(),
             newtype_trait_name.canonical().expect(KEYED),
         )
@@ -2618,7 +2617,7 @@ fn generate_newtype_reflect_impls(
             &target.receiver,
             case_style_type,
             &target.wire_name_policy,
-            newtype_trait_name,
+            &root_trait_name,
             &policy_method,
             target.span,
         );
@@ -2788,7 +2787,7 @@ fn generate_flags_reflect_methods(
         &target.receiver,
         env.case_style_type,
         &target.wire_name_policy,
-        flags_trait_name,
+        &env.root_trait_name,
         &env.wire_name_policy_method,
         span,
     );

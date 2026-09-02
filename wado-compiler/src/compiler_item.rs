@@ -394,6 +394,10 @@ pub enum CompilerItem {
     ListFromTuple,
     /// `Reflect::type_name` — the declaration's name, for every kind.
     ReflectTypeName,
+    /// `Reflect::wire_name_policy` — the declaration's `#[wire(name_policy)]`.
+    /// Every kind carries the attribute and it says the same thing on each, so
+    /// the root states it once.
+    ReflectWireNamePolicy,
     /// `ReflectStruct::members` — the per-field member tuple.
     ReflectStructMembers,
     /// `ReflectStruct::from_fields` — assemble a struct from its field-value tuple.
@@ -402,8 +406,6 @@ pub enum CompilerItem {
     ReflectStructDefaults,
     /// `ReflectStruct::empty_slots` — `[..Option<F>]` with every slot empty.
     ReflectStructEmptySlots,
-    /// `ReflectStruct::wire_name_policy` — the struct's `#[wire(name_policy)]` policy.
-    ReflectStructWireNamePolicy,
     /// `Member::name` — the member's source field name.
     MemberName,
     /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
@@ -412,8 +414,6 @@ pub enum CompilerItem {
     ReflectVariantDiscriminant,
     /// `ReflectVariant::members` — the per-case member tuple.
     ReflectVariantMembers,
-    /// `ReflectVariant::wire_name_policy` — the variant's `#[wire(name_policy)]`.
-    ReflectVariantWireNamePolicy,
     /// `ReflectEnum::discriminant` — the value's tag as `i32`.
     ReflectEnumDiscriminant,
     /// `ReflectEnum::from_discriminant` — the reverse bridge; unknown
@@ -421,8 +421,6 @@ pub enum CompilerItem {
     ReflectEnumFromDiscriminant,
     /// `ReflectEnum::members` — the per-case member list.
     ReflectEnumMembers,
-    /// `ReflectEnum::wire_name_policy` — the enum's `#[wire(name_policy)]`.
-    ReflectEnumWireNamePolicy,
     /// `ReflectFlags::bits` — the value's bits, u64-normalized.
     ReflectFlagsBits,
     /// `ReflectFlags::from_bits` — the reverse bridge; unknown bits
@@ -430,12 +428,6 @@ pub enum CompilerItem {
     ReflectFlagsFromBits,
     /// `ReflectFlags::members` — the per-bit member list.
     ReflectFlagsMembers,
-    /// `ReflectFlags::wire_name_policy` — the flags type's `#[wire(name_policy)]`.
-    ReflectFlagsWireNamePolicy,
-    /// `ReflectNewtype::wire_name_policy` — the newtype's own
-    /// `#[wire(name_policy)]`. The kind with no members, so this spells the
-    /// type's own name rather than renaming anything under it.
-    ReflectNewtypeWireNamePolicy,
     /// `String::with_capacity` — the buffer allocation template expansion
     /// emits and the NIR template-hoist recognises.
     StringWithCapacity,
@@ -725,25 +717,21 @@ impl CompilerItem {
         Self::ListPush,
         Self::ListFromTuple,
         Self::ReflectTypeName,
+        Self::ReflectWireNamePolicy,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
         Self::ReflectStructDefaults,
         Self::ReflectStructEmptySlots,
-        Self::ReflectStructWireNamePolicy,
         Self::MemberName,
         Self::MemberWireNameOverride,
         Self::ReflectVariantDiscriminant,
         Self::ReflectVariantMembers,
-        Self::ReflectVariantWireNamePolicy,
         Self::ReflectEnumDiscriminant,
         Self::ReflectEnumFromDiscriminant,
         Self::ReflectEnumMembers,
-        Self::ReflectEnumWireNamePolicy,
         Self::ReflectFlagsBits,
         Self::ReflectFlagsFromBits,
         Self::ReflectFlagsMembers,
-        Self::ReflectFlagsWireNamePolicy,
-        Self::ReflectNewtypeWireNamePolicy,
         Self::StringWithCapacity,
         Self::StringPushStr,
         Self::StringPushChar,
@@ -923,11 +911,11 @@ impl CompilerItem {
             Self::ListPush => "list_push",
             Self::ListFromTuple => "list_from_tuple",
             Self::ReflectTypeName => "reflect_type_name",
+            Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
             Self::ReflectStructDefaults => "reflect_struct_defaults",
             Self::ReflectStructEmptySlots => "reflect_struct_empty_slots",
-            Self::ReflectStructWireNamePolicy => "reflect_struct_wire_name_policy",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
@@ -949,16 +937,12 @@ impl CompilerItem {
             Self::CmWaitableSetPoll => "cm_waitable_set_poll",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
             Self::ReflectVariantMembers => "reflect_variant_members",
-            Self::ReflectVariantWireNamePolicy => "reflect_variant_wire_name_policy",
             Self::ReflectEnumDiscriminant => "reflect_enum_discriminant",
             Self::ReflectEnumFromDiscriminant => "reflect_enum_from_discriminant",
             Self::ReflectEnumMembers => "reflect_enum_members",
-            Self::ReflectEnumWireNamePolicy => "reflect_enum_wire_name_policy",
             Self::ReflectFlagsBits => "reflect_flags_bits",
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
             Self::ReflectFlagsMembers => "reflect_flags_members",
-            Self::ReflectFlagsWireNamePolicy => "reflect_flags_wire_name_policy",
-            Self::ReflectNewtypeWireNamePolicy => "reflect_newtype_wire_name_policy",
             Self::StringWithCapacity => "string_with_capacity",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
@@ -1101,26 +1085,22 @@ impl CompilerItem {
             | Self::ListPush
             | Self::ListFromTuple
             | Self::ReflectTypeName
+            | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaults
             | Self::ReflectStructEmptySlots
-            | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::FormatterNew
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
-            | Self::ReflectVariantWireNamePolicy
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
             | Self::ReflectEnumMembers
-            | Self::ReflectEnumWireNamePolicy
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
-            | Self::ReflectFlagsWireNamePolicy
-            | Self::ReflectNewtypeWireNamePolicy
             | Self::StringWithCapacity
             | Self::StringPushStr
             | Self::StringPushChar
@@ -1356,25 +1336,21 @@ impl CompilerItem {
             Self::ListPush
             | Self::ListFromTuple
             | Self::ReflectTypeName
+            | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaults
             | Self::ReflectStructEmptySlots
-            | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
-            | Self::ReflectVariantWireNamePolicy
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
             | Self::ReflectEnumMembers
-            | Self::ReflectEnumWireNamePolicy
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
-            | Self::ReflectFlagsWireNamePolicy
-            | Self::ReflectNewtypeWireNamePolicy
             | Self::StringWithCapacity
             | Self::StringPushStr
             | Self::StringPushChar

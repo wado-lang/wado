@@ -65,6 +65,12 @@ internal trait Reflect {
     /// Returns the declaration's name.
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
+
+    /// The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
+    /// kind carries the attribute, and it says the same thing on each: the
+    /// root answers so a caller need not know which kind it holds.
+    #[compiler_item("reflect_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time struct introspection. The compiler synthesizes an impl for
@@ -101,10 +107,6 @@ internal trait ReflectStruct: Reflect {
     /// wire wrote this", so a repeat is visible without a second record.
     #[compiler_item("reflect_struct_empty_slots")]
     fn empty_slots() -> Self::FieldSlots;
-
-    /// The struct's `#[wire(name_policy)]` (`Identity` if none).
-    #[compiler_item("reflect_struct_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
 }
 
 /// The wire-naming policy declared by `#[wire(name_policy = "...")]` (casing
@@ -152,10 +154,6 @@ internal trait ReflectVariant: Reflect {
     /// Returns the per-case members.
     #[compiler_item("reflect_variant_members")]
     fn members() -> Self::Members;
-
-    /// The variant's `#[wire(name_policy)]` (`Identity` if none).
-    #[compiler_item("reflect_variant_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time enum introspection. The compiler synthesizes an impl for
@@ -178,10 +176,6 @@ internal trait ReflectEnum: Reflect {
     /// Returns the per-case members.
     #[compiler_item("reflect_enum_members")]
     fn members() -> Self::Members;
-
-    /// The enum's `#[wire(name_policy)]` (`Identity` if none).
-    #[compiler_item("reflect_enum_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time flags introspection. The compiler synthesizes an impl for
@@ -205,10 +199,6 @@ internal trait ReflectFlags: Reflect {
     /// Returns the per-bit members.
     #[compiler_item("reflect_flags_members")]
     fn members() -> Self::Members;
-
-    /// The flags type's `#[wire(name_policy)]` (`Identity` if none).
-    #[compiler_item("reflect_flags_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time newtype introspection. The compiler synthesizes an impl for
@@ -224,12 +214,6 @@ internal trait ReflectFlags: Reflect {
 internal trait ReflectNewtype: Reflect {
     /// The type this newtype wraps: `type UserName = String` → `String`.
     type Base;
-
-    /// The newtype's own `#[wire(name_policy)]` (`Identity` if none). The kind
-    /// with no members spells its own name: a schema keys its `$defs` entry
-    /// by it.
-    #[compiler_item("reflect_newtype_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
