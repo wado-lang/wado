@@ -278,12 +278,11 @@ path
     : IDENTIFIER ('::' IDENTIFIER)*
     ;
 
-// `memberName` is the token set; each use site wraps it in a rule naming what
-// the name *is* there, and the query captures those rather than `memberName`.
-// An override fires anywhere under its rule, so a capture on `memberName`
-// itself would reach every use site at once — including the `::` segments that
-// must stay uncoloured. Each wrapper holds one token, so no capture on it can
-// reach the argument list or type arguments beside it.
+// `memberName` is the token set. Each use site wraps it in a rule naming what
+// the name is there, and the query captures those wrappers. A capture on
+// `memberName` itself would fire under every use site at once, because an
+// override matches anywhere below its rule. Each wrapper holds one token, so
+// no capture on it reaches the argument list or type arguments beside it.
 
 // The name in `.name(...)`.
 methodName
@@ -500,11 +499,9 @@ exprPath
     : identifier ('::' (typeArgs | pathSegment))*
     ;
 
-// A `::` segment: `Option::None`'s case, `Foo::new`'s static method, or the
-// middle of a module path. Telling them apart takes name resolution — the call
-// form's `(` is a `postfixOp`, outside this rule — so the query leaves it
-// uncoloured rather than guessing, as `patternPath` and `path` already do.
-// Naming it keeps it off `memberName`, which is a field and is coloured.
+// A `::` segment: a variant case, a static method, or the middle of a module
+// path. Named so it stays off `memberName`, which is a field and is coloured;
+// nothing captures this, matching `patternPath` and `path`.
 pathSegment
     : memberName
     ;

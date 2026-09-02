@@ -334,18 +334,11 @@ struct AstSpans {
     /// recovered structurally here). Declaration and use sites share the
     /// binding's definition id, so one set covers both.
     param_ids: IndexSet<AstId>,
-    /// byte start -> class for the names the AST settles outright, kept apart
-    /// from `map` because these outrank symbol resolution rather than being
-    /// refined by it:
-    /// - the contextual keywords that double as names — `test`, `do`,
-    ///   `resume`, `task`, `trap`, and `forward` — which lex as plain
-    ///   identifiers and are only keywords where they sit. (`self` is not
-    ///   here: the language reserves it, so [`classify_token`] recognises it
-    ///   lexically.)
-    /// - a field name, which names the field even where it also reads a
-    ///   binding: the shorthand `{ state }` resolves to that binding, and
-    ///   letting the symbol win would colour it `variable` on the path that
-    ///   has a snapshot and `property` on the one that does not.
+    /// byte start -> class for the names the AST settles outright: the
+    /// contextual keywords, and the field names. Apart from `map` because
+    /// these outrank symbol resolution rather than being refined by it — a
+    /// shorthand `{ state }` resolves to the binding it reads, and the symbol
+    /// winning would colour it `variable` wherever a snapshot exists.
     overrides: IndexMap<usize, (u32, u32)>,
 }
 
@@ -410,7 +403,6 @@ impl SpanCollector {
         }
     }
 
-    /// Descend an attribute value to the objects it holds. A scalar holds none.
     fn mark_attr_value(&mut self, value: &ast::AttrValue) {
         match value {
             ast::AttrValue::Object(nested) => self.mark_attr_keys(nested),
@@ -426,9 +418,6 @@ impl SpanCollector {
         }
     }
 
-    /// A name that is the field it writes. It outranks symbol resolution: a
-    /// shorthand `{ state }` resolves to the binding it reads, and deferring to
-    /// that would colour it `variable` wherever a snapshot exists.
     fn mark_field_name(&mut self, span: Span) {
         self.spans
             .mark_override(span.start, (token_type::PROPERTY, 0));
@@ -447,8 +436,7 @@ impl AstVisitor for SpanCollector {
         {
             self.spans.mark_override(rest.keyword_span.start, KEYWORD);
         }
-        // An import attribute's keys are its object's fields, at every depth.
-        // They are not expressions, so no other walk reaches them.
+        // Attribute keys are not expressions, so no other walk reaches them.
         if let Item::Use(decl) = item
             && let Some(attributes) = &decl.attributes
         {
@@ -486,8 +474,6 @@ impl AstVisitor for SpanCollector {
         if let Expr::WithHandler(w) = expr {
             self.spans.mark_override(w.do_span.start, KEYWORD);
         }
-        // A field name is the field, not a variable — including the shorthand
-        // `{ state }`, where it is also a read but names the field first.
         if let Expr::StructLiteral(literal) = expr {
             for field in &literal.fields {
                 self.mark_field_name(field.name_span);
@@ -497,9 +483,7 @@ impl AstVisitor for SpanCollector {
     }
 
     fn visit_pattern(&mut self, pat: &ast::Pattern) {
-        // The destructuring side of the same rule: `let { x } = p` names the
-        // field first, and binds through it. A field's span starts at its
-        // name, in the `x: inner` form as much as the shorthand.
+        // A field's span starts at its name, in `x: inner` as much as `x`.
         if let ast::Pattern::Struct { fields, .. } = pat {
             for field in fields {
                 self.mark_field_name(field.span);
@@ -1040,8 +1024,7 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 1, "Tall"), token_type::TYPE);
     }
 
-    /// A struct literal's field names are properties, not the variables the
-    /// default arm made of them. Only the AST knows, so no semantics here.
+    /// Only the AST knows, so this asserts the no-semantics path.
     #[test]
     fn struct_literal_field_names_are_properties() {
         let src = "struct Gen {\n    state: i32,\n}\nfn run() {\n    let g = Gen {\n        state: 1,\n    };\n}\n";
@@ -1049,9 +1032,8 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 5, "state"), token_type::PROPERTY);
     }
 
-    /// An import attribute's keys are its object's fields, nested ones too.
-    /// They are not expressions, so only the `use` item's own walk reaches
-    /// them.
+    /// Attribute keys are not expressions, so only the `use` item's own walk
+    /// reaches them — the nested ones included.
     #[test]
     fn import_attribute_keys_are_properties() {
         let src = "use { f } from \"./m.wado\"\n    with {\n        generator: {\n            module: \"lib:gale\",\n        },\n    };\nfn run() {}\n";
@@ -1060,8 +1042,6 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 3, "module"), token_type::PROPERTY);
     }
 
-    /// An array element is an attribute value like any other, so the object
-    /// inside one carries field names too.
     #[test]
     fn import_attribute_keys_under_an_array_are_properties() {
         let src = "use { f } from \"./m.wado\"\n    with {\n        options: {\n            rules: [\n                { name: \"expr\" },\n            ],\n        },\n    };\nfn run() {}\n";
@@ -1069,7 +1049,6 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 4, "name"), token_type::PROPERTY);
     }
 
-    /// A shorthand field is the field, not the variable it reads.
     #[test]
     fn a_shorthand_struct_literal_field_is_a_property() {
         let src = "struct Gen {\n    state: i32,\n}\nfn run() {\n    let state = 1;\n    let g = Gen {\n        state,\n    };\n}\n";
@@ -1077,7 +1056,6 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 6, "state"), token_type::PROPERTY);
     }
 
-    /// The destructuring side of the same rule.
     #[test]
     fn a_struct_pattern_field_is_a_property() {
         let src = "fn run() {\n    let p = { x: 1, y: 2 };\n    let {\n        x,\n        y: renamed,\n    } = p;\n}\n";
@@ -1086,7 +1064,6 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 4, "y"), token_type::PROPERTY);
     }
 
-    /// A closure-type bound's signature is types as much as any other.
     #[test]
     fn a_closure_type_bound_signature_is_types() {
         let src =

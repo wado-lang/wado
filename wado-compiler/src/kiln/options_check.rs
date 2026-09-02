@@ -8,7 +8,6 @@
 
 use crate::ast::{AttrObject, AttrValue};
 use crate::compiler_host::{Code, Diagnostic, Severity};
-use crate::hashmap::IndexMap;
 
 use super::options::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsType};
 
@@ -37,7 +36,7 @@ pub fn validate(
     let mut diagnostics = Vec::new();
     let mut output = Vec::with_capacity(descriptor.fields.len());
 
-    let empty: AttrObject = IndexMap::default();
+    let empty = AttrObject::default();
     let (provided, path): (&AttrObject, String) = match value {
         None => (&empty, "options".to_string()),
         Some(AttrValue::Object(obj)) => (obj, "options".to_string()),
@@ -357,7 +356,7 @@ mod tests {
                 Some(CanonicalValue::Bool(false)),
             )],
         };
-        let mut obj: AttrObject = IndexMap::default();
+        let mut obj = AttrObject::default();
         obj.insert("enabled".to_string(), entry(AttrValue::Bool(true)));
         obj.insert("extra".to_string(), entry(AttrValue::Int(1)));
         let err = validate(&desc, Some(&AttrValue::Object(obj))).unwrap_err();
@@ -389,7 +388,7 @@ mod tests {
             vec![("entries".to_string(), CanonicalValue::List(vec![]))]
         );
         // Supplied array → a `List` of the element type.
-        let mut obj: AttrObject = IndexMap::default();
+        let mut obj = AttrObject::default();
         obj.insert(
             "entries".to_string(),
             entry(AttrValue::Array(vec![
@@ -409,7 +408,7 @@ mod tests {
             )]
         );
         // A wrong element type is rejected.
-        let mut obj: AttrObject = IndexMap::default();
+        let mut obj = AttrObject::default();
         obj.insert(
             "entries".to_string(),
             entry(AttrValue::Array(vec![AttrValue::Int(1)])),
@@ -422,7 +421,7 @@ mod tests {
         let desc = OptionsDescriptor {
             fields: vec![field("ratio", OptionsType::F64, None)],
         };
-        let mut obj: AttrObject = IndexMap::default();
+        let mut obj = AttrObject::default();
         obj.insert("ratio".to_string(), entry(AttrValue::Float(f64::INFINITY)));
         let err = validate(&desc, Some(&AttrValue::Object(obj))).unwrap_err();
         assert!(err.iter().any(|d| d.message.contains("must be finite")));
@@ -433,7 +432,7 @@ mod tests {
         let desc = OptionsDescriptor {
             fields: vec![field("enabled", OptionsType::Bool, None)],
         };
-        let mut obj: AttrObject = IndexMap::default();
+        let mut obj = AttrObject::default();
         obj.insert(
             "enabled".to_string(),
             entry(AttrValue::String("yes".to_string())),
@@ -467,7 +466,7 @@ mod tests {
                 None,
             )],
         };
-        let mut obj: AttrObject = IndexMap::default();
+        let mut obj = AttrObject::default();
         obj.insert(
             "rule".to_string(),
             entry(AttrValue::String("expr".to_string())),

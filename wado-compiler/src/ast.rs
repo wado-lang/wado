@@ -933,8 +933,6 @@ pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
             v.visit_id(assoc.id, assoc.span);
             v.visit_type(&assoc.ty);
         }
-        // `T: fn(i32) -> i32 with E` carries a signature the bound spells out
-        // rather than wrapping in a `Type`, so it is walked as one here.
         if let Some(signature) = &bound.fn_signature {
             walk_function_type(v, signature);
         }
@@ -1636,18 +1634,14 @@ pub enum AttrValue {
 /// An attribute object's entries, in parse order, each keyed by its name.
 pub type AttrObject = IndexMap<String, AttrEntry>;
 
-/// The value at `key`, for a reader that wants the value and not the key span
-/// stored beside it.
+/// The value at `key`, dropping the key span stored beside it.
 #[must_use]
 pub fn attr_value<'a>(object: &'a AttrObject, key: &str) -> Option<&'a AttrValue> {
     object.get(key).map(|entry| &entry.value)
 }
 
-/// One `key: value` entry of an attribute object.
-///
-/// The key's own span is what lets the highlighter — and, once `options_check`
-/// carries a file, a diagnostic — point at the key rather than at the whole
-/// `with { … }`.
+/// One `key: value` entry of an attribute object. `key_span` is what lets a
+/// reader point at the key rather than at the whole `with { … }`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttrEntry {
     pub key_span: Span,
@@ -3118,8 +3112,8 @@ pub enum Type {
     Named(NamedType),
     Generic(GenericType),
     /// Namespaced generic type like `ns::Type<T>` or `T::Assoc`. Boxed, as
-    /// `Function` is: it carries two names and two spans, and unboxed it makes
-    /// `Type` — and every enum holding one — large enough to be worth splitting.
+    /// `Function` is: two names and two spans make `Type` large enough that
+    /// every enum holding one draws `large_enum_variant`.
     NamespacedGeneric(Box<NamespacedGenericType>),
     Function(Box<FunctionType>),
     Tuple(Vec<Type>),
@@ -3573,9 +3567,8 @@ pub struct TupleTypeDecl {
     pub id: AstId,
     pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
-    /// The declared head, `[..T]`. The declaration carries no meaning beyond
-    /// anchoring the family, but keeping the type it was written as is what
-    /// lets a walk reach the `T` it binds.
+    /// The declared head, `[..T]`. Kept so a walk reaches the `T` it binds,
+    /// and so the formatter prints the name that was written.
     pub head: Type,
     pub span: Span,
 }

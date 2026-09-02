@@ -58,17 +58,16 @@
 ; context-free grammar has. `mise run check-highlight` reports what stays
 ; uncoloured, by the kind the compiler resolved it to.
 (formatSpec (IDENTIFIER) @comment)
-; `stores[b]` names a parameter, not a type — and it sits inside the `fn(…)
-; with stores[b]` type that the rule below would otherwise paint.
+; `stores[b]` names a parameter, not a type. It sits inside the `fn(…) with
+; stores[b]` type that the rule below would otherwise paint.
 (storesItem (IDENTIFIER) @variable)
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
-; `.method()` and `.field` / a struct literal's or pattern's field name. Both
-; capture their use-site wrapper, never the shared `memberName` an override
-; would reach every use site through — including the `::` segments, which go
-; through `pathSegment` and stay uncoloured because `Option::None`'s case and
-; `Foo::new`'s static method are one shape that only name resolution splits.
-; The call form is a fact, not a guess: the grammar matches its `(`.
+; `.method()`, and `.field` with a struct literal's and a pattern's field name.
+; Each captures its use-site wrapper rather than the shared `memberName`; see
+; `Wado.g4`. A `::` segment goes through `pathSegment` and nothing captures it,
+; because `Option::None` and `Foo::new` are one shape that only name resolution
+; splits. The call form is a fact instead: the grammar matches its `(`.
 ;
 ; Each wrapper also spells out the contextual keywords usable as a name; only
 ; those need listing, because they are the ones the compiler lexes as plain
@@ -87,8 +86,8 @@
 (fieldName "forward" @property)
 ; An interpolation holds ordinary code, so its names take the classes the rules
 ; above give them and nothing more. Painting the rest `@variable` would reach
-; every identifier under `${…}` — the `::` segments included — and colour
-; inside a template what the same name is left plain outside one.
+; every identifier under `${…}`, the `::` segments included, and colour inside
+; a template what the same name is left plain outside one.
 
 ; The contextual keywords the `identifier` rule also accepts as names. In that
 ; position they are not keywords — the compiler lexes them as identifiers and

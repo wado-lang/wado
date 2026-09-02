@@ -613,11 +613,11 @@ mod tests {
     }
 
     fn attr_with_generator(entries: &[(&str, AttrValue)]) -> ImportAttributes {
-        let mut gen_obj: AttrObject = IndexMap::default();
+        let mut gen_obj = AttrObject::default();
         for (k, v) in entries {
             gen_obj.insert((*k).to_string(), entry(v.clone()));
         }
-        let mut entries_map: AttrObject = IndexMap::default();
+        let mut entries_map = AttrObject::default();
         entries_map.insert("generator".to_string(), entry(AttrValue::Object(gen_obj)));
         ImportAttributes {
             entries: entries_map,

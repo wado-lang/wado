@@ -5,20 +5,16 @@
 //! the same corpus and through the same split — the compiler in-process, Gale
 //! under `wado run`, `scripts/check-highlight.sh` driving both.
 //!
-//! Both vocabularies project onto [`Class`], and the projection is where the
-//! comparison stays honest about what a context-free grammar can know. A token
-//! class is decidable from the token stream, so the grammar must carry it and
-//! any disagreement is a defect. An identifier class it may leave plain —
-//! telling a function from a variable takes name resolution — but a span it
-//! does colour has to agree, so the two sides naming one differently is a
-//! defect too. Only silence on an identifier is a capability gap, and that is
-//! reported rather than gated.
+//! Both vocabularies project onto [`Class`], and the projection is what keeps
+//! the comparison honest about a context-free grammar. The grammar must carry
+//! every token class, so any disagreement there is a defect. It may leave an
+//! identifier plain, because telling a function from a variable takes name
+//! resolution; that silence is reported rather than gated. Colouring one is a
+//! claim, so two names for the same span is a defect again.
 //!
-//! A file either side rejects is skipped and counted. Past a syntax error the
-//! two recoveries describe different programs — a `compile_error` fixture's
-//! parameter list stops being a parameter list on the side that broke — so
-//! comparing them measures the recoveries, not the highlighters.
-//! `check-grammar` owns that divergence.
+//! A file either side rejects is skipped and counted: past a syntax error the
+//! two recoveries describe different programs, so comparing them measures the
+//! recoveries. `check-grammar` owns that divergence.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -49,9 +45,7 @@ enum Class {
 }
 
 impl Class {
-    /// Whether the grammar has to colour this class at all. See the module
-    /// docs: silence on a token class is a defect, silence on an identifier is
-    /// a capability gap.
+    /// Whether the grammar has to colour this class at all.
     fn is_required(self) -> bool {
         match self {
             Self::Comment
@@ -450,11 +444,6 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
             continue;
         }
         let source = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
-        // A file only one side parses puts its recovery against the other's
-        // real parse, and the two recover differently past the break — a
-        // `compile_error` fixture's parameter list stops being a parameter
-        // list. `check-grammar` owns that divergence; this one compares only
-        // where both sides read the same program.
         if !wado_compiler::parse(&source).errors.is_empty() {
             skipped += 1;
             continue;
