@@ -896,7 +896,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `ns::Color::Red` — and the resolve walk answered for it in the
         // module that wrote it. So a reference inside a foreign default
         // resolves in the declaring module without a second, module-scoped
-<<<<<<< HEAD
         // lookup beside the first. A bare case (`None`, `Leaf`) has no such
         // segment: the walk answered for the case itself.
         let (owner, spelled) = if let Some(i) = ident.segments.len().checked_sub(2) {
@@ -908,23 +907,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (owner, spelled) = self.tysys.bare_case_at(ident.id)?;
             (Some(owner), spelled)
         };
-        let pos = spelled.find("::")?;
-        let prefix = &spelled[..pos];
-        let suffix = &spelled[pos + 2..];
-||||||| b32a52617
-        // lookup beside the first.
-        let owner = ident
-            .segments
-            .len()
-            .checked_sub(2)
-            .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
-=======
-        // lookup beside the first.
-        let owner = ident
-            .segments
-            .len()
-            .checked_sub(2)
-            .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
         // A newtype reaches its base's members and keeps its own identity, so
         // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
         // the implicit form of `Color::Green as C`.
@@ -932,7 +914,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::types::newtype_member_owner(&self.type_lookup(), &self.tysys, def)
         });
         let owner = through_newtype.map(|(base, _)| base).or(owner);
->>>>>>> origin/main
+        let pos = spelled.find("::")?;
+        let prefix = &spelled[..pos];
+        let suffix = &spelled[pos + 2..];
         macro_rules! lookup_case {
             ($of:ident) => {
                 owner.and_then(|def| self.type_lookup().$of(def)).cloned()

@@ -690,19 +690,6 @@ impl TypeSystem {
         if !is_newtype {
             return self.type_implements_trait(ctx, scope, type_id, trait_);
         }
-<<<<<<< HEAD
-        if let Some(repeated) = Self::repeated_answer(ctx, type_id, trait_) {
-            return repeated;
-||||||| b32a52617
-        // A repeat answers `false` where `type_implements_trait` answers `true`
-        // on the same stack: that query descends into members, this one holds
-        // the subject fixed, so a repeat here is a bound grounding nothing.
-        {
-            let stack = ctx.trait_check_stack.borrow();
-            if stack.contains(&(type_id, trait_)) {
-                return false;
-            }
-=======
         // The two facts a newtype owns rather than inherits: it has a name, and
         // it is a newtype (WEP 2026-06-13). Both are synthesized, so no impl
         // block exists for the index search below to find, and both hold at
@@ -714,15 +701,8 @@ impl TypeSystem {
         ) {
             return true;
         }
-        // A repeat answers `false` where `type_implements_trait` answers `true`
-        // on the same stack: that query descends into members, this one holds
-        // the subject fixed, so a repeat here is a bound grounding nothing.
-        {
-            let stack = ctx.trait_check_stack.borrow();
-            if stack.contains(&(type_id, trait_)) {
-                return false;
-            }
->>>>>>> origin/main
+        if let Some(repeated) = Self::repeated_answer(ctx, type_id, trait_) {
+            return repeated;
         }
         Self::open_question(ctx, type_id, trait_);
         let receiver = self.type_table.borrow().impl_receiver_key(type_id);

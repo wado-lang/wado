@@ -353,6 +353,7 @@ enum ReflectKind {
     Variant,
     Enum,
     Flags,
+    Newtype,
 }
 
 /// The solver's view of the whole program, and the differential that checks
@@ -393,12 +394,13 @@ impl SolverBridge {
 
     /// The reflection kinds, each with the shape it holds of. The root holds
     /// of every kind, ungated by field visibility (WEP 2026-06-13).
-    const REFLECT: [(CompilerItem, ReflectKind); 5] = [
+    const REFLECT: [(CompilerItem, ReflectKind); 6] = [
         (CompilerItem::Reflect, ReflectKind::Any),
         (CompilerItem::ReflectStruct, ReflectKind::Struct),
         (CompilerItem::ReflectVariant, ReflectKind::Variant),
         (CompilerItem::ReflectEnum, ReflectKind::Enum),
         (CompilerItem::ReflectFlags, ReflectKind::Flags),
+        (CompilerItem::ReflectNewtype, ReflectKind::Newtype),
     ];
 
     pub(crate) fn build(tysys: &TypeSystem) -> Self {
@@ -685,6 +687,18 @@ impl SolverBridge {
             if table.decl_of_type(info.type_id).is_some_and(eligible) {
                 state(def, ReflectKind::Flags, None);
             }
+        }
+        // A newtype names itself and is a newtype at depth 0; its base's kind
+        // it inherits (WEP 2026-06-13). A `flags` type sits in the same table
+        // and is not one.
+        let newtypes = tysys
+            .all_newtypes
+            .iter()
+            .filter(|(_, id)| matches!(table.get(**id), ResolvedType::Newtype { .. }))
+            .map(|(&def, _)| def)
+            .chain(tysys.all_generic_newtypes.keys().copied());
+        for def in newtypes {
+            state(def, ReflectKind::Newtype, None);
         }
     }
 

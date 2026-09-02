@@ -9162,22 +9162,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
                 // A newtype reaches its base's members and keeps its own type:
                 // `C::Green` is the implicit `Color::Green as C`.
-                let through_newtype = self.newtype_member_owner(owner, prefix);
+                let through_newtype = owner
+                    .and_then(|def| super::types::newtype_member_owner(&lookup, &self.tysys, def));
+                let owner = through_newtype.map(|(base, _)| base).or(owner);
 
                 // Variant case.
-<<<<<<< HEAD
                 if let Some(variant_info) = owner
                     .and_then(|owner| lookup.variant_cases_of(owner))
                     .cloned()
-||||||| b32a52617
-                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
-=======
-                let variant_info = match through_newtype {
-                    Some((base, _)) => lookup.variant_cases_of(base).cloned(),
-                    None => lookup.variant_cases_at(owner, prefix).cloned(),
-                };
-                if let Some(variant_info) = variant_info
->>>>>>> origin/main
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -9212,18 +9204,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Enum case.
-<<<<<<< HEAD
                 if let Some(enum_info) =
                     owner.and_then(|owner| lookup.enum_cases_of(owner)).cloned()
-||||||| b32a52617
-                if let Some(enum_info) = lookup.enum_cases_at(owner, prefix).cloned()
-=======
-                let enum_info = match through_newtype {
-                    Some((base, _)) => lookup.enum_cases_of(base).cloned(),
-                    None => lookup.enum_cases_at(owner, prefix).cloned(),
-                };
-                if let Some(enum_info) = enum_info
->>>>>>> origin/main
                     && let Some(case_data) = enum_info.find_case(suffix).cloned()
                 {
                     let enum_type = self
@@ -9243,19 +9225,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Flags member.
-<<<<<<< HEAD
                 if let Some(flags_info) = owner
                     .and_then(|owner| lookup.flags_members_of(owner))
                     .cloned()
-||||||| b32a52617
-                if let Some(flags_info) = lookup.flags_members_at(owner, prefix).cloned()
-=======
-                let flags_info = match through_newtype {
-                    Some((base, _)) => lookup.flags_members_of(base).cloned(),
-                    None => lookup.flags_members_at(owner, prefix).cloned(),
-                };
-                if let Some(flags_info) = flags_info
->>>>>>> origin/main
                     && let Some(member) = flags_info
                         .members
                         .iter()
