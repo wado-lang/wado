@@ -156,6 +156,8 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         b.space,
         b.count,
         false,
+        // Synthesized from WIT, never highlighted: no source text to key on.
+        Vec::new(),
     );
     Ok(ComponentBindings {
         module,

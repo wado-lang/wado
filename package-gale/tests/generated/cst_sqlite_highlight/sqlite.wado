@@ -1128,9 +1128,8 @@ pub struct HighlightCapture {
     pub end: i32,
 }
 
-struct ResolvedOverride {
+struct RuleCapture {
     rule_id: i32,
-    token_kind: i32,
     capture_id: i32,
 }
 
@@ -1138,10 +1137,29 @@ pub struct HighlightVisitor {
     pub capture_names: List<String>,
     pub capture_classes: List<String>,
     default_ids: List<i32>,
-    overrides: List<ResolvedOverride>,
+    overrides_by_kind: List<List<RuleCapture>>,
     rule_stack: List<i32>,
     visited: List<bool>,
     pub captures: List<HighlightCapture>,
+}
+
+fn name_index(names: &List<String>, value: &String) -> i32 {
+    for let mut i = 0; i < names.len(); i += 1 {
+        if names[i] == *value {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn capture_id_of(names: &mut List<String>, classes: &mut List<String>, capture: &String) -> i32 {
+    let found = name_index(names, capture);
+    if found >= 0 {
+        return found;
+    }
+    classes.push(class_text(capture));
+    names.push(*capture);
+    return names.len() - 1;
 }
 
 impl HighlightVisitor {
@@ -1153,33 +1171,26 @@ impl HighlightVisitor {
             if d.is_empty() {
                 default_ids.push(-1);
             } else {
-                default_ids.push(capture_names.len());
-                capture_classes.push(class_text(d));
-                capture_names.push(*d);
+                default_ids.push(capture_id_of(&mut capture_names, &mut capture_classes, d));
             }
         }
-        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
+        let mut overrides_by_kind: List<List<RuleCapture>> = [];
         for let ov of &mapping.overrides {
-            let mut id: i32 = -1;
-            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
-                if mapping.rule_names[i] == ov.rule_name {
-                    id = i;
-                    break;
-                }
-            }
-            if id < 0 {
+            let rule_id = name_index(&mapping.rule_names, &ov.rule_name);
+            if rule_id < 0 {
                 continue;
             }
-            let capture_id = capture_names.len();
-            capture_classes.push(class_text(&ov.capture));
-            capture_names.push(ov.capture);
-            overrides.push(ResolvedOverride { rule_id: id, token_kind: ov.token_kind, capture_id });
+            let capture_id = capture_id_of(&mut capture_names, &mut capture_classes, &ov.capture);
+            while overrides_by_kind.len() <= ov.token_kind {
+                overrides_by_kind.push([]);
+            }
+            overrides_by_kind[ov.token_kind].push(RuleCapture { rule_id, capture_id });
         }
         return HighlightVisitor {
             capture_names,
             capture_classes,
             default_ids,
-            overrides,
+            overrides_by_kind,
             rule_stack: [],
             visited: [],
             captures: [],
@@ -1187,11 +1198,11 @@ impl HighlightVisitor {
     }
 
     fn classify(&self, kind: i32) -> i32 {
-        for let ov of &self.overrides {
-            if ov.token_kind == kind {
+        if kind >= 0 && kind < self.overrides_by_kind.len() {
+            for let candidate of &self.overrides_by_kind[kind] {
                 for let rule_id of &self.rule_stack {
-                    if *rule_id == ov.rule_id {
-                        return ov.capture_id;
+                    if *rule_id == candidate.rule_id {
+                        return candidate.capture_id;
                     }
                 }
             }
@@ -17864,7 +17875,132 @@ pub fn highlight_mapping() -> HighlightMapping {
         "transaction_name",
         "any_name",
     ];
-    let overrides: List<HighlightOverride> = [];
+    let overrides: List<HighlightOverride> = [
+        HighlightOverride { rule_name: "keyword", token_kind: 24, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 25, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 26, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 27, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 28, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 29, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 30, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 31, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 32, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 33, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 34, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 35, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 36, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 37, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 38, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 39, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 40, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 41, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 42, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 43, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 44, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 45, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 46, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 47, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 48, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 49, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 50, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 51, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 52, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 53, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 54, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 55, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 56, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 57, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 58, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 59, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 60, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 61, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 62, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 63, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 64, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 65, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 66, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 67, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 68, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 69, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 70, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 71, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 72, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 73, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 74, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 75, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 76, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 77, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 78, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 79, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 80, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 81, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 82, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 83, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 84, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 85, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 86, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 87, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 88, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 89, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 90, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 91, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 92, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 93, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 94, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 95, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 96, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 97, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 98, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 99, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 100, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 101, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 102, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 103, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 104, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 105, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 106, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 107, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 108, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 109, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 110, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 111, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 112, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 113, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 114, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 115, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 116, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 117, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 118, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 119, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 120, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 121, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 122, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 123, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 124, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 125, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 126, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 127, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 128, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 129, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 130, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 131, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 132, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 133, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 134, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 135, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 136, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 137, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 138, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 139, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 140, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 141, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 142, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 143, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 144, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 145, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 146, capture: "variable" },
+        HighlightOverride { rule_name: "keyword", token_kind: 147, capture: "variable" },
+    ];
     return HighlightMapping { defaults, rule_names, overrides };
 }
 
@@ -17877,6 +18013,7 @@ pub fn capture_vocabulary() -> List<String> {
         "punctuation.bracket",
         "punctuation.delimiter",
         "string",
+        "variable",
         "variable.parameter",
     ];
 }
@@ -17884,6 +18021,7 @@ pub fn capture_vocabulary() -> List<String> {
 pub fn highlight_result(result: &ParseResult, input: &String) -> String {
     let mapping = highlight_mapping();
     let mut visitor = HighlightVisitor::new(mapping);
+    highlight_walk(&mut visitor, &result.tokens, &result.cst);
     visitor.hl_cover_unvisited(&result.tokens);
     return highlight_html(input, &visitor.captures, &visitor.capture_classes);
 }
