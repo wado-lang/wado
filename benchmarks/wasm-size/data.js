@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788350716696,
+  "lastUpdate": 1788358051861,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52593,6 +52593,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e242d11b3b058b760282650114ed4a947d80c5c7"
         },
         "date": 1788350716043,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276753,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bbfba767ba794de36bdabcfd7409151ec883fd41",
+          "message": "Merge pull request #1946 from wado-lang/claude/cheatsheet-spec-improvement-inqfui\n\nfix(elaborator): labeled block branch typing, and reject loop jumps with no loop",
+          "timestamp": "2026-09-02T22:53:16+09:00",
+          "tree_id": "46cb306834519c34afd32892e6928007de5e9512",
+          "url": "https://github.com/wado-lang/wado/commit/bbfba767ba794de36bdabcfd7409151ec883fd41"
+        },
+        "date": 1788358050888,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
