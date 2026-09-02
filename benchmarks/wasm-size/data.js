@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788314736812,
+  "lastUpdate": 1788315925888,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52461,6 +52461,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b720ab55b5ca0d92b39d932d5be988a62d5675e2"
         },
         "date": 1788314735868,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 278121,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b4b9c0ef25821ec90594fb54ff18eb40b2470103",
+          "message": "Merge pull request #1940 from wado-lang/claude/ci-gale-o3-performance-myvsij\n\nperf(gale): price the descriptor cache by the read, and carry many descriptors per entry module",
+          "timestamp": "2026-09-02T11:12:17+09:00",
+          "tree_id": "88460143b6114293b8b15a1ba3c0e1aa35d4fd2b",
+          "url": "https://github.com/wado-lang/wado/commit/b4b9c0ef25821ec90594fb54ff18eb40b2470103"
+        },
+        "date": 1788315924921,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
