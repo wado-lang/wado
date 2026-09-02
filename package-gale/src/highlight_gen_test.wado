@@ -166,6 +166,37 @@ IDENTIFIER : [a-z]+ ;
     assert count_occurrences(&out, "capture: \"property\"") == 3, out;
 }
 
+test "rule capture follows a delegation chain as long as the grammar makes it" {
+    let out = highlight_output_q("grammar T;
+r : a ;
+a : b ;
+b : c ;
+c : d ;
+d : e ;
+e : name ;
+name : IDENTIFIER | 'test' ;
+IDENTIFIER : [a-z]+ ;
+", "(a) @property");
+    assert count_occurrences(&out, "rule_name: \"a\"") == 2, out;
+}
+
+test "rule capture on a delegation cycle warns instead of recurring forever" {
+    let g = parse_grammar("grammar T;
+r : a ;
+a : b ;
+b : a ;
+IDENTIFIER : [a-z]+ ;
+");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let query = parse_highlight_query(&"(a) @variable").unwrap();
+    let mut ctx = GenContext::new(&g.parser_rules, &lits);
+    let mut w = CodeWriter::new();
+    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
+    let diags = ctx.copy_diagnostics();
+    assert diags.len() == 1, `expected one diagnostic, got ${diags.len()}`;
+    assert index_of(&w.to_string(), "HighlightOverride {") == -1, w.to_string();
+}
+
 test "rule capture on a multi-token rule warns instead of half-covering it" {
     let g = parse_grammar("grammar T;
 r : pair ;

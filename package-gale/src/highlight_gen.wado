@@ -146,7 +146,8 @@ fn expand_rule_capture(
     capture: String,
     ctx: &mut GenContext,
 ) {
-    match rule_token_kinds(rule, parser_rules, idx, 0) {
+    let mut visiting: List<String> = [rule.name];
+    match rule_token_kinds(rule, parser_rules, idx, &mut visiting) {
         Some(kinds) => {
             for let kind of &kinds {
                 push_override(overrides, rule.name, *kind, capture);
@@ -164,15 +165,14 @@ fn expand_rule_capture(
 /// but one token. A rule that delegates to another (`fieldName : memberName`)
 /// is followed: a grammar gives a use site its own wrapper rule so a query can
 /// capture that site alone, and the wrapper accepts what it delegates to.
+/// `visiting` holds the chain being followed, so a delegation cycle ends it.
 fn rule_token_kinds(
     rule: &ParserRule,
     parser_rules: &List<ParserRule>,
     idx: &KindIndex,
-    depth: i32,
+    visiting: &mut List<String>,
 ) -> Option<List<i32>> {
-    if depth > MAX_RULE_CAPTURE_DEPTH {
-        return null;
-    }
+    assert visiting.contains(&rule.name);
     let mut kinds: List<i32> = [];
     for let alt of &rule.alternatives {
         if alt.elements.len() != 1 {
@@ -193,10 +193,13 @@ fn rule_token_kinds(
             },
             RuleRef(r) => {
                 let at = parser_rule_index(parser_rules, &r.name);
-                if at < 0 {
+                if at < 0 || visiting.contains(&r.name) {
                     return null;
                 }
-                match rule_token_kinds(&parser_rules[at], parser_rules, idx, depth + 1) {
+                visiting.push(r.name);
+                let delegated = rule_token_kinds(&parser_rules[at], parser_rules, idx, visiting);
+                visiting.pop();
+                match delegated {
                     Some(inner) => {
                         for let k of &inner {
                             kinds.push(*k);
@@ -214,11 +217,6 @@ fn rule_token_kinds(
     }
     return Option::Some(kinds);
 }
-
-/// How far `(rule) @capture` follows a delegation. A naming rule is wrapped
-/// once per use site (`fieldName : memberName`); the bound is what stops a
-/// mutually recursive pair.
-global MAX_RULE_CAPTURE_DEPTH: i32 = 4;
 
 /// Record an override for (rule, token), last-wins: a later query rule for the
 /// same pair replaces an earlier one (matching the default table's last-wins
