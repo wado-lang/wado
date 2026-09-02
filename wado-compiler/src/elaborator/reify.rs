@@ -953,22 +953,37 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// Reify a `newtype N = T;` declaration (concrete only). Generic
-    /// newtypes are instantiated on demand by `make_newtype_instance`;
-    /// the concrete decl shape is what lands in TIR.
+    /// Reify a `type N = T;` declaration. A generic one names no single type —
+    /// each instantiation is its own, minted on demand by
+    /// `make_newtype_instance` — so it lands here without one, carrying the
+    /// parameters its synthesized impls are written over.
     fn reify_newtype(&self, newtype_decl: &ast::Newtype) -> Option<TirNewtype> {
-        if !newtype_decl.type_params.is_empty() {
-            // Generic newtypes have no concrete TIR decl emitted at the
-            // module level; they materialise per-instantiation.
+        let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
+        let generic = !newtype_decl.type_params.is_empty();
+        let type_id = self.tysys.all_newtypes.get(&def).copied();
+        if !generic && type_id.is_none() {
             return None;
         }
-        let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
-        let type_id = *self.tysys.all_newtypes.get(&def)?;
         Some(TirNewtype {
             name: newtype_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: newtype_decl.visibility,
-            type_id,
+            def,
+            type_params: newtype_decl
+                .type_params
+                .iter()
+                .enumerate()
+                .map(|(index, p)| crate::tir::TirTypeParam {
+                    name: p.name.clone(),
+                    is_effect: false,
+                    is_pack: false,
+                    bounds: Vec::new(),
+                    default: None,
+                    index: index as u32,
+                    projected_from: None,
+                })
+                .collect(),
+            type_id: type_id.filter(|_| !generic),
             span: newtype_decl.span,
         })
     }
@@ -1165,20 +1180,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Generic local newtypes are unresolved (see `resolve_local_newtype`).
             return;
         }
-        let Some(&type_id) = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(newtype_decl.id)
-            .and_then(|def| self.sem.decls.local_newtypes.get(&def))
-        else {
+        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
+            return;
+        };
+        let Some(&type_id) = self.sem.decls.local_newtypes.get(&def) else {
             return;
         };
         self.pending_local_newtypes.push(TirNewtype {
             name: crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
-            type_id,
+            def,
+            type_params: Vec::new(),
+            type_id: Some(type_id),
             span: newtype_decl.span,
         });
     }

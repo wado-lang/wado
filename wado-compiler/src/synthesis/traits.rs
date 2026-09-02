@@ -738,10 +738,6 @@ pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 /// under `Option`, the shape `defaults()` returns and a streaming build fills.
 pub(crate) const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
 
-/// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
-/// wraps. The kind with no members states a base instead.
-pub(crate) const REFLECT_BASE_ASSOC: &str = "Base";
-
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every struct's `ReflectStruct` synthesis in that
 /// module.
@@ -2566,25 +2562,11 @@ fn generate_newtype_reflect_impls(
         module
             .newtypes
             .iter()
-            .map(|nt| {
-                let ResolvedType::Newtype { def, base_type, .. } = tt.get(nt.type_id) else {
-                    unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
-                };
-                // What is synthesized and what a bound may claim are one set:
-                // a kind the resolver withholds names methods nothing emits.
-                assert_eq!(
-                    tt.reflect_kind(nt.type_id),
-                    Some(CompilerItem::ReflectNewtype),
-                    "newtype {} is synthesized but carries no reflection kind",
-                    nt.name
-                );
-                ReflectNewtypeTarget {
-                    newtype_type: nt.type_id,
-                    base_type: *base_type,
-                    receiver: tt.fq_base_type_name(nt.type_id),
-                    display_name: tt.def_name(*def).to_string(),
-                    span: nt.span,
-                }
+            .map(|nt| ReflectNewtypeTarget {
+                receiver: FqTypeName::declared(tt.defs(), nt.def),
+                display_name: tt.def_name(nt.def).to_string(),
+                type_params: nt.type_params.clone(),
+                span: nt.span,
             })
             .collect()
     };
@@ -2606,38 +2588,36 @@ fn generate_newtype_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
-        module
-            .type_table
-            .borrow_mut()
-            .register_assoc_type_resolution(
-                target.newtype_type,
-                crate::tir::TraitRef::bare(newtype_trait_key),
-                REFLECT_BASE_ASSOC.to_string(),
-                target.base_type,
-            );
-        generated.push(Rc::new(RefCell::new(generate_type_name_fn(
+        let mut type_name = generate_type_name_fn(
             &target.receiver,
             &target.display_name,
             string_type,
             &root_trait_name,
             &type_name_method,
             target.span,
-        ))));
+        );
+        // A generic declaration is one impl over `N<T, …>`, instantiated per
+        // use — the shape the struct kind already takes.
+        type_name.impl_type_params.clone_from(&target.type_params);
+        generated.push(Rc::new(RefCell::new(type_name)));
         ctx.record_impl(&target.receiver, &newtype_trait_key);
     }
 
     module.functions.extend(generated);
 }
 
-/// A newtype selected for `ReflectNewtype` synthesis.
+/// A newtype selected for `ReflectNewtype` synthesis. `Base` is not among its
+/// facts: every newtype carries the type it wraps, so the association is read
+/// off the type rather than recorded beside it.
 struct ReflectNewtypeTarget {
-    newtype_type: TypeId,
-    base_type: TypeId,
     /// The head every synthesised method of this target hangs off.
     receiver: FqTypeName,
     /// The declaration's own name: `Reflect` answers `UserId`, never the
     /// `UserId@<local>` spelling a local declaration is stored under.
     display_name: String,
+    /// Empty for `type N = T`; the parameters the impl is written over for
+    /// `type N<T> = …`.
+    type_params: Vec<TirTypeParam>,
     span: Span,
 }
 

@@ -440,11 +440,6 @@ nothing else yet does.
   subject already carries the three facts it needs (its base name, module, and
   type arguments). The tuple family and `()` join the nameable set with it;
   today only the five synthesized kinds carry the root.
-- A generic newtype (`type Wrapped<T> = Point`) has no identity of its own.
-  Synthesis walks declarations, and an instance materializes after it runs, so
-  `Wrapped<i32>` reflects through its base and names `"Point"`. Closing it takes
-  minting the two synthesized impls per instantiation, where `TypeInfo` already
-  has to go.
 
 ## Related WEPs
 

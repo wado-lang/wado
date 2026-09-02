@@ -7,12 +7,18 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::canonical::CmCallTarget;
+use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{LocalMethodName, RefKind, TypeNameInfo, format_type_name};
 use crate::token::Span;
+
+/// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
+/// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
+/// registry-driven.
+const REFLECT_NEWTYPE_BASE: &str = "Base";
 
 /// Identifies the scope where a type parameter is defined
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -2602,6 +2608,18 @@ impl TypeTable {
         trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
+        // `ReflectNewtype::Base` is the type itself: every newtype carries what
+        // it wraps, instantiation included, so reading it there answers for one
+        // written `type N = T` and for `N<i32>` alike.
+        if assoc_name == REFLECT_NEWTYPE_BASE
+            && let ResolvedType::Newtype { base_type, .. } = self.get(concrete_id)
+            && self
+                .compiler_items()
+                .trait_decl(CompilerItem::ReflectNewtype)
+                == Some(self.defs.ast_id(*trait_key))
+        {
+            return Some(*base_type);
+        }
         self.inheriting(concrete_id, |receiver| {
             self.assoc_type_resolutions
                 .get(&AssocTypeKey {
@@ -3370,11 +3388,7 @@ impl TypeTable {
     /// type, and so to which kind bound can hold for it. A `GenericInstance`
     /// takes its declaration's kind — `Pair<i32>` is a struct because `Pair` is.
     ///
-    /// A generic newtype is the one declaration with no kind of its own. It
-    /// materializes per instantiation and gets no module-level decl
-    /// ([`crate::elaborator::reify`]), so nothing synthesizes its identity and
-    /// it reflects through its base; `generate_newtype_reflect_impls` asserts
-    /// the two agree. The sealed member handles carry no kind either.
+    /// The sealed member handles are the one declared struct it withholds.
     pub fn reflect_kind(&self, id: TypeId) -> Option<crate::compiler_item::CompilerItem> {
         use crate::compiler_item::CompilerItem;
         if self
@@ -3388,9 +3402,7 @@ impl TypeTable {
             ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
             ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
             ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
-            ResolvedType::Newtype { type_args, .. } if type_args.is_empty() => {
-                Some(CompilerItem::ReflectNewtype)
-            }
+            ResolvedType::Newtype { .. } => Some(CompilerItem::ReflectNewtype),
             ResolvedType::GenericInstance { def, .. } => {
                 let def = *def;
                 // A variant is asked first: a variant declaration also registers
@@ -5806,7 +5818,14 @@ pub struct TirNewtype {
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: crate::ast::Visibility,
-    pub type_id: TypeId,
+    pub def: crate::defs::DefId,
+    /// Empty for `type N = T`; the declaration's parameters for `type N<T> = …`,
+    /// which is then one declaration over many types.
+    pub type_params: Vec<TirTypeParam>,
+    /// `None` for a generic declaration: it names no single type, since each
+    /// instantiation is its own. Its impls are synthesized over the declaration
+    /// and instantiated per use, the way a generic struct's are.
+    pub type_id: Option<TypeId>,
     pub span: Span,
 }
 
