@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788315925888,
+  "lastUpdate": 1788348436265,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52505,6 +52505,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b4b9c0ef25821ec90594fb54ff18eb40b2470103"
         },
         "date": 1788315924921,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 278121,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2e9b1f0036bef33e0a5bb2ccbb607502aaaec49a",
+          "message": "Merge pull request #1943 from wado-lang/claude/gale-highlight-wado-compiler-0w9dx6\n\nfeat(highlight): hold the grammar to the identifier classes it colours",
+          "timestamp": "2026-09-02T20:11:48+09:00",
+          "tree_id": "fe5921681ae3a034eb8d7dab41a01e6569fb9d13",
+          "url": "https://github.com/wado-lang/wado/commit/2e9b1f0036bef33e0a5bb2ccbb607502aaaec49a"
+        },
+        "date": 1788348435593,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
