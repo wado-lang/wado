@@ -520,9 +520,8 @@ struct Key<'a> {
     index: i32,
 }
 
-/// Emits `lookup` as a decision tree: each node reads one byte of the key and
-/// branches on it, so a key costs a walk down the tree rather than a scan of
-/// every field.
+/// Emits `lookup` as a decision tree over the key's bytes, so a key costs one
+/// walk down the tree rather than one test per declared field.
 struct LookupTree<'a> {
     key_slice_type: TypeId,
     option_i32: TypeId,
@@ -555,17 +554,18 @@ impl LookupTree<'_> {
     }
 
     /// Confirm the positions the walk has not already decided, then report the
-    /// field; falls through when one of them differs.
+    /// field. Falls through when one of them differs.
     fn confirm(&self, key: &Key, decided: &[usize]) -> TirStmt {
         let found = self.found(key.index);
-        match self.matches(key, undecided(key.bytes.len(), decided)) {
+        match self.byte_tests(key, undecided(key.bytes.len(), decided)) {
             Some(condition) => if_stmt(condition, block(vec![found]), None),
             None => found,
         }
     }
 
-    /// `key`'s own bytes at `positions`, tested together. `None` for none.
-    fn matches(&self, key: &Key, positions: impl Iterator<Item = usize>) -> Option<TirExpr> {
+    /// The condition testing that `positions` hold `key`'s own bytes. `None`
+    /// when `positions` is empty.
+    fn byte_tests(&self, key: &Key, positions: impl Iterator<Item = usize>) -> Option<TirExpr> {
         positions
             .map(|pos| {
                 i32_eq(
@@ -577,8 +577,8 @@ impl LookupTree<'_> {
             .reduce(|acc, eq| and_expr(acc, eq, self.span))
     }
 
-    /// Statements returning the field one of `keys` names, or falling through.
-    /// `decided` holds the positions the walk has already pinned to one byte.
+    /// Statements that return whichever of `keys` the wire key names, or fall
+    /// through. `decided` holds the positions the walk has pinned to one byte.
     fn dispatch(&mut self, keys: &[Key], decided: &mut Vec<usize>) -> Vec<TirStmt> {
         if let [only] = keys {
             return vec![self.confirm(only, decided)];
@@ -589,12 +589,12 @@ impl LookupTree<'_> {
              position is sound only because the length branch above pinned it \
              for every key still in play"
         );
-        // A position the whole group agrees on costs one test for the group,
-        // where a leaf would pay it once per key.
+        // A position the whole group agrees on costs one test for the group. A
+        // leaf would pay it once per key.
         let shared: Vec<usize> = undecided(keys[0].bytes.len(), decided)
             .filter(|&p| keys.iter().all(|k| k.bytes[p] == keys[0].bytes[p]))
             .collect();
-        let Some(condition) = self.matches(&keys[0], shared.iter().copied()) else {
+        let Some(condition) = self.byte_tests(&keys[0], shared.iter().copied()) else {
             return self.split(keys, decided);
         };
         decided.extend(&shared);
@@ -606,7 +606,8 @@ impl LookupTree<'_> {
     /// Branch `keys` on the byte that tells them apart best.
     fn split(&mut self, keys: &[Key], decided: &mut Vec<usize>) -> Vec<TirStmt> {
         let Some(pos) = split_position(keys, decided) else {
-            // Two fields share a wire name; first declared wins, as in a chain.
+            // Two fields share a wire name, so nothing tells them apart. The
+            // first declared wins.
             return keys.iter().map(|k| self.confirm(k, decided)).collect();
         };
         let groups = group_by_byte(keys, pos);
@@ -618,8 +619,9 @@ impl LookupTree<'_> {
             TypeTable::I32,
             false,
         );
-        // A local, not the read inline in each guard: `if_chain_to_match` fuses
-        // a run of `if K == <local>` into one `Match`, which lowers to a switch.
+        // Bound to a local rather than read inside each guard: `if_chain_to_match`
+        // fuses a run of `if K == <local>` into one `Match`, which lowers to a
+        // switch.
         let mut stmts = vec![let_stmt(&name, local, TypeTable::I32, self.byte_at(pos))];
         decided.push(pos);
         for (byte, group) in groups {
@@ -642,24 +644,17 @@ fn undecided(len: usize, decided: &[usize]) -> impl Iterator<Item = usize> + '_ 
     (0..len).filter(|p| !decided.contains(p))
 }
 
-/// The undecided position splitting `keys` into the most groups, lowest first.
-/// `None` when none splits them, which only equal keys produce.
+/// The undecided position splitting `keys` into the most groups; ties go to the
+/// lowest. `None` when no position splits them, which needs two equal keys.
 fn split_position(keys: &[Key], decided: &[usize]) -> Option<usize> {
     undecided(keys[0].bytes.len(), decided)
-        .map(|p| (distinct_bytes(keys, p), p))
-        .filter(|&(distinct, _)| distinct > 1)
-        .max_by_key(|&(distinct, p)| (distinct, std::cmp::Reverse(p)))
+        .map(|p| (group_by_byte(keys, p).len(), p))
+        .filter(|&(groups, _)| groups > 1)
+        .max_by_key(|&(groups, p)| (groups, std::cmp::Reverse(p)))
         .map(|(_, p)| p)
 }
 
-fn distinct_bytes(keys: &[Key], pos: usize) -> usize {
-    let mut seen = [false; 256];
-    keys.iter()
-        .filter(|k| !std::mem::replace(&mut seen[usize::from(k.bytes[pos])], true))
-        .count()
-}
-
-/// `keys` bucketed by their byte at `pos`, both bucket and contents in
+/// `keys` bucketed by their byte at `pos`. Buckets and contents both keep
 /// declaration order.
 fn group_by_byte<'a>(keys: &[Key<'a>], pos: usize) -> IndexMap<u8, Vec<Key<'a>>> {
     let mut groups: IndexMap<u8, Vec<Key<'a>>> = IndexMap::default();
@@ -679,8 +674,6 @@ fn generate_lookup_function(
     span: Span,
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirFunction {
-    // A static trait method, resolved at monomorphization by
-    // `next_field::<Type>()`, so the call is direct and inlinable.
     let mut tree = LookupTree {
         key_slice_type,
         option_i32,
@@ -695,7 +688,7 @@ fn generate_lookup_function(
     let mut stmts = vec![let_stmt("__len", len_local, TypeTable::I32, len_expr)];
 
     // A positional field is ordinal, never matched by name, so the tree omits
-    // it; `positional_at` enumerates it instead.
+    // it. `positional_at` enumerates it instead.
     let mut by_len: IndexMap<usize, Vec<Key>> = IndexMap::default();
     for (index, (_, wire_name, _, _)) in fields.iter().enumerate() {
         if positional_flags.get(index).copied().unwrap_or(false) {
@@ -707,8 +700,8 @@ fn generate_lookup_function(
         };
         by_len.entry(key.bytes.len()).or_default().push(key);
     }
-    // Length roots the tree: it discriminates without reading a byte, and it is
-    // what puts every position the branches below it read in range.
+    // Length roots the tree. It discriminates without reading a byte, and every
+    // byte the branches below it read is in range only because it ran first.
     for (len, group) in by_len {
         let condition = i32_eq(
             local_ref(len_local, "__len", TypeTable::I32),

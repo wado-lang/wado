@@ -187,12 +187,11 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       deserialize phase. Inlining that pair also buys caller-specific dead-field
       elimination, which promotion alone would not recover.
 - [ ] Factoring a conjunctive if-chain into a decision tree. `if_chain_to_match`
-      fuses a run whose guards are a single `K == x`; a run of
-      `K0 == x0 && K1 == x1 && …` could be partitioned on its most
-      discriminating shared atom and nested, which would reach the hand-written
-      dispatchers the synthesised `FieldSchema::lookup` tree does not. Atom
-      order is load-bearing: one may be hoisted above another only when it does
-      not guard that one's operand range, or a miss becomes a trap.
+      fuses a run whose guards are one `K == x`. A run of
+      `K0 == x0 && K1 == x1 && …` could be split on the atom that discriminates
+      best, then nested. That reaches the hand-written dispatchers the
+      synthesised `FieldSchema::lookup` tree does not. An atom that guards
+      another's operand range has to be tested first, or a miss becomes a trap.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known

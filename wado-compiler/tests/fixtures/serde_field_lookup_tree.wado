@@ -1,9 +1,9 @@
-// `FieldSchema::lookup` walks a decision tree over the key's bytes, so a wire
-// key that shares a branch with a field but differs off it must still be
+// `FieldSchema::lookup` walks a decision tree over the key's bytes. A wire key
+// that shares a branch with a field but differs off it must still come back
 // unknown: "xyc" takes the same last-byte branch as "abc", "ad" the same length
-// as "ab", and "abcd" no branch at all. `Degenerate` covers the two shapes with
-// no branch to take at all.
-use { Serialize, Deserialize } from "core:serde";
+// bucket as "ab", and "abcd" no bucket at all. `Degenerate` covers the names
+// the tree cannot branch on.
+use { Deserialize } from "core:serde";
 use { from_string } from "core:json";
 
 struct Keys {
@@ -16,7 +16,6 @@ struct Keys {
     long_field_name_two: i32 = -1,
 }
 
-impl Serialize for Keys;
 impl Deserialize for Keys;
 
 test "every field is reachable by its own key" {
@@ -37,18 +36,17 @@ test "a key off the tree is unknown, not the field it branches with" {
 }
 
 struct Degenerate {
-    // No position tells these apart, so the tree has nothing to split on and
-    // the first declared wins, as it did when the lookup was a flat chain.
+    // No position tells these apart, so the tree has nothing to split on. The
+    // first declared wins, as it did when the lookup was a flat chain.
     #[wire(name = "k")]
     first: i32 = -1,
     #[wire(name = "k")]
     second: i32 = -1,
-    // A zero-length bucket: its leaf confirms no position at all.
+    // A zero-length bucket, whose leaf reads no byte.
     #[wire(name = "")]
     empty: i32 = -1,
 }
 
-impl Serialize for Degenerate;
 impl Deserialize for Degenerate;
 
 test "a name the tree cannot split binds the first declared" {
