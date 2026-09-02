@@ -5426,6 +5426,20 @@ struct Foo {
 }
 ```
 
+#### `#[allow(dead_code)]`
+
+Waives the unused / test-only diagnostic on the item carrying it. As the module
+inner attribute `#![allow(dead_code)]` it waives the lint for every item in the
+file. `dead_code` is the only lint this takes, and there is no `#[deny(...)]`.
+See [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+
+```wado
+#[allow(dead_code)]
+fn scaffolding() -> i32 {  // no "function `scaffolding` is never used"
+    return 0;
+}
+```
+
 #### `#[param]` / `#[param(from_env = "...")]` / `#[param(name = "...")]`
 
 Marks a `global` as a compile-time build input. The type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references. Each parameter resolves highest-priority-first: `-D NAME=value` (alias `--define`) on the `wado` invocation, then `from_env`, then the initializer. Overrides are parsed into the declared scalar type with the `LenientFromStr` spellings. See [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
