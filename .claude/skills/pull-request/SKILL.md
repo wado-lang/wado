@@ -56,6 +56,12 @@ If the branch obviously closes a known issue, add a closing keyword
 
 No need to include a test section. CI runs the full test suite.
 
+Angle brackets need nothing but a code span: `` `t_<Name>` `` renders as written.
+Reading the body back through the GitHub MCP server shows it as `t_` — that path
+mangles the text it returns (it HTML-escapes quotes in the same response), so
+what it hands back is not what GitHub stored. Check the web UI before believing
+the description is broken, and never rewrite prose to work around it.
+
 ## After opening & Periodic status checks
 
 Check mergeability (`mergeable_state`). If conflicting, resolve it with the
