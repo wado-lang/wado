@@ -196,9 +196,12 @@ let b = if c { 1; } else { 2; };       // also 1 or 2
 let u = if c { g(); () } else { () };  // ()
 ```
 
-Only `if`, `match`, `loop` and [labeled blocks](#labeled-blocks) produce a block
-value. A brace in value position is a struct literal: `let x = { 1 };` is an
-error, and `let p = { x: 1, y: 2 };` is an implicit struct literal.
+Only `if`, `match` and [labeled blocks](#labeled-blocks) produce a block value.
+A brace in value position is a struct literal: `let x = { 1 };` is an error, and
+`let p = { x: 1, y: 2 };` is an implicit struct literal.
+
+`loop` is a statement, not an expression. A loop that computes a value goes
+inside a labeled block, which `break LABEL: expr` leaves with the result.
 
 ### Variable Mutability
 

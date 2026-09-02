@@ -238,6 +238,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `break LABEL` naming no enclosing labeled block
+    UnknownBreakLabel {
+        label: String,
+        span: Span,
+    },
+
     /// Wrong number of arguments
     ArgumentCountMismatch {
         expected: usize,
@@ -1001,6 +1007,11 @@ impl TypeError {
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{name}'"),
+                *span,
+            ),
+            TypeError::UnknownBreakLabel { label, span } => (
+                Code::UndefinedVariable,
+                format!("labeled break target not found: no enclosing block labeled '{label}'"),
                 *span,
             ),
 

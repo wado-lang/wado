@@ -2832,21 +2832,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(label) = &break_stmt.label
             && !ctx.active_labels.iter().any(|l| l == label)
         {
-            let _ = self.emit(TypeError::UnknownIdentifier {
-                name: format!("labeled break target not found: {label}"),
+            let _ = self.emit(TypeError::UnknownBreakLabel {
+                label: label.clone(),
                 span: break_stmt.span,
             });
         }
 
-        // If breaking with a value to a labeled block expression, record the
-        // type. Scan innermost-first so a `break label` inside a nested block
-        // that reuses the same label name is attributed to the inner target —
-        // consistent with the `expected_type` lookup above and with WIR `br`
-        // depth resolution.
-        if let (Some(label), Some(val)) = (&break_stmt.label, &value) {
+        // Record the type this break yields to its labeled block expression. A
+        // valueless `break label` yields unit, and is a branch like any other:
+        // recording nothing let a value-position block take its type from the
+        // other exits alone, and codegen then emitted a `br` leaving the stack
+        // empty against that type. Scan innermost-first so a `break label`
+        // inside a nested block that reuses the same label name is attributed
+        // to the inner target — consistent with the `expected_type` lookup
+        // above and with WIR `br` depth resolution.
+        if let Some(label) = &break_stmt.label {
+            let branch_type = value.unwrap_or(TypeTable::UNIT);
             for target in ctx.labeled_block_targets.iter_mut().rev() {
                 if &target.label == label {
-                    target.break_types.push(*val);
+                    target.break_types.push(branch_type);
                     break;
                 }
             }

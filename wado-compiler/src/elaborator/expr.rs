@@ -382,8 +382,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Unify every `break label: expr` with the fall-through path,
                 // whose value is the trailing statement's. The use-site expected
                 // type wins when present; otherwise pick a representative branch
-                // type, skipping `never` and any still holding UNKNOWN so a
-                // diverging or unresolved branch cannot mask the real one.
+                // type, skipping `never`, `unit` and any still holding UNKNOWN
+                // so a diverging, valueless or unresolved branch cannot mask the
+                // real one — a block mixing the two is a value block whose
+                // valueless branches are the error to report.
                 let tail_type = self.ast_block_result_type(&lb.block);
                 let mut branch_types = target.break_types.clone();
                 branch_types.push(tail_type);
@@ -394,7 +396,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     branch_types
                         .iter()
                         .copied()
-                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
+                        .find(|&t| {
+                            t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t)
+                        })
                         .or_else(|| {
                             branch_types
                                 .iter()
