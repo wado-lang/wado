@@ -2044,6 +2044,21 @@ impl TypeTable {
             .then_some(inner)
     }
 
+    /// `Result<T, E>`'s two arguments, keyed by the declaration the registry
+    /// records rather than the spelling `Result` (WEP 2026-08-12). A newtype
+    /// over one answers through its representation.
+    pub fn as_result(&self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
+        let head = self.representation_head(type_id);
+        let ResolvedType::GenericInstance { type_args, .. } = self.get(head) else {
+            return None;
+        };
+        let [ok, err] = type_args[..] else {
+            return None;
+        };
+        self.is_compiler_item_type(head, crate::compiler_item::CompilerItem::Result)
+            .then_some((ok, err))
+    }
+
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
         let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Tuple);
         self.intern(ResolvedType::GenericInstance {
@@ -2632,15 +2647,20 @@ impl TypeTable {
     }
 
     /// Answer a receiver-keyed lookup, falling back to what a newtype inherits.
-    /// A newtype registers only what it declares — `ReflectNewtype::Base` — and
-    /// inherits the rest from its base (WEP 2026-01-29), so the direct hit
-    /// answers first and the structure head answers for everything else.
+    /// A newtype inherits its *immediate* base's impls (WEP 2026-01-29), so the
+    /// chain answers a link at a time: a middle link carrying its own impl is
+    /// what a jump to the base would step over.
     fn inheriting<T>(&self, receiver: TypeId, lookup: impl Fn(TypeId) -> Option<T>) -> Option<T> {
-        if let Some(found) = lookup(receiver) {
-            return Some(found);
+        let mut current = receiver;
+        loop {
+            if let Some(found) = lookup(current) {
+                return Some(found);
+            }
+            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(current) else {
+                return None;
+            };
+            current = *base_type;
         }
-        let head = self.reflect_structure_head(receiver);
-        (head != receiver).then(|| lookup(head)).flatten()
     }
 
     /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`

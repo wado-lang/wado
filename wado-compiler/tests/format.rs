@@ -157,6 +157,16 @@ fn assert_format_preserves_ast(source: &str) {
             "Formatter changed AST semantics!\n\n{diff_context}\n\nOriginal source:\n{source}\n\nFormatted source:\n{formatted}"
         );
     }
+
+    // A rule that wraps an already-wrapped operand keeps the AST equal while
+    // adding a layer per pass, so every round-trip case asserts the fixed point
+    // too.
+    let again = wado_compiler::format(&formatted)
+        .unwrap_or_else(|e| panic!("formatted code failed to format: {e:?}\n\n{formatted}"));
+    assert_eq!(
+        formatted, again,
+        "format is not idempotent\n\nFirst pass:\n{formatted}\n\nSecond pass:\n{again}"
+    );
 }
 
 #[test]

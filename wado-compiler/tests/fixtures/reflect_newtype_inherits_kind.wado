@@ -29,6 +29,7 @@ type P = Point;
 type C = Color;
 type M = Perm;
 type S = Shape;
+type PP = P;
 
 // A generic newtype is a newtype: it names itself and inherits its base's
 // structure, exactly as a plain one does. Its impls are synthesized over the
@@ -90,6 +91,15 @@ test "a variant newtype reflects the base's cases" {
         names = names + c.name();
     }
     assert names == "DotLine";
+}
+
+// Each link of a chain answers for itself, and inherits the structure of what
+// it wraps — the base's, however many links away.
+test "a chained newtype names its own link and walks the base's fields" {
+    let pp = Point { x: 1, y: 2 } as PP;
+    assert pp.describe() == "PP.x.y";
+    assert Reflect::<PP>::type_name() == "PP";
+    assert `${pp:?}` == "Point { x: 1, y: 2 } as P as PP";
 }
 
 test "a generic newtype names itself and inherits the base's structure" {
