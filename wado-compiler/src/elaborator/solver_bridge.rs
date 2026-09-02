@@ -13,7 +13,7 @@ use crate::trait_solver::{
     Program, RefRule, SolverType, TraitDeclId, TypeDeclId, TypeDef, derive, holds,
 };
 
-use super::trait_env::ImplHeader;
+use super::trait_env::{BlanketReceiver, ImplHeader};
 use super::trait_query::primitive_has_operator;
 use super::tysys::TypeSystem;
 
@@ -232,10 +232,10 @@ impl Lowering {
 /// back the header each [`ImplId`](crate::trait_solver::ImplId) stands for so
 /// a finding can be given a span. A header the lowering cannot express is
 /// dropped, never approximated.
-pub(super) fn lower_impls(
+pub(super) fn lower_impls<'a>(
     lowering: &mut Lowering,
     program: &mut Program,
-    impl_headers: &IndexMap<DefId, ImplHeader>,
+    impl_headers: impl IntoIterator<Item = (&'a DefId, &'a ImplHeader)>,
     resolutions: &crate::resolve::Resolutions,
 ) -> Vec<DefId> {
     let mut sources: Vec<DefId> = Vec::new();
@@ -407,10 +407,15 @@ impl SolverBridge {
         let table = tysys.type_table.borrow();
         lowering.tuple = table.compiler_item_def(CompilerItem::Tuple);
         Self::intern_declarations(tysys, &mut lowering);
+        let derivation_sources = Self::derivation_sources(tysys);
         lower_impls(
             &mut lowering,
             &mut program,
-            &tysys.trait_env.impl_headers,
+            tysys
+                .trait_env
+                .impl_headers
+                .iter()
+                .filter(|(def, _)| !derivation_sources.contains(*def)),
             &tysys.resolutions,
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
@@ -423,6 +428,35 @@ impl SolverBridge {
             lowering,
             excluded: Self::excluded(tysys),
         }
+    }
+
+    /// The `Reflect*`-bounded value blankets of the structural traits: each is
+    /// the derived body's source, which [`derive`] answers for per declaration.
+    fn derivation_sources(tysys: &TypeSystem) -> IndexSet<DefId> {
+        let reflect: IndexSet<DefId> = Self::REFLECT
+            .into_iter()
+            .filter_map(|(item, _)| tysys.compiler_trait_def(item))
+            .collect();
+        Self::DERIVED
+            .into_iter()
+            .filter_map(|item| tysys.compiler_trait_def(item))
+            .flat_map(|trait_| {
+                tysys
+                    .trait_env
+                    .blanket_impls
+                    .get(&trait_)
+                    .into_iter()
+                    .flatten()
+            })
+            .filter(|blanket| {
+                blanket.receiver == BlanketReceiver::Value
+                    && blanket
+                        .bounds
+                        .iter()
+                        .any(|bound| bound.decl_ref.is_some_and(|decl| reflect.contains(&decl)))
+            })
+            .map(|blanket| blanket.def)
+            .collect()
     }
 
     /// Intern every declaration and module up front, so a query lowers without

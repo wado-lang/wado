@@ -336,6 +336,10 @@ trait solving is one uniform search over impls:
 - A written impl for the pair blocks derivation, and a marker
   (`impl Eq for D;`) demands it: the marker is an error where `D` cannot
   derive, and answers the bound where it can.
+- A `Reflect*`-bounded blanket of a structural trait
+  (`impl<S: ReflectStruct<…>, ..F: Serialize> Serialize for S`) is the derived
+  body's source, not a candidate. The lowering leaves it out, and `derive`
+  answers per declaration.
 - `holds` reports the derived and marker impls its answer passed through. The
   caller records the bodies to emit; the solver never records one itself.
 
@@ -366,7 +370,9 @@ answer it: the defaults are on the trait, `Self` meaning the impl's target. And
 it may pin an associated type (`T: Mul<Output = T>`): the pin is on the bound,
 and the impl that answers it must bind the type as the pin says, read off the
 impl's own `type Output = …`. A pin naming a parameter the target leaves
-unbound (`Members = [..C]`) reads the projection rather than checking it.
+unbound (`Members = [..C]`) reads the projection rather than checking it, and a
+bound on that parameter (`..C: Arbitrary`) waits for monomorphization
+(WEP 2026-03-14).
 
 #### The five questions
 

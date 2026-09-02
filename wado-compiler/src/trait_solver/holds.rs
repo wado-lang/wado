@@ -135,8 +135,6 @@ impl Query<'_> {
             return None;
         }
         let bound_to = |ty: &SolverType| ty.map_params(&|i| bindings.get(i as usize)?.clone());
-        // The body owed is the answering impl's, which may be of a subtrait
-        // of the one asked for.
         let mut requests = match def.origin {
             ImplOrigin::Written => Vec::new(),
             ImplOrigin::Derived | ImplOrigin::Marker => vec![DerivationRequest {
@@ -145,13 +143,10 @@ impl Query<'_> {
             }],
         };
         for (index, param) in def.params.iter().enumerate() {
-            // A parameter the target never mentions binds nothing, so a bound
-            // on it cannot be checked and the impl does not answer through it.
+            // A parameter the target never mentions is bound off a projection
+            // at monomorphization, and so is its bound (WEP 2026-03-14).
             let Some(binding) = bindings[index].as_ref() else {
-                if param.bounds.is_empty() {
-                    continue;
-                }
-                return None;
+                continue;
             };
             // A pack's bound holds of each element it took (`..T: Eq` on
             // `(..T)`), a parameter's of the one type it bound.
@@ -1017,6 +1012,49 @@ mod tests {
                 }],
                 ..Holds::default()
             })
+        );
+    }
+
+    /// `impl<S: ReflectStruct<Fields = [..F]>, ..F: Arbitrary> Arbitrary for S`:
+    /// the pack is read off the projection and its bound waits for
+    /// monomorphization, so the blanket answers for every struct.
+    #[test]
+    fn a_bound_on_a_parameter_the_target_never_mentions_is_deferred() {
+        const ARBITRARY: TraitDeclId = TraitDeclId(9);
+        const FIELDS: AssocId = AssocId(0);
+        let p = Builder::default()
+            .impl_(ImplDef {
+                trait_: Some(ARBITRARY),
+                trait_args: vec![],
+                target: SolverType::Param(0),
+                params: vec![
+                    ParamDef {
+                        bounds: vec![ALPHA],
+                        pins: vec![Pin {
+                            trait_: ALPHA,
+                            assoc: FIELDS,
+                            ty: SolverType::Tuple(vec![SolverType::Pack(1)]),
+                        }],
+                    },
+                    ParamDef::bounded(vec![ARBITRARY]),
+                ],
+                origin: ImplOrigin::Written,
+            })
+            .fact(POINT, ALPHA, Fact { visible_from: None })
+            .build();
+        assert_eq!(
+            holds(&p, &Env::default(), &decl(POINT), ARBITRARY, HERE),
+            Some(Holds {
+                requests: vec![DerivationRequest {
+                    ty: decl(POINT),
+                    trait_: ALPHA,
+                }],
+                ..Holds::default()
+            })
+        );
+        assert_eq!(
+            holds(&p, &Env::default(), &decl(I32), ARBITRARY, HERE),
+            None
         );
     }
 
