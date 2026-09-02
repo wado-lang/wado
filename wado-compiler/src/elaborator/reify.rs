@@ -6543,7 +6543,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // feeds the return type only (Step 4).
         let expected_fn_type = expected_type.map(|t| {
             let table = self.tysys.type_table.borrow();
-            table.get_ultimate_base_type(table.peel_refs(t))
+            table.representation_head(table.peel_refs(t))
         });
         let params: Vec<(String, TypeId)> = closure
             .params
@@ -7741,7 +7741,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .decls
             .lookup_global(name, &self.current_module_source)?;
         let table = self.tysys.type_table.borrow();
-        let base = table.get_ultimate_base_type(table.peel_refs(ty));
+        let base = table.representation_head(table.peel_refs(ty));
         matches!(table.get(base), crate::tir::ResolvedType::Function { .. }).then_some((
             module_source,
             global_name,
@@ -8015,7 +8015,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // peel references and the ultimate base type before
                 // checking for `Function`.
                 let table = self.tysys.type_table.borrow();
-                let base = table.get_ultimate_base_type(table.peel_refs(local.type_id));
+                let base = table.representation_head(table.peel_refs(local.type_id));
                 matches!(table.get(base), crate::tir::ResolvedType::Function { .. })
             }
         {
@@ -8108,7 +8108,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let callee_expr = self.reify_expr(&call.callee, ctx, None);
             let is_fn = {
                 let table = self.tysys.type_table.borrow();
-                let base = table.get_ultimate_base_type(table.peel_refs(callee_expr.type_id));
+                let base = table.representation_head(table.peel_refs(callee_expr.type_id));
                 matches!(table.get(base), crate::tir::ResolvedType::Function { .. })
             };
             if is_fn {
@@ -8571,7 +8571,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     tt.get(raw_receiver.type_id),
                     crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
                 ) && matches!(
-                    tt.get(tt.get_ultimate_base_type(raw_receiver.type_id)),
+                    tt.get(tt.representation_head(raw_receiver.type_id)),
                     crate::tir::ResolvedType::Primitive(_) | crate::tir::ResolvedType::Enum { .. }
                 )
             };
@@ -9276,7 +9276,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(target_type);
+            .representation_head(target_type);
         let name = match self.tysys.type_table.borrow().get(target_base).clone() {
             crate::tir::ResolvedType::Struct { def, .. }
                 if matches!(
@@ -9405,8 +9405,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (source_base, target_base) = {
             let tt = self.tysys.type_table.borrow();
             (
-                tt.get_ultimate_base_type(source_type),
-                tt.get_ultimate_base_type(target_type),
+                tt.representation_head(source_type),
+                tt.representation_head(target_type),
             )
         };
         let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
@@ -9599,7 +9599,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .get_ultimate_base_type(recorded_type);
+                    .representation_head(recorded_type);
                 // A float-only literal (`1.0`, `0.0`, `1e2`) is a float
                 // regardless of the recorded type: when the recorded type is
                 // missing/UNKNOWN (e.g. a stdlib const body whose

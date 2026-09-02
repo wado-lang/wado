@@ -2570,6 +2570,14 @@ fn generate_newtype_reflect_impls(
                 let ResolvedType::Newtype { def, base_type, .. } = tt.get(nt.type_id) else {
                     unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
                 };
+                // What is synthesized and what a bound may claim are one set:
+                // a kind the resolver withholds names methods nothing emits.
+                assert_eq!(
+                    tt.reflect_kind(nt.type_id),
+                    Some(CompilerItem::ReflectNewtype),
+                    "newtype {} is synthesized but carries no reflection kind",
+                    nt.name
+                );
                 ReflectNewtypeTarget {
                     newtype_type: nt.type_id,
                     base_type: *base_type,

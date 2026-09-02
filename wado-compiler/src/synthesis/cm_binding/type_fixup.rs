@@ -686,7 +686,7 @@ fn fixup_adapter_return_from_call_site(
     let call_site_type = {
         let tt = type_table.borrow();
         if matches!(tt.get(call_site_type), ResolvedType::Newtype { .. }) {
-            tt.get_ultimate_base_type(call_site_type)
+            tt.representation_head(call_site_type)
         } else {
             call_site_type
         }

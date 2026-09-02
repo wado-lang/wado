@@ -357,7 +357,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .get_ultimate_base_type(target_type);
+                .representation_head(target_type);
             let string_struct_name = self
                 .tysys
                 .type_table
@@ -400,7 +400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .get_ultimate_base_type(target_type);
+                .representation_head(target_type);
             if base_id == list_u8 {
                 if let Expr::Literal(lit) = expr
                     && let Literal::Bytes(raw) = &lit.value
@@ -429,7 +429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .get_ultimate_base_type(target_type);
+                .representation_head(target_type);
             let is_fn_newtype = matches!(
                 self.tysys.type_table.borrow().get(base_id),
                 ResolvedType::Function { .. }

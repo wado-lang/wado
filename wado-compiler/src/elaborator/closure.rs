@@ -41,7 +41,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // See through newtype layers so a closure assigned to a `type Handler =
         // fn(...)` newtype still gets its parameter types inferred from the
         // underlying fn signature.
-        let base_id = tt.get_ultimate_base_type(tid);
+        let base_id = tt.representation_head(tid);
         match tt.get(base_id) {
             ResolvedType::Function {
                 params,

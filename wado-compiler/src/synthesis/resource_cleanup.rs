@@ -73,7 +73,7 @@ impl Cx<'_> {
 /// `Result<_, _>` recognised by name; the only structural carrier of an owned
 /// resource that the fixtures exercise (`Fields::from_list`).
 fn result_args(tt: &TypeTable, type_id: TypeId) -> Option<(TypeId, TypeId)> {
-    match tt.get(tt.get_ultimate_base_type(type_id)) {
+    match tt.get(tt.representation_head(type_id)) {
         ResolvedType::GenericInstance { def, type_args }
             if tt.def_name(*def) == "Result" && type_args.len() == 2 =>
         {
@@ -128,7 +128,7 @@ fn carries_resource_rec(
     type_id: TypeId,
     visited: &mut Vec<TypeId>,
 ) -> bool {
-    let base = tt.get_ultimate_base_type(type_id);
+    let base = tt.representation_head(type_id);
     if visited.contains(&base) {
         return false;
     }
@@ -382,7 +382,7 @@ fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
 /// Build the statements that release every Component Model resource reachable
 /// from `scrutinee` (a value of type `type_id`).
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
-    let base = cx.tt.get_ultimate_base_type(type_id);
+    let base = cx.tt.representation_head(type_id);
     match cx.tt.get(base).clone() {
         ResolvedType::Resource { def } if cx.tt.is_extern_handle_resource(def) => Vec::new(),
         ResolvedType::Resource { def } => match cx

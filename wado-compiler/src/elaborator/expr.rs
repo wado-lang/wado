@@ -3180,8 +3180,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         source_type: TypeId,
         target_type: TypeId,
     ) -> Option<&'static str> {
-        let source_base = tt.get_ultimate_base_type(source_type);
-        let target_base = tt.get_ultimate_base_type(target_type);
+        let source_base = tt.representation_head(source_type);
+        let target_base = tt.representation_head(target_type);
         let slice_elem = |id| match tt.get(id) {
             ResolvedType::GenericInstance { def, type_args }
                 if tt.compiler_item_def(crate::compiler_item::CompilerItem::Slice)
@@ -3369,11 +3369,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `i128` / `u128` are structs here; their rules below cover a
             // wide-int source only, so such a target never exempts an aggregate.
             let wide_int = |id| {
-                matches!(tt.get(tt.get_ultimate_base_type(id)), ResolvedType::Struct { def, .. }
+                matches!(tt.get(tt.representation_head(id)), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
             };
             // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
-            let source_base = tt.get_ultimate_base_type(source_type);
+            let source_base = tt.representation_head(source_type);
             let source_is_aggregate = !wide_int(source_type)
                 && matches!(
                     tt.get(source_base),
@@ -3381,7 +3381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Variant { .. }
                 );
-            source_is_aggregate && source_base != tt.get_ultimate_base_type(target_type)
+            source_is_aggregate && source_base != tt.representation_head(target_type)
         };
         if unrelated_aggregate {
             let tt = self.tysys.type_table.borrow();
@@ -3420,12 +3420,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             use crate::tir::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
-                tt.get(tt.get_ultimate_base_type(source_type)),
+                tt.get(tt.representation_head(source_type)),
                 ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
             );
             let target_supported = !source_is_wide_int
-                || match tt.get(tt.get_ultimate_base_type(target_type)) {
+                || match tt.get(tt.representation_head(target_type)) {
                     ResolvedType::Primitive(
                         PrimitiveType::F64
                         | PrimitiveType::F32
@@ -3463,12 +3463,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(source_type);
+            .representation_head(source_type);
         let target_base = self
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(target_type);
+            .representation_head(target_type);
         if target_base == TypeTable::CHAR
             && source_base != TypeTable::CHAR
             && source_base != TypeTable::U8

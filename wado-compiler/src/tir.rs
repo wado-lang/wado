@@ -1041,7 +1041,7 @@ impl TypeTable {
 
     pub fn is_integer(&self, id: TypeId) -> bool {
         // Follow newtype chain to get ultimate base type
-        let base_id = self.get_ultimate_base_type(id);
+        let base_id = self.representation_head(id);
         matches!(
             self.get(base_id),
             ResolvedType::Primitive(
@@ -1061,7 +1061,7 @@ impl TypeTable {
 
     pub fn is_float(&self, id: TypeId) -> bool {
         // Follow newtype chain to get ultimate base type
-        let base_id = self.get_ultimate_base_type(id);
+        let base_id = self.representation_head(id);
         matches!(
             self.get(base_id),
             ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
@@ -2370,7 +2370,7 @@ impl TypeTable {
 
     /// Check if a type is a primitive (including following newtypes).
     pub fn is_primitive_like(&self, id: TypeId) -> bool {
-        let base = self.get_ultimate_base_type(id);
+        let base = self.representation_head(id);
         matches!(self.get(base), ResolvedType::Primitive(_))
     }
 
@@ -2378,7 +2378,7 @@ impl TypeTable {
     /// but `v128`, whose arithmetic is lane-wise and known only to the lane
     /// type's own impl.
     pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
-        let base = self.get_ultimate_base_type(id);
+        let base = self.representation_head(id);
         matches!(self.get(base), ResolvedType::Primitive(p) if *p != PrimitiveType::V128)
     }
 
@@ -3307,7 +3307,7 @@ impl TypeTable {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
         for id in ids {
             let redirect = match self.types.get(id).unwrap() {
-                ResolvedType::Newtype { .. } => Some(self.get_ultimate_base_type(id)),
+                ResolvedType::Newtype { .. } => Some(self.representation_head(id)),
                 ResolvedType::Flags { .. } => Some(TypeTable::U32),
                 _ => None,
             };
@@ -3326,11 +3326,34 @@ impl TypeTable {
         }
     }
 
+    /// The first link of `id`'s newtype chain that `owns` accepts, outermost
+    /// first: a link's impl serves every level above it, so the chain — not the
+    /// receiver alone — says which type a call dispatches to (WEP 2026-01-29).
+    /// References are stepped over. `None` when no link owns.
+    ///
+    /// Reads the unerased view: erasure redirects a link to its base, and the
+    /// erased view would report no chain at all.
+    pub fn newtype_link_owning(&self, id: TypeId, owns: impl Fn(TypeId) -> bool) -> Option<TypeId> {
+        let mut current = id;
+        loop {
+            match self.get_unerased(current) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = *inner,
+                ResolvedType::Newtype { base_type, .. } => {
+                    if owns(current) {
+                        return Some(current);
+                    }
+                    current = *base_type;
+                }
+                _ => return None,
+            }
+        }
+    }
+
     /// The declaration a newtype inherits from: its chain peeled to what it
     /// wraps, any other type unchanged (WEP 2026-01-29). That is where its
     /// impls live, and so where a `Reflect*` kind reads its members.
     ///
-    /// Unlike [`Self::get_ultimate_base_type`] the walk stops at a `flags`
+    /// Unlike [`Self::representation_head`] the walk stops at a `flags`
     /// type, which is a declaration carrying its own impls rather than a
     /// stand-in for `u32`. Identity is *not* inherited — a newtype names itself
     /// through `Reflect` — so this never answers for a type's name.
@@ -3342,20 +3365,61 @@ impl TypeTable {
         current
     }
 
-    /// Whether `id` is a newtype the compiler synthesized reflection for: one
-    /// written as a declaration. A generic newtype materializes per
-    /// instantiation, after synthesis has run, so it carries neither the root's
-    /// `type_name` nor a `ReflectNewtype` impl — claiming either for it names a
-    /// method nothing generates. It reflects through its base instead.
-    pub fn is_reflected_newtype(&self, id: TypeId) -> bool {
-        matches!(self.get(id), ResolvedType::Newtype { type_args, .. } if type_args.is_empty())
+    /// The reflection kind `id` is, or `None` where reflection does not cover
+    /// it: the one answer to which `Reflect*` the compiler synthesizes for a
+    /// type, and so to which kind bound can hold for it. A `GenericInstance`
+    /// takes its declaration's kind — `Pair<i32>` is a struct because `Pair` is.
+    ///
+    /// A generic newtype is the one declaration with no kind of its own. It
+    /// materializes per instantiation and gets no module-level decl
+    /// ([`crate::elaborator::reify`]), so nothing synthesizes its identity and
+    /// it reflects through its base; `generate_newtype_reflect_impls` asserts
+    /// the two agree. The sealed member handles carry no kind either.
+    pub fn reflect_kind(&self, id: TypeId) -> Option<crate::compiler_item::CompilerItem> {
+        use crate::compiler_item::CompilerItem;
+        if self
+            .decl_of_type(id)
+            .is_some_and(|decl| self.is_sealed_reflect_member(decl))
+        {
+            return None;
+        }
+        match self.get(id) {
+            ResolvedType::Struct { .. } => Some(CompilerItem::ReflectStruct),
+            ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
+            ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
+            ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
+            ResolvedType::Newtype { type_args, .. } if type_args.is_empty() => {
+                Some(CompilerItem::ReflectNewtype)
+            }
+            ResolvedType::GenericInstance { def, .. } => {
+                let def = *def;
+                // A variant is asked first: a variant declaration also registers
+                // a struct-shaped payload layout under its own name, so the
+                // struct lookup answers for both kinds.
+                if self.find_variant_type(def).is_some() {
+                    Some(CompilerItem::ReflectVariant)
+                } else if self
+                    .find_struct_by_name(&self.def_name(def).to_string(), self.def_module(def))
+                    .is_some()
+                {
+                    Some(CompilerItem::ReflectStruct)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
-    /// Get the ultimate base type by following the chain of newtypes.
-    /// `Flags` types ultimately resolve to `u32`.
-    /// Returns the original type if it's not a newtype or flags.
-    pub fn get_ultimate_base_type(&self, id: TypeId) -> TypeId {
-        // Fast path: after erasure, redirects always point directly to the ultimate base.
+    /// The type `id` is represented by: its newtype chain followed to the end
+    /// and a `flags` type answered as `u32`, anything else unchanged.
+    /// [`Self::reflect_structure_head`] answers the other question — where a
+    /// declaration's impls live — and so stops at `flags`, which writes its own.
+    ///
+    /// Works before and after `erase_newtypes_and_flags()`: the redirect map is
+    /// consulted first, so `FieldName` answers `String` either way.
+    pub fn representation_head(&self, id: TypeId) -> TypeId {
+        // Fast path: after erasure, redirects always point directly to the base.
         if let Some(&redirect) = self.redirects.get(id) {
             return redirect;
         }
@@ -3386,7 +3450,7 @@ impl TypeTable {
     /// - One is a newtype of the other
     /// - Both are newtypes with the same ultimate base type
     pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
-        self.get_ultimate_base_type(a) == self.get_ultimate_base_type(b)
+        self.representation_head(a) == self.representation_head(b)
     }
 
     /// Check if a type is `List<T>` and return the element type if so.
@@ -3847,41 +3911,10 @@ impl TypeTable {
         }
     }
 
-    /// Resolve through newtypes/flags to find the base type.
-    /// Returns the original `TypeId` if not a newtype or flags.
-    ///
-    /// Works both before and after `erase_newtypes_and_flags()`. After erasure,
-    /// the redirect map is checked first so that `resolve_newtype_base(FieldName_id)` → `String_id`.
-    #[must_use]
-    pub fn resolve_newtype_base(&self, id: TypeId) -> TypeId {
-        // Fast path: after erasure, redirects already point to the base.
-        if let Some(&redirect) = self.redirects.get(id) {
-            return redirect;
-        }
-        let mut current = id;
-        loop {
-            match self
-                .types
-                .get(current)
-                .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
-            {
-                ResolvedType::Newtype { base_type, .. } => {
-                    current = self
-                        .redirects
-                        .get(*base_type)
-                        .copied()
-                        .unwrap_or(*base_type);
-                }
-                ResolvedType::Flags { .. } => return TypeTable::U32,
-                _ => return current,
-            }
-        }
-    }
-
     /// Mangle a type name, resolving all newtypes/flags to their base types recursively.
     /// E.g., `List<FieldName>` → `List<String>` when `FieldName = String`.
     pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
-        let base = self.resolve_newtype_base(id);
+        let base = self.representation_head(id);
         match self.get(base) {
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = self.def_name(*def);
@@ -3912,7 +3945,7 @@ impl TypeTable {
     /// Returns the same `TypeId` if no newtypes are found, or a new `TypeId` with all
     /// newtypes replaced by their base types.
     pub fn resolve_newtypes_deep(&mut self, id: TypeId) -> TypeId {
-        let base = self.resolve_newtype_base(id);
+        let base = self.representation_head(id);
         match self.get(base).clone() {
             ResolvedType::GenericInstance { def, type_args } => {
                 let resolved: Vec<TypeId> = type_args
@@ -3942,7 +3975,7 @@ impl TypeTable {
     /// would require creating new types.
     #[must_use]
     pub fn resolve_newtypes_deep_readonly(&self, id: TypeId) -> TypeId {
-        let base = self.resolve_newtype_base(id);
+        let base = self.representation_head(id);
         match self.get(base) {
             ResolvedType::GenericInstance { def, type_args } => {
                 let resolved: Vec<TypeId> = type_args
@@ -3989,7 +4022,7 @@ impl TypeTable {
     /// fq lookup sites that consult the newtype-resolved form
     /// (`wir_build/context.rs`).
     pub fn mangle_type_arg_for_generic_resolving_newtypes(&self, id: TypeId) -> String {
-        let resolved = self.resolve_newtype_base(id);
+        let resolved = self.representation_head(id);
         self.mangle_type_arg_for_generic(resolved)
     }
 
@@ -4002,7 +4035,7 @@ impl TypeTable {
     pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {
         match self.get(id) {
             ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
-                self.mangle_type_arg_erased(self.get_ultimate_base_type(id))
+                self.mangle_type_arg_erased(self.representation_head(id))
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 let args: Vec<String> = type_args

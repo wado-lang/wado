@@ -168,7 +168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
         let table = self.tysys.type_table.borrow();
         let peeled_ref = table.peel_refs(type_id);
-        let base = table.get_ultimate_base_type(peeled_ref);
+        let base = table.representation_head(peeled_ref);
         match table.get(base) {
             ResolvedType::Function {
                 is_mut,

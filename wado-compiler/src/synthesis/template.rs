@@ -680,29 +680,21 @@ fn peel_transparent_newtype(
     if kind == FormatKind::Inspect {
         return type_id;
     }
-    let mut tid = type_id;
-    loop {
-        let base = {
-            let tt = ctx.tt.borrow();
-            match tt.get(tid) {
-                ResolvedType::Newtype { base_type, .. }
-                    if ctx
-                        .trait_env
-                        .trait_def_of_fq(trait_name)
-                        .is_none_or(|trait_| {
-                            !ctx.trait_env.has_any_methodful_impl_by_receiver(
-                                &tt.impl_receiver_key(tid),
-                                trait_,
-                            )
-                        }) =>
-                {
-                    *base_type
-                }
-                _ => return tid,
-            }
-        };
-        tid = base;
+    let tt = ctx.tt.borrow();
+    // A reference is not a chain: `&Meters` formats through the ref impl, so
+    // the walk — which steps over references — is asked only of a newtype.
+    if !matches!(tt.get(type_id), ResolvedType::Newtype { .. }) {
+        return type_id;
     }
+    let owner = tt.newtype_link_owning(type_id, |tid| {
+        ctx.trait_env
+            .trait_def_of_fq(trait_name)
+            .is_some_and(|trait_| {
+                ctx.trait_env
+                    .has_any_methodful_impl_by_receiver(&tt.impl_receiver_key(tid), trait_)
+            })
+    });
+    owner.unwrap_or_else(|| tt.reflect_structure_head(type_id))
 }
 
 /// Unified format trait dispatch: emit the `value.fmt(&mut f)` call,
@@ -854,51 +846,10 @@ fn method_call_info_for_type(
     }
 }
 
-/// The reflection kind `type_id` is, or `None` when reflection does not cover
-/// it. A type is exactly one kind and its kind is fixed by its declaration, so
-/// this is a structural question — it does not depend on how far the pipeline
-/// has run. A `GenericInstance` takes its base declaration's kind: `Pair<i32>`
-/// is a struct because `Pair` is. The sealed member handles are the one
-/// declared struct reflection never covers.
-fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
-    if tt
-        .decl_of_type(type_id)
-        .is_some_and(|decl| tt.is_sealed_reflect_member(decl))
-    {
-        return None;
-    }
-    match tt.get(type_id) {
-        ResolvedType::Struct { .. } => Some(CompilerItem::ReflectStruct),
-        ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
-        ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
-        ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
-        // Only a declared one: a generic newtype instance carries no
-        // synthesized `ReflectNewtype`, so it reflects through its base.
-        ResolvedType::Newtype { type_args, .. } if type_args.is_empty() => {
-            Some(CompilerItem::ReflectNewtype)
-        }
-        ResolvedType::GenericInstance { def, .. } => {
-            let name = &tt.def_name(*def).to_string();
-            let module_source = &tt.def_module(*def).clone();
-            // A variant is asked first: a variant declaration also registers a
-            // struct-shaped payload layout under its own name, so the struct
-            // lookup answers for both kinds.
-            if tt.find_variant_type(*def).is_some() {
-                Some(CompilerItem::ReflectVariant)
-            } else if tt.find_struct_by_name(name, module_source).is_some() {
-                Some(CompilerItem::ReflectStruct)
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
 /// Whether `type_id` is one of the five reflection kinds, i.e. whether a
 /// `Reflect*`-bounded blanket can claim it.
 pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
-    reflect_kind_of(type_id, tt).is_some()
+    tt.reflect_kind(type_id).is_some()
 }
 
 /// The value blanket serving `receiver`: the first whose bounds hold at the
@@ -975,7 +926,7 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
     // `&self` method — every `Serialize::serialize` call — arrives as a
     // reference. Asking the reference for its reflection kind answers `None`
     // and rejects the blanket that should have served the call.
-    let kind = reflect_kind_of(tt.peel_refs(type_id), tt);
+    let kind = tt.reflect_kind(tt.peel_refs(type_id));
     bounds
         .iter()
         .all(|bound| match reflect_bound_item(bound, tt) {

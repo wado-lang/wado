@@ -959,7 +959,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let (bound, base) = {
                     let tt = self.tysys.type_table.borrow();
-                    let base = tt.get_ultimate_base_type(type_id);
+                    let base = tt.representation_head(type_id);
                     (tt.get(type_id).clone(), tt.get(base).clone())
                 };
                 if is_scalar(&bound) || is_scalar(&base) {

@@ -1768,7 +1768,7 @@ impl Monomorphizer {
     ) -> TypeId {
         let base = match type_table.get(tid) {
             // What the newtype inherits impls from, which for a newtype over a
-            // `flags` type is that declaration — `resolve_newtype_base` would
+            // `flags` type is that declaration — `representation_head` would
             // carry on to `u32`, the representation, whose impls are a
             // different set and which carries no `ReflectFlags` at all.
             ResolvedType::Newtype { .. } => type_table.reflect_structure_head(tid),
@@ -1785,10 +1785,8 @@ impl Monomorphizer {
         // the root and the newtype kind are synthesized per newtype and carry
         // no AST header, so the checks below would peel past them and a
         // derivation would answer with the base's name. Every other trait does
-        // inherit, and peeling is how it is reached. Only a declared newtype
-        // carries that synthesis — a generic instance has none, and keeping
-        // identity there would name a `type_name` nothing generates.
-        if type_table.is_reflected_newtype(tid) {
+        // inherit, and peeling is how it is reached.
+        if type_table.reflect_kind(tid) == Some(CompilerItem::ReflectNewtype) {
             let items = type_table.compiler_items();
             if [CompilerItem::Reflect, CompilerItem::ReflectNewtype]
                 .into_iter()
@@ -3357,14 +3355,14 @@ impl Monomorphizer {
             } else {
                 // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.
-                let resolved_inner = type_table.resolve_newtype_base(inner);
+                let resolved_inner = type_table.representation_head(inner);
                 info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner))
             }
         } else if needs_struct_type_args {
             // Resolve through newtypes so the receiver matches the TraitEnv key
             // for the template's home module (issue #1110).
             let recv_inner = type_table.peel_refs(receiver_type_id);
-            let resolved_recv = type_table.resolve_newtype_base(recv_inner);
+            let resolved_recv = type_table.representation_head(recv_inner);
             let mut new_info =
                 info.with_substituted_struct_name(&type_table.fq_type_name(resolved_recv));
             // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
@@ -3511,7 +3509,7 @@ impl Monomorphizer {
             // Peel newtypes: `type FieldValue = List<u8>` inherits
             // List's generic-impl dispatch, so the call must not be
             // marked blanket even though FieldValue itself has no impl.
-            let resolved = type_table.resolve_newtype_base(inner);
+            let resolved = type_table.representation_head(inner);
             matches!(
                 type_table.get(resolved),
                 ResolvedType::GenericInstance {
