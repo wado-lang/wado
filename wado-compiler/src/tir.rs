@@ -5856,6 +5856,10 @@ pub struct TirNewtype {
     /// instantiation is its own. Its impls are synthesized over the declaration
     /// and instantiated per use, the way a generic struct's are.
     pub type_id: Option<TypeId>,
+    /// The declaration's own `#[wire(name_policy)]`. A newtype has no members
+    /// to rename, so this spells the *type's* name on the wire — what a schema
+    /// keys its `$defs` entry by.
+    pub wire_name_policy: Option<String>,
     pub span: Span,
 }
 

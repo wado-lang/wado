@@ -224,6 +224,12 @@ internal trait ReflectFlags: Reflect {
 internal trait ReflectNewtype: Reflect {
     /// The type this newtype wraps: `type UserName = String` → `String`.
     type Base;
+
+    /// The newtype's own `#[wire(name_policy)]` (`Identity` if none). The kind
+    /// with no members spells its own name: a schema keys its `$defs` entry
+    /// by it.
+    #[compiler_item("reflect_newtype_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`

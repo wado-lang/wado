@@ -2566,6 +2566,7 @@ fn generate_newtype_reflect_impls(
                 receiver: FqTypeName::declared(tt.defs(), nt.def),
                 display_name: tt.def_name(nt.def).to_string(),
                 type_params: nt.type_params.clone(),
+                wire_name_policy: nt.wire_name_policy.clone(),
                 span: nt.span,
             })
             .collect()
@@ -2574,14 +2575,26 @@ fn generate_newtype_reflect_impls(
         return;
     }
 
-    let (string_type, root_trait_name, type_name_method, newtype_trait_key) = {
+    let (
+        string_type,
+        case_style_type,
+        root_trait_name,
+        type_name_method,
+        policy_method,
+        newtype_trait_key,
+    ) = {
         let mut tt = module.type_table.borrow_mut();
         let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
         (
             string_type,
+            case_style_type,
             items.trait_fq(CompilerItem::Reflect),
             items.method_name(CompilerItem::ReflectTypeName).to_string(),
+            items
+                .method_name(CompilerItem::ReflectNewtypeWireNamePolicy)
+                .to_string(),
             newtype_trait_name.canonical().expect(KEYED),
         )
     };
@@ -2600,6 +2613,18 @@ fn generate_newtype_reflect_impls(
         // use — the shape the struct kind already takes.
         type_name.impl_type_params.clone_from(&target.type_params);
         generated.push(Rc::new(RefCell::new(type_name)));
+
+        let mut policy = generate_wire_name_policy_fn(
+            &target.receiver,
+            case_style_type,
+            &target.wire_name_policy,
+            newtype_trait_name,
+            &policy_method,
+            target.span,
+        );
+        policy.impl_type_params.clone_from(&target.type_params);
+        generated.push(Rc::new(RefCell::new(policy)));
+
         ctx.record_impl(&target.receiver, &newtype_trait_key);
     }
 
@@ -2618,6 +2643,8 @@ struct ReflectNewtypeTarget {
     /// Empty for `type N = T`; the parameters the impl is written over for
     /// `type N<T> = …`.
     type_params: Vec<TirTypeParam>,
+    /// The declaration's own `#[wire(name_policy)]`.
+    wire_name_policy: Option<String>,
     span: Span,
 }
 

@@ -1,0 +1,22 @@
+// A newtype has no members to rename, so its `#[wire(name_policy)]` spells
+// the type's *own* name — what a schema keys its `$defs` entry by (issue
+// #1933). The four structure kinds each answer for their members; the fifth
+// answers for itself.
+
+use { CaseStyle } from "core:prelude";
+
+#[wire(name_policy = "kebab-case")]
+type UserName = String;
+
+type PlainName = String;
+
+test "a newtype answers its declared wire policy" {
+    assert ReflectNewtype::<UserName>::wire_name_policy() == CaseStyle::Kebab;
+}
+
+test "a newtype with no policy answers Identity" {
+    assert ReflectNewtype::<PlainName>::wire_name_policy() == CaseStyle::Identity;
+}
+
+__DATA__
+{"test": {}}

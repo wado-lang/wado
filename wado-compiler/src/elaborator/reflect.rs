@@ -195,6 +195,7 @@ pub(super) enum ReflectDispatch {
     Root,
     Struct,
     Variant,
+    Newtype,
     Scalar(ScalarReflectSpec),
 }
 
@@ -876,10 +877,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.is_reflect_variant_trait_call(prefix, method) {
             return Some(ReflectDispatch::Variant);
         }
+        if self.is_reflect_newtype_trait_call(prefix, method) {
+            return Some(ReflectDispatch::Newtype);
+        }
         [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS]
             .into_iter()
             .find(|spec| self.is_reflect_scalar_trait_call(*spec, prefix, method))
             .map(ReflectDispatch::Scalar)
+    }
+
+    /// Whether `prefix::method` names `ReflectNewtype::<T>::wire_name_policy`.
+    /// Same scope discipline as [`Self::is_reflect_trait_call`]. `Base` is an
+    /// associated type, not a call, so the kind declares one method here.
+    fn is_reflect_newtype_trait_call(&self, prefix: &str, method: &str) -> bool {
+        if self
+            .tysys
+            .classify_on_bound_trait(&self.type_lookup(), prefix)
+            != Some(super::trait_query::OnBoundTrait::ReflectNewtype)
+        {
+            return false;
+        }
+        let tt = self.tysys.type_table.borrow();
+        method
+            == tt
+                .compiler_items()
+                .method_name(CompilerItem::ReflectNewtypeWireNamePolicy)
     }
 
     /// Whether `prefix::method` names `Reflect::<T>::type_name`. Same scope
@@ -908,34 +930,82 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(CompilerItem::String);
+        self.resolve_shapeless_reflect_static_call(
+            CompilerItem::Reflect,
+            string_type,
+            self_ty,
+            static_call,
+            ctx,
+        )
+    }
+
+    /// Resolve `ReflectNewtype::<T>::wire_name_policy()`. The kind with no
+    /// members asks nothing of `T` beyond being a newtype, which the trait
+    /// prefix already said.
+    pub(super) fn resolve_reflect_newtype_static_call(
+        &mut self,
+        self_ty: TypeId,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let case_style = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_enum(CompilerItem::CaseStyle);
+        self.resolve_shapeless_reflect_static_call(
+            CompilerItem::ReflectNewtype,
+            case_style,
+            self_ty,
+            static_call,
+            ctx,
+        )
+    }
+
+    /// A reflection static call that reads a fact about `T` itself rather than
+    /// walking anything under it, so there is no shape to check and no pack to
+    /// bind: the trait names the impl, `result` is what the method answers.
+    fn resolve_shapeless_reflect_static_call(
+        &mut self,
+        trait_item: CompilerItem,
+        result: TypeId,
+        self_ty: TypeId,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
         let method = static_call.method.clone();
         if !self.reject_reflect_metadata_args(static_call, ctx) {
             return TypeTable::ERROR;
         }
 
-        let (root_trait_name, string_type) = {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            let trait_name = tt.compiler_items().trait_fq(CompilerItem::Reflect);
-            let string_type = tt.make_compiler_struct(CompilerItem::String);
-            (trait_name, string_type)
-        };
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_fq(trait_item);
 
         let subject = self.tysys.type_table.borrow().get(self_ty).clone();
         if let ResolvedType::TypeParam { name, .. } = subject {
             self.record_type_param_reflect_dispatch(
                 &name,
-                root_trait_name,
+                trait_name,
                 method,
                 static_call,
                 Vec::new(),
             );
-            return string_type;
+            return result;
         }
 
         let Some((base_name, module_source, type_args)) = self.reflect_root_subject(self_ty) else {
             let self_name = self.tysys.type_table.borrow().type_name(self_ty);
             let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("Reflect::<{self_name}>::{method}"),
+                name: format!("{}::<{self_name}>::{method}", trait_name.base_name()),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
@@ -945,13 +1015,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_ty,
             &base_name,
             &type_args,
-            &root_trait_name,
+            &trait_name,
             &method,
             module_source,
         );
         self.record_reflect_dispatch(static_call.id, func_ref, Vec::new());
 
-        string_type
+        result
     }
 
     /// The declaration `Reflect::<T>` names, and this instantiation's type args.

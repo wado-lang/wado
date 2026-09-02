@@ -432,6 +432,10 @@ pub enum CompilerItem {
     ReflectFlagsMembers,
     /// `ReflectFlags::wire_name_policy` — the flags type's `#[wire(name_policy)]`.
     ReflectFlagsWireNamePolicy,
+    /// `ReflectNewtype::wire_name_policy` — the newtype's own
+    /// `#[wire(name_policy)]`. The kind with no members, so this spells the
+    /// type's own name rather than renaming anything under it.
+    ReflectNewtypeWireNamePolicy,
     /// `String::with_capacity` — the buffer allocation template expansion
     /// emits and the NIR template-hoist recognises.
     StringWithCapacity,
@@ -739,6 +743,7 @@ impl CompilerItem {
         Self::ReflectFlagsFromBits,
         Self::ReflectFlagsMembers,
         Self::ReflectFlagsWireNamePolicy,
+        Self::ReflectNewtypeWireNamePolicy,
         Self::StringWithCapacity,
         Self::StringPushStr,
         Self::StringPushChar,
@@ -953,6 +958,7 @@ impl CompilerItem {
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
             Self::ReflectFlagsMembers => "reflect_flags_members",
             Self::ReflectFlagsWireNamePolicy => "reflect_flags_wire_name_policy",
+            Self::ReflectNewtypeWireNamePolicy => "reflect_newtype_wire_name_policy",
             Self::StringWithCapacity => "string_with_capacity",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
@@ -1114,6 +1120,7 @@ impl CompilerItem {
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
             | Self::ReflectFlagsWireNamePolicy
+            | Self::ReflectNewtypeWireNamePolicy
             | Self::StringWithCapacity
             | Self::StringPushStr
             | Self::StringPushChar
@@ -1367,6 +1374,7 @@ impl CompilerItem {
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
             | Self::ReflectFlagsWireNamePolicy
+            | Self::ReflectNewtypeWireNamePolicy
             | Self::StringWithCapacity
             | Self::StringPushStr
             | Self::StringPushChar

@@ -991,6 +991,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             def,
             type_params: Self::declared_type_params(&newtype_decl.type_params),
             type_id: type_id.filter(|_| !generic),
+            wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
             span: newtype_decl.span,
         })
     }
@@ -1198,6 +1199,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             def,
             type_params: Self::declared_type_params(&newtype_decl.type_params),
             type_id: type_id.filter(|_| !generic),
+            wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
             span: newtype_decl.span,
         });
     }
