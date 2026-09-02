@@ -142,11 +142,22 @@ impl Query<'_> {
                 trait_: implemented,
             }],
         };
+        let pinned = |index: usize| {
+            def.params.iter().flat_map(|p| &p.pins).any(|pin| {
+                pin.ty.mentions(&|p| {
+                    matches!(p, SolverType::Param(i) | SolverType::Pack(i) if *i as usize == index)
+                })
+            })
+        };
         for (index, param) in def.params.iter().enumerate() {
-            // A parameter the target never mentions is bound off a projection
-            // at monomorphization, and so is its bound (WEP 2026-03-14).
+            // A parameter a pin supplies (`Fields = [..F]`) is bound off the
+            // projection at monomorphization, and so is its bound
+            // (WEP 2026-03-14). One nothing supplies answers for no one.
             let Some(binding) = bindings[index].as_ref() else {
-                continue;
+                if param.bounds.is_empty() || pinned(index) {
+                    continue;
+                }
+                return None;
             };
             // A pack's bound holds of each element it took (`..T: Eq` on
             // `(..T)`), a parameter's of the one type it bound.
@@ -1012,6 +1023,32 @@ mod tests {
                 }],
                 ..Holds::default()
             })
+        );
+    }
+
+    /// `impl<T, U: Alpha> Beta for List<T>`: nothing supplies `U`, so its bound
+    /// can never be checked and the impl answers for no receiver.
+    #[test]
+    fn a_bound_on_a_parameter_nothing_supplies_answers_for_no_one() {
+        let unsupplied = |bounds: Vec<TraitDeclId>| ImplDef {
+            trait_: Some(BETA),
+            trait_args: vec![],
+            target: list_of(SolverType::Param(0)),
+            params: vec![ParamDef::default(), ParamDef::bounded(bounds)],
+            origin: ImplOrigin::Written,
+        };
+        let p = Builder::default()
+            .impl_(unsupplied(vec![ALPHA]))
+            .concrete(ALPHA, decl(I32))
+            .build();
+        assert_eq!(
+            holds(&p, &Env::default(), &list_of(decl(I32)), BETA, HERE),
+            None
+        );
+        let p = Builder::default().impl_(unsupplied(vec![])).build();
+        assert_eq!(
+            holds(&p, &Env::default(), &list_of(decl(I32)), BETA, HERE),
+            Some(Holds::default())
         );
     }
 
