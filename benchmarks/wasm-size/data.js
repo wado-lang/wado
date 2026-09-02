@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788298553218,
+  "lastUpdate": 1788314736812,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52417,6 +52417,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b32a526171ce4d998406cb7ae2e3402f30dfb080"
         },
         "date": 1788298552559,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 278121,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b720ab55b5ca0d92b39d932d5be988a62d5675e2",
+          "message": "Merge pull request #1941 from wado-lang/perf/field-schema-decision-tree\n\nperf(serde): dispatch a wire key through a decision tree",
+          "timestamp": "2026-09-02T10:52:11+09:00",
+          "tree_id": "225e82f41cf9e822d213298699b6d80686f789aa",
+          "url": "https://github.com/wado-lang/wado/commit/b720ab55b5ca0d92b39d932d5be988a62d5675e2"
+        },
+        "date": 1788314735868,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
