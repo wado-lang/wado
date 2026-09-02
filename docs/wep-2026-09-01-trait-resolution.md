@@ -256,6 +256,89 @@ the method's binder. Separately, all `impl` blocks in one module that bind a
 parameter of one spelling share an index bucket, which is neither a declaration
 nor a shape.
 
+## How the order is guaranteed
+
+The order above is a specification, and nothing holds the implementation to it
+but a corpus of `.wado` fixtures. A fixture pins what a program prints, so it
+proves the whole pipeline agreed on an answer; it does not pin the rule. A rank
+that never fires, a candidate list that quietly loses a shape, a cycle rule only
+one receiver kind exercises — none has a test that can name it. The rules
+therefore move to where they can be stated and checked directly.
+
+### The solver's input
+
+Selection reads `TypeId`s, `DefId`s, `ImplHeader` AST nodes and the annotate-time
+`Scope`. Every one is an index into something only the pipeline builds, so a test
+that wants to ask a question has to write Wado source and run the compiler to ask
+it. The solver takes one self-contained value instead:
+
+```text
+Program {
+  types:  TypeDeclId  -> { kind, members: [(name, type, visibility)], module }
+  traits: TraitDeclId -> { supertraits, methods, assoc_types, compiler_item }
+  impls:  ImplId      -> { trait_, trait_args, target, params: [{ bounds }],
+                           module, methods }
+  scopes: ModuleId    -> { traits_in_scope }
+}
+
+SolverType = Decl(TypeDeclId, [SolverType]) | Param(u32) | Ref { mut, inner }
+           | Tuple([SolverType])
+```
+
+`kind` names the shape a structural rule reads: struct, variant, enum, flags,
+newtype over a base, primitive. Every id is a plain index, so a test writes
+`TypeDeclId(0)` and the program around it, with no source and no pipeline.
+
+A query carries an environment beside the program: the bounds in force where the
+question was asked. A generic body's `T: Tr` holds because its own signature says
+so, not because any impl exists, so no query can answer from `Program` alone.
+This is rustc's `ParamEnv`, and it is a parameter from the start — the
+annotate-time `Scope` field it replaces is mutable state threaded through the
+elaborator, which is the shape hardest to retrofit later.
+
+A query also carries the asking module. A `Reflect*` bound holds only where the
+receiver's members are visible at the use site, and scope gates candidates by
+what that module imported, so `Program` carries member visibility and no query is
+a function of types alone.
+
+### The four questions
+
+| Function                                            | Rules it owns                                                                          |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `coherence_errors(program)`                         | duplicate `(Trait, Type)` pairs, an unbounded value blanket, variadic overlap, orphans |
+| `holds(program, env, ty, trait_)`                   | bound satisfaction, supertraits, the cycle rule                                        |
+| `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth                      |
+| `rank(candidates)`                                  | ranks 0-3 and both ambiguities                                                         |
+
+Two disciplines keep them functions rather than passes:
+
+- A diagnostic is returned, never emitted. `rank` answers with a winner or a
+  description of the ambiguity by candidate, and the elaborator turns that into a
+  message with the names only `DefTable` knows. An ambiguity becomes testable for
+  the same reason.
+- A derivation request is returned, never recorded. Answering a bound today
+  writes "synthesize `Eq` for this type" into the `TypeTable` on the way past.
+  The function reports the requests its answer depends on and the caller records
+  them; a caller that drops one silently loses a derived body.
+
+### Landing it
+
+Nothing flips at once. The fixture corpus is the drift detector, as
+`verify_arg_synthesis` already uses it for argument synthesis (WEP 2026-07-31):
+
+- [ ] Define `Program` and the four functions with unit tests, called by nothing.
+- [ ] Lower `TypeSystem` and `TraitEnv` into a `Program`, and in debug builds
+      assert the solver's answer against the path in use, over every fixture.
+      The existing path stays authoritative.
+- [ ] Once the two agree everywhere, make the solver authoritative and delete the
+      path it replaces.
+
+`coherence_errors` goes first. It reads the shallowest part of `Program` — impls
+and types, no bounds and no receiver — so it fixes the lowering's skeleton at the
+smallest surface, and it closes the two definition-time checks the Decision
+already owes. `holds`, `candidates` and `rank` follow in that order, each on a
+representation the step before it proved.
+
 ## Consequences
 
 Selection is one ordered list. A new rule becomes a rank in that list, and a
@@ -393,6 +476,26 @@ Only one shape reaches this once the rest lands — two value blankets of one
 trait holding at the same level, one written in the calling module — because a
 duplicate pair is rejected where it is written, a newtype and its base are
 separated by rank 1, and two traits' blankets are the cross-trait ambiguity.
+
+### What `holds` may answer from is open
+
+Answering a bound is not an impl lookup. `type_implements_trait` answers from the
+primitive operator items, a plain `enum`'s derived `Display`, the structural
+conformance of `Eq` / `Ord` / `Default` / serde over a type's members, the four
+`Reflect*` kinds, and reference identity. Which side of the lowering that
+knowledge sits on decides how much `Program` weighs:
+
+- The solver models it, and `Program` carries every type's kind and members. The
+  differential check then covers the derivation rules too, and the
+  representation grows to the size of the rules it restates.
+- Lowering resolves it, and `Program` carries the conclusion — this type
+  satisfies this trait — as a fact. The solver stays small, and the differential
+  covers less, because the part most likely to disagree was computed by the old
+  code on the way in.
+
+The proposal is the second: what selection needs is that a bound holds, not why.
+It is a decision either way, and the first `holds` written settles it, so it is
+worth settling before that.
 
 ### `spec.md` overstates coherence
 
