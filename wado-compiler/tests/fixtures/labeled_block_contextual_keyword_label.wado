@@ -1,18 +1,39 @@
-// A label is any name an expression may start with, which includes the
-// contextual keywords (`type`, `flags`, `of`, `from`). A block carries one and
-// a `break` leaves it, in statement and expression position alike.
+// A label is any name an expression may start with, which is what
+// `as_ident_name` defines and includes every contextual keyword. A block
+// carries one and a `break` leaves it, in statement and expression position
+// alike.
 
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let c = builtin::black_box(true);
+    let mut reached = 0;
 
+    of: {
+        if c {
+            break of;
+        }
+        reached += 1;
+    }
+    from: {
+        if c {
+            break from;
+        }
+        reached += 1;
+    }
+    extends: {
+        if c {
+            break extends;
+        }
+        reached += 1;
+    }
     type: {
         if c {
             break type;
         }
-        println("not reached");
+        reached += 1;
     }
+    assert reached == 0;
 
     let v = flags: {
         if c {

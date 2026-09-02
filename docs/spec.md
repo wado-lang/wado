@@ -734,12 +734,13 @@ for let mut i = 0; i < 10; i = i + 1 {
 }
 ```
 
-Both `break` and `continue` work with `while`, `for`, and `loop`. A loop carries
-no label, so neither can name one: `continue` takes no label at all, and
-`break LABEL` names an enclosing labeled block. Outside a loop both are errors.
-A closure body starts its own loop scope, so a loop around a closure binds
-nothing written inside it. To leave more than the innermost loop, wrap the nest
-in a labeled block and break to its label.
+Both `break` and `continue` work with `while`, `for`, and `loop`, and a loop
+carries no label. An unlabeled `break` or `continue` acts on the innermost loop,
+and outside a loop both are errors. `continue` never takes a label.
+`break LABEL` is a different statement: it leaves an enclosing labeled block,
+needs no loop of its own, and is how to leave more than the innermost loop. A
+closure body starts its own loop scope, so a loop around a closure binds nothing
+written inside it.
 
 ### Labeled Blocks
 
