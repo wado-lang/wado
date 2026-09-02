@@ -1265,22 +1265,22 @@ fn push_escaped_upto(out: &mut String, source: &String, cur: &mut HtmlCursor, ta
     let mut run = bi;
     while pos < target && bi < n {
         let b = source.get_byte_unchecked(bi);
-        if b >= 128 {
-            if b < 224 {
+        if b >= b'\x80' {
+            if b < b'\xe0' {
                 bi += 2;
-            } else if b < 240 {
+            } else if b < b'\xf0' {
                 bi += 3;
             } else {
                 bi += 4;
             }
         } else {
-            if b == 38 || b == 60 || b == 62 || b == 34 {
+            if b == b'&' || b == b'<' || b == b'>' || b == b'"' {
                 out.push_str_range_unchecked(source, run, bi);
-                if b == 38 {
+                if b == b'&' {
                     out.push_str(&"&amp;");
-                } else if b == 60 {
+                } else if b == b'<' {
                     out.push_str(&"&lt;");
-                } else if b == 62 {
+                } else if b == b'>' {
                     out.push_str(&"&gt;");
                 } else {
                     out.push_str(&"&quot;");
