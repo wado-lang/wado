@@ -1,6 +1,8 @@
 //! The checks that read the program alone — no receiver, no bounds in force.
 
-use super::program::{ImplDef, ImplId, ImplOrigin, Pin, Program, SolverType, TraitDeclId};
+use super::program::{
+    ArgDefault, ImplDef, ImplId, ImplOrigin, Pin, Program, SolverType, TraitDeclId,
+};
 use crate::hashmap::IndexMap;
 
 /// What a coherence check found. It names impls; the caller turns an id into a
@@ -20,12 +22,12 @@ pub enum CoherenceError {
 #[must_use]
 pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     let mut errors = Vec::new();
-    let mut seen: IndexMap<ImplKey<'_>, ImplId> = IndexMap::default();
+    let mut seen: IndexMap<ImplKey, ImplId> = IndexMap::default();
     for (&id, def) in &program.impls {
         if let Some(impl_) = unbounded_value_blanket(id, def) {
             errors.push(impl_);
         }
-        let Some(key) = impl_key(def) else {
+        let Some(key) = impl_key(program, def) else {
             continue;
         };
         match seen.get(&key) {
@@ -38,39 +40,59 @@ pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     errors
 }
 
-/// What makes two impls the same pair: the trait, its own arguments, the
-/// target, and its parameters' conditions, so `impl<T: A> Tr for T` and
-/// `impl<T: B> Tr for T` are two pairs. A condition's bounds are a set:
-/// `T: A + B` and `T: B + A` are one.
-type ImplKey<'a> = (
+/// What makes two impls the same pair: the trait at its arguments, the target,
+/// and its parameters' conditions, so `impl<T: A> Tr for T` and
+/// `impl<T: B> Tr for T` are two pairs. An omitted argument is its default and
+/// a condition's bounds and pins are sets, so `impl Mul for Point` and
+/// `impl Mul<Point> for Point` are one pair, as are `T: A + B` and `T: B + A`.
+type ImplKey = (
     TraitDeclId,
-    &'a [SolverType],
-    &'a SolverType,
-    Vec<(Vec<TraitDeclId>, &'a [Pin])>,
+    Vec<SolverType>,
+    SolverType,
+    Vec<(Vec<TraitDeclId>, Vec<Pin>)>,
 );
 
 /// An inherent impl and a marker have no key: several inherent impls spread a
 /// type's methods across modules, and a marker asks for a body.
-fn impl_key(def: &ImplDef) -> Option<ImplKey<'_>> {
+fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
     if def.origin == ImplOrigin::Marker {
         return None;
+    }
+    fn set<T: Ord + Clone>(items: &[T]) -> Vec<T> {
+        let mut items = items.to_vec();
+        items.sort_unstable();
+        items.dedup();
+        items
     }
     let conditions = def
         .params
         .iter()
-        .map(|p| {
-            let mut bounds = p.bounds.clone();
-            bounds.sort_unstable();
-            bounds.dedup();
-            (bounds, p.pins.as_slice())
-        })
+        .map(|p| (set(&p.bounds), set(&p.pins)))
         .collect();
     Some((
         def.trait_?,
-        def.trait_args.as_slice(),
-        &def.target,
+        trait_args_at_defaults(program, def),
+        def.target.clone(),
         conditions,
     ))
+}
+
+/// The impl's trait arguments with the omitted ones at the trait's defaults,
+/// `Self` read as the target. A default the lowering cannot spell keeps the
+/// omission, so an impl writing that argument is another pair.
+fn trait_args_at_defaults(program: &Program, def: &ImplDef) -> Vec<SolverType> {
+    let mut args = def.trait_args.clone();
+    let Some(trait_def) = def.trait_.and_then(|t| program.traits.get(&t)) else {
+        return args;
+    };
+    for default in trait_def.arg_defaults.iter().skip(args.len()) {
+        match default {
+            Some(ArgDefault::SelfType) => args.push(def.target.clone()),
+            Some(ArgDefault::Type(ty)) => args.push(ty.clone()),
+            Some(ArgDefault::Opaque) | None => break,
+        }
+    }
+    args
 }
 
 /// A value blanket targets a bare parameter, and that parameter states the
@@ -88,7 +110,7 @@ fn unbounded_value_blanket(id: ImplId, def: &ImplDef) -> Option<CoherenceError> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{ParamDef, TypeDeclId};
+    use super::super::program::{AssocId, ParamDef, TraitDef, TypeDeclId};
     use super::super::testing::{concrete, decl, program};
     use super::*;
 
@@ -263,6 +285,60 @@ mod tests {
                 blanket(vec![LIMIT, OTHER_TR]),
                 blanket(vec![OTHER_TR, LIMIT]),
             ])),
+            vec![CoherenceError::DuplicateImpl {
+                first: ImplId(0),
+                second: ImplId(1),
+            }]
+        );
+    }
+
+    /// The pins travel with the bounds: `T: A<X = i32> + B<Y = i32>` and
+    /// `T: B<Y = i32> + A<X = i32>` are one condition.
+    #[test]
+    fn two_blankets_at_reordered_pinned_bounds_are_a_duplicate() {
+        let pin = |trait_: TraitDeclId| Pin {
+            trait_,
+            assoc: AssocId(0),
+            ty: decl(I32),
+        };
+        let blanket = |bounds: [TraitDeclId; 2]| ImplDef {
+            trait_: Some(TR),
+            trait_args: vec![],
+            target: SolverType::Param(0),
+            params: vec![ParamDef {
+                bounds: bounds.to_vec(),
+                pins: bounds.map(pin).to_vec(),
+            }],
+            origin: ImplOrigin::Written,
+        };
+        assert_eq!(
+            coherence_errors(&program([
+                blanket([LIMIT, OTHER_TR]),
+                blanket([OTHER_TR, LIMIT]),
+            ])),
+            vec![CoherenceError::DuplicateImpl {
+                first: ImplId(0),
+                second: ImplId(1),
+            }]
+        );
+    }
+
+    /// `trait Mul<Rhs = Self>`: `impl Mul for Point` and
+    /// `impl Mul<Point> for Point` are one pair.
+    #[test]
+    fn an_omitted_argument_is_its_default() {
+        let mut explicit = concrete(TR, point());
+        explicit.trait_args = vec![point()];
+        let mut p = program([concrete(TR, point()), explicit]);
+        p.traits.insert(
+            TR,
+            TraitDef {
+                arg_defaults: vec![Some(ArgDefault::SelfType)],
+                ..TraitDef::default()
+            },
+        );
+        assert_eq!(
+            coherence_errors(&p),
             vec![CoherenceError::DuplicateImpl {
                 first: ImplId(0),
                 second: ImplId(1),

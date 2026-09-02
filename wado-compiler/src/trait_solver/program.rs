@@ -23,7 +23,7 @@ pub struct ImplId(pub u32);
 /// pair: a parameter is its position, so `impl<T> Tag for Box_<T>` and
 /// `impl<U> Tag for Box_<U>` are the same target, while
 /// `impl Tag for Box_<i32>` is a different one.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum SolverType {
     /// A declared type at its type arguments: `Point`, `Box_<i32>`.
     Decl(TypeDeclId, Vec<SolverType>),
@@ -46,7 +46,7 @@ pub struct AssocId(pub u32);
 /// What a bound says an associated type must be: the `Output = T` in
 /// `impl<T: Mul<Output = T>> Product for T`. The impl answering `T: Mul` must
 /// bind `Output` to `ty`, spelled with the pinning impl's own parameters.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Pin {
     pub trait_: TraitDeclId,
     pub assoc: AssocId,
