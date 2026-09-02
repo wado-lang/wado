@@ -723,25 +723,17 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
                 // After `.`: method if the call follows, else property. A
                 // `::<` turbofish is a call's type arguments — `.collect::<T>()`
                 // is as much a method as `.collect()`.
-                if follows(tokens, index, 1, &TokenKind::LParen)
-                    || (follows(tokens, index, 1, &TokenKind::ColonColon)
-                        && follows(tokens, index, 2, &TokenKind::Lt))
-                {
+                if calls(tokens, index) {
                     return (token_type::METHOD, 0);
                 }
                 return (token_type::PROPERTY, 0);
             }
             TokenKind::ColonColon => {
                 // After `::`: could be enum member or static method
-                if follows(tokens, index, 1, &TokenKind::LParen) {
+                if calls(tokens, index) {
                     return (token_type::FUNCTION, 0);
                 }
                 if follows(tokens, index, 1, &TokenKind::ColonColon) {
-                    // `::<` is a turbofish, so this is the callee it applies
-                    // to, not the middle of a path like `A::B::C`.
-                    if follows(tokens, index, 2, &TokenKind::Lt) {
-                        return (token_type::FUNCTION, 0);
-                    }
                     return (token_type::TYPE, 0);
                 }
                 return (token_type::ENUM_MEMBER, 0);
@@ -752,10 +744,7 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
 
     // 3. A call follows, directly or past its turbofish: `f(`, `f::<T>(`. A
     // `::` onto a name instead is a path, and step 2 classifies its segments.
-    if follows(tokens, index, 1, &TokenKind::LParen)
-        || (follows(tokens, index, 1, &TokenKind::ColonColon)
-            && follows(tokens, index, 2, &TokenKind::Lt))
-    {
+    if calls(tokens, index) {
         return (token_type::FUNCTION, 0);
     }
 
@@ -777,6 +766,38 @@ fn follows(tokens: &[Token], index: usize, ahead: usize, kind: &TokenKind) -> bo
     tokens
         .get(index + ahead)
         .is_some_and(|t| std::mem::discriminant(&t.kind) == std::mem::discriminant(kind))
+}
+
+/// Whether the name at `index` is called: `f(`, or `f::<T>(` past a turbofish.
+///
+/// The turbofish has to be followed to its close, not merely opened. `::<`
+/// alone also starts `Opt::<i32>::None`, where the type arguments qualify a
+/// path and the name is no callee.
+fn calls(tokens: &[Token], index: usize) -> bool {
+    if follows(tokens, index, 1, &TokenKind::LParen) {
+        return true;
+    }
+    if !follows(tokens, index, 1, &TokenKind::ColonColon)
+        || !follows(tokens, index, 2, &TokenKind::Lt)
+    {
+        return false;
+    }
+    // `<` never opens a comparison in type-argument position, so nesting is
+    // decidable by counting. A `>>` closes two levels: the lexer emits one
+    // token for the pair that `List<List<i32>>` ends on.
+    let mut depth = 0usize;
+    for (at, token) in tokens.iter().enumerate().skip(index + 2) {
+        depth = match token.kind {
+            TokenKind::Lt => depth + 1,
+            TokenKind::Gt => depth.saturating_sub(1),
+            TokenKind::GtGt => depth.saturating_sub(2),
+            _ => continue,
+        };
+        if depth == 0 {
+            return follows(tokens, at, 1, &TokenKind::LParen);
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -1089,12 +1110,24 @@ mod tests {
     }
 
     /// A path's turbofish is pinned on the identifier, not on a call, when no
-    /// call follows — and its arguments are types there too.
+    /// call follows — and its arguments are types there too. The head is no
+    /// callee either: `::<` opens as much a path as a call, and only the `(`
+    /// the turbofish closes onto tells them apart.
     #[test]
     fn a_path_prefix_turbofish_argument_is_a_type() {
         let src = "variant Opt<V> {\n    None,\n    Some(V),\n}\nfn run() {\n    let b = Opt::<i32>::None;\n}\n";
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 5, "i32"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 5, "Opt"), token_type::VARIABLE);
+    }
+
+    /// The same path one segment in, where a `::` precedes the turbofish's
+    /// name: a path middle, classified as one.
+    #[test]
+    fn a_path_middle_before_a_turbofish_is_not_a_function() {
+        let src = "fn run() {\n    let b = ns::Opt::<i32>::None;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "Opt"), token_type::TYPE);
     }
 
     /// `Output` in `Builder<Output = T>` names an associated type.
