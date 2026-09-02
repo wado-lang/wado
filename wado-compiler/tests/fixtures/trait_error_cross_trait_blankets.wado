@@ -1,14 +1,15 @@
 // Two traits' blankets share a method name and both apply. Neither ambiguity
-// fires: the cross-trait count skips blankets (WEP 2026-07-31), and the
-// blanket report covers one trait declaration at one argument list. Nothing
-// ranks them, so collection order picks — the silent cross-trait dispatch the
-// concrete-receiver rule exists to remove.
+// fires: the cross-trait count skips blankets, and the blanket report covers
+// one trait declaration at one argument list. Nothing ranks them, so collection
+// order picks — the silent cross-trait dispatch the concrete-receiver rule
+// exists to remove.
 //
-// Reporting it needs the two rules reconciled: the tie is an error with
-// `Alpha::describe(&p)` as the escape, or candidates are scoped by import and
-// the tie stops arising. Until that is decided this fixture fails
-// (WEP 2026-09-01, "Two traits' blankets sharing a method name are not
-// reported").
+// Both traits are declared here, so scope leaves both in the candidate set and
+// the tie is real: a blanket must join the cross-trait collision like any other
+// candidate, with `Alpha::describe(&p)` as the escape. Scope removes the
+// *foreign* form of this tie (`trait_error_unimported_blanket.wado`); this one
+// is the count's to report (WEP 2026-09-01, "Two traits' blankets sharing a
+// method name are not reported").
 
 trait Limit {
     fn limit() -> i32;

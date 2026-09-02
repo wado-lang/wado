@@ -78,6 +78,49 @@ A blanket over a reference (`impl<T: Bound> Tr for &T`) is a third shape and is
 on neither list. The prelude's `Inspect` and `Eq` reach one through the
 compiler's own bound handling; nothing else does.
 
+Both lists are then gated on scope, below.
+
+### Scope
+
+A trait's methods are candidates at a call site only where that trait's
+_declaration_ is in scope. Where the impl was written does not matter; impls
+stay globally visible, and one in a module the caller never named still answers
+once the trait is imported.
+
+A declaration is in scope when the calling module declares it, imports it by
+name or by alias, imports it through a `pub use` re-export, or when it is one of
+the prelude's. The prelude is the only exemption in the language: every other
+top-level symbol a module names must be imported, and a trait is no different.
+`Display`, `Eq`, `Inspect`, `IntoIterator` and the operator traits therefore
+carry no import burden and nothing else is auto-used. Importing a _type_ brings
+none of the traits its impls mention.
+
+A bound is a name like any other, so `T: Sub` requires `Sub` imported and
+reaches `Sub`'s own methods. A supertrait is a second name: a body calling
+`Base`'s method through `T: Sub` imports `Base` as well, exactly as it would to
+write `T: Base`. The bound states which contract `T` satisfies, not which names
+the body may leave unwritten.
+
+Explicitness is the reason. A method call whose meaning depends on a module the
+reader cannot see in the imports is a call the reader cannot resolve either. The
+cost the earlier design feared — that a library adding a blanket becomes a
+breaking change downstream — lands the other way without this gate: the blanket
+reaches every receiver in the program, so adding one changes what downstream
+calls mean, with no diagnostic. Scope removes the reach and the tie together.
+
+Lookup keeps searching outside the scope, for the diagnostic alone. When the
+scoped candidates are empty and the unscoped ones are not, the call is an error
+naming the trait that would have answered and the import that would enable it:
+
+```text
+no method 'shout' on 'String' in scope: 'Loud' declares it and is not
+imported here; add `use { Loud } from "./lib_a.wado"`
+```
+
+The unscoped search never selects. It runs only where the scoped one found
+nothing, so a call that resolves is never second-guessed, and its result is a
+message rather than a candidate.
+
 ### The order
 
 Candidates are ranked:
@@ -128,17 +171,14 @@ Candidates are ranked:
    Every other tie is settled by the order the candidates were collected in,
    which is a gap rather than a rule.
 
-Two filters sit beside the order rather than in it:
+One filter sits beside the order rather than in it. Arguments: one trait
+declaration at several argument lists forms an overload set, and the call's
+arguments choose (WEP 2026-07-31). Distinct traits never form one.
 
-- **Scope.** Two same-named trait declarations from different modules are
-  distinct traits. When the concrete candidates name several declarations and
-  exactly one of them is in scope at the call site, the others are dropped: each
-  module's `s.shout()` dispatches to the `Loud` in scope there
-  (`cross_module_same_name_foreign_impl.wado`). With none or several in scope the
-  filter does not fire and the ambiguity rules see every candidate.
-- **Arguments.** One trait declaration at several argument lists forms an
-  overload set, and the call's arguments choose (WEP 2026-07-31). Distinct
-  traits never form one.
+Two same-named trait declarations from different modules are distinct traits, so
+Scope above settles them: each module's `s.shout()` dispatches to the `Loud`
+imported there (`cross_module_same_name_foreign_impl.wado`), and a module
+importing both gets the two-trait ambiguity below.
 
 ### The two ambiguities
 
@@ -150,10 +190,10 @@ The receiver has `impl Alpha for Item` and `impl Beta for Item`, both declaring
 `describe`. They share no contract, so nothing selects. The call names the
 trait: `Alpha::describe(&it)` (WEP 2026-07-31).
 
-Counted over concrete candidates only. A blanket does not join the collision,
-because a foreign `impl<T: Bound> Foreign for T` reaches every receiver in the
-program and counting it would make adding a blanket to a library a breaking
-change for every downstream method of that name.
+Blankets join the collision like any other candidate. Two traits' blankets
+sharing a method name and both applying is the same question with no impl to
+name, and Scope is what keeps it rare: both traits have to be imported here for
+both to compete.
 
 #### Two blankets of one trait
 
@@ -175,7 +215,7 @@ rejected at definition time. The standard library never reaches this rule: the
 four reflection kinds are mutually exclusive, so no receiver satisfies two.
 
 The report covers one trait declaration at one argument list. Two blankets of
-_different_ traits sharing a method name fall under neither diagnostic.
+_different_ traits are the two-trait ambiguity above.
 
 ### What eligibility is, and is not
 
@@ -208,9 +248,39 @@ must not diverge, so the sort cites this document instead of restating it.
 
 ## Known gaps
 
-Four of these are one defect in several shapes: a candidate the order cannot
+Three of these are one defect in several shapes: a candidate the order cannot
 rank is dropped without a word, so which impl runs depends on load order,
 declaration order, or which module the reader is in.
+
+### Scope is decided and not implemented
+
+Today a trait's methods are candidates wherever its impls are loaded. A trait
+declaration's scope is consulted at one point only — several concrete candidates
+naming several declarations, with exactly one of those in scope — so an
+unimported trait's method still dispatches, an unimported blanket still reaches
+every receiver, and two of them tie on collection order.
+
+What the decision above needs:
+
+- [ ] Gate both candidate lists on the trait declaration's scope at the call
+      site, so a call in a module that imported nothing sees only the prelude.
+- [ ] Keep the unscoped search as the recovery path: run it only where the
+      scoped set came out empty, and turn its result into the "not imported
+      here" message rather than a candidate.
+- [ ] Gate the supertrait reach too: a body calling `Base`'s method through
+      `T: Sub` resolves today with `Base` unimported, and must stop.
+- [ ] Pin an aliased import (`use { Loud as L }`) and a `pub use` re-export as
+      putting the trait in scope. Both follow from the rule and neither is
+      exercised by a fixture.
+- [ ] Pin that an impl in a module the caller never named still answers once
+      the trait is imported. Impls stay global; scope gates the declaration.
+
+An unused-trait-import warning belongs to
+[Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) rather than here,
+with one constraint this decision imposes on it: a trait imported only to enable
+a dispatch never appears in an expression, so the check must count enabling a
+dispatch as a use. A check that reads the source alone will tell the programmer
+to delete the import that makes the module compile.
 
 ### Duplicate impls of one `(Trait, Type)` pair are accepted
 
@@ -225,11 +295,10 @@ check, not a rank.
 
 `impl<T: Limit> Alpha for T` beside `impl<T: Limit> Beta for T`, both declaring
 `describe`, both applying to the receiver: rank 3 answers when exactly one is
-local, and otherwise collection order does. Excluding blankets from the
-cross-trait count is what keeps adding a blanket from breaking downstream code
-(WEP 2026-07-31), and it is also what makes this tie silent. Reporting it needs
-the two rules reconciled: either the tie is an error with `Alpha::describe(&x)`
-as the escape, or candidates are scoped by import and the tie stops arising.
+local, and otherwise collection order does. Blankets are excluded from the
+cross-trait count, which is what makes this tie silent. Scope removes most of
+it — two foreign blankets only compete where both traits are imported — and the
+rest is the count: a blanket must join the collision like any other candidate.
 
 ### Rank 2 does not reach concrete impls
 

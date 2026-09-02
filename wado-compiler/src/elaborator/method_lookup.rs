@@ -2498,6 +2498,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && a.impl_module_source == b.impl_module_source
         });
 
+        // The narrow half of the scope rule
+        // (`docs/wep-2026-09-01-trait-resolution.md`): the full gate keeps an
+        // unimported trait's methods out of the candidate list entirely, and
+        // until it lands only this tie-break consults scope.
+        //
         // Distinct same-name declarations tie-break on scope: a same-named
         // foreign trait the calling module never imported is not a competitor
         // (`cross_module_same_name_foreign_impl.wado` — each module's
@@ -2675,11 +2680,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) {
-        // Blanket candidates are excluded from the count: a blanket loses to
-        // any impl written for the receiver, and counting it would make a
-        // library adding one a breaking change for every downstream method of
-        // that name (WEP 2026-07-31, blanket exception). Selection is
-        // untouched — this decides only what is reported.
+        // Blanket candidates are excluded from the count, which is why two
+        // traits' blankets sharing a method name tie silently — a known gap of
+        // `docs/wep-2026-09-01-trait-resolution.md`, to be closed with the
+        // scope gate that keeps the two from competing in the first place.
+        // Selection is untouched — this decides only what is reported.
         // The collision is counted on declarations, so two same-named traits
         // from different modules still collide even though their spellings
         // agree — identity is the declaration, not the name.

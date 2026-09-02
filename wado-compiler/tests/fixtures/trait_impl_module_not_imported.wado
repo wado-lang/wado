@@ -1,0 +1,16 @@
+// Scope gates the trait declaration, never the impl. `Loud` is imported here;
+// the impl answering the call lives in a module this one never names, reached
+// only through the factory it calls. Impls stay globally visible, which is what
+// keeps a library free to spread its impls across its own modules
+// (WEP 2026-09-01).
+
+use { Loud } from "./sub/trait_scope_lib.wado";
+use { make_whisperer } from "./sub/trait_scope_reexporter.wado";
+
+test "an impl in an unnamed module answers once the trait is imported" {
+    let w = make_whisperer(4);
+    assert w.shout() == "whisper:4";
+}
+
+__DATA__
+{"test": {}}

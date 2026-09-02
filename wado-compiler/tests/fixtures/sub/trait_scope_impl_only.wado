@@ -1,0 +1,13 @@
+// The impl lives here, apart from the trait it implements. Nothing imports this
+// module by name; it arrives through `trait_scope_reexporter.wado`.
+use { Loud, Speaker } from "./trait_scope_lib.wado";
+
+pub struct Whisperer {
+    pub id: i32,
+}
+
+impl Loud for Whisperer {
+    fn shout(&self) -> String {
+        return `whisper:${self.id}`;
+    }
+}
