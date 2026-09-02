@@ -1,0 +1,97 @@
+// Test: `slot_temp_sroa` scalarizes a struct an inlined two-armed helper yields
+//
+// Inlining a helper whose arms build the aggregate leaves `let x = <labeled
+// block>`, which `sroa`'s direct-literal matcher cannot see, so the struct was
+// allocated on the heap and read straight back. The `core:prelude/fpfmt.wado`
+// shape: a fast arm that builds the pair inline and a slow arm that calls out
+// for it, paid once per float conversion.
+//
+// The aggregate-valued block itself is what must go, so the expectations name
+// its printed result type rather than any one exit.
+
+struct HiLo {
+    hi: u64,
+    lo: u64,
+}
+
+struct Pair {
+    a: u64,
+    b: u64,
+}
+
+// Both exits build the struct in place.
+fn pick_literal(p: i32) -> HiLo {
+    if p >= 0 && p < 8 {
+        return HiLo { hi: p as u64, lo: 7 };
+    }
+    return HiLo { hi: p as u64 * 3, lo: 5 };
+}
+
+#[inline("never")]
+fn use_literal(p: i32) -> u64 {
+    let x = pick_literal(p);
+    return x.hi + x.lo;
+}
+
+#[inline("never")]
+fn wide(p: i32) -> Pair {
+    return Pair { a: p as u64 * 3, b: p as u64 * 5 };
+}
+
+// One exit calls out for the struct: that arm has no fields to assign from, so
+// it binds the result and projects them.
+fn pick_call(p: i32) -> Pair {
+    if p >= 0 && p < 8 {
+        return Pair { a: p as u64, b: 7 };
+    }
+    return wide(p);
+}
+
+#[inline("never")]
+fn use_call(p: i32) -> u64 {
+    let x = pick_call(p);
+    return x.a + x.b;
+}
+
+struct Half {
+    kept: u64,
+    dropped: u64,
+}
+
+fn pick_half(p: i32) -> Half {
+    if p >= 0 && p < 8 {
+        return Half { kept: p as u64, dropped: 7 };
+    }
+    return Half { kept: p as u64 * 3, dropped: 5 };
+}
+
+// Only one field is read, so the struct is not fully decomposed and the block
+// stays: taking half of a named struct is what would strip the shape another
+// pass keys on — `tmpl_hoist` reads a template `String`'s `used` and no more.
+#[inline("never")]
+fn use_half(p: i32) -> u64 {
+    let x = pick_half(p);
+    return x.kept;
+}
+
+export fn run() {
+    assert use_literal(builtin::black_box(3)) == 10;
+    assert use_literal(builtin::black_box(90)) == 275;
+    assert use_call(builtin::black_box(3)) == 10;
+    assert use_call(builtin::black_box(90)) == 720;
+    assert use_half(builtin::black_box(3)) == 3;
+    assert use_half(builtin::black_box(90)) == 270;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "__sroa_slot_",
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//Half\""
+    ],
+    "wir_not_expect:O2": [
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//HiLo\"",
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//Pair\""
+    ]
+}
