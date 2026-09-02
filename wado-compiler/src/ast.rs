@@ -505,7 +505,10 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_generic_params(&n.type_params);
             v.visit_type(&n.ty);
         }
-        Item::TupleTypeDecl(t) => v.visit_id(t.id, t.span),
+        Item::TupleTypeDecl(t) => {
+            v.visit_id(t.id, t.span);
+            v.visit_type(&t.head);
+        }
         Item::BuiltinTypeDecl(d) => {
             v.visit_id(d.id, d.span);
             v.visit_generic_params(&d.type_params);
@@ -552,7 +555,20 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
                 v.visit_function(m);
             }
         }
-        Item::World(w) => v.visit_id(w.id, w.span),
+        Item::World(w) => {
+            v.visit_id(w.id, w.span);
+            // An exported signature is types like any other.
+            for export in &w.exports {
+                if let WorldExport::Function(f) = export {
+                    for param in &f.params {
+                        v.visit_type(&param.ty);
+                    }
+                    if let Some(return_type) = &f.return_type {
+                        v.visit_type(return_type);
+                    }
+                }
+            }
+        }
         Item::Test(t) => {
             v.visit_id(t.id, t.span);
             v.visit_block(&t.body);
@@ -704,6 +720,10 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         Expr::Ident(i) => {
             for segment in &i.segments {
                 v.visit_id(segment.id, segment.span);
+            }
+            // `Opt::<V>::None` pins its turbofish here rather than on a call.
+            for ty in &i.type_args {
+                v.visit_type(ty);
             }
         }
         Expr::Literal(_) => {}
@@ -912,6 +932,13 @@ pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
         for assoc in &bound.assoc_types {
             v.visit_id(assoc.id, assoc.span);
             v.visit_type(&assoc.ty);
+        }
+        // `T: fn(i32) -> i32` carries its signature's types here.
+        if let Some(signature) = &bound.fn_signature {
+            for param in &signature.params {
+                v.visit_type(param);
+            }
+            v.visit_type(&signature.return_type);
         }
     }
 }
@@ -1601,7 +1628,27 @@ pub enum AttrValue {
     Float(f64),
     Bool(bool),
     Array(Vec<AttrValue>),
-    Object(IndexMap<String, AttrValue>),
+    Object(AttrObject),
+}
+
+/// An attribute object's entries, in parse order, each keyed by its name.
+pub type AttrObject = IndexMap<String, AttrEntry>;
+
+/// The value at `key`, for a reader that wants the value and not the key span
+/// stored beside it.
+#[must_use]
+pub fn attr_value<'a>(object: &'a AttrObject, key: &str) -> Option<&'a AttrValue> {
+    object.get(key).map(|entry| &entry.value)
+}
+
+/// One `key: value` entry of an attribute object.
+///
+/// The key's own span is what lets a diagnostic — and the highlighter — point
+/// at the key rather than at the whole `with { … }`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttrEntry {
+    pub key_span: Span,
+    pub value: AttrValue,
 }
 
 impl AttrValue {
@@ -1616,7 +1663,7 @@ impl AttrValue {
 
     /// Borrow the inner object, if this is a [`AttrValue::Object`].
     #[must_use]
-    pub fn as_object(&self) -> Option<&IndexMap<String, AttrValue>> {
+    pub fn as_object(&self) -> Option<&AttrObject> {
         match self {
             AttrValue::Object(o) => Some(o),
             _ => None,
@@ -1643,15 +1690,12 @@ impl AttrValue {
 #[derive(Debug, Clone, Default)]
 pub struct ImportAttributes {
     /// Top-level key/value entries, in parse order.
-    pub entries: IndexMap<String, AttrValue>,
+    pub entries: AttrObject,
 }
 
 impl ImportAttributes {
     fn get_str(&self, key: &str) -> Option<String> {
-        self.entries
-            .get(key)
-            .and_then(AttrValue::as_str)
-            .map(str::to_string)
+        self.get(key).and_then(AttrValue::as_str).map(str::to_string)
     }
 
     #[must_use]
@@ -1706,8 +1750,8 @@ impl ImportAttributes {
 
     /// Inline Kiln generator configuration (`with { generator: { ... } }`).
     #[must_use]
-    pub fn generator(&self) -> Option<&IndexMap<String, AttrValue>> {
-        self.entries.get("generator").and_then(AttrValue::as_object)
+    pub fn generator(&self) -> Option<&AttrObject> {
+        self.get("generator").and_then(AttrValue::as_object)
     }
 
     /// Inline provider source (`with { provider: "./ext.wado" }`): a Wado file
@@ -1715,13 +1759,13 @@ impl ImportAttributes {
     /// dependency's guest-effect imports (research-cm-boundary-callbacks.md).
     #[must_use]
     pub fn provider_path(&self) -> Option<&str> {
-        self.entries.get("provider").and_then(AttrValue::as_str)
+        self.get("provider").and_then(AttrValue::as_str)
     }
 
     /// Raw lookup for any top-level attribute.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&AttrValue> {
-        self.entries.get(key)
+        self.entries.get(key).map(|entry| &entry.value)
     }
 }
 
@@ -3219,6 +3263,9 @@ pub struct NamespacedGenericType {
     pub namespace: String,
     /// Type name (e.g., "Value")
     pub name: String,
+    /// Span of just the type name token. `span` covers the whole `ns::Value<T>`,
+    /// so only this locates the second segment.
+    pub name_span: Span,
     /// Generic arguments
     pub args: Vec<Type>,
     pub span: Span,
@@ -3519,6 +3566,10 @@ pub struct TupleTypeDecl {
     pub id: AstId,
     pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
+    /// The declared head, `[..T]`. The declaration carries no meaning beyond
+    /// anchoring the family, but keeping the type it was written as is what
+    /// lets a walk reach the `T` it binds.
+    pub head: Type,
     pub span: Span,
 }
 

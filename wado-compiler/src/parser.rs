@@ -3,7 +3,8 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
+    AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
+    CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
     CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
@@ -910,6 +911,7 @@ impl Parser {
                     id: self.alloc_ast_id(),
                     namespace: t.name.clone(),
                     name: second_name,
+                    name_span: second_span,
                     args: second_args,
                     span: start_span,
                 }),
@@ -1558,10 +1560,10 @@ impl Parser {
 
         if !self.check(&TokenKind::RBrace) {
             loop {
-                let key = self.consume_ident()?;
+                let (key, key_span) = self.consume_ident_with_span()?;
                 self.expect(&TokenKind::Colon)?;
                 let value = self.parse_attr_value()?;
-                attrs.entries.insert(key, value);
+                attrs.entries.insert(key, AttrEntry { key_span, value });
 
                 if !self.check(&TokenKind::Comma) {
                     break;
@@ -1654,14 +1656,13 @@ impl Parser {
                     });
                 }
                 self.advance();
-                let mut obj: crate::hashmap::IndexMap<String, crate::ast::AttrValue> =
-                    crate::hashmap::IndexMap::default();
+                let mut obj = crate::ast::AttrObject::default();
                 if !self.check(&TokenKind::RBrace) {
                     loop {
-                        let key = self.consume_ident()?;
+                        let (key, key_span) = self.consume_ident_with_span()?;
                         self.expect(&TokenKind::Colon)?;
-                        let v = self.parse_attr_value()?;
-                        obj.insert(key, v);
+                        let value = self.parse_attr_value()?;
+                        obj.insert(key, AttrEntry { key_span, value });
                         if !self.check(&TokenKind::Comma) {
                             break;
                         }
@@ -4664,8 +4665,10 @@ impl Parser {
     /// Parse a type or a type pack spread (`..T`) inside a tuple type.
     fn parse_type_or_pack(&mut self) -> ParseResult<Type> {
         if self.check_dot_dot_or_ellipsis() {
-            let span = self.consume_dot_dot()?;
-            let name = self.consume_ident()?;
+            self.consume_dot_dot()?;
+            // The name's span, not the `..`, so the span starts at the token
+            // being named — as it does on every other type node.
+            let (name, span) = self.consume_ident_with_span()?;
             return Ok(Type::TypePackSpread(name, span));
         }
         self.parse_type()
@@ -4793,7 +4796,7 @@ impl Parser {
         // Check for namespaced type: namespace::type<T>
         if self.check(&TokenKind::ColonColon) {
             self.advance();
-            let type_name = self.consume_ident()?;
+            let (type_name, type_name_span) = self.consume_ident_with_span()?;
 
             // Namespaced generic type: namespace::type<T>
             if self.check(&TokenKind::Lt) {
@@ -4807,6 +4810,7 @@ impl Parser {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
+                    name_span: type_name_span,
                     args,
                     span: start_span.merge(&end_span),
                 }));
@@ -4817,6 +4821,7 @@ impl Parser {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
+                    name_span: type_name_span,
                     args: Vec::new(),
                     span: start_span.merge(&end_span),
                 }));
@@ -5428,10 +5433,11 @@ impl Parser {
             let end_span = self.expect(&TokenKind::Semicolon)?.span;
             let span = start_span.merge(&end_span);
             return match ty {
-                Type::Tuple(_) => Ok(Item::TupleTypeDecl(TupleTypeDecl {
+                head @ Type::Tuple(_) => Ok(Item::TupleTypeDecl(TupleTypeDecl {
                     id,
                     visibility,
                     attrs,
+                    head,
                     span,
                 })),
                 Type::Named(head) => Ok(Item::BuiltinTypeDecl(BuiltinTypeDecl {

@@ -12,10 +12,13 @@
 //! telling a function from a variable takes name resolution — but a span it
 //! does colour has to agree, so the two sides naming one differently is a
 //! defect too. Only silence on an identifier is a capability gap, and that is
-//! reported rather than gated. Files Gale reports diagnostics for are skipped
-//! and counted:
-//! `check-grammar` owns that failure. The two recoveries agree closely — what
-//! comparing them anyway adds is a divergence on the broken token itself.
+//! reported rather than gated.
+//!
+//! A file either side rejects is skipped and counted. Past a syntax error the
+//! two recoveries describe different programs — a `compile_error` fixture's
+//! parameter list stops being a parameter list on the side that broke — so
+//! comparing them measures the recoveries, not the highlighters.
+//! `check-grammar` owns that divergence.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -40,6 +43,7 @@ enum Class {
     Operator,
     Type,
     Property,
+    Method,
     EnumMember,
     Name,
 }
@@ -56,7 +60,7 @@ impl Class {
             | Self::Keyword
             | Self::Constant
             | Self::Operator => true,
-            Self::Type | Self::Property | Self::EnumMember | Self::Name => false,
+            Self::Type | Self::Property | Self::Method | Self::EnumMember | Self::Name => false,
         }
     }
 
@@ -70,6 +74,7 @@ impl Class {
             Self::Operator => "operator",
             Self::Type => "type",
             Self::Property => "property",
+            Self::Method => "method",
             Self::EnumMember => "enumMember",
             Self::Name => "name",
         }
@@ -97,12 +102,12 @@ fn class_of_token(token: &ClassifiedToken) -> Class {
         | token_type::INTERFACE
         | token_type::CLASS => Class::Type,
         token_type::PROPERTY => Class::Property,
+        token_type::METHOD => Class::Method,
         token_type::ENUM_MEMBER => Class::EnumMember,
         token_type::NAMESPACE
         | token_type::PARAMETER
         | token_type::VARIABLE
-        | token_type::FUNCTION
-        | token_type::METHOD => Class::Name,
+        | token_type::FUNCTION => Class::Name,
         other => panic!(
             "the classifier emits token type {other} ('{}'), which this comparison has no class for",
             TOKEN_TYPES[other as usize]
@@ -122,6 +127,7 @@ fn class_of_capture(capture: &str) -> Class {
         "operator" => Class::Operator,
         "type" => Class::Type,
         "property" => Class::Property,
+        "function.method" => Class::Method,
         "variable" => Class::Name,
         other => panic!(
             "the highlight query emits capture '{other}', which this comparison has no class for"
@@ -442,6 +448,15 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
             continue;
         }
         let source = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
+        // A file only one side parses puts its recovery against the other's
+        // real parse, and the two recover differently past the break — a
+        // `compile_error` fixture's parameter list stops being a parameter
+        // list. `check-grammar` owns that divergence; this one compares only
+        // where both sides read the same program.
+        if !wado_compiler::parse(&source).errors.is_empty() {
+            skipped += 1;
+            continue;
+        }
         compared += 1;
         let gale_pieces = to_byte_offsets(&source, &theirs.pieces);
         let (found, refined) = diverge(path, &source, &compiler_pieces(&source), &gale_pieces);
@@ -455,7 +470,7 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
             .unwrap_or_else(|e| panic!("writing '{path}': {e}"));
     }
     println!(
-        "corpus: {} files | compared: {compared} | skipped (Gale diagnostics): {skipped} | \
+        "corpus: {} files | compared: {compared} | skipped (either side rejects): {skipped} | \
          divergences: {} in {} patterns | template refinements: {refinements}",
         corpus.len(),
         divergences.len(),

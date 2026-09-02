@@ -385,6 +385,27 @@ struct SpanCollector {
     spans: AstSpans,
 }
 
+impl SpanCollector {
+    /// An effect named in a `with` clause. The declaration site already reads
+    /// as a type (`effect E`); its uses are the same name.
+    fn mark_effect_names(&mut self, effects: &[(AstId, Span)]) {
+        for (_, span) in effects {
+            self.spans.insert(span.start, token_type::TYPE);
+        }
+    }
+
+    /// Mark every key of an attribute object, and of the objects nested in it.
+    fn mark_attr_keys(&mut self, object: &ast::AttrObject) {
+        for entry in object.values() {
+            self.spans
+                .insert(entry.key_span.start, token_type::PROPERTY);
+            if let Some(nested) = entry.value.as_object() {
+                self.mark_attr_keys(nested);
+            }
+        }
+    }
+}
+
 impl AstVisitor for SpanCollector {
     fn visit_item(&mut self, item: &Item) {
         // The contextual keywords lex as identifiers, so the declaration's own
@@ -397,6 +418,13 @@ impl AstVisitor for SpanCollector {
         {
             self.spans.mark_contextual(rest.keyword_span.start, KEYWORD);
         }
+        // An import attribute's keys are its object's fields, at every depth.
+        // They are not expressions, so no other walk reaches them.
+        if let Item::Use(decl) = item
+            && let Some(attributes) = &decl.attributes
+        {
+            self.mark_attr_keys(&attributes.entries);
+        }
         ast::walk_item(self, item);
     }
 
@@ -404,6 +432,7 @@ impl AstVisitor for SpanCollector {
         for param in &func.params {
             self.spans.mark_param(param.id);
         }
+        self.mark_effect_names(&func.effect_ids);
         ast::walk_function(self, func);
     }
 
@@ -428,13 +457,35 @@ impl AstVisitor for SpanCollector {
         if let Expr::WithHandler(w) = expr {
             self.spans.mark_contextual(w.do_span.start, KEYWORD);
         }
+        // A field name is the field, not a variable — including the shorthand
+        // `{ state }`, where it is also a read but names the field first.
+        if let Expr::StructLiteral(literal) = expr {
+            for field in &literal.fields {
+                self.spans
+                    .insert(field.name_span.start, token_type::PROPERTY);
+            }
+        }
         ast::walk_expr(self, expr);
+    }
+
+    fn visit_pattern(&mut self, pat: &ast::Pattern) {
+        // The destructuring side of the same rule: `let { x } = p` names the
+        // field first, and binds through it. A field's span starts at its
+        // name, in the `x: inner` form as much as the shorthand.
+        if let ast::Pattern::Struct { fields, .. } = pat {
+            for field in fields {
+                self.spans.insert(field.span.start, token_type::PROPERTY);
+            }
+        }
+        ast::walk_pattern(self, pat);
     }
 
     fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
         for param in params {
+            // `name_span`, not `span`: a pack parameter's `span` starts at its
+            // `..`, and classification keys on the identifier's own offset.
             self.spans
-                .insert(param.span.start, token_type::TYPE_PARAMETER);
+                .insert(param.name_span.start, token_type::TYPE_PARAMETER);
         }
         ast::walk_generic_params(self, params);
     }
@@ -442,6 +493,14 @@ impl AstVisitor for SpanCollector {
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
             self.spans.insert(bound.span.start, token_type::TYPE);
+            // `Output` in `Builder<Output = T>` names an associated type.
+            for assoc in &bound.assoc_types {
+                self.spans.insert(assoc.span.start, token_type::TYPE);
+            }
+            // A closure bound's own `with` clause: `F: fn() with Stdout`.
+            if let Some(signature) = &bound.fn_signature {
+                self.mark_effect_names(&signature.effect_ids);
+            }
         }
         ast::walk_trait_bounds(self, bounds);
     }
@@ -450,14 +509,20 @@ impl AstVisitor for SpanCollector {
         match ty {
             Type::Named(t) => self.spans.insert(t.span.start, token_type::TYPE),
             Type::Generic(t) => self.spans.insert(t.span.start, token_type::TYPE),
-            // `ns::Value` and `Self::Item` parse to the same node, so the head
-            // is not knowably a namespace; leave it to the symbol map.
-            Type::NamespacedGeneric(_)
-            | Type::Function(_)
-            | Type::Tuple(_)
+            // Both segments sit in a type position, so both take the class the
+            // position gives them. The head is not knowably a namespace —
+            // `ns::Value` and `Self::Item` parse to the same node — and the
+            // symbol map refines it where it resolves one; without that, `type`
+            // beats the `enumMember` the `::` heuristic would land on.
+            Type::NamespacedGeneric(t) => {
+                self.spans.insert(t.span.start, token_type::TYPE);
+                self.spans.insert(t.name_span.start, token_type::TYPE);
+            }
+            Type::TypePackSpread(_, span) => self.spans.insert(span.start, token_type::TYPE),
+            Type::Function(f) => self.mark_effect_names(&f.effect_ids),
+            Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _)
             | Type::Infer(_)
             | Type::Error(_) => {}
         }
@@ -642,19 +707,28 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
             | TokenKind::World
             | TokenKind::Effect => return (token_type::TYPE, 0),
             TokenKind::Dot => {
-                // After `.`: method if followed by `(`, else property
-                if next_is(tokens, index, &TokenKind::LParen) {
+                // After `.`: method if the call follows, else property. A
+                // `::<` turbofish is a call's type arguments — `.collect::<T>()`
+                // is as much a method as `.collect()`.
+                if follows(tokens, index, 1, &TokenKind::LParen)
+                    || (follows(tokens, index, 1, &TokenKind::ColonColon)
+                        && follows(tokens, index, 2, &TokenKind::Lt))
+                {
                     return (token_type::METHOD, 0);
                 }
                 return (token_type::PROPERTY, 0);
             }
             TokenKind::ColonColon => {
                 // After `::`: could be enum member or static method
-                if next_is(tokens, index, &TokenKind::LParen) {
+                if follows(tokens, index, 1, &TokenKind::LParen) {
                     return (token_type::FUNCTION, 0);
                 }
-                if next_is(tokens, index, &TokenKind::ColonColon) {
-                    // Middle of a path like `A::B::C` - treat as type
+                if follows(tokens, index, 1, &TokenKind::ColonColon) {
+                    // `::<` is a turbofish, so this is the callee it applies
+                    // to, not the middle of a path like `A::B::C`.
+                    if follows(tokens, index, 2, &TokenKind::Lt) {
+                        return (token_type::FUNCTION, 0);
+                    }
                     return (token_type::TYPE, 0);
                 }
                 return (token_type::ENUM_MEMBER, 0);
@@ -664,7 +738,7 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
     }
 
     // 3. Check if followed by `(` → function call
-    if next_is(tokens, index, &TokenKind::LParen) {
+    if follows(tokens, index, 1, &TokenKind::LParen) {
         return (token_type::FUNCTION, 0);
     }
 
@@ -680,9 +754,11 @@ fn prev_significant(tokens: &[Token], index: usize) -> Option<&Token> {
     }
 }
 
-fn next_is(tokens: &[Token], index: usize, kind: &TokenKind) -> bool {
+/// Whether the token `ahead` positions past `index` is of `kind`. `ahead` is 1
+/// for the next token; the `::<` turbofish needs 2.
+fn follows(tokens: &[Token], index: usize, ahead: usize, kind: &TokenKind) -> bool {
     tokens
-        .get(index + 1)
+        .get(index + ahead)
         .is_some_and(|t| std::mem::discriminant(&t.kind) == std::mem::discriminant(kind))
 }
 
@@ -933,6 +1009,120 @@ mod tests {
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 1, "Wide"), token_type::TYPE);
         assert_eq!(kind_of(&tokens, src, 1, "Tall"), token_type::TYPE);
+    }
+
+    /// A struct literal's field names are properties, not the variables the
+    /// default arm made of them. Only the AST knows, so no semantics here.
+    #[test]
+    fn struct_literal_field_names_are_properties() {
+        let src = "struct Gen {\n    state: i32,\n}\nfn run() {\n    let g = Gen {\n        state: 1,\n    };\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 5, "state"), token_type::PROPERTY);
+    }
+
+    /// An import attribute's keys are its object's fields, nested ones too.
+    /// They are not expressions, so only the `use` item's own walk reaches
+    /// them.
+    #[test]
+    fn import_attribute_keys_are_properties() {
+        let src = "use { f } from \"./m.wado\"\n    with {\n        generator: {\n            module: \"lib:gale\",\n        },\n    };\nfn run() {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 2, "generator"), token_type::PROPERTY);
+        assert_eq!(kind_of(&tokens, src, 3, "module"), token_type::PROPERTY);
+    }
+
+    /// A shorthand field is the field, not the variable it reads.
+    #[test]
+    fn a_shorthand_struct_literal_field_is_a_property() {
+        let src = "struct Gen {\n    state: i32,\n}\nfn run() {\n    let state = 1;\n    let g = Gen {\n        state,\n    };\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 6, "state"), token_type::PROPERTY);
+    }
+
+    /// The destructuring side of the same rule.
+    #[test]
+    fn a_struct_pattern_field_is_a_property() {
+        let src = "fn run() {\n    let p = { x: 1, y: 2 };\n    let {\n        x,\n        y: renamed,\n    } = p;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 3, "x"), token_type::PROPERTY);
+        assert_eq!(kind_of(&tokens, src, 4, "y"), token_type::PROPERTY);
+    }
+
+    /// A closure-type bound's signature is types as much as any other.
+    #[test]
+    fn a_closure_type_bound_signature_is_types() {
+        let src = "effect E {\n    fn e();\n}\nfn apply<\n    T: fn(i32) -> f64 with E,\n>(f: T) {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 4, "i32"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 4, "f64"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 4, "E"), token_type::TYPE);
+    }
+
+    /// An effect named in a `with` clause reads as the type its declaration
+    /// does — on the function's own clause and inside an `fn(…) with E` type.
+    #[test]
+    fn an_effect_named_in_a_with_clause_is_a_type() {
+        let src = "effect E {\n    fn f();\n}\nfn run<\n    T,\n>(\n    body: fn mut() -> T with E,\n) -> T with E {\n    return body();\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 6, "E"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 7, "E"), token_type::TYPE);
+    }
+
+    /// A path's turbofish is pinned on the identifier, not on a call, when no
+    /// call follows — and its arguments are types there too.
+    #[test]
+    fn a_path_prefix_turbofish_argument_is_a_type() {
+        let src = "variant Opt<V> {\n    None,\n    Some(V),\n}\nfn run() {\n    let b = Opt::<i32>::None;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 5, "i32"), token_type::TYPE);
+    }
+
+    /// `Output` in `Builder<Output = T>` names an associated type.
+    #[test]
+    fn an_associated_type_binding_is_a_type() {
+        let src = "fn f<\n    B: Builder<Output = i32>,\n>() {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "Output"), token_type::TYPE);
+    }
+
+    /// A type pack's member sits in a type position and is one — at its
+    /// declaration, where the `..` starts the parameter's span, as much as at
+    /// its use.
+    #[test]
+    fn a_type_pack_spread_member_is_a_type() {
+        let src = "fn f<\n    ..T,\n>(\n    items: [..T],\n) {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "T"), token_type::TYPE_PARAMETER);
+        assert_eq!(kind_of(&tokens, src, 3, "T"), token_type::TYPE);
+    }
+
+    /// Both segments of `ns::Value` are in a type position. The head is not
+    /// knowably a namespace — `Self::Item` parses the same — so it takes the
+    /// class the position gives it rather than the one resolution would.
+    #[test]
+    fn a_namespaced_type_is_a_type_on_both_segments() {
+        let src = "fn f(\n    v: ns::Value,\n) {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "ns"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 1, "Value"), token_type::TYPE);
+    }
+
+    /// `::<` is a turbofish, so the name before it is the callee, not the
+    /// middle of a path like `A::B::C`.
+    #[test]
+    fn a_turbofish_callee_is_a_function_not_a_path_middle() {
+        let src = "fn run() {\n    let x = builtin::array_new::<u8>(1);\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "array_new"), token_type::FUNCTION);
+    }
+
+    /// The same turbofish after a `.`: type arguments do not make a call a
+    /// field read.
+    #[test]
+    fn a_turbofish_method_call_is_a_method() {
+        let src = "fn run() {\n    let d = \"h\".bytes().collect::<List<u8>>();\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "collect"), token_type::METHOD);
     }
 
     #[test]

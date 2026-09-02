@@ -35,12 +35,16 @@ the tree-sitter capture vocabulary, so any tree-sitter theme applies:
 | `keyword`          | `fn`, `let`, `if`, …                         |
 | `operator`         | `matches`, `+`, `==`, `->`, …                |
 | `type`             | type references and type parameters          |
-| `property`         | `.field`, `.method()`, struct literal fields |
-| `variable`         | identifiers in an interpolation              |
+| `property`         | `.field`, struct literal fields              |
+| `function method`  | `.method()`                                  |
+| `variable`         | `stores[p]`, a contextual keyword as a name  |
 | `constant builtin` | `true` / `false` / `null` / `self`           |
 
 A plain identifier stays uncoloured: telling a function from a variable takes
-name resolution, which no context-free grammar has.
+name resolution, which no context-free grammar has. A `::` segment is the same
+case — `Option::None`'s case and `Foo::new`'s static method are one shape, and
+the call's `(` sits outside the path rule — so it stays plain too. `.method()`
+does not: the grammar matches the `(` in the same alternative as the name.
 
 A dotted capture like `constant.builtin` becomes `class="constant builtin"`.
 See [`example/standalone.wado`](./example/standalone.wado) for a full styled

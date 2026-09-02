@@ -3524,6 +3524,7 @@ impl CmInterfaceRegistry {
                     id: ng.id,
                     namespace: ng.namespace.clone(),
                     name: ng.name.clone(),
+                    name_span: ng.name_span,
                     args: resolved_args,
                     span: ng.span,
                 })

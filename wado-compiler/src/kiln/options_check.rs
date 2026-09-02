@@ -6,7 +6,7 @@
 //! lock-step. All diagnostics are batched: a single malformed table surfaces
 //! every mismatched / missing / unknown field at once.
 
-use crate::ast::AttrValue;
+use crate::ast::{AttrObject, AttrValue};
 use crate::compiler_host::{Code, Diagnostic, Severity};
 use crate::hashmap::IndexMap;
 
@@ -37,8 +37,8 @@ pub fn validate(
     let mut diagnostics = Vec::new();
     let mut output = Vec::with_capacity(descriptor.fields.len());
 
-    let empty: IndexMap<String, AttrValue> = IndexMap::default();
-    let (provided, path): (&IndexMap<String, AttrValue>, String) = match value {
+    let empty: AttrObject = IndexMap::default();
+    let (provided, path): (&AttrObject, String) = match value {
         None => (&empty, "options".to_string()),
         Some(AttrValue::Object(obj)) => (obj, "options".to_string()),
         Some(other) => {
@@ -58,7 +58,7 @@ pub fn validate(
     for field in &descriptor.fields {
         let field_path = format!("{path}.{}", field.name);
         let canonical = match provided.get(&field.name) {
-            Some(supplied) => check_field(field, supplied, &field_path, &mut diagnostics),
+            Some(supplied) => check_field(field, &supplied.value, &field_path, &mut diagnostics),
             None => apply_default(field, &field_path, &mut diagnostics),
         };
         if let Some(value) = canonical {
@@ -211,7 +211,7 @@ fn check_value(
 
 fn descriptor_validate_object(
     descriptor: &OptionsDescriptor,
-    obj: &IndexMap<String, AttrValue>,
+    obj: &AttrObject,
     path: &str,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Vec<(String, CanonicalValue)>> {
@@ -220,7 +220,7 @@ fn descriptor_validate_object(
     for field in &descriptor.fields {
         let child_path = format!("{path}.{}", field.name);
         let canonical = match obj.get(&field.name) {
-            Some(v) => check_value(&field.ty, v, &child_path, diagnostics),
+            Some(entry) => check_value(&field.ty, &entry.value, &child_path, diagnostics),
             None => apply_default(field, &child_path, diagnostics),
         };
         match canonical {
@@ -301,7 +301,17 @@ fn attr_value_kind(v: &AttrValue) -> &'static str {
 mod tests {
     use super::*;
     use crate::kiln::options::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsType};
+    use crate::ast::AttrEntry;
     use crate::token::Span;
+
+    /// An attribute entry at a placeholder span: these tests exercise the
+    /// validation, not where a key sits.
+    fn entry(value: AttrValue) -> AttrEntry {
+        AttrEntry {
+            key_span: Span::new(0, 0, 1, 1),
+            value,
+        }
+    }
 
     fn field(name: &str, ty: OptionsType, default: Option<CanonicalValue>) -> OptionsField {
         OptionsField {
@@ -347,9 +357,9 @@ mod tests {
                 Some(CanonicalValue::Bool(false)),
             )],
         };
-        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
-        obj.insert("enabled".to_string(), AttrValue::Bool(true));
-        obj.insert("extra".to_string(), AttrValue::Int(1));
+        let mut obj: AttrObject = IndexMap::default();
+        obj.insert("enabled".to_string(), entry(AttrValue::Bool(true)));
+        obj.insert("extra".to_string(), entry(AttrValue::Int(1)));
         let err = validate(&desc, Some(&AttrValue::Object(obj))).unwrap_err();
         assert!(err.iter().any(|d| d.message.contains("extra")));
     }
@@ -379,13 +389,13 @@ mod tests {
             vec![("entries".to_string(), CanonicalValue::List(vec![]))]
         );
         // Supplied array → a `List` of the element type.
-        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
+        let mut obj: AttrObject = IndexMap::default();
         obj.insert(
             "entries".to_string(),
-            AttrValue::Array(vec![
+            entry(AttrValue::Array(vec![
                 AttrValue::String("a".to_string()),
                 AttrValue::String("b".to_string()),
-            ]),
+            ])),
         );
         let result = validate(&desc, Some(&AttrValue::Object(obj))).unwrap();
         assert_eq!(
@@ -399,10 +409,10 @@ mod tests {
             )]
         );
         // A wrong element type is rejected.
-        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
+        let mut obj: AttrObject = IndexMap::default();
         obj.insert(
             "entries".to_string(),
-            AttrValue::Array(vec![AttrValue::Int(1)]),
+            entry(AttrValue::Array(vec![AttrValue::Int(1)])),
         );
         assert!(validate(&desc, Some(&AttrValue::Object(obj))).is_err());
     }
@@ -412,8 +422,8 @@ mod tests {
         let desc = OptionsDescriptor {
             fields: vec![field("ratio", OptionsType::F64, None)],
         };
-        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
-        obj.insert("ratio".to_string(), AttrValue::Float(f64::INFINITY));
+        let mut obj: AttrObject = IndexMap::default();
+        obj.insert("ratio".to_string(), entry(AttrValue::Float(f64::INFINITY)));
         let err = validate(&desc, Some(&AttrValue::Object(obj))).unwrap_err();
         assert!(err.iter().any(|d| d.message.contains("must be finite")));
     }
@@ -423,8 +433,8 @@ mod tests {
         let desc = OptionsDescriptor {
             fields: vec![field("enabled", OptionsType::Bool, None)],
         };
-        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
-        obj.insert("enabled".to_string(), AttrValue::String("yes".to_string()));
+        let mut obj: AttrObject = IndexMap::default();
+        obj.insert("enabled".to_string(), entry(AttrValue::String("yes".to_string())));
         let err = validate(&desc, Some(&AttrValue::Object(obj))).unwrap_err();
         assert!(err.iter().any(|d| d.message.contains("expected bool")));
     }
@@ -454,8 +464,8 @@ mod tests {
                 None,
             )],
         };
-        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
-        obj.insert("rule".to_string(), AttrValue::String("expr".to_string()));
+        let mut obj: AttrObject = IndexMap::default();
+        obj.insert("rule".to_string(), entry(AttrValue::String("expr".to_string())));
         let result = validate(&desc, Some(&AttrValue::Object(obj))).unwrap();
         assert_eq!(
             result.values,

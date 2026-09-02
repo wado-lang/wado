@@ -58,21 +58,37 @@
 ; context-free grammar has. `mise run check-highlight` reports what stays
 ; uncoloured, by the kind the compiler resolved it to.
 (formatSpec (IDENTIFIER) @comment)
+; `stores[b]` names a parameter, not a type — and it sits inside the `fn(…)
+; with stores[b]` type that the rule below would otherwise paint.
+(storesItem (IDENTIFIER) @variable)
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
-; `.field`, `.method()`, a struct literal's field names, and — the minority
-; case this over-reaches on — the `::Case` of a variant path. `memberName`
-; also spells out every keyword usable as a member name; only the contextual
-; ones need listing, because those are the ones the compiler lexes as plain
+; `.method()` and `.field` / a struct literal's or pattern's field name. Both
+; capture their use-site wrapper, never the shared `memberName` an override
+; would reach every use site through — including the `::` segments, which go
+; through `pathSegment` and stay uncoloured because `Option::None`'s case and
+; `Foo::new`'s static method are one shape that only name resolution splits.
+; The call form is a fact, not a guess: the grammar matches its `(`.
+;
+; Each wrapper also spells out the contextual keywords usable as a name; only
+; those need listing, because they are the ones the compiler lexes as plain
 ; identifiers (a real keyword stays a keyword on both sides).
-(memberName (IDENTIFIER) @property)
-(memberName "test" @property)
-(memberName "do" @property)
-(memberName "task" @property)
-(memberName "trap" @property)
-(memberName "forward" @property)
-; The rest of an interpolation is a name the grammar cannot place further.
-(interpolation (IDENTIFIER) @variable)
+(methodName (IDENTIFIER) @function.method)
+(methodName "test" @function.method)
+(methodName "do" @function.method)
+(methodName "task" @function.method)
+(methodName "trap" @function.method)
+(methodName "forward" @function.method)
+(fieldName (IDENTIFIER) @property)
+(fieldName "test" @property)
+(fieldName "do" @property)
+(fieldName "task" @property)
+(fieldName "trap" @property)
+(fieldName "forward" @property)
+; An interpolation holds ordinary code, so its names take the classes the rules
+; above give them and nothing more. Painting the rest `@variable` would reach
+; every identifier under `${…}` — the `::` segments included — and colour
+; inside a template what the same name is left plain outside one.
 
 ; The contextual keywords the `identifier` rule also accepts as names. In that
 ; position they are not keywords — the compiler lexes them as identifiers and

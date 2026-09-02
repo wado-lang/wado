@@ -6,7 +6,7 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::ast::{AttrValue, Module, UseDecl};
+use crate::ast::{AttrObject, AttrValue, Module, UseDecl, attr_value};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 
@@ -165,7 +165,7 @@ fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
 fn lower_inline(
     module_path: &str,
     use_decl: &UseDecl,
-    cfg: &IndexMap<String, AttrValue>,
+    cfg: &AttrObject,
     descriptors: &IndexMap<String, OptionsDescriptor>,
     manifest_root: &str,
 ) -> Result<Invocation, Vec<Diagnostic>> {
@@ -180,7 +180,7 @@ fn lower_inline(
     // path-relative imports a few characters earlier
     // (`use ... from "./schema.g4"`), so the inline `module` field
     // follows the same rule.
-    let module = match cfg.get("module") {
+    let module = match attr_value(cfg, "module") {
         Some(AttrValue::String(s)) => {
             lower_module_specifier(module_path, use_decl, s, manifest_root, &mut errors)
         }
@@ -247,7 +247,7 @@ fn lower_inline(
         use_decl,
         &mut errors,
     );
-    let inputs = match cfg.get("inputs") {
+    let inputs = match attr_value(cfg, "inputs") {
         None => Vec::new(),
         Some(AttrValue::Array(items)) => items
             .iter()
@@ -292,7 +292,7 @@ fn lower_inline(
     let options = if let Some(module) = module.as_ref() {
         validate_inline_options(
             module,
-            cfg.get("options"),
+            attr_value(cfg, "options"),
             use_decl,
             module_path,
             descriptors,
@@ -302,7 +302,7 @@ fn lower_inline(
         CanonicalOptions::default()
     };
 
-    let output_dir_override = match cfg.get("output_dir") {
+    let output_dir_override = match attr_value(cfg, "output_dir") {
         None => None,
         Some(AttrValue::String(s)) => Some(resolve_or_reject(
             module_path,
@@ -361,7 +361,7 @@ fn lower_inline(
         inputs,
         output_dir,
         options,
-        raw_options: cfg.get("options").cloned(),
+        raw_options: attr_value(cfg, "options").cloned(),
     })
 }
 
@@ -409,12 +409,12 @@ fn resolve_or_reject(
 /// and yields `None`.
 fn optional_source_string(
     field: &str,
-    cfg: &IndexMap<String, AttrValue>,
+    cfg: &AttrObject,
     module_path: &str,
     use_decl: &UseDecl,
     errors: &mut Vec<Diagnostic>,
 ) -> Option<String> {
-    match cfg.get(field) {
+    match attr_value(cfg, field) {
         None => None,
         Some(AttrValue::String(s)) => Some(s.clone()),
         Some(other) => {
@@ -581,7 +581,7 @@ fn attr_kind(v: &AttrValue) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstId, ImportAttributes, Item, UseDecl, UseItem};
+    use crate::ast::{AstId, AttrEntry, ImportAttributes, Item, UseDecl, UseItem};
     use crate::token::Span;
     use std::assert_matches;
 
@@ -603,13 +603,22 @@ mod tests {
         Module::new(vec![Item::Use(use_decl)])
     }
 
-    fn attr_with_generator(entries: &[(&str, AttrValue)]) -> ImportAttributes {
-        let mut gen_obj: IndexMap<String, AttrValue> = IndexMap::default();
-        for (k, v) in entries {
-            gen_obj.insert((*k).to_string(), v.clone());
+    /// An attribute entry at a placeholder span: these tests exercise the
+    /// lowering, not where a key sits.
+    fn entry(value: AttrValue) -> AttrEntry {
+        AttrEntry {
+            key_span: span(),
+            value,
         }
-        let mut entries_map: IndexMap<String, AttrValue> = IndexMap::default();
-        entries_map.insert("generator".to_string(), AttrValue::Object(gen_obj));
+    }
+
+    fn attr_with_generator(entries: &[(&str, AttrValue)]) -> ImportAttributes {
+        let mut gen_obj: AttrObject = IndexMap::default();
+        for (k, v) in entries {
+            gen_obj.insert((*k).to_string(), entry(v.clone()));
+        }
+        let mut entries_map: AttrObject = IndexMap::default();
+        entries_map.insert("generator".to_string(), entry(AttrValue::Object(gen_obj)));
         ImportAttributes {
             entries: entries_map,
         }

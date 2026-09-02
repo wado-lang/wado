@@ -278,6 +278,23 @@ path
     : IDENTIFIER ('::' IDENTIFIER)*
     ;
 
+// `memberName` is the token set; each use site wraps it in a rule naming what
+// the name *is* there, and the query captures those rather than `memberName`.
+// An override fires anywhere under its rule, so a capture on `memberName`
+// itself would reach every use site at once — including the `::` segments that
+// must stay uncoloured. Each wrapper holds one token, so no capture on it can
+// reach the argument list or type arguments beside it.
+
+// The name in `.name(...)`.
+methodName
+    : memberName
+    ;
+
+// The name in `.name`, a struct literal's `name:`, and a pattern's `name:`.
+fieldName
+    : memberName
+    ;
+
 memberName
     : IDENTIFIER
     | 'use' | 'from' | 'as' | 'fn' | 'with' | 'let' | 'mut' | 'return'
@@ -437,7 +454,7 @@ postfix
 postfixOp
     : '(' argumentList? ')'
     | '::' typeArgs '(' argumentList? ')'
-    | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER | FLOAT)
+    | '.' (methodName ('::' typeArgs)? '(' argumentList? ')' | fieldName ('::' typeArgs)? | INTEGER | FLOAT)
     | '[' expression ']'
     | '?'
     ;
@@ -478,7 +495,16 @@ braceLiteral
     ;
 
 exprPath
-    : identifier ('::' (typeArgs | memberName))*
+    : identifier ('::' (typeArgs | pathSegment))*
+    ;
+
+// A `::` segment: `Option::None`'s case, `Foo::new`'s static method, or the
+// middle of a module path. Telling them apart takes name resolution — the call
+// form's `(` is a `postfixOp`, outside this rule — so the query leaves it
+// uncoloured rather than guessing, as `patternPath` and `path` already do.
+// Naming it keeps it off `memberName`, which is a field and is coloured.
+pathSegment
+    : memberName
     ;
 
 compileTimeExpr
@@ -535,7 +561,7 @@ fieldInitList
     ;
 
 fieldInit
-    : (memberName | STRING_LITERAL) (':' expression)?
+    : (fieldName | STRING_LITERAL) (':' expression)?
     | '..' expression
     ;
 
@@ -622,7 +648,7 @@ patternFieldList
     ;
 
 patternField
-    : (memberName | STRING_LITERAL) (':' pattern)?
+    : (fieldName | STRING_LITERAL) (':' pattern)?
     ;
 
 literal
