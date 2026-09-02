@@ -43,6 +43,13 @@ release headline + comparison baselines (Gale vs `tree-sitter` for highlight, vs
 `sqlparser-rs` for parse) come from `mise run syntax-highlight` /
 `mise run sqlite-parse` on a release host; not reproduced here (dev-only).
 
+The `copying` column is stale as an absolute: the same benchmark measures
+**1.467 ms/iter** on a dev host as of 2026-09-02, against 1.436–1.479 on a
+release one — the two hosts are now within each other's spread, since
+`Cargo.toml` raises `opt-level` on the compiler's dependencies and wasmtime is
+one. Treat the split as a ratio, and re-measure both columns before sizing a GC
+lever off them.
+
 > **Measurement note.** These are dev-profile `wado` profiles, which over-weight
 > allocation/GC frames; read the percentages as relative and size any GC win by
 > its release number. Mechanism: the `wado-performance` skill.
@@ -125,37 +132,56 @@ behind `needs_scan_atn` for exactly that reason (#1475) — a change that puts o
 `List` per ATN state back into a global will cost 3–6× on `sqlite_parse` however
 fast its own code is.
 
-### Live profile (`syntax_highlight`, 1928 leaf samples @1 ms, 2026-07)
+### The highlight phase pays only for what a query asks for (landed, 2026-09-02)
 
-A dated snapshot — the `push` rows have shrunk since the runtime pushers went
-to one capacity check per row/token; re-profile before sizing a new lever off
-this table. The dev profile is noisy per-frame;
-mid-size frames swing ±several points across runs, so read the buckets, not
-the individual rows.
+Two levers, both in the consumer half of `syntax_highlight`, worth **+8.0%**
+together on a release host (1.551 → 1.436 ms/iter, alternating best of five per
+arm, arms' ranges disjoint):
 
-|   Pct | Symbol                             | bucket                                   |
-| ----: | ---------------------------------- | ---------------------------------------- |
-| 14.5% | `List<i32>::push`                  | CST column build (+ `rule_stack`/trivia) |
-|  6.2% | `TreeBuilder::finish`              | CST finalize + column copy               |
-|  6.2% | `HighlightVisitor::classify`       | highlight                                |
-|  5.0% | `_kind_set_8`                      | kind-set membership                      |
-|  4.4% | `char::to_ascii_lowercase`         | case-insensitive keyword match           |
-|  4.3% | `scan_any_name`                    | scan                                     |
-|  3.4% | `scan_expr`                        | scan                                     |
-|  3.3% | `highlight_html`                   | highlight (HTML output)                  |
-|  3.1% | `try_IDENTIFIER`                   | lexer                                    |
-|  2.7% | `List<i32>::pop`                   | CST/rule-stack                           |
-|  2.6% | `String::internal_reserve_uninit`  | HTML output realloc                      |
-|  2.4% | `follow_yields`                    | scan/predict (LL FOLLOW gate)            |
-|  2.4% | `TokenStream::new`                 | SoA token-array alloc (WasmGC zero-fill) |
-|  2.4% | `HighlightVisitor::hl_visit_token` | highlight                                |
+- **No rule-context capture, no CST walk (+6.5%).** `highlight_walk` visits
+  every CST row — `rows ≈ 3.44 × tokens` — only to maintain the visitor's rule
+  stack, which `classify` reads inside the override loop and nowhere else. A
+  query with no rule-context capture leaves that loop empty, so the walk is
+  unobservable: `hl_cover_unvisited`'s token sweep reaches the same captures.
+  `gen_highlight` now emits the call only when the query resolved an override.
+  Skipping the walk **without** also gating `hl_cover_unvisited`'s sort is a
+  _loss_ (1.553–1.615) — the sweep alone is already in start order, and sorting
+  ~2900 captures costs more than the walk did.
+- **Escape HTML by byte run (+1.8%).** `highlight_html` drove a `StrCharIter`
+  and called `escape_html_char`, which called `String::push` — three calls per
+  source character, ~40K per iteration. The escapable set is ASCII, so a byte
+  walk is UTF-8-correct (only a lead byte advances the char position) and the
+  stretch between two escapes is one `array.copy`.
 
-Rough buckets: **CST build + walk** (`List<i32>` push/pop + `finish` +
-`highlight_walk`) ≈ **~25%**; **highlight** (`classify` + `highlight_html` +
-`escape_html_char` + `hl_visit_token`) ≈ **~14%**; **scan/predict**
-(`follow_yields` + `scan_*` + kind-set) ≈ **~18%**; **lexer**
-(`to_ascii_lowercase` + `try_*` + `classify_keyword` + `to_chars`) ≈ **~11%**.
-CST column build is the largest bucket.
+Note what the second one is not: the 2026-07 run-batching attempt below, which
+kept the char iterator and measured flat. Batching was never the lever; the
+calls were.
+
+### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
+
+Post both levers. The dev profile is noisy per-frame; mid-size frames swing
+±several points across runs, so read the buckets, not the individual rows.
+
+|  Pct | Symbol                             | bucket                        |
+| ---: | ---------------------------------- | ----------------------------- |
+| 5.8% | `TreeBuilder::push_row`            | CST column build              |
+| 5.7% | `scan_any_name`                    | scan                          |
+| 5.5% | `scan_expr`                        | scan                          |
+| 5.5% | `try_IDENTIFIER`                   | lexer                         |
+| 4.8% | `push_escaped_upto`                | highlight (HTML output)       |
+| 4.8% | `TreeBuilder::finish`              | CST finalize + column copy    |
+| 4.7% | `_kind_set_4`                      | kind-set membership           |
+| 4.4% | `TokenStream::push_token_flagged`  | tokenize                      |
+| 4.2% | `bubble_to_parent`                 | CST finalize                  |
+| 3.2% | `HighlightVisitor::hl_visit_token` | highlight                     |
+| 3.1% | `follow_yields`                    | scan/predict (LL FOLLOW gate) |
+| 2.8% | `String::grow`                     | HTML output realloc           |
+| 2.8% | `highlight_html`                   | highlight (HTML output)       |
+| 2.7% | `tokenize`                         | lexer                         |
+
+Inclusive buckets: **parse** ~51%, **tokenize** ~20%, **highlight** ~17%
+(`highlight_html` 10.4% + the token sweep 6.8%), **CST finalize**
+(`TreeBuilder::finish`) 9.0%. Highlight was ~23% before the two levers above.
 
 ## What's next
 
@@ -163,6 +189,12 @@ Pick the current top frame off the live profile above rather than a fixed recipe
 here: the frames shift as levers land, and the mid-size ones are noisy, so
 re-measure before committing. Candidates read off the profile above:
 
+- **`TreeBuilder::finish` (9.0% inclusive, `bubble_to_parent` 4.2% of it).** It
+  allocates three `List::filled(n, 0)` columns and value-copies `tag` / `a` /
+  `b` / `alt` out of the builder, because Wado has no by-value `self` — seven
+  ~10K-element arrays per parse, and the copies are _live_ for the whole walk,
+  not transient. Building the parser's events straight into the store, with
+  `finish` filling `end` / `flags` / `next` in place, removes all four copies.
 - **First-char dispatch is linear in the ranges, not the rules.** The dispatch is an
   `if / else if` chain over the first-char sets, so a rule opening on a large set costs
   a comparison per range — a `[\p{L}]` rule is ~700. Coalescing branches with identical
@@ -170,10 +202,11 @@ re-measure before committing. Candidates read off the profile above:
   leaves ~2000 comparisons on the fall-through path. ASCII resolves early (single-char
   branches are sorted and come first), so this is a worst case rather than a
   benchmark-visible cost. A sorted interval table with a binary search would bound it.
-- **`HighlightVisitor::classify` (6.2%).** A non-inlined call per token that walks the
-  override list before the `default_ids[kind]` lookup, even when — as for SQLite — there
-  is exactly one override. Hoisting the common `default_ids` path to the call site
-  (overrides only when the kind is in an override's kind set) would cut it.
+- **An alternative's dispatch re-tests the kind set it dispatched on.**
+  `scan_any_name` (5.7%) calls `_kind_set_37(alt_kind)` to pick the alternative
+  and then `_kind_set_37(tokens[pos])` inside it, on the same token. The
+  kind-set frames are call-frequency-bound (below), and this is a whole class of
+  calls the emitter already knows the answer to.
 
 ### Generation-time cost: the generator itself (2026-07)
 
@@ -417,7 +450,14 @@ own shapes:
   `push_str_range_unchecked` measured **flat** (median 2.93 vs 2.90 ms/iter). The
   captures are dense — ~2900 over 13366 chars, so the mean unescaped stretch is
   ~4.6 chars and the per-run bookkeeping costs what the batching saves.
-  Input-shape-bound: sparse captures would answer differently.
+  Input-shape-bound: sparse captures would answer differently. Batching the
+  _same_ runs off a byte walk instead of the char iterator did pay (+1.8%,
+  2026-09-02) — what the loop dropped was three calls per character, not the
+  copies.
+- **Hoisting `HighlightVisitor::classify`'s default path** (2026-09-02) to get it
+  under the inline budget: flat, and the WIR shows it still not inlined.
+  `.claude/skills/wado-performance/dead-ends.md` has the numbers. Deleting the
+  call's _caller_ is what paid.
 
 ## Correctness items with a performance flavor
 
