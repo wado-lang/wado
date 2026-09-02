@@ -652,9 +652,9 @@ non-local jump: it replaces loop labels, labeled `continue`, and `goto`, and it
 is the block form that carries a value. See
 [the spec](./spec.md#labeled-blocks).
 
-The label is required, since an unlabeled `{ ... }` is a struct literal. It
-cannot start with `__`, a nested block may reuse it (`break` takes the
-innermost), and `break LABEL: ()` says what `break LABEL` says.
+The label is required, since an unlabeled `{ ... }` is a struct literal, and it
+cannot start with `__`. A nested block may reuse a label, and `break` takes the
+innermost. `break LABEL: ()` says what `break LABEL` says.
 
 ```wado
 // Leave a whole loop nest with one break; the tail is the path no break took.
@@ -687,11 +687,11 @@ let first_even = find: {
 
 ### Branch Hints
 
-`builtin::cold_path()` marks the path containing it as rarely executed. It is a
-plain statement and emits no code: the engine predicts the other side of the
-branch, and the inliner leaves the cold path out of its cost estimate. Being a
-statement, it also works in a `match` or `if let` arm, where no boolean is
-available. See [the spec](./spec.md#branch-hints).
+`builtin::cold_path()` marks the path containing it as rarely executed, and
+emits no code. The engine predicts the other side of the branch, and the inliner
+leaves the cold path out of its cost estimate. It is a statement rather than a
+condition wrapper, so it also works in a `match` or `if let` arm, where no
+boolean is available. See [the spec](./spec.md#branch-hints).
 
 ```wado
 if i >= len {

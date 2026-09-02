@@ -753,8 +753,8 @@ it. It is Wado's only non-local jump, and it replaces loop labels, labeled
 
 - The label is an identifier followed by a colon, and cannot start with `__`,
   which is reserved for the blocks the compiler synthesises
-- `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value.
-  `()` is a value like any other, so `break LABEL: ()` says what `break LABEL`
+- `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value
+- `()` is a value like any other, so `break LABEL: ()` says what `break LABEL`
   says, and `break ()` says what `break` says
 - Nested blocks may reuse a label name; a `break` targets the innermost match
 - The block opens a new scope, and a name declared inside may shadow an outer
@@ -790,7 +790,7 @@ search: {
 
 A labeled block used as a value yields two ways: through `break LABEL: expr`,
 and through its trailing statement on the path that reaches the end. Both are
-branches, so every path must agree on one type, and they unify against the type
+branches, so every path must agree on one type. They unify against the type
 expected where the block sits, so a literal coerces to that rather than to its
 own default. Any expression position takes one, not only the right-hand side of
 a `let`.

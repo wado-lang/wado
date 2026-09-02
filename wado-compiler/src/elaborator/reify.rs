@@ -2957,10 +2957,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // recorded `expression_types[lb.id]`; annotate already
                 // unified break types into it.
                 // Fall back to the block's unified result type when the use
-                // site supplies no expected type, so a `null` whose `Option<T>`
-                // only resolves from a sibling break still coerces — as a
-                // `break label: null`, and as the fall-through tail, which
-                // reifies against the same expectation.
+                // site supplies no expected type, so a `null` resolving only
+                // from a sibling break still coerces, as a `break label: null`
+                // or as the fall-through tail.
                 let branch_expected = expected_type.or(Some(recorded_type));
                 ctx.push_labeled_block_frame(lb.label.clone(), branch_expected);
                 let tir_block = s.reify_block(&lb.block, ctx, branch_expected);
