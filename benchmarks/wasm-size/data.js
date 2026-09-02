@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788348436265,
+  "lastUpdate": 1788350716696,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52569,6 +52569,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 278121,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e242d11b3b058b760282650114ed4a947d80c5c7",
+          "message": "Merge pull request #1945 from wado-lang/perf/highlight-html-byte-runs\n\nperf(gale): highlight pays only for what the query asks for, and a dropped value keeps only its effects",
+          "timestamp": "2026-09-02T20:53:38+09:00",
+          "tree_id": "7161a80baf1a7789762e27855aa0f0cc86cabf50",
+          "url": "https://github.com/wado-lang/wado/commit/e242d11b3b058b760282650114ed4a947d80c5c7"
+        },
+        "date": 1788350716043,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276753,
             "unit": "bytes"
           }
         ]
