@@ -40,15 +40,14 @@ Returns null on invalid input.
 
 ### `pub fn decode_url_strict<S: AsByteSlice>(encoded: &S) -> Option<ByteList>`
 
-Decodes URL-safe Base64 (RFC 4648 §5, unpadded) — the exact inverse of
-[`encode_url`], and the encoding JWS/JWT mandate.
+Decodes URL-safe Base64 (RFC 4648 §5, unpadded), the exact inverse of
+[`encode_url`] and the encoding JWS/JWT mandate.
 
-Canonical where [`decode`] is lenient: it rejects everything `encode_url`
-never writes — the standard alphabet's `+` and `/`, `=` padding, and a
-final group whose unused bits are set. One byte string therefore has
-exactly one accepted spelling, so a decoded value cannot be re-encoded into
-a different-looking input that decodes the same. Reach for [`decode`] when
-the input comes from a producer you do not control.
+This one is canonical where [`decode`] is lenient. It rejects everything
+`encode_url` never writes: the standard alphabet's `+` and `/`, `=`
+padding, and a final group whose unused bits are set. One byte string
+therefore has exactly one accepted spelling, so no second input decodes to
+the same value. Use [`decode`] for input from a producer you do not control.
 
 ## Flags
 

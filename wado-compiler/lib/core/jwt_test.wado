@@ -1,4 +1,4 @@
-use { Hs256Key, JwsAlgorithm, JwsVerifier, JwtError, RegisteredClaims, sign, verify } from "core:jwt";
+use { Hs256Key, JwsAlgorithm, JwsSigner, JwsVerifier, JwtError, RegisteredClaims, sign, verify } from "core:jwt";
 use { decode_url_strict, encode_url } from "core:base64";
 use { from_bytes } from "core:json";
 
@@ -19,6 +19,17 @@ fn rfc7515_token() -> String {
     return `${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}`;
 }
 
+fn shared_key() -> Hs256Key {
+    return Hs256Key::new(&"a 32-byte-or-longer shared secret");
+}
+
+/// A token carrying a header `sign` would not write, signed all the same.
+fn token_with_header<K: JwsSigner>(header: String, payload: String, key: &K) -> String {
+    let signing_input = `${encode_url(&header)}.${encode_url(&payload)}`;
+    let bytes: ByteList = signing_input.bytes().collect();
+    return `${signing_input}.${encode_url(&key.sign(&bytes))}`;
+}
+
 test "verifies the RFC 7515 A.1 token" {
     let key = rfc7515_key();
     let Ok(payload) = verify(&rfc7515_token(), &key) else {
@@ -36,7 +47,6 @@ test "signing reproduces the RFC 7515 A.1 signature" {
     // signature is compared over the RFC's own signing input.
     let signing_input: ByteList = `${RFC7515_HEADER}.${RFC7515_PAYLOAD}`.bytes().collect();
     assert encode_url(&key.sign(&signing_input)) == RFC7515_SIGNATURE;
-    assert verify(&sign(&payload, &key), &key) matches { Ok(_) };
 }
 
 test "a tampered payload fails verification" {
@@ -52,7 +62,7 @@ test "another key fails verification" {
 }
 
 test "a round trip carries the payload back" {
-    let key = Hs256Key::new(&"a 32-byte-or-longer shared secret");
+    let key = shared_key();
     let token = sign(&`{"sub":"joe"}`, &key);
     let Ok(payload) = verify(&token, &key) else {
         panic("a freshly signed token verifies");
@@ -72,24 +82,17 @@ test "a malformed token is rejected before any hashing" {
 }
 
 test "the header's alg must be the key's" {
-    let key = Hs256Key::new(&"a 32-byte-or-longer shared secret");
-    // A header claiming RS256, signed with this HMAC key: the signature is
-    // this key's, and the token is refused all the same.
-    let header = encode_url(&`{"alg":"RS256"}`);
-    let payload = encode_url(&`{"sub":"joe"}`);
-    let signing_input: ByteList = `${header}.${payload}`.bytes().collect();
-    let token = `${header}.${payload}.${encode_url(&key.sign(&signing_input))}`;
-    assert key.verify(&signing_input, &key.sign(&signing_input));
-    assert verify(&token, &key) matches { Err(JwtError::AlgMismatch) };
+    let key = shared_key();
+    // The same payload signed by the same key, differing only in the header:
+    // the signature is this key's either way, and one of the two is refused.
+    assert verify(&token_with_header(`{"alg":"HS256"}`, `{"sub":"joe"}`, &key), &key) matches { Ok(_) };
+    assert verify(&token_with_header(`{"alg":"RS256"}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::AlgMismatch) };
 }
 
 test "a critical header extension is rejected" {
-    let key = Hs256Key::new(&"a 32-byte-or-longer shared secret");
-    let header = encode_url(&`{"alg":"HS256","crit":["exp"],"exp":1300819380}`);
-    let payload = encode_url(&`{"sub":"joe"}`);
-    let signing_input: ByteList = `${header}.${payload}`.bytes().collect();
-    let token = `${header}.${payload}.${encode_url(&key.sign(&signing_input))}`;
-    assert verify(&token, &key) matches { Err(JwtError::CriticalHeader) };
+    let key = shared_key();
+    let header = `{"alg":"HS256","crit":["exp"],"exp":1300819380}`;
+    assert verify(&token_with_header(header, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
 }
 
 test "exp and nbf are checked against the time passed in" {
@@ -112,7 +115,7 @@ test "absent claims are not checked" {
 }
 
 test "registered claims deserialize from a verified payload" {
-    let key = Hs256Key::new(&"a 32-byte-or-longer shared secret");
+    let key = shared_key();
     let token = sign(&`{"iss":"wado","sub":"joe","exp":1300819380,"scope":"read"}`, &key);
     let Ok(payload) = verify(&token, &key) else {
         panic("a freshly signed token verifies");

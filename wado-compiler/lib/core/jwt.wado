@@ -4,18 +4,17 @@
 //!
 //! The key decides the algorithm, never the token. [`verify`] takes a key that
 //! implements [`JwsVerifier`] and checks the signature with *that* algorithm,
-//! so a header naming another one cannot redirect verification — the
-//! algorithm-confusion class that has broken JWT libraries repeatedly. `alg`
+//! so a header naming another one cannot redirect verification. That is the
+//! algorithm-confusion class, which has broken JWT libraries repeatedly. `alg`
 //! is still read, and a token whose header disagrees with the key is rejected.
 //!
-//! A key type defined elsewhere — RSA, ECDSA — implements the same traits and
-//! works with the same entry points; this module needs no change to admit one.
+//! An RSA or ECDSA key type defined elsewhere implements the same traits and
+//! works with the same entry points, with no change here to admit it.
 //!
-//! Claims stay bytes here: [`verify`] returns the payload for the caller to
-//! deserialize with `core:json` — into its own struct, or into
-//! [`RegisteredClaims`] for the registered ones, whose `exp` / `nbf` are
-//! checked by [`RegisteredClaims::validate_time`]. That takes the current time
-//! as an argument, so verifying a token needs no clock effect.
+//! Claims stay bytes: [`verify`] returns the payload for the caller to
+//! deserialize with `core:json`, into its own struct or into
+//! [`RegisteredClaims`]. [`RegisteredClaims::validate_time`] checks `exp` and
+//! `nbf` against a time it is passed, so verifying needs no clock effect.
 
 use { hmac_sha256 } from "core:digest";
 use { decode_url_strict, encode_url } from "core:base64";
@@ -39,8 +38,8 @@ test {
     assert claims.validate_time(1300819380) matches { Err(JwtError::Expired) };
 }
 
-/// The `alg` a key speaks for, shared by the signing and verifying halves so a
-/// key that does both answers once.
+/// The `alg` a key speaks for. Both halves inherit it, so a key that signs
+/// and verifies answers once.
 pub trait JwsAlgorithm {
     /// The `alg` header value, e.g. `"HS256"`.
     fn alg(&self) -> String;
@@ -96,9 +95,9 @@ impl RegisteredClaims {
     /// tolerating `leeway` seconds of clock skew on either side. A claim that
     /// is absent is not checked.
     ///
-    /// The time is an argument rather than a clock read, so a program that
-    /// verifies tokens gains no `SystemClock` effect; pass
-    /// `Instant::now().seconds` where you do have one.
+    /// The time is an argument rather than a clock read, so verifying a token
+    /// gains no `SystemClock` effect. Pass `Instant::now().seconds` where you
+    /// do have one.
     pub fn validate_time(&self, now: i64, leeway: i64 = 0) -> Result<(), JwtError> {
         if let Some(exp) = self.exp && now - leeway >= exp {
             return Result::Err(JwtError::Expired);
@@ -132,22 +131,16 @@ pub fn sign<K: JwsSigner, P: AsByteSlice>(payload: &P, key: &K) -> String {
 ///
 /// Checks, in order: three canonical base64url segments, the key's signature
 /// over `header.payload`, the header's `alg` against the key's, and that no
-/// extension is marked critical. Claims are not read — `exp` is
+/// extension is marked critical. Claims are not read: checking `exp` is
 /// [`RegisteredClaims::validate_time`]'s job, and the caller's to invoke.
 pub fn verify<K: JwsVerifier>(token: &String, key: &K) -> Result<ByteList, JwtError> {
     let parts: List<String> = token.split(".").collect();
     if parts.len() != 3 {
         return Result::Err(JwtError::Malformed);
     }
-    let Some(header_bytes) = decode_url_strict(&parts[0]) else {
-        return Result::Err(JwtError::Malformed);
-    };
-    let Some(payload) = decode_url_strict(&parts[1]) else {
-        return Result::Err(JwtError::Malformed);
-    };
-    let Some(signature) = decode_url_strict(&parts[2]) else {
-        return Result::Err(JwtError::Malformed);
-    };
+    let header_bytes = decode_segment(&parts[0])?;
+    let payload = decode_segment(&parts[1])?;
+    let signature = decode_segment(&parts[2])?;
 
     let signing_input: ByteList = `${parts[0]}.${parts[1]}`.bytes().collect();
     if !key.verify(&signing_input, &signature) {
@@ -172,9 +165,8 @@ pub struct Hs256Key {
 }
 
 impl Hs256Key {
-    /// RFC 7518 §3.2 requires a key at least as long as the hash output, so a
-    /// shorter secret — the brute-forcible kind — is refused here rather than
-    /// silently accepted.
+    /// RFC 7518 §3.2 requires a key at least as long as the hash output. A
+    /// shorter secret is brute-forcible, so it is refused rather than accepted.
     pub fn new<S: AsByteSlice>(secret: &S) -> Hs256Key {
         let bytes = secret.as_byte_slice().to_list() as ByteList;
         assert bytes.len() >= 32, `an HS256 secret is at least 32 bytes, got ${bytes.len()}`;
@@ -200,16 +192,15 @@ impl JwsVerifier for Hs256Key {
     }
 }
 
+/// One token segment, which JWS spells as canonical base64url or not at all.
+fn decode_segment(segment: &String) -> Result<ByteList, JwtError> {
+    let Some(bytes) = decode_url_strict(segment) else {
+        return Result::Err(JwtError::Malformed);
+    };
+    return Result::Ok(bytes);
+}
+
 /// Whether `alg` is safe to splice into the header JSON `sign` writes.
 fn is_alg_token(alg: &String) -> bool {
-    if alg.len() == 0 {
-        return false;
-    }
-    for let byte of alg.bytes() {
-        let alnum = byte >= b'0' && byte <= b'9' || byte >= b'A' && byte <= b'Z' || byte >= b'a' && byte <= b'z';
-        if !alnum {
-            return false;
-        }
-    }
-    return true;
+    return !alg.is_empty() && alg.bytes().all(|byte: u8| byte.is_ascii_alphanumeric());
 }

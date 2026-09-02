@@ -3,12 +3,11 @@
 
 # core:digest
 
-Cryptographic hash functions.
+Cryptographic hash functions, and [`hmac`] to key one.
 
-This module provides the [`Digest`] trait — a common interface for
-incremental hashing — and concrete implementations. Currently only
-[`Sha256`] (SHA-256, FIPS 180-4 / RFC 6234) is provided; the trait keeps
-the module name stable as more algorithms are added.
+The [`Digest`] trait is the common interface for incremental hashing, and
+[`Sha256`] (FIPS 180-4 / RFC 6234) is so far its one implementation. The
+trait keeps the module name stable as more algorithms are added.
 
 Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
 `ByteList`, `ByteArray`, or a `String` (its UTF-8 bytes).
@@ -41,12 +40,11 @@ bytes). Render the result as hex with `to_hex`, e.g. `sha256(&data).to_hex()`.
 Keyed message authentication over any [`Digest`] (HMAC, RFC 2104):
 `H((K ^ opad) || H((K ^ ipad) || message))`.
 
-`hasher` is a fresh state of the algorithm to key — value semantics give
-the two passes their own copy of it. A key longer than the block is hashed
-down first, a shorter one is zero-padded, as the RFC prescribes.
+Pass a fresh `hasher` of the algorithm to key; value semantics give the two
+passes their own copy. A key longer than the block is hashed down first, a
+shorter one zero-padded, as the RFC prescribes.
 
-Check a MAC with a comparison that does not exit early — one that stops at
-the first differing byte tells an attacker how much of a forgery was right.
+Check the result with `eq_constant_time`, never `==`.
 
 ### `pub fn hmac_sha256<K: AsByteSlice, M: AsByteSlice>(key: &K, message: &M) -> ByteList`
 

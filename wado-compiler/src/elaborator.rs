@@ -680,9 +680,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         control_flow::block_result_type(self.ctrl_flow_ctx(), block)
     }
 
-    /// Recorded type of one AST expression — the single-expression counterpart
-    /// of [`Self::ast_block_result_type`]. `None` while the body walk has not
-    /// reached it.
+    /// Recorded type of one AST expression, the single-expression counterpart
+    /// of [`Self::ast_block_result_type`]. `None` until the body walk reaches it.
     pub(super) fn ast_expr_type(&self, expr: &crate::ast::Expr) -> Option<TypeId> {
         self.sem.types.expression_types.get(&expr.id()).copied()
     }

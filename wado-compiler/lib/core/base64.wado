@@ -57,8 +57,7 @@ fn build_decode_table(lenient: bool) -> ByteList {
 
 global DECODE_TABLE: ByteList = build_decode_table(true);
 
-// The URL-safe alphabet alone: `+`, `/` and `=` stay invalid, so a canonical
-// decode rejects them rather than silently accepting a second spelling.
+// The URL-safe alphabet alone, so a canonical decode rejects `+`, `/` and `=`.
 global URL_DECODE_TABLE: ByteList = build_decode_table(false);
 
 fn encode_impl(data: ByteSlice, table: &ByteList, pad: bool) -> String {
@@ -203,15 +202,14 @@ pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
     return decode_impl(encoded.as_byte_slice(), &DECODE_TABLE, false);
 }
 
-/// Decodes URL-safe Base64 (RFC 4648 §5, unpadded) — the exact inverse of
-/// [`encode_url`], and the encoding JWS/JWT mandate.
+/// Decodes URL-safe Base64 (RFC 4648 §5, unpadded), the exact inverse of
+/// [`encode_url`] and the encoding JWS/JWT mandate.
 ///
-/// Canonical where [`decode`] is lenient: it rejects everything `encode_url`
-/// never writes — the standard alphabet's `+` and `/`, `=` padding, and a
-/// final group whose unused bits are set. One byte string therefore has
-/// exactly one accepted spelling, so a decoded value cannot be re-encoded into
-/// a different-looking input that decodes the same. Reach for [`decode`] when
-/// the input comes from a producer you do not control.
+/// This one is canonical where [`decode`] is lenient. It rejects everything
+/// `encode_url` never writes: the standard alphabet's `+` and `/`, `=`
+/// padding, and a final group whose unused bits are set. One byte string
+/// therefore has exactly one accepted spelling, so no second input decodes to
+/// the same value. Use [`decode`] for input from a producer you do not control.
 #[inline]
 pub fn decode_url_strict<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
     return decode_impl(encoded.as_byte_slice(), &URL_DECODE_TABLE, true);

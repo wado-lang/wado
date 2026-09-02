@@ -67,10 +67,8 @@ test "hmac-sha256 hashes a key longer than the block" {
 }
 
 test "hmac keys any Digest, and a fresh hasher is not consumed" {
-    assert hmac(Sha256::new(), &"Jefe", &"what do ya want for nothing?") == hmac_sha256(
-        &"Jefe",
-        &"what do ya want for nothing?",
-    );
+    let message = "what do ya want for nothing?";
+    assert hmac(Sha256::new(), &"Jefe", &message) == hmac_sha256(&"Jefe", &message);
 }
 
 test "a keyed digest is not the unkeyed one" {

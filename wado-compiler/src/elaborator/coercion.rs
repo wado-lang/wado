@@ -20,9 +20,7 @@ fn is_literal_expr(expr: &Expr) -> bool {
 }
 
 /// Whether `expr` is one of the numeric-literal shapes
-/// [`Elaborator::try_coerce_numeric_literal`] retargets. A branch tail that is
-/// one can adopt a sibling branch's numeric type; anything else has to carry
-/// that type already.
+/// [`Elaborator::try_coerce_numeric_literal`] retargets.
 pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     match expr {
         Expr::Literal(lit) => matches!(lit.value, Literal::Number(_) | Literal::Byte(_)),

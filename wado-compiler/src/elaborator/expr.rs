@@ -198,6 +198,11 @@ struct NumericLiteralTails<'a> {
     branches: Vec<AstId>,
 }
 
+/// Whether a branch already produces `target`; `never` fits any of them.
+fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
+    ty == target || ty == TypeTable::NEVER
+}
+
 /// A struct-literal field as the body walk knows it: the name it was written
 /// under, its declared position, and the type its value resolved to.
 pub(super) struct ResolvedField {
@@ -2355,33 +2360,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.report_unresolved_nulls(&spans, result_type);
     }
 
-    /// Resolve a match expression
-    /// Give a numeric-literal branch tail the concrete numeric type fixed by a
-    /// sibling branch — the coercion `let x: T = <branch>` already performs.
-    /// Without it a `0` arm stays `i32` and conflicts with, say, a `u64`
-    /// sibling. Descends through a block tail; only a bare numeric literal (or
-    /// negated literal) is affected. A tail that is itself a branching
-    /// expression — an `else if` chain, a nested `match` — is descended into,
-    /// so a literal one level down adopts the type just as a direct one does.
-    /// Returns the coerced type when one applied.
+    /// Give a numeric-literal branch tail the type a sibling branch fixed, as
+    /// the coercion in `let x: T = <branch>` does. `None` when none applied.
     fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
         let mut tails = NumericLiteralTails::default();
-        if !self.collect_numeric_literal_tails(expr, target, &mut tails)
-            || tails.literals.is_empty()
-        {
+        if !self.collect_numeric_literal_tails(expr, target, &mut tails) {
+            return None;
+        }
+        self.retarget_numeric_literal_tails(tails, target)
+    }
+
+    fn coerce_block_numeric_literal_tail(
+        &mut self,
+        block: &ast::Block,
+        target: TypeId,
+    ) -> Option<TypeId> {
+        let mut tails = NumericLiteralTails::default();
+        if !self.collect_block_numeric_literal_tails(block, target, &mut tails) {
+            return None;
+        }
+        self.retarget_numeric_literal_tails(tails, target)
+    }
+
+    fn retarget_numeric_literal_tails(
+        &mut self,
+        tails: NumericLiteralTails<'_>,
+        target: TypeId,
+    ) -> Option<TypeId> {
+        if tails.literals.is_empty() {
             return None;
         }
         for literal in tails.literals {
-            // A refusal here leaves the earlier literals retargeted, which is
-            // harmless: the caller reports the mismatch and the diagnostic
-            // aborts before WIR build.
+            // A refusal leaves the earlier literals retargeted, which is
+            // harmless: the caller's mismatch aborts before WIR build.
             self.try_coerce_numeric_literal(literal, target)?;
         }
-        // A nested branch expression carries its own recorded type, which the
-        // enclosing branch reads back through `ast_block_result_type` and reify
-        // uses as the `If` / `Match` node's result type. Retargeting only the
-        // literals would leave it stale, and the node would push a type its
-        // branches no longer produce.
+        // Reify reads a nested branch's recorded type as the node's result
+        // type, so leaving it stale emits an `if` its branches disagree with.
         for branch in tails.branches {
             self.record_expression_type(branch, target);
         }
@@ -2420,21 +2435,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 out.literals.push(expr);
                 true
             }
-            _ => {
-                let ty = self.ast_expr_type(expr);
-                ty == Some(target) || ty == Some(TypeTable::NEVER)
-            }
-        }
-    }
-
-    fn coerce_block_numeric_literal_tail(
-        &mut self,
-        block: &ast::Block,
-        target: TypeId,
-    ) -> Option<TypeId> {
-        match block.stmts.last() {
-            Some(ast::Stmt::Expr(e)) => self.coerce_numeric_literal_tail(&e.expr, target),
-            _ => None,
+            _ => self
+                .ast_expr_type(expr)
+                .is_some_and(|ty| agrees_with_target(ty, target)),
         }
     }
 
@@ -2446,12 +2449,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         match block.stmts.last() {
             Some(ast::Stmt::Expr(e)) => self.collect_numeric_literal_tails(&e.expr, target, out),
-            // No expression tail to retarget: the block contributes nothing,
-            // and only agrees if what it already produces is the target.
-            _ => {
-                let ty = self.ast_block_result_type(block);
-                ty == target || ty == TypeTable::NEVER
-            }
+            // No expression tail to retarget, so the block has to agree already.
+            _ => agrees_with_target(self.ast_block_result_type(block), target),
         }
     }
 

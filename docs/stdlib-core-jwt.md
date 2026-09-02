@@ -8,18 +8,17 @@ with HMAC-SHA256 (`HS256`, RFC 7518 §3.2) built in.
 
 The key decides the algorithm, never the token. [`verify`] takes a key that
 implements [`JwsVerifier`] and checks the signature with _that_ algorithm,
-so a header naming another one cannot redirect verification — the
-algorithm-confusion class that has broken JWT libraries repeatedly. `alg`
+so a header naming another one cannot redirect verification. That is the
+algorithm-confusion class, which has broken JWT libraries repeatedly. `alg`
 is still read, and a token whose header disagrees with the key is rejected.
 
-A key type defined elsewhere — RSA, ECDSA — implements the same traits and
-works with the same entry points; this module needs no change to admit one.
+An RSA or ECDSA key type defined elsewhere implements the same traits and
+works with the same entry points, with no change here to admit it.
 
-Claims stay bytes here: [`verify`] returns the payload for the caller to
-deserialize with `core:json` — into its own struct, or into
-[`RegisteredClaims`] for the registered ones, whose `exp` / `nbf` are
-checked by [`RegisteredClaims::validate_time`]. That takes the current time
-as an argument, so verifying a token needs no clock effect.
+Claims stay bytes: [`verify`] returns the payload for the caller to
+deserialize with `core:json`, into its own struct or into
+[`RegisteredClaims`]. [`RegisteredClaims::validate_time`] checks `exp` and
+`nbf` against a time it is passed, so verifying needs no clock effect.
 
 ## Synopsis
 
@@ -51,15 +50,15 @@ Verify `token` with `key` and return its payload bytes.
 
 Checks, in order: three canonical base64url segments, the key's signature
 over `header.payload`, the header's `alg` against the key's, and that no
-extension is marked critical. Claims are not read — `exp` is
+extension is marked critical. Claims are not read: checking `exp` is
 [`RegisteredClaims::validate_time`]'s job, and the caller's to invoke.
 
 ## Traits
 
 ### `pub trait JwsAlgorithm`
 
-The `alg` a key speaks for, shared by the signing and verifying halves so a
-key that does both answers once.
+The `alg` a key speaks for. Both halves inherit it, so a key that signs
+and verifies answers once.
 
 #### `fn alg(&self) -> String`
 
@@ -106,9 +105,9 @@ Check `exp` and `nbf` against `now` (seconds since the Unix epoch),
 tolerating `leeway` seconds of clock skew on either side. A claim that
 is absent is not checked.
 
-The time is an argument rather than a clock read, so a program that
-verifies tokens gains no `SystemClock` effect; pass
-`Instant::now().seconds` where you do have one.
+The time is an argument rather than a clock read, so verifying a token
+gains no `SystemClock` effect. Pass `Instant::now().seconds` where you
+do have one.
 
 ### `pub struct Hs256Key`
 
@@ -118,9 +117,8 @@ _Fields are private._
 
 #### `pub fn new<S: AsByteSlice>(secret: &S) -> Hs256Key`
 
-RFC 7518 §3.2 requires a key at least as long as the hash output, so a
-shorter secret — the brute-forcible kind — is refused here rather than
-silently accepted.
+RFC 7518 §3.2 requires a key at least as long as the hash output. A
+shorter secret is brute-forcible, so it is refused rather than accepted.
 
 #### `impl JwsAlgorithm for Hs256Key`
 
