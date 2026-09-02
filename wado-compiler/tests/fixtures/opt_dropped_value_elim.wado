@@ -1,8 +1,7 @@
-// Test: a discarded value keeps only its effects.
-// `let _ = xs.pop()` inlines to a block that breaks with `Option::Some { … }`
-// on one path and `Option::None` on the other. Nothing reads the result, so
-// both allocations — and the bounds-checked element read that fills one — are
-// dead; the `used` decrement is all that must survive.
+// Test: a discarded value keeps only its effects. `let _ = xs.pop()` inlines to
+// a block breaking with an `Option` on both paths; nothing reads it, so neither
+// allocation survives. The `used` decrement does, and so does the element read,
+// which may trap.
 
 use { println, Stdout } from "core:cli";
 

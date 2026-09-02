@@ -296,21 +296,21 @@ reason, since they do not track speed.
 
 ## Hoisting `HighlightVisitor::classify`'s common path to get it inlined (2026-09-02)
 
-`classify` is a call per token and per trivia — ~5300 on syntax-highlight — and
+`classify` is one call per token and per trivia, ~5300 on syntax-highlight, and
 `package-gale/perf.md` named it a lever: it walks the override list before the
 `default_ids[kind]` lookup, and SQLite has no overrides at all. Splitting the
 scan into `classify_override` leaves a fast path of two compares and one indexed
 load, which reads like it should fit `-O2`'s 16-instruction budget.
 
-It does not fit: `wado dump -O2` still shows the two call sites in
-`hl_visit_token`, and the benchmark is flat to slightly negative (1.537–1.561
-ms/iter against 1.525–1.536). Writing the guard as `overrides.len() > 0` rather
-than `!is_empty()` — `is_empty` left a non-inlined `List<ResolvedOverride>::len`
-call in the WIR — changed neither.
+It does not fit. `wado dump -O2` still shows both call sites, and the benchmark
+is flat to slightly negative: 1.537–1.561 ms/iter against 1.525–1.536. Writing
+the guard as `overrides.len() > 0` rather than `!is_empty()` changed neither,
+though it did remove a non-inlined `List<ResolvedOverride>::len` call the WIR
+had kept.
 
-What did pay, on the same frame, was deleting the caller: with no override,
-nothing reads the rule stack, so the CST walk that maintains it is unobservable
-and `gen_highlight` stops emitting it (+6.5%).
+What paid on the same frame was deleting the caller. With no override nothing
+reads the rule stack, so the CST walk that maintains it is unobservable, and
+`gen_highlight` stops emitting it (+6.5%).
 
 Generalizes: a fast path you shrink is still a call until it is under the
 budget, and "under the budget" is a WIR question, not an eyeball one. Ask what

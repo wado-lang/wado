@@ -63,7 +63,7 @@ pub fn gen_highlight(
         w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
         w.line(&"let tokens = tokenize(input);");
         w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
-        w.line(&"visitor.hl_visit_token(&tokens, _i);");
+        w.line(&"visitor.hl_capture_token(&tokens, _i);");
         w.end();
         w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
@@ -154,8 +154,8 @@ fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &Li
     };
 }
 
-/// Returns whether the query resolved any rule-context override — what decides
-/// if the generated `highlight_result` needs the CST walk.
+/// Returns whether the query resolved a rule-context override, which is what
+/// decides whether the generated `highlight_result` needs the CST walk.
 fn gen_highlight_mapping(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,

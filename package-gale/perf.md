@@ -30,25 +30,23 @@ traverse. `benchmark/sqlite_parse` (parse only: build the CST, then
 `result.ok()`) is the build-isolation companion. Both run the same 13366-byte
 SQLite fixture, guest at `-O2`.
 
-Dev-host numbers (`cargo run` `wado`; post-flat-CST, 2026-07):
+Dev-host numbers (`cargo run` `wado`; post-flat-CST, 2026-07). Read the split as
+a ratio, not as absolutes: the same benchmark measured **1.467 ms/iter** on a dev
+host on 2026-09-02, against 1.436–1.479 on a release one. The two hosts sit
+within each other's spread now, because `Cargo.toml` raises `opt-level` on the
+compiler's dependencies and wasmtime is one of them. Re-measure both columns
+before sizing a GC lever off them.
 
 | benchmark                         | `copying` (default) | `null` (no GC) |     GC part |
 | --------------------------------- | ------------------: | -------------: | ----------: |
 | `syntax_highlight` (build + walk) |        ~9.5 ms/iter |   ~5.8 ms/iter | ~4.1 (~42%) |
 | `sqlite_parse` (build only)       |        ~4.4 ms/iter |              — |           — |
 
-`syntax_highlight` is **no longer GC-bound** (~42% of wall-clock is collection,
-down from ~73% on the old node tree — see "The CST is a flat store"). The
-release headline + comparison baselines (Gale vs `tree-sitter` for highlight, vs
-`sqlparser-rs` for parse) come from `mise run syntax-highlight` /
+`syntax_highlight` is **no longer GC-bound**: collection was ~42% of wall-clock
+at that snapshot, down from ~73% on the old node tree (see "The CST is a flat
+store"). The release headline + comparison baselines (Gale vs `tree-sitter` for
+highlight, vs `sqlparser-rs` for parse) come from `mise run syntax-highlight` /
 `mise run sqlite-parse` on a release host; not reproduced here (dev-only).
-
-The `copying` column is stale as an absolute: the same benchmark measures
-**1.467 ms/iter** on a dev host as of 2026-09-02, against 1.436–1.479 on a
-release one — the two hosts are now within each other's spread, since
-`Cargo.toml` raises `opt-level` on the compiler's dependencies and wasmtime is
-one. Treat the split as a ratio, and re-measure both columns before sizing a GC
-lever off them.
 
 > **Measurement note.** These are dev-profile `wado` profiles, which over-weight
 > allocation/GC frames; read the percentages as relative and size any GC win by
@@ -157,10 +155,18 @@ Note what the second one is not: the 2026-07 run-batching attempt below, which
 kept the char iterator and measured flat. Batching was never the lever; the
 calls were.
 
+`nir/drop_value` (`docs/optimizer.md`) took another 3.3% on top of the two, so
+the three come to **1.515 → 1.351 ms/iter (+12.1%)** against `origin/main`,
+three alternating pairs with the order swapped and the arms disjoint. That pass
+is Wado-wide rather than Gale's, but this is the benchmark it showed on: the
+parser and `TreeBuilder` discard a `pop()` per closed node, and each was
+allocating the `Option` it threw away.
+
 ### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
 
-Post both levers. The dev profile is noisy per-frame; mid-size frames swing
-±several points across runs, so read the buckets, not the individual rows.
+Taken after the two levers above, before `nir/drop_value` and before the token
+sweep stopped marking `visited`. The dev profile is noisy per-frame; mid-size
+frames swing ±several points across runs, so read the buckets, not the rows.
 
 |  Pct | Symbol                             | bucket                        |
 | ---: | ---------------------------------- | ----------------------------- |
@@ -182,12 +188,6 @@ Post both levers. The dev profile is noisy per-frame; mid-size frames swing
 Inclusive buckets: **parse** ~51%, **tokenize** ~20%, **highlight** ~17%
 (`highlight_html` 10.4% + the token sweep 6.8%), **CST finalize**
 (`TreeBuilder::finish`) 9.0%. Highlight was ~23% before the two levers above.
-
-`nir/drop_value` landed after this profile and takes another 3.3%: a discarded
-`pop()` was allocating the `Option` it throws away, and the parser and
-`TreeBuilder` do that once per closed node. Against `origin/main`, the three
-together are **1.515 → 1.351 ms/iter (+12.1%)**, three alternating pairs with
-the order swapped, arms disjoint.
 
 ## What's next
 

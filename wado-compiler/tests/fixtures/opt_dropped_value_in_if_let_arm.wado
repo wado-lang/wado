@@ -1,9 +1,7 @@
-// Test: a discarded value inside an `if let` arm still runs its effects.
-// `names.insert(*n)` returns a `bool` nobody reads, and its inlined body is a
-// labeled block breaking with that `bool` on both paths. The arm is the last
-// statement of the match arm the `if let` lowers to, so stripping the value has
-// to leave the arm producing what its consumer expects — a rewrite that only
-// looks at whether the *statement* is read gets this wrong and traps.
+// Test: a discarded value at the end of an `if let` arm still leaves the arm a
+// value. `names.insert(*n)` returns a `bool` nobody reads, but it is the last
+// statement of the arm the `if let` lowers to, and WIR translates that arm as a
+// value region, so stripping the value makes the program trap.
 
 use { println, Stdout } from "core:cli";
 use { TreeSet } from "core:collections";

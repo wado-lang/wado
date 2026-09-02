@@ -1,25 +1,10 @@
 //! Dropped-value elimination: a value in discarded position keeps only its
-//! effects.
+//! effects. `docs/optimizer.md` states the rewrite and what counts as discarded.
 //!
-//! `let _ = xs.pop()` inlines to a labeled block that breaks with an
-//! `Option::Some { … }` on one path and an `Option::None` on the other. Nothing
-//! reads the result, so both allocations — and the bounds-checked element read
-//! one of them wraps — are dead; only the `used` decrement must survive.
-//! `elide_local` gets as far as demoting the dead binding to `Expr(block)`,
-//! which still evaluates the value it then throws away, and stops there: the
-//! read may trap, so the aggregate around it is not deletable whole.
-//!
-//! The rewrite is a change of shape rather than of contents: the value-producing
-//! `ExprKind::LabeledBlock` becomes the value-discarding `StmtKind::LabeledBlock`,
-//! and each `break L: v` targeting it gives up its operand — decomposed into the
-//! statements its own operands' effects need, so the allocation goes and the
-//! trapping read inside it stays. Everything left dead is then `elide_local`'s
-//! and DCE's to reclaim.
-//!
-//! The same decomposition applied to a discarded `Expr(aggregate)` _statement_
-//! does not converge: `sroa_variant_return` tracks a call by whether its result
-//! is dropped, reads that off bare `Expr` statements only, and reboxes what the
-//! decomposition moves one level down — every round.
+//! Deliberately not extended to a discarded `Expr(aggregate)` statement:
+//! `sroa_variant_return` tracks a call by whether its result is dropped, reads
+//! that off bare `Expr` statements only, and reboxes what the decomposition
+//! moves one level down — every round, past the optimizer's iteration cap.
 
 use crate::nir_arena::{BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
@@ -34,12 +19,11 @@ impl Rule for DropValueRule {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         let last = stmts.last().copied();
-        // A block's tail may be its value, and at WIR that is decided by the
-        // block expression's own type rather than by whether anything reads the
-        // enclosing construct: a `match` arm whose result is dropped still
-        // translates as a value region and expects its last statement to leave
-        // one. So only a statement something follows is discarded — plus the
-        // root block's tail, which `translate_block` lowers with no value at all.
+        // Only a statement something follows is discarded, plus the root block's
+        // tail, which `translate_block` lowers with no value at all. WIR decides
+        // "value region" by a block expression's own type, not by whether
+        // anything reads the enclosing construct, so a `match` arm whose result
+        // is dropped still expects its last statement to leave a value.
         let is_root = id == engine.body.root;
         let discarded = |s: StmtId| Some(s) != last || is_root;
         let mut changed = false;
@@ -65,8 +49,7 @@ impl Rule for DropValueRule {
 }
 
 /// Replace a discarded value with the statements its operands' effects need.
-/// An aggregate decomposes into its operands, each strictly smaller, so the
-/// recursion terminates and a second visit finds nothing to do.
+/// Each operand is smaller than the aggregate it came from, so this terminates.
 fn emit_discarded(engine: &mut Engine, op: Operand, span: Span, out: &mut Vec<StmtId>) {
     let Some(e) = op.as_expr() else {
         return;
@@ -87,8 +70,8 @@ fn emit_discarded(engine: &mut Engine, op: Operand, span: Span, out: &mut Vec<St
     }
 }
 
-/// The (label, block) of a statement whose whole value is a labeled block
-/// nothing reads and whose exits this pass can rewrite.
+/// The (label, block) of a statement whose whole value is a labeled block with
+/// exits this pass can rewrite. The caller decides the value is discarded.
 fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId)> {
     let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[s].kind else {
         return None;
@@ -105,8 +88,8 @@ fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId)> {
         return None;
     }
     let (label, block) = (label.clone(), *block);
-    // The block must not fall off its end: a fall-through would leave the value
-    // in the tail statement, which is not an exit this pass rewrites.
+    // A fall-through would leave the value in the tail statement, which is not
+    // an exit this pass rewrites.
     let last = *engine.body.blocks[block].stmts.last()?;
     if !matches!(
         engine.body.stmts[last].kind,
@@ -117,9 +100,9 @@ fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId)> {
     strippable(engine, block, &label).then_some((label, block))
 }
 
-/// Whether every `break <label>` in `block` sits where [`strip_exits`] rewrites
-/// it. The two walks share one shape: each arm here either recurses exactly
-/// where the rewriter does, or refuses an operand that hides a break to `label`.
+/// Whether every `break <label>` in `block` sits where [`strip_stmt`] rewrites
+/// it. The two walks match arm for arm; what the rewriter passes over unchanged
+/// is what has to hide no such break.
 fn strippable(engine: &Engine, block: BlockId, label: &str) -> bool {
     engine.body.blocks[block]
         .stmts
@@ -128,13 +111,11 @@ fn strippable(engine: &Engine, block: BlockId, label: &str) -> bool {
 }
 
 fn strippable_stmt(engine: &Engine, s: StmtId, label: &str) -> bool {
-    let no_hidden_break =
-        |op: &Option<Operand>| op.is_none_or(|v| !operand_breaks_to(engine, v, label));
     match &engine.body.stmts[s].kind {
         StmtKind::Break {
             label: Some(l),
             value,
-        } if l == label => no_hidden_break(value),
+        } if l == label => value.is_none_or(|v| !operand_breaks_to(engine, v, label)),
         StmtKind::If {
             condition,
             then_block,
@@ -146,16 +127,16 @@ fn strippable_stmt(engine: &Engine, s: StmtId, label: &str) -> bool {
         }
         StmtKind::Loop { body } => strippable(engine, *body, label),
         // A block rebinding the label owns every break to it inside, so neither
-        // walk descends — `strip_exits` skips the same shape.
+        // walk descends.
         StmtKind::LabeledBlock { label: l, block } => {
             l == label || strippable(engine, *block, label)
         }
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            !operand_breaks_to(engine, *value, label)
-        }
-        StmtKind::Expr(value) => !operand_breaks_to(engine, *value, label),
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => no_hidden_break(value),
-        StmtKind::Continue => true,
+        StmtKind::Let { .. }
+        | StmtKind::LetDestructure { .. }
+        | StmtKind::Expr(_)
+        | StmtKind::Return { .. }
+        | StmtKind::Break { .. }
+        | StmtKind::Continue => !arena_query::has_break_to(engine.body, NodeRef::Stmt(s), label),
     }
 }
 
@@ -164,11 +145,9 @@ fn operand_breaks_to(engine: &Engine, op: Operand, label: &str) -> bool {
         .is_some_and(|e| arena_query::has_break_to(engine.body, NodeRef::Expr(e), label))
 }
 
-/// Drop the operand of every `break <label>` in `block`, keeping one that still
-/// has an effect to run as the statement ahead of the break. Reports whether it
-/// rewrote anything, so a subtree holding no such break is left untouched rather
-/// than written back identical — the engine re-runs every rule over a block it
-/// is told changed.
+/// Drop the operand of every `break <label>` in `block`, keeping what it still
+/// has to run as the statement ahead of the break. Returns whether it rewrote
+/// anything: the engine re-runs every rule over a block it is told changed.
 fn strip_exits(engine: &mut Engine, block: BlockId, label: &str) -> bool {
     let stmts = engine.body.blocks[block].stmts.clone();
     let mut out = Vec::with_capacity(stmts.len());

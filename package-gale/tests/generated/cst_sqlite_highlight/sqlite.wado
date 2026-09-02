@@ -1217,6 +1217,10 @@ impl HighlightVisitor {
             self.visited.push(false);
         }
         self.visited[idx] = true;
+        self.hl_capture_token(toks, idx);
+    }
+
+    fn hl_capture_token(&mut self, toks: &TokenStream, idx: i32) {
         for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
             let id = self.classify(toks.triv_kinds[t]);
             if id >= 0 {
@@ -1243,7 +1247,7 @@ impl HighlightVisitor {
             if i < self.visited.len() && self.visited[i] {
                 continue;
             }
-            self.hl_visit_token(toks, i);
+            self.hl_capture_token(toks, i);
         }
         if walked > 0 && self.captures.len() != walked {
             self.captures.sort_by(|a: &HighlightCapture, b: &HighlightCapture| {
