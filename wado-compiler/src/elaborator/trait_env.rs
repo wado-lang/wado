@@ -1310,6 +1310,7 @@ impl TraitEnv {
             [&struct_like_decl_modules, &newtype_decl_modules],
         );
 
+        violations.extend(check_impl_coherence(&impl_headers, resolutions));
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
         violations.extend(check_inherent_impl_collisions(
             defs,
@@ -2225,6 +2226,208 @@ impl VariadicImpl<'_> {
                 .zip(other.trait_args)
                 .all(|(a, b)| types_can_unify(a, &self.params, b, &other.params))
     }
+}
+
+/// Lower the impl headers into the value the solver answers from, and hand back
+/// the header each [`ImplId`] stands for so a finding can be given a span.
+///
+/// The one place a `DefId`, an AST type and a spelling become plain indices.
+/// A header whose target the lowering cannot express is dropped rather than
+/// approximated: an approximate target would key against the wrong impls, and
+/// the shapes dropped here — a function type, an associated-type projection, an
+/// unresolved name — carry a diagnostic of their own already.
+fn lower_impl_program(
+    impl_headers: &IndexMap<DefId, ImplHeader>,
+    resolutions: &crate::resolve::Resolutions,
+) -> (crate::trait_solver::Program, Vec<DefId>) {
+    let mut program = crate::trait_solver::Program::new();
+    let mut sources: Vec<DefId> = Vec::new();
+    // One interner over declarations: a `DefId` is a trait's or a type's, and
+    // which of the two a given id is read back as is decided by the position it
+    // was lowered from.
+    let mut decls: IndexMap<DefId, u32> = IndexMap::default();
+    let mut intern = |def: DefId| -> u32 {
+        let next = u32::try_from(decls.len()).expect("a program declares fewer than 2^32 items");
+        *decls.entry(def).or_insert(next)
+    };
+
+    for (&impl_def, header) in impl_headers {
+        let Some(target) =
+            lower_solver_type(&header.ty, &header.type_params, resolutions, &mut intern)
+        else {
+            continue;
+        };
+        let trait_args = match header.trait_type.as_ref() {
+            Some(Type::Generic(generic)) => {
+                let mut args = Vec::with_capacity(generic.args.len());
+                for arg in &generic.args {
+                    let Some(arg) =
+                        lower_solver_type(arg, &header.type_params, resolutions, &mut intern)
+                    else {
+                        break;
+                    };
+                    args.push(arg);
+                }
+                // A partially lowered argument list would key against impls it
+                // does not name, so the header is dropped as its target would be.
+                if args.len() != generic.args.len() {
+                    continue;
+                }
+                args
+            }
+            Some(
+                Type::Named(_)
+                | Type::NamespacedGeneric(_)
+                | Type::Function(_)
+                | Type::Tuple(_)
+                | Type::Reference(_)
+                | Type::MutReference(_)
+                | Type::TypePackSpread(_, _)
+                | Type::Infer(_)
+                | Type::Error(_),
+            )
+            | None => Vec::new(),
+        };
+        let id = crate::trait_solver::ImplId(
+            u32::try_from(sources.len()).expect("a program declares fewer than 2^32 impls"),
+        );
+        program.add_impl(
+            id,
+            crate::trait_solver::ImplDef {
+                trait_: header
+                    .trait_ref
+                    .map(|t| crate::trait_solver::TraitDeclId(intern(t))),
+                trait_args,
+                target,
+                is_derivation_request: header.is_synthesize_request,
+                params: header
+                    .type_params
+                    .iter()
+                    .map(|p| crate::trait_solver::ParamDef {
+                        bounds: p
+                            .bounds
+                            .iter()
+                            .filter_map(|b| resolutions.declared(b.id))
+                            .map(|b| crate::trait_solver::TraitDeclId(intern(b)))
+                            .collect(),
+                    })
+                    .collect(),
+            },
+        );
+        sources.push(impl_def);
+    }
+    (program, sources)
+}
+
+/// One AST type as the solver reads it, or `None` for a shape it has no way to
+/// say. `params` are the impl's own, so a name among them is a position rather
+/// than a declaration.
+fn lower_solver_type(
+    ty: &Type,
+    params: &[ast::GenericParam],
+    resolutions: &crate::resolve::Resolutions,
+    intern: &mut impl FnMut(DefId) -> u32,
+) -> Option<crate::trait_solver::SolverType> {
+    use crate::trait_solver::SolverType;
+    let param_at = |name: &str| params.iter().position(|p| p.name == name);
+    match ty {
+        Type::Named(named) => match param_at(&named.name) {
+            Some(index) => {
+                let index = u32::try_from(index).expect("an impl declares fewer than 2^32 params");
+                Some(if params[index as usize].is_pack {
+                    SolverType::Pack(index)
+                } else {
+                    SolverType::Param(index)
+                })
+            }
+            None => Some(SolverType::Decl(
+                crate::trait_solver::TypeDeclId(intern(resolutions.declared(named.id)?)),
+                Vec::new(),
+            )),
+        },
+        Type::Generic(generic) => {
+            // A generic head is a declaration; an impl parameter never carries
+            // type arguments of its own.
+            let head = crate::trait_solver::TypeDeclId(intern(resolutions.declared(generic.id)?));
+            let mut args = Vec::with_capacity(generic.args.len());
+            for arg in &generic.args {
+                args.push(lower_solver_type(arg, params, resolutions, intern)?);
+            }
+            Some(SolverType::Decl(head, args))
+        }
+        Type::Tuple(elems) => {
+            let mut lowered = Vec::with_capacity(elems.len());
+            for elem in elems {
+                lowered.push(lower_solver_type(elem, params, resolutions, intern)?);
+            }
+            Some(SolverType::Tuple(lowered))
+        }
+        Type::TypePackSpread(name, _) => {
+            let index = u32::try_from(param_at(name)?).expect("fewer than 2^32 params");
+            Some(SolverType::Pack(index))
+        }
+        Type::Reference(inner) => Some(SolverType::Ref {
+            is_mut: false,
+            inner: Box::new(lower_solver_type(inner, params, resolutions, intern)?),
+        }),
+        Type::MutReference(inner) => Some(SolverType::Ref {
+            is_mut: true,
+            inner: Box::new(lower_solver_type(inner, params, resolutions, intern)?),
+        }),
+        Type::NamespacedGeneric(_) | Type::Function(_) | Type::Infer(_) | Type::Error(_) => None,
+    }
+}
+
+/// The coherence checks the solver owns, given spans and names by the headers
+/// they came from. Only a user-local impl is reported: a stdlib pair the check
+/// would name is not something a program can fix.
+fn check_impl_coherence(
+    impl_headers: &IndexMap<DefId, ImplHeader>,
+    resolutions: &crate::resolve::Resolutions,
+) -> Vec<(ModuleSource, TypeError)> {
+    use crate::trait_solver::CoherenceError;
+    let (program, sources) = lower_impl_program(impl_headers, resolutions);
+    let header_of =
+        |id: crate::trait_solver::ImplId| -> &ImplHeader { &impl_headers[&sources[id.0 as usize]] };
+    let mut violations = Vec::new();
+    for error in crate::trait_solver::coherence_errors(&program) {
+        match error {
+            CoherenceError::DuplicateImpl { first, second } => {
+                let (first, second) = (header_of(first), header_of(second));
+                if !is_user_local(&second.module) {
+                    continue;
+                }
+                violations.push((
+                    second.module.clone(),
+                    TypeError::DuplicateTraitImpl {
+                        trait_name: second.trait_name.clone().unwrap_or_default(),
+                        self_type_name: get_type_name_static(&second.ty),
+                        conflicting_impl: if first.module == second.module {
+                            "an earlier impl in this file".to_string()
+                        } else {
+                            format!("the one in `{}`", first.module)
+                        },
+                        span: second.span,
+                    },
+                ));
+            }
+            CoherenceError::UnboundedValueBlanket { impl_ } => {
+                let header = header_of(impl_);
+                if !is_user_local(&header.module) {
+                    continue;
+                }
+                violations.push((
+                    header.module.clone(),
+                    TypeError::UnboundedValueBlanket {
+                        trait_name: header.trait_name.clone().unwrap_or_default(),
+                        param: get_type_name_static(&header.ty),
+                        span: header.span,
+                    },
+                ));
+            }
+        }
+    }
+    violations
 }
 
 /// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of one trait accept

@@ -572,6 +572,25 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Coherence violation: two impls of one `(Trait, Type)` pair. No rank
+    /// separates them, so without this the collection order decides which body
+    /// every call runs.
+    DuplicateTraitImpl {
+        trait_name: String,
+        self_type_name: String,
+        /// Where the impl this one duplicates lives.
+        conflicting_impl: String,
+        span: Span,
+    },
+
+    /// Coherence violation: `impl<T> Trait for T`. A value blanket is selected
+    /// by its receiver parameter's bound, and this one states none.
+    UnboundedValueBlanket {
+        trait_name: String,
+        param: String,
+        span: Span,
+    },
+
     /// Coherence violation: an inherent impl for one instantiation defines a
     /// method an inherent impl generic over the same head already defines.
     DuplicateInherentMethod {
@@ -1397,6 +1416,29 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: this one and {conflicting_impl} accept the same tuples, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
+                ),
+                *span,
+            ),
+            TypeError::DuplicateTraitImpl {
+                trait_name,
+                self_type_name,
+                conflicting_impl,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "duplicate impl of `{trait_name}` for `{self_type_name}`: {conflicting_impl} implements the same pair, and nothing ranks two impls of one pair, so which one every call runs would be decided by the order they were loaded in"
+                ),
+                *span,
+            ),
+            TypeError::UnboundedValueBlanket {
+                trait_name,
+                param,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "blanket impl of `{trait_name}` for `{param}` states no bound: a blanket impl's receiver type parameter needs a bound, since the bound is what decides which receivers it covers"
                 ),
                 *span,
             ),

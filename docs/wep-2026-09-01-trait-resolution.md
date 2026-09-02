@@ -326,18 +326,18 @@ Two disciplines keep them functions rather than passes:
 Nothing flips at once. The fixture corpus is the drift detector, as
 `verify_arg_synthesis` already uses it for argument synthesis (WEP 2026-07-31):
 
-- [ ] Define `Program` and the four functions with unit tests, called by nothing.
-- [ ] Lower `TypeSystem` and `TraitEnv` into a `Program`, and in debug builds
-      assert the solver's answer against the path in use, over every fixture.
-      The existing path stays authoritative.
-- [ ] Once the two agree everywhere, make the solver authoritative and delete the
-      path it replaces.
+- [x] `coherence_errors` and the impls half of `Program`, with unit tests.
+- [x] Lower the impl headers into a `Program` and report what it finds. It has
+      no path in use to differ against — the checks it answers did not exist —
+      so it is authoritative from the start.
+- [ ] `holds`, then `candidates`, then `rank`, each on a representation the step
+      before it proved. Each replaces a path already in use, so each lands under
+      the differential first: lower, assert the solver's answer against the path
+      in use over every fixture, and flip only once they agree everywhere.
 
-`coherence_errors` goes first. It reads the shallowest part of `Program` — impls
-and types, no bounds and no receiver — so it fixes the lowering's skeleton at the
-smallest surface, and it closes the two definition-time checks the Decision
-already owes. `holds`, `candidates` and `rank` follow in that order, each on a
-representation the step before it proved.
+`coherence_errors` went first because it reads the shallowest part of `Program` —
+impls alone, no bounds in force and no receiver — so it fixed the lowering's
+skeleton at the smallest surface while closing two checks the Decision owed.
 
 ## Consequences
 
@@ -385,17 +385,17 @@ a dispatch never appears in an expression, so the check must count enabling a
 dispatch as a use. A check that reads the source alone will tell the programmer
 to delete the import that makes the module compile.
 
-### Two definition-time checks are missing
+### Two coherence rules still read the AST
 
-Neither shape the Decision rejects is rejected yet. Both compile, and the second
-then reaches no call:
+`coherence_errors` owns four rules and answers two of them:
 
-- [ ] Two impls of one `(Trait, Type)` pair. Today collection order decides
-      which body every call runs, so swapping two `use` statements changes the
-      program (`trait_error_duplicate_impl_one_module.wado`, `_two_modules`).
-- [ ] An unbounded `impl<T> Tr for T`. Today it is accepted and indexed as
-      nothing, so the call reports the method as missing with no hint that the
-      impl exists (`trait_unbounded_value_blanket.wado`).
+- [x] Two impls of one `(Trait, Type)` pair.
+- [x] An unbounded `impl<T> Tr for T`.
+- [ ] Variadic overlap, still `check_variadic_impl_overlap` over the AST. Moving
+      it needs `Program` to carry a pack's bounds, which the key it compares on
+      deliberately ignores (WEP 2026-03-14 §5 Rule 2).
+- [ ] The orphan rule, still over the AST. Moving it needs each declaration's
+      module and the package boundary, which `Program` does not carry yet.
 
 ### Rank 1 does not order the chain
 
