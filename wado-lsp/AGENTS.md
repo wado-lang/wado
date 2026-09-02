@@ -48,7 +48,7 @@ span can classify them: `TestDecl::span`, `ResumeExpr::span`,
 `RestClauseDecl::keyword_span`. `AstSpans::overrides` keeps those apart from
 the type spans because they outrank symbol resolution.
 
-A field name is in there for the same reason. The shorthand `{ state }`
+A field name is in `overrides` for the same reason. The shorthand `{ state }`
 resolves to the binding it reads, so deferring to the symbol would colour it
 `variable` wherever a snapshot exists and `property` wherever one does not.
 

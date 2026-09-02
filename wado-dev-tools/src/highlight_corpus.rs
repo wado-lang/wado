@@ -10,7 +10,7 @@
 //! every token class, so any disagreement there is a defect. It may leave an
 //! identifier plain, because telling a function from a variable takes name
 //! resolution; that silence is reported rather than gated. Colouring one is a
-//! claim, so two names for the same span is a defect again.
+//! claim, so two different classes on one span is a defect.
 //!
 //! A file either side rejects is skipped and counted: past a syntax error the
 //! two recoveries describe different programs, so comparing them measures the
@@ -26,9 +26,9 @@ use wado_lsp::semantic_tokens::{
 };
 
 /// The vocabulary both sides are projected onto: the token classes, then the
-/// identifier classes the grammar can place from its parse alone. The kinds
-/// below those — a function against a variable — take name resolution, so
-/// both sides' leftovers land in `Name`.
+/// identifier classes the grammar can place from its parse alone. Below those,
+/// telling a function from a variable takes name resolution, so both sides'
+/// leftovers land in `Name`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Class {
     Comment,
@@ -164,6 +164,10 @@ impl Relation {
     }
 }
 
+/// What a divergence is grouped by: the relation, both sides' classes, and the
+/// kind of the span.
+type Pattern = (Relation, Option<Class>, Option<Class>, &'static str);
+
 /// One disagreement, before grouping.
 #[derive(Debug, Clone)]
 struct Divergence {
@@ -181,17 +185,17 @@ struct Divergence {
 impl Divergence {
     /// The pattern this divergence is an instance of. Thousands of
     /// divergences collapse onto a handful of these, which is what makes the
-    /// report triageable. [`Self::kind`] is part of it: `name` against
-    /// `property` is a method call or a struct field depending on it, and
-    /// which side is wrong differs between the two.
-    fn pattern(&self) -> (Relation, Option<Class>, Option<Class>, &'static str) {
+    /// report triageable. The kind is part of it: `name` against `property` is
+    /// a method call or a struct field depending on it, and which side is
+    /// wrong differs between the two.
+    fn pattern(&self) -> Pattern {
         (self.relation, self.compiler, self.gale, self.kind)
     }
 
     /// Whether this divergence is a defect rather than a capability gap. A
     /// required class on either side is one the grammar must carry, so any
-    /// relation on it fails; below those, only a span both sides classified
-    /// does — a class or a boundary the two disagree on, never a silence.
+    /// relation on it fails. Below those, only a span both sides classified
+    /// counts: a class or a boundary they disagree on, never a silence.
     fn is_gated(&self) -> bool {
         self.compiler.is_some_and(Class::is_required)
             || self.gale.is_some_and(Class::is_required)
@@ -289,11 +293,10 @@ fn read_gale_dump(path: &str) -> IndexMap<String, GaleFile> {
 
 /// The compiler's classification of `source`.
 ///
-/// Semantics are deliberately not loaded: what the grammar is held to is what
-/// a parse can settle, and that is exactly the classification this path
-/// produces. Resolving the corpus would answer a different question — a
-/// `.method()` becomes the function it resolves to — and hold a context-free
-/// grammar to it.
+/// Semantics are deliberately not loaded: the grammar is held to what a parse
+/// can settle, which is exactly what this path produces. Resolving the corpus
+/// would ask a different question (a `.method()` becomes the function behind
+/// it) and hold a context-free grammar to the answer.
 fn compiler_pieces(source: &str) -> Vec<Piece> {
     classify_all(source, None)
         .iter()
@@ -488,7 +491,7 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
 /// name (`(typeRef (IDENTIFIER) @type)`). A `function` or `parameter` does
 /// not: telling one from a plain variable takes name resolution, which is
 /// exactly what a context-free grammar cannot do. Leaving either uncoloured is
-/// reported, never gated — what is gated is colouring one as the wrong class.
+/// reported, never gated; colouring one as the wrong class is.
 fn render_capability_gap(divergences: &[Divergence]) -> String {
     let mut counts: IndexMap<&'static str, usize> = IndexMap::default();
     for divergence in divergences {
@@ -516,10 +519,7 @@ fn render_capability_gap(divergences: &[Divergence]) -> String {
 /// Collapse divergences onto their patterns, most frequent first, keeping one
 /// example each.
 fn group(divergences: &[Divergence]) -> Vec<(usize, Divergence)> {
-    let mut grouped: IndexMap<
-        (Relation, Option<Class>, Option<Class>, &'static str),
-        (usize, Divergence),
-    > = IndexMap::default();
+    let mut grouped: IndexMap<Pattern, (usize, Divergence)> = IndexMap::default();
     for divergence in divergences {
         grouped
             .entry(divergence.pattern())
@@ -623,8 +623,8 @@ mod tests {
     }
 
     /// An identifier the grammar colours has to carry the class the compiler
-    /// gave it: `Color::Red` is an `enumMember`, and capturing it `@property`
-    /// is a defect the old flat `Ident` swallowed.
+    /// gave it: `Color::Red` is an `enumMember`, so capturing it `@property`
+    /// is a defect.
     #[test]
     fn two_identifier_classes_on_one_span_is_a_defect() {
         let mine = [piece(0, 3, Class::EnumMember)];

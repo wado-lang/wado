@@ -47,9 +47,9 @@ A `::` segment naming an identifier stays uncoloured for the same reason.
 `Option::None` and `Foo::new` are one shape to the grammar, and the call's `(`
 sits outside the path rule, so it cannot tell a variant case from a static
 method. A segment spelled with a keyword stays a keyword: `Foo::from` colours
-`from` as one, which is what the compiler lexes it as. `.method()` is different
-again: there the grammar matches the `(` alongside the name, so the call is a
-fact rather than a guess.
+`from` as one, which is what the compiler lexes it as. `.method()` is not the
+same case: there the grammar matches the `(` alongside the name, so the call is
+certain.
 
 A dotted capture like `constant.builtin` becomes `class="constant builtin"`.
 See [`example/standalone.wado`](./example/standalone.wado) for a full styled

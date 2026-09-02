@@ -74,7 +74,7 @@ fn attr_value_depth(v: &crate::ast::AttrValue) -> usize {
 }
 
 /// Whether the `with { ... }` attribute object must be expanded multi-line by
-/// the depth rule — i.e. it holds at least one nested container.
+/// the depth rule: it holds at least one nested container.
 fn attrs_force_multiline(u: &UseDecl) -> bool {
     u.attributes.as_ref().is_some_and(|attrs| {
         attrs

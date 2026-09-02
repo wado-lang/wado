@@ -580,8 +580,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     }
 }
 
-/// A parameter list, wherever one is declared: its bindings, their types, and
-/// the default arguments beside them.
+/// A parameter list wherever one is declared: a function's, a world export's.
 fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
     for param in params {
         v.visit_id(param.id, param.span);

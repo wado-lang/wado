@@ -498,8 +498,8 @@ exprPath
     ;
 
 // A `::` segment: a variant case, a static method, or the middle of a module
-// path. Named so it stays off `memberName`, which is a field and is coloured;
-// nothing captures this, matching `patternPath` and `path`.
+// path. It has its own rule so no capture on `fieldName` or `methodName`
+// reaches it; nothing captures this one, matching `patternPath` and `path`.
 pathSegment
     : memberName
     ;

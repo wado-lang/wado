@@ -334,11 +334,11 @@ struct AstSpans {
     /// recovered structurally here). Declaration and use sites share the
     /// binding's definition id, so one set covers both.
     param_ids: IndexSet<AstId>,
-    /// byte start -> class for the names the AST settles outright: the
-    /// contextual keywords, and the field names. Apart from `map` because
-    /// these outrank symbol resolution rather than being refined by it — a
-    /// shorthand `{ state }` resolves to the binding it reads, and the symbol
-    /// winning would colour it `variable` wherever a snapshot exists.
+    /// byte start -> class for the names the AST settles outright: contextual
+    /// keywords and field names. These outrank symbol resolution rather than
+    /// being refined by it, so they stay apart from `map`: a shorthand
+    /// `{ state }` resolves to the binding it reads, which would colour it
+    /// `variable` wherever a snapshot exists.
     overrides: IndexMap<usize, (u32, u32)>,
 }
 
@@ -386,16 +386,16 @@ struct SpanCollector {
 }
 
 impl SpanCollector {
-    /// An effect named in a `with` clause. The declaration site already reads
-    /// as a type (`effect E`); its uses are the same name.
+    /// An effect named in a `with` clause reads as its declaration does:
+    /// `effect E` is a type, and every mention of `E` is the same name.
     fn mark_effect_names(&mut self, effects: &[(AstId, Span)]) {
         for (_, span) in effects {
             self.spans.insert(span.start, token_type::TYPE);
         }
     }
 
-    /// Mark every key of an attribute object, and of the objects nested in it —
-    /// under an array element as much as under another key.
+    /// Every key of an attribute object and of the objects nested in it, under
+    /// an array element as much as under another key.
     fn mark_attr_keys(&mut self, object: &ast::AttrObject) {
         for entry in object.values() {
             self.mark_field_name(entry.key_span);
@@ -521,11 +521,10 @@ impl AstVisitor for SpanCollector {
         match ty {
             Type::Named(t) => self.spans.insert(t.span.start, token_type::TYPE),
             Type::Generic(t) => self.spans.insert(t.span.start, token_type::TYPE),
-            // Both segments sit in a type position, so both take the class the
-            // position gives them. The head is not knowably a namespace —
-            // `ns::Value` and `Self::Item` parse to the same node — and the
-            // symbol map refines it where it resolves one; without that, `type`
-            // beats the `enumMember` the `::` heuristic would land on.
+            // Both segments sit in a type position. The head is not knowably a
+            // namespace (`ns::Value` and `Self::Item` parse to the same node),
+            // so the symbol map refines it where it resolves one, and `type`
+            // beats the `enumMember` the `::` heuristic would otherwise land on.
             Type::NamespacedGeneric(t) => {
                 self.spans.insert(t.span.start, token_type::TYPE);
                 self.spans.insert(t.name_span.start, token_type::TYPE);
@@ -570,11 +569,9 @@ fn classify_token(
             // as the parameter binding it resolves to.
             TokenKind::Ident(name) if name == "self" => CONSTANT,
 
-            // Identifiers. A name the AST settles outright — a contextual
-            // keyword, a field name — outranks whatever else would classify
-            // it; everything else prefers the resolved symbol classification
-            // (precomputed in `sem_classes`, keyed by byte start) and falls
-            // back to the lexer/AST heuristics.
+            // Identifiers, in precedence order: a name the AST settles
+            // outright (a contextual keyword, a field name), then the resolved
+            // symbol class from `sem_classes`, then the lexer/AST heuristics.
             TokenKind::Ident(_) => ast_spans
                 .override_at(token.span.start)
                 .or_else(|| sem_classes.and_then(|classes| classes.get(&token.span.start).copied()))
@@ -720,19 +717,16 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
             | TokenKind::World
             | TokenKind::Effect => return (token_type::TYPE, 0),
             TokenKind::Dot => {
-                // After `.`: method if the call follows, else property. A
-                // `::<` turbofish is a call's type arguments — `.collect::<T>()`
-                // is as much a method as `.collect()`.
                 if calls(tokens, index) {
                     return (token_type::METHOD, 0);
                 }
                 return (token_type::PROPERTY, 0);
             }
             TokenKind::ColonColon => {
-                // After `::`: could be enum member or static method
                 if calls(tokens, index) {
                     return (token_type::FUNCTION, 0);
                 }
+                // More path after it: a middle segment like `B` in `A::B::C`.
                 if follows(tokens, index, 1, &TokenKind::ColonColon) {
                     return (token_type::TYPE, 0);
                 }
@@ -742,8 +736,7 @@ fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32,
         }
     }
 
-    // 3. A call follows, directly or past its turbofish: `f(`, `f::<T>(`. A
-    // `::` onto a name instead is a path, and step 2 classifies its segments.
+    // 3. A call. A `::` onto a name is a path instead, classified in step 2.
     if calls(tokens, index) {
         return (token_type::FUNCTION, 0);
     }
@@ -760,8 +753,8 @@ fn prev_significant(tokens: &[Token], index: usize) -> Option<&Token> {
     }
 }
 
-/// Whether the token `ahead` positions past `index` is of `kind`. `ahead` is 1
-/// for the next token; the `::<` turbofish needs 2.
+/// Whether the token `ahead` positions past `index` is of `kind`, counting
+/// from 1 for the next one.
 fn follows(tokens: &[Token], index: usize, ahead: usize, kind: &TokenKind) -> bool {
     tokens
         .get(index + ahead)
@@ -769,10 +762,7 @@ fn follows(tokens: &[Token], index: usize, ahead: usize, kind: &TokenKind) -> bo
 }
 
 /// Whether the name at `index` is called: `f(`, or `f::<T>(` past a turbofish.
-///
-/// The turbofish has to be followed to its close, not merely opened. `::<`
-/// alone also starts `Opt::<i32>::None`, where the type arguments qualify a
-/// path and the name is no callee.
+/// `::<` opens `Opt::<i32>::None` too, so the `(` must follow the close.
 fn calls(tokens: &[Token], index: usize) -> bool {
     if follows(tokens, index, 1, &TokenKind::LParen) {
         return true;
@@ -1049,7 +1039,7 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 1, "Tall"), token_type::TYPE);
     }
 
-    /// Only the AST knows, so this asserts the no-semantics path.
+    /// No symbol resolves a literal's field name, so the AST alone settles it.
     #[test]
     fn struct_literal_field_names_are_properties() {
         let src = "struct Gen {\n    state: i32,\n}\nfn run() {\n    let g = Gen {\n        state: 1,\n    };\n}\n";
@@ -1109,10 +1099,8 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 7, "E"), token_type::TYPE);
     }
 
-    /// A path's turbofish is pinned on the identifier, not on a call, when no
-    /// call follows — and its arguments are types there too. The head is no
-    /// callee either: `::<` opens as much a path as a call, and only the `(`
-    /// the turbofish closes onto tells them apart.
+    /// `Opt::<i32>::None` is a path, not a call. Its arguments are types, and
+    /// its head is no callee: only the `(` a turbofish closes onto says which.
     #[test]
     fn a_path_prefix_turbofish_argument_is_a_type() {
         let src = "variant Opt<V> {\n    None,\n    Some(V),\n}\nfn run() {\n    let b = Opt::<i32>::None;\n}\n";
@@ -1121,8 +1109,8 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 5, "Opt"), token_type::VARIABLE);
     }
 
-    /// The same path one segment in, where a `::` precedes the turbofish's
-    /// name: a path middle, classified as one.
+    /// The same path one segment in: a `::` before the name makes it a path
+    /// middle, and the turbofish after it still does not make it a callee.
     #[test]
     fn a_path_middle_before_a_turbofish_is_not_a_function() {
         let src = "fn run() {\n    let b = ns::Opt::<i32>::None;\n}\n";
