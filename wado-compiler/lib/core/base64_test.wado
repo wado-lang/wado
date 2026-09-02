@@ -1,4 +1,4 @@
-use { encode, decode, encode_url, encode_with, Encoding } from "core:base64";
+use { encode, decode, decode_url, encode_url, encode_with, Encoding } from "core:base64";
 
 test "encode empty" {
     let data: ByteList = [];
@@ -182,4 +182,38 @@ test "RFC 4648 test vectors" {
     assert encode(&"foob") == "Zm9vYg==";
     assert encode(&"fooba") == "Zm9vYmE=";
     assert encode(&"foobar") == "Zm9vYmFy";
+}
+
+test "decode_url is the inverse of encode_url" {
+    let data: ByteList = [116, 24, 223, 180, 151, 153, 224, 37];
+    assert decode_url(&encode_url(&data)) matches { Some(round) && round == data };
+    assert decode_url(&"") matches { Some(empty) && empty.len() == 0 };
+}
+
+test "decode_url rejects what encode_url never writes" {
+    // Padding, the standard alphabet, and a stray character: `decode` takes
+    // all three, so one byte string would have several spellings.
+    assert decode(&"SGVsbG8=") matches { Some(_) };
+    assert decode_url(&"SGVsbG8=") matches { None };
+    assert decode(&"++//") matches { Some(_) };
+    assert decode_url(&"++//") matches { None };
+    assert decode_url(&"SGVsb G8") matches { None };
+}
+
+test "decode_url rejects a non-canonical final group" {
+    // `Zg` and `Zh` both carry 'f' in their first 8 bits; only the spelling
+    // whose unused bits are zero is accepted.
+    assert decode_url(&"Zg") matches { Some(f) && f == b"f" };
+    assert decode_url(&"Zh") matches { None };
+    assert decode_url(&"Zm8") matches { Some(fo) && fo == b"fo" };
+    assert decode_url(&"Zm9") matches { None };
+    // A lone character cannot carry a byte.
+    assert decode_url(&"Z") matches { None };
+}
+
+test "decode_url accepts the URL-safe alphabet" {
+    let data: ByteList = [255, 255, 255];
+    assert encode_url(&data) == "____";
+    assert decode_url(&"____") matches { Some(d) && d == data };
+    assert decode_url(&"-_-_") matches { Some(_) };
 }

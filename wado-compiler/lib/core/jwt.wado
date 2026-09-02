@@ -1,0 +1,270 @@
+#![stdlib("core:jwt")]
+//! JSON Web Tokens (RFC 7519) in the JWS Compact Serialization (RFC 7515),
+//! with HMAC-SHA256 (`HS256`, RFC 7518 §3.2) built in.
+//!
+//! The key decides the algorithm, never the token. [`verify`] takes a key that
+//! implements [`JwsVerifier`] and checks the signature with *that* algorithm,
+//! so a header naming another one cannot redirect verification — the
+//! algorithm-confusion class that has broken JWT libraries repeatedly. `alg`
+//! is still read, and a token whose header disagrees with the key is rejected.
+//!
+//! A key type defined elsewhere — RSA, ECDSA — implements the same traits and
+//! works with the same entry points; this module needs no change to admit one.
+//!
+//! Claims stay bytes here. Deserialize the payload with `core:json` into your
+//! own struct, or into [`RegisteredClaims`] for the registered ones, and check
+//! `exp` / `nbf` with [`RegisteredClaims::validate_time`] — which takes the
+//! current time as an argument, so verifying a token needs no clock effect.
+
+use { Digest, Sha256, sha256 } from "core:digest";
+use { decode_url, encode_url } from "core:base64";
+use { from_bytes } from "core:json";
+use { Deserialize } from "core:serde";
+
+#[synopsis]
+test {
+    let key = Hs256Key::new(&"a 32-byte-or-longer shared secret");
+    let token = sign(&`{"sub":"joe","exp":1300819380}`, &key);
+
+    // Verification hands back the payload bytes; claims are yours to read.
+    let Ok(payload) = verify(&token, &key) else {
+        panic("the token this key just signed must verify");
+    };
+    let Ok(claims) = from_bytes::<RegisteredClaims, ByteList>(payload) else {
+        panic("the payload is JSON");
+    };
+    assert claims.sub == Option::Some("joe");
+    assert claims.validate_time(1300819379) matches { Ok(_) };
+    assert claims.validate_time(1300819380) matches { Err(JwtError::Expired) };
+}
+
+/// The `alg` a key speaks for, shared by the signing and verifying halves so a
+/// key that does both answers once.
+pub trait JwsAlgorithm {
+    /// The `alg` header value, e.g. `"HS256"`.
+    fn alg(&self) -> String;
+}
+
+/// The verifying half of a JWS algorithm. Implement it on a key type to teach
+/// [`verify`] an algorithm this module does not carry.
+pub trait JwsVerifier: JwsAlgorithm {
+    /// Whether `signature` is this key's over `signing_input` (the token's
+    /// `header.payload` ASCII bytes). An implementation compares in constant
+    /// time — see [`ct_eq`].
+    fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool;
+}
+
+/// The signing half of a JWS algorithm.
+pub trait JwsSigner: JwsAlgorithm {
+    fn sign(&self, signing_input: &ByteList) -> ByteList;
+}
+
+/// Why a token was rejected.
+pub enum JwtError {
+    /// Not three `.`-separated segments, or a segment that is not canonical
+    /// base64url, or a header that is not JSON.
+    Malformed,
+    /// The header's `alg` is not the one the key verifies.
+    AlgMismatch,
+    /// The header marks extensions critical (`crit`) that this module does not
+    /// implement, which RFC 7515 §4.1.11 requires it to reject.
+    CriticalHeader,
+    /// The signature is not this key's over this token.
+    InvalidSignature,
+    /// `exp` has passed.
+    Expired,
+    /// `nbf` has not arrived.
+    NotYetValid,
+}
+
+/// A token whose signature verified, in its decoded halves.
+pub struct Jws {
+    pub header: ByteList,
+    pub payload: ByteList,
+}
+
+/// The registered claims (RFC 7519 §4.1) this module knows how to check.
+/// `aud` is absent: it is a string *or* an array of strings on the wire, so it
+/// belongs to a caller's own claims struct until this module carries both.
+pub struct RegisteredClaims {
+    pub iss: Option<String> = null,
+    pub sub: Option<String> = null,
+    pub exp: Option<i64> = null,
+    pub nbf: Option<i64> = null,
+    pub iat: Option<i64> = null,
+}
+
+impl Deserialize for RegisteredClaims;
+
+impl RegisteredClaims {
+    /// Check `exp` and `nbf` against `now` (seconds since the Unix epoch),
+    /// tolerating `leeway` seconds of clock skew on either side. A claim that
+    /// is absent is not checked.
+    ///
+    /// The time is an argument rather than a clock read, so a program that
+    /// verifies tokens gains no `SystemClock` effect; pass
+    /// `Instant::now().seconds` where you do have one.
+    pub fn validate_time(&self, now: i64, leeway: i64 = 0) -> Result<(), JwtError> {
+        if let Some(exp) = self.exp && now - leeway >= exp {
+            return Result::Err(JwtError::Expired);
+        }
+        if let Some(nbf) = self.nbf && now + leeway < nbf {
+            return Result::Err(JwtError::NotYetValid);
+        }
+        return Result::Ok(());
+    }
+}
+
+/// The one JWS header this module writes, and the shape it accepts back.
+struct Header {
+    alg: String,
+    crit: Option<List<String>> = null,
+}
+
+impl Deserialize for Header;
+
+/// Sign `payload` into a compact JWS: `base64url(header).base64url(payload).base64url(signature)`.
+pub fn sign<K: JwsSigner, P: AsByteSlice>(payload: &P, key: &K) -> String {
+    let alg = key.alg();
+    assert is_alg_token(&alg), `a JWS alg is alphanumeric, got ${alg}`;
+    let header = encode_url(&`{"alg":"${alg}","typ":"JWT"}`);
+    let signing_input = `${header}.${encode_url(payload)}`;
+    let bytes: ByteList = signing_input.bytes().collect();
+    return `${signing_input}.${encode_url(&key.sign(&bytes))}`;
+}
+
+/// Verify `token` with `key` and return its payload bytes.
+///
+/// Checks, in order: three canonical base64url segments, the key's signature
+/// over `header.payload`, the header's `alg` against the key's, and that no
+/// extension is marked critical. Claims are not read — `exp` is
+/// [`RegisteredClaims::validate_time`]'s job, and the caller's to invoke.
+pub fn verify<K: JwsVerifier>(token: &String, key: &K) -> Result<ByteList, JwtError> {
+    let jws = verify_signature(token, key)?;
+    let Ok(header) = from_bytes::<Header, ByteList>(jws.header) else {
+        return Result::Err(JwtError::Malformed);
+    };
+    if header.alg != key.alg() {
+        return Result::Err(JwtError::AlgMismatch);
+    }
+    if header.crit matches { Some(_) } {
+        return Result::Err(JwtError::CriticalHeader);
+    }
+    return Result::Ok(jws.payload);
+}
+
+/// Verify the signature alone, returning both decoded halves without looking
+/// inside the header. [`verify`] is the entry point to reach for; this one is
+/// for a caller that reads the header itself (a `kid` to select a key, say)
+/// and then owes itself the `alg` and `crit` checks `verify` performs.
+pub fn verify_signature<K: JwsVerifier>(token: &String, key: &K) -> Result<Jws, JwtError> {
+    let parts: List<String> = token.split(".").collect();
+    if parts.len() != 3 {
+        return Result::Err(JwtError::Malformed);
+    }
+    let Some(header) = decode_url(&parts[0]) else {
+        return Result::Err(JwtError::Malformed);
+    };
+    let Some(payload) = decode_url(&parts[1]) else {
+        return Result::Err(JwtError::Malformed);
+    };
+    let Some(signature) = decode_url(&parts[2]) else {
+        return Result::Err(JwtError::Malformed);
+    };
+
+    let signing_input: ByteList = `${parts[0]}.${parts[1]}`.bytes().collect();
+    if !key.verify(&signing_input, &signature) {
+        return Result::Err(JwtError::InvalidSignature);
+    }
+    return Result::Ok(Jws { header: header, payload: payload });
+}
+
+/// A shared secret for `HS256`, signing and verifying with HMAC-SHA256.
+pub struct Hs256Key {
+    secret: ByteList,
+}
+
+impl Hs256Key {
+    /// RFC 7518 §3.2 requires a key at least as long as the hash output, so a
+    /// shorter secret — the brute-forcible kind — is refused here rather than
+    /// silently accepted.
+    pub fn new<S: AsByteSlice>(secret: &S) -> Hs256Key {
+        let bytes = secret.as_byte_slice().to_list() as ByteList;
+        assert bytes.len() >= 32, `an HS256 secret is at least 32 bytes, got ${bytes.len()}`;
+        return Hs256Key { secret: bytes };
+    }
+}
+
+impl JwsAlgorithm for Hs256Key {
+    fn alg(&self) -> String {
+        return "HS256";
+    }
+}
+
+impl JwsSigner for Hs256Key {
+    fn sign(&self, signing_input: &ByteList) -> ByteList {
+        return hmac_sha256(&self.secret, signing_input);
+    }
+}
+
+impl JwsVerifier for Hs256Key {
+    fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool {
+        return ct_eq(&hmac_sha256(&self.secret, signing_input), signature);
+    }
+}
+
+/// Compare two byte strings without an early exit, so the time taken says
+/// nothing about how much of a signature an attacker got right. Public
+/// because an out-of-tree [`JwsVerifier`] owes its comparison the same.
+pub fn ct_eq(a: &ByteList, b: &ByteList) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for let mut i = 0; i < a.len(); i += 1 {
+        diff = diff | a[i] ^ b[i];
+    }
+    return diff == 0;
+}
+
+// SHA-256 processes 64-byte blocks, the width HMAC pads its keys to.
+global BLOCK_LEN: i32 = 64;
+
+/// HMAC-SHA256 (RFC 2104): `H((K ^ opad) || H((K ^ ipad) || message))`.
+fn hmac_sha256(key: &ByteList, message: &ByteList) -> ByteList {
+    let mut block = if key.len() > BLOCK_LEN { sha256(key) } else { *key };
+    while block.len() < BLOCK_LEN {
+        block.push(0);
+    }
+
+    let mut inner_pad: ByteList = [];
+    let mut outer_pad: ByteList = [];
+    for let mut i = 0; i < BLOCK_LEN; i += 1 {
+        inner_pad.push(block[i] ^ 0x36);
+        outer_pad.push(block[i] ^ 0x5c);
+    }
+
+    let mut inner = Sha256::new();
+    inner.update(&inner_pad);
+    inner.update(message);
+    let digest = inner.finalize();
+
+    let mut outer = Sha256::new();
+    outer.update(&outer_pad);
+    outer.update(&digest);
+    return outer.finalize();
+}
+
+/// Whether `alg` is safe to splice into the header JSON `sign` writes.
+fn is_alg_token(alg: &String) -> bool {
+    if alg.len() == 0 {
+        return false;
+    }
+    for let byte of alg.bytes() {
+        let alnum = byte >= b'0' && byte <= b'9' || byte >= b'A' && byte <= b'Z' || byte >= b'a' && byte <= b'z';
+        if !alnum {
+            return false;
+        }
+    }
+    return true;
+}

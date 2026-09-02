@@ -1,7 +1,8 @@
 #![stdlib("core:base64")]
 //! Base64 encoding and decoding (RFC 4648): standard and URL-safe alphabets,
-//! configurable padding via `Encoding` flags, and lenient decoding that
-//! accepts either alphabet with or without padding. Entry points accept any
+//! configurable padding via `Encoding` flags, and two decoders — [`decode`]
+//! accepts either alphabet with or without padding, [`decode_url`] accepts
+//! only the canonical URL-safe unpadded spelling. Entry points accept any
 //! `AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, or `String`).
 
 
@@ -31,7 +32,7 @@ global URL_SAFE_TABLE: ByteList = [
     b'5', b'6', b'7', b'8', b'9', b'-', b'_',
 ];
 
-fn build_decode_table() -> ByteList {
+fn build_decode_table(lenient: bool) -> ByteList {
     let mut table = ByteList::filled(256, 255);
 
     for let mut i = 0; i < 26; i += 1 {
@@ -43,16 +44,22 @@ fn build_decode_table() -> ByteList {
     for let mut i = 0; i < 10; i += 1 {
         table['0' as i32 + i] = (52 + i) as u8;
     }
-    table['+' as i32] = 62;
-    table['/' as i32] = 63;
     table['-' as i32] = 62;
     table['_' as i32] = 63;
-    table['=' as i32] = 254;
+    if lenient {
+        table['+' as i32] = 62;
+        table['/' as i32] = 63;
+        table['=' as i32] = 254;
+    }
 
     return table;
 }
 
-global DECODE_TABLE: ByteList = build_decode_table();
+global DECODE_TABLE: ByteList = build_decode_table(true);
+
+// The URL-safe alphabet alone: `+`, `/` and `=` stay invalid, so a canonical
+// decode rejects them rather than silently accepting a second spelling.
+global URL_DECODE_TABLE: ByteList = build_decode_table(false);
 
 fn encode_impl(data: ByteSlice, table: &ByteList, pad: bool) -> String {
     let len = data.len();
@@ -119,10 +126,12 @@ pub fn encode_with<S: AsByteSlice>(data: &S, encoding: Encoding) -> String {
     return encode_impl(data.as_byte_slice(), &STANDARD_TABLE, !no_padding);
 }
 
-fn decode_impl(input: ByteSlice) -> Option<ByteList> {
+fn decode_impl(input: ByteSlice, table: &ByteList, canonical: bool) -> Option<ByteList> {
     let mut end = input.len();
-    while end > 0 && input[end - 1] == b'=' {
-        end -= 1;
+    if !canonical {
+        while end > 0 && input[end - 1] == b'=' {
+            end -= 1;
+        }
     }
 
     if end % 4 == 1 {
@@ -139,7 +148,6 @@ fn decode_impl(input: ByteSlice) -> Option<ByteList> {
     }
 
     let mut out = ByteList::with_capacity(out_len);
-    let table = &DECODE_TABLE;
 
     let mut i = 0;
     while i + 3 < end {
@@ -164,12 +172,20 @@ fn decode_impl(input: ByteSlice) -> Option<ByteList> {
         if v0 >= 254 || v1 >= 254 {
             return null;
         }
+        // The last character carries four bits the output byte drops. Only the
+        // spelling that leaves them zero is canonical.
+        if canonical && v1 & 15 != 0 {
+            return null;
+        }
         out.push((v0 << 2 | v1 >> 4) as u8);
     } else if remainder == 3 {
         let v0 = table[input[i] as i32] as i32;
         let v1 = table[input[i + 1] as i32] as i32;
         let v2 = table[input[i + 2] as i32] as i32;
         if v0 >= 254 || v1 >= 254 || v2 >= 254 {
+            return null;
+        }
+        if canonical && v2 & 3 != 0 {
             return null;
         }
         out.push((v0 << 2 | v1 >> 4) as u8);
@@ -184,5 +200,19 @@ fn decode_impl(input: ByteSlice) -> Option<ByteList> {
 /// Returns null on invalid input.
 #[inline]
 pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
-    return decode_impl(encoded.as_byte_slice());
+    return decode_impl(encoded.as_byte_slice(), &DECODE_TABLE, false);
+}
+
+/// Decodes URL-safe Base64 (RFC 4648 §5, unpadded) — the exact inverse of
+/// [`encode_url`], and the encoding JWS/JWT mandate.
+///
+/// Canonical where [`decode`] is lenient: it rejects everything `encode_url`
+/// never writes — the standard alphabet's `+` and `/`, `=` padding, and a
+/// final group whose unused bits are set. One byte string therefore has
+/// exactly one accepted spelling, so a decoded value cannot be re-encoded into
+/// a different-looking input that decodes the same. Reach for [`decode`] when
+/// the input comes from a producer you do not control.
+#[inline]
+pub fn decode_url<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
+    return decode_impl(encoded.as_byte_slice(), &URL_DECODE_TABLE, true);
 }

@@ -46,3 +46,31 @@ test "if-else literal adopts the typed branch (either side)" {
     assert x == 7;
     assert y == 7;
 }
+
+test "else-if chain literal adopts the typed branch" {
+    let a: u64 = 7;
+    let x = if a == 1 { a } else if a == 7 { 0 } else { 1 };
+    let y = if false { 0 } else if false { 1 } else { a };
+    assert x == 0;
+    assert y == 7;
+}
+
+test "else-if chain of literals adopts a cast branch" {
+    let b: u8 = 5;
+    let v = if b < 3 {
+        (b - 1) as u32
+    } else if b < 10 {
+        (b - 2) as u32 + 26
+    } else if b == 30 {
+        62
+    } else {
+        63
+    };
+    assert v == 29;
+}
+
+test "match arm whose body is an else-if chain of literals" {
+    let opt: Option<i64> = null;
+    let v = match opt { Some(x) => x, None => if true { 0 } else { 1 } };
+    assert v == 0;
+}

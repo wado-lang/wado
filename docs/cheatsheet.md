@@ -1442,6 +1442,7 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value
 - [`core:base64`](./stdlib-core-base64.md) — base64 encoding and decoding
 - [`core:digest`](./stdlib-core-digest.md) — cryptographic hashes (SHA-256)
+- [`core:jwt`](./stdlib-core-jwt.md) — JSON Web Tokens over JWS Compact (`HS256`)
 - [`core:zlib`](./stdlib-core-zlib.md) — zlib/gzip compression
 - [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
