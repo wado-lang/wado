@@ -1,7 +1,7 @@
 #![stdlib("core:base64")]
 //! Base64 encoding and decoding (RFC 4648): standard and URL-safe alphabets,
 //! configurable padding via `Encoding` flags, and two decoders — [`decode`]
-//! accepts either alphabet with or without padding, [`decode_url`] accepts
+//! accepts either alphabet with or without padding, [`decode_url_strict`] accepts
 //! only the canonical URL-safe unpadded spelling. Entry points accept any
 //! `AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, or `String`).
 
@@ -213,6 +213,6 @@ pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
 /// a different-looking input that decodes the same. Reach for [`decode`] when
 /// the input comes from a producer you do not control.
 #[inline]
-pub fn decode_url<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
+pub fn decode_url_strict<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
     return decode_impl(encoded.as_byte_slice(), &URL_DECODE_TABLE, true);
 }

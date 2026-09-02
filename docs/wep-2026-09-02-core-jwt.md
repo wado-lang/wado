@@ -8,8 +8,8 @@ Serialization (RFC 7515) is what that traffic actually carries.
 
 The pieces were already in the tree: `core:digest` hashes with SHA-256,
 `core:base64` encodes URL-safe base64, `core:json` and `core:serde`
-deserialize claims. What was missing is HMAC, the token grammar, and the
-rejection rules.
+deserialize claims. What was missing is keyed hashing, the token grammar, and
+the rejection rules.
 
 Two questions decide the shape of the module, and neither is about the math:
 
@@ -23,9 +23,9 @@ Two questions decide the shape of the module, and neither is about the math:
   wide-multiply builtin (`builtin::i64_mul_wide_u`) at verification speeds an
   HTTP service can pay per request — the cost is the implementation and its
   security review, not the runtime.
-- **How much of the token layer.** Decoding claims through `core:json` costs
-  several times what verifying a signature does, in code size. What the module
-  forces on every caller therefore matters more than what it offers.
+- **How much of the token layer.** Claims are an application schema, not a
+  token format: every deployment reads different ones. A JWT library that owns
+  the claim structs owns a schema it cannot know.
 
 ## Decision
 
@@ -54,13 +54,26 @@ into the same `verify`, with `core:jwt` unchanged — the minimum stays a
 minimum without becoming a dead end. `Hs256Key` is the one implementation
 here, signing and verifying with HMAC-SHA256 (RFC 2104).
 
-### Claims stay bytes
+### One entry point, and claims stay bytes
 
-`verify` returns the payload bytes. A caller that wants typed claims
-deserializes them itself — into its own struct, or into `RegisteredClaims`
-(`iss`, `sub`, `exp`, `nbf`, `iat`). Because a program links only what it
-calls, a caller that verifies a signature and reads the payload its own way
-never pulls `core:json` into its component.
+`verify` is the only way in, and it returns the payload bytes. A second
+function that verified the signature without reading the header would be a
+door around the `alg` and `crit` checks, and the caller who took it would owe
+itself both. Reading a header _before_ verification — a `kid` that selects a
+key — is a real need, but it is JWKS-shaped, and it can arrive as its own API
+with the algorithms that need it.
+
+A caller that wants typed claims deserializes the payload itself, into its own
+struct or into `RegisteredClaims` (`iss`, `sub`, `exp`, `nbf`, `iat`) for the
+registered ones. The module reads no claim of its own.
+
+### HMAC belongs to `core:digest`
+
+Keyed hashing is not a JWT concept. `core:digest` gains `hmac` over the
+`Digest` trait — with `block_len` as a trait method, since a trait cannot
+declare an associated constant today — and `hmac_sha256` as the one-shot
+counterpart to `sha256`. `core:jwt` is then a consumer, and the next caller
+that needs a MAC does not go looking inside a token library.
 
 ### Time is an argument
 
@@ -76,10 +89,11 @@ and ignores a final group's unused bits — so one signature has several
 spellings that all verify. Tokens are used as cache and revocation keys, where
 that is a bug.
 
-`decode_url` is the canonical inverse of `encode_url`: it rejects `+`, `/`,
-`=`, and a final group whose dropped bits are set, so one byte string has
+`decode_url_strict` is the canonical inverse of `encode_url`: it rejects `+`,
+`/`, `=`, and a final group whose dropped bits are set, so one byte string has
 exactly one accepted spelling. It belongs in `core:base64` next to the encoder
-it inverts, not hidden inside `core:jwt`.
+it inverts, not hidden inside `core:jwt`, and its name has to answer "why this
+one, when `decode` already takes base64url?" without a trip to the docs.
 
 ### Refusing a weak secret
 
@@ -116,8 +130,5 @@ failure, and an assert fires at key construction — startup — not per request
   algorithms at runtime — a JWKS carrying both RSA and EC keys — needs a
   closed `match` at the call site. Generic `verify` covers the static case
   only.
-- **`hmac_sha256` is private to `core:jwt`.** HMAC over the `Digest` trait
-  belongs in `core:digest`; generalizing it needs a block size per algorithm,
-  which traits cannot express today (no associated constants in a trait).
 - **JWE** (encrypted tokens, RFC 7516) is a separate specification and is not
   addressed here.

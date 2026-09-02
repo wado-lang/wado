@@ -11,13 +11,14 @@
 //! A key type defined elsewhere — RSA, ECDSA — implements the same traits and
 //! works with the same entry points; this module needs no change to admit one.
 //!
-//! Claims stay bytes here. Deserialize the payload with `core:json` into your
-//! own struct, or into [`RegisteredClaims`] for the registered ones, and check
-//! `exp` / `nbf` with [`RegisteredClaims::validate_time`] — which takes the
-//! current time as an argument, so verifying a token needs no clock effect.
+//! Claims stay bytes here: [`verify`] returns the payload for the caller to
+//! deserialize with `core:json` — into its own struct, or into
+//! [`RegisteredClaims`] for the registered ones, whose `exp` / `nbf` are
+//! checked by [`RegisteredClaims::validate_time`]. That takes the current time
+//! as an argument, so verifying a token needs no clock effect.
 
-use { Digest, Sha256, sha256 } from "core:digest";
-use { decode_url, encode_url } from "core:base64";
+use { hmac_sha256 } from "core:digest";
+use { decode_url_strict, encode_url } from "core:base64";
 use { from_bytes } from "core:json";
 use { Deserialize } from "core:serde";
 
@@ -77,12 +78,6 @@ pub enum JwtError {
     NotYetValid,
 }
 
-/// A token whose signature verified, in its decoded halves.
-pub struct Jws {
-    pub header: ByteList,
-    pub payload: ByteList,
-}
-
 /// The registered claims (RFC 7519 §4.1) this module knows how to check.
 /// `aud` is absent: it is a string *or* an array of strings on the wire, so it
 /// belongs to a caller's own claims struct until this module carries both.
@@ -140,8 +135,26 @@ pub fn sign<K: JwsSigner, P: AsByteSlice>(payload: &P, key: &K) -> String {
 /// extension is marked critical. Claims are not read — `exp` is
 /// [`RegisteredClaims::validate_time`]'s job, and the caller's to invoke.
 pub fn verify<K: JwsVerifier>(token: &String, key: &K) -> Result<ByteList, JwtError> {
-    let jws = verify_signature(token, key)?;
-    let Ok(header) = from_bytes::<Header, ByteList>(jws.header) else {
+    let parts: List<String> = token.split(".").collect();
+    if parts.len() != 3 {
+        return Result::Err(JwtError::Malformed);
+    }
+    let Some(header_bytes) = decode_url_strict(&parts[0]) else {
+        return Result::Err(JwtError::Malformed);
+    };
+    let Some(payload) = decode_url_strict(&parts[1]) else {
+        return Result::Err(JwtError::Malformed);
+    };
+    let Some(signature) = decode_url_strict(&parts[2]) else {
+        return Result::Err(JwtError::Malformed);
+    };
+
+    let signing_input: ByteList = `${parts[0]}.${parts[1]}`.bytes().collect();
+    if !key.verify(&signing_input, &signature) {
+        return Result::Err(JwtError::InvalidSignature);
+    }
+
+    let Ok(header) = from_bytes::<Header, ByteList>(header_bytes) else {
         return Result::Err(JwtError::Malformed);
     };
     if header.alg != key.alg() {
@@ -150,33 +163,7 @@ pub fn verify<K: JwsVerifier>(token: &String, key: &K) -> Result<ByteList, JwtEr
     if header.crit matches { Some(_) } {
         return Result::Err(JwtError::CriticalHeader);
     }
-    return Result::Ok(jws.payload);
-}
-
-/// Verify the signature alone, returning both decoded halves without looking
-/// inside the header. [`verify`] is the entry point to reach for; this one is
-/// for a caller that reads the header itself (a `kid` to select a key, say)
-/// and then owes itself the `alg` and `crit` checks `verify` performs.
-pub fn verify_signature<K: JwsVerifier>(token: &String, key: &K) -> Result<Jws, JwtError> {
-    let parts: List<String> = token.split(".").collect();
-    if parts.len() != 3 {
-        return Result::Err(JwtError::Malformed);
-    }
-    let Some(header) = decode_url(&parts[0]) else {
-        return Result::Err(JwtError::Malformed);
-    };
-    let Some(payload) = decode_url(&parts[1]) else {
-        return Result::Err(JwtError::Malformed);
-    };
-    let Some(signature) = decode_url(&parts[2]) else {
-        return Result::Err(JwtError::Malformed);
-    };
-
-    let signing_input: ByteList = `${parts[0]}.${parts[1]}`.bytes().collect();
-    if !key.verify(&signing_input, &signature) {
-        return Result::Err(JwtError::InvalidSignature);
-    }
-    return Result::Ok(Jws { header: header, payload: payload });
+    return Result::Ok(payload);
 }
 
 /// A shared secret for `HS256`, signing and verifying with HMAC-SHA256.
@@ -225,34 +212,6 @@ pub fn ct_eq(a: &ByteList, b: &ByteList) -> bool {
         diff = diff | a[i] ^ b[i];
     }
     return diff == 0;
-}
-
-// SHA-256 processes 64-byte blocks, the width HMAC pads its keys to.
-global BLOCK_LEN: i32 = 64;
-
-/// HMAC-SHA256 (RFC 2104): `H((K ^ opad) || H((K ^ ipad) || message))`.
-fn hmac_sha256(key: &ByteList, message: &ByteList) -> ByteList {
-    let mut block = if key.len() > BLOCK_LEN { sha256(key) } else { *key };
-    while block.len() < BLOCK_LEN {
-        block.push(0);
-    }
-
-    let mut inner_pad: ByteList = [];
-    let mut outer_pad: ByteList = [];
-    for let mut i = 0; i < BLOCK_LEN; i += 1 {
-        inner_pad.push(block[i] ^ 0x36);
-        outer_pad.push(block[i] ^ 0x5c);
-    }
-
-    let mut inner = Sha256::new();
-    inner.update(&inner_pad);
-    inner.update(message);
-    let digest = inner.finalize();
-
-    let mut outer = Sha256::new();
-    outer.update(&outer_pad);
-    outer.update(&digest);
-    return outer.finalize();
 }
 
 /// Whether `alg` is safe to splice into the header JSON `sign` writes.

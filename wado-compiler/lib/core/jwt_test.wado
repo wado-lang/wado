@@ -1,15 +1,5 @@
-use {
-    Hs256Key,
-    JwsAlgorithm,
-    JwsVerifier,
-    JwtError,
-    RegisteredClaims,
-    ct_eq,
-    sign,
-    verify,
-    verify_signature,
-} from "core:jwt";
-use { decode_url, encode_url } from "core:base64";
+use { Hs256Key, JwsAlgorithm, JwsVerifier, JwtError, RegisteredClaims, ct_eq, sign, verify } from "core:jwt";
+use { decode_url_strict, encode_url } from "core:base64";
 use { from_bytes } from "core:json";
 
 // RFC 7515 A.1: the HS256 example token, its key, and its two segments.
@@ -19,7 +9,7 @@ global RFC7515_SIGNATURE: String = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 global RFC7515_KEY: String = "AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow";
 
 fn rfc7515_key() -> Hs256Key {
-    let Some(secret) = decode_url(&RFC7515_KEY) else {
+    let Some(secret) = decode_url_strict(&RFC7515_KEY) else {
         panic("the RFC 7515 key is canonical base64url");
     };
     return Hs256Key::new(&secret);
@@ -31,34 +21,34 @@ fn rfc7515_token() -> String {
 
 test "verifies the RFC 7515 A.1 token" {
     let key = rfc7515_key();
-    let Ok(jws) = verify_signature(&rfc7515_token(), &key) else {
+    let Ok(payload) = verify(&rfc7515_token(), &key) else {
         panic("the RFC 7515 A.1 token verifies under its own key");
     };
-    assert String::from_utf8(jws.payload) matches { Ok(text) && text.contains("\"iss\":\"joe\"") };
+    assert String::from_utf8(payload) matches { Ok(text) && text.contains("\"iss\":\"joe\"") };
 }
 
 test "signing reproduces the RFC 7515 A.1 signature" {
     let key = rfc7515_key();
-    let Some(payload) = decode_url(&RFC7515_PAYLOAD) else {
+    let Some(payload) = decode_url_strict(&RFC7515_PAYLOAD) else {
         panic("the RFC 7515 payload is canonical base64url");
     };
     // The RFC's header carries a line break this module does not write, so the
     // signature is compared over the RFC's own signing input.
     let signing_input: ByteList = `${RFC7515_HEADER}.${RFC7515_PAYLOAD}`.bytes().collect();
     assert encode_url(&key.sign(&signing_input)) == RFC7515_SIGNATURE;
-    assert verify_signature(&sign(&payload, &key), &key) matches { Ok(_) };
+    assert verify(&sign(&payload, &key), &key) matches { Ok(_) };
 }
 
 test "a tampered payload fails verification" {
     let key = rfc7515_key();
     let forged = encode_url(&`{"iss":"eve"}`);
     let token = `${RFC7515_HEADER}.${forged}.${RFC7515_SIGNATURE}`;
-    assert verify_signature(&token, &key) matches { Err(JwtError::InvalidSignature) };
+    assert verify(&token, &key) matches { Err(JwtError::InvalidSignature) };
 }
 
 test "another key fails verification" {
     let other = Hs256Key::new(&"another secret that is at least 32 bytes");
-    assert verify_signature(&rfc7515_token(), &other) matches { Err(JwtError::InvalidSignature) };
+    assert verify(&rfc7515_token(), &other) matches { Err(JwtError::InvalidSignature) };
 }
 
 test "a round trip carries the payload back" {
@@ -72,23 +62,24 @@ test "a round trip carries the payload back" {
 
 test "a malformed token is rejected before any hashing" {
     let key = rfc7515_key();
-    assert verify_signature(&"", &key) matches { Err(JwtError::Malformed) };
-    assert verify_signature(&"a.b", &key) matches { Err(JwtError::Malformed) };
-    assert verify_signature(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}.x`, &key) matches { Err(JwtError::Malformed) };
-    // A padded signature is a second spelling of the same bytes; `decode_url`
-    // rejects it, so one token cannot be rewritten into another that verifies.
-    assert verify_signature(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}=`, &key) matches { Err(JwtError::Malformed) };
+    assert verify(&"", &key) matches { Err(JwtError::Malformed) };
+    assert verify(&"a.b", &key) matches { Err(JwtError::Malformed) };
+    assert verify(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}.x`, &key) matches { Err(JwtError::Malformed) };
+    // A padded signature is a second spelling of the same bytes;
+    // `decode_url_strict` rejects it, so one token cannot be rewritten into
+    // another that verifies.
+    assert verify(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}=`, &key) matches { Err(JwtError::Malformed) };
 }
 
 test "the header's alg must be the key's" {
     let key = Hs256Key::new(&"a 32-byte-or-longer shared secret");
-    // A header claiming RS256, signed with the HMAC key: the signature is
-    // valid, and `verify` still refuses it while `verify_signature` does not.
+    // A header claiming RS256, signed with this HMAC key: the signature is
+    // this key's, and the token is refused all the same.
     let header = encode_url(&`{"alg":"RS256"}`);
     let payload = encode_url(&`{"sub":"joe"}`);
     let signing_input: ByteList = `${header}.${payload}`.bytes().collect();
     let token = `${header}.${payload}.${encode_url(&key.sign(&signing_input))}`;
-    assert verify_signature(&token, &key) matches { Ok(_) };
+    assert key.verify(&signing_input, &key.sign(&signing_input));
     assert verify(&token, &key) matches { Err(JwtError::AlgMismatch) };
 }
 
@@ -146,7 +137,7 @@ test "constant-time comparison still compares" {
 }
 
 // An algorithm this module does not carry, added from outside it: the key type
-// is local to this file and plugs into `verify_signature` unchanged.
+// is local to this file and plugs into `verify` unchanged.
 struct StubKey {
     accept: ByteList,
 }
@@ -166,7 +157,7 @@ impl JwsVerifier for StubKey {
 test "an out-of-tree key type plugs into the same entry points" {
     let header = encode_url(&`{"alg":"RS256"}`);
     let payload = encode_url(&`{"sub":"joe"}`);
-    let Some(accept) = decode_url(&"__8") else {
+    let Some(accept) = decode_url_strict(&"__8") else {
         panic("__8 is canonical base64url");
     };
     let key = StubKey { accept: accept };

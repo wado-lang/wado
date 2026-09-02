@@ -36,6 +36,23 @@ Hash a complete message with SHA-256, returning the 32-byte digest.
 Accepts any byte source via `AsByteSlice` (a `String` hashes its UTF-8
 bytes). Render the result as hex with `to_hex`, e.g. `sha256(&data).to_hex()`.
 
+### `pub fn hmac<H: Digest, K: AsByteSlice, M: AsByteSlice>(hasher: H, key: &K, message: &M) -> ByteList`
+
+Keyed message authentication over any [`Digest`] (HMAC, RFC 2104):
+`H((K ^ opad) || H((K ^ ipad) || message))`.
+
+`hasher` is a fresh state of the algorithm to key — value semantics give
+the two passes their own copy of it. A key longer than the block is hashed
+down first, a shorter one is zero-padded, as the RFC prescribes.
+
+Check a MAC with a comparison that does not exit early — one that stops at
+the first differing byte tells an attacker how much of a forgery was right.
+
+### `pub fn hmac_sha256<K: AsByteSlice, M: AsByteSlice>(key: &K, message: &M) -> ByteList`
+
+Key a complete message with HMAC-SHA256, returning the 32-byte MAC.
+The one-shot counterpart to [`hmac`], as [`sha256`] is to [`Sha256`].
+
 ## Traits
 
 ### `pub trait Digest`
@@ -45,6 +62,11 @@ A streaming message-digest algorithm.
 Feed message bytes with [`update`](Digest::update) (any number of times),
 then call [`finalize`](Digest::finalize) exactly once to obtain the digest.
 A value must not be used after `finalize`.
+
+#### `fn block_len(&self) -> i32`
+
+The algorithm's compression block width in bytes — 64 for SHA-256.
+[`hmac`] pads its key to it.
 
 #### `fn update<S: AsByteSlice>(&mut self, data: &S)`
 
@@ -70,6 +92,8 @@ _Fields are private._
 Create a fresh SHA-256 state initialized with the standard IV.
 
 #### `impl Digest for Sha256`
+
+##### `fn block_len(&self) -> i32`
 
 ##### `fn update<S: AsByteSlice>(&mut self, data: &S)`
 

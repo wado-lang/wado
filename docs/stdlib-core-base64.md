@@ -5,7 +5,7 @@
 
 Base64 encoding and decoding (RFC 4648): standard and URL-safe alphabets,
 configurable padding via `Encoding` flags, and two decoders — [`decode`]
-accepts either alphabet with or without padding, [`decode_url`] accepts
+accepts either alphabet with or without padding, [`decode_url_strict`] accepts
 only the canonical URL-safe unpadded spelling. Entry points accept any
 `AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, or `String`).
 
@@ -38,7 +38,7 @@ Decodes Base64 from text or raw bytes (e.g., HTTP body, file content).
 Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
 Returns null on invalid input.
 
-### `pub fn decode_url<S: AsByteSlice>(encoded: &S) -> Option<ByteList>`
+### `pub fn decode_url_strict<S: AsByteSlice>(encoded: &S) -> Option<ByteList>`
 
 Decodes URL-safe Base64 (RFC 4648 §5, unpadded) — the exact inverse of
 [`encode_url`], and the encoding JWS/JWT mandate.

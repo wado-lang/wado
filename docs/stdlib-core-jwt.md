@@ -15,10 +15,11 @@ is still read, and a token whose header disagrees with the key is rejected.
 A key type defined elsewhere — RSA, ECDSA — implements the same traits and
 works with the same entry points; this module needs no change to admit one.
 
-Claims stay bytes here. Deserialize the payload with `core:json` into your
-own struct, or into [`RegisteredClaims`] for the registered ones, and check
-`exp` / `nbf` with [`RegisteredClaims::validate_time`] — which takes the
-current time as an argument, so verifying a token needs no clock effect.
+Claims stay bytes here: [`verify`] returns the payload for the caller to
+deserialize with `core:json` — into its own struct, or into
+[`RegisteredClaims`] for the registered ones, whose `exp` / `nbf` are
+checked by [`RegisteredClaims::validate_time`]. That takes the current time
+as an argument, so verifying a token needs no clock effect.
 
 ## Synopsis
 
@@ -52,13 +53,6 @@ Checks, in order: three canonical base64url segments, the key's signature
 over `header.payload`, the header's `alg` against the key's, and that no
 extension is marked critical. Claims are not read — `exp` is
 [`RegisteredClaims::validate_time`]'s job, and the caller's to invoke.
-
-### `pub fn verify_signature<K: JwsVerifier>(token: &String, key: &K) -> Result<Jws, JwtError>`
-
-Verify the signature alone, returning both decoded halves without looking
-inside the header. [`verify`] is the entry point to reach for; this one is
-for a caller that reads the header itself (a `kid` to select a key, say)
-and then owes itself the `alg` and `crit` checks `verify` performs.
 
 ### `pub fn ct_eq(a: &ByteList, b: &ByteList) -> bool`
 
@@ -95,14 +89,6 @@ The signing half of a JWS algorithm.
 #### `fn sign(&self, signing_input: &ByteList) -> ByteList`
 
 ## Structs
-
-### `pub struct Jws`
-
-A token whose signature verified, in its decoded halves.
-
-#### `header: ByteList`
-
-#### `payload: ByteList`
 
 ### `pub struct RegisteredClaims`
 
