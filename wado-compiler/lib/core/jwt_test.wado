@@ -41,9 +41,6 @@ test "verifies the RFC 7515 A.1 token" {
 
 test "signing reproduces the RFC 7515 A.1 signature" {
     let key = rfc7515_key();
-    let Some(payload) = decode_url_strict(&RFC7515_PAYLOAD) else {
-        panic("the RFC 7515 payload is canonical base64url");
-    };
     // The RFC's header carries a line break this module does not write, so the
     // signature is compared over the RFC's own signing input.
     let signing_input: ByteList = `${RFC7515_HEADER}.${RFC7515_PAYLOAD}`.bytes().collect();
@@ -76,9 +73,8 @@ test "a malformed token is rejected before any hashing" {
     assert verify(&"", &key) matches { Err(JwtError::Malformed) };
     assert verify(&"a.b", &key) matches { Err(JwtError::Malformed) };
     assert verify(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}.x`, &key) matches { Err(JwtError::Malformed) };
-    // A padded signature is a second spelling of the same bytes;
-    // `decode_url_strict` rejects it, so one token cannot be rewritten into
-    // another that verifies.
+    // A padded signature is a second spelling of the same bytes, so accepting
+    // it would let one token be rewritten into another that verifies.
     assert verify(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}=`, &key) matches { Err(JwtError::Malformed) };
 }
 
@@ -94,8 +90,8 @@ test "a crit header is rejected in every spelling" {
     let key = shared_key();
     let listed = `{"alg":"HS256","crit":["exp"],"exp":1300819380}`;
     assert verify(&token_with_header(listed, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
-    // Neither of these names an extension, and both are the member present:
-    // `null` is the one an `Option` field would read as absent.
+    // Neither names an extension, and both are the member present. `null` is
+    // the one an `Option` field would read as absent.
     assert verify(&token_with_header(`{"alg":"HS256","crit":null}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
     assert verify(&token_with_header(`{"alg":"HS256","crit":[]}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
 }
@@ -108,7 +104,6 @@ test "exp and nbf are checked against the time passed in" {
     assert claims.validate_time(500) matches { Ok(_) };
     assert claims.validate_time(1000) matches { Err(JwtError::Expired) };
     assert claims.validate_time(99) matches { Err(JwtError::NotYetValid) };
-    // Leeway forgives skew on either side.
     assert claims.validate_time(1000, 1) matches { Ok(_) };
     assert claims.validate_time(99, 1) matches { Ok(_) };
 }
@@ -147,6 +142,11 @@ test "registered claims deserialize from a verified payload" {
     assert claims.nbf == Option::<i64>::None;
 }
 
+#[expect_trap]
+test "a short HS256 secret is refused" {
+    let _ = Hs256Key::new(&"too short");
+}
+
 // An algorithm this module does not carry, added from outside it: the key type
 // is local to this file and plugs into `verify` unchanged.
 struct StubKey {
@@ -175,11 +175,6 @@ test "an out-of-tree key type plugs into the same entry points" {
     let token = `${header}.${payload}.__8`;
     assert verify(&token, &key) matches { Ok(_) };
     assert verify(&`${header}.${payload}.__4`, &key) matches { Err(JwtError::InvalidSignature) };
-}
-
-#[expect_trap]
-test "a short HS256 secret is refused" {
-    let _ = Hs256Key::new(&"too short");
 }
 
 // A key whose `alg` is whatever it is named, so `sign` is exercised over the

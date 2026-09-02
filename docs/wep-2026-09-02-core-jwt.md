@@ -103,8 +103,9 @@ import a token library to get a MAC.
   against a time it is passed rather than a clock it reads, so verifying a
   token adds nothing to a program's effect row. A caller that has
   `SystemClock` passes `Instant::now().seconds`.
-- A key type defined outside this module verifies through the same `verify`,
-  which the tests exercise with a stub `RS256` key.
+- A key type defined outside this module signs and verifies through the same
+  entry points, under whatever `alg` it names — RFC 7515 §4.1.1 allows a URI.
+  The tests exercise both with key types local to the test file.
 
 ## What extension opens
 
@@ -154,8 +155,8 @@ decision is undone.
   right.
 - A brute-forcible secret, refused at construction rather than per request.
 - A `crit` header, in any spelling. The member is refused for being present, so
-  an explicit `null` — which an optional field reads as the absent member it is
-  not — is refused with the list that names an extension.
+  an explicit `null` is refused alongside the list that names an extension. An
+  optional field would have read that `null` as the absent member it is not.
 - A header member injected through `alg`. `sign` escapes the key's `alg` rather
   than splicing it, so no key type can add or replace a header member by naming
   itself carefully.
@@ -185,8 +186,8 @@ key.
 - Compare with `eq_constant_time`.
 - Reject on any parse failure. A malformed key or signature is a rejection,
   never a fallback to a default.
-- Treat private-key operations as out of the module's reach: their side
-  channels are the implementation's problem. ECDSA in particular needs a
+- Own the side channels of its private-key operations. This module makes no
+  promise about them. ECDSA in particular needs a
   deterministic nonce (RFC 6979), since a repeated nonce discloses the key and
   randomness here is an effect a signer may not have.
 

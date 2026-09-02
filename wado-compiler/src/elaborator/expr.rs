@@ -189,9 +189,9 @@ pub(super) fn compose_union_plan(
     merged.into_values().collect()
 }
 
-/// What retargeting a branch tail to a sibling's numeric type touches: the
-/// literals that adopt it, and the nested branch expressions whose recorded
-/// type has to follow them.
+/// What retargeting a branch tail touches: the literals that adopt the type,
+/// and the nested `if` / `match` nodes whose recorded type reify reads back as
+/// their result, so it has to follow.
 #[derive(Default)]
 struct NumericLiteralTails<'a> {
     literals: Vec<&'a ast::Expr>,
@@ -2395,8 +2395,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // harmless: the caller's mismatch aborts before WIR build.
             self.try_coerce_numeric_literal(literal, target)?;
         }
-        // Reify reads a nested branch's recorded type as the node's result
-        // type, so leaving it stale emits an `if` its branches disagree with.
         for branch in tails.branches {
             self.record_expression_type(branch, target);
         }
@@ -2414,8 +2412,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         match expr {
             ast::Expr::Block(block) => self.collect_block_numeric_literal_tails(block, target, out),
-            // Reify reads an `if` / `match` *expression*'s recorded type as the
-            // node's result type, so it has to follow its retargeted branches.
             ast::Expr::If(if_expr) => {
                 out.branches.push(if_expr.id);
                 self.collect_if_numeric_literal_tails(
@@ -2448,8 +2444,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(ast::Stmt::Expr(e)) => self.collect_numeric_literal_tails(&e.expr, target, out),
             // `block_result_type` reads a trailing `if` / `match` statement as
             // the block's value, so `else { if … }` retargets like `else if …`.
-            // Only the `match` records a type: reify recomputes a trailing
-            // `if`'s from the branches it has just built.
+            // A trailing `if` records no type: reify recomputes one from the
+            // branches it has just built.
             Some(ast::Stmt::If(if_stmt)) => self.collect_if_numeric_literal_tails(
                 &if_stmt.then_block,
                 if_stmt.else_block.as_ref(),
@@ -2465,7 +2461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The two halves of an `if`, in either its expression or its statement
-    /// spelling. Without an `else` the missing branch is `()`.
+    /// spelling. A missing `else` is `()`, which no numeric target accepts.
     fn collect_if_numeric_literal_tails<'a>(
         &self,
         then_block: &'a ast::Block,

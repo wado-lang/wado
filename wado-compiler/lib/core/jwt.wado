@@ -4,9 +4,9 @@
 //!
 //! The key decides the algorithm, never the token. [`verify`] takes a key that
 //! implements [`JwsVerifier`] and checks the signature with *that* algorithm,
-//! so a header naming another one cannot redirect verification. That is the
-//! algorithm-confusion class, which has broken JWT libraries repeatedly. `alg`
-//! is still read, and a token whose header disagrees with the key is rejected.
+//! so a header naming another one cannot redirect verification — the
+//! algorithm-confusion class. `alg` is still read, and a token whose header
+//! disagrees with the key is rejected.
 //!
 //! An RSA or ECDSA key type defined elsewhere implements the same traits and
 //! works with the same entry points, with no change here to admit it.
@@ -93,9 +93,9 @@ impl Deserialize for RegisteredClaims;
 
 impl RegisteredClaims {
     /// Check `exp` and `nbf` against `now` (seconds since the Unix epoch),
-    /// tolerating `leeway` seconds of clock skew on either side. A claim that
-    /// is absent is not checked, and `leeway` widens the window, so it is
-    /// never negative.
+    /// tolerating `leeway` seconds of clock skew on either side. An absent
+    /// claim is not checked. `leeway` widens the window, so it is never
+    /// negative.
     ///
     /// The time is an argument rather than a clock read, so verifying a token
     /// gains no `SystemClock` effect. Pass `Instant::now().seconds` where you
@@ -117,11 +117,9 @@ impl RegisteredClaims {
     }
 }
 
-/// Whether the header carries `crit`, in any spelling. RFC 7515 §4.1.11
-/// requires rejecting extensions a recipient does not implement, and this
-/// module implements none, so the member is refused for being present and its
-/// contents are never read — an explicit `null`, which an `Option` field reads
-/// as the absent member it is not, included.
+/// Whether the header carries `crit`, which is all [`verify`] asks: the member
+/// is refused for being present, so its contents are never read. An `Option`
+/// field would read an explicit `null` as the absent member it is not.
 enum Crit {
     Absent,
     Present,
@@ -134,7 +132,8 @@ impl Deserialize for Crit {
     }
 }
 
-/// The one JWS header this module writes, and the shape it accepts back.
+/// The header shape [`verify`] reads back. Unnamed members are ignored, as
+/// JWS allows; `crit` is the one whose mere presence is a rejection.
 struct Header {
     alg: String,
     crit: Crit = Crit::Absent,

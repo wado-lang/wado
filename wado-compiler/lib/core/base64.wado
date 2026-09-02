@@ -208,8 +208,8 @@ pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
 /// This one is canonical where [`decode`] is lenient. It rejects everything
 /// `encode_url` never writes: the standard alphabet's `+` and `/`, `=`
 /// padding, and a final group whose unused bits are set. One byte string
-/// therefore has exactly one accepted spelling, so no second input decodes to
-/// the same value. Use [`decode`] for input from a producer you do not control.
+/// therefore has exactly one accepted spelling. Use [`decode`] for input from
+/// a producer you do not control.
 #[inline]
 pub fn decode_url_strict<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
     return decode_impl(encoded.as_byte_slice(), &URL_DECODE_TABLE, true);
