@@ -10,11 +10,13 @@ use { TreeMap } from "core:collections";
 /// then drive `highlight_walk` over the parsed CST store. `parse` always
 /// returns a tree (partial on broken input), so there is no parse-failure /
 /// tokenize-only branch — a broken input still highlights from its partial
-/// tree.
+/// tree. `hl_cover_unvisited` then sweeps whatever the tree left out.
 ///
-/// The walk exists only to give the visitor a rule stack, so a query with no
-/// rule-context capture skips it: `hl_cover_unvisited` then sweeps every token
-/// in index order and reaches the same captures without reading the tree.
+/// The walk is what gives the visitor its rule stack. A query with no
+/// rule-context capture reaches the same captures without one, since an empty
+/// override table never reads the stack, but it is walked all the same: the
+/// saving is one traversal on a highlight, and a second path to reason about
+/// costs more than it.
 pub fn gen_highlight(
     w: &mut CodeWriter,
     grammar: &Grammar,
@@ -22,7 +24,7 @@ pub fn gen_highlight(
     query: &List<HighlightRule>,
     ctx: &mut GenContext,
 ) {
-    let needs_rule_context = gen_highlight_mapping(
+    gen_highlight_mapping(
         w,
         &grammar.lexer_rules,
         &grammar.parser_rules,
@@ -38,9 +40,7 @@ pub fn gen_highlight(
         fr.emit_begin(w);
         w.line(&"let mapping = highlight_mapping();");
         w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
-        if needs_rule_context {
-            w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.cst);");
-        }
+        w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.cst);");
         w.line(&"visitor.hl_cover_unvisited(&result.tokens);");
         w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
@@ -247,7 +247,7 @@ fn gen_highlight_mapping(
     lit_tokens: &List<LitToken>,
     query: &List<HighlightRule>,
     ctx: &mut GenContext,
-) -> bool {
+) {
     // Token kind ids follow `token_slot_order` — including deferred
     // `more` / `type(...)` rules and the conditional `TK_ERROR` sentinel —
     // so both the defaults table (indexed `defaults[kind]` at runtime) and
@@ -362,7 +362,6 @@ fn gen_highlight_mapping(
     w.blank();
 
     gen_capture_vocabulary(w, &default_by_kind, &overrides);
-    return !overrides.is_empty();
 }
 
 /// `capture_vocabulary`: the distinct capture classes this grammar's query can
