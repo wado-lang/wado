@@ -103,7 +103,8 @@ belongs to a caller's own claims struct until this module carries both.
 
 Check `exp` and `nbf` against `now` (seconds since the Unix epoch),
 tolerating `leeway` seconds of clock skew on either side. A claim that
-is absent is not checked.
+is absent is not checked, and `leeway` widens the window, so it is
+never negative.
 
 The time is an argument rather than a clock read, so verifying a token
 gains no `SystemClock` effect. Pass `Instant::now().seconds` where you

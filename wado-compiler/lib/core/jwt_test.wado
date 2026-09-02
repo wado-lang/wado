@@ -108,6 +108,19 @@ test "exp and nbf are checked against the time passed in" {
     assert claims.validate_time(99, 1) matches { Ok(_) };
 }
 
+test "the window clamps at the i64 boundaries" {
+    let past = RegisteredClaims { nbf: Option::Some(0 as i64) };
+    assert past.validate_time(9223372036854775807, 1) matches { Ok(_) };
+    let future = RegisteredClaims { exp: Option::Some(0 as i64) };
+    assert future.validate_time(-9223372036854775808, 1) matches { Ok(_) };
+}
+
+#[expect_trap]
+test "a negative leeway is refused" {
+    let claims = RegisteredClaims { exp: Option::Some(1000 as i64) };
+    let _ = claims.validate_time(500, -60);
+}
+
 test "absent claims are not checked" {
     let claims = RegisteredClaims {};
     assert claims.validate_time(0) matches { Ok(_) };

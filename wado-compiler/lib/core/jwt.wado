@@ -93,16 +93,23 @@ impl Deserialize for RegisteredClaims;
 impl RegisteredClaims {
     /// Check `exp` and `nbf` against `now` (seconds since the Unix epoch),
     /// tolerating `leeway` seconds of clock skew on either side. A claim that
-    /// is absent is not checked.
+    /// is absent is not checked, and `leeway` widens the window, so it is
+    /// never negative.
     ///
     /// The time is an argument rather than a clock read, so verifying a token
     /// gains no `SystemClock` effect. Pass `Instant::now().seconds` where you
     /// do have one.
     pub fn validate_time(&self, now: i64, leeway: i64 = 0) -> Result<(), JwtError> {
-        if let Some(exp) = self.exp && now - leeway >= exp {
+        assert leeway >= 0, `leeway widens the window, so it is never negative: ${leeway}`;
+        // Clamp `now` before widening it: `now + leeway` past the ceiling would
+        // wrap to the floor and report the opposite verdict.
+        let earliest = i64::max(now, i64::MIN + leeway) - leeway;
+        let latest = i64::min(now, i64::MAX - leeway) + leeway;
+
+        if let Some(exp) = self.exp && earliest >= exp {
             return Result::Err(JwtError::Expired);
         }
-        if let Some(nbf) = self.nbf && now + leeway < nbf {
+        if let Some(nbf) = self.nbf && latest < nbf {
             return Result::Err(JwtError::NotYetValid);
         }
         return Result::Ok(());
