@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788385844649,
+  "lastUpdate": 1788390529566,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52681,6 +52681,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/02131a9aa1185f432c8a6512cf1381cd0593a9eb"
         },
         "date": 1788385844239,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0c4b1def949d41c2d5e842131e69d3877a2c6b53",
+          "message": "Merge pull request #1947 from wado-lang/claude/newtype-reflection-coverage-yv6qcx\n\nfeat(reflect): cover the newtype kind",
+          "timestamp": "2026-09-03T07:55:13+09:00",
+          "tree_id": "65855a3454fc640f6e93b3fe4f3d8ab15730443e",
+          "url": "https://github.com/wado-lang/wado/commit/0c4b1def949d41c2d5e842131e69d3877a2c6b53"
+        },
+        "date": 1788390529202,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
