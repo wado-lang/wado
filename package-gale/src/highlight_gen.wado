@@ -135,9 +135,7 @@ fn parser_rule_index(parser_rules: &List<ParserRule>, name: &String) -> i32 {
 
 /// `(rule) @capture` — every token the rule accepts, captured within it. The
 /// runtime keys an override by (rule, token kind), so each alternative has to
-/// be one token, or a delegation to a rule that is. Reading the set off the
-/// grammar is the point: a query spelling the keywords out would drift the
-/// moment the rule gained one.
+/// be one token, or a delegation to a rule that is.
 fn expand_rule_capture(
     overrides: &mut List<ResolvedOverride>,
     rule: &ParserRule,
@@ -156,16 +154,14 @@ fn expand_rule_capture(
         None => ctx.warn(
             &DiagnosticOwner::host(&"highlight"),
             DiagnosticKind::HighlightQuery,
-            `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token`,
+            `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token, or a delegation to a rule that is`,
         ),
     }
 }
 
 /// Every token kind `rule` accepts, or `null` where an alternative is anything
-/// but one token. A rule that delegates to another (`fieldName : memberName`)
-/// is followed: a grammar gives a use site its own wrapper rule so a query can
-/// capture that site alone, and the wrapper accepts what it delegates to.
-/// `visiting` holds the chain being followed, so a delegation cycle ends it.
+/// but one token or a delegation to such a rule (`fieldName : memberName`).
+/// `visiting` is the delegation chain being followed, which is what ends a cycle.
 fn rule_token_kinds(
     rule: &ParserRule,
     parser_rules: &List<ParserRule>,

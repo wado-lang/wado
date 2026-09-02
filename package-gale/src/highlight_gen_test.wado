@@ -11,6 +11,7 @@ use { collect_literal_tokens } from "./lexer_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { parse_highlight_query } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
+use { Diagnostic } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 fn parse_grammar(input: String) -> Grammar {
@@ -19,7 +20,8 @@ fn parse_grammar(input: String) -> Grammar {
     return g;
 }
 
-fn highlight_output_q(input: String, query_src: String) -> String {
+/// The generated text and the diagnostics one query run produced.
+fn highlight_run(input: String, query_src: String) -> [String, List<Diagnostic>] {
     let mut g = parse_grammar(input);
     // Mirror `generate()`, whose `lit_tokens` never see an aliased text.
     alias_parser_literals(&mut g);
@@ -28,11 +30,25 @@ fn highlight_output_q(input: String, query_src: String) -> String {
     let mut ctx = GenContext::new(&g.parser_rules, &lits);
     let mut w = CodeWriter::new();
     gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
-    return w.to_string();
+    return [
+        w.to_string(),
+        ctx.copy_diagnostics(),
+    ];
+}
+
+fn highlight_output_q(input: String, query_src: String) -> String {
+    return highlight_run(input, query_src).0;
 }
 
 fn highlight_output(input: String) -> String {
     return highlight_output_q(input, "");
+}
+
+/// A rule capture the generator cannot expand: one warning, no overrides.
+fn assert_capture_refused(run: &[String, List<Diagnostic>]) {
+    assert run.1.len() == 1, `expected one diagnostic, got ${run.1.len()}`;
+    assert run.1[0].message.contains("single token"), run.1[0].message;
+    assert index_of(&run.0, "HighlightOverride {") == -1, run.0;
 }
 
 fn index_of(haystack: &String, needle: String) -> i32 {
@@ -181,37 +197,20 @@ IDENTIFIER : [a-z]+ ;
 }
 
 test "rule capture on a delegation cycle warns instead of recurring forever" {
-    let g = parse_grammar("grammar T;
+    assert_capture_refused(&highlight_run("grammar T;
 r : a ;
 a : b ;
 b : a ;
 IDENTIFIER : [a-z]+ ;
-");
-    let lits = collect_literal_tokens(&g.parser_rules);
-    let query = parse_highlight_query(&"(a) @variable").unwrap();
-    let mut ctx = GenContext::new(&g.parser_rules, &lits);
-    let mut w = CodeWriter::new();
-    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
-    let diags = ctx.copy_diagnostics();
-    assert diags.len() == 1, `expected one diagnostic, got ${diags.len()}`;
-    assert index_of(&w.to_string(), "HighlightOverride {") == -1, w.to_string();
+", "(a) @variable"));
 }
 
 test "rule capture on a multi-token rule warns instead of half-covering it" {
-    let g = parse_grammar("grammar T;
+    assert_capture_refused(&highlight_run("grammar T;
 r : pair ;
 pair : IDENTIFIER IDENTIFIER ;
 IDENTIFIER : [a-z]+ ;
-");
-    let lits = collect_literal_tokens(&g.parser_rules);
-    let query = parse_highlight_query(&"(pair) @variable").unwrap();
-    let mut ctx = GenContext::new(&g.parser_rules, &lits);
-    let mut w = CodeWriter::new();
-    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
-    let diags = ctx.copy_diagnostics();
-    assert diags.len() == 1, `expected one diagnostic, got ${diags.len()}`;
-    assert diags[0].message.contains("single token"), diags[0].message;
-    assert index_of(&w.to_string(), "HighlightOverride {") == -1, w.to_string();
+", "(pair) @variable"));
 }
 
 test "query override emits a HighlightOverride row" {

@@ -20,9 +20,9 @@
 //!    `::`, `?`, `..`, `...`) stay uncoloured on both sides.
 //! 5. Every keyword the parser accepts as a name is a name in `Wado.g4` too:
 //!    `NAME_KEYWORDS` under `identifier`, and every keyword under `memberName`,
-//!    which is where a `.name` goes. One-directional — the grammar accepts
-//!    more words as names than the parser does, and `check-grammar` owns that
-//!    half.
+//!    which is where a `.name` goes. It is one-directional: the grammar
+//!    accepts more words as names than the parser does, and `check-grammar`
+//!    owns that half.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -155,7 +155,7 @@ fn literal_captures(query: &str) -> Vec<(String, String)> {
 }
 
 /// The `'literal'` alternatives of one grammar rule.
-fn rule_literals(grammar: &str, rule: &str) -> Vec<String> {
+fn rule_literals<'a>(grammar: &'a str, rule: &str) -> Vec<&'a str> {
     let head = format!("\n{rule}\n");
     let start = grammar
         .find(&head)
@@ -164,12 +164,7 @@ fn rule_literals(grammar: &str, rule: &str) -> Vec<String> {
         .find("\n    ;")
         .map(|at| start + at)
         .expect("a grammar rule ends with `;`");
-    grammar[start..end]
-        .split('\'')
-        .skip(1)
-        .step_by(2)
-        .map(str::to_string)
-        .collect()
+    grammar[start..end].split('\'').skip(1).step_by(2).collect()
 }
 
 /// Every keyword the compiler knows, real and contextual, with its category.
