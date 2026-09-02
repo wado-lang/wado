@@ -158,8 +158,10 @@ Candidates are ranked:
 
    The walk keeps the same subject throughout. If it reaches a `(type, trait)`
    pair twice, that bound grounds nothing, so the walk answers no. Dispatch's
-   query answers yes to the same repeat, because it descends into members, where
-   a repeat is the well-founded structural case.
+   query answers the same repeat by the same rule, with one exception: a
+   repeat with a member descent between the two askings is a recursive type
+   (`struct Node { next: Option<Node> }`), the well-founded structural case,
+   and answers yes.
 
 2. **A concrete impl beats a blanket.** Within one level: an impl written for
    the receiver defines the exact function the call names, and a blanket only
@@ -274,20 +276,23 @@ it. The solver takes one self-contained value instead:
 
 ```text
 Program {
-  types:  TypeDeclId  -> { kind, members: [(name, type, visibility)], module }
-  traits: TraitDeclId -> { supertraits, methods, assoc_types, compiler_item }
-  impls:  ImplId      -> { trait_, trait_args, target, params: [{ bounds }],
-                           module, methods }
-  scopes: ModuleId    -> { traits_in_scope }
+  impls:  ImplId      -> { trait_, trait_args, target, params: [{ bounds, pins }],
+                           origin: Written | Derived | Marker }
+  traits: TraitDeclId -> { supertraits, holds_for_all, arg_defaults, on_ref }
+  types:  TypeDeclId  -> { newtype_base }
+  facts:  (TypeDeclId, TraitDeclId) -> { visible_from }
+  assoc_bindings: (ImplId, AssocId) -> SolverType
+  scopes: ModuleId    -> { traits_in_scope }          -- arrives with `candidates`
 }
 
-SolverType = Decl(TypeDeclId, [SolverType]) | Param(u32) | Ref { mut, inner }
-           | Tuple([SolverType])
+SolverType = Decl(TypeDeclId, [SolverType]) | Param(u32) | Pack(u32)
+           | Ref { mut, inner } | Tuple([SolverType])
 ```
 
-`kind` names the shape a structural rule reads: struct, variant, enum, flags,
-newtype over a base, primitive. Every id is a plain index, so a test writes
-`TypeDeclId(0)` and the program around it, with no source and no pipeline.
+A declaration's kind and members are read by `derive` alone and arrive as a
+`Declaration` beside the program rather than living in it. Every id is a plain
+index, so a test writes `TypeDeclId(0)` and the program around it, with no
+source and no pipeline.
 
 A query carries an environment beside the program: the bounds in force where the
 question was asked. A generic body's `T: Tr` holds because its own signature says
@@ -301,43 +306,80 @@ receiver's members are visible at the use site, and scope gates candidates by
 what that module imported, so `Program` carries member visibility and no query is
 a function of types alone.
 
-### What `holds` answers from
+### Derivation is impl generation
 
-Answering a bound is not an impl lookup. `T: Tr` holds nine ways: `Inspect`
-holds for everything; a plain `enum` derives `Display`; a generic body's
-parameter holds by its own signature; a reference satisfies the reference
-identities; a primitive carries `Eq` / `Ord` and the operator items; a struct or
-variant satisfies `Eq` / `Ord` / `Default` / serde when its members do; a
-declaration satisfies its own reflection kind; an impl is written; or a blanket
+Answering a bound is not, today, an impl lookup. `T: Tr` holds nine ways:
+`Inspect` holds for everything; a plain `enum` derives `Display`; a generic
+body's parameter holds by its own signature; a reference satisfies the reference
+identities; a primitive carries `Eq` / `Ord` and the operator items; a struct
+satisfies `Eq` / `Ord` / `Default` / serde and a variant `Eq` / serde when its
+members do; a declaration satisfies its own reflection kind; an impl is written; or a blanket
 answers and its bound is asked in turn.
 
-The last two are the only recursive ones, and they are the solver's. The rest
-are read off a type and are resolved by the lowering into facts the `Program`
-carries — "this type satisfies `Eq` structurally", "this type is a
-`ReflectStruct` when asked from this module".
+The sixth is where the shape goes wrong. It is asked as a _query_: "is this
+struct `Eq`?" walks the members and asks the full question of each, so
+derivation and impl search are mutually recursive, and a repeated
+`(type, trait)` pair means two different things depending on how it was
+reached — through a blanket's bound it is the ungrounded cycle and answers no,
+through a member it is a recursive type (`struct Node { next: Option<Node> }`)
+and answers yes. That is the two-stack problem the earlier gap describes, and it
+exists only because `Eq` is modelled as an auto trait.
 
-The split is where the recursion is, not where the difficulty is. A fact is a
-property of one type; an impl and a blanket are a search whose steps are other
-questions of the same shape, and that search is what needs the cycle rule below.
-Precomputing it is not an option either: whether a blanket applies is the
-question, so a lowering that answered it would be running the solver.
+Rust does not ask that question. `derive` generates an ordinary impl, bounded on
+the type parameters, and trait solving is then one uniform search over impls.
+Its coinductive machinery exists for `Send` and `Sync` alone. Wado's `Eq` is
+a derive, not an auto trait, and the solver models it as one:
 
-One of the six is not a property of one type, and the split does not hold as
-stated — see "Structural derivation is not a leaf".
+- A structural trait is not special in `holds`. It is answered by impls.
+- Derivation is generating an impl per _declaration_: `struct D<P1..Pn>` that
+  can derive `Eq` contributes `impl<Pi: Eq, …> Eq for D<P1..Pn>`, bounded on
+  the parameters its members mention. A plain `enum` or `flags` has no
+  members and derives unconditionally. A newtype derives nothing; it inherits.
+- Whether a declaration can derive is a definition-time fixpoint over the
+  declarations, which are finite and known before any body is elaborated: `D`
+  derives `Tr` when every member type satisfies `Tr` under `Pi: Tr`, asked of
+  `holds` with every declaration's tentative impl in place, and a declaration
+  that fails is removed until none does. Assuming and then refuting is what
+  makes a recursive type derive — the answer the compiler gives today.
+- A written impl for the pair blocks derivation, and a marker
+  (`impl Eq for D;`) demands it: the marker is an error where `D` cannot
+  derive, and answers the bound where it can.
+- `holds` reports the derived and marker impls its answer passed through. The
+  caller records the bodies to emit; the solver never records one itself.
 
-A fact carries the derivation requests its answer depends on. "This struct
-satisfies `Eq`" is also "emit `Eq` for this struct", and an answer that arrives
-without the request loses the body.
+What that buys is one recursion. `holds` reaches other questions only through
+an impl's bounds, so a repeated pair is always the ungrounded cycle, and the
+rule is one line with unit tests. A generic instance never needs its own entry:
+`List<Point>: Eq` is the prelude's `impl<T: Eq> Eq for List<T>` and the
+derived `impl Eq for Point`, assembled at the query. And the derivation rule
+itself — members all satisfy the trait, under the parameters' bounds — is a
+function of declarations, under unit test.
 
-Two things a bound can say are not carried yet: a trait's own arguments — no
-bound can spell them (WEP 2026-07-31) — and an associated-type constraint
-(`T: Mul<Output = T>`), which today gates a blanket separately.
+The remaining ways are read off a type and go where they belong: a primitive's
+`Eq`, `Ord` and operator items are impls the lowering states; a trait that holds for everything
+is a flag on its declaration, since the unbounded blanket that would say it is
+rejected; how a reference answers — `Eq` of itself, `Ord` never, the rest by
+auto-deref to the pointee unless a receiverless method names `Self` — is a flag
+on the trait; the reflection kinds, which depend on the asking module's view of
+the members and on no member's trait, are facts stated of a declaration, each
+naming the modules its members are visible from, and answering for every
+instance of it.
 
-### The four questions
+A bound says two more things than a trait. It spells no arguments
+(WEP 2026-07-31), so it asks for the trait at its declared defaults, and an impl
+of another instantiation (`impl Mul<Inch> for Cm` against `T: Mul`) does not
+answer it: the defaults are on the trait, `Self` meaning the impl's target. And
+it may pin an associated type (`T: Mul<Output = T>`): the pin is on the bound,
+and the impl that answers it must bind the type as the pin says, read off the
+impl's own `type Output = …`. A pin naming a parameter the target leaves
+unbound (`Members = [..C]`) reads the projection rather than checking it.
+
+### The five questions
 
 | Function                                            | Rules it owns                                                                          |
 | --------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `coherence_errors(program)`                         | duplicate `(Trait, Type)` pairs, an unbounded value blanket, variadic overlap, orphans |
+| `derive(program, declarations)`                     | which declarations derive which structural traits, and the impls that says             |
 | `holds(program, env, ty, trait_)`                   | bound satisfaction, supertraits, the cycle rule                                        |
 | `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth                      |
 | `rank(candidates)`                                  | ranks 0-3 and both ambiguities                                                         |
@@ -368,9 +410,10 @@ Nothing flips at once. The fixture corpus is the drift detector, as
 - [x] `rank`, with ranks 0-3 and every shape they leave, under unit test.
 - [ ] `candidates` — which impls a call has, and at which level of the
       receiver's newtype chain each was selected.
-- [ ] Lower the facts and put `holds` under the differential against
-      `type_implements_trait` over every fixture, once "Structural derivation is
-      not a leaf" is settled: the boundary it asks about is what a fact is.
+- [x] `derive`, the definition-time fixpoint that turns declarations into
+      impls, under unit test.
+- [x] Lower the declarations, run `derive`, and put `holds` under the
+      differential against `type_implements_trait` over every fixture.
 - [ ] The differential for `candidates` and `rank`, then the flip.
 
 `coherence_errors` went first because it reads the shallowest part of `Program` —
@@ -474,19 +517,6 @@ most of it — two foreign blankets only compete where both traits are imported 
 and the rest is the count: a blanket must join the collision like any other
 candidate.
 
-### An ungrounded bound cycle satisfies its own bounds
-
-Write `impl<T: A> B for T` beside `impl<T: B> A for T` and neither trait is
-grounded. The dispatch query still answers yes to a repeated `(type, trait)`
-pair, so every type satisfies both, and a blanket keyed on either applies to
-every receiver in the program. Rank 1's walk refuses the repeat, so a newtype is
-unaffected. A concrete receiver has no such walk and reaches the shared answer.
-
-Closing this needs a second recursion stack. One stack cannot separate the two
-recursions: descent into members is well-founded and must answer yes, while a
-cycle at a fixed subject must answer no. That is a change to dispatch, not to
-selection, which is why it is recorded here rather than made.
-
 ### The other dispatch paths do not share the order
 
 `Type::m(args)` scans the receiver's trait impls current-module-first and takes
@@ -515,38 +545,35 @@ trait holding at the same level, one written in the calling module — because a
 duplicate pair is rejected where it is written, a newtype and its base are
 separated by rank 1, and two traits' blankets are the cross-trait ambiguity.
 
-### Structural derivation is not a leaf
+### Derivation is still a query in the compiler
 
-The boundary above holds for five of the six: a trait that holds for everything,
-a plain `enum`'s `Display`, a reference identity, a primitive's built-in traits,
-and a declaration's own reflection kind are each read off one type.
+`structural_conformance` still walks a receiver's members at each bound and
+asks the full question of each, and the recursion guard counts the member
+descents to tell a recursive type from an ungrounded cycle. The solver's
+`derive` runs beside it: every declaration is lowered and derived when the
+`Program` is built, and `holds` answers under the differential against
+`type_implements_trait` over every fixture. What is left is the flip:
 
-The sixth is not. `structural_conformance` walks the receiver's members and asks
-the _full_ question of each: `struct Wrapper { inner: List<Point> }` satisfies
-`Eq` if `List<Point>` does, which the prelude's `impl<T: Eq> Eq for List<T>`
-answers, which asks whether `Point` does, which is structural again. Derivation
-and impl search are mutually recursive, so neither is a leaf of the other.
+- [ ] Route the derived bodies through what `holds` reports instead of
+      `record_bound_driven_synth_request_for`, and retire the member walk.
 
-That rules out a precomputed table for it twice over. The answers are not
-properties of a type the lowering can read off, and the pairs are not known in
-advance: a structurally derived generic instance gets its `TypeId` during
-elaboration, after any table would have been built.
+### Three compiler items are outside the differential
 
-Two ways to redraw it, and the choice decides how much `Program` weighs:
+The lowering states nothing for a plain `enum`'s `Display`, for `Default`, or
+for the `Ref` / `RefMut` identities, so a bound on any of them is answered by
+the compiler's path alone and the differential skips it. Each is one more
+thing the lowering reads off a type, in the shape the section above gives the
+others.
 
-- `Program` carries each type's kind, members and member visibility, and `holds`
-  walks them. Member descent then needs a second recursion stack: a repeat at a
-  fixed subject is the ungrounded cycle and answers no, while a repeat reached
-  through members is a recursive type (`struct Node { next: Option<Node> }`) and
-  answers yes. That is the gap "An ungrounded bound cycle satisfies its own
-  bounds" describes, and in the solver it is a rule with unit tests rather than
-  a change to dispatch.
-- The derivation answers arrive as a query the caller supplies rather than a
-  table, so the compiler answers them from the code that answers them today and
-  a test answers them from a table. `Program` stays small; the mutual recursion
-  then crosses the boundary, and the cycle stack lives on one side of it.
+### `()` is not a tuple
 
-The first is the honest shape and the larger change. Nothing is decided.
+`()` is indexed apart from the tuples, so the prelude's
+`impl<..T: Eq> Eq for [..T]` does not answer for it, and no `impl Eq for ()`
+exists: `() == ()` is an error, and so is comparing a struct with a `()` member
+(`trait_unit_eq_ord.wado`). The solver lowers `()` the same way, so the two
+agree; whether `()` should be the empty tuple to trait resolution — every
+`[..T]` impl answering for it, an `impl Tr for ()` outranking one at rank 0 —
+is open.
 
 ### `spec.md` overstates coherence
 

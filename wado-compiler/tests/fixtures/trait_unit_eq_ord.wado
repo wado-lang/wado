@@ -1,0 +1,22 @@
+#![TODO]
+// `()` is indexed apart from the tuples, so the prelude's
+// `impl<..T: Eq> Eq for [..T]` does not answer for it and no `impl Eq for ()`
+// exists: `() == ()` is an error, and so is comparing any struct with a `()`
+// member. Whether `()` is the empty tuple to trait resolution is open
+// (WEP 2026-09-01, "`()` is not a tuple").
+
+struct Entry<K, V> {
+    key: K,
+    value: V,
+}
+
+test "the unit type is Eq and Ord" {
+    assert () == ();
+    assert !(() < ());
+    let a = Entry { key: 1, value: () };
+    let b = Entry { key: 1, value: () };
+    assert a == b;
+}
+
+__DATA__
+{"test": {}}

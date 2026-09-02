@@ -297,6 +297,25 @@ pub enum PrimitiveType {
 }
 
 impl PrimitiveType {
+    /// Every primitive, so a rule that holds of all of them can say so once.
+    pub const ALL: [Self; 15] = [
+        Self::I8,
+        Self::I16,
+        Self::I32,
+        Self::I64,
+        Self::I128,
+        Self::U8,
+        Self::U16,
+        Self::U32,
+        Self::U64,
+        Self::U128,
+        Self::F32,
+        Self::F64,
+        Self::Bool,
+        Self::Char,
+        Self::V128,
+    ];
+
     /// Returns the string representation of the primitive type (e.g., "i32", "f64")
     #[must_use]
     pub fn as_str(&self) -> &'static str {

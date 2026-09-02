@@ -1,0 +1,31 @@
+// A generic struct derives `Eq` / `Ord` at an instance when its fields do at
+// that instance — including a field that mentions the parameter inside
+// another type. `items: List<T>` is `List<i32>` at `Gen<i32>`, not `List<T>`
+// asked with no `T` in scope.
+
+struct Gen<T> {
+    items: List<T>,
+    idx: i32,
+}
+
+fn same<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+fn before<T: Ord>(a: T, b: T) -> bool {
+    return a < b;
+}
+
+test "a nested generic field derives at the instance" {
+    let a: Gen<i32> = Gen { items: [1, 2], idx: 0 };
+    let b: Gen<i32> = Gen { items: [1, 2], idx: 0 };
+    let c: Gen<i32> = Gen { items: [1, 3], idx: 0 };
+    assert same(a, b);
+    assert !same(a, c);
+    assert before(a, c);
+    assert a == b;
+    assert a < c;
+}
+
+__DATA__
+{"test": {}}

@@ -57,6 +57,10 @@ pub(crate) struct TypeSystem {
     /// and blanket impls. Built once by [`TraitEnv::build`] and shared
     /// across every per-module elaborator via `Arc`.
     pub(crate) trait_env: Arc<TraitEnv>,
+    /// The solver's view of the program, built between the decl and body
+    /// passes; `None` until then. See `docs/wep-2026-09-01-trait-resolution.md`,
+    /// "How the order is guaranteed".
+    pub(crate) solver: Rc<Option<super::solver_bridge::SolverBridge>>,
 
     /// Registries the elaborator queries. The Component-Model
     /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`

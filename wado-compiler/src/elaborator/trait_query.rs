@@ -14,7 +14,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::scope::{BinderInScope, Scope};
+use super::scope::{BinderInScope, Scope, TraitCheckFrame};
 use super::sig::TraitSig;
 use super::trait_env::InheritedBound;
 use super::types::{
@@ -608,24 +608,70 @@ impl TypeSystem {
     ) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
 
-        // Recursion guard: if we're already checking this (type, trait) pair,
-        // optimistically return true to break infinite recursion on recursive types.
-        // This is sound because auto-derived Eq/Ord on recursive types is well-founded
-        // (Wasm GC types are heap-allocated, so the comparison terminates on structural equality).
-        // If any non-recursive field fails the trait check, it will be caught on that path.
-        {
-            let stack = ctx.trait_check_stack.borrow();
-            if stack.contains(&(type_id, trait_)) {
-                return true;
-            }
+        if let Some(repeated) = Self::repeated_answer(ctx, type_id, trait_) {
+            return repeated;
         }
-        ctx.trait_check_stack.borrow_mut().push((type_id, trait_));
-
+        Self::open_question(ctx, type_id, trait_);
         let result = self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_);
-
         ctx.trait_check_stack.borrow_mut().pop();
 
+        self.check_solver_agreement(ctx, scope, type_id, trait_, result);
         result
+    }
+
+    /// The answer to a question already open on the stack, `None` for a new
+    /// one. A repeat is one of two things. Reached through a member
+    /// (`struct Node { next: Option<Node> }`) it is a recursive type, whose
+    /// derived body is well-founded, and answers yes. Reached through impl
+    /// bounds alone (`impl<T: A> B for T` beside `impl<T: B> A for T`) it
+    /// grounds nothing and answers no; yes would make every type satisfy
+    /// both (WEP 2026-09-01).
+    fn repeated_answer(ctx: &Scope, type_id: TypeId, trait_: DefId) -> Option<bool> {
+        let member_edges = ctx.member_edges.get();
+        ctx.trait_check_stack
+            .borrow()
+            .iter()
+            .find(|f| f.type_id == type_id && f.trait_ == trait_)
+            .map(|open| member_edges > open.member_edges)
+    }
+
+    /// Open a question on the stack; the caller pops it.
+    fn open_question(ctx: &Scope, type_id: TypeId, trait_: DefId) {
+        ctx.trait_check_stack.borrow_mut().push(TraitCheckFrame {
+            type_id,
+            trait_,
+            member_edges: ctx.member_edges.get(),
+        });
+    }
+
+    /// The differential `docs/wep-2026-09-01-trait-resolution.md` lands the
+    /// solver under: at the outermost question of a bound, in debug builds, the
+    /// solver must answer as this path did. Nested questions are the compiler's
+    /// own recursion and are not asked twice.
+    fn check_solver_agreement(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        trait_: DefId,
+        expected: bool,
+    ) {
+        if !cfg!(debug_assertions) || !ctx.trait_check_stack.borrow().is_empty() {
+            return;
+        }
+        let Some(bridge) = self.solver.as_ref() else {
+            return;
+        };
+        let Some((actual, detail)) = bridge.answer(self, ctx, scope, type_id, trait_) else {
+            return;
+        };
+        assert_eq!(
+            actual,
+            expected,
+            "the trait solver disagrees with type_implements_trait: `{}: {}` is {expected} to the compiler and {actual} to the solver ({detail})",
+            self.type_table.borrow().type_name(type_id),
+            self.resolutions.defs().name(trait_),
+        );
     }
 
     /// Whether `type_id` satisfies `trait_` at the type itself, without peeling
@@ -645,16 +691,10 @@ impl TypeSystem {
         if !is_newtype {
             return self.type_implements_trait(ctx, scope, type_id, trait_);
         }
-        // A repeat answers `false` where `type_implements_trait` answers `true`
-        // on the same stack: that query descends into members, this one holds
-        // the subject fixed, so a repeat here is a bound grounding nothing.
-        {
-            let stack = ctx.trait_check_stack.borrow();
-            if stack.contains(&(type_id, trait_)) {
-                return false;
-            }
+        if let Some(repeated) = Self::repeated_answer(ctx, type_id, trait_) {
+            return repeated;
         }
-        ctx.trait_check_stack.borrow_mut().push((type_id, trait_));
+        Self::open_question(ctx, type_id, trait_);
         let receiver = self.type_table.borrow().impl_receiver_key(type_id);
         let result = self.find_trait_impl_for_subject(
             ctx,
@@ -682,7 +722,10 @@ impl TypeSystem {
         let mut failing: Option<(String, TypeId)> = None;
         let walked =
             self.walk_structural_derive_members(scope, resolved, tr, &mut |member, member_tid| {
-                if self.type_implements_trait(ctx, scope, member_tid, trait_) {
+                ctx.member_edges.set(ctx.member_edges.get() + 1);
+                let holds = self.type_implements_trait(ctx, scope, member_tid, trait_);
+                ctx.member_edges.set(ctx.member_edges.get() - 1);
+                if holds {
                     true
                 } else {
                     failing = Some((member.describe(), member_tid));
@@ -928,12 +971,22 @@ impl TypeSystem {
         tr: OnBoundTrait,
         visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool,
     ) -> Option<bool> {
+        // A member is read at the instance: `items: List<T>` is `List<i32>`
+        // at `Gen<i32>`, however deep the parameter sits.
         let subst = |param_ids: &[TypeId], type_args: &[TypeId], tid: TypeId| -> TypeId {
-            param_ids
+            if type_args.is_empty() {
+                return tid;
+            }
+            let mut table = self.type_table.borrow_mut();
+            let substitution: crate::hashmap::IndexMap<u32, TypeId> = param_ids
                 .iter()
-                .position(|param| *param == tid)
-                .and_then(|i| type_args.get(i).copied())
-                .unwrap_or(tid)
+                .zip(type_args)
+                .filter_map(|(&param, &arg)| match table.get(param) {
+                    ResolvedType::TypeParam { index, .. } => Some((*index, arg)),
+                    _ => None,
+                })
+                .collect();
+            table.substitute_type_params(tid, &substitution)
         };
         let walk_struct = |info: &super::types::StructFieldInfo,
                            type_args: &[TypeId],
@@ -1098,7 +1151,7 @@ impl TypeSystem {
     /// Whether a reference is denied `trait_`'s bound, which it otherwise
     /// inherits from its pointee by auto-deref at the call. `==` on a reference
     /// is identity, so `&T` is no `Ord`; and see below for the other rule.
-    fn ref_denies_bound(&self, on_bound: Option<OnBoundTrait>, trait_: DefId) -> bool {
+    pub(super) fn ref_denies_bound(&self, on_bound: Option<OnBoundTrait>, trait_: DefId) -> bool {
         if on_bound == Some(OnBoundTrait::Ord) {
             return true;
         }
@@ -1596,16 +1649,15 @@ impl TypeSystem {
             (NewtypePeel::Here, None) => {
                 self.find_trait_impl_for_subject(ctx, scope, subject, type_key, bound_trait, peel)
             }
-            (NewtypePeel::Follow, _) => {
-                subject.is_some_and(|id| self.type_implements_trait(ctx, scope, id, bound_trait))
-                    || self.find_trait_impl_for_subject(
-                        ctx,
-                        scope,
-                        subject,
-                        type_key,
-                        bound_trait,
-                        peel,
-                    )
+            // With a subject the general question is the whole answer: it
+            // searches the impls too, under the recursion guard. Asking the
+            // impls again beside it would repeat a refused question outside
+            // the guard.
+            (NewtypePeel::Follow, Some(id)) => {
+                self.type_implements_trait(ctx, scope, id, bound_trait)
+            }
+            (NewtypePeel::Follow, None) => {
+                self.find_trait_impl_for_subject(ctx, scope, subject, type_key, bound_trait, peel)
             }
         }
     }
@@ -2824,7 +2876,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 /// Whether the compiler supplies `trait_name`'s operator for the primitive
 /// spelled `prim_name`. `v128` is excluded with the non-numeric ones: its
 /// arithmetic is lane-wise, and only the lane type's own impl knows the width.
-fn primitive_has_operator(prim_name: &str, op: CompilerItem) -> bool {
+pub(super) fn primitive_has_operator(prim_name: &str, op: CompilerItem) -> bool {
     let is_int = matches!(prim_name.as_bytes().first(), Some(b'i' | b'u'));
     match op {
         CompilerItem::Add

@@ -1,6 +1,6 @@
 //! The checks that read the program alone — no receiver, no bounds in force.
 
-use super::program::{ImplDef, ImplId, Program, SolverType};
+use super::program::{ImplDef, ImplId, ImplOrigin, Program, SolverType};
 use crate::hashmap::IndexMap;
 
 /// What a coherence check found. It names impls; the caller turns an id into a
@@ -64,7 +64,7 @@ type ImplKey<'a> = (
 );
 
 fn impl_key(def: &ImplDef) -> Option<ImplKey<'_>> {
-    if def.is_derivation_request {
+    if def.origin == ImplOrigin::Marker {
         return None;
     }
     Some((
@@ -114,7 +114,7 @@ mod tests {
             trait_args: vec![],
             target,
             params: vec![],
-            is_derivation_request: false,
+            origin: ImplOrigin::Written,
         }
     }
 
@@ -195,7 +195,7 @@ mod tests {
             trait_args: vec![],
             target: SolverType::Decl(BOX, vec![SolverType::Param(0)]),
             params: vec![ParamDef::default()],
-            is_derivation_request: false,
+            origin: ImplOrigin::Written,
         };
         assert_eq!(coherence_errors(&program([specific, general])), vec![]);
     }
@@ -209,7 +209,7 @@ mod tests {
             trait_args: vec![],
             target: SolverType::Decl(BOX, vec![SolverType::Param(0)]),
             params: vec![ParamDef::default()],
-            is_derivation_request: false,
+            origin: ImplOrigin::Written,
         };
         assert_eq!(
             coherence_errors(&program([head(), head()])),
@@ -229,7 +229,7 @@ mod tests {
             trait_args: vec![],
             target: point(),
             params: vec![],
-            is_derivation_request: false,
+            origin: ImplOrigin::Written,
         };
         assert_eq!(coherence_errors(&program([inherent(), inherent()])), vec![]);
     }
@@ -244,10 +244,8 @@ mod tests {
             trait_: Some(TR),
             trait_args: vec![],
             target: SolverType::Param(0),
-            params: vec![ParamDef {
-                bounds: vec![bound],
-            }],
-            is_derivation_request: false,
+            params: vec![ParamDef::bounded(vec![bound])],
+            origin: ImplOrigin::Written,
         };
         assert_eq!(
             coherence_errors(&program([blanket(LIMIT), blanket(OTHER_TR)])),
@@ -261,10 +259,8 @@ mod tests {
             trait_: Some(TR),
             trait_args: vec![],
             target: SolverType::Param(0),
-            params: vec![ParamDef {
-                bounds: vec![LIMIT],
-            }],
-            is_derivation_request: false,
+            params: vec![ParamDef::bounded(vec![LIMIT])],
+            origin: ImplOrigin::Written,
         };
         assert_eq!(
             coherence_errors(&program([blanket(), blanket()])),
@@ -284,10 +280,8 @@ mod tests {
             trait_: Some(TR),
             trait_args: vec![],
             target: SolverType::Decl(BOX, vec![SolverType::Param(0)]),
-            params: vec![ParamDef {
-                bounds: vec![bound],
-            }],
-            is_derivation_request: false,
+            params: vec![ParamDef::bounded(vec![bound])],
+            origin: ImplOrigin::Written,
         };
         assert_eq!(
             coherence_errors(&program([boxed(LIMIT), boxed(OTHER_TR)])),
@@ -306,7 +300,7 @@ mod tests {
             trait_args: vec![],
             target: point(),
             params: vec![],
-            is_derivation_request: true,
+            origin: ImplOrigin::Marker,
         };
         assert_eq!(
             coherence_errors(&program([concrete(TR, point()), request(), request()])),
@@ -320,10 +314,8 @@ mod tests {
             trait_: Some(TR),
             trait_args: vec![],
             target: SolverType::Param(0),
-            params: vec![ParamDef {
-                bounds: vec![LIMIT],
-            }],
-            is_derivation_request: false,
+            params: vec![ParamDef::bounded(vec![LIMIT])],
+            origin: ImplOrigin::Written,
         }]);
         assert_eq!(coherence_errors(&p), vec![]);
     }
@@ -335,7 +327,7 @@ mod tests {
             trait_args: vec![],
             target: SolverType::Param(0),
             params: vec![ParamDef::default()],
-            is_derivation_request: false,
+            origin: ImplOrigin::Written,
         }]);
         assert_eq!(
             coherence_errors(&p),
@@ -355,7 +347,7 @@ mod tests {
                 inner: Box::new(SolverType::Param(0)),
             },
             params: vec![ParamDef::default()],
-            is_derivation_request: false,
+            origin: ImplOrigin::Written,
         }]);
         assert_eq!(coherence_errors(&p), vec![]);
     }
@@ -369,7 +361,7 @@ mod tests {
             trait_args: vec![],
             target: SolverType::Param(0),
             params: vec![ParamDef::default()],
-            is_derivation_request: false,
+            origin: ImplOrigin::Written,
         };
         assert_eq!(
             coherence_errors(&program([blanket(), blanket()])),

@@ -14,14 +14,17 @@
 //! the receiver's newtype chain — follows them onto this representation.
 
 mod coherence;
+mod derive;
 mod holds;
 mod program;
 mod rank;
 
 pub use coherence::{CoherenceError, coherence_errors};
+pub use derive::{DeriveError, Derived, derive};
 pub use holds::{Holds, holds};
 pub use program::{
-    DerivationRequest, Env, Fact, ImplDef, ImplId, ModuleId, ParamDef, Program, SolverType,
-    TraitDeclId, TraitDef, TypeDeclId,
+    ArgDefault, AssocId, Declaration, DerivationRequest, Env, Fact, ImplDef, ImplId, ImplOrigin,
+    ModuleId, ParamDef, Pin, Program, RefRule, SolverType, TraitDeclId, TraitDef, TypeDeclId,
+    TypeDef,
 };
 pub use rank::{Candidate, Selection, rank};

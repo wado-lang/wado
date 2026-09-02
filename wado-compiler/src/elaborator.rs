@@ -27,6 +27,7 @@ pub(crate) mod reify;
 mod scope;
 pub(crate) mod sem;
 pub(crate) mod sig;
+mod solver_bridge;
 mod stmt;
 mod synth;
 mod template;
