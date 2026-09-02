@@ -36,6 +36,16 @@ pub(crate) struct StructFieldInfo {
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
+    /// What each type parameter wrote after `=`, parallel to
+    /// `type_param_bounds`. See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
+}
+
+/// What each type parameter declares as its default, in declaration order:
+/// `Some(ty)` where the parameter wrote `= ty`. A use site that omits the
+/// argument takes it.
+pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option<ast::Type>> {
+    params.iter().map(|p| p.default.clone()).collect()
 }
 
 /// A trait bound as a declaration digest records it: the site that wrote it,
@@ -77,6 +87,9 @@ pub(crate) struct VariantInfo {
     /// Used by `infer_variant_type_args` to fill type params from payload args
     /// and expected type context.
     pub(super) type_param_type_ids: Vec<TypeId>,
+    /// What each type parameter wrote after `=`, parallel to `type_params`.
+    /// See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Enum case info: case name and discriminant index
@@ -155,6 +168,9 @@ pub(crate) struct ResourceInfo {
 pub(crate) struct GenericNewtypeInfo {
     pub(super) type_params: Vec<String>,
     pub(super) base_type_ast: ast::Type,
+    /// What each type parameter wrote after `=`, parallel to `type_params`.
+    /// See [`type_param_defaults_of`].
+    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Which kind of inherent impl member a visibility violation names.

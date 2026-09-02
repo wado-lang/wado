@@ -437,6 +437,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     field_defaults: Vec::new(),
                                     type_param_bounds,
                                     type_param_type_ids: Vec::new(), // filled in second pass
+                                    type_param_defaults: super::types::type_param_defaults_of(
+                                        &struct_decl.type_params,
+                                    ),
                                 },
                             );
                         }
@@ -467,6 +470,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     type_params,
                                     cases: Vec::new(),
                                     type_param_type_ids: Vec::new(),
+                                    type_param_defaults: super::types::type_param_defaults_of(
+                                        &variant_decl.type_params,
+                                    ),
                                 },
                             );
                         }
@@ -716,6 +722,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             GenericNewtypeInfo {
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
+                                type_param_defaults: super::types::type_param_defaults_of(
+                                    &newtype_decl.type_params,
+                                ),
                             },
                         );
                         newly_resolved = true;
@@ -857,6 +866,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             field_defaults,
                             type_param_bounds,
                             type_param_type_ids,
+                            type_param_defaults: super::types::type_param_defaults_of(
+                                &struct_decl.type_params,
+                            ),
                         };
                         if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
                             all_struct_fields.insert(def, info);
@@ -891,6 +903,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             let info = GenericNewtypeInfo {
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
+                                type_param_defaults: super::types::type_param_defaults_of(
+                                    &newtype_decl.type_params,
+                                ),
                             };
                             if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
                                 all_generic_newtypes.insert(def, info);
@@ -946,6 +961,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     type_params,
                                     cases,
                                     type_param_type_ids,
+                                    type_param_defaults: super::types::type_param_defaults_of(
+                                        &variant_decl.type_params,
+                                    ),
                                 },
                             );
                         }

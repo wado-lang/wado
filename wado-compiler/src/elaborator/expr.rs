@@ -4321,6 +4321,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_defaults: vec![None; effective_fields.len()],
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
+            type_param_defaults: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 

@@ -286,6 +286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 field_defaults: Vec::new(),
                 type_param_bounds: Self::type_param_bounds_of(&struct_decl.type_params),
                 type_param_type_ids,
+                type_param_defaults: super::types::type_param_defaults_of(&struct_decl.type_params),
             },
         );
     }
@@ -471,6 +472,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|p| p.name.clone())
                         .collect(),
                     base_type_ast: newtype_decl.ty.clone(),
+                    type_param_defaults: super::types::type_param_defaults_of(
+                        &newtype_decl.type_params,
+                    ),
                 },
             );
             self.sem

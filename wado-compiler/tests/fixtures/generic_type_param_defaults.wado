@@ -1,0 +1,62 @@
+// A declared type-parameter default is what the parameter takes when the use
+// site omits it. The grammar has accepted `T = i32` all along and the
+// formatter and `wado doc` both render it, but no declaration kind applied it:
+// a bare `Pair` reported `missing type arguments`. Every generic declaration
+// answers the same way — struct, variant and newtype alike — so no kind is the
+// odd one out.
+
+struct Pair<T = i32> {
+    a: T,
+}
+
+variant Slot<T = i32> {
+    Empty,
+    Full(T),
+}
+
+struct Point {
+    x: i32,
+}
+
+type Wrapped<T = i32> = Point;
+
+// Only the omitted tail takes a default; a written argument always wins.
+struct Both<A, B = String> {
+    a: A,
+    b: B,
+}
+
+test "a struct takes its declared default" {
+    let p: Pair = Pair { a: 7 };
+    assert p.a == 7;
+}
+
+test "a written argument still wins over the default" {
+    let p: Pair<String> = Pair { a: "x" };
+    assert p.a == "x";
+}
+
+test "a variant takes its declared default" {
+    let s: Slot = Slot::Full(3);
+    assert s matches { Slot::Full(3) };
+}
+
+test "a newtype takes its declared default" {
+    let w = Point { x: 1 } as Wrapped;
+    assert w.x == 1;
+}
+
+// The default fills only what the site left out.
+test "the omitted tail takes its default" {
+    let b: Both<i32> = Both { a: 1, b: "s" };
+    assert b.a == 1;
+    assert b.b == "s";
+}
+
+test "both arguments written" {
+    let b: Both<i32, i32> = Both { a: 1, b: 2 };
+    assert b.b == 2;
+}
+
+__DATA__
+{"test": {}}

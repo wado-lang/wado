@@ -501,13 +501,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if let Some(def) = self.type_decl_at(site, name) {
-            if enforce_arity && let Some(expected) = self.bare_generic_type_arity(def) {
-                let _ = self.emit(TypeError::MissingTypeArguments {
-                    name: name.to_string(),
-                    expected,
-                    span,
-                });
-                return TypeTable::ERROR;
+            if let Some(expected) = self.bare_generic_type_arity(def) {
+                // Every parameter declaring a default makes the bare name the
+                // defaulted instantiation; otherwise the site must write them.
+                if let Some(args) = self.all_defaulted_type_args(def) {
+                    return self.resolve_generic_type_at(site, name, &args, span);
+                }
+                if enforce_arity {
+                    let _ = self.emit(TypeError::MissingTypeArguments {
+                        name: name.to_string(),
+                        expected,
+                        span,
+                    });
+                    return TypeTable::ERROR;
+                }
             }
             if let Some(type_id) = self.lookup_newtype_of_decl(def) {
                 return type_id;
@@ -565,6 +572,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(info.type_params.len());
         }
         None
+    }
+
+    /// What each of `def`'s type parameters declares as its default, in
+    /// declaration order. `None` where `def` takes no type parameters.
+    ///
+    /// Cloned rather than borrowed: only a site that omitted an argument asks,
+    /// which the written-out spelling never does.
+    fn declared_type_param_defaults(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<Vec<Option<crate::ast::Type>>> {
+        if let Some(info) = self.lookup_struct_fields_of_decl(def)
+            && !info.type_param_bounds.is_empty()
+        {
+            return Some(info.type_param_defaults.clone());
+        }
+        if let Some(info) = self.lookup_variant_case_of_decl(def)
+            && !info.type_params.is_empty()
+        {
+            return Some(info.type_param_defaults.clone());
+        }
+        if let Some(info) = self.lookup_generic_newtype_of_decl(def)
+            && !info.type_params.is_empty()
+        {
+            return Some(info.type_param_defaults.clone());
+        }
+        None
+    }
+
+    /// The arguments a bare use of `def` stands for — `None` unless every
+    /// parameter declares a default.
+    fn all_defaulted_type_args(&self, def: crate::defs::DefId) -> Option<Vec<crate::ast::Type>> {
+        self.declared_type_param_defaults(def)?
+            .into_iter()
+            .collect()
+    }
+
+    /// `args` extended with the declared default of each parameter the site
+    /// left out. `None` when nothing was omitted, or an omitted parameter
+    /// declares no default — the arity diagnostics answer for that.
+    fn type_args_with_defaults(
+        &self,
+        def: crate::defs::DefId,
+        args: &[crate::ast::Type],
+    ) -> Option<Vec<crate::ast::Type>> {
+        let defaults = self.declared_type_param_defaults(def)?;
+        if args.len() >= defaults.len() {
+            return None;
+        }
+        let mut filled = args.to_vec();
+        for default in &defaults[args.len()..] {
+            filled.push(default.clone()?);
+        }
+        Some(filled)
     }
 
     /// The type a generic application resolves to. `site` names the head's
@@ -674,6 +735,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(def) = self.type_decl_at(site, name) else {
                     return self.resolve_generic_type_out_of_scope(site, name, args, span);
                 };
+                // A trailing argument the site left out takes its default.
+                let filled = self.type_args_with_defaults(def, args);
+                let args = filled.as_deref().unwrap_or(args);
                 let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
                 if struct_info
                     .as_ref()
