@@ -4,9 +4,9 @@
 // The prelude's `Inspect for &T` works because the compiler answers that bound
 // itself, not because this shape dispatches.
 //
-// Either the shape is rejected where it is written, or the reference step ranks
-// a blanket `&T` impl below a concrete one and above the base type's — a
-// decision, so the gap is pinned (WEP 2026-09-01).
+// Reference blankets are a third candidate list, ranked under a concrete `&T`
+// impl and over the base type's (WEP 2026-09-01, "A ref blanket never
+// dispatches").
 
 trait Limit {
     fn limit() -> i32;

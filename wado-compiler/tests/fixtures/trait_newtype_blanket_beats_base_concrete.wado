@@ -1,0 +1,46 @@
+#![TODO]
+// Rank 1 runs before rank 2: the search stops at the first level of the newtype
+// chain that answers, so a blanket satisfied at the newtype wins over an impl
+// written for the base. A newtype is a type distinct from its base, and nothing
+// written for the base may answer while the newtype itself does.
+//
+// Today depth is read off a blanket's bounds alone and concrete-over-blanket
+// runs first, so the base's impl answers instead
+// (WEP 2026-09-01, "Rank 1 does not order the chain").
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Inner {
+    x: i32,
+}
+
+type Wrapped = Inner;
+
+impl Limit for Wrapped {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+impl Describe for Inner {
+    fn describe(&self) -> String {
+        return "base concrete";
+    }
+}
+
+test "the newtype's level answers before the base's" {
+    let w = Inner { x: 1 } as Wrapped;
+    assert w.describe() == "limit:7";
+}

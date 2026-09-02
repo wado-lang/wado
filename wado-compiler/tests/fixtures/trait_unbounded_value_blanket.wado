@@ -1,11 +1,11 @@
-#![TODO]
-// An unbounded value blanket reaches no receiver: a blanket is indexed only
-// when its receiver parameter carries a bound, so `impl<T> Describe for T`
-// compiles and the call reports the method as missing.
+// A value blanket's receiver parameter carries at least one bound: an unbounded
+// `impl<T> Describe for T` names no condition that could select it, so it is
+// rejected where it is written.
 //
-// Either the bound is required where the impl is written, or the impl applies
-// to every type. Both are decisions, so the gap is pinned
-// (WEP 2026-09-01).
+// Today it is accepted and indexed as nothing, so the call reports the method as
+// missing with no hint that the impl exists. The message below states what the
+// check should say; it does not exist yet, so this fixture fails until it is
+// written (WEP 2026-09-01, "Two definition-time checks are missing").
 
 trait Describe {
     fn describe(&self) -> String;
@@ -21,7 +21,10 @@ impl<T> Describe for T {
     }
 }
 
-test "an unbounded value blanket applies to every type" {
+export fn run() {
     let p = Point { x: 1 };
     assert p.describe() == "blanket";
 }
+
+__DATA__
+{"compile_error": "a blanket impl's receiver type parameter needs a bound"}

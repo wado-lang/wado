@@ -1,9 +1,9 @@
-// Rank 2 outranks rank 3: the blanket whose bound holds at the newtype wins
-// even though it is foreign and the blanket holding only at the base is local
-// (WEP 2026-09-01).
+// Rank 1 outranks rank 3: the level a candidate is selected at decides before
+// where it was written, so the foreign blanket holding at the newtype wins over
+// the local one holding only at the base (WEP 2026-09-01).
 
-use { Limit, Base, Describe, Inner } from "./sub/trait_rank2_lib.wado";
-use { } from "./sub/trait_rank2_foreign_blanket.wado";
+use { Limit, Base, Describe, Inner } from "./sub/trait_depth_lib.wado";
+use { } from "./sub/trait_depth_foreign_blanket.wado";
 
 type Wrapped = Inner;
 

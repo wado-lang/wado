@@ -1,12 +1,10 @@
 #![TODO]
-// Rank 2 does not reach concrete impls: a newtype's own impl and its base's
-// both sit at depth 0, so rank 3 decides and the local impl on the base takes
-// a call on the newtype. A newtype is a type distinct from its base
-// (WEP 2026-06-25), so its own impl must win wherever it is written.
+// Rank 1 orders the newtype chain, so a newtype's own impl answers before
+// anything written for its base, wherever either is written.
 //
-// Closing this means measuring depth over the impl's target as well as over a
-// blanket's bounds — a decision, so the gap is pinned rather than papered over
-// (WEP 2026-09-01).
+// Today depth is read off a blanket's bounds alone, so both impls sit at 0 and
+// rank 3 decides: the local impl on the base takes a call on the newtype
+// (WEP 2026-09-01, "Rank 1 does not order the chain").
 
 use { Describe, Inner, Wrapped } from "./sub/trait_newtype_own_impl_lib.wado";
 
