@@ -627,12 +627,11 @@ fn "core:rt/i32_clamp$cold0"(lo, hi) {
 }
 
 fn "cbor_skip_depth_limit.wado/cbor_skip_depth_limit.wado/Small^core:serde/FieldSchema::lookup"(__key) {
-    if (if (__key.end - __key.start) == 1 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 97;
-    } else {
-        0;
-    }) {
-        return 0, 0;
+    if (__key.end - __key.start) == 1 {
+        if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 97 {
+            return 0, 0;
+        }
+        return 1, 0;
     }
     return 1, 0;
 }
@@ -3043,12 +3042,13 @@ fn "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_fiel
             e = select i32(a_52 < len, a_52, len);
             __sroa___key_repr = self.de.input.repr;
             __sroa___key_start = self.de.input.start + s;
-            if (if ((self.de.input.start + e) - __sroa___key_start) == 1 -> i32 {
-                builtin::array_get_value<u8>(__sroa___key_repr, __sroa___key_start + 0) == 97;
-            } else {
-                0;
-            }) {
-                __sroa_slot_60 = 0;
+            if ((self.de.input.start + e) - __sroa___key_start) == 1 {
+                if builtin::array_get_value<u8>(__sroa___key_repr, __sroa___key_start + 0) == 97 {
+                    __sroa_slot_60 = 0;
+                    __sroa_slot_61 = 0;
+                    break __inline_cbor_skip_depth_limit_wado_Small_core_serde_FieldSchema__lookup_3;
+                }
+                __sroa_slot_60 = 1;
                 __sroa_slot_61 = 0;
                 break __inline_cbor_skip_depth_limit_wado_Small_core_serde_FieldSchema__lookup_3;
             }

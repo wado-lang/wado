@@ -2508,45 +2508,32 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
 }
 
 fn "serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup"(__key) {
-    let __len: i32;
-    __len = __key.end - __key.start;
-    if (if (if (if (if __len == 4 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 116;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 103;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 115;
-    } else {
-        0;
-    }) {
-        return 0, 0;
-    }
-    if (if (if (if (if __len == 4 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 110;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 109;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 101;
-    } else {
-        0;
-    }) {
-        return 0, 1;
+    let __b0: i32;
+    if (__key.end - __key.start) == 4 {
+        if builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97 {
+            __b0 = builtin::array_get_value<u8>(__key.repr, __key.start + 0);
+            if __b0 == 116 {
+                if (if builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 103 -> i32 {
+                    builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 115;
+                } else {
+                    0;
+                }) {
+                    return 0, 0;
+                }
+                return 1, 0;
+            } else if __b0 == 110 {
+                if (if builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 109 -> i32 {
+                    builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 101;
+                } else {
+                    0;
+                }) {
+                    return 0, 1;
+                }
+                return 1, 0;
+            } else {
+            }
+        }
+        return 1, 0;
     }
     return 1, 0;
 }
@@ -2794,7 +2781,7 @@ fn "core:json/core:json/JsonDeserializer::read_json_string"(self) {
     self.pos = prefix_mv_end;
     __hfs_pos_73 = self.pos;
     block {
-        l305: loop {
+        l303: loop {
             chunk_start = __hfs_pos_73;
             let chunk_mv_end: i32;
             let chunk_mv_at_escape: bool;
@@ -2861,7 +2848,7 @@ fn "core:json/core:json/JsonDeserializer::read_json_string"(self) {
                 } else {
                     unreachable;
                 }));
-                continue l305: __hfs_pos_73 = self.pos;
+                continue l303: __hfs_pos_73 = self.pos;
             } else {
                 cold_path;
                 __hfs_call_74 = ref.null none;
@@ -2871,7 +2858,7 @@ fn "core:json/core:json/JsonDeserializer::read_json_string"(self) {
             }
             __hfs_pos_73 = __hfs_pos_73 + 1;
             self.pos = __hfs_pos_73;
-            continue l305;
+            continue l303;
         };
     };
 }
@@ -2898,9 +2885,9 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     _licm_input_11 = self.input;
     _licm_repr_12 = _licm_input_11.repr;
     _licm_start_13 = _licm_input_11.start;
-    b322: block {
-        l323: loop {
-            break_if b322 i >= 4;
+    b320: block {
+        l321: loop {
+            break_if b320 i >= 4;
             c_4 = builtin::array_get_value<u8>(_licm_repr_12, _licm_start_13 + (_licm_pos_10 + i)) & 255;
             if @unlikely((if (if (c_4 - 48) <u 10 -> i32 {
                 1;
@@ -2916,7 +2903,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
             }
             code = (code * 16) + "core:prelude/primitive.wado/char::hex_digit_value$scalar"(c_4);
             i = i + 1;
-            continue l323;
+            continue l321;
         };
     };
     self.pos = _av_15 + 4;
@@ -3058,20 +3045,20 @@ fn "core:json/core:json/JsonDeserializer::skip_number"(self) {
     _licm_repr_35 = _licm_input_9.repr;
     _licm_arith_36 = _licm_end_33 - _licm_start_34;
     __hfs_pos_45 = self.pos;
-    b343: block {
-        l344: loop {
+    b341: block {
+        l342: loop {
             if __hfs_pos_45 >= _licm_arith_36 {
                 self.pos = __hfs_pos_45;
-                break b343;
+                break b341;
             }
             b_1 = builtin::array_get_value<u8>(_licm_repr_35, _licm_start_34 + __hfs_pos_45);
             if select i32(48 <= b_1, b_1 <= 57, 0) {
                 __hfs_pos_45 = __hfs_pos_45 + 1;
             } else {
                 self.pos = __hfs_pos_45;
-                break b343;
+                break b341;
             }
-            continue l344;
+            continue l342;
         };
     };
     _av_49 = self.pos;
@@ -3087,20 +3074,20 @@ fn "core:json/core:json/JsonDeserializer::skip_number"(self) {
         _licm_repr_39 = _licm_input_10.repr;
         _licm_arith_40 = _licm_end_37 - _licm_start_38;
         __hfs_pos_46 = self.pos;
-        b349: block {
-            l350: loop {
+        b347: block {
+            l348: loop {
                 if __hfs_pos_46 >= _licm_arith_40 {
                     self.pos = __hfs_pos_46;
-                    break b349;
+                    break b347;
                 }
                 b_3 = builtin::array_get_value<u8>(_licm_repr_39, _licm_start_38 + __hfs_pos_46);
                 if select i32(48 <= b_3, b_3 <= 57, 0) {
                     __hfs_pos_46 = __hfs_pos_46 + 1;
                 } else {
                     self.pos = __hfs_pos_46;
-                    break b349;
+                    break b347;
                 }
-                continue l350;
+                continue l348;
             };
         };
     }
@@ -3121,20 +3108,20 @@ fn "core:json/core:json/JsonDeserializer::skip_number"(self) {
             _licm_repr_43 = _licm_input_11.repr;
             _licm_arith_44 = _licm_end_41 - _licm_start_42;
             __hfs_pos_47 = self.pos;
-            b357: block {
-                l358: loop {
+            b355: block {
+                l356: loop {
                     if __hfs_pos_47 >= _licm_arith_44 {
                         self.pos = __hfs_pos_47;
-                        break b357;
+                        break b355;
                     }
                     b2 = builtin::array_get_value<u8>(_licm_repr_43, _licm_start_42 + __hfs_pos_47);
                     if select i32(48 <= b2, b2 <= 57, 0) {
                         __hfs_pos_47 = __hfs_pos_47 + 1;
                     } else {
                         self.pos = __hfs_pos_47;
-                        break b357;
+                        break b355;
                     }
-                    continue l358;
+                    continue l356;
                 };
             };
         }
@@ -3213,15 +3200,15 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, out) {
     if first == 48 {
         _licm_repr_57 = input.repr;
         _licm_start_58 = input.start;
-        b366: block {
-            l367: loop {
-                break_if b366 (if pos < len -> i32 {
+        b364: block {
+            l365: loop {
+                break_if b364 (if pos < len -> i32 {
                     builtin::array_get_value<u8>(_licm_repr_57, _licm_start_58 + pos) == 48;
                 } else {
                     0;
                 }) == 0;
                 pos = pos + 1;
-                continue l367;
+                continue l365;
             };
         };
     }
@@ -3233,29 +3220,29 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, out) {
     }
     _licm_repr_59 = input.repr;
     _licm_start_60 = input.start;
-    b370: block {
-        l371: loop {
-            break_if b370 pos >= cap;
+    b368: block {
+        l369: loop {
+            break_if b368 pos >= cap;
             d_12 = local.tee b_34(builtin::array_get_value<u8>(_licm_repr_59, _licm_start_60 + pos)) - 48;
-            break_if b370 d_12 >u 9;
+            break_if b368 d_12 >u 9;
             digits = (digits * 10_i64) + builtin::i64_extend_i32_u(d_12);
             pos = pos + 1;
-            continue l371;
+            continue l369;
         };
     };
     acc_digits = pos - sig_start;
     if pos == cap {
         _licm_repr_61 = input.repr;
         _licm_start_62 = input.start;
-        b373: block {
-            l374: loop {
-                break_if b373 (if pos < len -> i32 {
+        b371: block {
+            l372: loop {
+                break_if b371 (if pos < len -> i32 {
                     local.tee b_39(builtin::array_get_value<u8>(_licm_repr_61, _licm_start_62 + pos)) - 48 <=u 9;
                 } else {
                     0;
                 }) == 0;
                 pos = pos + 1;
-                continue l374;
+                continue l372;
             };
         };
     }
@@ -3274,15 +3261,15 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, out) {
             lead_start = pos;
             _licm_repr_63 = input.repr;
             _licm_start_64 = input.start;
-            b379: block {
-                l380: loop {
-                    break_if b379 (if pos < len -> i32 {
+            b377: block {
+                l378: loop {
+                    break_if b377 (if pos < len -> i32 {
                         builtin::array_get_value<u8>(_licm_repr_63, _licm_start_64 + pos) == 48;
                     } else {
                         0;
                     }) == 0;
                     pos = pos + 1;
-                    continue l380;
+                    continue l378;
                 };
             };
             frac_lead_zeros = pos - lead_start;
@@ -3294,14 +3281,14 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, out) {
         frac_start = pos;
         _licm_repr_65 = input.repr;
         _licm_start_66 = input.start;
-        b383: block {
-            l384: loop {
-                break_if b383 pos >= frac_cap;
+        b381: block {
+            l382: loop {
+                break_if b381 pos >= frac_cap;
                 d_20 = local.tee b_44(builtin::array_get_value<u8>(_licm_repr_65, _licm_start_66 + pos)) - 48;
-                break_if b383 d_20 >u 9;
+                break_if b381 d_20 >u 9;
                 digits = (digits * 10_i64) + builtin::i64_extend_i32_u(d_20);
                 pos = pos + 1;
-                continue l384;
+                continue l382;
             };
         };
         frac_digits = pos - frac_start;
@@ -3309,15 +3296,15 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, out) {
         if pos == frac_cap {
             _licm_repr_67 = input.repr;
             _licm_start_68 = input.start;
-            b386: block {
-                l387: loop {
-                    break_if b386 (if pos < len -> i32 {
+            b384: block {
+                l385: loop {
+                    break_if b384 (if pos < len -> i32 {
                         local.tee b_49(builtin::array_get_value<u8>(_licm_repr_67, _licm_start_68 + pos)) - 48 <=u 9;
                     } else {
                         0;
                     }) == 0;
                     pos = pos + 1;
-                    continue l387;
+                    continue l385;
                 };
             };
         }
@@ -3341,16 +3328,16 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, out) {
             }
             _licm_repr_69 = input.repr;
             _licm_start_70 = input.start;
-            b394: block {
-                l395: loop {
-                    break_if b394 pos >= len;
+            b392: block {
+                l393: loop {
+                    break_if b392 pos >= len;
                     d_24 = local.tee b_54(builtin::array_get_value<u8>(_licm_repr_69, _licm_start_70 + pos)) - 48;
-                    break_if b394 d_24 >u 9;
+                    break_if b392 d_24 >u 9;
                     if exp <= 350 {
                         exp = (exp * 10) + d_24;
                     }
                     pos = pos + 1;
-                    continue l395;
+                    continue l393;
                 };
             };
             if exp_neg {
@@ -3450,7 +3437,7 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
     _licm_input_7 = self.input;
     __hfs_pos_8 = self.pos;
     block {
-        l407: loop {
+        l405: loop {
             start = __hfs_pos_8;
             let scan_mv_end: i32;
             let scan_mv_at_escape: bool;
@@ -3486,7 +3473,7 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
                 __hfs_pos_8 = __hfs_pos_8 + 4;
             }
             __hfs_pos_8 = __hfs_pos_8 + 1;
-            continue l407;
+            continue l405;
         };
     };
 }
@@ -3579,7 +3566,7 @@ fn "core:json/core:json/JsonDeserializer::skip_array_body"(self, depth) {
     }
     __hfs_pos_12 = self.pos;
     block {
-        l429: loop {
+        l427: loop {
             __match_4 = "core:json/core:json/JsonDeserializer::skip_value"(self, depth);
             if @likely(ref.is_null(__match_4)) {
             } else {
@@ -3605,7 +3592,7 @@ fn "core:json/core:json/JsonDeserializer::skip_array_body"(self, depth) {
                 return ref.as_non_null("core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or ']'"), used: 19 }, builtin::i64_extend_i32_s(__hfs_pos_12)));
             }
             self.pos = __hfs_pos_12;
-            continue l429;
+            continue l427;
         };
     };
     cold_path;
@@ -3635,7 +3622,7 @@ fn "core:json/core:json/JsonDeserializer::skip_object_body"(self, depth) {
     }
     __hfs_pos_21 = self.pos;
     block {
-        l437: loop {
+        l435: loop {
             "core:json/core:json/JsonDeserializer::skip_whitespace"(self);
             __hfs_pos_21 = self.pos;
             if @unlikely((if __hfs_pos_21 >= (self.input.end - self.input.start) -> i32 {
@@ -3685,7 +3672,7 @@ fn "core:json/core:json/JsonDeserializer::skip_object_body"(self, depth) {
                 return ref.as_non_null("core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or '}'"), used: 19 }, builtin::i64_extend_i32_s(__hfs_pos_21)));
             }
             self.pos = __hfs_pos_21;
-            continue l437;
+            continue l435;
         };
     };
     cold_path;
@@ -3959,14 +3946,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_44 + (_av_45 - _av_44);
     offset = data.start;
     block {
-        l473: loop {
+        l471: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b474: block {
-                l475: loop {
-                    break_if b474 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b472: block {
+                l473: loop {
+                    break_if b472 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l475;
+                    continue l473;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -3990,7 +3977,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l473;
+            continue l471;
         };
     };
 }
@@ -4052,8 +4039,8 @@ fn "core:serde/serde_json_list_default.wado/S^core:serde/Deserialize::deserializ
     } else {
         unreachable;
     });
-    b482: block {
-        l483: loop {
+    b480: block {
+        l481: loop {
             let __vr_51_mv_0: i32;
             let __vr_51_mv_1: ref null "core:prelude/types.wado//Option<i32>";
             let __vr_51_mv_2: ref null "core:serde//DeserializeError";
@@ -4140,9 +4127,9 @@ fn "core:serde/serde_json_list_default.wado/S^core:serde/Deserialize::deserializ
                     }
                 }
             } else {
-                break b482;
+                break b480;
             }
-            continue l483;
+            continue l481;
         };
     };
     __match_49 = "core:json/core:json/JsonDeserializer::expect_char"(sd.de, 125);
@@ -4357,7 +4344,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
         builtin::array_set<i32>(items.repr, 0, first_elem);
         items.used = 1;
         block {
-            l529: loop {
+            l527: loop {
                 let __vr_21_mv_0: i32;
                 let __vr_21_mv_1: ref null "core:prelude/types.wado//Option<i32>";
                 let __vr_21_mv_2: ref null "core:serde//DeserializeError";
@@ -4393,7 +4380,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
                     }
                     return 0, items, ref.null none;
                 }
-                continue l529;
+                continue l527;
             };
         };
     } else {
@@ -4491,12 +4478,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b546: block {
-            l547: loop {
-                break_if b546 t <=u 0_i64;
+        b544: block {
+            l545: loop {
+                break_if b544 t <=u 0_i64;
                 n = n + 1;
                 t = t /u 10_i64;
-                continue l547;
+                continue l545;
             };
         };
         break __inline_count_digits_u64_1: n;
@@ -4570,24 +4557,24 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$scalar"(self, from) {
     valid = 1;
     _licm_repr_14 = self.repr;
     _licm_start_15 = self.start;
-    b552: block {
-        l553: loop {
-            break_if b552 pos >= len;
+    b550: block {
+        l551: loop {
+            break_if b550 pos >= len;
             b = builtin::array_get_value<u8>(_licm_repr_14, _licm_start_15 + pos);
             if b < 128 {
-                break_if b552 select i32(b == 34, 1, b == 92);
+                break_if b550 select i32(b == 34, 1, b == 92);
                 pos = pos + 1;
-                continue l553;
+                continue l551;
             }
             advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(self, pos, len);
             if @unlikely(advance == 0) {
                 cold_path;
                 valid = 0;
                 pos = pos + 1;
-                continue l553;
+                continue l551;
             }
             pos = pos + advance;
-            continue l553;
+            continue l551;
         };
     };
     at_escape = (if pos < len -> i32 {
@@ -4608,9 +4595,9 @@ fn "core:json/core:json/JsonDeserializer::whitespace_end$scalar"(self, from) {
     pos = from;
     _licm_repr_10 = self.repr;
     _licm_start_11 = self.start;
-    b557: block {
-        l558: loop {
-            break_if b557 (if pos < len -> i32 {
+    b555: block {
+        l556: loop {
+            break_if b555 (if pos < len -> i32 {
                 b = builtin::array_get_value<u8>(_licm_repr_10, _licm_start_11 + pos);
                 if b < 64 -> i32 {
                     ((4294977024_i64 >>u builtin::i64_extend_i32_s(b)) & 1_i64) != 0_i64;
@@ -4621,7 +4608,7 @@ fn "core:json/core:json/JsonDeserializer::whitespace_end$scalar"(self, from) {
                 0;
             }) == 0;
             pos = pos + 1;
-            continue l558;
+            continue l556;
         };
     };
     return pos;

@@ -186,6 +186,12 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       each through nothing but field access, and costs ~5% of the json-canada
       deserialize phase. Inlining that pair also buys caller-specific dead-field
       elimination, which promotion alone would not recover.
+- [ ] Factoring a conjunctive if-chain into a decision tree. `if_chain_to_match`
+      fuses a run whose guards are one `K == x`. A run of
+      `K0 == x0 && K1 == x1 && …` could be split on the atom that discriminates
+      best, then nested. That reaches the hand-written dispatchers the
+      synthesised `FieldSchema::lookup` tree does not. An atom that guards
+      another's operand range has to be tested first, or a miss becomes a trap.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known

@@ -1783,28 +1783,27 @@ fn "core:uuid/core:uuid/UuidVisitor^core:serde/Visitor::visit_string"(v) {
 }
 
 fn "multi_value_return_inlined_if_tail.wado/multi_value_return_inlined_if_tail.wado/RunCli^core:serde/FieldSchema::lookup"(__key) {
-    if (if (if (if (if (if (__key.end - __key.start) == 5 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 116;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 114;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 97;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 99;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 4) == 101;
-    } else {
-        0;
-    }) {
-        return 0, 0;
+    if (__key.end - __key.start) == 5 {
+        if (if (if (if (if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 116 -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 114;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 97;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 99;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 4) == 101;
+        } else {
+            0;
+        }) {
+            return 0, 0;
+        }
+        return 1, 0;
     }
     return 1, 0;
 }
