@@ -681,15 +681,6 @@ impl<'a> Engine<'a> {
         if self.body.value_graph.is_some() {
             return;
         }
-        // Size-gate the persisted value graph: building it, plus the inline-time
-        // `build_scoped` scratch-pool clone, scales with function size — under
-        // `wado test`'s parallel compilation that OOMs on generated parsers
-        // (ANTLR4 drivers). Past the threshold, skip it: every consumer already
-        // guards `value_graph.is_none()`.
-        const VG_MAX_EXPRS: usize = 5000;
-        if self.body.exprs.len() > VG_MAX_EXPRS {
-            return;
-        }
         let empty_builtins = IndexSet::default();
         let build = crate::nir_value_graph::builder::build(
             &mut *self.body,

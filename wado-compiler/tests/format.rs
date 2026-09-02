@@ -1897,6 +1897,15 @@ fn test_format_deref_method_preserves_parens() {
     );
 }
 
+/// A tuple type declaration names its own pack, so the formatter has to print
+/// the one that was written rather than a fixed `T`.
+#[test]
+fn test_format_tuple_type_decl_keeps_its_pack_name() {
+    let source = "pub type [..Args];\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
 #[test]
 fn test_format_doc_comment_before_attribute_no_extra_blank() {
     // Doc comment immediately before an attribute must not grow a blank line

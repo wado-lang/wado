@@ -9,6 +9,14 @@ lib = "src/lib.wado"
 "wasi:cli/command" = "src/main.wado"
 "core:kiln/generator" = "src/generator.wado"
 
+[format]
+# The descriptor corpus is written by `scripts/extract_antlr4_descriptors.wado`,
+# so the extractor decides its layout. Formatting it makes `mise run format` and
+# a regeneration each undo the other, and the committed corpus drifts from the
+# generator that is supposed to reproduce it byte for byte. (`tests/generated/`
+# is Kiln output and happens to be formatter-stable, so it stays in.)
+exclude = ["tests/antlr4-compat/**"]
+
 [test]
 # `build/` holds Kiln intermediates. For split grammars (e.g.
 # `css3Parser.g4` alone, no lexer half) the parser-only intermediate

@@ -1,0 +1,37 @@
+// Test: a discarded value at the end of an `if let` arm still leaves the arm a
+// value. `names.insert(*n)` returns a `bool` nobody reads, but it is the last
+// statement of the arm the `if let` lowers to, and WIR translates that arm as a
+// value region, so stripping the value makes the program trap.
+
+use { println, Stdout } from "core:cli";
+use { TreeSet } from "core:collections";
+
+variant Elem {
+    Name(String),
+    Num(i32),
+}
+
+fn distinct_names(elems: &List<Elem>) -> i32 {
+    let mut names = TreeSet::<String>::new();
+    for let e of elems {
+        if let Name(n) = e {
+            names.insert(*n);
+        }
+    }
+    return names.len();
+}
+
+export fn run() with Stdout {
+    let elems: List<Elem> = [
+        Elem::Name("a"),
+        Elem::Num(builtin::black_box(1)),
+        Elem::Name("b"),
+        Elem::Name("a"),
+    ];
+    println(`${distinct_names(&elems)}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n"
+}

@@ -1,0 +1,28 @@
+// Test: the contextual keywords usable as names. Each is a keyword elsewhere
+// in the grammar and an ordinary name here, which is what the highlighter has
+// to tell apart — `check-highlight` compares Gale's colouring of this file
+// against the compiler's own classifier, and had no such case before.
+
+use { println, Stdout } from "core:cli";
+
+fn contextual() -> i32 {
+    let type = 1;
+    let from = 2;
+    let of = 3;
+    let flags = 4;
+    let test = 5;
+    let do = 6;
+    let task = 7;
+    let trap = 8;
+    let forward = 9;
+    return type + from + of + flags + test + do + task + trap + forward;
+}
+
+export fn run() with Stdout {
+    println(`${contextual()}`);
+}
+
+__DATA__
+{
+    "stdout": "45\n"
+}

@@ -14,9 +14,10 @@ use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
 use crate::token::Span;
 
-/// Minimum number of literal arms required for the `br_table` rewrite
-/// to be worthwhile.
-const SWITCH_MIN_CASES: usize = 8;
+/// Minimum values a `br_table` must cover to be worth it — one range arm can
+/// reach it alone. It replaces a cascade the predictor gets right with a single
+/// indirect branch, so it pays only once that cascade is long.
+const SWITCH_MIN_CASES: usize = 12;
 
 /// Minimum density (cases / range) for `br_table` to be worthwhile.
 const SWITCH_DENSITY_THRESHOLD: f64 = 0.75;

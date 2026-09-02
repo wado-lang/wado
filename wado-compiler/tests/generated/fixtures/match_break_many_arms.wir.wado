@@ -106,80 +106,57 @@ fn "match_break_many_arms.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 (leave == 0) == 0;
-            b2: block {
-                b3: block {
-                    b4: block {
-                        b5: block {
-                            b6: block {
-                                b7: block {
-                                    b8: block {
-                                        b9: block {
-                                            b10: block {
-                                                b11: block {
-                                                    b12: block {
-                                                        b13: block {
-                                                            b14: block {
-                                                                br_table state [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] default=0;
-                                                            };
-                                                            leave = 1;
-                                                            break b2;
-                                                        };
-                                                        result = result + 1;
-                                                        state = 1;
-                                                        break b2;
-                                                    };
-                                                    result = result + 2;
-                                                    state = 2;
-                                                    break b2;
-                                                };
-                                                result = result + 3;
-                                                state = 3;
-                                                break b2;
-                                            };
-                                            result = result + 4;
-                                            state = 4;
-                                            break b2;
-                                        };
-                                        result = result + 5;
-                                        state = 5;
-                                        break b2;
-                                    };
-                                    i = 0;
-                                    b15: block {
-                                        l16: loop {
-                                            break_if b15 i >= 3;
-                                            if i == 1 {
-                                                leave = 1;
-                                                break b15;
-                                            }
-                                            result = result + 100;
-                                            i = i + 1;
-                                            continue l16;
-                                        };
-                                    };
-                                    break_if b0 leave;
-                                    result = result + 9999;
-                                    state = 6;
-                                    break b2;
-                                };
-                                result = result + 7;
-                                state = 7;
-                                break b2;
-                            };
-                            result = result + 8;
-                            state = 8;
-                            break b2;
-                        };
-                        result = result + 9;
-                        state = 9;
-                        break b2;
+            let __match_scrut_0: "match_break_many_arms.wado//enum:State";
+            __match_scrut_0 = state;
+            if __match_scrut_0 == 0 {
+                result = result + 1;
+                state = 1;
+            } else if __match_scrut_0 == 1 {
+                result = result + 2;
+                state = 2;
+            } else if __match_scrut_0 == 2 {
+                result = result + 3;
+                state = 3;
+            } else if __match_scrut_0 == 3 {
+                result = result + 4;
+                state = 4;
+            } else if __match_scrut_0 == 4 {
+                result = result + 5;
+                state = 5;
+            } else if __match_scrut_0 == 5 {
+                i = 0;
+                b8: block {
+                    l9: loop {
+                        break_if b8 i >= 3;
+                        if i == 1 {
+                            leave = 1;
+                            break b8;
+                        }
+                        result = result + 100;
+                        i = i + 1;
+                        continue l9;
                     };
-                    result = result + 10;
-                    state = 10;
-                    break b2;
                 };
+                break_if b0 leave;
+                result = result + 9999;
+                state = 6;
+            } else if __match_scrut_0 == 6 {
+                result = result + 7;
+                state = 7;
+            } else if __match_scrut_0 == 7 {
+                result = result + 8;
+                state = 8;
+            } else if __match_scrut_0 == 8 {
+                result = result + 9;
+                state = 9;
+            } else if __match_scrut_0 == 9 {
+                result = result + 10;
+                state = 10;
+            } else if __match_scrut_0 == 10 {
                 leave = 1;
-            };
+            } else {
+                leave = 1;
+            }
             continue l1;
         };
     };
@@ -214,14 +191,14 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     pos = offset + digit_count;
     t = val;
     i = 0;
-    b18: block {
-        l19: loop {
-            break_if b18 i >= digit_count;
+    b16: block {
+        l17: loop {
+            break_if b16 i >= digit_count;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l19;
+            continue l17;
         };
     };
 }
@@ -289,7 +266,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -302,14 +278,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_44 + (_av_45 - _av_44);
     offset = data.start;
     block {
-        l24: loop {
+        l22: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b25: block {
-                l26: loop {
-                    break_if b25 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b23: block {
+                l24: loop {
+                    break_if b23 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l26;
+                    continue l24;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -318,12 +294,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };
@@ -332,7 +309,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l24;
+            continue l22;
         };
     };
 }
@@ -354,12 +331,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b32: block {
-            l33: loop {
-                break_if b32 t <=u 0_i64;
+        b30: block {
+            l31: loop {
+                break_if b30 t <=u 0_i64;
                 n = n + 1;
                 t = t /u 10_i64;
-                continue l33;
+                continue l31;
             };
         };
         break __inline_count_digits_u64_1: n;

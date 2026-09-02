@@ -1113,20 +1113,34 @@ impl String {
 
     /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
     pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String> {
-        let len = bytes.len();
-        let mut i = 0;
-        while i < len {
-            let advance = String::utf8_sequence_len(&bytes, i, len);
-            if advance == 0 {
-                builtin::cold_path();
-                return Result::Err(`invalid UTF-8 at byte ${i}`);
-            }
-            i += advance;
+        let bad = String::utf8_error_offset(&bytes);
+        if bad >= 0 {
+            builtin::cold_path();
+            return Result::Err(`invalid UTF-8 at byte ${bad}`);
         }
         return Result::Ok(String {
             repr: bytes.to_array() as ByteArray,
             used: bytes.len(),
         });
+    }
+
+    /// Offset of the first malformed UTF-8 sequence in `bytes`, or `-1` when it
+    /// is well-formed. ASCII is tested here, `utf8_sequence_len` being a call.
+    internal fn utf8_error_offset(bytes: &ByteSlice) -> i32 {
+        let len = bytes.len();
+        let mut i = 0;
+        while i < len {
+            let mut advance = 1;
+            if bytes.get_unchecked(i) >= 0x80 {
+                advance = String::utf8_sequence_len(bytes, i, len);
+                if advance == 0 {
+                    builtin::cold_path();
+                    return i;
+                }
+            }
+            i += advance;
+        }
+        return -1;
     }
 
     /// Length (1–4) of the valid UTF-8 sequence at `bytes[start..len)`, or 0 when
@@ -1200,17 +1214,7 @@ impl String {
 
     /// Whether `bytes` is well-formed UTF-8.
     pub fn is_valid_utf8(bytes: ByteSlice) -> bool {
-        let len = bytes.len();
-        let mut i = 0;
-        while i < len {
-            let advance = String::utf8_sequence_len(&bytes, i, len);
-            if advance == 0 {
-                builtin::cold_path();
-                return false;
-            }
-            i += advance;
-        }
-        return true;
+        return String::utf8_error_offset(&bytes) < 0;
     }
 
     /// Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.

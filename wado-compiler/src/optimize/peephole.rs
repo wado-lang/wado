@@ -13,9 +13,11 @@ use crate::nir_package::NirPackage;
 use super::aggregate_forward::AggregateForwardRule;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
+use super::drop_value::DropValueRule;
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
+use super::if_chain_to_match::IfChainToMatchRule;
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
@@ -56,6 +58,7 @@ pub(super) fn run_peephole(
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let aggregate_forward_rule = AggregateForwardRule;
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
+    let if_chain_rule = IfChainToMatchRule::new(&type_table);
     let tuple_projection_rule = TupleProjectionRule;
 
     let len = project.functions.len();
@@ -123,6 +126,8 @@ pub(super) fn run_peephole(
         };
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);
         if pre_inline {
+            // Ordered before `match_rule`, which lowers the `Match` it plants.
+            rules.push(&if_chain_rule);
             rules.push(&match_rule);
         }
         if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {
@@ -136,6 +141,13 @@ pub(super) fn run_peephole(
         }
         if let Some(slot_temp_sroa_rule) = slot_temp_sroa_rule.as_ref() {
             rules.push(slot_temp_sroa_rule);
+        }
+        // Post-inline only: a value-producing labeled block in statement position
+        // is what `inline` leaves where a caller discarded the result. After
+        // fusion, whose shapes it would otherwise flatten, and before
+        // `elide_rule`, which reclaims what it strips.
+        if !pre_inline {
+            rules.push(&DropValueRule);
         }
         rules.extend([
             &aggregate_forward_rule as &dyn Rule,

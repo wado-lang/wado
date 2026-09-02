@@ -11,6 +11,10 @@ use { TreeMap } from "core:collections";
 /// returns a tree (partial on broken input), so there is no parse-failure /
 /// tokenize-only branch — a broken input still highlights from its partial
 /// tree.
+///
+/// The walk exists only to give the visitor a rule stack, so a query with no
+/// rule-context capture skips it: `hl_cover_unvisited` then sweeps every token
+/// in index order and reaches the same captures without reading the tree.
 pub fn gen_highlight(
     w: &mut CodeWriter,
     grammar: &Grammar,
@@ -18,7 +22,14 @@ pub fn gen_highlight(
     query: &List<HighlightRule>,
     ctx: &mut GenContext,
 ) {
-    gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens, query, ctx);
+    let needs_rule_context = gen_highlight_mapping(
+        w,
+        &grammar.lexer_rules,
+        &grammar.parser_rules,
+        lit_tokens,
+        query,
+        ctx,
+    );
     if grammar.parser_rules.len() > 0 {
         let mut fr = FnSpec::new(&"highlight_result", Vis::Pub);
         fr.add_param(&"result", &"&ParseResult");
@@ -27,7 +38,9 @@ pub fn gen_highlight(
         fr.emit_begin(w);
         w.line(&"let mapping = highlight_mapping();");
         w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
-        w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.cst);");
+        if needs_rule_context {
+            w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.cst);");
+        }
         w.line(&"visitor.hl_cover_unvisited(&result.tokens);");
         w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
@@ -50,7 +63,7 @@ pub fn gen_highlight(
         w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
         w.line(&"let tokens = tokenize(input);");
         w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
-        w.line(&"visitor.hl_visit_token(&tokens, _i);");
+        w.line(&"visitor.hl_capture_token(&tokens, _i);");
         w.end();
         w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
@@ -119,6 +132,51 @@ fn parser_rule_exists(parser_rules: &List<ParserRule>, name: &String) -> bool {
     return parser_rules.iter_ref().any(|r| r.name == *name);
 }
 
+/// `(rule) @capture` — every token the rule spells out, captured within it.
+/// The runtime keys an override by (rule, token kind), so the rule has to be
+/// one whose alternatives are each a single token: a naming rule listing the
+/// contextual keywords it accepts alongside `IDENTIFIER`. Reading the set off
+/// the grammar is the point — a query that spelled the keywords out instead
+/// would drift the moment the rule gained one.
+fn expand_rule_capture(
+    overrides: &mut List<ResolvedOverride>,
+    rule: &ParserRule,
+    idx: &KindIndex,
+    capture: String,
+    ctx: &mut GenContext,
+) {
+    let mut kinds: List<i32> = [];
+    for let alt of &rule.alternatives {
+        if alt.elements.len() != 1 {
+            ctx.warn(
+                &DiagnosticOwner::host(&"highlight"),
+                DiagnosticKind::HighlightQuery,
+                `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token`,
+            );
+            return;
+        }
+        let kind = match &alt.elements[0] {
+            TokenRef(t) => idx.by_name.get(t.name),
+            Literal(l) => idx.by_literal.get(l.text),
+            _ => null,
+        };
+        match kind {
+            Some(k) => kinds.push(k),
+            None => {
+                ctx.warn(
+                    &DiagnosticOwner::host(&"highlight"),
+                    DiagnosticKind::HighlightQuery,
+                    `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token`,
+                );
+                return;
+            },
+        }
+    }
+    for let kind of &kinds {
+        push_override(overrides, rule.name, *kind, capture);
+    }
+}
+
 /// Record an override for (rule, token), last-wins: a later query rule for the
 /// same pair replaces an earlier one (matching the default table's last-wins
 /// and tree-sitter's convention), rather than being dead behind it.
@@ -141,6 +199,8 @@ fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &Li
     };
 }
 
+/// Returns whether the query resolved a rule-context override, which is what
+/// decides whether the generated `highlight_result` needs the CST walk.
 fn gen_highlight_mapping(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,
@@ -148,7 +208,7 @@ fn gen_highlight_mapping(
     lit_tokens: &List<LitToken>,
     query: &List<HighlightRule>,
     ctx: &mut GenContext,
-) {
+) -> bool {
     // Token kind ids follow `token_slot_order` — including deferred
     // `more` / `type(...)` rules and the conditional `TK_ERROR` sentinel —
     // so both the defaults table (indexed `defaults[kind]` at runtime) and
@@ -162,6 +222,21 @@ fn gen_highlight_mapping(
     let mut default_by_kind = TreeMap::<i32, String>::new();
     let mut overrides: List<ResolvedOverride> = [];
     for let rule of query {
+        let mut expanded = false;
+        if rule.rule_context matches { None } {
+            if let Name(name) = &rule.selector {
+                for let named of parser_rules {
+                    if named.name == *name {
+                        expand_rule_capture(&mut overrides, named, &idx, rule.capture, ctx);
+                        expanded = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if expanded {
+            continue;
+        }
         let kind = match resolve_selector(&idx, &rule.selector) {
             Some(k) => k,
             None => {
@@ -241,6 +316,7 @@ fn gen_highlight_mapping(
     w.blank();
 
     gen_capture_vocabulary(w, &default_by_kind, &overrides);
+    return !overrides.is_empty();
 }
 
 /// `capture_vocabulary`: the distinct capture classes this grammar's query can

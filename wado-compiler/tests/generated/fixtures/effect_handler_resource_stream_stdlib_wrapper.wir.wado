@@ -658,7 +658,6 @@ fn "core:rt/cm_stream_read_u8"(handle, max) {
     let result: i32;
     let count: i32;
     let arr: ref Array<u8>;
-    let status: i32;
     ptr = "mem/realloc"(0, 0, 1, max);
     result = "wasi/stream-read"(handle, ptr, max);
     if result == -1 {
@@ -668,12 +667,13 @@ fn "core:rt/cm_stream_read_u8"(handle, max) {
     arr = "core:rt/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
     return struct.new "core:prelude/types.wado//StreamChunk<u8>" { items: struct.new "core:prelude//List<u8>" { repr: arr, used: count }, result: __inline_cm_copy_result_1: block -> "core:prelude/types.wado//enum:CopyResult" {
-        status = result & 15;
-        if status == 0 {
+        let __match_scrut_0: i32;
+        __match_scrut_0 = result & 15;
+        if __match_scrut_0 == 0 {
             break __inline_cm_copy_result_1: 0;
-        }
-        if status == 1 {
+        } else if __match_scrut_0 == 1 {
             break __inline_cm_copy_result_1: 1;
+        } else {
         }
         break __inline_cm_copy_result_1: 2;
     } };
@@ -1691,7 +1691,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let __sroa_written_count: i32;
     let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
     let result: i32;
-    let status: i32;
     let _av_40: i32;
     let _av_41: i32;
     _av_40 = data.start;
@@ -1725,12 +1724,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                         result = "core:rt/cm_await_blocked"(self);
                     }
                     written_25 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_stream_write_once_4____inline_cm_copy_result_0: block -> "core:prelude/types.wado//enum:CopyResult" {
-                        status = result & 15;
-                        if status == 0 {
+                        let __match_scrut_1: i32;
+                        __match_scrut_1 = result & 15;
+                        if __match_scrut_1 == 0 {
                             break __inline_cm_stream_write_once_4____inline_cm_copy_result_0: 0;
-                        }
-                        if status == 1 {
+                        } else if __match_scrut_1 == 1 {
                             break __inline_cm_stream_write_once_4____inline_cm_copy_result_0: 1;
+                        } else {
                         }
                         break __inline_cm_stream_write_once_4____inline_cm_copy_result_0: 2;
                     } };
@@ -1772,7 +1772,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let __sroa_written_count: i32;
     let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
     let result: i32;
-    let status: i32;
     let a_49: i32;
     let a_59: i32;
     if data.used == 0 {
@@ -1802,12 +1801,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                         result = "core:rt/cm_await_blocked"(self);
                     }
                     written_18 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_stream_write_once_1____inline_cm_copy_result_0: block -> "core:prelude/types.wado//enum:CopyResult" {
-                        status = result & 15;
-                        if status == 0 {
+                        let __match_scrut_1: i32;
+                        __match_scrut_1 = result & 15;
+                        if __match_scrut_1 == 0 {
                             break __inline_cm_stream_write_once_1____inline_cm_copy_result_0: 0;
-                        }
-                        if status == 1 {
+                        } else if __match_scrut_1 == 1 {
                             break __inline_cm_stream_write_once_1____inline_cm_copy_result_0: 1;
+                        } else {
                         }
                         break __inline_cm_stream_write_once_1____inline_cm_copy_result_0: 2;
                     } };

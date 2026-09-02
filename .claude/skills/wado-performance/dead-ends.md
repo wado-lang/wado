@@ -36,27 +36,6 @@ so no division was ever issued. The ~28% in these frames is the per-byte
 Reverted; the digit-boundary tests were kept. Generalizes to any "replace a
 constant divide/modulo" idea in guest code.
 
-## Bucketing `FieldSchema::lookup` by wire-name length (2026-08-16)
-
-The synthesized `lookup` (`serde_synth.rs`) is a flat chain of
-`__len == N && key[0] == b0 && …`. Bucketing by length, then dispatching on a
-discriminating byte, mirrors `json_catalog_v2.wado`'s hand-written parser.
-
-Not pursued. `lookup` is **0.71%** of the json-catalog profile (`next_field`
-another 0.50%); it is a real function there, not inlined away. Also:
-
-- Zero gain when name lengths are distinct — the `&&` chain already
-  short-circuits on length. Only same-length-heavy structs benefit (`Event`:
-  16 comparisons → 13).
-- Byte-at-a-time is irreducible: WasmGC has no multi-byte load or compare over
-  `Array<u8>` (`builtin.wado` has only `array_get_value_u8`/`array_copy`/`array_fill`).
-- v2's discriminating-byte shortcut is unsound here — an unknown key matching
-  on length and that byte would silently capture a real field's value.
-
-Where the time actually is: `whitespace_end` 12.5% (`citm_catalog.json` is 71%
-whitespace), and on ser `push_str` 6.6%, `write_plain_key` 5.1%,
-`String::grow` 5.1%.
-
 ## Sharing list elements instead of deep-copying them (2026-08-20)
 
 Lifting `value_copy_demote`'s variant-deep-copy gate is a no-op: the candidate
@@ -111,10 +90,11 @@ mandelbrot goes slightly backwards, and every program pays for it in bytes:
 `-Os` output grows 41% on gale-gen (1.29 → 1.81 MB), 43% on json-twitter, 16%
 on syntax-highlight.
 
-So the budget is not a dial with a better setting — a serializer's hot loop is
-exactly what growing it damages. What the sweep says instead is that the
-threshold is doing two jobs, admitting a callee and pricing a loop body, and a
-gale-gen-shaped win needs the second priced apart from the first.
+So 20 is not a better setting — a serializer's hot loop is exactly what growing
+it that far damages. What the sweep says instead is that the threshold is doing
+two jobs, admitting a callee and pricing a loop body, and a gale-gen-shaped win
+needs the second priced apart from the first. 16 did land later, on the same
+rows; the budget this entry measures against is that, not the 13 above.
 
 ## A jump table in place of a compare cascade (gale, 2026-07/08)
 
@@ -132,6 +112,10 @@ call-frequency-bound, not dispatch-bound.
 
 Generalizes: a hot `match`-vs-cascade frame is telling you how often it is
 called. Cut the calls.
+
+Both cascades here were short and already early-exit. A run of independent `if`s
+that tests every key whatever matched is not that shape, and turning one into a
+`br_table` gained 10.7% on cbor-twitter deserialize (`nir/if_chain_to_match`).
 
 ## Index loops in place of `for x of &List<i32>` (gale, 2026-07)
 
@@ -233,6 +217,46 @@ The generalization: stop when the floor is the representation. A store-bound
 loop over an `Array<T>`-backed `String` is near-optimal short of leaving GC
 arrays, and no scheme that keeps the array beats it.
 
+## SROA-ing the derived deserializer's slot tuple (2026-09-01)
+
+`ReflectStruct::empty_slots` returns `[Option<F_0>, …]` as a tuple literal, but
+out of line, so the caller's `let slots = empty_slots()` is bound to a _call_ and
+`sroa`'s direct-literal matcher never sees it: the slots stay one heap tuple,
+allocated per struct and written field by field for the whole decode. `defaults`
+already carries `InlineHint::Always` for exactly this reason, and giving
+`empty_slots` the same hint works — `wado dump -O2` on cbor-twitter goes from 516
+`slots.N` heap accesses to none.
+
+It is **6.5% slower**. cbor-twitter de, three alternating pairs, 212.1/212.0/214.9
+→ 198.3/197.2/201.4 MB/s; json-catalog, whose structs are 2–9 fields wide, is
+flat.
+
+Forty slots become forty `ref`-typed locals live across a loop full of calls, so
+the function trades one bump allocation for forty stack slots it reloads at every
+call boundary — plus a `ref.null` init apiece at entry. Reverted.
+
+Generalizes: SROA is priced by the aggregate's _width_, not by the allocation it
+removes. Past the register file, decomposing a wide aggregate whose live range
+spans calls is a pessimization, and "the allocation is gone" says nothing about
+which side won.
+
+## Marking the CBOR scalar decoders' slow paths cold (2026-09-01)
+
+`deserialize_bool` / `deserialize_string` are a two-byte fast path followed by a
+tolerant `loop` for tag-wrapped and indefinite encodings. `inline_cost` discounts
+what a `cold_path()` marker opens, so a marker before the loop should price each
+function by its fast path and get it inlined at every field.
+
+It does not: the WIR A/B is byte-identical on the hot path — the same inlined
+`peek_byte`, the same two compares — and the call sites still call. The marker
+only stops `is_passthrough_tag` from being inlined into the arm nobody runs. The
+fast path alone is still over `-O2`'s 16-instruction budget, so the discount
+changes nothing to admit.
+
+Generalizes: the cold discount decides admission, not size. Marking a slow path
+cold is worth doing when the hot path _would_ fit under the threshold without it;
+when it would not, the marker buys only cold-side bytes.
+
 ## Splitting `encode_char` at the ASCII boundary (2026-08-30)
 
 `encode_char` carries `#[inline]`, so its four-way UTF-8 width dispatch and nine
@@ -269,3 +293,25 @@ every call site, and a region reached once behind a branch has nothing to give
 back. "The traversal has a blind spot" is a claim about the code, not about what
 closing it is worth — and bytes alone would have retired this for the wrong
 reason, since they do not track speed.
+
+## Hoisting `HighlightVisitor::classify`'s common path to get it inlined (2026-09-02)
+
+`classify` is one call per token and per trivia, ~5300 on syntax-highlight, and
+`package-gale/perf.md` named it a lever: it walks the override list before the
+`default_ids[kind]` lookup, and SQLite has no overrides at all. Splitting the
+scan into `classify_override` leaves a fast path of two compares and one indexed
+load, which reads like it should fit `-O2`'s 16-instruction budget.
+
+It does not fit. `wado dump -O2` still shows both call sites, and the benchmark
+is flat to slightly negative: 1.537–1.561 ms/iter against 1.525–1.536. Writing
+the guard as `overrides.len() > 0` rather than `!is_empty()` changed neither,
+though it did remove a non-inlined `List<ResolvedOverride>::len` call the WIR
+had kept.
+
+What paid on the same frame was deleting the caller. With no override nothing
+reads the rule stack, so the CST walk that maintains it is unobservable, and
+`gen_highlight` stops emitting it (+6.5%).
+
+Generalizes: a fast path you shrink is still a call until it is under the
+budget, and "under the budget" is a WIR question, not an eyeball one. Ask what
+makes the call unnecessary before asking what makes it cheap.

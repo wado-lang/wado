@@ -2553,37 +2553,35 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
 }
 
 fn "serde_struct_derive_no_copy.wado/serde_struct_derive_no_copy.wado/Bag^core:serde/FieldSchema::lookup"(__key) {
-    let __len: i32;
-    __len = __key.end - __key.start;
-    if (if (if (if (if __len == 4 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 116;
+    let __match_scrut_0: i32;
+    __match_scrut_0 = __key.end - __key.start;
+    if __match_scrut_0 == 4 {
+        if (if (if (if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 116 -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 103;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 115;
+        } else {
+            0;
+        }) {
+            return 0, 0;
+        }
+        return 1, 0;
+    } else if __match_scrut_0 == 2 {
+        if (if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 105 -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 100;
+        } else {
+            0;
+        }) {
+            return 0, 1;
+        }
+        return 1, 0;
     } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 103;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 3) == 115;
-    } else {
-        0;
-    }) {
-        return 0, 0;
-    }
-    if (if (if __len == 2 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 105;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 100;
-    } else {
-        0;
-    }) {
-        return 0, 1;
     }
     return 1, 0;
 }
@@ -4020,7 +4018,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -4049,12 +4046,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };
@@ -4141,7 +4139,7 @@ fn "core:serde/serde_struct_derive_no_copy.wado/Bag^core:serde/Deserialize::dese
                 index = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_45).payload_0;
                 taken = 0;
                 if index == 0 {
-                    if @unlikely(let __match_scrut_3: ref null "core:prelude//List<core:prelude/string.wado/String>"; __match_scrut_3 = __sroa_slots_0; ref.is_null(__match_scrut_3) == 0) {
+                    if @unlikely(let __match_scrut_7: ref null "core:prelude//List<core:prelude/string.wado/String>"; __match_scrut_7 = __sroa_slots_0; ref.is_null(__match_scrut_7) == 0) {
                         cold_path;
                         __local_46 = ref.as_non_null("core:serde/core:serde/DeserializeError::duplicate_field"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 97, 103, 115), used: 4 }));
                         if @likely(ref.is_null(__local_46)) {
@@ -4168,9 +4166,8 @@ fn "core:serde/serde_struct_derive_no_copy.wado/Bag^core:serde/Deserialize::dese
                     });
                     __sroa_slots_0 = value_17;
                     taken = 1;
-                }
-                if 1 == index {
-                    if @unlikely(let __match_scrut_6: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_6 = __sroa_slots_1; ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_6)) {
+                } else if index == 1 {
+                    if @unlikely(let __match_scrut_4: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_4 = __sroa_slots_1; ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_4)) {
                         cold_path;
                         __local_47 = ref.as_non_null("core:serde/core:serde/DeserializeError::duplicate_field"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 100), used: 2 }));
                         if @likely(ref.is_null(__local_47)) {
@@ -4197,6 +4194,7 @@ fn "core:serde/serde_struct_derive_no_copy.wado/Bag^core:serde/Deserialize::dese
                     });
                     __sroa_slots_1 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: __local_35 };
                     taken = 1;
+                } else {
                 }
                 if taken == 0 {
                     __local_48 = "core:json/core:json/JsonDeserializer::skip_value"(sd.de, sd.depth);
@@ -4220,13 +4218,13 @@ fn "core:serde/serde_struct_derive_no_copy.wado/Bag^core:serde/Deserialize::dese
         cold_path;
         return 1, ref.null none, "serde_struct_derive_no_copy.wado/$value_copy$core:serde/DeserializeError"(__qm_e_21);
     }
-    return 0, let __match_scrut_11: ref null "core:prelude//List<core:prelude/string.wado/String>"; __match_scrut_11 = __sroa_slots_0; __sroa_fields_0 = (if ref.is_null(__match_scrut_11) == 0 -> ref "core:prelude//List<core:prelude/string.wado/String>" {
-        value_25 = ref.as_non_null(__match_scrut_11);
+    return 0, let __match_scrut_12: ref null "core:prelude//List<core:prelude/string.wado/String>"; __match_scrut_12 = __sroa_slots_0; __sroa_fields_0 = (if ref.is_null(__match_scrut_12) == 0 -> ref "core:prelude//List<core:prelude/string.wado/String>" {
+        value_25 = ref.as_non_null(__match_scrut_12);
         value_25;
     } else {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: tags"), used: 19 }, offset: -1_i64 };
-    }); let __match_scrut_12: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_12 = __sroa_slots_1; __sroa_fields_1 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_12) -> i32 {
-        local.tee __local_43(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_12).payload_0);
+    }); let __match_scrut_13: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_13 = __sroa_slots_1; __sroa_fields_1 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_13) -> i32 {
+        local.tee __local_43(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_13).payload_0);
     } else {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: id"), used: 17 }, offset: -1_i64 };
     }); struct.new "serde_struct_derive_no_copy.wado//Bag" { tags: __sroa_fields_0, id: __sroa_fields_1 }, ref.null none;

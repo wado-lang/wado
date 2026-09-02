@@ -2140,20 +2140,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
 }
 
 fn "serde_synth_propagates_begin_struct_error.wado/serde_synth_propagates_begin_struct_error.wado/Foo^core:serde/FieldSchema::lookup"(__key) {
-    if (if (if (if (__key.end - __key.start) == 3 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 98;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
-    } else {
-        0;
-    }) -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 114;
-    } else {
-        0;
-    }) {
-        return 0, 0;
+    if (__key.end - __key.start) == 3 {
+        if (if (if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 98 -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 1) == 97;
+        } else {
+            0;
+        }) -> i32 {
+            builtin::array_get_value<u8>(__key.repr, __key.start + 2) == 114;
+        } else {
+            0;
+        }) {
+            return 0, 0;
+        }
+        return 1, 0;
     }
     return 1, 0;
 }
@@ -4475,7 +4474,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -4504,12 +4502,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };

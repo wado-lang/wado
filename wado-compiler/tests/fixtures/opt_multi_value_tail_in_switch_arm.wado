@@ -3,7 +3,9 @@
 // `dispatch` returns `Pair` under the multi-value ABI, and each arm tails into
 // `base`, which returns the same aggregate under the same ABI. The dense arms
 // lower to a `br_table` whose exits carry the callee's results directly, so
-// the lowering has to return them rather than expect the aggregate.
+// the lowering has to return them rather than expect the aggregate. Twelve
+// arms is `match_to_switch`'s width — the `wir_expect` below is what keeps the
+// fixture on the `br_table` path it is here to cover.
 
 struct Pair {
     a: i32,
@@ -28,12 +30,14 @@ fn dispatch(n: i32) -> Pair {
         7 => base(17),
         8 => base(18),
         9 => base(19),
+        10 => base(20),
+        11 => base(21),
         _ => Pair { a: -1, b: -1 },
     };
 }
 
 export fn run() {
-    for let mut i = 0; i < 10; i += 1 {
+    for let mut i = 0; i < 12; i += 1 {
         let p = dispatch(i);
         assert p.a == i + 10;
         assert p.b == (i + 10) * 2;
@@ -45,5 +49,6 @@ export fn run() {
 
 __DATA__
 {
-    "stdout": ""
+    "stdout": "",
+    "wir_expect:O2": ["br_table"]
 }

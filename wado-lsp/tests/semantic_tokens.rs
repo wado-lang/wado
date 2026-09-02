@@ -125,3 +125,27 @@ fn f() {
     assert_eq!(c.token_type, token_type::VARIABLE);
     assert_ne!(c.modifiers & token_modifier::READONLY, 0);
 }
+
+/// A snapshot resolves a shorthand field to the binding it reads, and the
+/// field name wins anyway. The unit tests run without one and cannot say that.
+#[test]
+fn a_shorthand_field_is_a_property_with_a_snapshot_too() {
+    let src = "\
+struct Gen { state: i32 }
+fn make(state: i32) -> Gen {
+    return Gen { state };
+}
+fn take(g: Gen) -> i32 {
+    let { state } = g;
+    return state;
+}
+";
+    let tokens = tokens_for(src);
+
+    // `state` in the literal `Gen { state }`.
+    assert_eq!(at(&tokens, 2, 17).token_type, token_type::PROPERTY);
+    // `state` in the pattern `let { state } = g`.
+    assert_eq!(at(&tokens, 5, 10).token_type, token_type::PROPERTY);
+    // The binding it reads is still a variable at its other use site.
+    assert_eq!(at(&tokens, 6, 11).token_type, token_type::VARIABLE);
+}

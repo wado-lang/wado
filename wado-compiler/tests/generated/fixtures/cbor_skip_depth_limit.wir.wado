@@ -176,7 +176,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(53)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(54)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_offset" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> i32;  // TypeId(54)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32) -> i32;  // TypeId(55)
 
@@ -274,21 +274,21 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global global:core:cbor::I128_MAX_AS_U128: ref null "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: 9223372036854775807_i64 };
 global mut global:core:cbor::MSG_EXPECTED_MAP_FOR_STRUCT: ref null "core:prelude/string.wado//String" = ref.null none;
 global mut global:cbor_skip_depth_limit.wado::__modules_initialized: bool = 0;
-global global:core:prelude/string.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 118, 97, 108, 105, 100, 32, 85, 84, 70, 45, 56, 32, 97, 116, 32, 98, 121, 116, 101, 32), used: 22 };
 global global:core:serde::__const_obj_2: ref null Array<u8> = array.new_fixed<u8>(100, 117, 112, 108, 105, 99, 97, 116, 101, 32, 102, 105, 101, 108, 100, 58, 32);
 global global:core:cbor::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 120, 116, 32, 115, 116, 114, 105, 110, 103, 32, 99, 111, 110, 116, 97, 105, 110, 115, 32), used: 21 };
-global global:core:cbor::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 120, 99, 101, 101, 100, 101, 100, 32, 109, 97, 120, 105, 109, 117, 109, 32, 110, 101, 115, 116, 105, 110, 103, 32, 100, 101, 112, 116, 104, 32, 111, 102, 32), used: 34 };
-global global:core:cbor::__const_obj_9: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: 2147483647_i64, high: 0_i64 };
-global global:core:cbor::__const_obj_10: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: -2147483648_i64, high: -1_i64 };
-global mut global:cbor_skip_depth_limit.wado::__const_obj_12: ref null Array<u8> = ref.null none;
-global global:cbor_skip_depth_limit.wado::__const_obj_13: ref null Array<u8> = array.new_fixed<u8>(99, 98, 111, 114, 95, 115, 107, 105, 112, 95, 100, 101, 112, 116, 104, 95, 108, 105, 109, 105, 116, 46, 119, 97, 100, 111);
-global global:cbor_skip_depth_limit.wado::__const_obj_14: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
-global mut global:cbor_skip_depth_limit.wado::__const_obj_15: ref null Array<u8> = ref.null none;
-global mut global:cbor_skip_depth_limit.wado::__const_obj_18: ref null Array<u8> = ref.null none;
-global global:core:rt::__const_obj_21: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 111, 32, 60, 61, 32, 104, 105, 10);
-global global:core:rt::__const_obj_22: ref null Array<u8> = array.new_fixed<u8>(105, 51, 50, 95, 99, 108, 97, 109, 112, 58, 32, 108, 111, 32, 109, 117, 115, 116, 32, 98, 101, 32, 60, 61, 32, 104, 105);
-global global:core:rt::__const_obj_23: ref null Array<u8> = array.new_fixed<u8>(105, 51, 50, 95, 99, 108, 97, 109, 112);
-global global:core:prelude/primitive.wado::__const_obj_32: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:cbor::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 118, 97, 108, 105, 100, 32, 85, 84, 70, 45, 56, 32, 97, 116, 32, 98, 121, 116, 101, 32), used: 22 };
+global global:core:cbor::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 120, 99, 101, 101, 100, 101, 100, 32, 109, 97, 120, 105, 109, 117, 109, 32, 110, 101, 115, 116, 105, 110, 103, 32, 100, 101, 112, 116, 104, 32, 111, 102, 32), used: 34 };
+global global:core:cbor::__const_obj_10: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: 2147483647_i64, high: 0_i64 };
+global global:core:cbor::__const_obj_11: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: -2147483648_i64, high: -1_i64 };
+global mut global:cbor_skip_depth_limit.wado::__const_obj_13: ref null Array<u8> = ref.null none;
+global global:cbor_skip_depth_limit.wado::__const_obj_14: ref null Array<u8> = array.new_fixed<u8>(99, 98, 111, 114, 95, 115, 107, 105, 112, 95, 100, 101, 112, 116, 104, 95, 108, 105, 109, 105, 116, 46, 119, 97, 100, 111);
+global global:cbor_skip_depth_limit.wado::__const_obj_15: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
+global mut global:cbor_skip_depth_limit.wado::__const_obj_16: ref null Array<u8> = ref.null none;
+global mut global:cbor_skip_depth_limit.wado::__const_obj_19: ref null Array<u8> = ref.null none;
+global global:core:rt::__const_obj_22: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 111, 32, 60, 61, 32, 104, 105, 10);
+global global:core:rt::__const_obj_23: ref null Array<u8> = array.new_fixed<u8>(105, 51, 50, 95, 99, 108, 97, 109, 112, 58, 32, 108, 111, 32, 109, 117, 115, 116, 32, 98, 101, 32, 60, 61, 32, 104, 105);
+global global:core:rt::__const_obj_24: ref null Array<u8> = array.new_fixed<u8>(105, 51, 50, 95, 99, 108, 97, 109, 112);
+global global:core:prelude/primitive.wado::__const_obj_33: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "cbor_skip_depth_limit.wado/nested_skip"(levels) {
     let b: ref "core:prelude//List<u8>";
@@ -434,14 +434,14 @@ fn "cbor_skip_depth_limit.wado/run$cold0"() {
     "core:rt/panic"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(149), used: 0 }; new_used_15 = 0 + 54; if @unlikely(new_used_15 > builtin::array_len(__local_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_9, new_used_15);
-    }; start_16 = __local_9.used; __local_9.used = new_used_15; self_18 = __local_9.repr; builtin::array_copy<u8>(self_18, start_16, global:cbor_skip_depth_limit.wado::__const_obj_14, 0, 20); builtin::array_set_u8(__local_9.repr, start_16 + 20, 114); builtin::array_set_u8(__local_9.repr, start_16 + 21, 117); builtin::array_set_u8(__local_9.repr, start_16 + 22, 110); builtin::array_set_u8(__local_9.repr, start_16 + 23, 32); builtin::array_set_u8(__local_9.repr, start_16 + 24, 97); builtin::array_set_u8(__local_9.repr, start_16 + 25, 116); builtin::array_set_u8(__local_9.repr, start_16 + 26, 32); self_64 = __local_9.repr; builtin::array_copy<u8>(self_64, start_16 + 27, global:cbor_skip_depth_limit.wado::__const_obj_13, 0, 26); builtin::array_set_u8(__local_9.repr, start_16 + 53, 58); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(34, __local_9); new_used_86 = __local_9.used + 76; if @unlikely(new_used_86 > builtin::array_len(__local_9.repr)) {
+    }; start_16 = __local_9.used; __local_9.used = new_used_15; self_18 = __local_9.repr; builtin::array_copy<u8>(self_18, start_16, global:cbor_skip_depth_limit.wado::__const_obj_15, 0, 20); builtin::array_set_u8(__local_9.repr, start_16 + 20, 114); builtin::array_set_u8(__local_9.repr, start_16 + 21, 117); builtin::array_set_u8(__local_9.repr, start_16 + 22, 110); builtin::array_set_u8(__local_9.repr, start_16 + 23, 32); builtin::array_set_u8(__local_9.repr, start_16 + 24, 97); builtin::array_set_u8(__local_9.repr, start_16 + 25, 116); builtin::array_set_u8(__local_9.repr, start_16 + 26, 32); self_64 = __local_9.repr; builtin::array_copy<u8>(self_64, start_16 + 27, global:cbor_skip_depth_limit.wado::__const_obj_14, 0, 26); builtin::array_set_u8(__local_9.repr, start_16 + 53, 58); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(34, __local_9); new_used_86 = __local_9.used + 76; if @unlikely(new_used_86 > builtin::array_len(__local_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_9, new_used_86);
-    }; start_87 = __local_9.used; __local_9.used = new_used_86; builtin::array_copy<u8>(__local_9.repr, start_87, if ref.is_null(global:cbor_skip_depth_limit.wado::__const_obj_12) {
-        global:cbor_skip_depth_limit.wado::__const_obj_12 = array.new_data<u8>("
+    }; start_87 = __local_9.used; __local_9.used = new_used_86; builtin::array_copy<u8>(__local_9.repr, start_87, if ref.is_null(global:cbor_skip_depth_limit.wado::__const_obj_13) {
+        global:cbor_skip_depth_limit.wado::__const_obj_13 = array.new_data<u8>("
 condition: from_bytes::<Small, ByteList>(nested_skip(5)) matches { Ok(_) }
 ");
-    }; global:cbor_skip_depth_limit.wado::__const_obj_12, 0, 76); __local_9);
+    }; global:cbor_skip_depth_limit.wado::__const_obj_13, 0, 76); __local_9);
     unreachable;
 }
 
@@ -456,14 +456,14 @@ fn "cbor_skip_depth_limit.wado/run$cold1"() {
     "core:rt/panic"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(207), used: 0 }; new_used_15 = 0 + 54; if @unlikely(new_used_15 > builtin::array_len(__local_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used_15);
-    }; start_16 = __local_7.used; __local_7.used = new_used_15; self_18 = __local_7.repr; builtin::array_copy<u8>(self_18, start_16, global:cbor_skip_depth_limit.wado::__const_obj_14, 0, 20); builtin::array_set_u8(__local_7.repr, start_16 + 20, 114); builtin::array_set_u8(__local_7.repr, start_16 + 21, 117); builtin::array_set_u8(__local_7.repr, start_16 + 22, 110); builtin::array_set_u8(__local_7.repr, start_16 + 23, 32); builtin::array_set_u8(__local_7.repr, start_16 + 24, 97); builtin::array_set_u8(__local_7.repr, start_16 + 25, 116); builtin::array_set_u8(__local_7.repr, start_16 + 26, 32); self_64 = __local_7.repr; builtin::array_copy<u8>(self_64, start_16 + 27, global:cbor_skip_depth_limit.wado::__const_obj_13, 0, 26); builtin::array_set_u8(__local_7.repr, start_16 + 53, 58); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(31, __local_7); new_used_86 = __local_7.used + 134; if @unlikely(new_used_86 > builtin::array_len(__local_7.repr)) {
+    }; start_16 = __local_7.used; __local_7.used = new_used_15; self_18 = __local_7.repr; builtin::array_copy<u8>(self_18, start_16, global:cbor_skip_depth_limit.wado::__const_obj_15, 0, 20); builtin::array_set_u8(__local_7.repr, start_16 + 20, 114); builtin::array_set_u8(__local_7.repr, start_16 + 21, 117); builtin::array_set_u8(__local_7.repr, start_16 + 22, 110); builtin::array_set_u8(__local_7.repr, start_16 + 23, 32); builtin::array_set_u8(__local_7.repr, start_16 + 24, 97); builtin::array_set_u8(__local_7.repr, start_16 + 25, 116); builtin::array_set_u8(__local_7.repr, start_16 + 26, 32); self_64 = __local_7.repr; builtin::array_copy<u8>(self_64, start_16 + 27, global:cbor_skip_depth_limit.wado::__const_obj_14, 0, 26); builtin::array_set_u8(__local_7.repr, start_16 + 53, 58); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(31, __local_7); new_used_86 = __local_7.used + 134; if @unlikely(new_used_86 > builtin::array_len(__local_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used_86);
-    }; start_87 = __local_7.used; __local_7.used = new_used_86; builtin::array_copy<u8>(__local_7.repr, start_87, if ref.is_null(global:cbor_skip_depth_limit.wado::__const_obj_15) {
-        global:cbor_skip_depth_limit.wado::__const_obj_15 = array.new_data<u8>("
+    }; start_87 = __local_7.used; __local_7.used = new_used_86; builtin::array_copy<u8>(__local_7.repr, start_87, if ref.is_null(global:cbor_skip_depth_limit.wado::__const_obj_16) {
+        global:cbor_skip_depth_limit.wado::__const_obj_16 = array.new_data<u8>("
 condition: from_bytes::<Small, ByteList>(nested_skip(3000)) matches { Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded }
 ");
-    }; global:cbor_skip_depth_limit.wado::__const_obj_15, 0, 134); __local_7);
+    }; global:cbor_skip_depth_limit.wado::__const_obj_16, 0, 134); __local_7);
     unreachable;
 }
 
@@ -478,14 +478,14 @@ fn "cbor_skip_depth_limit.wado/run$cold2"() {
     "core:rt/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(209), used: 0 }; new_used_15 = 0 + 54; if @unlikely(new_used_15 > builtin::array_len(__local_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_5, new_used_15);
-    }; start_16 = __local_5.used; __local_5.used = new_used_15; self_18 = __local_5.repr; builtin::array_copy<u8>(self_18, start_16, global:cbor_skip_depth_limit.wado::__const_obj_14, 0, 20); builtin::array_set_u8(__local_5.repr, start_16 + 20, 114); builtin::array_set_u8(__local_5.repr, start_16 + 21, 117); builtin::array_set_u8(__local_5.repr, start_16 + 22, 110); builtin::array_set_u8(__local_5.repr, start_16 + 23, 32); builtin::array_set_u8(__local_5.repr, start_16 + 24, 97); builtin::array_set_u8(__local_5.repr, start_16 + 25, 116); builtin::array_set_u8(__local_5.repr, start_16 + 26, 32); self_64 = __local_5.repr; builtin::array_copy<u8>(self_64, start_16 + 27, global:cbor_skip_depth_limit.wado::__const_obj_13, 0, 26); builtin::array_set_u8(__local_5.repr, start_16 + 53, 58); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(28, __local_5); new_used_86 = __local_5.used + 136; if @unlikely(new_used_86 > builtin::array_len(__local_5.repr)) {
+    }; start_16 = __local_5.used; __local_5.used = new_used_15; self_18 = __local_5.repr; builtin::array_copy<u8>(self_18, start_16, global:cbor_skip_depth_limit.wado::__const_obj_15, 0, 20); builtin::array_set_u8(__local_5.repr, start_16 + 20, 114); builtin::array_set_u8(__local_5.repr, start_16 + 21, 117); builtin::array_set_u8(__local_5.repr, start_16 + 22, 110); builtin::array_set_u8(__local_5.repr, start_16 + 23, 32); builtin::array_set_u8(__local_5.repr, start_16 + 24, 97); builtin::array_set_u8(__local_5.repr, start_16 + 25, 116); builtin::array_set_u8(__local_5.repr, start_16 + 26, 32); self_64 = __local_5.repr; builtin::array_copy<u8>(self_64, start_16 + 27, global:cbor_skip_depth_limit.wado::__const_obj_14, 0, 26); builtin::array_set_u8(__local_5.repr, start_16 + 53, 58); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(28, __local_5); new_used_86 = __local_5.used + 136; if @unlikely(new_used_86 > builtin::array_len(__local_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_5, new_used_86);
-    }; start_87 = __local_5.used; __local_5.used = new_used_86; builtin::array_copy<u8>(__local_5.repr, start_87, if ref.is_null(global:cbor_skip_depth_limit.wado::__const_obj_18) {
-        global:cbor_skip_depth_limit.wado::__const_obj_18 = array.new_data<u8>("
+    }; start_87 = __local_5.used; __local_5.used = new_used_86; builtin::array_copy<u8>(__local_5.repr, start_87, if ref.is_null(global:cbor_skip_depth_limit.wado::__const_obj_19) {
+        global:cbor_skip_depth_limit.wado::__const_obj_19 = array.new_data<u8>("
 condition: from_bytes::<Small, ByteList>(nested_skip(200000)) matches { Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded }
 ");
-    }; global:cbor_skip_depth_limit.wado::__const_obj_18, 0, 136); __local_5);
+    }; global:cbor_skip_depth_limit.wado::__const_obj_19, 0, 136); __local_5);
     unreachable;
 }
 
@@ -604,7 +604,7 @@ fn "core:rt/i32_clamp$cold0"(lo, hi) {
     "core:rt/panic"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(154), used: 0 }; if @unlikely(29 > builtin::array_len(__local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4, 29);
-    }; start_15 = __local_4.used; __local_4.used = 29; self_17 = __local_4.repr; builtin::array_copy<u8>(self_17, start_15, global:cbor_skip_depth_limit.wado::__const_obj_14, 0, 20); self_21 = __local_4.repr; builtin::array_copy<u8>(self_21, start_15 + 20, global:core:rt::__const_obj_23, 0, 9); new_used_27 = __local_4.used + 12; if @unlikely(new_used_27 > builtin::array_len(__local_4.repr)) {
+    }; start_15 = __local_4.used; __local_4.used = 29; self_17 = __local_4.repr; builtin::array_copy<u8>(self_17, start_15, global:cbor_skip_depth_limit.wado::__const_obj_15, 0, 20); self_21 = __local_4.repr; builtin::array_copy<u8>(self_21, start_15 + 20, global:core:rt::__const_obj_24, 0, 9); new_used_27 = __local_4.used + 12; if @unlikely(new_used_27 > builtin::array_len(__local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4, new_used_27);
     }; start_28 = __local_4.used; __local_4.used = new_used_27; builtin::array_set_u8(__local_4.repr, start_28, 32); builtin::array_set_u8(__local_4.repr, start_28 + 1, 97); builtin::array_set_u8(__local_4.repr, start_28 + 2, 116); builtin::array_set_u8(__local_4.repr, start_28 + 3, 32); builtin::array_set_u8(__local_4.repr, start_28 + 4, 99); builtin::array_set_u8(__local_4.repr, start_28 + 5, 111); builtin::array_set_u8(__local_4.repr, start_28 + 6, 114); builtin::array_set_u8(__local_4.repr, start_28 + 7, 101); builtin::array_set_u8(__local_4.repr, start_28 + 8, 58); builtin::array_set_u8(__local_4.repr, start_28 + 9, 114); builtin::array_set_u8(__local_4.repr, start_28 + 10, 116); builtin::array_set_u8(__local_4.repr, start_28 + 11, 58); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_104 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(63, f_104); new_used_109 = __local_4.used + 2; if @unlikely(new_used_109 > builtin::array_len(__local_4.repr)) {
@@ -613,7 +613,7 @@ fn "core:rt/i32_clamp$cold0"(lo, hi) {
     }; start_110 = __local_4.used; __local_4.used = new_used_109; builtin::array_set_u8(__local_4.repr, start_110, 58); builtin::array_set_u8(__local_4.repr, start_110 + 1, 32); new_used_126 = __local_4.used + 48; if @unlikely(new_used_126 > builtin::array_len(__local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4, new_used_126);
-    }; start_127 = __local_4.used; __local_4.used = new_used_126; self_129 = __local_4.repr; builtin::array_copy<u8>(self_129, start_127, global:core:rt::__const_obj_22, 0, 27); self_133 = __local_4.repr; builtin::array_copy<u8>(self_133, start_127 + 27, global:core:rt::__const_obj_21, 0, 21); new_used_139 = __local_4.used + 4; if @unlikely(new_used_139 > builtin::array_len(__local_4.repr)) {
+    }; start_127 = __local_4.used; __local_4.used = new_used_126; self_129 = __local_4.repr; builtin::array_copy<u8>(self_129, start_127, global:core:rt::__const_obj_23, 0, 27); self_133 = __local_4.repr; builtin::array_copy<u8>(self_133, start_127 + 27, global:core:rt::__const_obj_22, 0, 21); new_used_139 = __local_4.used + 4; if @unlikely(new_used_139 > builtin::array_len(__local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4, new_used_139);
     }; start_140 = __local_4.used; __local_4.used = new_used_139; builtin::array_set_u8(__local_4.repr, start_140, 108); builtin::array_set_u8(__local_4.repr, start_140 + 1, 111); builtin::array_set_u8(__local_4.repr, start_140 + 2, 58); builtin::array_set_u8(__local_4.repr, start_140 + 3, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_168 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(lo, f_168); new_used_173 = __local_4.used + 5; if @unlikely(new_used_173 > builtin::array_len(__local_4.repr)) {
@@ -627,12 +627,11 @@ fn "core:rt/i32_clamp$cold0"(lo, hi) {
 }
 
 fn "cbor_skip_depth_limit.wado/cbor_skip_depth_limit.wado/Small^core:serde/FieldSchema::lookup"(__key) {
-    if (if (__key.end - __key.start) == 1 -> i32 {
-        builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 97;
-    } else {
-        0;
-    }) {
-        return 0, 0;
+    if (__key.end - __key.start) == 1 {
+        if builtin::array_get_value<u8>(__key.repr, __key.start + 0) == 97 {
+            return 0, 0;
+        }
+        return 1, 0;
     }
     return 1, 0;
 }
@@ -781,31 +780,32 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(bytes) {
-    let len_1: i32;
+fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_offset"(bytes) {
+    let len: i32;
     let i: i32;
     let advance: i32;
-    let __local_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
-    let len_8: i32;
-    let out: ref Array<u8>;
-    len_1 = bytes.end - bytes.start;
+    let _licm_repr_7: ref Array<u8>;
+    let _licm_start_8: i32;
+    len = bytes.end - bytes.start;
     i = 0;
+    _licm_repr_7 = bytes.repr;
+    _licm_start_8 = bytes.start;
     b52: block {
         l53: loop {
-            break_if b52 i >= len_1;
-            advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, i, len_1);
-            if @unlikely(advance == 0) {
-                cold_path;
-                return 1, __local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(38); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:core:prelude/string.wado::__const_obj_1); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: i }, __local_5); __local_4;
+            break_if b52 i >= len;
+            advance = 1;
+            if builtin::array_get_value<u8>(_licm_repr_7, _licm_start_8 + i) >=u 128 {
+                advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, i, len);
+                if @unlikely(advance == 0) {
+                    cold_path;
+                    return i;
+                }
             }
             i = i + advance;
             continue l53;
         };
     };
-    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(len_8 = bytes.end - bytes.start; out = builtin::array_new<u8>(select i32(len_8 > 0, len_8, 0)); if len_8 > 0 {
-        builtin::array_copy<u8>(out, 0, bytes.repr, bytes.start, len_8);
-    }; out), used: bytes.end - bytes.start };
+    return -1;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, start, len) {
@@ -1421,103 +1421,84 @@ fn "core:cbor/core:cbor/CborDeserializer::read_head"(self) {
         unreachable;
     })) >>u 5) & 255;
     ai = ib & 31;
-    b139: block {
-        b140: block {
-            b141: block {
-                b142: block {
-                    b143: block {
-                        b144: block {
-                            b145: block {
-                                b146: block {
-                                    b147: block {
-                                        b148: block {
-                                            br_table ai - 24 [1, 2, 3, 4, 5, 6, 7, 8] default=0;
-                                        };
-                                        return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: builtin::i64_extend_i32_u(ai), 3: 0 }, ref.null none;
-                                        break b139;
-                                    };
-                                    let __vr_10_mv_0: i32;
-                                    let __vr_10_mv_1: u64;
-                                    let __vr_10_mv_2: ref null "core:serde//DeserializeError";
-                                    multivalue_bind [__vr_10_mv_0, __vr_10_mv_1, __vr_10_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, ai);
-                                    v = (if __vr_10_mv_0 == 0 -> u64 {
-                                        local.tee __qm_v_6(__vr_10_mv_1);
-                                    } else if @unlikely(__vr_10_mv_0 == 1) -> u64 {
-                                        __qm_e_7 = ref.as_non_null(__vr_10_mv_2);
-                                        cold_path;
-                                        return 1, ref.null none, __qm_e_7;
-                                    } else {
-                                        unreachable;
-                                    });
-                                    return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
-                                    break b139;
-                                };
-                                let __vr_11_mv_0: i32;
-                                let __vr_11_mv_1: u64;
-                                let __vr_11_mv_2: ref null "core:serde//DeserializeError";
-                                multivalue_bind [__vr_11_mv_0, __vr_11_mv_1, __vr_11_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, ai);
-                                v = (if __vr_11_mv_0 == 0 -> u64 {
-                                    local.tee __qm_v_6(__vr_11_mv_1);
-                                } else if @unlikely(__vr_11_mv_0 == 1) -> u64 {
-                                    __qm_e_7 = ref.as_non_null(__vr_11_mv_2);
-                                    cold_path;
-                                    return 1, ref.null none, __qm_e_7;
-                                } else {
-                                    unreachable;
-                                });
-                                return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
-                                break b139;
-                            };
-                            let __vr_12_mv_0: i32;
-                            let __vr_12_mv_1: u64;
-                            let __vr_12_mv_2: ref null "core:serde//DeserializeError";
-                            multivalue_bind [__vr_12_mv_0, __vr_12_mv_1, __vr_12_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, ai);
-                            v = (if __vr_12_mv_0 == 0 -> u64 {
-                                local.tee __qm_v_6(__vr_12_mv_1);
-                            } else if @unlikely(__vr_12_mv_0 == 1) -> u64 {
-                                __qm_e_7 = ref.as_non_null(__vr_12_mv_2);
-                                cold_path;
-                                return 1, ref.null none, __qm_e_7;
-                            } else {
-                                unreachable;
-                            });
-                            return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
-                            break b139;
-                        };
-                        let __vr_13_mv_0: i32;
-                        let __vr_13_mv_1: u64;
-                        let __vr_13_mv_2: ref null "core:serde//DeserializeError";
-                        multivalue_bind [__vr_13_mv_0, __vr_13_mv_1, __vr_13_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, ai);
-                        v = (if __vr_13_mv_0 == 0 -> u64 {
-                            local.tee __qm_v_6(__vr_13_mv_1);
-                        } else if @unlikely(__vr_13_mv_0 == 1) -> u64 {
-                            __qm_e_7 = ref.as_non_null(__vr_13_mv_2);
-                            cold_path;
-                            return 1, ref.null none, __qm_e_7;
-                        } else {
-                            unreachable;
-                        });
-                        return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
-                        break b139;
-                    };
-                    cold_path;
-                    return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
-                    break b139;
-                };
-                cold_path;
-                return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
-                break b139;
-            };
+    if ai == 24 {
+        let __vr_10_mv_0: i32;
+        let __vr_10_mv_1: u64;
+        let __vr_10_mv_2: ref null "core:serde//DeserializeError";
+        multivalue_bind [__vr_10_mv_0, __vr_10_mv_1, __vr_10_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, ai);
+        v = (if __vr_10_mv_0 == 0 -> u64 {
+            local.tee __qm_v_6(__vr_10_mv_1);
+        } else if @unlikely(__vr_10_mv_0 == 1) -> u64 {
+            __qm_e_7 = ref.as_non_null(__vr_10_mv_2);
             cold_path;
-            return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
-            break b139;
-        };
+            return 1, ref.null none, __qm_e_7;
+        } else {
+            unreachable;
+        });
+        return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
+    } else if ai == 25 {
+        let __vr_11_mv_0: i32;
+        let __vr_11_mv_1: u64;
+        let __vr_11_mv_2: ref null "core:serde//DeserializeError";
+        multivalue_bind [__vr_11_mv_0, __vr_11_mv_1, __vr_11_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, ai);
+        v = (if __vr_11_mv_0 == 0 -> u64 {
+            local.tee __qm_v_6(__vr_11_mv_1);
+        } else if @unlikely(__vr_11_mv_0 == 1) -> u64 {
+            __qm_e_7 = ref.as_non_null(__vr_11_mv_2);
+            cold_path;
+            return 1, ref.null none, __qm_e_7;
+        } else {
+            unreachable;
+        });
+        return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
+    } else if ai == 26 {
+        let __vr_12_mv_0: i32;
+        let __vr_12_mv_1: u64;
+        let __vr_12_mv_2: ref null "core:serde//DeserializeError";
+        multivalue_bind [__vr_12_mv_0, __vr_12_mv_1, __vr_12_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, ai);
+        v = (if __vr_12_mv_0 == 0 -> u64 {
+            local.tee __qm_v_6(__vr_12_mv_1);
+        } else if @unlikely(__vr_12_mv_0 == 1) -> u64 {
+            __qm_e_7 = ref.as_non_null(__vr_12_mv_2);
+            cold_path;
+            return 1, ref.null none, __qm_e_7;
+        } else {
+            unreachable;
+        });
+        return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
+    } else if ai == 27 {
+        let __vr_13_mv_0: i32;
+        let __vr_13_mv_1: u64;
+        let __vr_13_mv_2: ref null "core:serde//DeserializeError";
+        multivalue_bind [__vr_13_mv_0, __vr_13_mv_1, __vr_13_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, ai);
+        v = (if __vr_13_mv_0 == 0 -> u64 {
+            local.tee __qm_v_6(__vr_13_mv_1);
+        } else if @unlikely(__vr_13_mv_0 == 1) -> u64 {
+            __qm_e_7 = ref.as_non_null(__vr_13_mv_2);
+            cold_path;
+            return 1, ref.null none, __qm_e_7;
+        } else {
+            unreachable;
+        });
+        return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: v, 3: 0 }, ref.null none;
+    } else if ai == 31 {
         if @unlikely(select i32(select i32(major == 0, 1, major == 1), 1, major == 6)) {
             cold_path;
             return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("indefinite length not allowed for this major type"), used: 49 }, builtin::i64_extend_i32_s(self.pos - 1));
         }
         return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: 0_i64, 3: 1 }, ref.null none;
-    };
+    } else if @unlikely(ai == 28) {
+        cold_path;
+        return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
+    } else if @unlikely(ai == 29) {
+        cold_path;
+        return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
+    } else if @unlikely(ai == 30) {
+        cold_path;
+        return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reserved additional info"), used: 24 }, builtin::i64_extend_i32_s(self.pos - 1));
+    } else {
+        return 0, struct.new "tuple//[u8, u8, u64, bool]" { 0: major, 1: ai, 2: builtin::i64_extend_i32_u(ai), 3: 0 }, ref.null none;
+    }
 }
 
 fn "core:cbor/core:cbor/CborDeserializer::read_definite_text"(self, len) {
@@ -1534,15 +1515,22 @@ fn "core:cbor/core:cbor/CborDeserializer::read_definite_text"(self, len) {
     let e_16: i32;
     let a_25: i32;
     let a_35: i32;
-    let _av_37: i32;
-    _av_37 = self.pos;
-    if @unlikely(len >u builtin::i64_extend_i32_s((self.input.end - self.input.start) - _av_37)) {
+    let bad: i32;
+    let __local_2: ref "core:prelude/string.wado//String";
+    let __local_3: ref "core:prelude/format.wado//Formatter";
+    let len_42: i32;
+    let out: ref Array<u8>;
+    let __sroa_slot_45: i32;
+    let __sroa_slot_46: ref null "core:prelude/string.wado//String";
+    let _av_49: i32;
+    _av_49 = self.pos;
+    if @unlikely(len >u builtin::i64_extend_i32_s((self.input.end - self.input.start) - _av_49)) {
         cold_path;
-        return 1, ref.null none, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(_av_37));
+        return 1, ref.null none, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(_av_49));
     }
     n = builtin::i32_wrap_i64(len);
     start = self.pos;
-    end = _av_37 + n;
+    end = _av_49 + n;
     len_14 = self.input.end - self.input.start;
     if @unlikely(0 > len_14) {
         cold_path;
@@ -1559,14 +1547,29 @@ fn "core:cbor/core:cbor/CborDeserializer::read_definite_text"(self, len) {
     a_35 = select i32(end > s_15, end, s_15);
     e_16 = select i32(a_35 < len_14, a_35, len_14);
     slice = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self.input.repr, start: self.input.start + s_15, end: self.input.start + e_16 };
-    let __vr_9_mv_0: i32;
-    let __vr_9_mv_1: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__vr_9_mv_0, __vr_9_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(slice);
-    s_7 = (if __vr_9_mv_0 == 0 -> ref "core:prelude/string.wado//String" {
-        v = ref.as_non_null(__vr_9_mv_1);
+    __sroa_slot_45 = 0;
+    __sroa_slot_46 = ref.null none;
+    __inline_core_prelude_string_wado_String__from_utf8_slice_8: block {
+        bad = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_offset"(slice);
+        if @unlikely(bad >= 0) {
+            cold_path;
+            __sroa_slot_45 = 1;
+            __sroa_slot_46 = ref.as_non_null(__local_2 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(38); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_2, global:core:cbor::__const_obj_7); __local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: bad }, __local_3); __local_2);
+            break __inline_core_prelude_string_wado_String__from_utf8_slice_8;
+        }
+        __sroa_slot_45 = 0;
+        __sroa_slot_46 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(len_42 = slice.end - slice.start; out = builtin::array_new<u8>(select i32(len_42 > 0, len_42, 0)); if len_42 > 0 {
+            builtin::array_copy<u8>(out, 0, slice.repr, slice.start, len_42);
+        }; out), used: slice.end - slice.start };
+        break __inline_core_prelude_string_wado_String__from_utf8_slice_8;
+    };
+    let __match_scrut_0: i32;
+    __match_scrut_0 = __sroa_slot_45;
+    s_7 = (if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+        v = ref.as_non_null(__sroa_slot_46);
         v;
-    } else if @unlikely(__vr_9_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
-        e_6 = ref.as_non_null(__vr_9_mv_1);
+    } else if @unlikely(__match_scrut_0 == 1) -> ref "core:prelude/string.wado//String" {
+        e_6 = ref.as_non_null(__sroa_slot_46);
         cold_path;
         return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed"(__local_8 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(37); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, global:core:cbor::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, e_6); __local_8, builtin::i64_extend_i32_s(self.pos));
     } else {
@@ -1943,8 +1946,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_signed_i128"(self) {
                     }
                     cold_path;
                     return 1, ref.null none, "core:serde/core:serde/DeserializeError::overflow"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bignum exceeds i128"), used: 19 }, builtin::i64_extend_i32_s(self.pos));
-                }
-                if @unlikely(arg == 3_i64) {
+                } else if @unlikely(arg == 3_i64) {
                     let __vr_17_mv_0: i32;
                     let __vr_17_mv_1: ref null "core:prelude/int128.wado//u128";
                     let __vr_17_mv_2: ref null "core:serde//DeserializeError";
@@ -1964,6 +1966,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_signed_i128"(self) {
                     }
                     cold_path;
                     return 1, ref.null none, "core:serde/core:serde/DeserializeError::overflow"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bignum exceeds i128"), used: 19 }, builtin::i64_extend_i32_s(self.pos));
+                } else {
                 }
                 cold_path;
                 return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer"), used: 16 }, builtin::i64_extend_i32_s(self.pos));
@@ -2125,231 +2128,212 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
     major = __pattern_temp_0.0;
     arg = __pattern_temp_0.2;
     indef = __pattern_temp_0.3;
-    b228: block {
-        b229: block {
-            b230: block {
-                b231: block {
-                    b232: block {
-                        b233: block {
-                            b234: block {
-                                b235: block {
-                                    b236: block {
-                                        b237: block {
-                                            br_table major [1, 2, 3, 4, 5, 6, 7, 8] default=0;
-                                        };
-                                        cold_path;
-                                        return ref.as_non_null("core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unskippable item"), used: 16 }, builtin::i64_extend_i32_s(self.pos)));
-                                        break b228;
-                                    };
-                                    return ref.null none;
-                                    break b228;
-                                };
-                                return ref.null none;
-                                break b228;
-                            };
-                            return "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, major);
-                            break b228;
-                        };
-                        return "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, major);
-                        break b228;
-                    };
-                    __sroa_slot_64 = 0;
-                    __sroa_slot_65 = 0;
-                    __sroa_slot_66 = ref.null none;
-                    __inline_deeper_0: block {
-                        max_depth_45 = self.max_depth;
-                        offset_46 = builtin::i64_extend_i32_s(self.pos);
-                        next_47 = depth + 1;
-                        if @unlikely(next_47 > max_depth_45) {
-                            cold_path;
-                            __sroa_slot_64 = 1;
-                            __sroa_slot_65 = 0;
-                            __sroa_slot_66 = ref.as_non_null("core:serde/core:serde/DeserializeError::depth_limit"(__local_4_48 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(50); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_48, global:core:cbor::__const_obj_7); __local_5_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_48); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: max_depth_45 }, __local_5_49); __local_4_48, offset_46));
-                            break __inline_deeper_0;
-                        }
-                        __sroa_slot_64 = 0;
-                        __sroa_slot_65 = next_47;
-                        __sroa_slot_66 = ref.null none;
-                        break __inline_deeper_0;
-                    };
-                    let __match_scrut_1: i32;
-                    __match_scrut_1 = __sroa_slot_64;
-                    inner_10 = (if __match_scrut_1 == 0 -> i32 {
-                        __sroa_slot_65;
-                    } else if @unlikely(__match_scrut_1 == 1) -> i32 {
-                        __qm_e_9 = ref.as_non_null(__sroa_slot_66);
-                        cold_path;
-                        return __qm_e_9;
-                    } else {
-                        unreachable;
-                    });
-                    if indef {
-                        b242: block {
-                            l243: loop {
-                                if __sroa_slot_67 = 0; __sroa_slot_68 = 0; __sroa_slot_69 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_1: block {
-                                    if @unlikely(self.pos >= (self.input.end - self.input.start)) {
-                                        cold_path;
-                                        __sroa_slot_67 = 1;
-                                        __sroa_slot_68 = 0;
-                                        __sroa_slot_69 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
-                                        break __inline_core_cbor_CborDeserializer__peek_byte_1;
-                                    }
-                                    __sroa_slot_67 = 0;
-                                    __sroa_slot_68 = builtin::array_get_value<u8>(self.input.repr, self.input.start + self.pos);
-                                    __sroa_slot_69 = ref.null none;
-                                    break __inline_core_cbor_CborDeserializer__peek_byte_1;
-                                }; let __match_scrut_2: i32; __match_scrut_2 = __sroa_slot_67; (if __match_scrut_2 == 0 -> u8 {
-                                    __sroa_slot_68;
-                                } else if @unlikely(__match_scrut_2 == 1) -> u8 {
-                                    __qm_e_12 = ref.as_non_null(__sroa_slot_69);
-                                    cold_path;
-                                    return __qm_e_12;
-                                } else {
-                                    unreachable;
-                                }) == 255 {
-                                    self.pos = self.pos + 1;
-                                    break b242;
-                                }
-                                __local_33 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_10);
-                                if @likely(ref.is_null(__local_33)) {
-                                } else {
-                                    __qm_e_14 = ref.as_non_null(__local_33);
-                                    cold_path;
-                                    return __qm_e_14;
-                                }
-                                continue l243;
-                            };
-                        };
-                    } else {
-                        i_15 = 0_i64;
-                        b249: block {
-                            l250: loop {
-                                break_if b249 i_15 >=u arg;
-                                __local_34 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_10);
-                                if @likely(ref.is_null(__local_34)) {
-                                } else {
-                                    __qm_e_17 = ref.as_non_null(__local_34);
-                                    cold_path;
-                                    return __qm_e_17;
-                                }
-                                i_15 = i_15 + 1_i64;
-                                continue l250;
-                            };
-                        };
-                    }
-                    return ref.null none;
-                    break b228;
-                };
-                __sroa_slot_70 = 0;
-                __sroa_slot_71 = 0;
-                __sroa_slot_72 = ref.null none;
-                __inline_deeper_4: block {
-                    max_depth_55 = self.max_depth;
-                    offset_56 = builtin::i64_extend_i32_s(self.pos);
-                    next_57 = depth + 1;
-                    if @unlikely(next_57 > max_depth_55) {
-                        cold_path;
-                        __sroa_slot_70 = 1;
-                        __sroa_slot_71 = 0;
-                        __sroa_slot_72 = ref.as_non_null("core:serde/core:serde/DeserializeError::depth_limit"(__local_4_58 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(50); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_58, global:core:cbor::__const_obj_7); __local_5_59 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_58); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: max_depth_55 }, __local_5_59); __local_4_58, offset_56));
-                        break __inline_deeper_4;
-                    }
-                    __sroa_slot_70 = 0;
-                    __sroa_slot_71 = next_57;
-                    __sroa_slot_72 = ref.null none;
-                    break __inline_deeper_4;
-                };
-                let __match_scrut_5: i32;
-                __match_scrut_5 = __sroa_slot_70;
-                inner_20 = (if __match_scrut_5 == 0 -> i32 {
-                    __sroa_slot_71;
-                } else if @unlikely(__match_scrut_5 == 1) -> i32 {
-                    __qm_e_19 = ref.as_non_null(__sroa_slot_72);
-                    cold_path;
-                    return __qm_e_19;
-                } else {
-                    unreachable;
-                });
-                if indef {
-                    b256: block {
-                        l257: loop {
-                            if __sroa_slot_73 = 0; __sroa_slot_74 = 0; __sroa_slot_75 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_5: block {
-                                if @unlikely(self.pos >= (self.input.end - self.input.start)) {
-                                    cold_path;
-                                    __sroa_slot_73 = 1;
-                                    __sroa_slot_74 = 0;
-                                    __sroa_slot_75 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
-                                    break __inline_core_cbor_CborDeserializer__peek_byte_5;
-                                }
-                                __sroa_slot_73 = 0;
-                                __sroa_slot_74 = builtin::array_get_value<u8>(self.input.repr, self.input.start + self.pos);
-                                __sroa_slot_75 = ref.null none;
-                                break __inline_core_cbor_CborDeserializer__peek_byte_5;
-                            }; let __match_scrut_6: i32; __match_scrut_6 = __sroa_slot_73; (if __match_scrut_6 == 0 -> u8 {
-                                __sroa_slot_74;
-                            } else if @unlikely(__match_scrut_6 == 1) -> u8 {
-                                __qm_e_22 = ref.as_non_null(__sroa_slot_75);
-                                cold_path;
-                                return __qm_e_22;
-                            } else {
-                                unreachable;
-                            }) == 255 {
-                                self.pos = self.pos + 1;
-                                break b256;
-                            }
-                            __local_35 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
-                            if @likely(ref.is_null(__local_35)) {
-                            } else {
-                                __qm_e_24 = ref.as_non_null(__local_35);
-                                cold_path;
-                                return __qm_e_24;
-                            }
-                            __local_36 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
-                            if @likely(ref.is_null(__local_36)) {
-                            } else {
-                                __qm_e_26 = ref.as_non_null(__local_36);
-                                cold_path;
-                                return __qm_e_26;
-                            }
-                            continue l257;
-                        };
-                    };
-                } else {
-                    i_27 = 0_i64;
-                    b264: block {
-                        l265: loop {
-                            break_if b264 i_27 >=u arg;
-                            __local_37 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
-                            if @likely(ref.is_null(__local_37)) {
-                            } else {
-                                __qm_e_29 = ref.as_non_null(__local_37);
-                                cold_path;
-                                return __qm_e_29;
-                            }
-                            __local_38 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
-                            if @likely(ref.is_null(__local_38)) {
-                            } else {
-                                __qm_e_31 = ref.as_non_null(__local_38);
-                                cold_path;
-                                return __qm_e_31;
-                            }
-                            i_27 = i_27 + 1_i64;
-                            continue l265;
-                        };
-                    };
-                }
-                return ref.null none;
-                break b228;
-            };
-            return "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth);
-            break b228;
-        };
+    if major == 0 {
+        return ref.null none;
+    } else if major == 1 {
+        return ref.null none;
+    } else if major == 7 {
         if @unlikely(indef) {
             cold_path;
             return ref.as_non_null("core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected break"), used: 16 }, builtin::i64_extend_i32_s(self.pos - 1)));
         }
         return ref.null none;
-    };
+    } else if major == 2 {
+        return "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, major);
+    } else if major == 3 {
+        return "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, major);
+    } else if major == 6 {
+        return "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth);
+    } else if major == 4 {
+        __sroa_slot_64 = 0;
+        __sroa_slot_65 = 0;
+        __sroa_slot_66 = ref.null none;
+        __inline_deeper_0: block {
+            max_depth_45 = self.max_depth;
+            offset_46 = builtin::i64_extend_i32_s(self.pos);
+            next_47 = depth + 1;
+            if @unlikely(next_47 > max_depth_45) {
+                cold_path;
+                __sroa_slot_64 = 1;
+                __sroa_slot_65 = 0;
+                __sroa_slot_66 = ref.as_non_null("core:serde/core:serde/DeserializeError::depth_limit"(__local_4_48 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(50); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_48, global:core:cbor::__const_obj_8); __local_5_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_48); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: max_depth_45 }, __local_5_49); __local_4_48, offset_46));
+                break __inline_deeper_0;
+            }
+            __sroa_slot_64 = 0;
+            __sroa_slot_65 = next_47;
+            __sroa_slot_66 = ref.null none;
+            break __inline_deeper_0;
+        };
+        let __match_scrut_8: i32;
+        __match_scrut_8 = __sroa_slot_64;
+        inner_10 = (if __match_scrut_8 == 0 -> i32 {
+            __sroa_slot_65;
+        } else if @unlikely(__match_scrut_8 == 1) -> i32 {
+            __qm_e_9 = ref.as_non_null(__sroa_slot_66);
+            cold_path;
+            return __qm_e_9;
+        } else {
+            unreachable;
+        });
+        if indef {
+            b240: block {
+                l241: loop {
+                    if __sroa_slot_67 = 0; __sroa_slot_68 = 0; __sroa_slot_69 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_1: block {
+                        if @unlikely(self.pos >= (self.input.end - self.input.start)) {
+                            cold_path;
+                            __sroa_slot_67 = 1;
+                            __sroa_slot_68 = 0;
+                            __sroa_slot_69 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
+                            break __inline_core_cbor_CborDeserializer__peek_byte_1;
+                        }
+                        __sroa_slot_67 = 0;
+                        __sroa_slot_68 = builtin::array_get_value<u8>(self.input.repr, self.input.start + self.pos);
+                        __sroa_slot_69 = ref.null none;
+                        break __inline_core_cbor_CborDeserializer__peek_byte_1;
+                    }; let __match_scrut_9: i32; __match_scrut_9 = __sroa_slot_67; (if __match_scrut_9 == 0 -> u8 {
+                        __sroa_slot_68;
+                    } else if @unlikely(__match_scrut_9 == 1) -> u8 {
+                        __qm_e_12 = ref.as_non_null(__sroa_slot_69);
+                        cold_path;
+                        return __qm_e_12;
+                    } else {
+                        unreachable;
+                    }) == 255 {
+                        self.pos = self.pos + 1;
+                        break b240;
+                    }
+                    __local_33 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_10);
+                    if @likely(ref.is_null(__local_33)) {
+                    } else {
+                        __qm_e_14 = ref.as_non_null(__local_33);
+                        cold_path;
+                        return __qm_e_14;
+                    }
+                    continue l241;
+                };
+            };
+        } else {
+            i_15 = 0_i64;
+            b247: block {
+                l248: loop {
+                    break_if b247 i_15 >=u arg;
+                    __local_34 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_10);
+                    if @likely(ref.is_null(__local_34)) {
+                    } else {
+                        __qm_e_17 = ref.as_non_null(__local_34);
+                        cold_path;
+                        return __qm_e_17;
+                    }
+                    i_15 = i_15 + 1_i64;
+                    continue l248;
+                };
+            };
+        }
+        return ref.null none;
+    } else if @likely(major == 5) {
+        __sroa_slot_70 = 0;
+        __sroa_slot_71 = 0;
+        __sroa_slot_72 = ref.null none;
+        __inline_deeper_4: block {
+            max_depth_55 = self.max_depth;
+            offset_56 = builtin::i64_extend_i32_s(self.pos);
+            next_57 = depth + 1;
+            if @unlikely(next_57 > max_depth_55) {
+                cold_path;
+                __sroa_slot_70 = 1;
+                __sroa_slot_71 = 0;
+                __sroa_slot_72 = ref.as_non_null("core:serde/core:serde/DeserializeError::depth_limit"(__local_4_58 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(50); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_58, global:core:cbor::__const_obj_8); __local_5_59 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4_58); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: max_depth_55 }, __local_5_59); __local_4_58, offset_56));
+                break __inline_deeper_4;
+            }
+            __sroa_slot_70 = 0;
+            __sroa_slot_71 = next_57;
+            __sroa_slot_72 = ref.null none;
+            break __inline_deeper_4;
+        };
+        let __match_scrut_2: i32;
+        __match_scrut_2 = __sroa_slot_70;
+        inner_20 = (if __match_scrut_2 == 0 -> i32 {
+            __sroa_slot_71;
+        } else if @unlikely(__match_scrut_2 == 1) -> i32 {
+            __qm_e_19 = ref.as_non_null(__sroa_slot_72);
+            cold_path;
+            return __qm_e_19;
+        } else {
+            unreachable;
+        });
+        if indef {
+            b255: block {
+                l256: loop {
+                    if __sroa_slot_73 = 0; __sroa_slot_74 = 0; __sroa_slot_75 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_5: block {
+                        if @unlikely(self.pos >= (self.input.end - self.input.start)) {
+                            cold_path;
+                            __sroa_slot_73 = 1;
+                            __sroa_slot_74 = 0;
+                            __sroa_slot_75 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
+                            break __inline_core_cbor_CborDeserializer__peek_byte_5;
+                        }
+                        __sroa_slot_73 = 0;
+                        __sroa_slot_74 = builtin::array_get_value<u8>(self.input.repr, self.input.start + self.pos);
+                        __sroa_slot_75 = ref.null none;
+                        break __inline_core_cbor_CborDeserializer__peek_byte_5;
+                    }; let __match_scrut_3: i32; __match_scrut_3 = __sroa_slot_73; (if __match_scrut_3 == 0 -> u8 {
+                        __sroa_slot_74;
+                    } else if @unlikely(__match_scrut_3 == 1) -> u8 {
+                        __qm_e_22 = ref.as_non_null(__sroa_slot_75);
+                        cold_path;
+                        return __qm_e_22;
+                    } else {
+                        unreachable;
+                    }) == 255 {
+                        self.pos = self.pos + 1;
+                        break b255;
+                    }
+                    __local_35 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
+                    if @likely(ref.is_null(__local_35)) {
+                    } else {
+                        __qm_e_24 = ref.as_non_null(__local_35);
+                        cold_path;
+                        return __qm_e_24;
+                    }
+                    __local_36 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
+                    if @likely(ref.is_null(__local_36)) {
+                    } else {
+                        __qm_e_26 = ref.as_non_null(__local_36);
+                        cold_path;
+                        return __qm_e_26;
+                    }
+                    continue l256;
+                };
+            };
+        } else {
+            i_27 = 0_i64;
+            b263: block {
+                l264: loop {
+                    break_if b263 i_27 >=u arg;
+                    __local_37 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
+                    if @likely(ref.is_null(__local_37)) {
+                    } else {
+                        __qm_e_29 = ref.as_non_null(__local_37);
+                        cold_path;
+                        return __qm_e_29;
+                    }
+                    __local_38 = "core:cbor/core:cbor/CborDeserializer::skip_item"(self, inner_20);
+                    if @likely(ref.is_null(__local_38)) {
+                    } else {
+                        __qm_e_31 = ref.as_non_null(__local_38);
+                        cold_path;
+                        return __qm_e_31;
+                    }
+                    i_27 = i_27 + 1_i64;
+                    continue l264;
+                };
+            };
+        }
+        return ref.null none;
+    } else {
+        cold_path;
+        return ref.as_non_null("core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unskippable item"), used: 16 }, builtin::i64_extend_i32_s(self.pos)));
+    }
 }
 
 fn "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, major) {
@@ -2378,7 +2362,7 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, maj
     }
     __hfs_pos_33 = self.pos;
     block {
-        l272: loop {
+        l270: loop {
             if __sroa_slot_30 = 0; __sroa_slot_31 = 0; __sroa_slot_32 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_2: block {
                 if @unlikely(__hfs_pos_33 >= (self.input.end - self.input.start)) {
                     cold_path;
@@ -2444,7 +2428,7 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, maj
                 return __hfs_call_34;
             }
             self.pos = __hfs_pos_33;
-            continue l272;
+            continue l270;
         };
     };
 }
@@ -2530,8 +2514,8 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_i3
     } else {
         unreachable;
     });
-    if @unlikely(__m0 = struct.new "core:prelude/int128.wado//i128" { low: v_12.low, high: v_12.high }; (if "core:prelude/int128.wado/core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(global:core:cbor::__const_obj_10, __m0) != 2 -> i32 {
-        "core:prelude/int128.wado/core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(__m0, global:core:cbor::__const_obj_9) != 2;
+    if @unlikely(__m0 = struct.new "core:prelude/int128.wado//i128" { low: v_12.low, high: v_12.high }; (if "core:prelude/int128.wado/core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(global:core:cbor::__const_obj_11, __m0) != 2 -> i32 {
+        "core:prelude/int128.wado/core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(__m0, global:core:cbor::__const_obj_10) != 2;
     } else {
         0;
     }) == 0) {
@@ -2600,7 +2584,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
         return "core:cbor/core:cbor/CborDeserializer::read_definite_text"(self, len);
     }
     block {
-        l302: loop {
+        l300: loop {
             let __vr_17_mv_0: i32;
             let __vr_17_mv_1: ref null "tuple//[u8, u8, u64, bool]";
             let __vr_17_mv_2: ref null "core:serde//DeserializeError";
@@ -2625,12 +2609,12 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
             } else {
                 0;
             })) {
-                continue l302;
+                continue l300;
             } else {
                 cold_path;
                 return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected text string"), used: 20 }, builtin::i64_extend_i32_s(self.pos));
             }
-            continue l302;
+            continue l300;
         };
     };
 }
@@ -2654,7 +2638,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
     let __sroa_slot_24: i32;
     let __sroa_slot_25: ref null "core:serde//DeserializeError";
     block {
-        l309: loop {
+        l307: loop {
             let __vr_14_mv_0: i32;
             let __vr_14_mv_1: ref null "tuple//[u8, u8, u64, bool]";
             let __vr_14_mv_2: ref null "core:serde//DeserializeError";
@@ -2672,7 +2656,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
             major = __pattern_temp_0.0;
             arg = __pattern_temp_0.2;
             indef = __pattern_temp_0.3;
-            continue_if l309 select i32(major == 6, arg == 55799_i64, 0);
+            continue_if l307 select i32(major == 6, arg == 55799_i64, 0);
             if @unlikely(major != want_major) {
                 cold_path;
                 return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type"("cbor_skip_depth_limit.wado/$value_copy$core:prelude/string.wado/String"(expected), builtin::i64_extend_i32_s(self.pos));
@@ -2689,7 +2673,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
                     cold_path;
                     __sroa_slot_23 = 1;
                     __sroa_slot_24 = 0;
-                    __sroa_slot_25 = ref.as_non_null("core:serde/core:serde/DeserializeError::depth_limit"(__local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(50); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:core:cbor::__const_obj_7); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: max_depth }, __local_5); __local_4, offset));
+                    __sroa_slot_25 = ref.as_non_null("core:serde/core:serde/DeserializeError::depth_limit"(__local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(50); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:core:cbor::__const_obj_8); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: max_depth }, __local_5); __local_4, offset));
                     break __inline_deeper_1;
                 }
                 __sroa_slot_23 = 0;
@@ -2709,7 +2693,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
                 unreachable;
             });
             return 0, struct.new "tuple//[i64, bool, i32]" { 0: select i64(indef, -1_i64, arg), 1: indef, 2: depth_11 }, ref.null none;
-            continue l309;
+            continue l307;
         };
     };
 }
@@ -2765,7 +2749,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_24: i32;
     let i: i32;
     let result: i32;
-    let status: i32;
     let __sroa_data_start: i32;
     let _av_44: i32;
     let _av_45: i32;
@@ -2778,14 +2761,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_44 + (_av_45 - _av_44);
     offset = data.start;
     block {
-        l322: loop {
+        l320: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b323: block {
-                l324: loop {
-                    break_if b323 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b321: block {
+                l322: loop {
+                    break_if b321 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l324;
+                    continue l322;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -2794,12 +2777,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 result = "core:rt/cm_await_blocked"(self);
             }
             written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
-                status = result & 15;
-                if status == 0 {
+                let __match_scrut_0: i32;
+                __match_scrut_0 = result & 15;
+                if __match_scrut_0 == 0 {
                     break __inline_cm_copy_result_13: 0;
-                }
-                if status == 1 {
+                } else if __match_scrut_0 == 1 {
                     break __inline_cm_copy_result_13: 1;
+                } else {
                 }
                 break __inline_cm_copy_result_13: 2;
             } };
@@ -2808,7 +2792,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l322;
+            continue l320;
         };
     };
 }
@@ -2859,8 +2843,8 @@ fn "core:serde/cbor_skip_depth_limit.wado/Small^core:serde/Deserialize::deserial
     } else {
         unreachable;
     });
-    b331: block {
-        l332: loop {
+    b329: block {
+        l330: loop {
             let __vr_38_mv_0: i32;
             let __vr_38_mv_1: ref null "core:prelude/types.wado//Option<i32>";
             let __vr_38_mv_2: ref null "core:serde//DeserializeError";
@@ -2917,9 +2901,9 @@ fn "core:serde/cbor_skip_depth_limit.wado/Small^core:serde/Deserialize::deserial
                     }
                 }
             } else {
-                break b331;
+                break b329;
             }
-            continue l332;
+            continue l330;
         };
     };
     if @likely(ref.is_null(ref.null none)) {
@@ -3058,12 +3042,13 @@ fn "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_fiel
             e = select i32(a_52 < len, a_52, len);
             __sroa___key_repr = self.de.input.repr;
             __sroa___key_start = self.de.input.start + s;
-            if (if ((self.de.input.start + e) - __sroa___key_start) == 1 -> i32 {
-                builtin::array_get_value<u8>(__sroa___key_repr, __sroa___key_start + 0) == 97;
-            } else {
-                0;
-            }) {
-                __sroa_slot_60 = 0;
+            if ((self.de.input.start + e) - __sroa___key_start) == 1 {
+                if builtin::array_get_value<u8>(__sroa___key_repr, __sroa___key_start + 0) == 97 {
+                    __sroa_slot_60 = 0;
+                    __sroa_slot_61 = 0;
+                    break __inline_cbor_skip_depth_limit_wado_Small_core_serde_FieldSchema__lookup_3;
+                }
+                __sroa_slot_60 = 1;
                 __sroa_slot_61 = 0;
                 break __inline_cbor_skip_depth_limit_wado_Small_core_serde_FieldSchema__lookup_3;
             }
@@ -3127,17 +3112,17 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b367: block {
-            l368: loop {
-                break_if b367 t <=u 0_i64;
+        b365: block {
+            l366: loop {
+                break_if b365 t <=u 0_i64;
                 n = n + 1;
                 t = t /u 10_i64;
-                continue l368;
+                continue l366;
             };
         };
         break __inline_count_digits_u64_1: n;
     };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_32, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_33, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, abs_val, digit_count);
 }
 
@@ -3180,17 +3165,17 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b373: block {
-            l374: loop {
-                break_if b373 t <=u 0_i64;
+        b371: block {
+            l372: loop {
+                break_if b371 t <=u 0_i64;
                 n = n + 1;
                 t = t /u 10_i64;
-                continue l374;
+                continue l372;
             };
         };
         break __inline_count_digits_u64_1: n;
     };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_32, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_33, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(f.repr, offset, abs_val, digit_count);
 }
 

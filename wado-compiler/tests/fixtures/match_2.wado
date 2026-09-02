@@ -24,6 +24,8 @@ fn describe_br(n: i32) -> String {
         7 => "seven",
         8 => "eight",
         9 => "nine",
+        10 => "ten",
+        11 => "eleven",
         _ => "other",
     };
 }
@@ -149,8 +151,9 @@ fn match_wildcard() with Stdout {
     println(name3);
 }
 
+// Enough literal arms to reach `SWITCH_MIN_CASES`; below it the name lies.
 fn match_switch_br_table() with Stdout {
-    for let mut i = 0; i <= 10; i += 1 {
+    for let mut i = 0; i <= 12; i += 1 {
         println(describe_br(i));
     }
 }
@@ -182,4 +185,7 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "medium\nsmall\nbig circle\nsmall circle\npoint\nlarge value\nsmall value\nno value\nnorth\nwest\n0\nother\nred\nother\nother\nzero\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nother\nRectangle area: 12\n"}
+{
+    "stdout": "medium\nsmall\nbig circle\nsmall circle\npoint\nlarge value\nsmall value\nno value\nnorth\nwest\n0\nother\nred\nother\nother\nzero\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\nother\nRectangle area: 12\n",
+    "wir_expect:O2": ["br_table"]
+}
