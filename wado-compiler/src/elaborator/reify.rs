@@ -954,17 +954,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// A newtype's parameters as the impls written over the declaration see
-    /// them: names in order. A newtype constrains none of them — its base does
-    /// — so no bound or default travels with them.
+    /// them, read off what the declaration states. A default is the one fact
+    /// left behind: resolving it needs the declaration's own parameters in
+    /// scope, which is where the base type is resolved, not here.
     fn declared_type_params(params: &[ast::GenericParam]) -> Vec<crate::tir::TirTypeParam> {
         params
             .iter()
             .enumerate()
             .map(|(index, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
-                is_effect: false,
-                is_pack: false,
-                bounds: Vec::new(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.real_bounds().iter().map(|b| b.name.clone()).collect(),
                 default: None,
                 index: index as u32,
                 projected_from: None,

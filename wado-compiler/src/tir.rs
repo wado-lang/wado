@@ -1013,8 +1013,8 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
-    /// [`Self::get`] before the newtype / flags erasure applied ahead of
-    /// monomorphize.
+    /// [`Self::get`] before the newtype / flags erasure, which runs once
+    /// monomorphize is done.
     ///
     /// Erasure is a representation choice — a `flags` value is a `u32` at
     /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
@@ -3320,7 +3320,8 @@ impl TypeTable {
     /// the redirect map. After this call, `get(id)` for any erased `TypeId` returns
     /// its ultimate base type (`Newtype` chains) or `u32` (`Flags`).
     ///
-    /// Must be called after resolve and synthesis, before monomorphize.
+    /// Must be called after monomorphize, whose dispatch reads the identities
+    /// this replaces.
     pub fn erase_newtypes_and_flags(&mut self) {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
         for id in ids {
@@ -3373,11 +3374,13 @@ impl TypeTable {
     ///
     /// Unlike [`Self::representation_head`] the walk stops at a `flags`
     /// type, which is a declaration carrying its own impls rather than a
-    /// stand-in for `u32`. Identity is *not* inherited — a newtype names itself
-    /// through `Reflect` — so this never answers for a type's name.
+    /// stand-in for `u32`, and it reads the identity ([`Self::get_unerased`]):
+    /// erasure redirects a link to its base, and the erased view shows no chain
+    /// to walk. Identity is *not* inherited — a newtype names itself through
+    /// `Reflect` — so this never answers for a type's name.
     pub fn reflect_structure_head(&self, id: TypeId) -> TypeId {
         let mut current = id;
-        while let ResolvedType::Newtype { base_type, .. } = self.get(current) {
+        while let ResolvedType::Newtype { base_type, .. } = self.get_unerased(current) {
             current = *base_type;
         }
         current
@@ -4203,11 +4206,14 @@ impl TypeTable {
         crate::name::FqTypeName::builtin(&crate::name::format_type_name(info))
     }
 
-    /// The declaration a type's head names, with any arguments dropped.
+    /// The declaration a type's head names, with any arguments dropped. Read
+    /// off the identity ([`Self::get_unerased`]): this is the head an `impl`
+    /// header writes, and erasure would answer `u32` for a `flags` type and the
+    /// base's name for a newtype — templates no impl declares.
     #[must_use]
     pub fn fq_base_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
         use crate::name::FqTypeName;
-        match self.get(id) {
+        match self.get_unerased(id) {
             ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
             ResolvedType::Enum { def }
             | ResolvedType::Variant { def }
@@ -4282,6 +4288,10 @@ impl TypeTable {
                 .map(|t| self.fq_type_name_spelled(*t, unboxed))
                 .collect()
         };
+        // The erased view, unlike [`Self::fq_base_type_name`]: this spelling
+        // also names representation-level functions minted after erasure — a
+        // canonical `$case_extract$` among them — where two ids that erase
+        // together must answer one name.
         match self.get(id) {
             ResolvedType::Primitive(prim) => FqTypeName::builtin(prim.as_str()),
             ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
