@@ -1442,6 +1442,22 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 5, "match"), token_type::PROPERTY);
     }
 
+    /// A label is a name too: any word an expression may start with can carry
+    /// a block, and the `break` that leaves it names the same label.
+    #[test]
+    fn a_keyword_used_as_a_label_is_a_variable() {
+        let src = concat!(
+            "fn run() {\n",
+            "    of: {\n",
+            "        break of;\n",
+            "    }\n",
+            "}\n",
+        );
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "of"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 2, "of"), token_type::VARIABLE);
+    }
+
     /// The same words in the positions that make them keywords.
     #[test]
     fn contextual_keywords_in_keyword_position_stay_keywords() {

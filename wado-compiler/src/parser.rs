@@ -2270,6 +2270,7 @@ impl Parser {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
 
+        self.mark_keyword_name();
         let label = self
             .advance()
             .kind
@@ -2828,6 +2829,7 @@ impl Parser {
         // ending a block without `;` does not stretch its span into the `}`.
         let (label, tail_span, value) = if let Some(name) = self.peek_kind().as_ident_name() {
             let name = name.to_string();
+            self.mark_keyword_name();
             let label_tok_span = self.advance().span;
             // Check for colon followed by expression (break with value)
             if self.check(&TokenKind::Colon) {
