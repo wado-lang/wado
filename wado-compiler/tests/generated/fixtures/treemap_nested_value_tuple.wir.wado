@@ -65,12 +65,18 @@ array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:c
 
 array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>");  // TypeId(15)
 
-struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode> {  // TypeId(16)
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode> {  // TypeId(16)
+    mut key: ref "core:prelude/string.wado//String",
+    mut value: ref "treemap_nested_value_tuple.wado//LNode",
+    mut deleted: bool,
+}
+
+struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode> {  // TypeId(17)
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode>>",
     mut index: i32,
 }
 
-struct core:collections//TreeMap<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode> {  // TypeId(17)
+struct core:collections//TreeMap<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode> {  // TypeId(18)
     mut root: ref "core:prelude/types.wado//Option<i32>",
     mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode>>",
@@ -78,12 +84,18 @@ struct core:collections//TreeMap<core:prelude/string.wado/String,treemap_nested_
     mut deleted_count: i32,
 }
 
-struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>> {  // TypeId(18)
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>> {  // TypeId(19)
+    mut key: ref "core:prelude/string.wado//String",
+    mut value: ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>",
+    mut deleted: bool,
+}
+
+struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>> {  // TypeId(20)
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>>>",
     mut index: i32,
 }
 
-struct core:collections//TreeMap<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>> {  // TypeId(19)
+struct core:collections//TreeMap<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>> {  // TypeId(21)
     mut root: ref "core:prelude/types.wado//Option<i32>",
     mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>>>",
@@ -91,7 +103,7 @@ struct core:collections//TreeMap<core:prelude/string.wado/String,core:collection
     mut deleted_count: i32,
 }
 
-struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(20)
+struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(22)
     mut root: ref "core:prelude/types.wado//Option<i32>",
     mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
@@ -99,36 +111,24 @@ struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // Type
     mut deleted_count: i32,
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(21)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(23)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,i32> {  // TypeId(22)
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,i32> {  // TypeId(24)
     mut key: ref "core:prelude/string.wado//String",
     mut value: i32,
     mut deleted: bool,
 }
 
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>> {  // TypeId(23)
-    mut key: ref "core:prelude/string.wado//String",
-    mut value: ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>",
-    mut deleted: bool,
-}
-
-struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(24)
+struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(25)
     mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
     mut level: i32,
     mut left: ref "core:prelude/types.wado//Option<i32>",
     mut right: ref "core:prelude/types.wado//Option<i32>",
-}
-
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode> {  // TypeId(25)
-    mut key: ref "core:prelude/string.wado//String",
-    mut value: ref "treemap_nested_value_tuple.wado//LNode",
-    mut deleted: bool,
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(26)
@@ -141,23 +141,23 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(27)
     payload_0: i32,
 }
 
-struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(28)
-    mut repr: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
-    mut used: i32,
-}
-
-struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> {  // TypeId(29)
-    mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
-    mut used: i32,
-}
-
-struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode>> {  // TypeId(30)
+struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode>> {  // TypeId(28)
     mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,treemap_nested_value_tuple.wado/LNode>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>>> {  // TypeId(31)
+struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(29)
+    mut repr: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
+    mut used: i32,
+}
+
+struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>>> {  // TypeId(30)
     mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:collections/TreeMap<core:prelude/string.wado/String,i32>>>",
+    mut used: i32,
+}
+
+struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> {  // TypeId(31)
+    mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
     mut used: i32,
 }
 
