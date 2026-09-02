@@ -735,8 +735,9 @@ for let mut i = 0; i < 10; i = i + 1 {
 ```
 
 Both `break` and `continue` work with `while`, `for`, and `loop`. Neither takes
-a label. To leave more than the innermost loop, wrap the nest in a labeled
-block and break to its label.
+a label, and neither is valid outside a loop — a labeled block is left with
+`break LABEL`, and a closure body is its own loop scope. To leave more than the
+innermost loop, wrap the nest in a labeled block and break to its label.
 
 ### Labeled Blocks
 
@@ -870,6 +871,19 @@ let u = blk: { total += 1; };   // u: ()
 let v = blk: {
     if c { break blk: 1; }
     total += 1;                 // error: expected 'i32', found '()'
+};
+```
+
+A path that cannot reach the end is no branch at all. A block whose trailing
+statement is a loop that only `break LABEL` leaves takes its type from the
+breaks alone — the shape a loop computing a value takes:
+
+```wado
+let found = scan: {
+    loop {
+        let line = next();
+        if line.is_match() { break scan: line; }
+    }
 };
 ```
 

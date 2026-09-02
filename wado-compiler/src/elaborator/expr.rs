@@ -17,7 +17,7 @@ use super::call::turbofish_holes;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
-use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
+use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
 
 /// Outcome of trying to derive type arguments for a generic function
@@ -361,12 +361,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
             Expr::LabeledBlock(lb) => {
-                ctx.labeled_block_targets.push(LabeledBlockTarget {
-                    label: lb.label.clone(),
-                    break_types: Vec::new(),
-                    expected_type,
-                });
-                ctx.active_labels.push(lb.label.clone());
+                ctx.push_labeled_block_frame(lb.label.clone(), expected_type);
 
                 ctx.enter_scope();
                 // A labeled block yields via `break label: value`, not a tail
@@ -376,8 +371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_block(&lb.block, ctx, expected_type);
                 ctx.exit_scope();
 
-                ctx.active_labels.pop();
-                let target = ctx.labeled_block_targets.pop().unwrap();
+                let target = ctx.pop_labeled_block_frame();
 
                 // Unify every `break label: expr` with the fall-through path,
                 // whose value is the trailing statement's. The use-site expected
@@ -386,7 +380,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // so a diverging, valueless or unresolved branch cannot mask the
                 // real one — a block mixing the two is a value block whose
                 // valueless branches are the error to report.
-                let tail_type = self.ast_block_result_type(&lb.block);
+                // The tail is a branch only on the path that reaches it. A
+                // block whose end is unreachable — a trailing `loop` left only
+                // by `break label` — has no fall-through value and contributes
+                // `never`, like a tail that is itself a `break`.
+                let tail_type = if self.ast_labeled_block_falls_through(&lb.block, &lb.label) {
+                    self.ast_block_result_type(&lb.block)
+                } else {
+                    TypeTable::NEVER
+                };
                 let mut branch_types = target.break_types.clone();
                 branch_types.push(tail_type);
                 let result_type = if let Some(ty) = expected_type {

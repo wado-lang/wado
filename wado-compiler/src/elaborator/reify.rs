@@ -2171,9 +2171,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     continue;
                 }
                 if let ast::Stmt::LabeledBlock(labeled_block) = s {
-                    ctx.active_labels.push(labeled_block.label.clone());
+                    ctx.push_labeled_block_frame(labeled_block.label.clone(), expected_type);
                     let block = self.reify_block(&labeled_block.block, ctx, expected_type);
-                    ctx.active_labels.pop();
+                    ctx.pop_labeled_block_frame();
                     stmts.push(TirStmt::new(
                         crate::tir::TirStmtKind::LabeledBlock {
                             label: labeled_block.label.clone(),
@@ -2406,9 +2406,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `break LABEL` lowers against this frame, walk the
                 // inner block, pop. The block result is dropped at
                 // stmt position, so no `expected_type` propagates.
-                ctx.active_labels.push(labeled_block.label.clone());
+                ctx.push_labeled_block_frame(labeled_block.label.clone(), None);
                 let block = self.reify_block(&labeled_block.block, ctx, None);
-                ctx.active_labels.pop();
+                ctx.pop_labeled_block_frame();
                 vec![TirStmt::new(
                     TirStmtKind::LabeledBlock {
                         label: labeled_block.label.clone(),
@@ -2956,20 +2956,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `TirExprKind::LabeledBlock`. The result type is the
                 // recorded `expression_types[lb.id]`; annotate already
                 // unified break types into it.
-                use crate::elaborator::types::LabeledBlockTarget;
                 // Fall back to the block's unified result type when the use
                 // site supplies no expected type, so a `break label: null`
                 // whose `Option<T>` only resolves from a sibling break still
                 // coerces (annotate unified the breaks into `recorded_type`).
-                ctx.labeled_block_targets.push(LabeledBlockTarget {
-                    label: lb.label.clone(),
-                    break_types: Vec::new(),
-                    expected_type: expected_type.or(Some(recorded_type)),
-                });
-                ctx.active_labels.push(lb.label.clone());
+                ctx.push_labeled_block_frame(
+                    lb.label.clone(),
+                    expected_type.or(Some(recorded_type)),
+                );
                 let tir_block = s.reify_block(&lb.block, ctx, expected_type);
-                ctx.active_labels.pop();
-                let _target = ctx.labeled_block_targets.pop();
+                ctx.pop_labeled_block_frame();
                 TirExpr::new(
                     TirExprKind::LabeledBlock {
                         label: lb.label.clone(),

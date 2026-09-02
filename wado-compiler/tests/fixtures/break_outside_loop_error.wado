@@ -1,0 +1,15 @@
+// An unlabeled `break` targets the innermost loop. With none, WIR had no
+// target block on its label stack and panicked; a labeled block is not a
+// target for it, only for `break LABEL`.
+
+export fn run() {
+    let c = builtin::black_box(true);
+    blk: {
+        if c {
+            break;
+        }
+    }
+}
+
+__DATA__
+{"compile_error": "`break` outside of a loop"}

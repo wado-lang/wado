@@ -519,10 +519,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         tail_value: bool,
     ) {
-        ctx.active_labels.push(labeled_block.label.clone());
+        // A stmt-position block yields no value, but it is still a break
+        // target: its frame keeps an inner `break LABEL` from landing on an
+        // outer labeled-block expression that reuses the name. The collected
+        // types are discarded — nothing consumes a dropped block's value.
+        ctx.push_labeled_block_frame(labeled_block.label.clone(), expected_type);
         // resolve_block already handles scope entry/exit
         self.resolve_block_with_position(&labeled_block.block, ctx, expected_type, tail_value);
-        ctx.active_labels.pop();
+        ctx.pop_labeled_block_frame();
     }
 
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
