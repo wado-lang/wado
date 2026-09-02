@@ -3326,13 +3326,14 @@ impl TypeTable {
         }
     }
 
-    /// The declaration a `Reflect*` kind reads structure from: a newtype chain
-    /// peeled to what it wraps, any other type unchanged. A newtype inherits
-    /// its base's impls (WEP 2026-01-29) and a reflection kind is no exception,
-    /// so its members are the base's. Unlike [`Self::get_ultimate_base_type`]
-    /// the walk stops at a `flags` type, which is a member-carrying kind rather
-    /// than a stand-in for `u32`. Identity is *not* inherited — a newtype names
-    /// itself through `Reflect`, so this never answers for a type's name.
+    /// The declaration a newtype inherits from: its chain peeled to what it
+    /// wraps, any other type unchanged (WEP 2026-01-29). That is where its
+    /// impls live, and so where a `Reflect*` kind reads its members.
+    ///
+    /// Unlike [`Self::get_ultimate_base_type`] the walk stops at a `flags`
+    /// type, which is a declaration carrying its own impls rather than a
+    /// stand-in for `u32`. Identity is *not* inherited — a newtype names itself
+    /// through `Reflect` — so this never answers for a type's name.
     pub fn reflect_structure_head(&self, id: TypeId) -> TypeId {
         let mut current = id;
         while let ResolvedType::Newtype { base_type, .. } = self.get(current) {

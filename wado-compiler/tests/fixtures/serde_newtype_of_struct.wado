@@ -1,10 +1,19 @@
-// A newtype over a struct serializes as that struct: serde's derivation is
-// keyed by `ReflectStruct`, which a newtype satisfies through its base
+// A newtype serializes as what it wraps: serde's derivations are keyed by the
+// structure kinds, which a newtype satisfies through its base
 // (WEP 2026-01-29). Before #1933 the bound admitted `P` but the walk read the
 // newtype, so `to_string::<P>` reported that `Point` — a type the program never
 // named — has no `Serialize`, and serializing both `Point` and `P` in one
 // program minted the same mangled impl under two module sources, tripping
 // lower's extern-stub assertion.
+//
+// One kind needed more than the peel: a newtype over `flags` inherits the
+// flags declaration's impls, and dispatch carried on to `u32` — the
+// representation, which has no `ReflectFlags` — so the derive instantiated for
+// a type that could not satisfy its own bound.
+//
+// And a base with an impl of its own keeps it: `String` and `List` are struct
+// declarations, so the struct derive claims them structurally, but their own
+// `Deserialize` outranks it — for the newtype as much as for the base.
 use { to_string, from_string } from "core:json";
 
 struct Point {
@@ -12,7 +21,27 @@ struct Point {
     y: i32,
 }
 
+enum Color {
+    Red,
+    Green,
+}
+
+flags Perm {
+    read,
+    write,
+}
+
 type P = Point;
+type C = Color;
+type M = Perm;
+type Age = i32;
+type Tags = List<String>;
+type Name = String;
+
+struct User {
+    age: Age,
+    tags: Tags,
+}
 
 test "the base serializes" {
     let q = Point { x: 1, y: 2 };
@@ -38,6 +67,70 @@ test "the newtype deserializes as its base" {
         assert (p as Point).y == 4;
     } else {
         panic("deserializing the newtype failed");
+    }
+}
+
+test "a newtype over an enum serializes as the enum" {
+    if let Ok(s) = to_string::<C>(&(Color::Green as C)) {
+        assert s == `"Green"`;
+    } else {
+        panic("serializing the enum newtype failed");
+    }
+    if let Ok(c) = from_string::<C>(`"Red"`) {
+        assert (c as Color) == Color::Red;
+    } else {
+        panic("deserializing the enum newtype failed");
+    }
+}
+
+test "a newtype over flags reaches the flags impls, not u32's" {
+    if let Ok(s) = to_string::<M>(&(Perm::read as M)) {
+        assert s == `["read"]`;
+    } else {
+        panic("serializing the flags newtype failed");
+    }
+    if let Ok(m) = from_string::<M>(`["write"]`) {
+        assert (m as Perm) == Perm::write;
+    } else {
+        panic("deserializing the flags newtype failed");
+    }
+}
+
+test "a newtype over a base with its own impl takes that impl, not the derive" {
+    if let Ok(s) = to_string::<Tags>(&(["x"] as Tags)) {
+        assert s == `["x"]`;
+    } else {
+        panic("serializing the container newtype failed");
+    }
+    if let Ok(t) = from_string::<Tags>(`["y"]`) {
+        assert (t as List<String>)[0] == "y";
+    } else {
+        panic("deserializing the container newtype failed");
+    }
+    if let Ok(s) = to_string::<Name>(&("x" as Name)) {
+        assert s == `"x"`;
+    } else {
+        panic("serializing the string newtype failed");
+    }
+    if let Ok(n) = from_string::<Name>(`"y"`) {
+        assert (n as String) == "y";
+    } else {
+        panic("deserializing the string newtype failed");
+    }
+}
+
+test "newtypes over a primitive and a container, as struct fields" {
+    let u = User { age: 36 as Age, tags: ["x"] as Tags };
+    if let Ok(s) = to_string::<User>(&u) {
+        assert s == `\{"age":36,"tags":["x"]\}`;
+    } else {
+        panic("serializing the fields failed");
+    }
+    if let Ok(v) = from_string::<User>(`\{"age":7,"tags":["y"]\}`) {
+        assert (v.age as i32) == 7;
+        assert (v.tags as List<String>)[0] == "y";
+    } else {
+        panic("deserializing the fields failed");
     }
 }
 

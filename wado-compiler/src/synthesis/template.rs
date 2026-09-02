@@ -897,22 +897,13 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
     reflect_kind_of(type_id, tt).is_some()
 }
 
-/// How deep a kind bound may look for its subject. `Own` asks the receiver
-/// itself; `Inherited` also accepts what a newtype's base carries. Selection
-/// tries `Own` first, so a newtype's own blanket beats one only its base
-/// satisfies — WEP 2026-09-01 rank 2, at this layer.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BoundDepth {
-    Own,
-    Inherited,
-}
-
-/// The value blanket serving `receiver`, ranked: one whose bounds hold at the
-/// receiver itself outranks one that holds only after peeling a newtype
-/// (WEP 2026-09-01 rank 2). The single place monomorphization applies that
-/// order, so its several blanket lookups cannot disagree about which one a
-/// newtype takes. [`blanket_dispatch_for`] asks a narrower question and stops
-/// at `Own`.
+/// The value blanket serving `receiver`: the first whose bounds hold at the
+/// receiver, else one a link down its newtype chain (WEP 2026-09-01 rank 2).
+/// The walk stops at a link carrying an impl of its own, which the newtype
+/// inherits and which outranks any blanket (rank 1) — so `type Name = String`
+/// takes `String`'s `Deserialize`, not the `ReflectStruct` derive its shape
+/// would otherwise admit. Monomorphization ranks blankets only here, so its
+/// several lookups cannot disagree about which one a newtype takes.
 pub(crate) fn ranked_value_blanket<'a>(
     trait_env: &'a TraitEnv,
     trait_: crate::defs::DefId,
@@ -920,13 +911,19 @@ pub(crate) fn ranked_value_blanket<'a>(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<&'a BlanketImpl> {
-    [BoundDepth::Own, BoundDepth::Inherited]
-        .into_iter()
-        .find_map(|depth| {
-            trait_env.value_blanket_for_receiver(trait_, type_module, &|bounds| {
-                receiver_satisfies_blanket_bounds(receiver, bounds, tt, depth)
-            })
-        })
+    if let Some(blanket) = trait_env.value_blanket_for_receiver(trait_, type_module, &|bounds| {
+        receiver_satisfies_blanket_bounds(receiver, bounds, tt)
+    }) {
+        return Some(blanket);
+    }
+    let ResolvedType::Newtype { base_type, .. } = tt.get(tt.peel_refs(receiver)) else {
+        return None;
+    };
+    let base = *base_type;
+    if trait_env.has_any_methodful_impl_by_receiver(&tt.impl_receiver_key(base), trait_) {
+        return None;
+    }
+    ranked_value_blanket(trait_env, trait_, type_module, base, tt)
 }
 
 /// The reflection trait `bound` names, or `None` for any other bound.
@@ -956,18 +953,16 @@ pub(crate) fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) 
         .any(|bound| reflect_bound_item(bound, tt).is_some())
 }
 
-/// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A kind
-/// bound holds when the receiver is that kind, or when the base it inherits
-/// from is (WEP 2026-09-01 rank 2 places the latter at depth 1, and selection
-/// there decides between them); the identity root `Reflect` holds for any kind,
-/// and `ReflectNewtype` for a newtype alone, since being a newtype is not
-/// inherited. Any other bound is treated as satisfiable — deciding one needs
-/// the elaborator's trait query, which monomorphization has no access to.
+/// Whether `type_id` itself satisfies a blanket impl's receiver-param `bounds`
+/// — what a newtype's base satisfies is [`ranked_value_blanket`]'s question, one
+/// chain link at a time. A kind bound holds when the receiver is that kind, the
+/// identity root `Reflect` for any kind, and `ReflectNewtype` for a newtype.
+/// Any other bound is treated as satisfiable — deciding one needs the
+/// elaborator's trait query, which monomorphization has no access to.
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: &[BlanketBound],
     tt: &TypeTable,
-    depth: BoundDepth,
 ) -> bool {
     if bounds.is_empty() {
         return true;
@@ -976,22 +971,15 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
     // `&self` method — every `Serialize::serialize` call — arrives as a
     // reference. Asking the reference for its reflection kind answers `None`
     // and rejects the blanket that should have served the call.
-    let receiver = tt.peel_refs(type_id);
-    let kind = reflect_kind_of(receiver, tt);
-    let inherited_kind = reflect_kind_of(tt.reflect_structure_head(receiver), tt);
-    bounds.iter().all(|bound| {
-        match reflect_bound_item(bound, tt) {
+    let kind = reflect_kind_of(tt.peel_refs(type_id), tt);
+    bounds
+        .iter()
+        .all(|bound| match reflect_bound_item(bound, tt) {
             // The root asks for a name, not for a shape: any reflected kind.
             Some(CompilerItem::Reflect) => kind.is_some(),
-            // Being a newtype is the one kind fact a base cannot supply.
-            Some(CompilerItem::ReflectNewtype) => kind == Some(CompilerItem::ReflectNewtype),
-            Some(required) => {
-                kind == Some(required)
-                    || (depth == BoundDepth::Inherited && inherited_kind == Some(required))
-            }
+            Some(required) => kind == Some(required),
             None => true,
-        }
-    })
+        })
 }
 
 /// The module of a struct-like `type_id`, used as the disambiguation hint for
@@ -1023,16 +1011,16 @@ pub(crate) fn blanket_dispatch_for(
     let type_module = type_module_hint_tt(type_id, tt);
     // Param and pack projections must come from the same blanket, or the
     // template name would name one kind and the args another.
-    // `Own` only, no peel: this asks which blanket *owns* the receiver's
-    // method, and rank 2 answers at the receiver itself. Admitting the base's
-    // bound here would hand a newtype over a struct to the `ReflectStruct`
-    // derive, losing the ` as Name` tag its own `ReflectNewtype` derive writes.
-    // The peel belongs to the pack projection, where the question is what the
-    // base's structure is, not whose impl this is.
+    // The receiver itself, no peel: this asks which blanket *owns* the
+    // receiver's method, and rank 2 answers at the receiver. Admitting the
+    // base's bound here would hand a newtype over a struct to the
+    // `ReflectStruct` derive, losing the ` as Name` tag its own
+    // `ReflectNewtype` derive writes. The peel belongs to the pack projection,
+    // where the question is what the base's structure is, not whose impl this is.
     let blanket = trait_env.value_blanket_for_receiver(
         trait_name.canonical()?,
         type_module.as_ref(),
-        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds, tt, BoundDepth::Own),
+        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds, tt),
     )?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(

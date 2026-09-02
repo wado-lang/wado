@@ -165,7 +165,7 @@ pub(super) fn blanket_pack_dispatch_args(
         type_table,
     )?;
     // Only the blanket this call dispatches. `ranked_value_blanket` also
-    // answers at the depth a newtype's base carries, so a trait with several
+    // answers for what a newtype's base carries, so a trait with several
     // blankets could hand back one whose template the call never names, and
     // its projections would key an instance nothing instantiates.
     if blanket_template_name(blanket, method, type_table) != generic_name {
@@ -1767,7 +1767,11 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> TypeId {
         let base = match type_table.get(tid) {
-            ResolvedType::Newtype { .. } => type_table.resolve_newtype_base(tid),
+            // What the newtype inherits impls from, which for a newtype over a
+            // `flags` type is that declaration — `resolve_newtype_base` would
+            // carry on to `u32`, the representation, whose impls are a
+            // different set and which carries no `ReflectFlags` at all.
+            ResolvedType::Newtype { .. } => type_table.reflect_structure_head(tid),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => return tid,
         };
