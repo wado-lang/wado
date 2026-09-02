@@ -281,18 +281,6 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
     return hi >> s as u64 | sticky;
 }
 
-// uscale by 10^p, for the callers that scale once per pow10 lookup. Taking the
-// pair through `get_pow10` costs a heap `PmHiLo` there: inlining turns it into a
-// two-armed block, and `sroa` splits only a direct literal. `short` keeps
-// `get_pow10`, since it scales three times off one lookup.
-pub fn uscale_pow10(x: u64, p: i32, s: i32) -> u64 {
-    if p >= 0 && p < POW10_K {
-        return uscale(x, pow10_fine(p), 0, s);
-    }
-    let pm = mul_pow10(p);
-    return uscale(x, pm.hi, pm.lo, s);
-}
-
 // Result of formatting
 pub struct FormatResult {
     pub digits: u64,
@@ -310,9 +298,10 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
 
     let p = n - 1 - log10_pow2(e + 63);
     let lp = log2_pow10(p);
+    let pm = get_pow10(p);
     let s = -(e + lp + 3);
 
-    let u = uscale_pow10(m, p, s);
+    let u = uscale(m, pm.hi, pm.lo, s);
     let mut d = unrounded_round(u);
     if d >= pow10(n) {
         d = unrounded_round(unrounded_div(u, 10));
@@ -323,8 +312,8 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
 }
 
 // Compute fixed_width result for fixed-point formatting with given precision.
-// Cost: 1×unpack64 + 1×uscale_pow10, against the short() + fixed_width() two-pass
-// this replaced; the rare shapes split off below need one more scaling to pin the
+// Cost: 1×unpack64 + 1×uscale, against the short() + fixed_width() two-pass this
+// replaced; the rare shapes split off below need one more scaling to pin the
 // decimal position.
 pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let unpack = unpack64(f);
@@ -345,8 +334,9 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     }
 
     let lp = log2_pow10(precision);
+    let pm = get_pow10(precision);
     let s = -(e + lp + 3);
-    let d = unrounded_round(uscale_pow10(m, precision, s));
+    let d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
     return FormatResult { digits: d, exponent: -precision, n_digits: digits(d) };
 }
 
@@ -358,8 +348,9 @@ fn fixed_width_out_of_range(m: u64, e: i32, log10_e63: i32, precision: i32) -> F
     // One uscale + floor check resolves the ambiguity exactly.
     let p1 = -log10_e63;
     let lp1 = log2_pow10(p1);
+    let pm1 = get_pow10(p1);
     let s1 = -(e + lp1 + 3);
-    let u1 = uscale_pow10(m, p1, s1);
+    let u1 = uscale(m, pm1.hi, pm1.lo, s1);
     let d1_floor = unrounded_floor(u1);
     // log10_pow2 underestimates floor(log10(f)) by one exactly when the
     // one-digit floor reaches 10, in which case the decimal position is one
@@ -387,8 +378,9 @@ fn fixed_width_out_of_range(m: u64, e: i32, log10_e63: i32, precision: i32) -> F
         // exponent. The result is 0 or 1.
         let p = -log10_e63;
         let lp = log2_pow10(p);
+        let pm = get_pow10(p);
         let s = -(e + lp + 3);
-        let u = uscale_pow10(m, p, s);
+        let u = uscale(m, pm.hi, pm.lo, s);
         let d = unrounded_round(unrounded_div(u, pow10(p - precision)));
         return FormatResult { digits: d, exponent: -precision, n_digits: d as i32 };
     }
@@ -397,8 +389,9 @@ fn fixed_width_out_of_range(m: u64, e: i32, log10_e63: i32, precision: i32) -> F
 
     let p = n - 1 - log10_e63;
     let lp = log2_pow10(p);
+    let pm = get_pow10(p);
     let s = -(e + lp + 3);
-    let u = uscale_pow10(m, p, s);
+    let u = uscale(m, pm.hi, pm.lo, s);
     let mut d = unrounded_round(u);
     if d >= pow10(n) {
         d = unrounded_round(unrounded_div(u, 10));
@@ -918,8 +911,9 @@ pub fn parse(d: u64, p: i32) -> f64 {
     let lp = log2_pow10(p);
     let mut e = i32::min(1074, 53 - b - lp);
     let x = d << (64 - b) as u64;
+    let pm = get_pow10(p);
     let s_val = -(e - (64 - b) + lp + 3);
-    let mut u = uscale_pow10(x, p, s_val);
+    let mut u = uscale(x, pm.hi, pm.lo, s_val);
 
     // Branch-free: if round(u) >= 1<<53, shift right by 1
     let unmin_val = (1 as u64 << 55) - 2;
