@@ -100,7 +100,7 @@ identifier
     | 'from' | 'of' | 'type' | 'matches' | 'stores' | 'world'
     | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
     | 'unique' | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
-    | 'test' | 'do' | 'task'
+    | 'test' | 'do' | 'task' | 'extends'
     ;
 
 paramList
@@ -328,7 +328,7 @@ localItemKind
     ;
 
 labeledBlock
-    : IDENTIFIER ':' block
+    : identifier ':' block
     ;
 
 letStatement
@@ -387,7 +387,7 @@ loopStatement
     ;
 
 breakStatement
-    : 'break' (IDENTIFIER (':' expression)?)?
+    : 'break' (identifier (':' expression)? | '(' ')')?
     ;
 
 continueStatement
