@@ -1,7 +1,8 @@
 // `FieldSchema::lookup` walks a decision tree over the key's bytes, so a wire
 // key that shares a branch with a field but differs off it must still be
 // unknown: "xyc" takes the same last-byte branch as "abc", "ad" the same length
-// as "ab", and "abcd" no branch at all.
+// as "ab", and "abcd" no branch at all. `Degenerate` covers the two shapes with
+// no branch to take at all.
 use { Serialize, Deserialize } from "core:serde";
 use { from_string } from "core:json";
 
@@ -33,6 +34,26 @@ test "a key off the tree is unknown, not the field it branches with" {
     assert k.ab == 1;
     assert [k.ac, k.abc, k.xyz, k.xya] == [-1, -1, -1, -1];
     assert [k.long_field_name_one, k.long_field_name_two] == [-1, -1];
+}
+
+struct Degenerate {
+    // No position tells these apart, so the tree has nothing to split on and
+    // the first declared wins, as it did when the lookup was a flat chain.
+    #[wire(name = "k")]
+    first: i32 = -1,
+    #[wire(name = "k")]
+    second: i32 = -1,
+    // A zero-length bucket: its leaf confirms no position at all.
+    #[wire(name = "")]
+    empty: i32 = -1,
+}
+
+impl Serialize for Degenerate;
+impl Deserialize for Degenerate;
+
+test "a name the tree cannot split binds the first declared" {
+    let d = from_string::<Degenerate>("{\"k\":7,\"\":9}").expect("deserialize failed");
+    assert [d.first, d.second, d.empty] == [7, -1, 9];
 }
 
 __DATA__
