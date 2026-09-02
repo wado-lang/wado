@@ -124,8 +124,8 @@ fn find_region(
     }
     let body = func.body.as_ref()?;
     // Nearly every function has no marker, so settle that with one linear scan
-    // of the arena before classifying its blocks — and before reading the
-    // package-wide descriptor table, which only the pricing below needs.
+    // of the arena before classifying its blocks. The descriptor table is read
+    // after it, since only the pricing below needs one.
     if !body
         .exprs
         .values()

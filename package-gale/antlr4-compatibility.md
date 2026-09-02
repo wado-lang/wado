@@ -160,9 +160,10 @@ Test sources covering Stage A:
    `tests/antlr4-compat/stage_a/<Category>/<Category>_<k>_test.wado`
    for claims (b), (c), (d). Each file carries up to
    `DESCRIPTORS_PER_FILE` descriptors, each importing its grammar under
-   a namespace of its own (`t_<Name>`) — one whole-program `-O3` build
-   pays for the shared Gale runtime once per file rather than once per
-   descriptor. A descriptor's claim is one of:
+   a namespace of its own (`t_<Name>`). Every entry module is a
+   whole-program `-O3` build, so grouping compiles the shared Gale
+   runtime once per file rather than once per descriptor. A
+   descriptor's claim is one of:
    - claim (b): assert `t_<N>::parse(&input)` returns
      `Ok`. Eligibility: `[type]` is `Parser`, non-empty `[input]`,
      empty `[errors]`, single grammar.

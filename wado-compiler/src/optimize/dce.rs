@@ -172,12 +172,9 @@ impl DescriptorCache {
         &self.refs
     }
 
-    /// A descriptor is keyed by store position, so it goes stale if a pass
-    /// renames a function in place. A caller may read this table once per
-    /// function — `cold_outline` does — so comparing every entry per read
-    /// would price the accessor at O(n) and its caller at O(n²). Compare one
-    /// entry per read and rotate: a pass that reads across the store still
-    /// covers the whole table.
+    /// A descriptor is keyed by store position, so a rename in place goes
+    /// stale. One entry per read, rotating: a whole-table check costs its
+    /// caller O(n²), since a pass may read once per function.
     #[cfg(debug_assertions)]
     fn assert_one_fresh(&mut self, project: &NirPackage) {
         if self.refs.is_empty() {

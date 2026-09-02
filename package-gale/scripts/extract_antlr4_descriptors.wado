@@ -73,6 +73,12 @@ fn generator_attr() -> String {
     return "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado\")]";
 }
 
+/// `generator_attr` for the Stage B′ files, which the JDK-gated finalize phase
+/// writes rather than the extract.
+fn finalize_attr() -> String {
+    return "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle\")]";
+}
+
 /// The shared `// Triage data: …([<axis>_*]).` comment line. `axis` is
 /// `stage_a` / `stage_b` / `stage_b_oracle`.
 fn triage_doc_line(axis: &String) -> String {
@@ -320,7 +326,7 @@ impl TriageMap {
 ///   (d) tokens-equivalence). At most one variant per descriptor exists
 ///   today (the variants are mutually exclusive on `[type]` / `[errors]`),
 ///   so a single `Category/Name` triage entry unambiguously addresses the
-///   right test file.
+///   right claim.
 /// - **stage_b** comes from the `[stage_b_todo]` / `[stage_b_skip]` buckets
 ///   and applies to the per-descriptor tree-shape equivalence tests
 ///   (full-tree or sub-tree). A descriptor can be Stage A green and Stage B
@@ -641,11 +647,10 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
     return w.to_string();
 }
 
-/// The parts of a per-descriptor chunk that vary by claim.
-/// `emit_test_chunk` builds the common skeleton (provenance comments, Kiln
-/// `use ... with { generator }`, triage decoration, `test { ... }` wrapper)
-/// and each `emit_*` fills this in plus an assertion-body closure.
-struct TestFileSpec {
+/// The parts of a per-descriptor chunk that vary by claim. `emit_test_chunk`
+/// builds the skeleton around it, and each `emit_*` supplies this plus a
+/// closure writing the assertion body.
+struct TestChunkSpec {
     category: String,
     name: String,
     /// Comment lines after `// Source descriptor:`, each `//`-prefixed.
@@ -658,30 +663,27 @@ struct TestFileSpec {
     triage: Triage,
 }
 
-/// One descriptor's chunk of a category test file, and the `tree_compare`
-/// helpers its body calls — hoisted into the one import the file carries.
+/// One descriptor's chunk of a category test file, with the `tree_compare`
+/// helpers its body calls. The file hoists them into a single import.
 struct TestChunk {
     text: String,
     tree_helpers: List<String>,
 }
 
-/// How many descriptors one entry module carries. A whole-program -O3 build
-/// per descriptor pays for the shared Gale runtime once per module, so
-/// grouping is what cuts the corpus's compile time; past roughly this many
-/// grammars the optimizer's whole-program passes grow faster than the
-/// sharing saves, and peak RSS with it. Measured on the corpus: 6, 10 and 16
-/// are within noise of each other and all beat one module per class on the
-/// largest ones (`stage_a/LexerExec` 36 descriptors: 80.6s → 61.7s).
+/// How many descriptors one entry module carries. Each module is a
+/// whole-program -O3 build, so grouping pays for the shared Gale runtime once
+/// per file; past roughly this many grammars the whole-program passes grow
+/// faster than the sharing saves, and peak RSS with them.
 global DESCRIPTORS_PER_FILE: i32 = 10;
 
-/// The module namespace a descriptor's grammar is imported under. Unique
-/// within its file, which is what lets one module carry many grammars —
-/// descriptor names are plain identifiers, unique within a category.
+/// The module namespace a descriptor's grammar is imported under. Descriptor
+/// names are plain identifiers and unique within a category, so this is what
+/// lets one module carry many grammars.
 fn chunk_namespace(name: &String) -> String {
     return `t_${*name}`;
 }
 
-fn emit_test_chunk(spec: &TestFileSpec, body: fn(&mut CodeWriter, &String)) -> TestChunk {
+fn emit_test_chunk(spec: &TestChunkSpec, body: fn(&mut CodeWriter, &String)) -> TestChunk {
     let ns = chunk_namespace(&spec.name);
     let mut w = CodeWriter::new();
     w.line(&`// Source descriptor: ${spec.category}/${spec.name} (ANTLR4 runtime-testsuite).`);
@@ -708,7 +710,7 @@ fn emit_test_chunk(spec: &TestFileSpec, body: fn(&mut CodeWriter, &String)) -> T
 }
 
 /// Wrap `chunks` as one entry module for `category`.
-fn emit_category_test_file(attr: &String, category: &String, chunks: &List<TestChunk>) -> String {
+fn emit_category_test_file(attr: &String, category: &String, chunks: Slice<TestChunk>) -> String {
     let mut helpers: List<String> = [];
     for let chunk of chunks {
         for let helper of &chunk.tree_helpers {
@@ -735,9 +737,9 @@ fn emit_category_test_file(attr: &String, category: &String, chunks: &List<TestC
 }
 
 /// Write `chunks` as `<Category>_<k>_test.wado` files of at most
-/// `DESCRIPTORS_PER_FILE` descriptors each, and delete every other test file
-/// in `dir` — one place decides which files a category has, so a descriptor
-/// that stops being eligible leaves nothing behind.
+/// `DESCRIPTORS_PER_FILE` descriptors each, and delete every other test file in
+/// `dir`. One place decides which files a category has, so a descriptor that
+/// stops being eligible leaves nothing behind.
 fn write_category_test_files(
     dir: &Descriptor,
     attr: &String,
@@ -745,21 +747,25 @@ fn write_category_test_files(
     chunks: &List<TestChunk>,
 ) -> i32 with Stderr {
     let mut written: List<String> = [];
-    let mut start = 0;
-    while start < chunks.len() {
-        let mut group: List<TestChunk> = [];
-        let mut i = start;
-        while i < chunks.len() && i < start + DESCRIPTORS_PER_FILE {
-            group.push(chunks[i]);
-            i += 1;
-        }
-        let filename = `${*category}_${written.len() + 1}_test.wado`;
-        let src = emit_category_test_file(attr, category, &group);
+    let mut failed = false;
+    let mut index = 0;
+    for let group of chunks.chunks(DESCRIPTORS_PER_FILE) {
+        index += 1;
+        let filename = `${*category}_${index}_test.wado`;
+        let src = emit_category_test_file(attr, category, group);
         if let Err(_) = write_file_string(dir, &filename, &src) {
             eprintln(`extract: cannot write ${*category}/${filename}`);
+            failed = true;
+        } else {
+            written.push(filename);
         }
-        written.push(filename);
-        start += DESCRIPTORS_PER_FILE;
+    }
+    // Which descriptors a file holds is positional, so a half-written category
+    // is a mix of this run's grouping and the last one's. Sweeping that would
+    // delete coverage the failure did not replace, and keeping it would leave
+    // two files claiming the same descriptor; leave it whole for a clean run.
+    if failed {
+        return written.len();
     }
     for let existing of list_files_with_suffix(dir, &"_test.wado") {
         if !written.contains(&existing) {
@@ -825,25 +831,15 @@ fn strip_doc_lines(strip: bool) -> List<String> {
     return [];
 }
 
-/// Emit one Stage B driver test file for a single descriptor.
-///
-/// The file lives at
-/// `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado` so each
-/// descriptor's grammar can be imported via Kiln (`use ... with {
-/// generator: ... }`) under its own `output_dir`, which avoids the
-/// one-grammar-per-file aliasing that a single per-category test file
-/// would require.
-///
-/// The emitted test:
-///   1. Imports the descriptor's `.g4` through Gale's generator,
-///   2. Runs the generated parser on `[input]`,
-///   3. Compares `to_string_tree()` against the normalised `[output]`.
+/// Emit one descriptor's Stage B chunk: import the `.g4` through Gale's
+/// generator, run it on `[input]`, compare `to_string_tree()` against the
+/// normalised `[output]`.
 ///
 /// Triage (`[stage_b_todo]` / `[stage_b_skip]`) decorates the emission:
 /// `Skip` callers should not invoke this function at all; `Todo` causes
 /// the test to be `#[TODO]`-marked so a known-failing assertion is
 /// recorded on a separate axis from real failures (matches Stage A).
-fn emit_stage_b_test_file(
+fn emit_stage_b_test_chunk(
     category: &String,
     name: &String,
     input: &String,
@@ -856,7 +852,7 @@ fn emit_stage_b_test_file(
     for let line of &strip_doc_lines(strip) {
         doc_lines.push(*line);
     }
-    let spec = TestFileSpec {
+    let spec = TestChunkSpec {
         category: *category,
         name: *name,
         doc_lines: doc_lines,
@@ -877,8 +873,8 @@ fn emit_stage_b_test_file(
     });
 }
 
-/// Emit a Stage B sub-tree driver test file. Variant of
-/// `emit_stage_b_test_file` for descriptors whose `[output]` is a
+/// Emit a descriptor's Stage B sub-tree chunk. Variant of
+/// `emit_stage_b_test_chunk` for descriptors whose `[output]` is a
 /// sub-tree of the start rule's tree — typically produced by an
 /// `@after { <ToStringTree("$r.ctx"):writeln()> }` action that prints
 /// the labelled child rather than the start rule itself.
@@ -887,7 +883,7 @@ fn emit_stage_b_test_file(
 /// root rule name (extracted via `extract_root_rule_name`) must differ
 /// from `[start]`. The emitted test navigates from the full tree down
 /// to the first child node of that name via `find_first_child_node`.
-fn emit_stage_sub_b_test_file(
+fn emit_stage_sub_b_test_chunk(
     category: &String,
     name: &String,
     input: &String,
@@ -904,7 +900,7 @@ fn emit_stage_sub_b_test_file(
     for let line of &strip_doc_lines(strip) {
         doc_lines.push(*line);
     }
-    let spec = TestFileSpec {
+    let spec = TestChunkSpec {
         category: *category,
         name: *name,
         doc_lines: doc_lines,
@@ -923,8 +919,7 @@ fn emit_stage_sub_b_test_file(
     });
 }
 
-/// Emit one Stage A claim (b) driver test file (parse-accepts-input)
-/// for a single descriptor.
+/// Emit one descriptor's Stage A claim (b) chunk (parse-accepts-input).
 ///
 /// Asserts that Gale's *generated parser* accepts the descriptor's
 /// `[input]` without error. Covers descriptors whose `[output]` is a
@@ -935,14 +930,14 @@ fn emit_stage_sub_b_test_file(
 ///
 /// Triage (`[stage_a_todo]` / `[stage_a_skip]`) decorates the emission
 /// the same way Stage B does.
-fn emit_stage_a_parse_test_file(
+fn emit_stage_a_parse_test_chunk(
     category: &String,
     name: &String,
     input: &String,
     start: &String,
     triage: &Triage,
 ) -> TestChunk {
-    let spec = TestFileSpec {
+    let spec = TestChunkSpec {
         category: *category,
         name: *name,
         doc_lines: [
@@ -990,7 +985,7 @@ fn descriptor_is_stage_c_eligible(parsed: &ParsedDescriptor) -> bool {
 /// is host-language action-print text (rejected by `normalize_output_for_stage_b`
 /// as a non-tree). Reuses the Stage A generated parser (`antlr4_compat_a`) — the
 /// parser is identical; only the assertion differs.
-fn emit_stage_c_output_test_file(
+fn emit_stage_c_output_test_chunk(
     category: &String,
     name: &String,
     input: &String,
@@ -1006,7 +1001,7 @@ fn emit_stage_c_output_test_file(
     for let line of &strip_doc_lines(strip) {
         doc_lines.push(*line);
     }
-    let spec = TestFileSpec {
+    let spec = TestChunkSpec {
         category: *category,
         name: *name,
         doc_lines: doc_lines,
@@ -1162,8 +1157,7 @@ fn classify_output_for_tokens(input: &String) -> Option<String> {
     return Option::<String>::Some(out);
 }
 
-/// Emit one Stage A claim (c) driver test file (parse-must-error) for
-/// a single descriptor.
+/// Emit one descriptor's Stage A claim (c) chunk (parse-must-error).
 ///
 /// Inverts Stage A claim (b): instead of asserting `Ok`, asserts that
 /// `g::parse(&input)` (for Parser-type grammars) returns `Err`, or
@@ -1176,7 +1170,7 @@ fn classify_output_for_tokens(input: &String) -> Option<String> {
 /// Eligibility is decided by the caller (Parser/Lexer type, non-empty
 /// `[input]`, non-empty `[errors]`, single grammar, category in the
 /// whitelist via `stage_a_err_category_eligible`).
-fn emit_stage_a_err_test_file(
+fn emit_stage_a_err_test_chunk(
     category: &String,
     name: &String,
     input: &String,
@@ -1184,7 +1178,7 @@ fn emit_stage_a_err_test_file(
     is_lexer: bool,
     triage: &Triage,
 ) -> TestChunk {
-    let spec = TestFileSpec {
+    let spec = TestChunkSpec {
         category: *category,
         name: *name,
         doc_lines: [
@@ -1216,8 +1210,7 @@ fn emit_stage_a_err_test_file(
     });
 }
 
-/// Emit one Stage A claim (d) driver test file (tokens-equivalence)
-/// for a single descriptor.
+/// Emit one descriptor's Stage A claim (d) chunk (tokens-equivalence).
 ///
 /// Runs `t::tokenize(&input)` and renders the result through
 /// `to_lexer_string` (defined in `runtime/tools.wado`, inlined into every
@@ -1228,14 +1221,14 @@ fn emit_stage_a_err_test_file(
 /// Eligibility is decided by the caller (Lexer type, non-empty
 /// `[input]`, non-empty `[output]`, empty `[errors]`, single grammar,
 /// output is a clean `[@…]` dump).
-fn emit_stage_a_tokens_test_file(
+fn emit_stage_a_tokens_test_chunk(
     category: &String,
     name: &String,
     input: &String,
     expected: &String,
     triage: &Triage,
 ) -> TestChunk {
-    let spec = TestFileSpec {
+    let spec = TestChunkSpec {
         category: *category,
         name: *name,
         doc_lines: [
@@ -1520,18 +1513,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
             if let Skip(reason) = &triage {
                 println(`  skip:  ${key} — ${*reason}`);
                 total_skip += 1;
-                // Category-level [skip] supersedes all per-stage emission, so
-                // sweep any stale per-stage files away. Without this, flipping
-                // a descriptor from a per-stage [todo] / pass into [skip] would
-                // leave the previous Stage A / Stage B test files behind.
-                let stale_b_filename = `${base}_test.wado`;
-                if let Err(_) = remove_file(&stage_b_cat_dir, &stale_b_filename) {
-                }
-                for let suffix of ["_parse_test.wado", "_err_test.wado", "_tokens_test.wado"] {
-                    let stale = `${base}${suffix}`;
-                    if let Err(_) = remove_file(&stage_a_cat_dir, &stale) {
-                    }
-                }
+                // A category-level [skip] contributes no chunk, so
+                // `write_category_test_files` drops whatever it was in.
+                //
                 // Also sweep the grammar file and its slaves — a [skip]
                 // descriptor's .g4 usually carries StringTemplate directives,
                 // i.e. it is not even a valid grammar, and leaving it behind
@@ -1617,23 +1601,19 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                 triage,
             });
 
-            // ----- Stage A claim (b/c/d): per-descriptor driver(s)
-            // asserting Gale's generated parser/lexer behaviour on
-            // `[input]`. The three claims are mutually exclusive on the
-            // descriptor's `[type]` / `[errors]` pair, so at most one
-            // variant is emitted per descriptor:
+            // ----- Stage A claim (b/c/d): one chunk asserting Gale's
+            // generated parser/lexer behaviour on `[input]`. The three
+            // claims are mutually exclusive on the descriptor's `[type]` /
+            // `[errors]` pair, so at most one fires:
             //
             //   * (b) parse-accepts-input — Parser, empty `[errors]`
-            //         → stage_a/<C>/<N>_parse_test.wado
             //   * (c) parse-must-error    — `ParserErrors` /
             //         `LexerErrors` category, non-empty `[errors]`
-            //         → stage_a/<C>/<N>_err_test.wado
             //   * (d) tokens-equivalence  — Lexer, empty `[errors]`,
             //         `[output]` is a clean `[@…` dump
-            //         → stage_a/<C>/<N>_tokens_test.wado
             //
             // A single `[stage_a_todo]` / `[stage_a_skip]` triage entry
-            // keyed by `Category/Name` addresses whichever variant fires.
+            // keyed by `Category/Name` addresses whichever one fires.
             // All variants share the same generated grammar under
             // `tests/generated/antlr4_compat_a/<C>/<N>/`.
             let parse_eligible = parsed.descriptor_type == "Parser"
@@ -1669,7 +1649,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                 println(`  skipA: ${key} — ${*reason}`);
                 stage_a_skip += 1;
             } else if parse_eligible {
-                stage_a_chunks.push(emit_stage_a_parse_test_file(
+                stage_a_chunks.push(emit_stage_a_parse_test_chunk(
                     category,
                     &base,
                     &parsed.input,
@@ -1682,7 +1662,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                 stage_a_parse_emitted += 1;
             } else if err_eligible {
                 let is_lexer = parsed.descriptor_type == "Lexer";
-                stage_a_chunks.push(emit_stage_a_err_test_file(
+                stage_a_chunks.push(emit_stage_a_err_test_chunk(
                     category,
                     &base,
                     &parsed.input,
@@ -1695,7 +1675,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                 }
                 stage_a_err_emitted += 1;
             } else if let Some(target) = tokens_target {
-                stage_a_chunks.push(emit_stage_a_tokens_test_file(
+                stage_a_chunks.push(emit_stage_a_tokens_test_chunk(
                     category,
                     &base,
                     &parsed.input,
@@ -1751,8 +1731,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                     // of the Stage B′ oracle path below, which derives a tree.
                     if descriptor_is_stage_c_eligible(&parsed) {
                         let stage_c_triage = stage_c_triage_map.lookup(&key);
-                        if !(stage_c_triage matches { Skip(_) }) {
-                            stage_c_chunks.push(emit_stage_c_output_test_file(
+                        if !stage_c_triage matches { Skip(_) } {
+                            stage_c_chunks.push(emit_stage_c_output_test_chunk(
                                 category,
                                 &base,
                                 &parsed.input,
@@ -1821,7 +1801,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                         continue;
                     },
                 };
-                stage_b_chunks.push(emit_stage_sub_b_test_file(
+                stage_b_chunks.push(emit_stage_sub_b_test_chunk(
                     category,
                     &base,
                     &parsed.input,
@@ -1832,7 +1812,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                     &stage_b_triage,
                 ));
             } else {
-                stage_b_chunks.push(emit_stage_b_test_file(
+                stage_b_chunks.push(emit_stage_b_test_chunk(
                     category,
                     &base,
                     &parsed.input,
@@ -1848,41 +1828,28 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
             stage_b_emitted += 1;
         }
 
-        stage_a_files += write_category_test_files(
-            &stage_a_cat_dir,
-            &generator_attr(),
-            category,
-            &stage_a_chunks,
-        );
-        stage_b_files += write_category_test_files(
-            &stage_b_cat_dir,
-            &generator_attr(),
-            category,
-            &stage_b_chunks,
-        );
-        stage_c_files += write_category_test_files(
-            &stage_c_cat_dir,
-            &generator_attr(),
-            category,
-            &stage_c_chunks,
-        );
-
-        // Emit the per-category test file. Skip when nothing would land in
-        // the file *and* no descriptor errored out along the way — i.e. the
-        // empty result is the intentional case where every descriptor was
-        // `[skip]`-triaged (currently only `Listeners`). When at least one
-        // descriptor failed to load / parse / write, leave any previous
-        // file in place: deleting it would silently hide the failure
-        // behind an `empty:` line, and rewriting it as a header-only stub
-        // would erase the last good run's coverage.
         let test_filename = `${to_snake_case(category)}_test.wado`;
+        // A descriptor that failed to load or parse contributed no chunk, and
+        // the sweep below cannot tell that from one that stopped being
+        // eligible. Rewriting the category would drop its committed tests, so
+        // a partial extract leaves the whole category as the last good run
+        // left it — for the per-stage files here and the summary file below.
+        if category_errors > 0 {
+            eprintln(
+                `extract: ${*category} had ${category_errors} descriptor failure(s); leaving antlr4-compat/${*category} untouched`,
+            );
+            continue;
+        }
+
+        let attr = generator_attr();
+        stage_a_files += write_category_test_files(&stage_a_cat_dir, &attr, category, &stage_a_chunks);
+        stage_b_files += write_category_test_files(&stage_b_cat_dir, &attr, category, &stage_b_chunks);
+        stage_c_files += write_category_test_files(&stage_c_cat_dir, &attr, category, &stage_c_chunks);
+
+        // Emit the per-category test file. Nothing landing in it is the
+        // intentional case where every descriptor was `[skip]`-triaged
+        // (currently only `Listeners`), so the file goes.
         if entries.is_empty() {
-            if category_errors > 0 {
-                eprintln(
-                    `extract: ${*category} had ${category_errors} descriptor failure(s); leaving antlr4-compat/${test_filename} untouched`,
-                );
-                continue;
-            }
             if let Err(_) = remove_file(&compat_dir, &test_filename) {
                 // No prior file is fine; only a real I/O failure would surface here.
             }
@@ -1963,11 +1930,10 @@ fn write_oracle_pending_files(
     return Result::Ok(());
 }
 
-/// Emit `stage_b_oracle/<C>/<N>_test.wado` for every
-/// `oracle-pending/<C>/<N>` triple where `.expected` exists (i.e. the
-/// shell wrapper successfully ran the oracle); sweep any prior test
-/// whose `.input` has gone away. `ORACLE_VERSION` env stamps the test
-/// header with the resolved jar version.
+/// Emit a Stage B′ chunk for every `oracle-pending/<C>/<N>` triple where
+/// `.expected` exists, i.e. the shell wrapper ran the oracle. A prior test
+/// whose `.input` has gone away is swept with the rest of the category.
+/// `ORACLE_VERSION` env stamps the header with the resolved jar version.
 fn finalize_stage_b_oracle(root: &Descriptor) with (Stdout, Stderr, Environment, Exit) {
     let pending_root = match open_dir(root, &"package-gale/tests/antlr4-compat/oracle-pending", false) {
         Ok(d) => d,
@@ -2066,7 +2032,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with (Stdout, Stderr, Environment,
                 skip_dropped += 1;
                 continue;
             }
-            chunks.push(emit_stage_b_oracle_test_file(
+            chunks.push(emit_stage_b_oracle_test_chunk(
                 &category,
                 &base,
                 &input_text,
@@ -2080,12 +2046,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with (Stdout, Stderr, Environment,
             }
             emitted += 1;
         }
-        files += write_category_test_files(
-            &oracle_cat,
-            &"#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle\")]",
-            &category,
-            &chunks,
-        );
+        files += write_category_test_files(&oracle_cat, &finalize_attr(), &category, &chunks);
     }
     println(`finalize: emitted ${emitted} Stage B′ test(s) (${emitted_todo} #[TODO]) in ${files} entry module(s)`);
     println(`finalize:           ${skip_dropped} dropped via [stage_b_oracle_skip]`);
@@ -2149,7 +2110,7 @@ fn strip_tail_eof_marker(s: &String) -> String {
 /// is already one line, so collapsing whitespace can only lose information,
 /// and it does whenever a token's own text carries whitespace
 /// (`BREAK: 'break '` renders `break  break `).
-fn emit_stage_b_oracle_test_file(
+fn emit_stage_b_oracle_test_chunk(
     category: &String,
     name: &String,
     input: &String,
@@ -2158,7 +2119,7 @@ fn emit_stage_b_oracle_test_file(
     triage: &Triage,
     oracle_version: &String,
 ) -> TestChunk {
-    let spec = TestFileSpec {
+    let spec = TestChunkSpec {
         category: *category,
         name: *name,
         doc_lines: [
@@ -2590,7 +2551,7 @@ test "triage: unknown bucket section is silently ignored" {
 test "triage: stage_a entry applies to whichever variant (parse / err / tokens) fires for the descriptor" {
     // The three Stage A variants are mutually exclusive on type+errors so
     // a single `Category/Name` key in [stage_a_todo] unambiguously routes
-    // to the right test file regardless of which variant was emitted.
+    // to the right claim regardless of which variant was emitted.
     let toml = Option::<String>::Some(
         "[stage_a_todo]
 \"ParserErrors/Foo\" = \"variant: parse must error — Gale's set-element dispatch elides the kind-check\"
@@ -2764,9 +2725,9 @@ test "parse_cli_args: empty args fall back to default categories" {
 // Regenerating the committed corpus exercises the Stage A / Stage B
 // emitters end-to-end, but the Stage B′ oracle emitter only runs in the
 // JDK-gated finalize phase, so pin its output against a committed file.
-test "emit_stage_b_oracle_test_file reproduces its committed chunk verbatim" {
-    let committed = #include_str("../tests/antlr4-compat/stage_b_oracle/Sets/Sets_1_test.wado");
-    let chunk = emit_stage_b_oracle_test_file(
+test "emit_stage_b_oracle_test_chunk reproduces its committed chunk verbatim" {
+    let committed = #include_str("../tests/antlr4-compat/stage_b_oracle/Sets/Sets_3_test.wado");
+    let chunk = emit_stage_b_oracle_test_chunk(
         &"Sets",
         &"StarSet",
         &"abaac",
@@ -2779,7 +2740,7 @@ test "emit_stage_b_oracle_test_file reproduces its committed chunk verbatim" {
 }
 
 test "emit_test_chunk: Todo triage decorates the test and wires Stage A paths" {
-    let src = emit_stage_a_parse_test_file(&"Foo", &"Bar", &"x", &"start", &Triage::Todo("flaky")).text;
+    let src = emit_stage_a_parse_test_chunk(&"Foo", &"Bar", &"x", &"start", &Triage::Todo("flaky")).text;
     assert src.contains("#[TODO]"), src;
     assert src.contains("// triage: flaky"), src;
     assert src.contains("output_dir: \"../../../generated/antlr4_compat_a/Foo/Bar\""), src;
@@ -2791,29 +2752,30 @@ test "emit_test_chunk: Todo triage decorates the test and wires Stage A paths" {
 }
 
 test "emit_test_chunk: each descriptor calls through its own namespace" {
-    let b = emit_stage_b_test_file(&"C", &"N", &"i", &"", &"(t)", false, &Triage::Pass);
+    let b = emit_stage_b_test_chunk(&"C", &"N", &"i", &"", &"(t)", false, &Triage::Pass);
     assert b.tree_helpers.contains(&"normalize_tree"), `${b.tree_helpers:?}`;
     assert b.text.contains("output_dir: \"../../../generated/antlr4_compat_b/C/N\""), b.text;
     assert b.text.contains("t_N::parse(&input)"), b.text;
 
-    let lexer_err = emit_stage_a_err_test_file(&"C", &"N", &"i", &"", true, &Triage::Pass).text;
+    let lexer_err = emit_stage_a_err_test_chunk(&"C", &"N", &"i", &"", true, &Triage::Pass).text;
     assert lexer_err.contains("t_N::TK_ERROR"), lexer_err;
     assert lexer_err.contains("has_err"), lexer_err;
 
-    let parser_err = emit_stage_a_err_test_file(&"C", &"N", &"i", &"r", false, &Triage::Pass).text;
-    assert !parser_err.contains("TK_ERROR"), parser_err;
+    let parser_err = emit_stage_a_err_test_chunk(&"C", &"N", &"i", &"r", false, &Triage::Pass).text;
+    assert !parser_err.contains("t_N::TK_ERROR"), parser_err;
     assert parser_err.contains("expected parse to fail"), parser_err;
 
-    let tokens = emit_stage_a_tokens_test_file(&"C", &"N", &"i", &"[@0]", &Triage::Pass).text;
+    let tokens = emit_stage_a_tokens_test_chunk(&"C", &"N", &"i", &"[@0]", &Triage::Pass).text;
     assert tokens.contains("t_N::to_lexer_string(&tokens, t_N::TK_EOF)"), tokens;
 }
 
 // Two grammars in one module is the point of the grouping: each keeps its own
 // namespace, and the `tree_compare` helpers they share are imported once.
 test "emit_category_test_file: one module carries many grammars" {
-    let first = emit_stage_b_test_file(&"C", &"One", &"i", &"", &"(t)", false, &Triage::Pass);
-    let second = emit_stage_b_test_file(&"C", &"Two", &"i", &"", &"(t)", false, &Triage::Pass);
-    let src = emit_category_test_file(&generator_attr(), &"C", &[first, second]);
+    let first = emit_stage_b_test_chunk(&"C", &"One", &"i", &"", &"(t)", false, &Triage::Pass);
+    let second = emit_stage_b_test_chunk(&"C", &"Two", &"i", &"", &"(t)", false, &Triage::Pass);
+    let chunks: List<TestChunk> = [first, second];
+    let src = emit_category_test_file(&generator_attr(), &"C", chunks.as_slice());
     assert src.contains("use t_One from"), src;
     assert src.contains("use t_Two from"), src;
     assert src.contains("t_One::parse(&input)"), src;
