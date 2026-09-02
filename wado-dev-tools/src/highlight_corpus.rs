@@ -12,9 +12,9 @@
 //! resolution; that silence is reported rather than gated. Colouring one is a
 //! claim, so two different classes on one span is a defect.
 //!
-//! A file either side rejects is skipped and counted: past a syntax error the
-//! two recoveries describe different programs, so comparing them measures the
-//! recoveries. `check-grammar` owns that divergence.
+//! A file either side rejects is skipped and counted: past a lexical or syntax
+//! error the two recoveries describe different programs, so comparing them
+//! measures the recoveries. `check-grammar` owns that divergence.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -217,8 +217,8 @@ fn accepted_source(path: &str, theirs: &GaleFile) -> Option<String> {
     }
     let source = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
     wado_compiler::parse(&source)
-        .errors
-        .is_empty()
+        .into_fail_fast()
+        .is_ok()
         .then_some(source)
 }
 
