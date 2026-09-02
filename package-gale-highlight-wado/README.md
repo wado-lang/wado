@@ -35,12 +35,21 @@ the tree-sitter capture vocabulary, so any tree-sitter theme applies:
 | `keyword`          | `fn`, `let`, `if`, …                         |
 | `operator`         | `matches`, `+`, `==`, `->`, …                |
 | `type`             | type references and type parameters          |
-| `property`         | `.field`, `.method()`, struct literal fields |
-| `variable`         | identifiers in an interpolation              |
+| `property`         | `.field`, literal and pattern field names    |
+| `function method`  | `.method()`                                  |
+| `variable`         | `stores[p]`, a contextual keyword as a name  |
 | `constant builtin` | `true` / `false` / `null` / `self`           |
 
 A plain identifier stays uncoloured: telling a function from a variable takes
 name resolution, which no context-free grammar has.
+
+A `::` segment naming an identifier stays uncoloured for the same reason.
+`Option::None` and `Foo::new` are one shape to the grammar, and the call's `(`
+sits outside the path rule, so it cannot tell a variant case from a static
+method. A segment spelled with a keyword stays a keyword: `Foo::from` colours
+`from` as one, which is what the compiler lexes it as. `.method()` is not the
+same case: there the grammar matches the `(` alongside the name, so the call is
+certain.
 
 A dotted capture like `constant.builtin` becomes `class="constant builtin"`.
 See [`example/standalone.wado`](./example/standalone.wado) for a full styled

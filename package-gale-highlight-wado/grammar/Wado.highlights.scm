@@ -44,35 +44,47 @@
 ; `matches` lexes as a keyword but is a binary pattern-test operator.
 "matches" @operator
 
-; Identifiers the grammar can classify on its own, most specific first: an
-; override matches anywhere *under* its rule and the first one declared wins,
-; so a rule nested inside another has to be listed above it. `formatSpec` is
-; above these for that reason; `interpolation` is below them.
+; Identifiers the grammar can classify on its own, most specific first. An
+; override matches anywhere under its rule and the first one declared wins, so
+; a rule nested inside another is listed above it.
 ;
 ; Only a rule whose whole subtree is of one nature can carry an override.
-; `typeRef` and `genericParam` hold nothing but types, and `memberName` is a
-; leaf; the call and index forms are out, because `postfixOp` contains the
-; argument list and `@function` there would repaint every argument.
+; `typeRef` and `genericParam` hold nothing but types. For a member name the
+; subtree is whatever `postfixOp` holds beside it, so `Wado.g4` wraps each use
+; site in a one-token rule and those carry the captures instead.
 ;
 ; Telling a function from a variable takes name resolution, which no
 ; context-free grammar has. `mise run check-highlight` reports what stays
 ; uncoloured, by the kind the compiler resolved it to.
 (formatSpec (IDENTIFIER) @comment)
+; `stores[b]` names a parameter, not a type. It sits inside the `fn(…) with
+; stores[b]` type that the rule below would otherwise paint.
+(storesItem (IDENTIFIER) @variable)
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
-; `.field`, `.method()`, a struct literal's field names, and — the minority
-; case this over-reaches on — the `::Case` of a variant path. `memberName`
-; also spells out every keyword usable as a member name; only the contextual
-; ones need listing, because those are the ones the compiler lexes as plain
+; `.method()`, and `.field` with a struct literal's and a pattern's field name.
+; A `::` segment is deliberately absent: it goes through `pathSegment`, which
+; nothing captures, because `Option::None` and `Foo::new` are one shape that
+; only name resolution splits.
+;
+; Each wrapper also spells out the contextual keywords usable as a name; only
+; those need listing, because they are the ones the compiler lexes as plain
 ; identifiers (a real keyword stays a keyword on both sides).
-(memberName (IDENTIFIER) @property)
-(memberName "test" @property)
-(memberName "do" @property)
-(memberName "task" @property)
-(memberName "trap" @property)
-(memberName "forward" @property)
-; The rest of an interpolation is a name the grammar cannot place further.
-(interpolation (IDENTIFIER) @variable)
+(methodName (IDENTIFIER) @function.method)
+(methodName "test" @function.method)
+(methodName "do" @function.method)
+(methodName "task" @function.method)
+(methodName "trap" @function.method)
+(methodName "forward" @function.method)
+(fieldName (IDENTIFIER) @property)
+(fieldName "test" @property)
+(fieldName "do" @property)
+(fieldName "task" @property)
+(fieldName "trap" @property)
+(fieldName "forward" @property)
+; An interpolation holds ordinary code, so its names take the classes the rules
+; above give them and nothing more. Painting the rest `@variable` would colour
+; inside a template what the same name is left plain outside one.
 
 ; The contextual keywords the `identifier` rule also accepts as names. In that
 ; position they are not keywords — the compiler lexes them as identifiers and

@@ -3,8 +3,8 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
-    CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
+    AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
+    CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
     CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
     FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
@@ -906,13 +906,14 @@ impl Parser {
             let case_span = self.peek().span;
             let case_name = self.consume_ident()?;
             let qualifier = match first_type {
-                Type::Named(ref t) => Type::NamespacedGeneric(NamespacedGenericType {
+                Type::Named(ref t) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: t.name.clone(),
                     name: second_name,
+                    name_span: second_span,
                     args: second_args,
                     span: start_span,
-                }),
+                })),
                 _ => {
                     return Err(ParseError {
                         message: "invalid qualified case pattern".to_string(),
@@ -1558,10 +1559,10 @@ impl Parser {
 
         if !self.check(&TokenKind::RBrace) {
             loop {
-                let key = self.consume_ident()?;
+                let (key, key_span) = self.consume_ident_with_span()?;
                 self.expect(&TokenKind::Colon)?;
                 let value = self.parse_attr_value()?;
-                attrs.entries.insert(key, value);
+                attrs.entries.insert(key, AttrEntry { key_span, value });
 
                 if !self.check(&TokenKind::Comma) {
                     break;
@@ -1654,14 +1655,13 @@ impl Parser {
                     });
                 }
                 self.advance();
-                let mut obj: crate::hashmap::IndexMap<String, crate::ast::AttrValue> =
-                    crate::hashmap::IndexMap::default();
+                let mut obj = crate::ast::AttrObject::default();
                 if !self.check(&TokenKind::RBrace) {
                     loop {
-                        let key = self.consume_ident()?;
+                        let (key, key_span) = self.consume_ident_with_span()?;
                         self.expect(&TokenKind::Colon)?;
-                        let v = self.parse_attr_value()?;
-                        obj.insert(key, v);
+                        let value = self.parse_attr_value()?;
+                        obj.insert(key, AttrEntry { key_span, value });
                         if !self.check(&TokenKind::Comma) {
                             break;
                         }
@@ -4664,8 +4664,9 @@ impl Parser {
     /// Parse a type or a type pack spread (`..T`) inside a tuple type.
     fn parse_type_or_pack(&mut self) -> ParseResult<Type> {
         if self.check_dot_dot_or_ellipsis() {
-            let span = self.consume_dot_dot()?;
-            let name = self.consume_ident()?;
+            self.consume_dot_dot()?;
+            // The span starts at the name, not the `..`, as on every type node.
+            let (name, span) = self.consume_ident_with_span()?;
             return Ok(Type::TypePackSpread(name, span));
         }
         self.parse_type()
@@ -4793,7 +4794,7 @@ impl Parser {
         // Check for namespaced type: namespace::type<T>
         if self.check(&TokenKind::ColonColon) {
             self.advance();
-            let type_name = self.consume_ident()?;
+            let (type_name, type_name_span) = self.consume_ident_with_span()?;
 
             // Namespaced generic type: namespace::type<T>
             if self.check(&TokenKind::Lt) {
@@ -4803,23 +4804,25 @@ impl Parser {
                 // to the right wins trailing-comment ownership (drops the comment).
                 let end_span = self.tokens[self.pos - 1].span;
 
-                return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
+                    name_span: type_name_span,
                     args,
                     span: start_span.merge(&end_span),
-                }));
+                })));
             } else {
                 // Namespaced type without generics: namespace::type
                 let end_span = self.tokens[self.pos - 1].span;
-                return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
+                    name_span: type_name_span,
                     args: Vec::new(),
                     span: start_span.merge(&end_span),
-                }));
+                })));
             }
         }
 
@@ -5428,10 +5431,11 @@ impl Parser {
             let end_span = self.expect(&TokenKind::Semicolon)?.span;
             let span = start_span.merge(&end_span);
             return match ty {
-                Type::Tuple(_) => Ok(Item::TupleTypeDecl(TupleTypeDecl {
+                head @ Type::Tuple(_) => Ok(Item::TupleTypeDecl(TupleTypeDecl {
                     id,
                     visibility,
                     attrs,
+                    head,
                     span,
                 })),
                 Type::Named(head) => Ok(Item::BuiltinTypeDecl(BuiltinTypeDecl {
@@ -8480,7 +8484,7 @@ line 2
         assert!(impl_block.methods.is_empty());
     }
 
-    /// `AstSpans::contextual` keys on this span's byte start, so a shift stops
+    /// `AstSpans::overrides` keys on this span's byte start, so a shift stops
     /// the highlighter colouring the word without failing a `kind` assertion.
     #[test]
     fn rest_clause_keyword_span_covers_the_word() {

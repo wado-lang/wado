@@ -63,18 +63,25 @@ fn attr_value_depth(v: &crate::ast::AttrValue) -> usize {
             1 + items.iter().map(attr_value_depth).max().unwrap_or(0)
         }
         AttrValue::Object(obj) if !obj.is_empty() => {
-            1 + obj.values().map(attr_value_depth).max().unwrap_or(0)
+            1 + obj
+                .values()
+                .map(|entry| attr_value_depth(&entry.value))
+                .max()
+                .unwrap_or(0)
         }
         _ => 0,
     }
 }
 
 /// Whether the `with { ... }` attribute object must be expanded multi-line by
-/// the depth rule — i.e. it holds at least one nested container.
+/// the depth rule: it holds at least one nested container.
 fn attrs_force_multiline(u: &UseDecl) -> bool {
-    u.attributes
-        .as_ref()
-        .is_some_and(|attrs| attrs.entries.values().any(|v| attr_value_depth(v) >= 1))
+    u.attributes.as_ref().is_some_and(|attrs| {
+        attrs
+            .entries
+            .values()
+            .any(|entry| attr_value_depth(&entry.value) >= 1)
+    })
 }
 
 /// Append each item separated by `", "` via `emit`.
@@ -559,10 +566,10 @@ impl<'a> Unparser<'a> {
             return;
         }
         self.output.push_str(" with { ");
-        self.comma_sep(&attrs.entries, |s, (k, v)| {
+        self.comma_sep(&attrs.entries, |s, (k, entry)| {
             s.output.push_str(k);
             s.output.push_str(": ");
-            s.unparse_attr_value(v);
+            s.unparse_attr_value(&entry.value);
         });
         self.output.push_str(" }");
     }
@@ -592,10 +599,10 @@ impl<'a> Unparser<'a> {
             }
             crate::ast::AttrValue::Object(obj) => {
                 self.output.push_str("{ ");
-                self.comma_sep(obj, |s, (k, v)| {
+                self.comma_sep(obj, |s, (k, entry)| {
                     s.output.push_str(k);
                     s.output.push_str(": ");
-                    s.unparse_attr_value(v);
+                    s.unparse_attr_value(&entry.value);
                 });
                 self.output.push_str(" }");
             }
@@ -652,17 +659,14 @@ impl<'a> Unparser<'a> {
 
     /// Emit `{` then one `key: value,` per line (recursively wrapping each
     /// value as needed), then a closing `}` on its own indented line.
-    fn unparse_attr_object_multiline(
-        &mut self,
-        obj: &crate::hashmap::IndexMap<String, crate::ast::AttrValue>,
-    ) {
+    fn unparse_attr_object_multiline(&mut self, obj: &crate::ast::AttrObject) {
         self.output.push_str("{\n");
         self.indent_level += 1;
-        for (k, v) in obj {
+        for (k, entry) in obj {
             self.write_indent();
             self.output.push_str(k);
             self.output.push_str(": ");
-            self.unparse_attr_value_wrapped(v);
+            self.unparse_attr_value_wrapped(&entry.value);
             self.output.push_str(",\n");
         }
         self.indent_level -= 1;
@@ -948,7 +952,9 @@ impl<'a> Unparser<'a> {
     fn unparse_tuple_type_decl(&mut self, d: &TupleTypeDecl) {
         self.emit_outer_attrs(&d.attrs);
         self.emit_visibility(d.visibility);
-        self.output.push_str("type [..T];\n");
+        self.output.push_str("type ");
+        self.unparse_type(&d.head);
+        self.output.push_str(";\n");
     }
 
     fn unparse_builtin_type_decl(&mut self, d: &BuiltinTypeDecl) {
