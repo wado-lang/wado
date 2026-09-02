@@ -183,7 +183,21 @@ pub(super) fn blanket_pack_dispatch_args(
         match source {
             BlanketParamSource::Receiver => out.push(receiver),
             BlanketParamSource::Projection(bound_trait, assoc) => {
-                out.push(type_table.resolve_assoc_type_of_trait(receiver, &bound_trait, &assoc)?);
+                // A registered projection, or nothing: `blanket_impl_args` reads
+                // the same one through `resolve_trait_assoc_type_of_instance`,
+                // which falls back to the generic declaration. Answering `None`
+                // here instead would leave the caller keying the instance on the
+                // un-projected args while construction emits the projected ones,
+                // and the queued instance would be lost rather than diagnosed.
+                let Some(projected) =
+                    type_table.resolve_assoc_type_of_trait(receiver, &bound_trait, &assoc)
+                else {
+                    unreachable!(
+                        "blanket projection {assoc} is unregistered at dispatch: \
+                         collection resolves every projection before rewrite reads it"
+                    )
+                };
+                out.push(projected);
             }
             BlanketParamSource::Unresolved => return None,
         }
