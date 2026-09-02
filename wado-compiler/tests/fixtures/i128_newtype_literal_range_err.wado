@@ -1,8 +1,7 @@
-// Which pair of words a 128-bit literal has to fit is how the value is stored,
-// so a newtype over `i128` is that pair too. Reading the cast target's name
-// instead of its representation skipped the literal path entirely, and an
-// oversized literal went through `Signed` with no diagnostic while the same
-// literal cast to `i128` was rejected.
+// A newtype over `i128` holds the same pair of words, so the same literals fit.
+// The cast read the target's name, found a newtype rather than the `i128`
+// struct, and skipped the range check: an oversized literal passed through
+// `Signed` with no diagnostic.
 
 type Signed = i128;
 

@@ -869,10 +869,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || method == items.method_name(CompilerItem::ReflectWireNamePolicy)
     }
 
-    /// Resolve a `Reflect::<T>` member to `T^Reflect::<method>`. The root reads
-    /// a fact about `T` itself rather than walking anything under it — its name,
-    /// its wire-name policy — so there is no shape to check, every kind answers,
-    /// and a generic subject needs no pack bound.
+    /// Resolve a `Reflect::<T>` member to `T^Reflect::<method>`. The root states
+    /// facts about `T` itself, so every kind answers and no pack bound is needed.
     pub(super) fn resolve_reflect_root_static_call(
         &mut self,
         self_ty: TypeId,

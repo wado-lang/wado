@@ -54,8 +54,9 @@ carries a parallel metadata list or value accessor.
 
 A newtype is the one kind with no members: it has a base, and its value bridges
 are the bidirectional `From` the compiler already generates for it ([Conversion Traits](./wep-2026-03-16-conversion-traits.md) §7), so `ReflectNewtype` carries
-neither a member channel nor a bridge of its own. It carries no
-`wire_name_policy` either: a policy cases member names, and a newtype has none.
+neither a member channel nor a bridge of its own. Its `#[wire(name_policy)]`
+names the newtype itself, which is why the policy sits on the root: it states a
+fact about the declaration rather than about anything under it.
 
 Identity and structure part ways at a newtype. It names _itself_ through the
 root, and inherits its base's structure like every other impl ([Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)).
@@ -73,6 +74,7 @@ per chain link, so `type A = i32; type B = A` renders `7 as A as B`.
 internal trait Reflect {                         // identity — every nameable type
     fn type_name() -> String;                    // the declaration's name
     fn type_info() -> TypeInfo;                  // + module + this instantiation's args
+    fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
 internal trait ReflectStruct: Reflect {          // struct
@@ -82,7 +84,6 @@ internal trait ReflectStruct: Reflect {          // struct
     fn members() -> Self::Members;
     fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
     fn defaults() -> Self::FieldSlots;           // declared `f: T = expr` per field
-    fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
 internal trait ReflectVariant: Reflect {         // variant
@@ -90,7 +91,6 @@ internal trait ReflectVariant: Reflect {         // variant
     type Members;                                // [VariantCase<Self, P_0>, …]
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
-    fn wire_name_policy() -> CaseStyle;
 }
 
 internal trait ReflectEnum: Reflect {            // enum
@@ -98,7 +98,6 @@ internal trait ReflectEnum: Reflect {            // enum
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
     fn from_discriminant(disc: i32) -> Option<Self>;
-    fn wire_name_policy() -> CaseStyle;
 }
 
 internal trait ReflectFlags: Reflect {           // flags
@@ -106,7 +105,6 @@ internal trait ReflectFlags: Reflect {           // flags
     fn members() -> Self::Members;
     fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
-    fn wire_name_policy() -> CaseStyle;
 }
 
 internal trait ReflectNewtype: Reflect {         // newtype
@@ -400,7 +398,7 @@ layout, so the receiver must be the instance.
 
 The reflection layer exposes only the authored facts — a member's `rename`
 override (`Member::wire_name_override`) and the type's `name_policy`
-(`wire_name_policy` as a `CaseStyle`, on every kind). A resolved wire name is policy, and
+(`Reflect::wire_name_policy` as a `CaseStyle`). A resolved wire name is policy, and
 casing is serialization vocabulary, not type structure, so it lives in
 `core:serde`; any schema library (Jade) calls the same helper, so wire names never
 diverge.

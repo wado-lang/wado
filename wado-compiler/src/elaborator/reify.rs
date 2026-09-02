@@ -9937,15 +9937,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         pattern_endpoint_to_i128(endpoint)
     }
 
-    /// Discriminant index of `case_name` when `scrutinee_type` is an
-    /// enum that declares it. Drives lowering a bare/qualified enum-case
-    /// pattern to `TirPattern::Enum`.
-    /// Where a qualified prefix's members live when the prefix names a
-    /// newtype, paired with the type the prefix itself names. A newtype
-    /// inherits its base's members and keeps its own identity, so `C::Green`
-    /// on `type C = Color` reads Color's cases and yields a `C` — the
-    /// implicit form of `Color::Green as C`. `None` when the prefix names
-    /// something that owns its members.
+    /// [`super::types::newtype_member_owner`] for the declaration `prefix`
+    /// names at `site`.
     pub(super) fn newtype_member_owner(
         &self,
         site: Option<ast::AstId>,
@@ -9966,6 +9959,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         tt.reflect_structure_head(tt.peel_refs(scrutinee_type))
     }
 
+    /// Discriminant index of `case_name` when `scrutinee_type` is an enum that
+    /// declares it. Drives lowering an enum-case pattern to `TirPattern::Enum`.
     fn scrutinee_enum_case_index(&self, scrutinee_type: TypeId, case_name: &str) -> Option<u32> {
         use crate::tir::ResolvedType;
         // Peel references for match ergonomics: `match &c { Red => … }`
