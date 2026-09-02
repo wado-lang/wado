@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788358051861,
+  "lastUpdate": 1788385844649,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52657,6 +52657,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276753,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "02131a9aa1185f432c8a6512cf1381cd0593a9eb",
+          "message": "Merge pull request #1950 from wado-lang/claude/contextual-keywords-coloring-mstthf\n\nfix(lsp,gale): a contextual keyword is whichever the parse read it as",
+          "timestamp": "2026-09-03T06:37:14+09:00",
+          "tree_id": "adca608bec9db802bda2cb5d7188cc4d149cfd47",
+          "url": "https://github.com/wado-lang/wado/commit/02131a9aa1185f432c8a6512cf1381cd0593a9eb"
+        },
+        "date": 1788385844239,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
             "unit": "bytes"
           }
         ]
