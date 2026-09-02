@@ -933,12 +933,16 @@ pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
             v.visit_id(assoc.id, assoc.span);
             v.visit_type(&assoc.ty);
         }
-        // `T: fn(i32) -> i32` carries its signature's types here.
+        // `T: fn(i32) -> i32 with E` carries its signature's types — and the
+        // effects it names — here, exactly as `Type::Function` does.
         if let Some(signature) = &bound.fn_signature {
             for param in &signature.params {
                 v.visit_type(param);
             }
             v.visit_type(&signature.return_type);
+            for (id, span) in &signature.effect_ids {
+                v.visit_id(*id, *span);
+            }
         }
     }
 }
@@ -1643,8 +1647,9 @@ pub fn attr_value<'a>(object: &'a AttrObject, key: &str) -> Option<&'a AttrValue
 
 /// One `key: value` entry of an attribute object.
 ///
-/// The key's own span is what lets a diagnostic — and the highlighter — point
-/// at the key rather than at the whole `with { … }`.
+/// The key's own span is what lets the highlighter — and, once `options_check`
+/// carries a file, a diagnostic — point at the key rather than at the whole
+/// `with { … }`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttrEntry {
     pub key_span: Span,
@@ -1695,7 +1700,9 @@ pub struct ImportAttributes {
 
 impl ImportAttributes {
     fn get_str(&self, key: &str) -> Option<String> {
-        self.get(key).and_then(AttrValue::as_str).map(str::to_string)
+        self.get(key)
+            .and_then(AttrValue::as_str)
+            .map(str::to_string)
     }
 
     #[must_use]

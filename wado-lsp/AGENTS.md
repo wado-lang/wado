@@ -45,8 +45,11 @@ The contextual keywords lex as identifiers. `test`, `do`, `resume`, `task`,
 `trap`, and `forward` are also usable as names, so only their declaring node's
 span can classify them: `TestDecl::span`, `ResumeExpr::span`,
 `WithHandlerExpr::do_span`, `TaskReturnStmt::span`, and
-`RestClauseDecl::keyword_span`. `AstSpans::contextual` keeps those apart from
-the type spans because they outrank symbol resolution.
+`RestClauseDecl::keyword_span`. `AstSpans::overrides` keeps those apart from
+the type spans because they outrank symbol resolution. A field name is in there
+for the same reason: the shorthand `{ state }` resolves to the binding it
+reads, and deferring to that would colour it `variable` wherever a snapshot
+exists and `property` wherever one does not.
 
 `self` is the exception: the language reserves it (it is absent from
 `Wado.g4`'s `identifier` rule), so `classify_token` recognises it lexically and

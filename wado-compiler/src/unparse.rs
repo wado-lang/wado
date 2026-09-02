@@ -76,14 +76,12 @@ fn attr_value_depth(v: &crate::ast::AttrValue) -> usize {
 /// Whether the `with { ... }` attribute object must be expanded multi-line by
 /// the depth rule — i.e. it holds at least one nested container.
 fn attrs_force_multiline(u: &UseDecl) -> bool {
-    u.attributes
-        .as_ref()
-        .is_some_and(|attrs| {
-            attrs
-                .entries
-                .values()
-                .any(|entry| attr_value_depth(&entry.value) >= 1)
-        })
+    u.attributes.as_ref().is_some_and(|attrs| {
+        attrs
+            .entries
+            .values()
+            .any(|entry| attr_value_depth(&entry.value) >= 1)
+    })
 }
 
 /// Append each item separated by `", "` via `emit`.
@@ -954,7 +952,9 @@ impl<'a> Unparser<'a> {
     fn unparse_tuple_type_decl(&mut self, d: &TupleTypeDecl) {
         self.emit_outer_attrs(&d.attrs);
         self.emit_visibility(d.visibility);
-        self.output.push_str("type [..T];\n");
+        self.output.push_str("type ");
+        self.unparse_type(&d.head);
+        self.output.push_str(";\n");
     }
 
     fn unparse_builtin_type_decl(&mut self, d: &BuiltinTypeDecl) {

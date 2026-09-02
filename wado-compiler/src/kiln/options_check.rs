@@ -300,8 +300,8 @@ fn attr_value_kind(v: &AttrValue) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kiln::options::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsType};
     use crate::ast::AttrEntry;
+    use crate::kiln::options::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsType};
     use crate::token::Span;
 
     /// An attribute entry at a placeholder span: these tests exercise the
@@ -434,7 +434,10 @@ mod tests {
             fields: vec![field("enabled", OptionsType::Bool, None)],
         };
         let mut obj: AttrObject = IndexMap::default();
-        obj.insert("enabled".to_string(), entry(AttrValue::String("yes".to_string())));
+        obj.insert(
+            "enabled".to_string(),
+            entry(AttrValue::String("yes".to_string())),
+        );
         let err = validate(&desc, Some(&AttrValue::Object(obj))).unwrap_err();
         assert!(err.iter().any(|d| d.message.contains("expected bool")));
     }
@@ -465,7 +468,10 @@ mod tests {
             )],
         };
         let mut obj: AttrObject = IndexMap::default();
-        obj.insert("rule".to_string(), entry(AttrValue::String("expr".to_string())));
+        obj.insert(
+            "rule".to_string(),
+            entry(AttrValue::String("expr".to_string())),
+        );
         let result = validate(&desc, Some(&AttrValue::Object(obj))).unwrap();
         assert_eq!(
             result.values,

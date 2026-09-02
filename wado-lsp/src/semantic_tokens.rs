@@ -334,12 +334,19 @@ struct AstSpans {
     /// recovered structurally here). Declaration and use sites share the
     /// binding's definition id, so one set covers both.
     param_ids: IndexSet<AstId>,
-    /// byte start -> class for the contextual keywords that double as names,
-    /// which lex as plain identifiers and are only keywords where they sit:
-    /// `test`, `do`, `resume`, `task`, `trap`, and `forward`. Kept apart from
-    /// `map` because it outranks symbol resolution. `self` is not here — the
-    /// language reserves it, so [`classify_token`] recognises it lexically.
-    contextual: IndexMap<usize, (u32, u32)>,
+    /// byte start -> class for the names the AST settles outright, kept apart
+    /// from `map` because these outrank symbol resolution rather than being
+    /// refined by it:
+    /// - the contextual keywords that double as names — `test`, `do`,
+    ///   `resume`, `task`, `trap`, and `forward` — which lex as plain
+    ///   identifiers and are only keywords where they sit. (`self` is not
+    ///   here: the language reserves it, so [`classify_token`] recognises it
+    ///   lexically.)
+    /// - a field name, which names the field even where it also reads a
+    ///   binding: the shorthand `{ state }` resolves to that binding, and
+    ///   letting the symbol win would colour it `variable` on the path that
+    ///   has a snapshot and `property` on the one that does not.
+    overrides: IndexMap<usize, (u32, u32)>,
 }
 
 impl AstSpans {
@@ -359,12 +366,12 @@ impl AstSpans {
         self.param_ids.contains(&id)
     }
 
-    fn mark_contextual(&mut self, start: usize, class: (u32, u32)) {
-        self.contextual.insert(start, class);
+    fn mark_override(&mut self, start: usize, class: (u32, u32)) {
+        self.overrides.insert(start, class);
     }
 
-    fn contextual_at(&self, start: usize) -> Option<(u32, u32)> {
-        self.contextual.get(&start).copied()
+    fn override_at(&self, start: usize) -> Option<(u32, u32)> {
+        self.overrides.get(&start).copied()
     }
 }
 
@@ -397,12 +404,19 @@ impl SpanCollector {
     /// Mark every key of an attribute object, and of the objects nested in it.
     fn mark_attr_keys(&mut self, object: &ast::AttrObject) {
         for entry in object.values() {
-            self.spans
-                .insert(entry.key_span.start, token_type::PROPERTY);
+            self.mark_field_name(entry.key_span);
             if let Some(nested) = entry.value.as_object() {
                 self.mark_attr_keys(nested);
             }
         }
+    }
+
+    /// A name that is the field it writes. It outranks symbol resolution: a
+    /// shorthand `{ state }` resolves to the binding it reads, and deferring to
+    /// that would colour it `variable` wherever a snapshot exists.
+    fn mark_field_name(&mut self, span: Span) {
+        self.spans
+            .mark_override(span.start, (token_type::PROPERTY, 0));
     }
 }
 
@@ -411,12 +425,12 @@ impl AstVisitor for SpanCollector {
         // The contextual keywords lex as identifiers, so the declaration's own
         // span is the only place each can be recognised.
         if let Item::Test(t) = item {
-            self.spans.mark_contextual(t.span.start, KEYWORD);
+            self.spans.mark_override(t.span.start, KEYWORD);
         }
         if let Item::Impl(b) = item
             && let Some(rest) = b.rest
         {
-            self.spans.mark_contextual(rest.keyword_span.start, KEYWORD);
+            self.spans.mark_override(rest.keyword_span.start, KEYWORD);
         }
         // An import attribute's keys are its object's fields, at every depth.
         // They are not expressions, so no other walk reaches them.
@@ -439,7 +453,7 @@ impl AstVisitor for SpanCollector {
     fn visit_stmt(&mut self, stmt: &ast::Stmt) {
         // `task` in `task return expr;` — the statement span opens on it.
         if let ast::Stmt::TaskReturn(t) = stmt {
-            self.spans.mark_contextual(t.span.start, KEYWORD);
+            self.spans.mark_override(t.span.start, KEYWORD);
         }
         ast::walk_stmt(self, stmt);
     }
@@ -452,17 +466,16 @@ impl AstVisitor for SpanCollector {
         }
         // `resume` and `do`, two more contextual keywords.
         if let Expr::Resume(r) = expr {
-            self.spans.mark_contextual(r.span.start, KEYWORD);
+            self.spans.mark_override(r.span.start, KEYWORD);
         }
         if let Expr::WithHandler(w) = expr {
-            self.spans.mark_contextual(w.do_span.start, KEYWORD);
+            self.spans.mark_override(w.do_span.start, KEYWORD);
         }
         // A field name is the field, not a variable — including the shorthand
         // `{ state }`, where it is also a read but names the field first.
         if let Expr::StructLiteral(literal) = expr {
             for field in &literal.fields {
-                self.spans
-                    .insert(field.name_span.start, token_type::PROPERTY);
+                self.mark_field_name(field.name_span);
             }
         }
         ast::walk_expr(self, expr);
@@ -474,7 +487,7 @@ impl AstVisitor for SpanCollector {
         // name, in the `x: inner` form as much as the shorthand.
         if let ast::Pattern::Struct { fields, .. } = pat {
             for field in fields {
-                self.spans.insert(field.span.start, token_type::PROPERTY);
+                self.mark_field_name(field.span);
             }
         }
         ast::walk_pattern(self, pat);
@@ -558,12 +571,13 @@ fn classify_token(
             // as the parameter binding it resolves to.
             TokenKind::Ident(name) if name == "self" => CONSTANT,
 
-            // Identifiers. A contextual keyword outranks whatever else would
-            // classify the name; everything else prefers the resolved symbol
-            // classification (precomputed in `sem_classes`, keyed by byte
-            // start) and falls back to the lexer/AST heuristics.
+            // Identifiers. A name the AST settles outright — a contextual
+            // keyword, a field name — outranks whatever else would classify
+            // it; everything else prefers the resolved symbol classification
+            // (precomputed in `sem_classes`, keyed by byte start) and falls
+            // back to the lexer/AST heuristics.
             TokenKind::Ident(_) => ast_spans
-                .contextual_at(token.span.start)
+                .override_at(token.span.start)
                 .or_else(|| sem_classes.and_then(|classes| classes.get(&token.span.start).copied()))
                 .unwrap_or_else(|| classify_ident(tokens, index, ast_spans)),
 
@@ -1051,7 +1065,8 @@ mod tests {
     /// A closure-type bound's signature is types as much as any other.
     #[test]
     fn a_closure_type_bound_signature_is_types() {
-        let src = "effect E {\n    fn e();\n}\nfn apply<\n    T: fn(i32) -> f64 with E,\n>(f: T) {}\n";
+        let src =
+            "effect E {\n    fn e();\n}\nfn apply<\n    T: fn(i32) -> f64 with E,\n>(f: T) {}\n";
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 4, "i32"), token_type::TYPE);
         assert_eq!(kind_of(&tokens, src, 4, "f64"), token_type::TYPE);

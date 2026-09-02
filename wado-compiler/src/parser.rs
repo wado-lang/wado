@@ -4,8 +4,7 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
-    CallExpr,
-    CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
+    CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
     CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
     FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
@@ -8486,7 +8485,7 @@ line 2
         assert!(impl_block.methods.is_empty());
     }
 
-    /// `AstSpans::contextual` keys on this span's byte start, so a shift stops
+    /// `AstSpans::overrides` keys on this span's byte start, so a shift stops
     /// the highlighter colouring the word without failing a `kind` assertion.
     #[test]
     fn rest_clause_keyword_span_covers_the_word() {

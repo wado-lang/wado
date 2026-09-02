@@ -196,8 +196,8 @@ impl Divergence {
 
     /// Whether this divergence is a defect rather than a capability gap. A
     /// required class on either side is one the grammar must carry, so any
-    /// relation on it fails; below those, only a span both sides classified —
-    /// and classified differently — does.
+    /// relation on it fails; below those, only a span both sides classified
+    /// does — a class or a boundary the two disagree on, never a silence.
     fn is_gated(&self) -> bool {
         self.compiler.is_some_and(Class::is_required)
             || self.gale.is_some_and(Class::is_required)
@@ -295,9 +295,11 @@ fn read_gale_dump(path: &str) -> IndexMap<String, GaleFile> {
 
 /// The compiler's classification of `source`.
 ///
-/// Semantics are deliberately not loaded: every gated class is decidable from
-/// the token stream and the AST alone, so resolving the whole corpus would buy
-/// only the `Ident` sub-kinds — which are never gated.
+/// Semantics are deliberately not loaded: what the grammar is held to is what
+/// a parse can settle, and that is exactly the classification this path
+/// produces. Resolving the corpus would answer a different question — a
+/// `.method()` becomes the function it resolves to — and hold a context-free
+/// grammar to it.
 fn compiler_pieces(source: &str) -> Vec<Piece> {
     classify_all(source, None)
         .iter()
@@ -506,7 +508,9 @@ fn render_capability_gap(divergences: &[Divergence]) -> String {
     let mut counts: IndexMap<&'static str, usize> = IndexMap::default();
     for divergence in divergences {
         if divergence.relation == Relation::Uncovered
-            && divergence.compiler.is_some_and(|class| !class.is_required())
+            && divergence
+                .compiler
+                .is_some_and(|class| !class.is_required())
         {
             *counts.entry(divergence.kind).or_insert(0) += 1;
         }
