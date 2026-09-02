@@ -1253,14 +1253,47 @@ impl HighlightVisitor {
     }
 }
 
-fn escape_html_char(out: &mut String, c: char) {
-    match c {
-        '&' => out.push_str(&"&amp;"),
-        '<' => out.push_str(&"&lt;"),
-        '>' => out.push_str(&"&gt;"),
-        '"' => out.push_str(&"&quot;"),
-        _ => out.push(c),
+struct HtmlCursor {
+    byte_index: i32,
+    char_index: i32,
+}
+
+fn push_escaped_upto(out: &mut String, source: &String, cur: &mut HtmlCursor, target: i32) {
+    let n = source.len();
+    let mut bi = cur.byte_index;
+    let mut pos = cur.char_index;
+    let mut run = bi;
+    while pos < target && bi < n {
+        let b = source.get_byte_unchecked(bi);
+        if b >= 128 {
+            if b < 224 {
+                bi += 2;
+            } else if b < 240 {
+                bi += 3;
+            } else {
+                bi += 4;
+            }
+        } else {
+            if b == 38 || b == 60 || b == 62 || b == 34 {
+                out.push_str_range_unchecked(source, run, bi);
+                if b == 38 {
+                    out.push_str(&"&amp;");
+                } else if b == 60 {
+                    out.push_str(&"&lt;");
+                } else if b == 62 {
+                    out.push_str(&"&gt;");
+                } else {
+                    out.push_str(&"&quot;");
+                }
+                run = bi + 1;
+            }
+            bi += 1;
+        }
+        pos += 1;
     }
+    out.push_str_range_unchecked(source, run, bi);
+    cur.byte_index = bi;
+    cur.char_index = pos;
 }
 
 fn class_text(capture: &String) -> String {
@@ -1277,30 +1310,16 @@ fn class_text(capture: &String) -> String {
 
 pub fn highlight_html(source: &String, captures: &List<HighlightCapture>, classes: &List<String>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
-    let mut pos = 0;
-    let mut iter = source.chars();
+    let mut cur = HtmlCursor { byte_index: 0, char_index: 0 };
     for let cap of captures {
-        while pos < cap.start {
-            if let Some(c) = iter.next() {
-                escape_html_char(&mut out, c);
-            }
-            pos += 1;
-        }
+        push_escaped_upto(&mut out, source, &mut cur, cap.start);
         out.push_str(&"<span class=\"");
         out.push_str(&classes[cap.capture_id]);
         out.push_str(&"\">");
-        let end = cap.end;
-        while pos < end {
-            if let Some(c) = iter.next() {
-                escape_html_char(&mut out, c);
-            }
-            pos += 1;
-        }
+        push_escaped_upto(&mut out, source, &mut cur, cap.end);
         out.push_str(&"</span>");
     }
-    while let Some(c) = iter.next() {
-        escape_html_char(&mut out, c);
-    }
+    push_escaped_upto(&mut out, source, &mut cur, source.len());
     return out;
 }
 
