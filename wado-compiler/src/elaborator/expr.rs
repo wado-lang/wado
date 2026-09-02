@@ -2480,7 +2480,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// no type of its own for the result to be read from.
     fn is_numeric_literal_arm(&self, body: &ast::Expr, body_type: TypeId) -> bool {
         let mut tails = NumericLiteralTails::default();
-        self.collect_numeric_literal_tails(body, body_type, &mut tails) && !tails.literals.is_empty()
+        self.collect_numeric_literal_tails(body, body_type, &mut tails)
+            && !tails.literals.is_empty()
     }
 
     /// The two halves of an `if`, in either its expression or its statement
