@@ -170,14 +170,12 @@ impl TypeSystem {
         }
     }
 
-    /// The case a bare identifier site names, with the variant, enum or flags
-    /// declaring it. A case is reachable unqualified wherever its type is in
-    /// scope, in value position, and a type of the same name shadows it — the
-    /// resolve walk applies that rule; this reads its answer.
+    /// The case a bare identifier site names, as the resolve walk answered it:
+    /// the type declaring it, and its `Type::Case` spelling.
     pub(crate) fn bare_case_at(
         &self,
         site: crate::ast::AstId,
-    ) -> Option<(crate::defs::DefId, crate::defs::DefId)> {
+    ) -> Option<(crate::defs::DefId, String)> {
         let case = self.resolutions.declared_if_walked(site)?;
         let defs = self.resolutions.defs();
         if !defs.kind(case).is_case() {
@@ -186,7 +184,7 @@ impl TypeSystem {
         let owner = defs
             .parent(case)
             .expect("a case is a member of the type declaring it");
-        Some((owner, case))
+        Some((owner, format!("{}::{}", defs.name(owner), defs.name(case))))
     }
 
     /// The method `name` that `owner` — an `impl` block or a `trait`

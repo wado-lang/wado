@@ -1,10 +1,5 @@
-//! The selection order, over candidates that already exist.
-//!
-//! Ranks 0-3 of `docs/wep-2026-09-01-trait-resolution.md`. Which candidates a
-//! call has is `candidates`' question and which body one names is the caller's;
-//! this is only the order, and it reads nothing but the facts a candidate
-//! carries about how it relates to the receiver. Where the impl was written is
-//! not among them.
+//! Ranks 0-3 of `docs/wep-2026-09-01-trait-resolution.md`, over candidates
+//! that already exist. Where an impl was written is not read.
 
 use super::program::{ImplId, SolverType, TraitDeclId};
 
@@ -140,7 +135,13 @@ mod tests {
             Self(Vec::new())
         }
 
-        fn add(mut self, trait_: TraitDeclId, depth: u32, is_blanket: bool) -> Self {
+        fn add(
+            mut self,
+            trait_: TraitDeclId,
+            depth: u32,
+            is_blanket: bool,
+            is_variadic: bool,
+        ) -> Self {
             let impl_ = ImplId(u32::try_from(self.0.len()).expect("test candidate count"));
             self.0.push(Candidate {
                 impl_,
@@ -148,30 +149,21 @@ mod tests {
                 trait_args: vec![],
                 depth,
                 is_blanket,
-                is_variadic: false,
+                is_variadic,
             });
             self
         }
 
         fn concrete(self, trait_: TraitDeclId, depth: u32) -> Self {
-            self.add(trait_, depth, false)
+            self.add(trait_, depth, false, false)
         }
 
         fn blanket(self, trait_: TraitDeclId, depth: u32) -> Self {
-            self.add(trait_, depth, true)
+            self.add(trait_, depth, true, false)
         }
 
-        fn variadic(mut self, trait_: TraitDeclId) -> Self {
-            let impl_ = ImplId(u32::try_from(self.0.len()).expect("test candidate count"));
-            self.0.push(Candidate {
-                impl_,
-                trait_,
-                trait_args: vec![],
-                depth: 0,
-                is_blanket: false,
-                is_variadic: true,
-            });
-            self
+        fn variadic(self, trait_: TraitDeclId) -> Self {
+            self.add(trait_, 0, false, true)
         }
 
         fn with_args(mut self, args: Vec<SolverType>) -> Self {

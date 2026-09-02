@@ -724,8 +724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return assoc.ty;
         }
 
-        // A qualified case name like `Color::Red` (without parentheses), or a
-        // bare built-in one like `None`.
+        // A case name without parentheses: `Color::Red`, or a bare `Red`.
         if let Some(result) = self.resolve_qualified_case(ident, expected_type) {
             return result;
         }
@@ -889,20 +888,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module that wrote it. So a reference inside a foreign default
         // resolves in the declaring module without a second, module-scoped
         // lookup beside the first. A bare case (`None`, `Leaf`) has no such
-        // segment: the walk answered for the case itself, and its type is
-        // the declaration the case is a member of.
+        // segment: the walk answered for the case itself.
         let (owner, spelled) = if let Some(i) = ident.segments.len().checked_sub(2) {
             (
                 self.tysys.resolutions.declared(ident.segments[i].id),
                 ident.name.clone(),
             )
         } else {
-            let (owner, case) = self.tysys.bare_case_at(ident.id)?;
-            let defs = self.tysys.resolutions.defs();
-            (
-                Some(owner),
-                format!("{}::{}", defs.name(owner), defs.name(case)),
-            )
+            let (owner, spelled) = self.tysys.bare_case_at(ident.id)?;
+            (Some(owner), spelled)
         };
         let pos = spelled.find("::")?;
         let prefix = &spelled[..pos];

@@ -1,7 +1,5 @@
-//! The value trait resolution answers questions about.
-//!
-//! Nothing here names a compiler type. An id is a plain index, so a test writes
-//! the program it needs rather than compiling source to obtain one.
+//! The value trait resolution answers questions about. An id is a plain index,
+//! so a test writes the program it needs rather than compiling source.
 
 use crate::hashmap::IndexMap;
 
@@ -53,6 +51,37 @@ pub struct Pin {
     pub trait_: TraitDeclId,
     pub assoc: AssocId,
     pub ty: SolverType,
+}
+
+impl SolverType {
+    /// Whether a [`Param`](Self::Param) or [`Pack`](Self::Pack) in `self`
+    /// satisfies `pred`.
+    #[must_use]
+    pub fn mentions(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
+        match self {
+            Self::Param(_) | Self::Pack(_) => pred(self),
+            Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
+            Self::Ref { inner, .. } => inner.mentions(pred),
+        }
+    }
+
+    /// `self` with each parameter and pack replaced by `arg` at its position;
+    /// `None` where `arg` has none for one.
+    #[must_use]
+    pub fn map_params(&self, arg: &dyn Fn(u32) -> Option<Self>) -> Option<Self> {
+        let each = |inner: &[Self]| -> Option<Vec<Self>> {
+            inner.iter().map(|t| t.map_params(arg)).collect()
+        };
+        Some(match self {
+            Self::Param(index) | Self::Pack(index) => arg(*index)?,
+            Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
+            Self::Tuple(inner) => Self::Tuple(each(inner)?),
+            Self::Ref { is_mut, inner } => Self::Ref {
+                is_mut: *is_mut,
+                inner: Box::new(inner.map_params(arg)?),
+            },
+        })
+    }
 }
 
 /// One of an impl's type parameters.
@@ -147,9 +176,8 @@ pub struct TraitDef {
     pub arg_defaults: Vec<Option<ArgDefault>>,
 }
 
-/// A type declaration, reduced to what `holds` reads of it at a query. What
-/// `derive` reads — kind, parameters, members — arrives as a [`Declaration`]
-/// and is not kept.
+/// A type declaration, reduced to what `holds` reads of it at a query. Its
+/// members arrive at `derive` as a [`Declaration`] and are not kept.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct TypeDef {
     /// For a newtype, the base it inherits impls from, spelled with the
@@ -179,13 +207,8 @@ pub struct DerivationRequest {
     pub trait_: TraitDeclId,
 }
 
-/// A way a bound holds that depends on the asking module's view of a type and
-/// on no member's trait: a declaration's own reflection kind, which holds only
-/// where its members are visible. Everything else a bound can hold by is an
-/// impl, a bound in force, or a trait that holds for all. A fact is stated of
-/// a declaration and answers for every instance of it: `Pair<String>` is a
-/// struct because `Pair` is. Its answer owes the body, as a derived impl's
-/// does.
+/// A declaration's own reflection kind, stated of the declaration and answering
+/// for every instance of it. Its answer owes the body, as a derived impl's does.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Fact {
     /// Where the fact holds. `None` — everywhere. `Some(modules)` — only when
@@ -194,11 +217,8 @@ pub struct Fact {
     pub visible_from: Option<Vec<ModuleId>>,
 }
 
-/// What the solver is asked about.
-///
-/// Each module's imported declarations join it as `candidates` lands — see
-/// "How the order is guaranteed" in
-/// `docs/wep-2026-09-01-trait-resolution.md`.
+/// What the solver is asked about (`docs/wep-2026-09-01-trait-resolution.md`,
+/// "The solver's input").
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Program {
     /// Insertion order is the order every answer is reported in, so a caller
@@ -230,20 +250,30 @@ impl Program {
         Self::default()
     }
 
-    /// Add one impl. Panics on a repeated id: an id names one impl block, and a
-    /// caller that mints two for one block has already lost the mapping back.
-    pub fn add_impl(&mut self, id: ImplId, def: ImplDef) {
-        assert!(
-            self.impls.insert(id, def).is_none(),
-            "{id:?} was added twice"
+    /// Add one impl at the next id.
+    pub fn push_impl(&mut self, def: ImplDef) -> ImplId {
+        let id = ImplId(
+            u32::try_from(self.impls.len()).expect("a program declares fewer than 2^32 impls"),
         );
-    }
-
-    /// The id the next impl added will get, so a generator can mint ids that
-    /// follow the written ones.
-    #[must_use]
-    pub fn next_impl_id(&self) -> ImplId {
-        ImplId(u32::try_from(self.impls.len()).expect("a program declares fewer than 2^32 impls"))
+        let declared = |p: &SolverType| match p {
+            SolverType::Param(index) | SolverType::Pack(index) => {
+                (*index as usize) < def.params.len()
+            }
+            SolverType::Decl(..) | SolverType::Tuple(_) | SolverType::Ref { .. } => true,
+        };
+        let undeclared = |ty: &SolverType| ty.mentions(&|p| !declared(p));
+        assert!(
+            !undeclared(&def.target)
+                && !def.trait_args.iter().any(undeclared)
+                && !def
+                    .params
+                    .iter()
+                    .flat_map(|p| &p.pins)
+                    .any(|pin| undeclared(&pin.ty)),
+            "{id:?} mentions a parameter it does not declare: {def:?}"
+        );
+        assert!(self.impls.insert(id, def).is_none());
+        id
     }
 
     /// The traits a bound on `trait_` answers for: itself and its supertraits,

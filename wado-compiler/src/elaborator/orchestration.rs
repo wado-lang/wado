@@ -1652,10 +1652,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             state.tysys.signatures = Rc::new(signatures);
         }
-        // Every declaration is resolved, so the solver can read them all at once.
-        state.tysys.solver = Rc::new(Some(super::solver_bridge::SolverBridge::build(
-            &state.tysys,
-        )));
+        // Every declaration is resolved, so the solver can read them all at
+        // once. Only the debug-build differential asks it.
+        state.tysys.solver = Rc::new(
+            cfg!(debug_assertions).then(|| super::solver_bridge::SolverBridge::build(&state.tysys)),
+        );
 
         // Imported globals: a `use`-brought global's type is the declaring
         // module's declaration fact, so it is filled here — once every decl

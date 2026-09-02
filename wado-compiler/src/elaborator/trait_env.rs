@@ -1373,17 +1373,16 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// The transitive supertraits of the trait `key` names, deduplicated by
-    /// declaration and excluding the trait itself. Empty for a trait with no
-    /// supertrait clause, and for a name that declares no trait.
-    /// Every trait with its supertrait closure, for a consumer lowering all of
-    /// them at once.
+    /// Every trait with its supertrait closure.
     pub(super) fn supertrait_closures(
         &self,
     ) -> impl Iterator<Item = (&DefId, &Vec<InheritedBound>)> {
         self.supertrait_closures.iter()
     }
 
+    /// The transitive supertraits of the trait `key` names, deduplicated by
+    /// declaration and excluding the trait itself. Empty for a trait with no
+    /// supertrait clause, and for a name that declares no trait.
     pub(super) fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
         self.supertrait_closures.get(key).map_or_else(
             || self.supertrait_closure_named(self.defs.name(*key)),
@@ -2243,23 +2242,19 @@ fn check_impl_coherence(
     impl_headers: &IndexMap<DefId, ImplHeader>,
     resolutions: &crate::resolve::Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
-    use crate::trait_solver::CoherenceError;
-    let mut lowering = super::solver_bridge::Lowering::default();
-    let mut program = crate::trait_solver::Program::new();
-    let sources =
-        super::solver_bridge::lower_impls(&mut lowering, &mut program, impl_headers, resolutions);
-    let header_of =
-        |id: crate::trait_solver::ImplId| -> &ImplHeader { &impl_headers[&sources[id.0 as usize]] };
+    use super::solver_bridge::{Lowering, lower_impls};
+    use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
+    let mut lowering = Lowering::default();
+    let mut program = Program::new();
+    let sources = lower_impls(&mut lowering, &mut program, impl_headers, resolutions);
+    let header_of = |id: ImplId| -> &ImplHeader { &impl_headers[&sources[id.0 as usize]] };
     let mut violations = Vec::new();
-    for error in crate::trait_solver::coherence_errors(&program) {
-        match error {
+    for error in coherence_errors(&program) {
+        let (reported, error) = match error {
             CoherenceError::DuplicateImpl { first, second } => {
                 let (first, second) = (header_of(first), header_of(second));
-                if !is_user_local(&second.module) {
-                    continue;
-                }
-                violations.push((
-                    second.module.clone(),
+                (
+                    second,
                     TypeError::DuplicateTraitImpl {
                         trait_name: second.trait_name.clone().unwrap_or_default(),
                         self_type_name: get_type_name_static(&second.ty),
@@ -2270,22 +2265,22 @@ fn check_impl_coherence(
                         },
                         span: second.span,
                     },
-                ));
+                )
             }
             CoherenceError::UnboundedValueBlanket { impl_ } => {
                 let header = header_of(impl_);
-                if !is_user_local(&header.module) {
-                    continue;
-                }
-                violations.push((
-                    header.module.clone(),
+                (
+                    header,
                     TypeError::UnboundedValueBlanket {
                         trait_name: header.trait_name.clone().unwrap_or_default(),
                         param: get_type_name_static(&header.ty),
                         span: header.span,
                     },
-                ));
+                )
             }
+        };
+        if is_user_local(&reported.module) {
+            violations.push((reported.module.clone(), error));
         }
     }
     violations

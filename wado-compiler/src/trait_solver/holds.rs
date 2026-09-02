@@ -1,13 +1,5 @@
-//! Does this type satisfy this trait?
-//!
-//! Every other question is asked on top of this one: whether a blanket is a
-//! candidate, whether a call's bound is met, whether a derived body is owed.
-//!
-//! A bound holds by a bound in force, by an impl — written, derived, or a
-//! marker — whose own bounds hold in turn, by the newtype chain, by a trait
-//! that holds for everything, or by a fact the lowering states. A structural
-//! trait is not special here: derivation is an impl (`derive`), so every step
-//! this takes is through an impl's bounds, and there is one recursion.
+//! Does this type satisfy this trait? Every other question is asked on top of
+//! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
     ArgDefault, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, Program,
@@ -24,14 +16,9 @@ pub struct Holds {
     pub assoc: Vec<(AssocId, SolverType)>,
 }
 
-/// Whether `ty` satisfies `trait_`, asked from `scope`.
-///
-/// `None` is "does not hold". It is also the answer to a question that reaches
-/// itself: `impl<T: A> B for T` beside `impl<T: B> A for T` grounds neither
-/// trait, and a walk that answered yes to the repeat would make every type
-/// satisfy both. The solver recurses only through impl bounds, so a repeated
-/// `(type, trait)` pair is always that cycle. A recursive type never repeats
-/// here: its derived impl is decided once by `derive`, and answers directly.
+/// Whether `ty` satisfies `trait_`, asked from `scope`. `None` is "does not
+/// hold", and the answer to a question that reaches itself through bounds
+/// alone: `impl<T: A> B for T` beside `impl<T: B> A for T` grounds neither.
 #[must_use]
 pub fn holds(
     program: &Program,
@@ -40,78 +27,168 @@ pub fn holds(
     trait_: TraitDeclId,
     scope: ModuleId,
 ) -> Option<Holds> {
-    holds_within(program, env, ty, trait_, scope, &mut Vec::new())
+    Query {
+        program,
+        env,
+        scope,
+        asking: Vec::new(),
+    }
+    .holds(ty, trait_)
 }
 
-fn holds_within(
-    program: &Program,
-    env: &Env,
-    ty: &SolverType,
-    trait_: TraitDeclId,
+/// One question and the questions open under it.
+struct Query<'a> {
+    program: &'a Program,
+    env: &'a Env,
     scope: ModuleId,
-    asking: &mut Vec<(SolverType, TraitDeclId)>,
-) -> Option<Holds> {
-    let goal = (ty.clone(), trait_);
-    if asking.contains(&goal) {
-        return None;
-    }
-    let trait_def = program.traits.get(&trait_);
-    if trait_def.is_some_and(|def| def.holds_for_all) {
-        return Some(Holds::default());
-    }
-    let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
-    if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
-        return Some(Holds::default());
-    }
-    if let SolverType::Param(index) = ty
-        && let Some(bounds) = env.param_bounds.get(*index as usize)
-        && bounds
+    asking: Vec<(SolverType, TraitDeclId)>,
+}
+
+impl Query<'_> {
+    fn holds(&mut self, ty: &SolverType, trait_: TraitDeclId) -> Option<Holds> {
+        let goal = (ty.clone(), trait_);
+        if self.asking.contains(&goal) {
+            return None;
+        }
+        let program = self.program;
+        let trait_def = program.traits.get(&trait_);
+        if trait_def.is_some_and(|def| def.holds_for_all) {
+            return Some(Holds::default());
+        }
+        let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
+        if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
+            return Some(Holds::default());
+        }
+        if let SolverType::Param(index) = ty
+            && let Some(bounds) = self.env.param_bounds.get(*index as usize)
+            && bounds
+                .iter()
+                .any(|&bound| program.bound_reaches(bound, trait_))
+        {
+            return Some(Holds::default());
+        }
+        if let SolverType::Decl(head, _) = ty
+            && let Some(fact) = program.facts.get(&(*head, trait_))
+            && fact
+                .visible_from
+                .as_ref()
+                .is_none_or(|modules| modules.contains(&self.scope))
+        {
+            return Some(Holds {
+                requests: vec![DerivationRequest {
+                    ty: ty.clone(),
+                    trait_,
+                }],
+                ..Holds::default()
+            });
+        }
+
+        self.asking.push(goal);
+        let answer = program
+            .impls
             .iter()
-            .any(|&bound| program.bound_reaches(bound, trait_))
-    {
-        return Some(Holds::default());
+            .find_map(|(&id, def)| self.impl_answers(id, def, ty, trait_))
+            .or_else(|| {
+                // A newtype inherits its base's impls (WEP 2026-01-29), which
+                // is rank 1 read as a bound.
+                let base = newtype_base(program, ty)?;
+                self.holds(&base, trait_)
+            })
+            .or_else(|| {
+                // A reference inherits its pointee's bound by auto-deref,
+                // where the trait allows it.
+                let SolverType::Ref { inner, .. } = ty else {
+                    return None;
+                };
+                match on_ref {
+                    RefRule::Inherits => self.holds(inner, trait_),
+                    RefRule::Always | RefRule::Never => None,
+                }
+            });
+        self.asking.pop();
+        answer
     }
-    if let SolverType::Decl(head, _) = ty
-        && let Some(fact) = program.facts.get(&(*head, trait_))
-        && fact
-            .visible_from
-            .as_ref()
-            .is_none_or(|modules| modules.contains(&scope))
-    {
-        return Some(Holds {
-            requests: vec![DerivationRequest {
+
+    /// Whether one impl answers the goal: its trait must reach `trait_` at the
+    /// trait's defaults, its target must match `ty`, and every bound its
+    /// parameters carry must hold of what the match bound them to, binding
+    /// what the bound pins.
+    fn impl_answers(
+        &mut self,
+        id: ImplId,
+        def: &ImplDef,
+        ty: &SolverType,
+        trait_: TraitDeclId,
+    ) -> Option<Holds> {
+        let program = self.program;
+        let implemented = def.trait_?;
+        if !program.bound_reaches(implemented, trait_) || !restates_defaults(program, def) {
+            return None;
+        }
+        // A value blanket mints no instance for a reference: `&T` reaches it
+        // through the pointee, by the trait's reference rule, or not at all.
+        if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Ref { .. }) {
+            return None;
+        }
+        let mut bindings: Vec<Option<SolverType>> = vec![None; def.params.len()];
+        if !match_target(&def.target, ty, &mut bindings) {
+            return None;
+        }
+        let bound_to = |ty: &SolverType| ty.map_params(&|i| bindings.get(i as usize)?.clone());
+        let mut requests = match def.origin {
+            ImplOrigin::Written => Vec::new(),
+            ImplOrigin::Derived | ImplOrigin::Marker => vec![DerivationRequest {
                 ty: ty.clone(),
                 trait_,
             }],
-            ..Holds::default()
-        });
-    }
-
-    asking.push(goal);
-    let answer = program
-        .impls
-        .iter()
-        .find_map(|(&id, def)| impl_answers(program, env, id, def, ty, trait_, scope, asking))
-        .or_else(|| {
-            // A newtype inherits its base's impls (WEP 2026-01-29). Its own
-            // are asked first, above; the base is asked only when they do not
-            // answer, which is rank 1 read as a bound.
-            let base = newtype_base(program, ty)?;
-            holds_within(program, env, &base, trait_, scope, asking)
-        })
-        .or_else(|| {
-            // A reference inherits its pointee's bound by auto-deref, where
-            // the trait allows it. Its own impls are asked first, above.
-            let SolverType::Ref { inner, .. } = ty else {
+        };
+        for (index, param) in def.params.iter().enumerate() {
+            // A parameter the target never mentions binds nothing, so a bound
+            // on it cannot be checked and the impl does not answer through it.
+            let Some(binding) = bindings[index].as_ref() else {
+                if param.bounds.is_empty() {
+                    continue;
+                }
                 return None;
             };
-            match on_ref {
-                RefRule::Inherits => holds_within(program, env, inner, trait_, scope, asking),
-                RefRule::Always | RefRule::Never => None,
+            // A pack's bound holds of each element it took (`..T: Eq` on
+            // `(..T)`), a parameter's of the one type it bound.
+            let is_pack = def
+                .target
+                .mentions(&|p| matches!(p, SolverType::Pack(i) if *i as usize == index));
+            let elements: Vec<&SolverType> = match binding {
+                SolverType::Tuple(elems) if is_pack => elems.iter().collect(),
+                _ => vec![binding],
+            };
+            for &bound in &param.bounds {
+                for element in &elements {
+                    let answer = self.holds(element, bound)?;
+                    // `T: Mul<Output = T>`: the answering impl must bind the
+                    // pinned type as the pin says. An answer binding nothing
+                    // for it is not refuted, and a pin naming a parameter the
+                    // target left unbound (`Members = [..C]`) reads the
+                    // projection rather than checking it.
+                    for pin in param.pins.iter().filter(|pin| pin.trait_ == bound) {
+                        let Some(expected) = bound_to(&pin.ty) else {
+                            continue;
+                        };
+                        let actual = answer.assoc.iter().find(|(assoc, _)| *assoc == pin.assoc);
+                        if actual.is_some_and(|(_, actual)| *actual != expected) {
+                            return None;
+                        }
+                    }
+                    requests.extend(answer.requests);
+                }
             }
-        });
-    asking.pop();
-    answer
+        }
+        let assoc = program
+            .assoc_bindings
+            .iter()
+            .filter(|((impl_, _), _)| *impl_ == id)
+            .filter_map(|((_, assoc), binding)| Some((*assoc, bound_to(binding)?)))
+            .collect();
+        Some(Holds { requests, assoc })
+    }
 }
 
 /// The base a newtype receiver inherits from, at the receiver's own type
@@ -121,115 +198,10 @@ fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverType> {
         return None;
     };
     let base = program.types.get(head)?.newtype_base.as_ref()?;
-    Some(substitute(base, args))
-}
-
-/// `ty` with each [`SolverType::Param`] replaced by the argument at its
-/// position.
-fn substitute(ty: &SolverType, args: &[SolverType]) -> SolverType {
-    match ty {
-        SolverType::Param(index) => args
-            .get(*index as usize)
-            .cloned()
-            .unwrap_or_else(|| panic!("parameter {index} has no argument among {args:?}")),
-        SolverType::Pack(_) => ty.clone(),
-        SolverType::Decl(head, inner) => {
-            SolverType::Decl(*head, inner.iter().map(|t| substitute(t, args)).collect())
-        }
-        SolverType::Tuple(inner) => {
-            SolverType::Tuple(inner.iter().map(|t| substitute(t, args)).collect())
-        }
-        SolverType::Ref { is_mut, inner } => SolverType::Ref {
-            is_mut: *is_mut,
-            inner: Box::new(substitute(inner, args)),
-        },
-    }
-}
-
-/// Whether one impl answers the goal: its trait must reach `trait_` at the
-/// trait's defaults, its target must match `ty`, and every bound its
-/// parameters carry must hold of what the match bound them to, binding what
-/// the bound pins.
-#[allow(clippy::too_many_arguments)]
-fn impl_answers(
-    program: &Program,
-    env: &Env,
-    id: ImplId,
-    def: &ImplDef,
-    ty: &SolverType,
-    trait_: TraitDeclId,
-    scope: ModuleId,
-    asking: &mut Vec<(SolverType, TraitDeclId)>,
-) -> Option<Holds> {
-    let implemented = def.trait_?;
-    if !program.bound_reaches(implemented, trait_) || !restates_defaults(program, def) {
-        return None;
-    }
-    // A value blanket mints no instance for a reference, so it does not
-    // answer one: `&T` reaches a value blanket through the pointee, by the
-    // trait's reference rule, or not at all.
-    if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Ref { .. }) {
-        return None;
-    }
-    let mut bindings: Vec<Option<SolverType>> = vec![None; def.params.len()];
-    if !match_target(&def.target, ty, &mut bindings) {
-        return None;
-    }
-    // A derived or marker impl answers like a written one, and the body it
-    // stands for is owed by the answer.
-    let mut requests = match def.origin {
-        ImplOrigin::Written => Vec::new(),
-        ImplOrigin::Derived | ImplOrigin::Marker => vec![DerivationRequest {
-            ty: ty.clone(),
-            trait_,
-        }],
-    };
-    for (index, param) in def.params.iter().enumerate() {
-        // A parameter the target never mentions is unconstrained, which is an
-        // error where the impl is written; it binds nothing here, so a bound on
-        // it cannot be checked and the impl does not answer through it.
-        let Some(bound_to) = bindings[index].as_ref() else {
-            if param.bounds.is_empty() {
-                continue;
-            }
-            return None;
-        };
-        // A pack's bound holds of each element it took (`..T: Eq` on
-        // `(..T)`), a parameter's of the one type it bound.
-        let elements: Vec<&SolverType> = match bound_to {
-            SolverType::Tuple(elems) if is_pack(&def.target, index) => elems.iter().collect(),
-            _ => vec![bound_to],
-        };
-        for &bound in &param.bounds {
-            for element in &elements {
-                let answer = holds_within(program, env, element, bound, scope, asking)?;
-                // `T: Mul<Output = T>`: the impl that answered must bind the
-                // pinned associated type as the bound says, spelled at this
-                // impl's own bindings. An answer that binds nothing for it —
-                // a bound in force, a trait holding for all — is not refuted.
-                // A pin naming a parameter the target leaves unbound
-                // (`Members = [..C]`) reads the projection rather than
-                // checking it, and constrains nothing here.
-                for pin in param.pins.iter().filter(|pin| pin.trait_ == bound) {
-                    let Some(expected) = substitute_bound(&pin.ty, &bindings) else {
-                        continue;
-                    };
-                    let actual = answer.assoc.iter().find(|(assoc, _)| *assoc == pin.assoc);
-                    if actual.is_some_and(|(_, actual)| *actual != expected) {
-                        return None;
-                    }
-                }
-                requests.extend(answer.requests);
-            }
-        }
-    }
-    let assoc = program
-        .assoc_bindings
-        .iter()
-        .filter(|((impl_, _), _)| *impl_ == id)
-        .filter_map(|((_, assoc), binding)| Some((*assoc, substitute_bound(binding, &bindings)?)))
-        .collect();
-    Some(Holds { requests, assoc })
+    Some(
+        base.map_params(&|i| args.get(i as usize).cloned())
+            .unwrap_or_else(|| panic!("{base:?} mentions a parameter {ty:?} has no argument for")),
+    )
 }
 
 /// Whether the impl's written trait arguments say what the trait's defaults
@@ -249,45 +221,6 @@ fn restates_defaults(program: &Program, def: &ImplDef) -> bool {
             Some(ArgDefault::Opaque) => false,
         }
     })
-}
-
-/// [`substitute`] over the bindings a match made, `None` where the type
-/// mentions a parameter the match left unbound.
-fn substitute_bound(ty: &SolverType, bindings: &[Option<SolverType>]) -> Option<SolverType> {
-    Some(match ty {
-        SolverType::Param(index) | SolverType::Pack(index) => {
-            bindings.get(*index as usize)?.clone()?
-        }
-        SolverType::Decl(head, inner) => SolverType::Decl(
-            *head,
-            inner
-                .iter()
-                .map(|t| substitute_bound(t, bindings))
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        SolverType::Tuple(inner) => SolverType::Tuple(
-            inner
-                .iter()
-                .map(|t| substitute_bound(t, bindings))
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        SolverType::Ref { is_mut, inner } => SolverType::Ref {
-            is_mut: *is_mut,
-            inner: Box::new(substitute_bound(inner, bindings)?),
-        },
-    })
-}
-
-/// Whether the target spells parameter `index` as a pack.
-fn is_pack(target: &SolverType, index: usize) -> bool {
-    match target {
-        SolverType::Pack(i) => *i as usize == index,
-        SolverType::Param(_) => false,
-        SolverType::Decl(_, args) | SolverType::Tuple(args) => {
-            args.iter().any(|a| is_pack(a, index))
-        }
-        SolverType::Ref { inner, .. } => is_pack(inner, index),
-    }
 }
 
 /// Match an impl target against a type, binding the target's parameters by
@@ -345,9 +278,6 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Sol
                         .all(|(a, b)| match_target(a, b, bindings))
             }
         },
-        // A pack matches a whole tuple, and only `candidates` needs what it
-        // bound; a bound on a pack is checked at monomorphization
-        // (WEP 2026-03-14 §5), never here.
         (SolverType::Pack(index), SolverType::Tuple(_)) => {
             bindings[*index as usize] = Some(ty.clone());
             true
@@ -369,6 +299,7 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Sol
 #[cfg(test)]
 mod tests {
     use super::super::program::{Fact, ParamDef, Pin, TraitDef, TypeDeclId, TypeDef};
+    use super::super::testing::{Builder, decl, ref_to};
     use super::*;
 
     const ALPHA: TraitDeclId = TraitDeclId(0);
@@ -382,73 +313,8 @@ mod tests {
     const HERE: ModuleId = ModuleId(0);
     const ELSEWHERE: ModuleId = ModuleId(1);
 
-    fn decl(id: TypeDeclId) -> SolverType {
-        SolverType::Decl(id, vec![])
-    }
-
     fn list_of(inner: SolverType) -> SolverType {
         SolverType::Decl(LIST, vec![inner])
-    }
-
-    #[derive(Default)]
-    struct Builder {
-        program: Program,
-        next: u32,
-    }
-
-    impl Builder {
-        fn impl_(mut self, def: ImplDef) -> Self {
-            self.program.add_impl(ImplId(self.next), def);
-            self.next += 1;
-            self
-        }
-
-        fn concrete(self, trait_: TraitDeclId, target: SolverType) -> Self {
-            self.impl_(ImplDef {
-                trait_: Some(trait_),
-                trait_args: vec![],
-                target,
-                params: vec![],
-                origin: ImplOrigin::Written,
-            })
-        }
-
-        /// `impl<T: bound> trait_ for target`, where `target` mentions `T` as
-        /// parameter 0.
-        fn bounded(
-            self,
-            trait_: TraitDeclId,
-            target: SolverType,
-            bounds: Vec<TraitDeclId>,
-        ) -> Self {
-            self.impl_(ImplDef {
-                trait_: Some(trait_),
-                trait_args: vec![],
-                target,
-                params: vec![ParamDef::bounded(bounds)],
-                origin: ImplOrigin::Written,
-            })
-        }
-
-        fn fact(mut self, head: TypeDeclId, trait_: TraitDeclId, fact: Fact) -> Self {
-            self.program.facts.insert((head, trait_), fact);
-            self
-        }
-
-        fn supertrait(mut self, sub: TraitDeclId, super_: TraitDeclId) -> Self {
-            self.program.traits.insert(
-                sub,
-                TraitDef {
-                    supertraits: vec![super_],
-                    ..TraitDef::default()
-                },
-            );
-            self
-        }
-
-        fn build(self) -> Program {
-            self.program
-        }
     }
 
     fn env(bounds: Vec<Vec<TraitDeclId>>) -> Env {
@@ -572,10 +438,6 @@ mod tests {
     /// `Ord` of none. A reference's own impl is asked first.
     #[test]
     fn a_reference_answers_by_the_trait_s_reference_rule() {
-        let ref_to = |inner: SolverType| SolverType::Ref {
-            is_mut: false,
-            inner: Box::new(inner),
-        };
         let mut p = Builder::default()
             .concrete(ALPHA, decl(POINT))
             .concrete(BETA, decl(POINT))
@@ -752,28 +614,19 @@ mod tests {
 
     #[test]
     fn a_reference_impl_answers_only_for_a_reference() {
-        let ref_of = |inner: SolverType, is_mut: bool| SolverType::Ref {
-            is_mut,
-            inner: Box::new(inner),
-        };
         let p = Builder::default()
-            .bounded(ALPHA, ref_of(SolverType::Param(0), false), vec![])
+            .bounded(ALPHA, ref_to(SolverType::Param(0)), vec![])
             .build();
         assert_eq!(
-            holds(
-                &p,
-                &Env::default(),
-                &ref_of(decl(POINT), false),
-                ALPHA,
-                HERE
-            ),
+            holds(&p, &Env::default(), &ref_to(decl(POINT)), ALPHA, HERE),
             Some(Holds::default())
         );
         assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
-        assert_eq!(
-            holds(&p, &Env::default(), &ref_of(decl(POINT), true), ALPHA, HERE),
-            None
-        );
+        let mut_ref = SolverType::Ref {
+            is_mut: true,
+            inner: Box::new(decl(POINT)),
+        };
+        assert_eq!(holds(&p, &Env::default(), &mut_ref, ALPHA, HERE), None);
     }
 
     /// `impl Serialize for Handler;` is written to make the pair exist where no
@@ -1146,10 +999,6 @@ mod tests {
     /// `&i32` by matching `T` to the reference itself.
     #[test]
     fn a_value_blanket_does_not_answer_for_a_reference() {
-        let ref_to = |inner: SolverType| SolverType::Ref {
-            is_mut: false,
-            inner: Box::new(inner),
-        };
         let mut p = Builder::default()
             .bounded(BETA, SolverType::Param(0), vec![ALPHA])
             .concrete(ALPHA, decl(POINT))

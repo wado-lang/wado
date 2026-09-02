@@ -280,16 +280,8 @@ impl TypeSystem {
         ident: &'a ast::IdentExpr,
     ) -> CalleeIdentKind<'a> {
         let Some(pos) = ident.name.find("::") else {
-            // A bare case (`Some(x)`, `Circle(r)`) is its variant's
-            // constructor, reached by the walk's answer for the site.
             return match self.bare_case_at(ident.id) {
-                Some((owner, case)) => {
-                    let defs = self.resolutions.defs();
-                    CalleeIdentKind::Case {
-                        owner,
-                        spelled: format!("{}::{}", defs.name(owner), defs.name(case)),
-                    }
-                }
+                Some((owner, spelled)) => CalleeIdentKind::Case { owner, spelled },
                 None => CalleeIdentKind::AsIs(ident),
             };
         };

@@ -38,6 +38,21 @@ pub(crate) struct StructFieldInfo {
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
 
+impl StructFieldInfo {
+    /// Whether a reflection written in `module` can enumerate every field
+    /// (WEP 2026-06-13, Visibility): one synthesized impl carries them all, so
+    /// admitting the struct on one public field would expose its private ones.
+    pub(super) fn fields_visible_from(&self, module: &ModuleSource) -> bool {
+        if self.fields.is_empty() || &self.module_source == module {
+            return true;
+        }
+        let same_package = self.module_source.same_package(module);
+        self.fields
+            .iter()
+            .all(|(_, _, vis)| vis.reachable_from(same_package))
+    }
+}
+
 /// A trait bound as a declaration digest records it: the site that wrote it,
 /// which is what says *which* trait, plus the spelling for diagnostics.
 #[derive(Clone, Debug)]

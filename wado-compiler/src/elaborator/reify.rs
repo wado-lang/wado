@@ -440,21 +440,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(ident.segments[owner].id)
     }
 
-    /// A bare case identifier (`Some`, `Leaf`), as the walk answered it: the
-    /// declaration it is a member of, and its `Type::Case` spelling, so it
-    /// reifies through the qualified path with its type read off the
-    /// declaration rather than looked up by name.
-    fn bare_case(&self, ident: &ast::IdentExpr) -> Option<(crate::defs::DefId, String)> {
-        let (owner, case) = self.tysys.bare_case_at(ident.id)?;
-        let defs = self.tysys.resolutions.defs();
-        Some((owner, format!("{}::{}", defs.name(owner), defs.name(case))))
-    }
-
-    /// The `Type::Case` spelling an identifier stands for: its own, or the
-    /// qualified form of a bare case.
-    fn qualified_case_spelling(&self, ident: &ast::IdentExpr) -> String {
-        self.bare_case(ident)
-            .map_or_else(|| ident.name.clone(), |(_, spelled)| spelled)
+    /// A `Type::Case` identifier as the type declaring the case and the case's
+    /// spelling: `Color::Red` at its own segments, a bare `Red` as the walk
+    /// answered it.
+    fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<crate::defs::DefId>, String)> {
+        match self.tysys.bare_case_at(ident.id) {
+            Some((owner, spelled)) => Some((Some(owner), spelled)),
+            None => ident
+                .name
+                .contains("::")
+                .then(|| (None, ident.name.clone())),
+        }
     }
 
     /// The symbol row behind a reference site — see
@@ -7785,18 +7781,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // ctor there too, but that shape would lower to a
         // `Call` against a function that doesn't exist.
         if let ast::Expr::Ident(ident) = &call.callee
-            && let spelled = self.qualified_case_spelling(ident)
+            && let Some((bare_owner, spelled)) = self.case_path(ident)
             && let Some(pos) = spelled.find("::")
         {
             let prefix = &spelled[..pos];
             let suffix = &spelled[pos + 2..];
             if !suffix.contains("::") {
-                let owner = self.qualified_owner_site(ident);
-                let bare_owner = self.bare_case(ident).map(|(owner, _)| owner);
                 let lookup = self.type_lookup();
-                if let Some(variant_info) = bare_owner
+                let owner = bare_owner
+                    .or_else(|| lookup.declaration_at(self.qualified_owner_site(ident), prefix));
+                if let Some(variant_info) = owner
                     .and_then(|owner| lookup.variant_cases_of(owner))
-                    .or_else(|| lookup.variant_cases_at(owner, prefix))
                     .cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
@@ -9051,11 +9046,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // 5. Free function reference — the ident names a function in
         //    the current module or imported via a `use` declaration.
         //    Emit `TirExprKind::FuncRef` with the recorded
-        //    instantiation's type_args when present. A bare built-in case
-        //    (`None`) resolves to its case declaration, which is no function;
-        //    it is the qualified case below.
-        let spelled = self.qualified_case_spelling(ident);
-        let is_bare_case = spelled != ident.name;
+        //    instantiation's type_args when present. A bare case (`None`)
+        //    resolves to its declaration, which is no function; it is the
+        //    case below.
+        let case_path = self.case_path(ident);
+        let is_bare_case = case_path.as_ref().is_some_and(|(owner, _)| owner.is_some());
         if !is_bare_case
             && self
                 .sem
@@ -9131,7 +9126,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    namespace-import form `ns::Type::Case` (two `::`
         //    separators) is handled by a dedicated branch in the
         //    elaborator that resolves the namespace alias first.
-        if let Some(pos) = spelled.find("::") {
+        if let Some((bare_owner, spelled)) = case_path
+            && let Some(pos) = spelled.find("::")
+        {
             let prefix = &spelled[..pos];
             let suffix = &spelled[pos + 2..];
 
@@ -9139,14 +9136,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // a further `::` is `ns::Type::Case` (namespace path) —
             // defer to a later branch.
             if !suffix.contains("::") {
-                let owner = self.qualified_owner_site(ident);
-                let bare_owner = self.bare_case(ident).map(|(owner, _)| owner);
                 let lookup = self.type_lookup();
+                let owner = bare_owner
+                    .or_else(|| lookup.declaration_at(self.qualified_owner_site(ident), prefix));
 
                 // Variant case.
-                if let Some(variant_info) = bare_owner
+                if let Some(variant_info) = owner
                     .and_then(|owner| lookup.variant_cases_of(owner))
-                    .or_else(|| lookup.variant_cases_at(owner, prefix))
                     .cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
@@ -9182,10 +9178,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Enum case.
-                if let Some(enum_info) = bare_owner
-                    .and_then(|owner| lookup.enum_cases_of(owner))
-                    .or_else(|| lookup.enum_cases_at(owner, prefix))
-                    .cloned()
+                if let Some(enum_info) =
+                    owner.and_then(|owner| lookup.enum_cases_of(owner)).cloned()
                     && let Some(case_data) = enum_info.find_case(suffix).cloned()
                 {
                     let enum_type = self
@@ -9205,9 +9199,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Flags member.
-                if let Some(flags_info) = bare_owner
+                if let Some(flags_info) = owner
                     .and_then(|owner| lookup.flags_members_of(owner))
-                    .or_else(|| lookup.flags_members_at(owner, prefix))
                     .cloned()
                     && let Some(member) = flags_info
                         .members

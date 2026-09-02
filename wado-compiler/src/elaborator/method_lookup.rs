@@ -2421,10 +2421,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(best) = candidates.first().filter(|m| m.blanket_binder.is_some()) else {
                 continue;
             };
-            // The locality grouping this keeps is the one
-            // `docs/wep-2026-09-01-trait-resolution.md` removes: two blankets
-            // tied at rank 2 report whichever modules wrote them, so this
-            // filter goes with the sort's local-over-foreign comparison.
+            // Locality grouping, which WEP 2026-09-01 removes ("Locality is
+            // still implemented").
             let is_local = |m: &super::types::TraitMethodMatch| {
                 m.impl_module_source == self.current_module_source
             };
@@ -2477,12 +2475,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
         });
 
-        // The order `docs/wep-2026-09-01-trait-resolution.md` states, as it
-        // stands: concrete over blanket, then bound depth, then local over
-        // foreign. That WEP has depth first, over an impl's target as well as a
-        // blanket's bounds, and no locality at all — the two are its open
-        // implementation items. Sorted BEFORE dedup_by, which only removes
-        // adjacent duplicates.
+        // Concrete over blanket, then bound depth, then local over foreign.
+        // WEP 2026-09-01 states depth first and no locality; both are its
+        // known gaps. Sorted BEFORE dedup_by, which only removes adjacent
+        // duplicates.
         let current_module = &self.current_module_source;
         found_traits.sort_by(|a, b| {
             let a_concrete = a.blanket_type_param.is_none();
@@ -2501,12 +2497,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && a.impl_module_source == b.impl_module_source
         });
 
-        // The narrow half of the scope rule
-        // (`docs/wep-2026-09-01-trait-resolution.md`): the full gate keeps an
-        // unimported trait's methods out of the candidate list entirely, and
-        // until it lands only this tie-break consults scope.
-        //
-        // Distinct same-name declarations tie-break on scope: a same-named
+        // The only place scope is consulted until WEP 2026-09-01's scope gate
+        // lands. Distinct same-name declarations tie-break on scope: a same-named
         // foreign trait the calling module never imported is not a competitor
         // (`cross_module_same_name_foreign_impl.wado` — each module's
         // `s.shout()` dispatches to the `Loud` in scope there). Only when
@@ -2683,10 +2675,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) {
-        // Blanket candidates are excluded from the count, which is why two
-        // traits' blankets sharing a method name tie silently — a known gap of
-        // `docs/wep-2026-09-01-trait-resolution.md`, to be closed with the
-        // scope gate that keeps the two from competing in the first place.
+        // Blanket candidates are excluded from the count, so two traits'
+        // blankets sharing a method name tie silently (WEP 2026-09-01, "Two
+        // traits' blankets sharing a method name are not reported").
         // Selection is untouched — this decides only what is reported.
         // The collision is counted on declarations, so two same-named traits
         // from different modules still collide even though their spellings

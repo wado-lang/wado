@@ -1,6 +1,6 @@
 //! The checks that read the program alone — no receiver, no bounds in force.
 
-use super::program::{ImplDef, ImplId, ImplOrigin, Program, SolverType};
+use super::program::{ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId};
 use crate::hashmap::IndexMap;
 
 /// What a coherence check found. It names impls; the caller turns an id into a
@@ -15,12 +15,8 @@ pub enum CoherenceError {
     UnboundedValueBlanket { impl_: ImplId },
 }
 
-/// Every coherence violation in `program`, in program order.
-///
-/// Two of the four rules `docs/wep-2026-09-01-trait-resolution.md` gives this
-/// function. The orphan rule and variadic overlap still run over the AST in
-/// `elaborator::trait_env`, and move here as the lowering grows to carry what
-/// they read.
+/// Every coherence violation in `program`, in program order. The orphan rule
+/// and variadic overlap still run over the AST in `elaborator::trait_env`.
 #[must_use]
 pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     let mut errors = Vec::new();
@@ -43,26 +39,17 @@ pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
 }
 
 /// What makes two impls the same pair: the trait, its own arguments, the
-/// target, and the bounds its parameters carry.
-///
-/// The bounds belong in the key because a parameter in the target stands for a
-/// condition, not a type. `impl<T: A> Tr for T` beside `impl<T: B> Tr for T`
-/// covers a common receiver only where one type satisfies both, and whether any
-/// does is not decidable where the impls are written — another module may
-/// implement `A` for a type carrying `B` at any time. Selection reports that
-/// overlap at the use site, which is the one place the question has an answer.
-///
-/// An inherent impl has no pair to duplicate — several are how a type spreads
-/// its methods across modules — so it has no key. Neither has a derivation
-/// request: it asks for a body rather than providing one, so it is redundant
-/// beside a real impl of the pair, not a second of them.
+/// target, and its parameters' bounds, so `impl<T: A> Tr for T` and
+/// `impl<T: B> Tr for T` are two pairs.
 type ImplKey<'a> = (
-    super::program::TraitDeclId,
+    TraitDeclId,
     &'a [SolverType],
     &'a SolverType,
-    &'a [super::program::ParamDef],
+    &'a [ParamDef],
 );
 
+/// An inherent impl and a marker have no key: several inherent impls spread a
+/// type's methods across modules, and a marker asks for a body.
 fn impl_key(def: &ImplDef) -> Option<ImplKey<'_>> {
     if def.origin == ImplOrigin::Marker {
         return None;
@@ -82,11 +69,7 @@ fn unbounded_value_blanket(id: ImplId, def: &ImplDef) -> Option<CoherenceError> 
     let SolverType::Param(index) = def.target else {
         return None;
     };
-    let param = def
-        .params
-        .get(index as usize)
-        .unwrap_or_else(|| panic!("{id:?} targets parameter {index}, which it does not declare"));
-    param
+    def.params[index as usize]
         .bounds
         .is_empty()
         .then_some(CoherenceError::UnboundedValueBlanket { impl_: id })
@@ -94,7 +77,8 @@ fn unbounded_value_blanket(id: ImplId, def: &ImplDef) -> Option<CoherenceError> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{ParamDef, TraitDeclId, TypeDeclId};
+    use super::super::program::TypeDeclId;
+    use super::super::testing::{concrete, decl, program};
     use super::*;
 
     const TR: TraitDeclId = TraitDeclId(0);
@@ -105,25 +89,7 @@ mod tests {
     const LIMIT: TraitDeclId = TraitDeclId(2);
 
     fn point() -> SolverType {
-        SolverType::Decl(POINT, vec![])
-    }
-
-    fn concrete(trait_: TraitDeclId, target: SolverType) -> ImplDef {
-        ImplDef {
-            trait_: Some(trait_),
-            trait_args: vec![],
-            target,
-            params: vec![],
-            origin: ImplOrigin::Written,
-        }
-    }
-
-    fn program(impls: impl IntoIterator<Item = ImplDef>) -> Program {
-        let mut program = Program::new();
-        for (i, def) in impls.into_iter().enumerate() {
-            program.add_impl(ImplId(u32::try_from(i).expect("test impl count")), def);
-        }
-        program
+        decl(POINT)
     }
 
     #[test]

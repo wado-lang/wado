@@ -620,12 +620,8 @@ impl TypeSystem {
     }
 
     /// The answer to a question already open on the stack, `None` for a new
-    /// one. A repeat is one of two things. Reached through a member
-    /// (`struct Node { next: Option<Node> }`) it is a recursive type, whose
-    /// derived body is well-founded, and answers yes. Reached through impl
-    /// bounds alone (`impl<T: A> B for T` beside `impl<T: B> A for T`) it
-    /// grounds nothing and answers no; yes would make every type satisfy
-    /// both (WEP 2026-09-01).
+    /// one: a repeat reached through a member is a recursive type and holds; one
+    /// reached through bounds alone grounds nothing (WEP 2026-09-01).
     fn repeated_answer(ctx: &Scope, type_id: TypeId, trait_: DefId) -> Option<bool> {
         let member_edges = ctx.member_edges.get();
         ctx.trait_check_stack
@@ -644,10 +640,8 @@ impl TypeSystem {
         });
     }
 
-    /// The differential `docs/wep-2026-09-01-trait-resolution.md` lands the
-    /// solver under: at the outermost question of a bound, in debug builds, the
-    /// solver must answer as this path did. Nested questions are the compiler's
-    /// own recursion and are not asked twice.
+    /// The differential of WEP 2026-09-01: in debug builds, the solver must
+    /// answer an outermost bound question as this path did.
     fn check_solver_agreement(
         &self,
         ctx: &Scope,
@@ -656,21 +650,22 @@ impl TypeSystem {
         trait_: DefId,
         expected: bool,
     ) {
-        if !cfg!(debug_assertions) || !ctx.trait_check_stack.borrow().is_empty() {
+        if !ctx.trait_check_stack.borrow().is_empty() {
             return;
         }
         let Some(bridge) = self.solver.as_ref() else {
             return;
         };
-        let Some((actual, detail)) = bridge.answer(self, ctx, scope, type_id, trait_) else {
+        let Some(actual) = bridge.answer(self, ctx, scope, type_id, trait_) else {
             return;
         };
         assert_eq!(
             actual,
             expected,
-            "the trait solver disagrees with type_implements_trait: `{}: {}` is {expected} to the compiler and {actual} to the solver ({detail})",
+            "the trait solver disagrees with type_implements_trait: `{}: {}` is {expected} to the compiler and {actual} to the solver ({})",
             self.type_table.borrow().type_name(type_id),
             self.resolutions.defs().name(trait_),
+            bridge.explain(self, ctx, scope, type_id, trait_),
         );
     }
 
@@ -808,13 +803,7 @@ impl TypeSystem {
     /// admitting the struct on one public field would expose its private ones.
     /// Eligibility is separate — [`Self::is_reflect_eligible`] sees every field.
     fn has_visible_fields(&self, scope: &TypeLookup, info: &super::types::StructFieldInfo) -> bool {
-        if info.fields.is_empty() || &info.module_source == scope.current_module_source {
-            return true;
-        }
-        let same_package = info.module_source.same_package(scope.current_module_source);
-        info.fields
-            .iter()
-            .all(|(_, _, vis)| vis.reachable_from(same_package))
+        info.fields_visible_from(scope.current_module_source)
     }
 
     /// Whether a declaration can be reflected, via the shared eligibility
@@ -973,40 +962,51 @@ impl TypeSystem {
     ) -> Option<bool> {
         // A member is read at the instance: `items: List<T>` is `List<i32>`
         // at `Gen<i32>`, however deep the parameter sits.
-        let subst = |param_ids: &[TypeId], type_args: &[TypeId], tid: TypeId| -> TypeId {
-            if type_args.is_empty() {
-                return tid;
-            }
-            let mut table = self.type_table.borrow_mut();
-            let substitution: crate::hashmap::IndexMap<u32, TypeId> = param_ids
+        let substitution = |param_ids: &[TypeId], type_args: &[TypeId]| {
+            let table = self.type_table.borrow();
+            param_ids
                 .iter()
                 .zip(type_args)
                 .filter_map(|(&param, &arg)| match table.get(param) {
                     ResolvedType::TypeParam { index, .. } => Some((*index, arg)),
                     _ => None,
                 })
-                .collect();
-            table.substitute_type_params(tid, &substitution)
+                .collect::<IndexMap<u32, TypeId>>()
+        };
+        let at_instance = |substitution: &IndexMap<u32, TypeId>, tid: TypeId| {
+            if substitution.is_empty() {
+                tid
+            } else {
+                self.type_table
+                    .borrow_mut()
+                    .substitute_type_params(tid, substitution)
+            }
         };
         let walk_struct = |info: &super::types::StructFieldInfo,
                            type_args: &[TypeId],
                            visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
          -> bool {
+            let substitution = substitution(&info.type_param_type_ids, type_args);
             info.fields.iter().all(|(fname, tid, _)| {
-                let concrete = subst(&info.type_param_type_ids, type_args, *tid);
-                visit(StructuralMember::Field(fname), concrete)
+                visit(
+                    StructuralMember::Field(fname),
+                    at_instance(&substitution, *tid),
+                )
             })
         };
         let walk_variant = |info: &super::types::VariantInfo,
                             type_args: &[TypeId],
                             visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
          -> bool {
+            let substitution = substitution(&info.type_param_type_ids, type_args);
             info.cases
                 .iter()
                 .filter(|c| c.payload != TypeTable::UNIT)
                 .all(|c| {
-                    let concrete = subst(&info.type_param_type_ids, type_args, c.payload);
-                    visit(StructuralMember::Case(&c.name), concrete)
+                    visit(
+                        StructuralMember::Case(&c.name),
+                        at_instance(&substitution, c.payload),
+                    )
                 })
         };
         match resolved {

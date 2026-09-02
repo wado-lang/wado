@@ -1,7 +1,6 @@
-// `()` has no Wasm representation, so an operand of it pushes nothing and a
-// scalar operator below it underflows the operand stack. Every operator on
-// `()` therefore dispatches through a trait, and `Add` has no impl for it.
-// (`==` and `<` do: `trait_unit_eq_ord.wado`.)
+// Every operator on `()` dispatches through a trait, and there is no
+// `impl Add for ()`, so `() + ()` is a type error rather than a codegen
+// failure. `==` and `<` have impls: `trait_unit_eq_ord.wado`.
 fn nothing() {}
 
 export fn run() {

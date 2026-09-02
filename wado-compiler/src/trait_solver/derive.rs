@@ -1,18 +1,5 @@
-//! Derivation as impl generation.
-//!
-//! A structural trait — `Eq`, `Ord`, `Default`, serde — is not special to
-//! [`holds`]: it is answered by impls like any other. What is special is where
-//! some of those impls come from. A declaration whose members all satisfy the
-//! trait derives it, and deriving it means contributing
-//! `impl<Pi: Tr, …> Tr for D<P1..Pn>`, bounded on the parameters its members
-//! mention.
-//!
-//! Whether a declaration derives is decided once, here, over the declarations
-//! — finite, and known before any body is elaborated — rather than at each
-//! bound over each receiver. The decision assumes every declaration derives,
-//! then refutes: a declaration whose members fail under everyone's tentative
-//! impl is removed, and the check repeats until none is. Assuming first is what
-//! makes a recursive type derive.
+//! Derivation as impl generation: a declaration whose members all satisfy a
+//! structural trait contributes `impl<Pi: Tr, …> Tr for D<P1..Pn>`.
 
 use super::holds::holds;
 use super::program::{
@@ -35,13 +22,8 @@ pub struct Derived {
     pub errors: Vec<DeriveError>,
 }
 
-/// Which of `declarations` derive `trait_` given `program`, and the impls that
-/// says.
-///
-/// A declaration with an impl of `trait_` already — written, or a marker
-/// demanding the derivation — derives nothing: the impl it has answers for it.
-/// A marker is checked instead, and reported where the members would not
-/// support the body it demands.
+/// Which of `declarations` derive `trait_`, and the impls that says. One with
+/// an impl already derives nothing; a marker is checked and reported instead.
 #[must_use]
 pub fn derive(program: &Program, trait_: TraitDeclId, declarations: &[Declaration]) -> Derived {
     let (undecided, markers): (Vec<&Declaration>, Vec<(&Declaration, ImplId)>) = {
@@ -57,14 +39,10 @@ pub fn derive(program: &Program, trait_: TraitDeclId, declarations: &[Declaratio
         (undecided, markers)
     };
 
-    // Assume, then refute. Every undecided declaration gets its tentative impl,
-    // and one whose members fail against the rest loses it; the loop ends when
-    // a pass removes none.
     let mut tentative = program.clone();
     let mut standing: Vec<(&Declaration, ImplId)> = Vec::with_capacity(undecided.len());
     for decl in undecided {
-        let id = tentative.next_impl_id();
-        tentative.add_impl(id, derived_impl(trait_, decl));
+        let id = tentative.push_impl(derived_impl(trait_, decl));
         standing.push((decl, id));
     }
     loop {
@@ -78,6 +56,7 @@ pub fn derive(program: &Program, trait_: TraitDeclId, declarations: &[Declaratio
             }
         }
         standing = kept;
+        assert!(standing.len() <= before);
         if standing.len() == before {
             break;
         }
@@ -96,41 +75,41 @@ pub fn derive(program: &Program, trait_: TraitDeclId, declarations: &[Declaratio
     }
 }
 
-/// The impl `decl` derives: its own head at its own parameters, each parameter
-/// its members mention bounded by the trait.
+/// The impl `decl` derives.
 fn derived_impl(trait_: TraitDeclId, decl: &Declaration) -> ImplDef {
     ImplDef {
         trait_: Some(trait_),
         trait_args: Vec::new(),
         target: SolverType::Decl(decl.id, (0..decl.params).map(SolverType::Param).collect()),
-        params: (0..decl.params)
-            .map(|index| {
-                ParamDef::bounded(if mentions_param(&decl.members, index) {
-                    vec![trait_]
-                } else {
-                    Vec::new()
-                })
-            })
+        params: derived_bounds(trait_, decl)
+            .into_iter()
+            .map(ParamDef::bounded)
             .collect(),
         origin: ImplOrigin::Derived,
     }
 }
 
-/// Whether every member satisfies `trait_` under the bounds the derived impl
-/// would carry. The environment is what makes `struct W<T> { inner: List<T> }`
-/// derive: `List<T>: Eq` reaches the prelude's blanket, whose `T: Eq` the
-/// environment answers.
+/// The bound each parameter of the derived impl carries: `trait_` where a
+/// member mentions it, none otherwise.
+fn derived_bounds(trait_: TraitDeclId, decl: &Declaration) -> Vec<Vec<TraitDeclId>> {
+    (0..decl.params)
+        .map(|index| {
+            let mentioned = decl.members.iter().any(|m| {
+                m.mentions(
+                    &|p| matches!(p, SolverType::Param(i) | SolverType::Pack(i) if *i == index),
+                )
+            });
+            if mentioned { vec![trait_] } else { Vec::new() }
+        })
+        .collect()
+}
+
+/// Whether every member satisfies `trait_` under the derived impl's bounds —
+/// which is what lets `struct W<T> { inner: List<T> }` derive through the
+/// prelude's `impl<T: Eq> Eq for List<T>`.
 fn members_satisfy(program: &Program, trait_: TraitDeclId, decl: &Declaration) -> bool {
     let env = Env {
-        param_bounds: (0..decl.params)
-            .map(|index| {
-                if mentions_param(&decl.members, index) {
-                    vec![trait_]
-                } else {
-                    Vec::new()
-                }
-            })
-            .collect(),
+        param_bounds: derived_bounds(trait_, decl),
     };
     decl.members
         .iter()
@@ -152,23 +131,10 @@ fn impl_on_head(
     })
 }
 
-fn mentions_param(members: &[SolverType], index: u32) -> bool {
-    members.iter().any(|m| type_mentions_param(m, index))
-}
-
-fn type_mentions_param(ty: &SolverType, index: u32) -> bool {
-    match ty {
-        SolverType::Param(i) | SolverType::Pack(i) => *i == index,
-        SolverType::Decl(_, args) | SolverType::Tuple(args) => {
-            args.iter().any(|a| type_mentions_param(a, index))
-        }
-        SolverType::Ref { inner, .. } => type_mentions_param(inner, index),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::program::{ModuleId, TypeDeclId};
+    use super::super::testing::{Builder, concrete, decl};
     use super::*;
 
     const EQ: TraitDeclId = TraitDeclId(0);
@@ -180,10 +146,6 @@ mod tests {
     const NODE: TypeDeclId = TypeDeclId(5);
     const OPTION: TypeDeclId = TypeDeclId(6);
     const HERE: ModuleId = ModuleId(0);
-
-    fn decl(id: TypeDeclId) -> SolverType {
-        SolverType::Decl(id, vec![])
-    }
 
     fn declaration(id: TypeDeclId, params: u32, members: Vec<SolverType>) -> Declaration {
         Declaration {
@@ -197,30 +159,19 @@ mod tests {
     /// A program where `i32: Eq` and the prelude's `impl<T: Eq> Eq for List<T>`
     /// and `impl<T: Eq> Eq for Option<T>` exist.
     fn prelude() -> Program {
-        let mut p = Program::new();
-        p.add_impl(
-            ImplId(0),
-            ImplDef {
-                trait_: Some(EQ),
-                trait_args: vec![],
-                target: decl(I32),
-                params: vec![],
-                origin: ImplOrigin::Written,
-            },
-        );
-        for (id, head) in [(ImplId(1), LIST), (ImplId(2), OPTION)] {
-            p.add_impl(
-                id,
-                ImplDef {
-                    trait_: Some(EQ),
-                    trait_args: vec![],
-                    target: SolverType::Decl(head, vec![SolverType::Param(0)]),
-                    params: vec![ParamDef::bounded(vec![EQ])],
-                    origin: ImplOrigin::Written,
-                },
-            );
-        }
-        p
+        let of = |head| SolverType::Decl(head, vec![SolverType::Param(0)]);
+        Builder::default()
+            .concrete(EQ, decl(I32))
+            .bounded(EQ, of(LIST), vec![EQ])
+            .bounded(EQ, of(OPTION), vec![EQ])
+            .build()
+    }
+
+    fn marker(p: &mut Program) -> ImplId {
+        p.push_impl(ImplDef {
+            origin: ImplOrigin::Marker,
+            ..concrete(EQ, decl(POINT))
+        })
     }
 
     fn derived_targets(d: &Derived) -> Vec<SolverType> {
@@ -363,16 +314,7 @@ mod tests {
     #[test]
     fn a_written_impl_blocks_derivation() {
         let mut p = prelude();
-        p.add_impl(
-            ImplId(3),
-            ImplDef {
-                trait_: Some(EQ),
-                trait_args: vec![],
-                target: decl(POINT),
-                params: vec![],
-                origin: ImplOrigin::Written,
-            },
-        );
+        p.push_impl(concrete(EQ, decl(POINT)));
         let d = derive(&p, EQ, &[declaration(POINT, 0, vec![decl(I32)])]);
         assert_eq!(d.impls, vec![]);
     }
@@ -381,18 +323,6 @@ mod tests {
     /// duplicated, and reported where the members would not support the body.
     #[test]
     fn a_marker_is_checked_rather_than_derived_beside() {
-        let marker = |p: &mut Program| {
-            p.add_impl(
-                ImplId(3),
-                ImplDef {
-                    trait_: Some(EQ),
-                    trait_args: vec![],
-                    target: decl(POINT),
-                    params: vec![],
-                    origin: ImplOrigin::Marker,
-                },
-            );
-        };
         let mut ok = prelude();
         marker(&mut ok);
         let d = derive(&ok, EQ, &[declaration(POINT, 0, vec![decl(I32)])]);
@@ -400,12 +330,9 @@ mod tests {
         assert_eq!(d.errors, vec![]);
 
         let mut bad = prelude();
-        marker(&mut bad);
+        let impl_ = marker(&mut bad);
         let d = derive(&bad, EQ, &[declaration(POINT, 0, vec![decl(OPAQUE)])]);
-        assert_eq!(
-            d.errors,
-            vec![DeriveError::MarkerNotDerivable { impl_: ImplId(3) }]
-        );
+        assert_eq!(d.errors, vec![DeriveError::MarkerNotDerivable { impl_ }]);
     }
 
     /// A member that reaches a declaration through the marker's impl derives:
@@ -413,16 +340,7 @@ mod tests {
     #[test]
     fn a_marker_answers_for_a_container_that_mentions_it() {
         let mut p = prelude();
-        p.add_impl(
-            ImplId(3),
-            ImplDef {
-                trait_: Some(EQ),
-                trait_args: vec![],
-                target: decl(POINT),
-                params: vec![],
-                origin: ImplOrigin::Marker,
-            },
-        );
+        marker(&mut p);
         let d = derive(
             &p,
             EQ,

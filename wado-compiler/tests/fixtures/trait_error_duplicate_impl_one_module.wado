@@ -1,12 +1,6 @@
-// Two impls of one `(Trait, Type)` pair compile, and the one written first
-// takes every call. `spec.md` says coherence guarantees at most one impl can
-// apply; nothing enforces it, and no rank separates the two, so collection
-// order decides silently.
-//
-// A package compiles whole, so rejecting the pair needs no open-world
-// reasoning. The message below states what the check should say; the check
-// does not exist yet, so this fixture fails until it is written
-// (WEP 2026-09-01, "Two definition-time checks are missing").
+// Two impls of one `(Trait, Type)` pair are rejected where the second is
+// written: no rank separates them, and a package compiles whole, so the check
+// needs no open-world reasoning (WEP 2026-09-01, "The candidates").
 
 trait Describe {
     fn describe(&self) -> String;
