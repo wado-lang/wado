@@ -183,6 +183,12 @@ Inclusive buckets: **parse** ~51%, **tokenize** ~20%, **highlight** ~17%
 (`highlight_html` 10.4% + the token sweep 6.8%), **CST finalize**
 (`TreeBuilder::finish`) 9.0%. Highlight was ~23% before the two levers above.
 
+`nir/drop_value` landed after this profile and takes another 3.3%: a discarded
+`pop()` was allocating the `Option` it throws away, and the parser and
+`TreeBuilder` do that once per closed node. Against `origin/main`, the three
+together are **1.515 → 1.351 ms/iter (+12.1%)**, three alternating pairs with
+the order swapped, arms disjoint.
+
 ## What's next
 
 Pick the current top frame off the live profile above rather than a fixed recipe
@@ -202,11 +208,19 @@ re-measure before committing. Candidates read off the profile above:
   leaves ~2000 comparisons on the fall-through path. ASCII resolves early (single-char
   branches are sorted and come first), so this is a worst case rather than a
   benchmark-visible cost. A sorted interval table with a binary search would bound it.
-- **An alternative's dispatch re-tests the kind set it dispatched on.**
-  `scan_any_name` (5.7%) calls `_kind_set_37(alt_kind)` to pick the alternative
-  and then `_kind_set_37(tokens[pos])` inside it, on the same token. The
-  kind-set frames are call-frequency-bound (below), and this is a whole class of
-  calls the emitter already knows the answer to.
+- **Every scan alternative re-tests the token its dispatch selected it on.**
+  `gen_scan_multi_alt` binds `alt_kind = pos < tokens.len() ? tokens[pos] :
+  TK_EOF` and branches on it; each partition body then re-reads the same token —
+  `if pos >= tokens.len() || tokens[pos] != TK_IDENTIFIER { break try_0; }` in
+  one arm, a second `_kind_set_37(tokens[pos])` inside `scan_keyword` in the
+  next. `scan_any_name` is 5.7% self, `_kind_set_4` 4.7% and `_kind_set_37`
+  2.6%, and those frames are call-frequency-bound, so this is the class of calls
+  to cut. The elision is sound when the partition's guard set excludes `TK_EOF`
+  (so the branch implies `pos < tokens.len()`) and the alt's first scan element
+  accepts every token in that guard — then the body is `pos += 1`. Both are
+  static: the guard set is `ScanAltPlan::groups_tokens[g]`, the accepted set is
+  `ScanBody::elements[0]`. A hoisted alt is emitted as its own `<base>_alt_<i>`
+  helper, so it needs the checked entry point kept for any other caller.
 
 ### Generation-time cost: the generator itself (2026-07)
 
