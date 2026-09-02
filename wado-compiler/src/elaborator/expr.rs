@@ -2460,6 +2460,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether every tail of a match arm is a numeric literal, leaving the arm
+    /// no type of its own for the result to be read from.
+    fn is_numeric_literal_arm(&self, body: &ast::Expr, body_type: TypeId) -> bool {
+        let mut tails = NumericLiteralTails::default();
+        self.collect_numeric_literal_tails(body, body_type, &mut tails) && !tails.literals.is_empty()
+    }
+
     /// The two halves of an `if`, in either its expression or its statement
     /// spelling. A missing `else` is `()`, which no numeric target accepts.
     fn collect_if_numeric_literal_tails<'a>(
@@ -2572,6 +2579,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 
+        // A numeric-literal arm holds its default type for want of a sibling
+        // saying otherwise, so it is in no position to fix the result: without
+        // this, `match k { 1 => 0, _ => a }` resolves to `i32` and rejects the
+        // `u64` arm, while the same match with its arms swapped compiles.
+        let literal_arms: Vec<bool> = match_expr
+            .arms
+            .iter()
+            .zip(&arm_bodies)
+            .map(|(arm, &(arm_type, _))| self.is_numeric_literal_arm(&arm.body, arm_type))
+            .collect();
+
         let type_id = expected_type.unwrap_or_else(|| {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
@@ -2582,8 +2600,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             arm_bodies
                 .iter()
-                .map(|(t, _)| *t)
+                .zip(&literal_arms)
+                .filter(|&(_, is_literal)| !*is_literal)
+                .map(|((t, _), _)| *t)
                 .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
+                .or_else(|| {
+                    arm_bodies
+                        .iter()
+                        .map(|(t, _)| *t)
+                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
+                })
                 .or_else(|| {
                     arm_bodies
                         .iter()

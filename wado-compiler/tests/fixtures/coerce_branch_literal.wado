@@ -69,6 +69,24 @@ test "else-if chain of literals adopts a cast branch" {
     assert v == 29;
 }
 
+// A literal arm holds `i32` only for want of a sibling saying otherwise, so
+// which arm comes first cannot decide the match's type.
+test "match literal arm adopts the typed arm from either position" {
+    let a: u64 = 18446744073709551615;
+    let k = 1;
+    let v = match k { 1 => 0, _ => a };
+    let w = match k { 1 => a, _ => 0 };
+    assert v == 0;
+    assert w == 18446744073709551615;
+}
+
+test "a braced literal arm adopts the typed arm before it" {
+    let a: u64 = 18446744073709551615;
+    let k = 2;
+    let v = match k { 1 => { 0 }, _ => a };
+    assert v == 18446744073709551615;
+}
+
 test "match arm whose body is an else-if chain of literals" {
     let opt: Option<i64> = null;
     let v = match opt { Some(x) => x, None => if true { 0 } else { 1 } };
