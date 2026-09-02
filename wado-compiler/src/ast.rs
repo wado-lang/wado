@@ -3112,8 +3112,10 @@ pub struct FormatSpec {
 pub enum Type {
     Named(NamedType),
     Generic(GenericType),
-    /// Namespaced generic type like `ns::Type<T>` or `T::Assoc`
-    NamespacedGeneric(NamespacedGenericType),
+    /// Namespaced generic type like `ns::Type<T>` or `T::Assoc`. Boxed, as
+    /// `Function` is: it carries two names and two spans, and unboxed it makes
+    /// `Type` — and every enum holding one — large enough to be worth splitting.
+    NamespacedGeneric(Box<NamespacedGenericType>),
     Function(Box<FunctionType>),
     Tuple(Vec<Type>),
     Reference(Box<Type>),

@@ -907,14 +907,14 @@ impl Parser {
             let case_span = self.peek().span;
             let case_name = self.consume_ident()?;
             let qualifier = match first_type {
-                Type::Named(ref t) => Type::NamespacedGeneric(NamespacedGenericType {
+                Type::Named(ref t) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: t.name.clone(),
                     name: second_name,
                     name_span: second_span,
                     args: second_args,
                     span: start_span,
-                }),
+                })),
                 _ => {
                     return Err(ParseError {
                         message: "invalid qualified case pattern".to_string(),
@@ -4806,25 +4806,25 @@ impl Parser {
                 // to the right wins trailing-comment ownership (drops the comment).
                 let end_span = self.tokens[self.pos - 1].span;
 
-                return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     name_span: type_name_span,
                     args,
                     span: start_span.merge(&end_span),
-                }));
+                })));
             } else {
                 // Namespaced type without generics: namespace::type
                 let end_span = self.tokens[self.pos - 1].span;
-                return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     name_span: type_name_span,
                     args: Vec::new(),
                     span: start_span.merge(&end_span),
-                }));
+                })));
             }
         }
 
