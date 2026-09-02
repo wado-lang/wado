@@ -3399,7 +3399,7 @@ impl TypeTable {
                 if self.find_variant_type(def).is_some() {
                     Some(CompilerItem::ReflectVariant)
                 } else if self
-                    .find_struct_by_name(&self.def_name(def).to_string(), self.def_module(def))
+                    .find_struct_by_name(self.def_name(def), self.def_module(def))
                     .is_some()
                 {
                     Some(CompilerItem::ReflectStruct)

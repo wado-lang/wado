@@ -1298,7 +1298,7 @@ impl TypeSystem {
             && let Some(kind) = reflect_kind
             && (bound == OnBoundTrait::Reflect
                 || (kind == bound.compiler_item()
-                    && self.reflect_members_visible(scope, &resolved, kind)))
+                    && self.reflect_members_visible(scope, resolved, kind)))
             && self.is_reflect_eligible(type_id)
         {
             // A declaration's impl is synthesized in the module walk; an
