@@ -150,8 +150,9 @@ The header's `alg` is not the one the key verifies.
 
 #### `CriticalHeader`
 
-The header marks extensions critical (`crit`) that this module does not
-implement, which RFC 7515 §4.1.11 requires it to reject.
+The header carries `crit`, which names extensions a recipient must
+implement. RFC 7515 §4.1.11 requires rejecting the ones it does not,
+and this module implements none.
 
 #### `InvalidSignature`
 

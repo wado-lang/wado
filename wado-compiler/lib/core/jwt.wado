@@ -18,8 +18,8 @@
 
 use { hmac_sha256 } from "core:digest";
 use { decode_url_strict, encode_url } from "core:base64";
-use { from_bytes } from "core:json";
-use { Deserialize } from "core:serde";
+use { from_bytes, write_escaped_string } from "core:json";
+use { Deserialize, DeserializeError, Deserializer, IgnoredAny } from "core:serde";
 
 #[synopsis]
 test {
@@ -66,8 +66,9 @@ pub enum JwtError {
     Malformed,
     /// The header's `alg` is not the one the key verifies.
     AlgMismatch,
-    /// The header marks extensions critical (`crit`) that this module does not
-    /// implement, which RFC 7515 §4.1.11 requires it to reject.
+    /// The header carries `crit`, which names extensions a recipient must
+    /// implement. RFC 7515 §4.1.11 requires rejecting the ones it does not,
+    /// and this module implements none.
     CriticalHeader,
     /// The signature is not this key's over this token.
     InvalidSignature,
@@ -116,19 +117,37 @@ impl RegisteredClaims {
     }
 }
 
+/// Whether the header carries `crit`, in any spelling. RFC 7515 §4.1.11
+/// requires rejecting extensions a recipient does not implement, and this
+/// module implements none, so the member is refused for being present and its
+/// contents are never read — an explicit `null`, which an `Option` field reads
+/// as the absent member it is not, included.
+enum Crit {
+    Absent,
+    Present,
+}
+
+impl Deserialize for Crit {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Crit, DeserializeError> {
+        let _ = IgnoredAny::deserialize(d)?;
+        return Result::Ok(Crit::Present);
+    }
+}
+
 /// The one JWS header this module writes, and the shape it accepts back.
 struct Header {
     alg: String,
-    crit: Option<List<String>> = null,
+    crit: Crit = Crit::Absent,
 }
 
 impl Deserialize for Header;
 
 /// Sign `payload` into a compact JWS: `base64url(header).base64url(payload).base64url(signature)`.
 pub fn sign<K: JwsSigner, P: AsByteSlice>(payload: &P, key: &K) -> String {
-    let alg = key.alg();
-    assert is_alg_token(&alg), `a JWS alg is alphanumeric, got ${alg}`;
-    let header = encode_url(&`{"alg":"${alg}","typ":"JWT"}`);
+    let mut header_json = `{"alg":`;
+    write_escaped_string(&mut header_json, &key.alg());
+    header_json.push_str(&`,"typ":"JWT"}`);
+    let header = encode_url(&header_json);
     let signing_input = `${header}.${encode_url(payload)}`;
     let bytes: ByteList = signing_input.bytes().collect();
     return `${signing_input}.${encode_url(&key.sign(&bytes))}`;
@@ -160,7 +179,7 @@ pub fn verify<K: JwsVerifier>(token: &String, key: &K) -> Result<ByteList, JwtEr
     if header.alg != key.alg() {
         return Result::Err(JwtError::AlgMismatch);
     }
-    if header.crit matches { Some(_) } {
+    if header.crit == Crit::Present {
         return Result::Err(JwtError::CriticalHeader);
     }
     return Result::Ok(payload);
@@ -205,9 +224,4 @@ fn decode_segment(segment: &String) -> Result<ByteList, JwtError> {
         return Result::Err(JwtError::Malformed);
     };
     return Result::Ok(bytes);
-}
-
-/// Whether `alg` is safe to splice into the header JSON `sign` writes.
-fn is_alg_token(alg: &String) -> bool {
-    return !alg.is_empty() && alg.bytes().all(|byte: u8| byte.is_ascii_alphanumeric());
 }

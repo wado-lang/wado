@@ -82,7 +82,9 @@ Nothing general lives here. Keyed hashing is `core:digest`'s `hmac`, over the
 `Digest` trait, with `hmac_sha256` as the one-shot counterpart to `sha256`.
 Canonical base64url is `core:base64`'s `decode_url_strict`. Constant-time
 comparison is `core:prelude`'s `eq_constant_time`, which every verifier
-reaches without an import.
+reaches without an import. Reading a value of any shape and discarding it is
+`core:serde`'s `IgnoredAny`, which is what lets a schema refuse a member for
+being present at all rather than for its contents.
 
 Each of those has callers beyond tokens, and each is what a future algorithm
 will build on. A `core:jwt` that hoarded them would make an RSA package
@@ -151,7 +153,12 @@ decision is undone.
   differing byte, so its duration says nothing about how much of a forgery was
   right.
 - A brute-forcible secret, refused at construction rather than per request.
-- A `crit` header naming extensions this module does not implement.
+- A `crit` header, in any spelling. The member is refused for being present, so
+  an explicit `null` — which an optional field reads as the absent member it is
+  not — is refused with the list that names an extension.
+- A header member injected through `alg`. `sign` escapes the key's `alg` rather
+  than splicing it, so no key type can add or replace a header member by naming
+  itself carefully.
 
 The order of checks is part of this. `verify` reaches the JSON parser only
 after the signature holds, so an attacker cannot feed the parser without the

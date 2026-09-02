@@ -1,5 +1,6 @@
 use { Hs256Key, JwsAlgorithm, JwsSigner, JwsVerifier, JwtError, RegisteredClaims, sign, verify } from "core:jwt";
 use { decode_url_strict, encode_url } from "core:base64";
+use { hmac_sha256 } from "core:digest";
 use { from_bytes } from "core:json";
 
 // RFC 7515 A.1: the HS256 example token, its key, and its two segments.
@@ -89,10 +90,14 @@ test "the header's alg must be the key's" {
     assert verify(&token_with_header(`{"alg":"RS256"}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::AlgMismatch) };
 }
 
-test "a critical header extension is rejected" {
+test "a crit header is rejected in every spelling" {
     let key = shared_key();
-    let header = `{"alg":"HS256","crit":["exp"],"exp":1300819380}`;
-    assert verify(&token_with_header(header, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
+    let listed = `{"alg":"HS256","crit":["exp"],"exp":1300819380}`;
+    assert verify(&token_with_header(listed, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
+    // Neither of these names an extension, and both are the member present:
+    // `null` is the one an `Option` field would read as absent.
+    assert verify(&token_with_header(`{"alg":"HS256","crit":null}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
+    assert verify(&token_with_header(`{"alg":"HS256","crit":[]}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
 }
 
 test "exp and nbf are checked against the time passed in" {
@@ -175,4 +180,40 @@ test "an out-of-tree key type plugs into the same entry points" {
 #[expect_trap]
 test "a short HS256 secret is refused" {
     let _ = Hs256Key::new(&"too short");
+}
+
+// A key whose `alg` is whatever it is named, so `sign` is exercised over the
+// StringOrURI RFC 7515 §4.1.1 permits rather than the registered names alone.
+struct NamedKey {
+    name: String,
+}
+
+impl JwsAlgorithm for NamedKey {
+    fn alg(&self) -> String {
+        return self.name;
+    }
+}
+
+impl JwsSigner for NamedKey {
+    fn sign(&self, signing_input: &ByteList) -> ByteList {
+        return hmac_sha256(&self.name, signing_input);
+    }
+}
+
+impl JwsVerifier for NamedKey {
+    fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool {
+        return eq_constant_time(&hmac_sha256(&self.name, signing_input), signature);
+    }
+}
+
+test "a collision-resistant URI alg round trips" {
+    let key = NamedKey { name: "http://example.com/alg" };
+    assert verify(&sign(&`{"sub":"joe"}`, &key), &key) matches { Ok(_) };
+}
+
+test "an alg cannot break out of the header JSON" {
+    // Spliced verbatim this closes the string and adds a member; escaped it is
+    // one `alg` value that reads back as itself.
+    let key = NamedKey { name: `hs","typ":"x` };
+    assert verify(&sign(&`{"sub":"joe"}`, &key), &key) matches { Ok(_) };
 }
