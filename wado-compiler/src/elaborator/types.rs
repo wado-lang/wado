@@ -41,6 +41,21 @@ pub(crate) struct StructFieldInfo {
     pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
+/// Where a qualified prefix's members live when the prefix names a newtype,
+/// paired with the type the prefix itself names. A newtype inherits its base's
+/// members and keeps its own identity, so `C::Green` on `type C = Color` reads
+/// Color's cases and yields a `C` — the implicit `Color::Green as C`. `None`
+/// when the prefix names something that owns its members.
+pub(super) fn newtype_member_owner(
+    lookup: &TypeLookup<'_>,
+    tysys: &super::tysys::TypeSystem,
+    def: crate::defs::DefId,
+) -> Option<(crate::defs::DefId, TypeId)> {
+    let newtype_id = lookup.newtype_of(def)?;
+    let head = tysys.type_table.borrow().reflect_structure_head(newtype_id);
+    Some((tysys.type_def(head)?, newtype_id))
+}
+
 /// What each type parameter declares as its default, in declaration order:
 /// `Some(ty)` where the parameter wrote `= ty`. A use site that omits the
 /// argument takes it.

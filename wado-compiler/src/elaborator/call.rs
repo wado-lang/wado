@@ -942,8 +942,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
-            else if let Some(flags_info) =
-                self.lookup_flags_members_at(receiver_site, prefix).cloned()
+            // A newtype reaches its base's constants and keeps its own type:
+            // `M::none()` on `type M = Perm` is `Perm::none() as M`.
+            else if let Some((flags_info, named)) =
+                self.flags_members_through_newtype(receiver_site, prefix)
                 && matches!(suffix, "none" | "all")
             {
                 if let Some(prefix_seg) = ident.segments.first() {
@@ -952,7 +954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Reify rebuilds the flags `none()` / `all()`
                 // constant from the AST + flags info; the body walk
                 // projects only the result type.
-                return flags_info.type_id;
+                return named.unwrap_or(flags_info.type_id);
             }
             // Check if this is a variant case construction (Color::Red)
             else if let Some(variant_info) = self.lookup_variant_cases_at(receiver_site, prefix) {

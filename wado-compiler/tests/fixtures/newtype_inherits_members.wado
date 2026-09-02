@@ -30,19 +30,21 @@ type S = Shape;
 type M = Perm;
 type P = Point;
 
+// The ` as C` tag is `Inspect`'s newtype rendering, so it is the assertion
+// that the value carries the newtype's identity rather than the base's.
 test "an enum case through a newtype is the newtype" {
     let g = C::Green;
-    assert `${g:?}` == "Green as C";
+    assert `${g:?}` == "Color::Green as C";
 }
 
 test "a variant case through a newtype is the newtype" {
     let d = S::Dot;
-    assert `${d:?}` == "Dot as S";
+    assert `${d:?}` == "Shape::Dot as S";
 }
 
 test "a flags constant through a newtype is the newtype" {
     let n = M::none();
-    assert `${n:?}` == "Perm() as M";
+    assert `${n:?}` == "Perm::none() as M";
 }
 
 // The scrutinee keeps its own type while the patterns name the base's cases.

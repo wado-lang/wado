@@ -8298,7 +8298,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let suffix = &ident.name[pos + 2..];
 
             let owner = self.qualified_owner_site(ident);
-            let flags = self.type_lookup().flags_members_at(owner, prefix).cloned();
+            // A newtype reaches its base's constants and keeps its own type.
+            let through_newtype = self.newtype_member_owner(owner, prefix);
+            let flags = match through_newtype {
+                Some((base, _)) => self.type_lookup().flags_members_of(base).cloned(),
+                None => self.type_lookup().flags_members_at(owner, prefix).cloned(),
+            };
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
             {
@@ -8313,7 +8318,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         value,
                         repr: value.to_string(),
                     },
-                    flags_info.type_id,
+                    through_newtype.map_or(flags_info.type_id, |(_, named)| named),
                     span,
                 );
             }
@@ -9134,8 +9139,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
 
+                // A newtype reaches its base's members and keeps its own type:
+                // `C::Green` is the implicit `Color::Green as C`.
+                let through_newtype = self.newtype_member_owner(owner, prefix);
+
                 // Variant case.
-                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
+                let variant_info = match through_newtype {
+                    Some((base, _)) => lookup.variant_cases_of(base).cloned(),
+                    None => lookup.variant_cases_at(owner, prefix).cloned(),
+                };
+                if let Some(variant_info) = variant_info
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -9164,13 +9177,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             case_name: case_data.name,
                             payload: None,
                         },
-                        variant_type,
+                        through_newtype.map_or(variant_type, |(_, named)| named),
                         ident.span,
                     );
                 }
 
                 // Enum case.
-                if let Some(enum_info) = lookup.enum_cases_at(owner, prefix).cloned()
+                let enum_info = match through_newtype {
+                    Some((base, _)) => lookup.enum_cases_of(base).cloned(),
+                    None => lookup.enum_cases_at(owner, prefix).cloned(),
+                };
+                if let Some(enum_info) = enum_info
                     && let Some(case_data) = enum_info.find_case(suffix).cloned()
                 {
                     let enum_type = self
@@ -9184,13 +9201,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             case_index: case_data.index,
                             case_name: case_data.name,
                         },
-                        enum_type,
+                        through_newtype.map_or(enum_type, |(_, named)| named),
                         ident.span,
                     );
                 }
 
                 // Flags member.
-                if let Some(flags_info) = lookup.flags_members_at(owner, prefix).cloned()
+                let flags_info = match through_newtype {
+                    Some((base, _)) => lookup.flags_members_of(base).cloned(),
+                    None => lookup.flags_members_at(owner, prefix).cloned(),
+                };
+                if let Some(flags_info) = flags_info
                     && let Some(member) = flags_info
                         .members
                         .iter()
@@ -9202,7 +9223,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             value: u64::from(member.bitmask),
                             repr: member.bitmask.to_string(),
                         },
-                        flags_info.type_id,
+                        through_newtype.map_or(flags_info.type_id, |(_, named)| named),
                         ident.span,
                     );
                 }
@@ -9917,6 +9938,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Discriminant index of `case_name` when `scrutinee_type` is an
     /// enum that declares it. Drives lowering a bare/qualified enum-case
     /// pattern to `TirPattern::Enum`.
+    /// Where a qualified prefix's members live when the prefix names a
+    /// newtype, paired with the type the prefix itself names. A newtype
+    /// inherits its base's members and keeps its own identity, so `C::Green`
+    /// on `type C = Color` reads Color's cases and yields a `C` — the
+    /// implicit form of `Color::Green as C`. `None` when the prefix names
+    /// something that owns its members.
+    pub(super) fn newtype_member_owner(
+        &self,
+        site: Option<ast::AstId>,
+        prefix: &str,
+    ) -> Option<(crate::defs::DefId, TypeId)> {
+        let lookup = self.type_lookup();
+        let def = lookup.declaration_at(site, prefix)?;
+        super::types::newtype_member_owner(&lookup, &self.tysys, def)
+    }
+
     /// Whose cases a pattern names: the scrutinee's structure, with references
     /// and newtype links peeled. A newtype inherits its base's cases (WEP
     /// 2026-01-29), so `match c { Color::Green => … }` holds for a `C` too —

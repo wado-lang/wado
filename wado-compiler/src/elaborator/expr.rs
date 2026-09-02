@@ -899,6 +899,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .len()
             .checked_sub(2)
             .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
+        // A newtype reaches its base's members and keeps its own identity, so
+        // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
+        // the implicit form of `Color::Green as C`.
+        let through_newtype = owner.and_then(|def| {
+            super::types::newtype_member_owner(&self.type_lookup(), &self.tysys, def)
+        });
+        let owner = through_newtype.map(|(base, _)| base).or(owner);
         macro_rules! lookup_case {
             ($of:ident) => {
                 owner.and_then(|def| self.type_lookup().$of(def)).cloned()
@@ -981,7 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Reify rebuilds the payload-less
                 // `VariantConstruct` from the AST + recorded generic
                 // instantiation. Not an l-value.
-                return Some(variant_type);
+                return Some(through_newtype.map_or(variant_type, |(_, named)| named));
             }
         }
 
@@ -999,7 +1006,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_id_of_decl(enum_info.defined_at);
 
             // Reify rebuilds the `EnumConstruct`. Not an l-value.
-            return Some(enum_type);
+            return Some(through_newtype.map_or(enum_type, |(_, named)| named));
         }
 
         // Check for flags member: PathFlags::SymlinkFollow
@@ -1014,7 +1021,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
             self.check_case_turbofish_arity(ident, prefix, 0);
-            return Some(flags_info.type_id);
+            return Some(through_newtype.map_or(flags_info.type_id, |(_, named)| named));
         }
         None
     }
