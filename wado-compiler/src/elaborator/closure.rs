@@ -209,6 +209,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
+        // A closure body is its own label stack: a loop around the closure
+        // binds no `break` / `continue` written inside it.
+        if let ast::Expr::Block(ref block) = closure.body {
+            self.validate_loop_jumps_ast(Some(block));
+        }
+
         // Diagnose missing returns / type mismatches on block-bodied
         // closures via the AST-walker, gating on the AST block shape so an
         // explicit `return` inside a partial branch reports the error with no

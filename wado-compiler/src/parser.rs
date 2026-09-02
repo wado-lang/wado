@@ -2176,8 +2176,9 @@ impl Parser {
 
     /// Parse a statement inside a block, allowing optional semicolon for the final expression
     fn parse_stmt_in_block(&mut self) -> ParseResult<Stmt> {
-        // Check for labeled block: `LABEL: { ... }`
-        if let TokenKind::Ident(_) = self.peek_kind()
+        // Check for labeled block: `LABEL: { ... }`. A local `type Foo = Bar`
+        // has no `:` and falls through to the item path below.
+        if self.peek_kind().as_ident_name().is_some()
             && matches!(self.peek_nth(1).kind, TokenKind::Colon)
             && matches!(self.peek_nth(2).kind, TokenKind::LBrace)
         {
@@ -2269,11 +2270,12 @@ impl Parser {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
 
-        // Parse the label (identifier)
-        let label = match self.advance().kind.clone() {
-            TokenKind::Ident(name) => name,
-            _ => unreachable!("parse_labeled_block_stmt called without identifier"),
-        };
+        let label = self
+            .advance()
+            .kind
+            .as_ident_name()
+            .expect("parse_labeled_block_stmt called without identifier")
+            .to_string();
         self.check_label_available(&label, start_span)?;
 
         // Consume the colon
@@ -2813,14 +2815,19 @@ impl Parser {
         Ok(Stmt::Loop(LoopStmt { id, body, span }))
     }
 
-    /// Parse break statement: `break;`, `break label;`, or `break label: expr;`
+    /// Parse break statement: `break;`, `break ()`, `break label;`, or
+    /// `break label: expr;`. An unlabeled break targets a loop, which yields no
+    /// value, so `break ()` says what `break;` says and both parse to no value.
     fn parse_break_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Break)?;
 
-        // Check for optional label
-        let (label, label_span, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
+        // Check for an optional label, over the same names a labeled block
+        // accepts. `tail_span` is the last token this break owns, so a `break`
+        // ending a block without `;` does not stretch its span into the `}`.
+        let (label, tail_span, value) = if let Some(name) = self.peek_kind().as_ident_name() {
+            let name = name.to_string();
             let label_tok_span = self.advance().span;
             // Check for colon followed by expression (break with value)
             if self.check(&TokenKind::Colon) {
@@ -2831,6 +2838,12 @@ impl Parser {
                 // Just a label, no value
                 (Some(name), Some(label_tok_span), None)
             }
+        } else if self.check(&TokenKind::LParen)
+            && matches!(self.peek_nth(1).kind, TokenKind::RParen)
+        {
+            let open = self.advance().span;
+            let close = self.advance().span;
+            (None, Some(open.merge(&close)), None)
         } else {
             // No label, no value
             (None, None, None)
@@ -2840,7 +2853,7 @@ impl Parser {
             value
                 .as_ref()
                 .map(|v| v.span())
-                .or(label_span)
+                .or(tail_span)
                 .unwrap_or(start_span),
         )?;
 

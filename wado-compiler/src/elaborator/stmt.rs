@@ -519,10 +519,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         tail_value: bool,
     ) {
-        ctx.active_labels.push(labeled_block.label.clone());
+        // A stmt-position block yields no value, but it is still a break
+        // target: its frame keeps an inner `break LABEL` from landing on an
+        // outer block expression reusing the name. Its collected types are
+        // dropped with the block's value.
+        ctx.push_labeled_block_frame(labeled_block.label.clone(), expected_type);
         // resolve_block already handles scope entry/exit
         self.resolve_block_with_position(&labeled_block.block, ctx, expected_type, tail_value);
-        ctx.active_labels.pop();
+        ctx.pop_labeled_block_frame();
     }
 
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
@@ -2832,21 +2836,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(label) = &break_stmt.label
             && !ctx.active_labels.iter().any(|l| l == label)
         {
-            let _ = self.emit(TypeError::UnknownIdentifier {
-                name: format!("labeled break target not found: {label}"),
+            let _ = self.emit(TypeError::UnknownBreakLabel {
+                label: label.clone(),
                 span: break_stmt.span,
             });
         }
 
-        // If breaking with a value to a labeled block expression, record the
-        // type. Scan innermost-first so a `break label` inside a nested block
-        // that reuses the same label name is attributed to the inner target —
-        // consistent with the `expected_type` lookup above and with WIR `br`
-        // depth resolution.
-        if let (Some(label), Some(val)) = (&break_stmt.label, &value) {
+        // Record the branch this break contributes to its labeled block; a
+        // valueless one yields unit. Scan innermost-first, matching the
+        // `expected_type` lookup above and WIR `br` depth resolution.
+        if let Some(label) = &break_stmt.label {
+            let branch_type = value.unwrap_or(TypeTable::UNIT);
             for target in ctx.labeled_block_targets.iter_mut().rev() {
                 if &target.label == label {
-                    target.break_types.push(*val);
+                    target.break_types.push(branch_type);
                     break;
                 }
             }

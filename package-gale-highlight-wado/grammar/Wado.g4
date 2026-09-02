@@ -342,7 +342,7 @@ localItemKind
     ;
 
 labeledBlock
-    : IDENTIFIER ':' block
+    : identifier ':' block
     ;
 
 letStatement
@@ -401,7 +401,7 @@ loopStatement
     ;
 
 breakStatement
-    : 'break' (IDENTIFIER (':' expression)?)?
+    : 'break' (identifier (':' expression)? | '(' ')')?
     ;
 
 continueStatement

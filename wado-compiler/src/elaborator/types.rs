@@ -180,6 +180,13 @@ impl ImplMemberKind {
     }
 }
 
+/// The unlabeled jumps a loop binds.
+#[derive(Debug, Clone, Copy)]
+pub enum LoopJump {
+    Break,
+    Continue,
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -235,6 +242,19 @@ pub enum TypeError {
     /// Unknown variable
     UnknownIdentifier {
         name: String,
+        span: Span,
+    },
+
+    /// `break LABEL` naming no enclosing labeled block
+    UnknownBreakLabel {
+        label: String,
+        span: Span,
+    },
+
+    /// Unlabeled `break` / `continue` with no enclosing loop. WIR resolves such
+    /// a jump against the innermost loop on its label stack and has none.
+    LoopJumpOutsideLoop {
+        jump: LoopJump,
         span: Span,
     },
 
@@ -1001,6 +1021,22 @@ impl TypeError {
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{name}'"),
+                *span,
+            ),
+            TypeError::UnknownBreakLabel { label, span } => (
+                Code::UndefinedVariable,
+                format!("labeled break target not found: no enclosing block labeled '{label}'"),
+                *span,
+            ),
+            TypeError::LoopJumpOutsideLoop { jump, span } => (
+                Code::InvalidSyntax,
+                match jump {
+                    LoopJump::Break => {
+                        "`break` outside of a loop; a labeled block is left with `break LABEL`"
+                            .to_string()
+                    }
+                    LoopJump::Continue => "`continue` outside of a loop".to_string(),
+                },
                 *span,
             ),
 
@@ -2018,6 +2054,30 @@ pub(super) struct FunctionContext {
 }
 
 impl FunctionContext {
+    /// Enter a labeled block in either position, so a `break LABEL` inside
+    /// resolves to the innermost block of that name.
+    pub(super) fn push_labeled_block_frame(
+        &mut self,
+        label: String,
+        expected_type: Option<TypeId>,
+    ) {
+        self.labeled_block_targets.push(LabeledBlockTarget {
+            label: label.clone(),
+            break_types: Vec::new(),
+            expected_type,
+        });
+        self.active_labels.push(label);
+    }
+
+    pub(super) fn pop_labeled_block_frame(&mut self) -> LabeledBlockTarget {
+        self.active_labels
+            .pop()
+            .expect("labeled block frame pushed before pop");
+        self.labeled_block_targets
+            .pop()
+            .expect("labeled block frame pushed before pop")
+    }
+
     pub(super) fn new(return_type: TypeId, function_name: String) -> Self {
         Self {
             scopes: vec![IndexMap::default()], // Start with one scope for function parameters
