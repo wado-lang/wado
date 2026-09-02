@@ -17888,8 +17888,13 @@ pub fn highlight_result(result: &ParseResult, input: &String) -> String {
 }
 
 pub fn highlight(input: &String) -> String {
-    let result = parse(input);
-    return highlight_result(&result, input);
+    let mapping = highlight_mapping();
+    let mut visitor = HighlightVisitor::new(mapping);
+    let tokens = tokenize(input);
+    for let mut _i = 0; _i < tokens.len(); _i += 1 {
+        visitor.hl_capture_token(&tokens, _i);
+    }
+    return highlight_html(input, &visitor.captures, &visitor.capture_classes);
 }
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
