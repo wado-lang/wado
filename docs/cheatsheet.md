@@ -1340,6 +1340,10 @@ type methods, and the prelude traits. See [`core:prelude`](./stdlib-core-prelude
 ```wado
 panic("error message");   // log to stderr and trap
 unreachable();            // trap on unreachable code
+
+// Comparing a secret (a MAC, a token, an API key): `==` stops at the first
+// differing byte, and how long it took says how much of a guess was right.
+eq_constant_time(&mac, &expected);   // any AsByteSlice: ByteList, String, …
 ```
 
 ### core:cli

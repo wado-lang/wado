@@ -50,8 +50,8 @@ pub trait JwsAlgorithm {
 /// [`verify`] an algorithm this module does not carry.
 pub trait JwsVerifier: JwsAlgorithm {
     /// Whether `signature` is this key's over `signing_input` (the token's
-    /// `header.payload` ASCII bytes). An implementation compares in constant
-    /// time — see [`ct_eq`].
+    /// `header.payload` ASCII bytes). An implementation compares with
+    /// `eq_constant_time`, never `==`.
     fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool;
 }
 
@@ -196,22 +196,8 @@ impl JwsSigner for Hs256Key {
 
 impl JwsVerifier for Hs256Key {
     fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool {
-        return ct_eq(&hmac_sha256(&self.secret, signing_input), signature);
+        return eq_constant_time(&hmac_sha256(&self.secret, signing_input), signature);
     }
-}
-
-/// Compare two byte strings without an early exit, so the time taken says
-/// nothing about how much of a signature an attacker got right. Public
-/// because an out-of-tree [`JwsVerifier`] owes its comparison the same.
-pub fn ct_eq(a: &ByteList, b: &ByteList) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff: u8 = 0;
-    for let mut i = 0; i < a.len(); i += 1 {
-        diff = diff | a[i] ^ b[i];
-    }
-    return diff == 0;
 }
 
 /// Whether `alg` is safe to splice into the header JSON `sign` writes.

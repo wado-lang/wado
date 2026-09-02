@@ -54,12 +54,6 @@ over `header.payload`, the header's `alg` against the key's, and that no
 extension is marked critical. Claims are not read — `exp` is
 [`RegisteredClaims::validate_time`]'s job, and the caller's to invoke.
 
-### `pub fn ct_eq(a: &ByteList, b: &ByteList) -> bool`
-
-Compare two byte strings without an early exit, so the time taken says
-nothing about how much of a signature an attacker got right. Public
-because an out-of-tree [`JwsVerifier`] owes its comparison the same.
-
 ## Traits
 
 ### `pub trait JwsAlgorithm`
@@ -79,8 +73,8 @@ The verifying half of a JWS algorithm. Implement it on a key type to teach
 #### `fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool`
 
 Whether `signature` is this key's over `signing_input` (the token's
-`header.payload` ASCII bytes). An implementation compares in constant
-time — see [`ct_eq`].
+`header.payload` ASCII bytes). An implementation compares with
+`eq_constant_time`, never `==`.
 
 ### `pub trait JwsSigner: JwsAlgorithm`
 

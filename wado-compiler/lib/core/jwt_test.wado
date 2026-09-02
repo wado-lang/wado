@@ -1,4 +1,4 @@
-use { Hs256Key, JwsAlgorithm, JwsVerifier, JwtError, RegisteredClaims, ct_eq, sign, verify } from "core:jwt";
+use { Hs256Key, JwsAlgorithm, JwsVerifier, JwtError, RegisteredClaims, sign, verify } from "core:jwt";
 use { decode_url_strict, encode_url } from "core:base64";
 use { from_bytes } from "core:json";
 
@@ -126,16 +126,6 @@ test "registered claims deserialize from a verified payload" {
     assert claims.nbf == Option::<i64>::None;
 }
 
-test "constant-time comparison still compares" {
-    let a: ByteList = [1, 2, 3];
-    let b: ByteList = [1, 2, 3];
-    let c: ByteList = [1, 2, 4];
-    let short: ByteList = [1, 2];
-    assert ct_eq(&a, &b);
-    assert !ct_eq(&a, &c);
-    assert !ct_eq(&a, &short);
-}
-
 // An algorithm this module does not carry, added from outside it: the key type
 // is local to this file and plugs into `verify` unchanged.
 struct StubKey {
@@ -150,7 +140,7 @@ impl JwsAlgorithm for StubKey {
 
 impl JwsVerifier for StubKey {
     fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool {
-        return ct_eq(signature, &self.accept);
+        return eq_constant_time(signature, &self.accept);
     }
 }
 

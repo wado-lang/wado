@@ -24,6 +24,24 @@ assert decoded matches { Ok(s) && s == "Wado" };
 
 ## Functions
 
+### `pub fn eq_constant_time<A: AsByteSlice, B: AsByteSlice>(a: &A, b: &B) -> bool`
+
+Whether two byte strings are equal, in time that does not depend on where
+they first differ. Accepts anything `AsByteSlice` covers, so a MAC, a token
+and an API key are all compared the same way.
+
+`==` stops at the first differing byte, and how long it took says how much
+of a guess was right — enough to recover a secret one byte at a time.
+Reach for this whenever one side of the comparison is a secret, and for
+everything else use `==`, which is faster.
+
+Only the contents are hidden: a length difference is answered immediately,
+which is what a MAC or a digest wants, their lengths being public.
+
+The loop is written not to exit early. Neither the optimizer nor Wasm
+promises constant-time execution, so this is care taken, not a guarantee
+the toolchain can make.
+
 ### `pub fn panic(message: String) -> !`
 
 Logs a message to stderr and traps.

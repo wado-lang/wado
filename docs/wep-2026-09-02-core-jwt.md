@@ -111,10 +111,10 @@ failure, and an assert fires at key construction — startup — not per request
 - The module carries no clock, no network, and no key-set logic, so it neither
   fetches JWKS nor rotates keys. That is the caller's, and it needs no
   cooperation from here.
-- Signature comparison is constant-time (`ct_eq`), and it is exported so an
-  out-of-tree verifier compares the same way. Neither the optimizer nor Wasm
-  guarantees constant-time execution generally, and the module does not claim
-  side-channel resistance beyond that comparison.
+- Signature comparison goes through `core:prelude`'s `eq_constant_time`, which
+  an out-of-tree verifier reaches without importing anything. Neither the
+  optimizer nor Wasm guarantees constant-time execution generally, and the
+  module claims no side-channel resistance beyond that comparison.
 
 ## Known gaps
 
