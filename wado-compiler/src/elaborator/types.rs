@@ -1442,7 +1442,7 @@ impl TypeError {
             } => (
                 Code::OrphanRule,
                 format!(
-                    "duplicate impl of `{trait_name}` for `{self_type_name}`: {conflicting_impl} implements the same pair, and nothing ranks two impls of one pair, so which one every call runs would be decided by the order they were loaded in"
+                    "duplicate impl of '{trait_name}' for '{self_type_name}': {conflicting_impl} implements the same pair, and nothing ranks two impls of one pair, so which one every call runs would be decided by the order they were loaded in"
                 ),
                 *span,
             ),
@@ -1453,7 +1453,7 @@ impl TypeError {
             } => (
                 Code::OrphanRule,
                 format!(
-                    "blanket impl of `{trait_name}` for `{param}` states no bound: a blanket impl's receiver type parameter needs a bound, since the bound is what decides which receivers it covers"
+                    "blanket impl of '{trait_name}' for '{param}' states no bound: a blanket impl's receiver type parameter needs a bound, since the bound is what decides which receivers it covers"
                 ),
                 *span,
             ),

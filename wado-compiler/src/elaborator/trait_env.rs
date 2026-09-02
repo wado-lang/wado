@@ -2261,7 +2261,7 @@ fn check_impl_coherence(
                         conflicting_impl: if first.module == second.module {
                             "an earlier impl in this file".to_string()
                         } else {
-                            format!("the one in `{}`", first.module)
+                            format!("the one in '{}'", first.module)
                         },
                         span: second.span,
                     },

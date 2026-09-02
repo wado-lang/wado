@@ -507,8 +507,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// directly at `case_ast_id` (its module is intrinsic to the id).
     ///
     /// Used for variant cases, enum cases, and flags members reached via
-    /// a two-segment qualified ident, and for a bare case (`Some`), whose one
-    /// segment is the case.
+    /// a two-segment qualified ident, and for a bare case (`Some`), whose
+    /// ident has no segments and is the case itself.
     pub(super) fn record_qualified_case(
         &mut self,
         ident: &crate::ast::IdentExpr,
@@ -516,12 +516,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         case_ast_id: crate::ast::AstId,
     ) {
         match ident.segments.as_slice() {
-            [case] => self.record_reference_to_def(case.id, case_ast_id),
+            [] => self.record_reference_to_def(ident.id, case_ast_id),
             [prefix, case, ..] => {
                 self.record_item_reference_by_name(prefix.id, type_name);
                 self.record_reference_to_def(case.id, case_ast_id);
             }
-            [] => {}
+            [_] => unreachable!("a qualified path has two or more segments"),
         }
     }
 

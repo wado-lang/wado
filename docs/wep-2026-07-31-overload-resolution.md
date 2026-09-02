@@ -107,8 +107,9 @@ which the design philosophy rules out. The escape is the qualified call syntax
 below, not renaming.
 
 Which declarations can collide at all is settled before this rule: a trait's
-methods are candidates only where its declaration is in scope
-([Trait Resolution](./wep-2026-09-01-trait-resolution.md)). Two libraries'
+methods are candidates at a call only where the calling module has its
+declaration in scope ([Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
+Where the receiver or the impl was written does not matter. Two libraries'
 private `trait Loud` never collide through a shared receiver type, because a
 module importing neither sees neither. A blanket is scoped the same way and
 counts toward the collision like any other candidate.

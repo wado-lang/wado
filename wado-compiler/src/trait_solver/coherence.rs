@@ -1,6 +1,6 @@
 //! The checks that read the program alone — no receiver, no bounds in force.
 
-use super::program::{ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId};
+use super::program::{ImplDef, ImplId, ImplOrigin, Pin, Program, SolverType, TraitDeclId};
 use crate::hashmap::IndexMap;
 
 /// What a coherence check found. It names impls; the caller turns an id into a
@@ -39,13 +39,14 @@ pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
 }
 
 /// What makes two impls the same pair: the trait, its own arguments, the
-/// target, and its parameters' bounds, so `impl<T: A> Tr for T` and
-/// `impl<T: B> Tr for T` are two pairs.
+/// target, and its parameters' conditions, so `impl<T: A> Tr for T` and
+/// `impl<T: B> Tr for T` are two pairs. A condition's bounds are a set:
+/// `T: A + B` and `T: B + A` are one.
 type ImplKey<'a> = (
     TraitDeclId,
     &'a [SolverType],
     &'a SolverType,
-    &'a [ParamDef],
+    Vec<(Vec<TraitDeclId>, &'a [Pin])>,
 );
 
 /// An inherent impl and a marker have no key: several inherent impls spread a
@@ -54,11 +55,21 @@ fn impl_key(def: &ImplDef) -> Option<ImplKey<'_>> {
     if def.origin == ImplOrigin::Marker {
         return None;
     }
+    let conditions = def
+        .params
+        .iter()
+        .map(|p| {
+            let mut bounds = p.bounds.clone();
+            bounds.sort_unstable();
+            bounds.dedup();
+            (bounds, p.pins.as_slice())
+        })
+        .collect();
     Some((
         def.trait_?,
         def.trait_args.as_slice(),
         &def.target,
-        def.params.as_slice(),
+        conditions,
     ))
 }
 
@@ -77,7 +88,7 @@ fn unbounded_value_blanket(id: ImplId, def: &ImplDef) -> Option<CoherenceError> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::TypeDeclId;
+    use super::super::program::{ParamDef, TypeDeclId};
     use super::super::testing::{concrete, decl, program};
     use super::*;
 
@@ -230,6 +241,28 @@ mod tests {
         };
         assert_eq!(
             coherence_errors(&program([blanket(), blanket()])),
+            vec![CoherenceError::DuplicateImpl {
+                first: ImplId(0),
+                second: ImplId(1),
+            }]
+        );
+    }
+
+    /// `impl<T: A + B>` and `impl<T: B + A>` state one condition.
+    #[test]
+    fn two_blankets_at_reordered_bounds_are_a_duplicate() {
+        let blanket = |bounds: Vec<TraitDeclId>| ImplDef {
+            trait_: Some(TR),
+            trait_args: vec![],
+            target: SolverType::Param(0),
+            params: vec![ParamDef::bounded(bounds)],
+            origin: ImplOrigin::Written,
+        };
+        assert_eq!(
+            coherence_errors(&program([
+                blanket(vec![LIMIT, OTHER_TR]),
+                blanket(vec![OTHER_TR, LIMIT]),
+            ])),
             vec![CoherenceError::DuplicateImpl {
                 first: ImplId(0),
                 second: ImplId(1),

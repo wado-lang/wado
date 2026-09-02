@@ -135,11 +135,13 @@ impl Query<'_> {
             return None;
         }
         let bound_to = |ty: &SolverType| ty.map_params(&|i| bindings.get(i as usize)?.clone());
+        // The body owed is the answering impl's, which may be of a subtrait
+        // of the one asked for.
         let mut requests = match def.origin {
             ImplOrigin::Written => Vec::new(),
             ImplOrigin::Derived | ImplOrigin::Marker => vec![DerivationRequest {
                 ty: ty.clone(),
-                trait_,
+                trait_: implemented,
             }],
         };
         for (index, param) in def.params.iter().enumerate() {
@@ -989,6 +991,32 @@ mod tests {
         assert_eq!(
             holds(&p, &Env::default(), &decl(CM), PRODUCT, HERE),
             Some(Holds::default())
+        );
+    }
+
+    /// A derived `impl Sub for Point` answering `Point: Base` owes the `Sub`
+    /// body, so the request names the impl's trait rather than the bound's.
+    #[test]
+    fn a_request_names_the_answering_impl_s_trait() {
+        let p = Builder::default()
+            .supertrait(SUB, BASE)
+            .impl_(ImplDef {
+                trait_: Some(SUB),
+                trait_args: vec![],
+                target: decl(POINT),
+                params: vec![],
+                origin: ImplOrigin::Derived,
+            })
+            .build();
+        assert_eq!(
+            holds(&p, &Env::default(), &decl(POINT), BASE, HERE),
+            Some(Holds {
+                requests: vec![DerivationRequest {
+                    ty: decl(POINT),
+                    trait_: SUB,
+                }],
+                ..Holds::default()
+            })
         );
     }
 
