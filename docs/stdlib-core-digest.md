@@ -40,9 +40,8 @@ bytes). Render the result as hex with `to_hex`, e.g. `sha256(&data).to_hex()`.
 Keyed message authentication over any [`Digest`] (HMAC, RFC 2104):
 `H((K ^ opad) || H((K ^ ipad) || message))`.
 
-Pass a fresh `hasher` of the algorithm to key; value semantics give the two
-passes their own copy. A key longer than the block is hashed down first, a
-shorter one zero-padded, as the RFC prescribes.
+Pass a fresh `hasher` of the algorithm to key. A key of any length works:
+the RFC's own reduction to one block applies.
 
 Check the result with `eq_constant_time`, never `==`.
 

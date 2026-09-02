@@ -27,18 +27,17 @@ assert decoded matches { Ok(s) && s == "Wado" };
 ### `pub fn eq_constant_time<A: AsByteSlice, B: AsByteSlice>(a: &A, b: &B) -> bool`
 
 Whether two byte strings are equal, in time that does not depend on where
-they first differ. A MAC, a token and an API key all compare the same way,
-since this takes anything `AsByteSlice` covers.
+they first differ.
 
-Use it whenever one side is a secret. `==` stops at the first differing
-byte, so how long it took says how much of a guess was right, and a secret
-falls one byte at a time. Everything else should keep using `==`, which is
-faster.
+Use it whenever one side is a secret — a MAC, a token, an API key.
+`==` stops at the first differing byte, so how long it took says how much
+of a guess was right, and a secret falls one byte at a time. Everything
+else should keep using `==`, which is faster.
 
 A length difference is still answered immediately: a MAC and a digest have
 public lengths, and only their contents are hidden. Neither the optimizer
-nor Wasm promises constant-time execution, so the loop takes the care it
-can rather than making a guarantee.
+nor Wasm promises constant-time execution, so this takes the care it can
+rather than making a guarantee.
 
 ### `pub fn panic(message: String) -> !`
 

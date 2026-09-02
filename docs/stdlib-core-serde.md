@@ -410,12 +410,10 @@ Used by variadic tuple deserialization via type pack expansion.
 
 ### `pub struct IgnoredAny`
 
-A value read and thrown away.
+A value of any shape, read and thrown away.
 
-Deserializing it consumes whatever the wire holds, of any shape, and builds
-nothing. A schema reaches for it to require a member's _absence_: an
-`Option<T>` field cannot, because it reads an explicit `null` as `None` and
-so agrees with a member that was never sent.
+It is how a schema requires a member's _absence_: an `Option<T>` field
+cannot, because it reads an explicit `null` as the member never sent.
 
 #### `impl Deserialize for IgnoredAny`
 

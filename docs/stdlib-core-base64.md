@@ -46,8 +46,8 @@ Decodes URL-safe Base64 (RFC 4648 §5, unpadded), the exact inverse of
 This one is canonical where [`decode`] is lenient. It rejects everything
 `encode_url` never writes: the standard alphabet's `+` and `/`, `=`
 padding, and a final group whose unused bits are set. One byte string
-therefore has exactly one accepted spelling, so no second input decodes to
-the same value. Use [`decode`] for input from a producer you do not control.
+therefore has exactly one accepted spelling. Use [`decode`] for input from
+a producer you do not control.
 
 ## Flags
 

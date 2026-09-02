@@ -8,9 +8,9 @@ with HMAC-SHA256 (`HS256`, RFC 7518 §3.2) built in.
 
 The key decides the algorithm, never the token. [`verify`] takes a key that
 implements [`JwsVerifier`] and checks the signature with _that_ algorithm,
-so a header naming another one cannot redirect verification. That is the
-algorithm-confusion class, which has broken JWT libraries repeatedly. `alg`
-is still read, and a token whose header disagrees with the key is rejected.
+so a header naming another one cannot redirect verification — the
+algorithm-confusion class. `alg` is still read, and a token whose header
+disagrees with the key is rejected.
 
 An RSA or ECDSA key type defined elsewhere implements the same traits and
 works with the same entry points, with no change here to admit it.
@@ -102,9 +102,9 @@ belongs to a caller's own claims struct until this module carries both.
 #### `pub fn validate_time(&self, now: i64, leeway: i64 = 0) -> Result<(), JwtError>`
 
 Check `exp` and `nbf` against `now` (seconds since the Unix epoch),
-tolerating `leeway` seconds of clock skew on either side. A claim that
-is absent is not checked, and `leeway` widens the window, so it is
-never negative.
+tolerating `leeway` seconds of clock skew on either side. An absent
+claim is not checked. `leeway` widens the window, so it is never
+negative.
 
 The time is an argument rather than a clock read, so verifying a token
 gains no `SystemClock` effect. Pass `Instant::now().seconds` where you
