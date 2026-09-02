@@ -933,17 +933,23 @@ pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
             v.visit_id(assoc.id, assoc.span);
             v.visit_type(&assoc.ty);
         }
-        // `T: fn(i32) -> i32 with E` carries its signature's types — and the
-        // effects it names — here, exactly as `Type::Function` does.
+        // `T: fn(i32) -> i32 with E` carries a signature the bound spells out
+        // rather than wrapping in a `Type`, so it is walked as one here.
         if let Some(signature) = &bound.fn_signature {
-            for param in &signature.params {
-                v.visit_type(param);
-            }
-            v.visit_type(&signature.return_type);
-            for (id, span) in &signature.effect_ids {
-                v.visit_id(*id, *span);
-            }
+            walk_function_type(v, signature);
         }
+    }
+}
+
+/// The types and effect names a function signature carries, whether it stands
+/// as a [`Type::Function`] or as a trait bound's `fn_signature`.
+pub fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
+    for p in &ft.params {
+        v.visit_type(p);
+    }
+    v.visit_type(&ft.return_type);
+    for (id, span) in &ft.effect_ids {
+        v.visit_id(*id, *span);
     }
 }
 
@@ -962,15 +968,7 @@ pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
                 v.visit_type(a);
             }
         }
-        Type::Function(ft) => {
-            for p in &ft.params {
-                v.visit_type(p);
-            }
-            v.visit_type(&ft.return_type);
-            for (id, span) in &ft.effect_ids {
-                v.visit_id(*id, *span);
-            }
-        }
+        Type::Function(ft) => walk_function_type(v, ft),
         Type::Tuple(ts) => {
             for t in ts {
                 v.visit_type(t);
@@ -1772,7 +1770,7 @@ impl ImportAttributes {
     /// Raw lookup for any top-level attribute.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&AttrValue> {
-        self.entries.get(key).map(|entry| &entry.value)
+        attr_value(&self.entries, key)
     }
 }
 

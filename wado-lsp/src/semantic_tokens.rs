@@ -401,13 +401,28 @@ impl SpanCollector {
         }
     }
 
-    /// Mark every key of an attribute object, and of the objects nested in it.
+    /// Mark every key of an attribute object, and of the objects nested in it —
+    /// under an array element as much as under another key.
     fn mark_attr_keys(&mut self, object: &ast::AttrObject) {
         for entry in object.values() {
             self.mark_field_name(entry.key_span);
-            if let Some(nested) = entry.value.as_object() {
-                self.mark_attr_keys(nested);
+            self.mark_attr_value(&entry.value);
+        }
+    }
+
+    /// Descend an attribute value to the objects it holds. A scalar holds none.
+    fn mark_attr_value(&mut self, value: &ast::AttrValue) {
+        match value {
+            ast::AttrValue::Object(nested) => self.mark_attr_keys(nested),
+            ast::AttrValue::Array(items) => {
+                for item in items {
+                    self.mark_attr_value(item);
+                }
             }
+            ast::AttrValue::String(_)
+            | ast::AttrValue::Int(_)
+            | ast::AttrValue::Float(_)
+            | ast::AttrValue::Bool(_) => {}
         }
     }
 
@@ -1043,6 +1058,15 @@ mod tests {
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 2, "generator"), token_type::PROPERTY);
         assert_eq!(kind_of(&tokens, src, 3, "module"), token_type::PROPERTY);
+    }
+
+    /// An array element is an attribute value like any other, so the object
+    /// inside one carries field names too.
+    #[test]
+    fn import_attribute_keys_under_an_array_are_properties() {
+        let src = "use { f } from \"./m.wado\"\n    with {\n        options: {\n            rules: [\n                { name: \"expr\" },\n            ],\n        },\n    };\nfn run() {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 4, "name"), token_type::PROPERTY);
     }
 
     /// A shorthand field is the field, not the variable it reads.

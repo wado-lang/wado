@@ -570,9 +570,9 @@ fn render_report(patterns: &[(usize, Divergence)]) -> String {
     let mut out = String::from(
         "# Where the two Wado highlighters disagree. Generated, not committed.\n#\n\
          # Grouped by pattern, most frequent first, one example each. A pattern\n\
-         # with a `-` for the Gale side on an identifier class is a capability\n\
-         # gap, not a defect: Gale is context-free and cannot resolve a name.\n\
-         # Every other pattern is a defect.\n#\n\
+         # with a `-` on one side and an identifier class on the other is a\n\
+         # silence, not a defect: Gale is context-free and cannot resolve a\n\
+         # name. Every other pattern is a defect.\n#\n\
          # count<TAB>relation<TAB>compiler<TAB>gale<TAB>kind<TAB>path<TAB>line<TAB>text\n",
     );
     for (count, example) in patterns {

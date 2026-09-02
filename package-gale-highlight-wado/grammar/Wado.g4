@@ -454,7 +454,9 @@ postfix
 postfixOp
     : '(' argumentList? ')'
     | '::' typeArgs '(' argumentList? ')'
-    | '.' (methodName ('::' typeArgs)? '(' argumentList? ')' | fieldName ('::' typeArgs)? | INTEGER | FLOAT)
+    // A turbofish after a `.` belongs to a call: the parser demands the `(`
+    // after it, so a field read carries no type arguments.
+    | '.' (methodName ('::' typeArgs)? '(' argumentList? ')' | fieldName | INTEGER | FLOAT)
     | '[' expression ']'
     | '?'
     ;
