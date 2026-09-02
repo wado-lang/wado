@@ -2389,6 +2389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
+        scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params
         // still in scope). `<F: fn(...)>` / `<F: fn mut(...)>` bounds are
@@ -2723,6 +2724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
+        scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params still
         // in scope). Mirror the free-function path in `resolve_function`:

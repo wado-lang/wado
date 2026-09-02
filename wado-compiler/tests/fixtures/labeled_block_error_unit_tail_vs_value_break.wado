@@ -1,0 +1,24 @@
+// A tail that is not a value yields `()`, which is a branch of the block like
+// any other. Against a `break` carrying a value the two disagree, so this is
+// the same type error a valueless `break` gets. Exempting the unit tail let
+// the block fall off its end and trap at run time instead.
+
+global mut CALLS: i32 = 0;
+
+fn note() {
+    CALLS += 1;
+}
+
+export fn run() {
+    let c = builtin::black_box(true);
+    let v = blk: {
+        if c {
+            break blk: 1;
+        }
+        note();
+    };
+    assert v == 1;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'i32', found '()'"}

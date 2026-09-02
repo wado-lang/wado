@@ -1,0 +1,19 @@
+// A valueless `break LABEL;` is a branch of its block like any other, so in a
+// block used as a value it yields nothing where a value is required. Unchecked,
+// it was recorded as no branch at all: the block took its type from the other
+// exits and codegen emitted a `br` that left the stack empty against that type
+// ("invalid core Wasm module: expected i32 but nothing on stack").
+
+export fn run() {
+    let c = builtin::black_box(true);
+    let v = blk: {
+        if c {
+            break blk;
+        }
+        1
+    };
+    assert v == 1;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'i32', found '()'"}

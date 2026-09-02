@@ -11,6 +11,8 @@ use crate::hashmap::IndexMap;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
+use super::types::LoopJump;
+
 /// Lookup context for AST control-flow walks. Holds the per-AstId
 /// type table; `expression_types` is keyed by globally-unique `AstId`,
 /// so no module qualifier is needed. `type_table` backs the definite-type
@@ -47,23 +49,48 @@ impl CtrlFlowCtx<'_> {
 /// Whether every control path through `block` exits before reaching
 /// the end. AST mirror of `Elaborator::block_always_exits`.
 pub(super) fn block_always_exits(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bool {
-    block.stmts.iter().any(|s| stmt_always_exits(ctx, s))
+    block_always_exits_past(ctx, block, &[])
 }
 
-fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> bool {
+/// Whether control can reach the end of a labeled block's body, which decides
+/// whether its trailing statement is a branch of the block.
+pub(super) fn labeled_block_falls_through(
+    ctx: CtrlFlowCtx<'_>,
+    block: &ast::Block,
+    label: &str,
+) -> bool {
+    !block_always_exits_past(ctx, block, &[label])
+}
+
+/// `exit_labels` name blocks a `break` leaves along with the region analysed,
+/// so such a break never reaches the statement after a loop it sits in.
+fn block_always_exits_past(ctx: CtrlFlowCtx<'_>, block: &ast::Block, exit_labels: &[&str]) -> bool {
+    block
+        .stmts
+        .iter()
+        .any(|s| stmt_always_exits(ctx, s, exit_labels))
+}
+
+fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, exit_labels: &[&str]) -> bool {
     match stmt {
         ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => true,
-        ast::Stmt::Expr(e) => expr_always_exits(ctx, &e.expr),
+        ast::Stmt::Expr(e) => expr_always_exits_past(ctx, &e.expr, exit_labels),
         ast::Stmt::If(if_stmt) => {
             if let Some(else_block) = &if_stmt.else_block {
-                block_always_exits(ctx, &if_stmt.then_block) && block_always_exits(ctx, else_block)
+                block_always_exits_past(ctx, &if_stmt.then_block, exit_labels)
+                    && block_always_exits_past(ctx, else_block, exit_labels)
             } else {
                 false
             }
         }
-        ast::Stmt::Loop(loop_stmt) => !loop_body_can_escape(ctx, &loop_stmt.body),
+        ast::Stmt::Loop(loop_stmt) => !loop_body_can_escape(ctx, &loop_stmt.body, exit_labels),
+        // `while true` is the same loop written differently: reify desugars it
+        // to `loop { if !true { break } B }`, so only a `break` in `B` ends it.
+        ast::Stmt::While(w) if condition_is_always_true(&w.condition) => {
+            !loop_body_can_escape(ctx, &w.body, exit_labels)
+        }
         ast::Stmt::LabeledBlock(lb) => {
-            block_always_exits(ctx, &lb.block)
+            block_always_exits_past(ctx, &lb.block, exit_labels)
                 && !block_can_break_to_label(ctx, &lb.block, &lb.label)
         }
         // `match { ... }` as a top-level statement diverges when every
@@ -71,37 +98,49 @@ fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> bool {
         // walker saw the same construct as `TirStmtKind::Expr` over an
         // `Expr::Match` — route through the expression-level check.
         ast::Stmt::Match(m) => {
-            !m.arms.is_empty() && m.arms.iter().all(|a| expr_always_exits(ctx, &a.body))
+            !m.arms.is_empty()
+                && m.arms
+                    .iter()
+                    .all(|a| expr_always_exits_past(ctx, &a.body, exit_labels))
         }
         _ => false,
     }
 }
 
-pub(super) fn expr_always_exits(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -> bool {
+fn condition_is_always_true(condition: &ast::Condition) -> bool {
+    matches!(condition, ast::Condition::Expr(ast::Expr::Literal(lit))
+        if matches!(lit.value, ast::Literal::Bool(true)))
+}
+
+fn expr_always_exits_past(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, exit_labels: &[&str]) -> bool {
     if ctx.is_never(expr) {
         return true;
     }
     match expr {
-        ast::Expr::Block(block) => block_always_exits(ctx, block),
+        ast::Expr::Block(block) => block_always_exits_past(ctx, block, exit_labels),
         ast::Expr::LabeledBlock(lb) => {
-            block_always_exits(ctx, &lb.block)
+            block_always_exits_past(ctx, &lb.block, exit_labels)
                 && !block_can_break_to_label(ctx, &lb.block, &lb.label)
         }
         ast::Expr::If(if_expr) => {
             if let Some(else_block) = &if_expr.else_block {
-                block_always_exits(ctx, &if_expr.then_block) && block_always_exits(ctx, else_block)
+                block_always_exits_past(ctx, &if_expr.then_block, exit_labels)
+                    && block_always_exits_past(ctx, else_block, exit_labels)
             } else {
                 false
             }
         }
         ast::Expr::Match(m) => {
-            !m.arms.is_empty() && m.arms.iter().all(|a| expr_always_exits(ctx, &a.body))
+            !m.arms.is_empty()
+                && m.arms
+                    .iter()
+                    .all(|a| expr_always_exits_past(ctx, &a.body, exit_labels))
         }
         // `resume value` transfers control out of the enclosing
         // handler method — lowered to `return value`.
         ast::Expr::Resume(_) => true,
         // `with … do { body }`: defer to body's definite-exit.
-        ast::Expr::WithHandler(wh) => block_always_exits(ctx, &wh.body),
+        ast::Expr::WithHandler(wh) => block_always_exits_past(ctx, &wh.body, exit_labels),
         _ => false,
     }
 }
@@ -314,11 +353,9 @@ trait AstTreeProbe {
     }
 }
 
-/// Searches for `break <label>` whose `label` is NOT defined inside
-/// the walked loop body. Labels declared by `LabeledBlock` (stmt or
-/// expr) nodes we enter are pushed onto `inner_labels`; a `break label`
-/// matches only when `label` is not on that stack.
-#[derive(Default)]
+/// Searches a loop body for a `break` that reaches the statement after the
+/// loop. `inner_labels` holds the labels whose `break` does not: those declared
+/// inside the body, and the seeded `exit_labels`.
 struct LoopEscape {
     inner_labels: Vec<String>,
 }
@@ -435,8 +472,46 @@ pub(super) fn collect_unresolved_null_breaks(
     probe.spans
 }
 
-fn loop_body_can_escape(ctx: CtrlFlowCtx<'_>, body: &ast::Block) -> bool {
-    let mut probe = LoopEscape::default();
+/// Searches for an unlabeled `break` / `continue` that no loop binds. A loop
+/// binds every such jump inside it, so the walk stops at one.
+struct UnboundLoopJump {
+    found: Option<(LoopJump, Span)>,
+}
+
+impl AstTreeProbe for UnboundLoopJump {
+    fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
+        match stmt {
+            ast::Stmt::Break(b) if b.label.is_none() => {
+                self.found = Some((LoopJump::Break, b.span));
+                Step::Match
+            }
+            ast::Stmt::Continue(c) => {
+                self.found = Some((LoopJump::Continue, c.span));
+                Step::Match
+            }
+            ast::Stmt::Loop(_) | ast::Stmt::While(_) | ast::Stmt::For(_) | ast::Stmt::ForOf(_) => {
+                Step::Skip
+            }
+            _ => Step::Descend,
+        }
+    }
+}
+
+/// Kind and span of the first `break` / `continue` in `block` that no enclosing
+/// loop binds. WIR panics on one, so it has to be rejected here.
+pub(super) fn find_unbound_loop_jump(
+    ctx: CtrlFlowCtx<'_>,
+    block: &ast::Block,
+) -> Option<(LoopJump, Span)> {
+    let mut probe = UnboundLoopJump { found: None };
+    any_in_tree(ctx, block, &mut probe);
+    probe.found
+}
+
+fn loop_body_can_escape(ctx: CtrlFlowCtx<'_>, body: &ast::Block, exit_labels: &[&str]) -> bool {
+    let mut probe = LoopEscape {
+        inner_labels: exit_labels.iter().map(|l| (*l).to_string()).collect(),
+    };
     any_in_tree(ctx, body, &mut probe)
 }
 
