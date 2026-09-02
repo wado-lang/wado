@@ -8,14 +8,13 @@ use { TreeMap } from "core:collections";
 
 /// `highlight`: build the token/rule mapping from the parsed highlight query,
 /// then drive `highlight_walk` over the parsed CST store. `parse` always
-/// returns a tree (partial on broken input), so there is no parse-failure
-/// branch — a broken input still highlights from its partial tree.
+/// returns a tree (partial on broken input), so there is no parse-failure /
+/// tokenize-only branch — a broken input still highlights from its partial
+/// tree.
 ///
-/// The tree is what a rule-context capture reads, and nothing else does. A
-/// query without one highlights from the token stream alone, which is what a
-/// lexer-only grammar has always done: `highlight` tokenizes and sweeps, and
-/// the parse it would have thrown away never runs. `highlight_result` stays
-/// either way, for a caller that already holds a `ParseResult`.
+/// The walk exists only to give the visitor a rule stack, so a query with no
+/// rule-context capture skips it: `hl_cover_unvisited` then sweeps every token
+/// in index order and reaches the same captures without reading the tree.
 pub fn gen_highlight(
     w: &mut CodeWriter,
     grammar: &Grammar,
@@ -31,8 +30,7 @@ pub fn gen_highlight(
         query,
         ctx,
     );
-    let has_tree = grammar.parser_rules.len() > 0;
-    if has_tree {
+    if grammar.parser_rules.len() > 0 {
         let mut fr = FnSpec::new(&"highlight_result", Vis::Pub);
         fr.add_param(&"result", &"&ParseResult");
         fr.add_param(&"input", &"&String");
@@ -47,16 +45,20 @@ pub fn gen_highlight(
         w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
         w.blank();
-    }
 
-    let mut f = FnSpec::new(&"highlight", Vis::Pub);
-    f.add_param(&"input", &"&String");
-    f.set_return_type(&"String");
-    f.emit_begin(w);
-    if has_tree && needs_rule_context {
+        let mut f = FnSpec::new(&"highlight", Vis::Pub);
+        f.add_param(&"input", &"&String");
+        f.set_return_type(&"String");
+        f.emit_begin(w);
         w.line(&"let result = parse(input);");
         w.line(&"return highlight_result(&result, input);");
+        w.end();
     } else {
+        // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
+        let mut f = FnSpec::new(&"highlight", Vis::Pub);
+        f.add_param(&"input", &"&String");
+        f.set_return_type(&"String");
+        f.emit_begin(w);
         w.line(&"let mapping = highlight_mapping();");
         w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
         w.line(&"let tokens = tokenize(input);");
@@ -64,8 +66,8 @@ pub fn gen_highlight(
         w.line(&"visitor.hl_capture_token(&tokens, _i);");
         w.end();
         w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
+        w.end();
     }
-    w.end();
     w.blank();
     gen_highlight_run(w);
 }

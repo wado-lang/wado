@@ -24,17 +24,11 @@ design). Design of the flat CST lives in
 
 ### Benchmarks
 
-**`benchmark/sqlite_parse`** (parse only: build the CST, then `result.ok()`)
-measures the build. **`benchmark/syntax_highlight`** measures highlighting, and
-as of 2026-09-02 that no longer includes a build: `SQLite.highlights.scm` has no
-rule-context capture, so nothing reads the tree and `highlight` does not parse.
-Both run the same 13366-byte SQLite fixture, guest at `-O2`.
-
-**TODO: no benchmark covers highlighting over a tree.** That path — parse, walk,
-rule-context capture — is only covered functionally, by
-`tests/driver_cst_json_highlight_test.wado`. Either give `SQLite.highlights.scm`
-a rule-context capture to bring it back under measurement, or add a benchmark
-that has one.
+The basis is **`benchmark/syntax_highlight`**: it builds the full CST _and_
+walks it (highlighting), so it exercises the realistic consumer path — build +
+traverse. `benchmark/sqlite_parse` (parse only: build the CST, then
+`result.ok()`) is the build-isolation companion. Both run the same 13366-byte
+SQLite fixture, guest at `-O2`.
 
 Dev-host numbers (`cargo run` `wado`; post-flat-CST, 2026-07). Read the split as
 a ratio, not as absolutes: the same benchmark measured **1.467 ms/iter** on a dev
@@ -138,10 +132,9 @@ fast its own code is.
 
 ### The highlight phase pays only for what a query asks for (landed, 2026-09-02)
 
-Only a rule-context capture reads the parse tree. Everything below follows from
-that, and together the levers take `syntax_highlight` from 1.551 to 0.508
-ms/iter. The first two are worth **+8.0%** on a release host (1.551 → 1.436
-ms/iter, alternating best of five per arm, arms' ranges disjoint):
+Two levers, both in the consumer half of `syntax_highlight`, worth **+8.0%**
+together on a release host (1.551 → 1.436 ms/iter, alternating best of five per
+arm, arms' ranges disjoint):
 
 - **No rule-context capture, no CST walk (+6.5%).** `highlight_walk` visits
   every CST row — `rows ≈ 3.44 × tokens` — only to maintain the visitor's rule
@@ -168,15 +161,6 @@ three alternating pairs with the order swapped and the arms disjoint. That pass
 is Wado-wide rather than Gale's, but this is the benchmark it showed on: the
 parser and `TreeBuilder` discard a `pop()` per closed node, and each was
 allocating the `Option` it threw away.
-
-Then the same question one level up retired the rest. Skipping the walk left
-`highlight` still calling `parse`, building a CST that nothing then read.
-`gen_highlight` now routes a query without a rule-context capture down the path
-lexer-only grammars have always used: tokenize, sweep, render. Best of three,
-**9.80 → 26.21 MB/s (1.359 → 0.508 ms/iter, 2.7x)**, HTML byte-identical to
-`origin/main`'s over the 13321-byte fixture. The profile predicted it — parse
-was ~51% inclusive and `TreeBuilder::finish` 9.0% — and 0.851 ms of the 1.359
-is 62.6%.
 
 ### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
 
