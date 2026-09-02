@@ -1168,10 +1168,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 // Every lookup below asks the scrutinee's head, which an
                 // anonymous shape and a function-local `struct` both have and
-                // neither of them can be reached by spelling.
-                let struct_head = match self.tysys.type_table.borrow().get(type_id) {
-                    ResolvedType::Struct { def, .. } => Some(*def),
-                    _ => None,
+                // neither of them can be reached by spelling. A newtype's head
+                // is its base's: it inherits the fields it wraps.
+                let struct_head = {
+                    let tt = self.tysys.type_table.borrow();
+                    match tt.get(tt.reflect_structure_head(type_id)) {
+                        ResolvedType::Struct { def, .. } => Some(*def),
+                        _ => None,
+                    }
                 };
 
                 let type_name_matches = match (type_name, struct_head) {
@@ -1658,6 +1662,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return vec![(qualified_variant_name, index, binding_type)];
                 }
 
+                // A newtype's cases are its base's, so classify by the
+                // structure the scrutinee wraps rather than by its identity.
+                let scrutinee_type = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .reflect_structure_head(scrutinee_type);
                 let resolved_type = self.tysys.type_table.borrow().get(scrutinee_type).clone();
                 if !self
                     .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())

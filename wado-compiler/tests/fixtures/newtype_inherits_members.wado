@@ -1,0 +1,99 @@
+// A newtype inherits its base's members and keeps its own identity, so
+// `C::Green` is the implicit form of `Color::Green as C` — a `C`, not a
+// `Color`. Reaching them through the newtype used to fail outright, and a
+// `match` on a newtype-of-enum crashed WIR build ("expected a variant type,
+// got Enum"): the scrutinee's identity was read where its structure was
+// wanted, so an enum fell into the variant branch.
+
+enum Color {
+    Red,
+    Green,
+}
+
+variant Shape {
+    Dot,
+    Line(i32),
+}
+
+flags Perm {
+    read,
+    write,
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+type C = Color;
+type S = Shape;
+type M = Perm;
+type P = Point;
+
+test "an enum case through a newtype is the newtype" {
+    let g = C::Green;
+    assert `${g:?}` == "Green as C";
+}
+
+test "a variant case through a newtype is the newtype" {
+    let d = S::Dot;
+    assert `${d:?}` == "Dot as S";
+}
+
+test "a flags constant through a newtype is the newtype" {
+    let n = M::none();
+    assert `${n:?}` == "Perm() as M";
+}
+
+// The scrutinee keeps its own type while the patterns name the base's cases.
+test "a newtype-of-enum matches on the base's cases" {
+    let c = Color::Green as C;
+    let mut hit = 0;
+    match c {
+        Color::Green => {
+            hit = 1;
+        }
+        Color::Red => {
+            hit = 2;
+        }
+    }
+    assert hit == 1;
+}
+
+test "a newtype-of-enum matches through its own name" {
+    let c = Color::Red as C;
+    let mut hit = 0;
+    match c {
+        C::Green => {
+            hit = 1;
+        }
+        C::Red => {
+            hit = 2;
+        }
+    }
+    assert hit == 2;
+}
+
+test "a newtype-of-struct destructures on the base's fields" {
+    let p = Point { x: 3, y: 4 } as P;
+    let Point { x, y } = p;
+    assert x == 3;
+    assert y == 4;
+}
+
+test "a newtype-of-variant matches on the base's cases" {
+    let s = Shape::Line(7) as S;
+    let mut got = 0;
+    match s {
+        Shape::Line(n) => {
+            got = n;
+        }
+        Shape::Dot => {
+            got = -1;
+        }
+    }
+    assert got == 7;
+}
+
+__DATA__
+{"test": {}}

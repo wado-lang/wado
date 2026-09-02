@@ -9917,11 +9917,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Discriminant index of `case_name` when `scrutinee_type` is an
     /// enum that declares it. Drives lowering a bare/qualified enum-case
     /// pattern to `TirPattern::Enum`.
+    /// Whose cases a pattern names: the scrutinee's structure, with references
+    /// and newtype links peeled. A newtype inherits its base's cases (WEP
+    /// 2026-01-29), so `match c { Color::Green => … }` holds for a `C` too —
+    /// reading the identity here dropped an enum into the variant branch, and
+    /// WIR build then had a variant pattern over an `Enum`.
+    pub(super) fn scrutinee_structure_head(&self, scrutinee_type: TypeId) -> TypeId {
+        let tt = self.tysys.type_table.borrow();
+        tt.reflect_structure_head(tt.peel_refs(scrutinee_type))
+    }
+
     fn scrutinee_enum_case_index(&self, scrutinee_type: TypeId, case_name: &str) -> Option<u32> {
         use crate::tir::ResolvedType;
         // Peel references for match ergonomics: `match &c { Red => … }`
         // presents the scrutinee as `&Color`.
-        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let peeled = self.scrutinee_structure_head(scrutinee_type);
         if !matches!(
             self.tysys.type_table.borrow().get(peeled),
             ResolvedType::Enum { .. }
@@ -9939,7 +9949,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// instance) whose cases include `case_name`.
     fn scrutinee_has_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> bool {
         use crate::tir::ResolvedType;
-        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let peeled = self.scrutinee_structure_head(scrutinee_type);
         if !matches!(
             self.tysys.type_table.borrow().get(peeled),
             ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. }
@@ -10070,7 +10080,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // known case first, then immutable global, then binding.
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
                     return TirPattern::Enum {
-                        enum_type: self.tysys.type_table.borrow().peel_refs(scrutinee_type),
+                        enum_type: self.scrutinee_structure_head(scrutinee_type),
                         case_name: name.clone(),
                         case_index,
                     };
@@ -10243,7 +10253,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, &case_name)
                 {
                     return TirPattern::Enum {
-                        enum_type: self.tysys.type_table.borrow().peel_refs(scrutinee_type),
+                        enum_type: self.scrutinee_structure_head(scrutinee_type),
                         case_name,
                         case_index,
                     };
@@ -10255,7 +10265,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // variant decl + payload type resolve through the
                 // underlying `Option<T>` rather than falling to the
                 // unknown-payload `_` arm.
-                let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+                let peeled_scrutinee = self.scrutinee_structure_head(scrutinee_type);
                 let payload_type = {
                     use crate::tir::ResolvedType;
                     let type_args =
@@ -10389,7 +10399,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Destructuring through a reference (`let { x, y } = &p`)
         // presents the scrutinee as `&Point`; peel references so the
         // struct decl resolves (fields inherit the reference kind below).
-        let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let peeled_scrutinee = self.scrutinee_structure_head(scrutinee_type);
 
         // A field index is a fact about the value being destructured, so the
         // scrutinee's head answers and the pattern's qualifier — which annotate
