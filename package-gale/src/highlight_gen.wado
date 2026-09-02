@@ -132,6 +132,51 @@ fn parser_rule_exists(parser_rules: &List<ParserRule>, name: &String) -> bool {
     return parser_rules.iter_ref().any(|r| r.name == *name);
 }
 
+/// `(rule) @capture` — every token the rule spells out, captured within it.
+/// The runtime keys an override by (rule, token kind), so the rule has to be
+/// one whose alternatives are each a single token: a naming rule listing the
+/// contextual keywords it accepts alongside `IDENTIFIER`. Reading the set off
+/// the grammar is the point — a query that spelled the keywords out instead
+/// would drift the moment the rule gained one.
+fn expand_rule_capture(
+    overrides: &mut List<ResolvedOverride>,
+    rule: &ParserRule,
+    idx: &KindIndex,
+    capture: String,
+    ctx: &mut GenContext,
+) {
+    let mut kinds: List<i32> = [];
+    for let alt of &rule.alternatives {
+        if alt.elements.len() != 1 {
+            ctx.warn(
+                &DiagnosticOwner::host(&"highlight"),
+                DiagnosticKind::HighlightQuery,
+                `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token`,
+            );
+            return;
+        }
+        let kind = match &alt.elements[0] {
+            TokenRef(t) => idx.by_name.get(t.name),
+            Literal(l) => idx.by_literal.get(l.text),
+            _ => null,
+        };
+        match kind {
+            Some(k) => kinds.push(k),
+            None => {
+                ctx.warn(
+                    &DiagnosticOwner::host(&"highlight"),
+                    DiagnosticKind::HighlightQuery,
+                    `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token`,
+                );
+                return;
+            },
+        }
+    }
+    for let kind of &kinds {
+        push_override(overrides, rule.name, *kind, capture);
+    }
+}
+
 /// Record an override for (rule, token), last-wins: a later query rule for the
 /// same pair replaces an earlier one (matching the default table's last-wins
 /// and tree-sitter's convention), rather than being dead behind it.
@@ -177,6 +222,21 @@ fn gen_highlight_mapping(
     let mut default_by_kind = TreeMap::<i32, String>::new();
     let mut overrides: List<ResolvedOverride> = [];
     for let rule of query {
+        let mut expanded = false;
+        if rule.rule_context matches { None } {
+            if let Name(name) = &rule.selector {
+                for let named of parser_rules {
+                    if named.name == *name {
+                        expand_rule_capture(&mut overrides, named, &idx, rule.capture, ctx);
+                        expanded = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if expanded {
+            continue;
+        }
         let kind = match resolve_selector(&idx, &rule.selector) {
             Some(k) => k,
             None => {
