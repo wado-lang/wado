@@ -574,7 +574,8 @@ loop {
     continue;
 }
 
-// `break`/`continue` take no label. To leave a loop nest, see Labeled Blocks.
+// A loop carries no label: `continue` takes none, and `break LABEL` names a
+// labeled block. To leave a loop nest, see Labeled Blocks.
 
 // Match expression
 let result = match opt {
@@ -646,30 +647,24 @@ let b = if cond() { 1; } else { 2; }; // ditto
 
 ### Labeled Blocks
 
-A named block that `break LABEL` leaves from any depth inside it. It is Wado's
-only non-local jump, and it replaces loop labels, labeled `continue`, and
-`goto`. It is also the block form that carries a value. See
+A named block that `break LABEL` leaves from any depth inside it. Wado's only
+non-local jump: it replaces loop labels, labeled `continue`, and `goto`, and it
+is the block form that carries a value. See
 [the spec](./spec.md#labeled-blocks).
 
-```wado
-// A named scope. The label is required: an unlabeled `{ ... }` is a struct
-// literal. Labels starting with `__` are reserved for the compiler. A nested
-// block may reuse a label; `break` targets the innermost one.
-scope: {
-    let x = 20;                     // new scope; gone after the block
-}
+The label is required, since an unlabeled `{ ... }` is a struct literal. It
+cannot start with `__`, a nested block may reuse it (`break` takes the
+innermost), and `break LABEL: ()` says what `break LABEL` says.
 
-// Leave a whole loop nest with one break.
+```wado
+// Leave a whole loop nest with one break; the tail is the path no break took.
 search: {
     for let r of 0..<grid.len() {
         for let c of 0..<grid[r].len() {
-            if grid[r][c] == needle {
-                hit = [r, c];
-                break search;       // leaves both loops
-            }
+            if grid[r][c] == needle { hit = [r, c]; break search; }
         }
     }
-    hit = [-1, -1];                 // reached only when no break was taken
+    hit = [-1, -1];
 }
 
 // Guard chain: `break LABEL` skips the rest, so the guards stay flat.
@@ -679,53 +674,36 @@ attempt: {
     matched = pos;
 }
 
-// As an expression: `break LABEL: expr` yields, and so does the trailing
-// statement on the path reaching the end. Every such path must agree on one
-// type, and a literal coerces to the type expected at the use site.
+// As an expression: `break LABEL: expr` and the trailing statement are both
+// branches, must agree on one type, and coerce to the type expected at the
+// use site. A tail that is not a value yields `()`.
 let first_even = find: {
     for let x of xs {
         if x % 2 == 0 { break find: x; }
     }
-    -1                              // the value when no break is taken
+    -1
 };
-
-// A `break` may also leave an effect handler's `do` block.
-outer: {
-    with Counter => &inner do {
-        if early { break outer; }
-    }
-}
 ```
 
 ### Branch Hints
 
 `builtin::cold_path()` marks the path containing it as rarely executed. It is a
-plain statement and emits no code. The engine lays out the other side of the
-branch as the predicted-taken path, and the inliner leaves the cold path out of
-its cost estimate. See [the spec](./spec.md#branch-hints).
+plain statement and emits no code: the engine predicts the other side of the
+branch, and the inliner leaves the cold path out of its cost estimate. Being a
+statement, it also works in a `match` or `if let` arm, where no boolean is
+available. See [the spec](./spec.md#branch-hints).
 
 ```wado
-// The taken branch is cold.
 if i >= len {
     builtin::cold_path();
     panic("index out of bounds");
-}
-
-// It is a statement, not a condition wrapper, so it also works in a `match`
-// or `if let` arm, where no boolean is available.
-match command {
-    Run => execute(),
-    Crash => {
-        builtin::cold_path();
-        panic("crashed");
-    }
 }
 
 // On the fall-through after a diverging guard, it hints the guard as likely.
 if let Some(v) = fast_path(key) {
     return v;
 }
-builtin::cold_path();          // the slow path below is rarely reached
+builtin::cold_path();
 return slow_path(key);
 ```
 
@@ -774,20 +752,15 @@ the declaring block. See [WEP: Local Item Definitions](./wep-2026-07-09-local-it
 
 ```wado
 fn area(width: i32, height: i32) -> i32 {
-    struct Size { width: i32, height: i32 }   // always private, never `pub`
-    let s = Size { width, height };
+    let s = Size { width, height };            // in scope before its
+    struct Size { width: i32, height: i32 }    // declaration, unlike `let`
     return s.width * s.height;
-}
-
-fn hoisted() -> i32 {
-    let b = Box { value: 1 };  // in scope before its declaration, unlike `let`
-    struct Box<T> { value: T }
-    return b.value;
 }
 ```
 
-A local item shadows a same-named module-level one. `enum`/`variant`/`flags`, a
-local `impl`/`trait`, and a generic local `type` are not yet supported.
+Always private, and shadows a same-named module-level item.
+`enum`/`variant`/`flags`, a local `impl`/`trait`, and a generic local `type`
+are not yet supported.
 
 ### Methods
 
@@ -931,16 +904,15 @@ fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
     return Container { data };
 }
 
-// `self` is a reference parameter like any other, so a method letting it
-// escape declares stores[self].
+// `self` is a reference parameter like any other.
 impl Node {
     fn wrap(&self) -> Ref with stores[self] {
         return Ref { inner: self };
     }
 }
 
-// A reference reached through a parameter is a different reference. Copying
-// it out is not that parameter escaping, so it needs no declaration.
+// A reference reached through a parameter is a different reference: copying
+// it out is not that parameter escaping.
 fn rebase(c: &Cursor, at: i32) -> Cursor {
     return Cursor { chars: c.chars, pos: at };
 }

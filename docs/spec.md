@@ -734,11 +734,12 @@ for let mut i = 0; i < 10; i = i + 1 {
 }
 ```
 
-Both `break` and `continue` work with `while`, `for`, and `loop`, and neither
-takes a label. Outside a loop both are errors. A labeled block is left with
-`break LABEL` instead, and a closure body starts its own loop scope, so a loop
-around a closure binds nothing written inside it. To leave more than the
-innermost loop, wrap the nest in a labeled block and break to its label.
+Both `break` and `continue` work with `while`, `for`, and `loop`. A loop carries
+no label, so neither can name one: `continue` takes no label at all, and
+`break LABEL` names an enclosing labeled block. Outside a loop both are errors.
+A closure body starts its own loop scope, so a loop around a closure binds
+nothing written inside it. To leave more than the innermost loop, wrap the nest
+in a labeled block and break to its label.
 
 ### Labeled Blocks
 
@@ -750,49 +751,26 @@ it. It is Wado's only non-local jump, and it replaces loop labels, labeled
 
 `LABEL: { ... }`, in statement or expression position.
 
-- The label must be a valid identifier followed by a colon
-- A label cannot start with `__`, which is reserved for the blocks the compiler
-  synthesises (an expanded template string, a desugared `for`, an inlined call)
-- `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value
+- The label is an identifier followed by a colon, and cannot start with `__`,
+  which is reserved for the blocks the compiler synthesises
+- `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value.
+  `()` is a value like any other, so `break LABEL: ()` says what `break LABEL`
+  says, and `break ()` says what `break` says
 - Nested blocks may reuse a label name; a `break` targets the innermost match
+- The block opens a new scope, and a name declared inside may shadow an outer
+  one
 
 The label is mandatory to tell a block apart from a struct literal, since
 `{ field: value }` on its own could be either. An unlabeled `{ ... }` block is
 therefore a parse error.
 
-Unit is a value like any other, so a break carrying `()` and a break carrying
-nothing are two spellings of one statement:
+#### Escaping and Early Exit
 
-```wado
-break lbl: ();  // the same statement as `break lbl;`
-break ();       // the same statement as `break;`
-```
-
-An unlabeled `break` targets a loop, and a loop yields no value, so `()` is the
-only value it can carry.
-
-#### Scoping
-
-The block opens a new scope: it sees the enclosing one, but the enclosing one
-does not see into it. A name declared inside may shadow an outer name.
-
-```wado
-outer: {
-    let a = 1;
-    inner: {
-        let b = 2;
-        let sum = a + b;  // a is visible from outer scope
-        println(`${sum}`);
-    }
-    // b is not visible here
-    println(`${a}`);
-}
-```
-
-#### Escaping Nested Loops
-
-`break` alone leaves the innermost loop. A labeled block around the nest leaves
-all of it at once:
+`break` alone leaves the innermost loop. A labeled block around a nest leaves
+all of it at once, and its tail is the path no `break` took. Inside a block,
+`break LABEL` skips the rest, so a chain of guards stays flat instead of nesting
+one inside the next. A `break` may also leave an effect handler's `do` block,
+which restores the outer handler either way.
 
 ```wado
 search: {
@@ -808,35 +786,14 @@ search: {
 }
 ```
 
-#### Early Exit
-
-`break LABEL` skips the rest of its block, so a chain of guards stays flat
-instead of nesting one inside the next:
-
-```wado
-attempt: {
-    if !consume(&toks, &mut pos, TK_A) { break attempt; }
-    if !consume(&toks, &mut pos, TK_B) { break attempt; }
-    matched = pos;
-}
-```
-
-A `break` may also leave an effect handler's `do` block. The outer handler is
-restored either way, whether the block exits by `break` or by falling through.
-
-```wado
-outer: {
-    with Counter => &inner do {
-        if early { break outer; }
-    }
-}
-```
-
 #### As an Expression
 
 A labeled block used as a value yields two ways: through `break LABEL: expr`,
 and through its trailing statement on the path that reaches the end. Both are
-branches of the block, so every path must agree on one type:
+branches, so every path must agree on one type, and they unify against the type
+expected where the block sits, so a literal coerces to that rather than to its
+own default. Any expression position takes one, not only the right-hand side of
+a `let`.
 
 ```wado
 let found = search: {
@@ -849,31 +806,9 @@ let found = search: {
 };
 ```
 
-The branches unify against the type expected where the block sits, so a literal
-coerces to that type rather than to its own default of `i32` or `f64`:
-
-```wado
-let wide: i64 = compute: {
-    if ready { break compute: 10; }
-    break compute: 20;
-};
-```
-
-A labeled block fits any expression position, such as an argument, an operand,
-or a field value. It is not limited to the right-hand side of a `let`.
-
-A trailing statement that is not a value yields `()`, which is a branch like
-any other. A block whose branches all yield `()` has the type `()`. One mixing
-`()` with a value is the same type error as any other disagreement:
-
-```wado
-let u = blk: { total += 1; };   // u: ()
-
-let v = blk: {
-    if c { break blk: 1; }
-    total += 1;                 // error: expected 'i32', found '()'
-};
-```
+A trailing statement that is not a value yields `()`. A block whose branches all
+yield `()` has the type `()`, and one mixing `()` with a value is the same type
+error as any other disagreement.
 
 A path that cannot reach the end is no branch at all. When the trailing
 statement is a loop that only `break LABEL` leaves, nothing reaches the tail, so

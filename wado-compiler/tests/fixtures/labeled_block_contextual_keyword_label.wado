@@ -1,0 +1,30 @@
+// A label is any name an expression may start with, which includes the
+// contextual keywords (`type`, `flags`, `of`, `from`). A block can carry one,
+// so a `break` must accept the same set: matching only `Ident` let a block be
+// labeled `type` that no `break type` could leave.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let c = builtin::black_box(true);
+
+    type: {
+        if c {
+            break type;
+        }
+        println("not reached");
+    }
+
+    let v = flags: {
+        if c {
+            break flags: 1;
+        }
+        break flags: 2;
+    };
+    assert v == 1;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

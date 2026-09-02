@@ -2142,8 +2142,10 @@ impl Parser {
 
     /// Parse a statement inside a block, allowing optional semicolon for the final expression
     fn parse_stmt_in_block(&mut self) -> ParseResult<Stmt> {
-        // Check for labeled block: `LABEL: { ... }`
-        if let TokenKind::Ident(_) = self.peek_kind()
+        // Check for labeled block: `LABEL: { ... }`. `as_ident_name` so a
+        // contextual keyword labels a block here as it does in expression
+        // position; a local `type Foo = Bar` has no `:` and falls through.
+        if self.peek_kind().as_ident_name().is_some()
             && matches!(self.peek_nth(1).kind, TokenKind::Colon)
             && matches!(self.peek_nth(2).kind, TokenKind::LBrace)
         {
@@ -2235,11 +2237,13 @@ impl Parser {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
 
-        // Parse the label (identifier)
-        let label = match self.advance().kind.clone() {
-            TokenKind::Ident(name) => name,
-            _ => unreachable!("parse_labeled_block_stmt called without identifier"),
-        };
+        // Parse the label (identifier or contextual keyword)
+        let label = self
+            .advance()
+            .kind
+            .as_ident_name()
+            .expect("parse_labeled_block_stmt called without identifier")
+            .to_string();
         self.check_label_available(&label, start_span)?;
 
         // Consume the colon
@@ -2786,10 +2790,13 @@ impl Parser {
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Break)?;
 
-        // Check for optional label. `tail_span` is the last token this break
-        // owns, so a `break` ending a block without `;` does not stretch its
-        // span into the `}`.
-        let (label, tail_span, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
+        // Check for optional label, over the same names a labeled block accepts
+        // — `as_ident_name` so a contextual keyword labelling a block can be
+        // broken to. `tail_span` is the last token this break owns, so a
+        // `break` ending a block without `;` does not stretch its span into the
+        // `}`.
+        let (label, tail_span, value) = if let Some(name) = self.peek_kind().as_ident_name() {
+            let name = name.to_string();
             let label_tok_span = self.advance().span;
             // Check for colon followed by expression (break with value)
             if self.check(&TokenKind::Colon) {
