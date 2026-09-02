@@ -1,0 +1,37 @@
+// Rank 3, the positive side of
+// `error_ambiguous_value_blankets_two_foreign_modules`: the two blankets are
+// tied at rank 2, and one of them is written here, so locality picks it
+// (WEP 2026-09-01).
+
+use { Limit, Mark, Describe } from "./sub/two_foreign_value_blankets_traits.wado";
+use { } from "./sub/two_foreign_value_blankets_limit.wado";
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+impl Mark for Point {
+    fn mark() -> i32 {
+        return 9;
+    }
+}
+
+impl<T: Mark> Describe for T {
+    fn describe(&self) -> String {
+        return `mark:${T::mark()}`;
+    }
+}
+
+test "a local blanket beats a foreign one at the same depth" {
+    let p = Point { x: 1 };
+    assert p.describe() == "mark:9";
+}
+
+__DATA__
+{"test": {}}

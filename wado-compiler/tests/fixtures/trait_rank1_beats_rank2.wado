@@ -1,0 +1,44 @@
+// Rank 1 outranks rank 2: an impl written for the base type beats a blanket
+// whose bound holds at the newtype itself. A concrete impl defines the exact
+// function the call names; a blanket covers the general case
+// (WEP 2026-09-01).
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Inner {
+    x: i32,
+}
+
+type Wrapped = Inner;
+
+impl Limit for Wrapped {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+impl Describe for Inner {
+    fn describe(&self) -> String {
+        return "concrete";
+    }
+}
+
+test "the base's own impl beats a blanket satisfied at the newtype" {
+    let w = Inner { x: 1 } as Wrapped;
+    assert w.describe() == "concrete";
+}
+
+__DATA__
+{"test": {}}

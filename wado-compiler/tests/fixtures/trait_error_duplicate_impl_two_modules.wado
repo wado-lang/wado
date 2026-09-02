@@ -1,0 +1,19 @@
+// The same duplicate pair as `trait_error_duplicate_impl_one_module`, split
+// across two modules of one package. Both are foreign here, so rank 3 does not
+// separate them either, and swapping the two `use` statements changes which
+// body every call runs — the load order decides.
+//
+// The message below states what the check should say; it does not exist yet, so
+// this fixture fails until it is written (WEP 2026-09-01).
+
+use { Describe, Point } from "./sub/trait_duplicate_impl_lib.wado";
+use { } from "./sub/trait_duplicate_impl_first.wado";
+use { } from "./sub/trait_duplicate_impl_second.wado";
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "first";
+}
+
+__DATA__
+{"compile_error": "duplicate impl of 'Describe' for 'Point'"}

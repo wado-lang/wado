@@ -1,0 +1,34 @@
+// Rank 2 outranks rank 3: the blanket whose bound holds at the newtype wins
+// even though it is foreign and the blanket holding only at the base is local
+// (WEP 2026-09-01).
+
+use { Limit, Base, Describe, Inner } from "./sub/trait_rank2_lib.wado";
+use { } from "./sub/trait_rank2_foreign_blanket.wado";
+
+type Wrapped = Inner;
+
+impl Limit for Wrapped {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+impl Base for Inner {
+    fn base() -> i32 {
+        return 9;
+    }
+}
+
+impl<T: Base> Describe for T {
+    fn describe(&self) -> String {
+        return `base:${T::base()}`;
+    }
+}
+
+test "a bound holding at the newtype beats a local one holding at the base" {
+    let w = Inner { x: 1 } as Wrapped;
+    assert w.describe() == "limit:7";
+}
+
+__DATA__
+{"test": {}}

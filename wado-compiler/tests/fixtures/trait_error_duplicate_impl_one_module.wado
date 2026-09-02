@@ -1,0 +1,37 @@
+// Two impls of one `(Trait, Type)` pair compile, and the one written first
+// takes every call. `spec.md` says coherence guarantees at most one impl can
+// apply; nothing enforces it, and no rank separates the two, so collection
+// order decides silently.
+//
+// A package compiles whole, so rejecting the pair needs no open-world
+// reasoning. The message below states what the check should say; the check
+// does not exist yet, so this fixture fails until it is written
+// (WEP 2026-09-01, "Duplicate impls of one `(Trait, Type)` pair are accepted").
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Describe for Point {
+    fn describe(&self) -> String {
+        return "first";
+    }
+}
+
+impl Describe for Point {
+    fn describe(&self) -> String {
+        return "second";
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "first";
+}
+
+__DATA__
+{"compile_error": "duplicate impl of 'Describe' for 'Point'"}

@@ -1,0 +1,55 @@
+// `impl<T: Alpha> Beta for T` beside `impl<T: Beta> Alpha for T` grounds
+// neither trait, yet the dispatch query answers yes to a repeated
+// `(type, trait)` pair, so every type satisfies both and a blanket keyed on
+// either reaches every receiver in the program.
+//
+// Rank 2's walk refuses the repeat, which is why the newtype case
+// (`blanket_bound_cycle_on_newtype.wado`) is already correct. A concrete
+// receiver has no such walk. Closing this needs a second recursion stack in
+// dispatch — descent into members must answer yes where a cycle at a fixed
+// subject must answer no — so the gap is pinned here (WEP 2026-09-01).
+
+trait Alpha {
+    fn alpha() -> i32;
+}
+
+trait Beta {
+    fn beta() -> i32;
+}
+
+impl<T: Beta> Alpha for T {
+    fn alpha() -> i32 {
+        return T::beta();
+    }
+}
+
+impl<T: Alpha> Beta for T {
+    fn beta() -> i32 {
+        return T::alpha();
+    }
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+// The body never calls `T::alpha()`: the two impls answer each other, so a
+// call would recurse forever. What is wrong here is that the bound holds at
+// all.
+impl<T: Alpha> Describe for T {
+    fn describe(&self) -> String {
+        return "ungrounded";
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "ungrounded";
+}
+
+__DATA__
+{"compile_error": "no method 'describe' found on type 'Point'"}

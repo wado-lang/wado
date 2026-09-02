@@ -1,0 +1,53 @@
+// Two traits' blankets share a method name and both apply. Neither ambiguity
+// fires: the cross-trait count skips blankets (WEP 2026-07-31), and the
+// blanket report covers one trait declaration at one argument list. Nothing
+// ranks them, so collection order picks — the silent cross-trait dispatch the
+// concrete-receiver rule exists to remove.
+//
+// Reporting it needs the two rules reconciled: the tie is an error with
+// `Alpha::describe(&p)` as the escape, or candidates are scoped by import and
+// the tie stops arising. Until that is decided this fixture fails
+// (WEP 2026-09-01, "Two traits' blankets sharing a method name are not
+// reported").
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Alpha {
+    fn describe(&self) -> String;
+}
+
+trait Beta {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+impl<T: Limit> Alpha for T {
+    fn describe(&self) -> String {
+        return "alpha";
+    }
+}
+
+impl<T: Limit> Beta for T {
+    fn describe(&self) -> String {
+        return "beta";
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "alpha";
+}
+
+__DATA__
+{"compile_error": "ambiguous method 'describe'"}

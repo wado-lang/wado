@@ -44,11 +44,43 @@ One order, stated here. Every other WEP that owns a rule keeps it and links here
 for its place in the sequence. The implementation cites this document instead of
 being the only place the order is written.
 
+### Where the order applies
+
+The order governs the trait-impl step of a _method call_ `recv.m(args)`. Method
+lookup reaches it after two steps that are not part of it, and three other
+dispatch paths select without it:
+
+| Step or path                                  | What selects                                                                |
+| --------------------------------------------- | --------------------------------------------------------------------------- |
+| Inherent method (`impl Type { fn m }`)        | Shadows every trait method of that name, along the whole newtype chain      |
+| A reference receiver's concrete `&T` impl     | Adopted ahead of the base type's impl; a _blanket_ `&T` impl never is       |
+| Trait impls on the receiver                   | The order below                                                             |
+| A type parameter's bounds (`T: Tr` in a body) | The first bound declaring the method; two or more is an ambiguity error     |
+| `Type::m(args)` and other associated calls    | Current-module-first scan, first hit; value blankets on a separate fallback |
+| Operators and indexing                        | The operand's type, unique-or-error (WEP 2026-07-31)                        |
+
+Those paths agreeing with this order is a goal, not a fact: see Known gaps.
+
+### The candidates
+
+A call's candidates come from two places.
+
+First, the impls whose target matches the receiver anywhere along its newtype
+chain — impls written for the receiver's own type, for one instantiation of it
+(`impl Tag for Box_<i32>`), or for its head (`impl<T> Tag for Box_<T>`).
+
+Second, every _value blanket_ whose receiver-parameter bounds the receiver
+satisfies. A value blanket is `impl<T: Bound> Tr for T`: its receiver parameter
+must carry at least one bound. `impl<T> Tr for T` binds nothing that could
+select it, so it is not a value blanket and reaches no receiver.
+
+A blanket over a reference (`impl<T: Bound> Tr for &T`) is a third shape and is
+on neither list. The prelude's `Inspect` and `Eq` reach one through the
+compiler's own bound handling; nothing else does.
+
 ### The order
 
-A call's candidates come from two places. First, the impls whose target matches
-the receiver anywhere along its newtype chain. Second, every value blanket whose
-receiver-parameter bounds the receiver satisfies. They are ranked:
+Candidates are ranked:
 
 0. **Variadic yields to non-variadic.** Within one trait at one argument list, a
    variadic impl (`impl<..T> Tr for [..T]`) is dropped when a non-variadic one is
@@ -58,12 +90,13 @@ receiver-parameter bounds the receiver satisfies. They are ranked:
 1. **A concrete impl beats a blanket.** An impl written for the receiver defines
    the exact function the call names. A blanket only covers the general case.
    This rank outranks locality: a foreign `impl Tr for Point` beats a local
-   `impl<T: B> Tr for T`.
+   `impl<T: B> Tr for T`. It also outranks rank 2, so the base's own impl beats a
+   blanket the newtype satisfies.
 
-2. **A shallower bound beats a deeper one.** This applies when the receiver is a
-   newtype. A blanket whose bounds hold at the newtype itself beats one that
+2. **A shallower bound beats a deeper one.** This ranks _blankets_ on a newtype
+   receiver: a blanket whose bounds hold at the newtype itself beats one that
    holds only after peeling to the base. A newtype is a type distinct from its
-   base, so its own impls select for it first (WEP 2026-06-25). This rank also
+   base, so its own impls select for it first (WEP 2026-06-25). This rank
    outranks locality, because it asks which type selected the impl rather than
    where the impl was written.
 
@@ -77,6 +110,11 @@ receiver-parameter bounds the receiver satisfies. They are ranked:
    query answers yes to the same repeat, because it descends into members, where
    a repeat is the well-founded structural case.
 
+   Depth is a property of a blanket's bounds, so every non-blanket candidate
+   sits at depth 0 and this rank does not separate two of them. Which of a
+   newtype's and its base's concrete impls a call takes is therefore decided by
+   ranks 3 and 4 instead — a gap, not the intent.
+
 3. **A local impl beats a foreign one.** When candidates are otherwise equal, the
    one in the calling module wins. This is the last tie-break, and it is weaker
    than the rest. Every rank above asks how the impl relates to the receiver.
@@ -86,16 +124,18 @@ receiver-parameter bounds the receiver satisfies. They are ranked:
    modules stay tied and fall to rank 4. Ordering them by which module wrote them
    would just be declaration order under another name.
 
-4. **Anything left is ambiguous.** The compiler reports it instead of picking.
-   The two shapes are described below.
+4. **Anything left is ambiguous.** Two shapes are reported, described below.
+   Every other tie is settled by the order the candidates were collected in,
+   which is a gap rather than a rule.
 
 Two filters sit beside the order rather than in it:
 
 - **Scope.** Two same-named trait declarations from different modules are
-  distinct traits. A declaration the calling module never imported does not
-  compete. Each module's `s.shout()` dispatches to the `Loud` in scope there
-  (`cross_module_same_name_foreign_impl.wado`). Only declarations in scope reach
-  the ambiguity rules.
+  distinct traits. When the concrete candidates name several declarations and
+  exactly one of them is in scope at the call site, the others are dropped: each
+  module's `s.shout()` dispatches to the `Loud` in scope there
+  (`cross_module_same_name_foreign_impl.wado`). With none or several in scope the
+  filter does not fire and the ambiguity rules see every candidate.
 - **Arguments.** One trait declaration at several argument lists forms an
   overload set, and the call's arguments choose (WEP 2026-07-31). Distinct
   traits never form one.
@@ -109,6 +149,11 @@ The two are separate diagnostics because the programmer fixes them differently.
 The receiver has `impl Alpha for Item` and `impl Beta for Item`, both declaring
 `describe`. They share no contract, so nothing selects. The call names the
 trait: `Alpha::describe(&it)` (WEP 2026-07-31).
+
+Counted over concrete candidates only. A blanket does not join the collision,
+because a foreign `impl<T: Bound> Foreign for T` reaches every receiver in the
+program and counting it would make adding a blanket to a library a breaking
+change for every downstream method of that name.
 
 #### Two blankets of one trait
 
@@ -128,6 +173,9 @@ whether two bounds can both hold. An open world cannot decide that, since
 another module may write `impl Limit` for a struct at any time. So nothing is
 rejected at definition time. The standard library never reaches this rule: the
 four reflection kinds are mutually exclusive, so no receiver satisfies two.
+
+The report covers one trait declaration at one argument list. Two blankets of
+_different_ traits sharing a method name fall under neither diagnostic.
 
 ### What eligibility is, and is not
 
@@ -160,6 +208,54 @@ must not diverge, so the sort cites this document instead of restating it.
 
 ## Known gaps
 
+Four of these are one defect in several shapes: a candidate the order cannot
+rank is dropped without a word, so which impl runs depends on load order,
+declaration order, or which module the reader is in.
+
+### Duplicate impls of one `(Trait, Type)` pair are accepted
+
+Two `impl Tr for S` blocks in one module, or in two modules of one package, both
+compile. Nothing ranks them — they agree at every rank — so collection order
+decides, and swapping two `use` statements changes which body runs. This is the
+pair spec.md's coherence claim says cannot exist, and a package compiles whole,
+so rejecting it needs no open-world reasoning. Closing it is a definition-time
+check, not a rank.
+
+### Two traits' blankets sharing a method name are not reported
+
+`impl<T: Limit> Alpha for T` beside `impl<T: Limit> Beta for T`, both declaring
+`describe`, both applying to the receiver: rank 3 answers when exactly one is
+local, and otherwise collection order does. Excluding blankets from the
+cross-trait count is what keeps adding a blanket from breaking downstream code
+(WEP 2026-07-31), and it is also what makes this tie silent. Reporting it needs
+the two rules reconciled: either the tie is an error with `Alpha::describe(&x)`
+as the escape, or candidates are scoped by import and the tie stops arising.
+
+### Rank 2 does not reach concrete impls
+
+A newtype's own `impl Tr for W` and its base's `impl Tr for Inner` both sit at
+depth 0, so rank 3 decides: written in one module the newtype's wins (the chain
+is walked nearest-first), but a local impl on the base beats a foreign one on the
+newtype. WEP 2026-06-25's "a newtype most of all" is therefore true only for
+blankets. Closing it means measuring depth over the impl's target as well as
+over a blanket's bounds.
+
+### An unbounded value blanket applies to nothing
+
+`impl<T> Tr for T` compiles and dispatches to no receiver — the call reports the
+method as missing. The orphan rule forbids the shape for a foreign trait, so only
+a local trait can reach it, which is why it has gone unnoticed. Either the
+receiver parameter's bound is required where the impl is written, or the impl
+applies to every type.
+
+### A ref blanket never dispatches
+
+`impl<T: Bound> Tr for &T` is accepted and reaches no call: the reference step
+adopts only concrete `&T` impls, and the blanket collection takes only value
+blankets. The prelude's `Inspect for &T` works because the compiler answers that
+bound itself. Either the shape is rejected where it is written, or the reference
+step ranks blanket `&T` impls below concrete ones and above the base type's.
+
 ### Specificity is not ranked
 
 Sometimes one blanket's bounds imply another's. An order exists there and goes
@@ -179,14 +275,26 @@ and it needs its own WEP. Rank 4 will surface a concrete case if one appears.
 
 Write `impl<T: A> B for T` beside `impl<T: B> A for T` and neither trait is
 grounded. The dispatch query still answers yes to a repeated `(type, trait)`
-pair, so every type satisfies both. Rank 2's walk refuses the repeat, so a
-newtype is unaffected. A concrete receiver has no such walk and reaches the
-shared answer.
+pair, so every type satisfies both, and a blanket keyed on either applies to
+every receiver in the program. Rank 2's walk refuses the repeat, so a newtype is
+unaffected. A concrete receiver has no such walk and reaches the shared answer.
 
 Closing this needs a second recursion stack. One stack cannot separate the two
 recursions: descent into members is well-founded and must answer yes, while a
 cycle at a fixed subject must answer no. That is a change to dispatch, not to
 selection, which is why it is recorded here rather than made.
+
+### The other dispatch paths do not share the order
+
+`Type::m(args)` scans the receiver's trait impls current-module-first and takes
+the first that declares the method, with value blankets on a separate fallback
+behind it; operators and indexing filter by operand type and report
+unique-or-error; a bound in a generic body takes the first bound declaring the
+name. Ranks 0-3 exist on none of them. They agree with the order in the cases
+tested so far because the scans happen to visit candidates in a compatible
+order, which is not a guarantee. One selection function serving every path is the
+fix; what stands in the way is that each path holds a different amount of the
+call (a receiver type, an operand class, a bound list).
 
 ### Rank 3 is undocumented elsewhere
 
@@ -197,9 +305,10 @@ reader's vantage decide a program's meaning is exactly what ranks 1 and 2 avoid.
 ### `spec.md` overstates coherence
 
 Its "at most one impl can apply" describes what the orphan rules guarantee about
-_where impls may be written_. It does not describe how many apply to a call. The
-selection order is language semantics and belongs in the spec. This WEP records
-the decision; writing the spec section is the follow-up.
+_where impls may be written_. It does not describe how many apply to a call. Its
+"Method Resolution" section lists two steps of the six above. The selection order
+is language semantics and belongs in the spec. This WEP records the decision;
+writing the spec section is the follow-up.
 
 ## Related WEPs
 

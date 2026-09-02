@@ -1,0 +1,27 @@
+#![TODO]
+// An unbounded value blanket reaches no receiver: a blanket is indexed only
+// when its receiver parameter carries a bound, so `impl<T> Describe for T`
+// compiles and the call reports the method as missing.
+//
+// Either the bound is required where the impl is written, or the impl applies
+// to every type. Both are decisions, so the gap is pinned
+// (WEP 2026-09-01).
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl<T> Describe for T {
+    fn describe(&self) -> String {
+        return "blanket";
+    }
+}
+
+test "an unbounded value blanket applies to every type" {
+    let p = Point { x: 1 };
+    assert p.describe() == "blanket";
+}
