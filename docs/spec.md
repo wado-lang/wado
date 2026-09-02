@@ -758,6 +758,17 @@ The label is mandatory to tell a block apart from a struct literal, since
 `{ field: value }` on its own could be either. An unlabeled `{ ... }` block is
 therefore a parse error.
 
+Unit is a value like any other, so a break carrying `()` and a break carrying
+nothing are two spellings of one statement:
+
+```wado
+break lbl: ();  // the same statement as `break lbl;`
+break ();       // the same statement as `break;`
+```
+
+An unlabeled `break` targets a loop, and a loop yields no value, so `()` is the
+only value it can carry.
+
 #### Scoping
 
 The block opens a new scope: it sees the enclosing one, but the enclosing one
@@ -849,8 +860,18 @@ let wide: i64 = compute: {
 A labeled block fits any expression position, such as an argument, an operand,
 or a field value. It is not limited to the right-hand side of a `let`.
 
-If the trailing statement is not a value, the path reaching the end has nothing
-to yield and traps at run time. Write `break LABEL: expr` on every path instead.
+A trailing statement that is not a value yields `()`, which is a branch like
+any other. A block whose branches all yield `()` has the type `()`; one mixing
+`()` with a value is the same type error as any other disagreement:
+
+```wado
+let u = blk: { total += 1; };   // u: ()
+
+let v = blk: {
+    if c { break blk: 1; }
+    total += 1;                 // error: expected 'i32', found '()'
+};
+```
 
 ### Match Expression
 

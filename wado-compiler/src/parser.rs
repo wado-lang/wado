@@ -2778,14 +2778,21 @@ impl Parser {
         Ok(Stmt::Loop(LoopStmt { id, body, span }))
     }
 
-    /// Parse break statement: `break;`, `break label;`, or `break label: expr;`
+    /// Parse break statement: `break;`, `break ()`, `break label;`, or
+    /// `break label: expr;`.
+    ///
+    /// An unlabeled `break` targets a loop, which yields no value, so unit is
+    /// the only value it can carry: `break ()` is spelled differently from
+    /// `break;` and means the same, and both parse to no value at all.
     fn parse_break_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Break)?;
 
-        // Check for optional label
-        let (label, label_span, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
+        // Check for optional label. `tail_span` is the last token this break
+        // owns, so a `break` ending a block without `;` does not stretch its
+        // span into the `}`.
+        let (label, tail_span, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
             let label_tok_span = self.advance().span;
             // Check for colon followed by expression (break with value)
             if self.check(&TokenKind::Colon) {
@@ -2796,6 +2803,12 @@ impl Parser {
                 // Just a label, no value
                 (Some(name), Some(label_tok_span), None)
             }
+        } else if self.check(&TokenKind::LParen)
+            && matches!(self.peek_nth(1).kind, TokenKind::RParen)
+        {
+            let open = self.advance().span;
+            let close = self.advance().span;
+            (None, Some(open.merge(&close)), None)
         } else {
             // No label, no value
             (None, None, None)
@@ -2805,7 +2818,7 @@ impl Parser {
             value
                 .as_ref()
                 .map(|v| v.span())
-                .or(label_span)
+                .or(tail_span)
                 .unwrap_or(start_span),
         )?;
 

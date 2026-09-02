@@ -420,11 +420,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Report any branch whose type disagrees with the unified
-                // result — the tail included, when it carries a value.
+                // result. The tail is one of them: a tail that is not a value
+                // yields unit, which agrees only with a unit block. Exempting
+                // it let a value block fall off its end and trap instead.
                 for &break_type in &target.break_types {
                     self.check_branch_type(break_type, result_type, lb.span);
                 }
-                if tail_type != TypeTable::UNIT && tail_type != TypeTable::NEVER {
+                if tail_type != TypeTable::NEVER {
                     self.check_branch_type(tail_type, result_type, lb.span);
                 }
 
