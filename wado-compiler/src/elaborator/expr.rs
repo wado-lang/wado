@@ -2026,14 +2026,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // AST mirror of `block_result_type(chain_block)`, and the
-                    // same shape as the `Condition::Expr` arm below: the chain's
-                    // result is what the then block and the else block agree on.
-                    let else_type = if_expr
-                        .else_block
-                        .as_ref()
-                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-                    let then_type = self.ast_block_result_type(&if_expr.then_block);
+                    // The chain's result is what the then block and the else
+                    // block agree on, exactly as in the `Condition::Expr` arm.
+                    let (then_type, else_type) = self.if_branch_types(if_expr);
                     match (
                         self.agreed_branch_type(&[then_type, else_type]),
                         &if_expr.else_block,
@@ -2115,25 +2110,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    let mut then_type = self.ast_block_result_type(&if_expr.then_block);
-                    let mut else_type = if_expr
-                        .else_block
-                        .as_ref()
-                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-
-                    // Let a numeric-literal branch adopt the sibling's concrete
-                    // numeric type before the agreement check below.
-                    if then_type != else_type
-                        && let Some(eb) = &if_expr.else_block
-                    {
-                        if let Some(t) = self.coerce_block_numeric_literal_tail(eb, then_type) {
-                            else_type = t;
-                        } else if let Some(t) =
-                            self.coerce_block_numeric_literal_tail(&if_expr.then_block, else_type)
-                        {
-                            then_type = t;
-                        }
-                    }
+                    let (then_type, else_type) = self.if_branch_types(if_expr);
 
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
@@ -2360,6 +2337,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.report_unresolved_nulls(&spans, result_type);
     }
 
+    /// The types an `if` expression's two branches settle on, after a
+    /// numeric-literal branch adopts the sibling's concrete numeric type. The
+    /// one place either condition kind computes them: an `if let` agrees its
+    /// branches exactly as a plain `if` does. A missing `else` is `()`.
+    fn if_branch_types(&mut self, if_expr: &IfExpr) -> (TypeId, TypeId) {
+        let mut then_type = self.ast_block_result_type(&if_expr.then_block);
+        let mut else_type = if_expr
+            .else_block
+            .as_ref()
+            .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
+
+        if then_type != else_type
+            && let Some(eb) = &if_expr.else_block
+        {
+            if let Some(t) = self.coerce_block_numeric_literal_tail(eb, then_type) {
+                else_type = t;
+            } else if let Some(t) =
+                self.coerce_block_numeric_literal_tail(&if_expr.then_block, else_type)
+            {
+                then_type = t;
+            }
+        }
+        (then_type, else_type)
+    }
+
     /// Give a numeric-literal branch tail the type a sibling branch fixed, as
     /// the coercion in `let x: T = <branch>` does. `None` when none applied.
     fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
@@ -2414,22 +2416,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         match expr {
             ast::Expr::Block(block) => self.collect_block_numeric_literal_tails(block, target, out),
+            // Reify reads an `if` / `match` *expression*'s recorded type as the
+            // node's result type, so it has to follow its retargeted branches.
             ast::Expr::If(if_expr) => {
-                // Without an `else` the missing branch is `()`, which no
-                // retarget can turn into `target`.
-                let Some(else_block) = &if_expr.else_block else {
-                    return false;
-                };
                 out.branches.push(if_expr.id);
-                self.collect_block_numeric_literal_tails(&if_expr.then_block, target, out)
-                    && self.collect_block_numeric_literal_tails(else_block, target, out)
+                self.collect_if_numeric_literal_tails(
+                    &if_expr.then_block,
+                    if_expr.else_block.as_ref(),
+                    target,
+                    out,
+                )
             }
             ast::Expr::Match(match_expr) => {
                 out.branches.push(match_expr.id);
-                match_expr
-                    .arms
-                    .iter()
-                    .all(|arm| self.collect_numeric_literal_tails(&arm.body, target, out))
+                self.collect_arm_numeric_literal_tails(&match_expr.arms, target, out)
             }
             _ if super::coercion::is_numeric_literal_expr(expr) => {
                 out.literals.push(expr);
@@ -2449,9 +2449,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         match block.stmts.last() {
             Some(ast::Stmt::Expr(e)) => self.collect_numeric_literal_tails(&e.expr, target, out),
+            // `block_result_type` reads a trailing `if` / `match` statement as
+            // the block's value too — `else { if … }` is the same expression as
+            // `else if …` — so the retarget reaches through both spellings. A
+            // trailing `if` needs no recorded type: reify computes its result
+            // from the branches it has just built.
+            Some(ast::Stmt::If(if_stmt)) => self.collect_if_numeric_literal_tails(
+                &if_stmt.then_block,
+                if_stmt.else_block.as_ref(),
+                target,
+                out,
+            ),
+            Some(ast::Stmt::Match(match_expr)) => {
+                out.branches.push(match_expr.id);
+                self.collect_arm_numeric_literal_tails(&match_expr.arms, target, out)
+            }
             // No expression tail to retarget, so the block has to agree already.
             _ => agrees_with_target(self.ast_block_result_type(block), target),
         }
+    }
+
+    /// The two halves of an `if`, in either its expression or its statement
+    /// spelling. Without an `else` the missing branch is `()`, which no
+    /// retarget can turn into `target`.
+    fn collect_if_numeric_literal_tails<'a>(
+        &self,
+        then_block: &'a ast::Block,
+        else_block: Option<&'a ast::Block>,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        let Some(else_block) = else_block else {
+            return false;
+        };
+        self.collect_block_numeric_literal_tails(then_block, target, out)
+            && self.collect_block_numeric_literal_tails(else_block, target, out)
+    }
+
+    fn collect_arm_numeric_literal_tails<'a>(
+        &self,
+        arms: &'a [ast::MatchArm],
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        arms.iter()
+            .all(|arm| self.collect_numeric_literal_tails(&arm.body, target, out))
     }
 
     /// The type a set of branches agrees on, `None` when they disagree — the

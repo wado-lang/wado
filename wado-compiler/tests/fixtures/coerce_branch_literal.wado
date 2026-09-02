@@ -74,3 +74,33 @@ test "match arm whose body is an else-if chain of literals" {
     let v = match opt { Some(x) => x, None => if true { 0 } else { 1 } };
     assert v == 0;
 }
+
+// A trailing `if` / `match` statement is the block's value as much as a
+// trailing expression is, so `else { if … }` retargets like `else if …`.
+test "a braced else holding an if reaches the literals inside it" {
+    let a: i64 = 3;
+    let v = if a == 1 { a } else { if true { 0 } else { 1 } };
+    assert v == 0;
+}
+
+test "a braced else holding a match reaches the literals inside it" {
+    let a: u64 = 7;
+    let k = 1;
+    let v = if a == 1 { a } else { match k { 1 => 0, _ => 2 } };
+    assert v == 0;
+}
+
+test "a match arm block holding an if reaches the literals inside it" {
+    let opt: Option<i64> = null;
+    let v = match opt { Some(x) => x, None => { if true { 0 } else { 1 } } };
+    assert v == 0;
+}
+
+// An `if let` agrees its branches the way a plain `if` does.
+test "if let literal adopts the typed branch" {
+    let opt: Option<u64> = Option::Some(9);
+    let v = if let Some(x) = opt { x } else { 0 };
+    let w = if let Some(_) = opt { 0 } else { 9 as u64 };
+    assert v == 9;
+    assert w == 0;
+}
