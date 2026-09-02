@@ -1,8 +1,6 @@
 //! The checks that read the program alone — no receiver, no bounds in force.
 
-use super::program::{
-    ArgDefault, ImplDef, ImplId, ImplOrigin, Pin, Program, SolverType, TraitDeclId,
-};
+use super::program::{ImplDef, ImplId, ImplOrigin, Pin, Program, SolverType, TraitDeclId};
 use crate::hashmap::IndexMap;
 
 /// What a coherence check found. It names impls; the caller turns an id into a
@@ -58,6 +56,7 @@ fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
     if def.origin == ImplOrigin::Marker {
         return None;
     }
+    let trait_ = def.trait_?;
     fn set<T: Ord + Clone>(items: &[T]) -> Vec<T> {
         let mut items = items.to_vec();
         items.sort_unstable();
@@ -70,26 +69,29 @@ fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
         .map(|p| (set(&p.bounds), set(&p.pins)))
         .collect();
     Some((
-        def.trait_?,
-        trait_args_at_defaults(program, def),
+        trait_,
+        trait_args_at_defaults(program, trait_, def),
         def.target.clone(),
         conditions,
     ))
 }
 
-/// The impl's trait arguments with the omitted ones at the trait's defaults,
-/// `Self` read as the target. A default the lowering cannot spell keeps the
-/// omission, so an impl writing that argument is another pair.
-fn trait_args_at_defaults(program: &Program, def: &ImplDef) -> Vec<SolverType> {
+/// The impl's trait arguments with the omitted ones at the trait's defaults.
+/// A default the lowering cannot spell keeps the omission, so an impl writing
+/// that argument is another pair.
+fn trait_args_at_defaults(
+    program: &Program,
+    trait_: TraitDeclId,
+    def: &ImplDef,
+) -> Vec<SolverType> {
     let mut args = def.trait_args.clone();
-    let Some(trait_def) = def.trait_.and_then(|t| program.traits.get(&t)) else {
+    let Some(trait_def) = program.traits.get(&trait_) else {
         return args;
     };
     for default in trait_def.arg_defaults.iter().skip(args.len()) {
-        match default {
-            Some(ArgDefault::SelfType) => args.push(def.target.clone()),
-            Some(ArgDefault::Type(ty)) => args.push(ty.clone()),
-            Some(ArgDefault::Opaque) | None => break,
+        match default.as_ref().and_then(|d| d.at(&def.target)) {
+            Some(ty) => args.push(ty),
+            None => break,
         }
     }
     args
@@ -110,7 +112,7 @@ fn unbounded_value_blanket(id: ImplId, def: &ImplDef) -> Option<CoherenceError> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{AssocId, ParamDef, TraitDef, TypeDeclId};
+    use super::super::program::{ArgDefault, AssocId, ParamDef, TraitDef, TypeDeclId};
     use super::super::testing::{concrete, decl, program};
     use super::*;
 

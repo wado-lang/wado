@@ -370,7 +370,7 @@ answer it: the defaults are on the trait, `Self` meaning the impl's target. And
 it may pin an associated type (`T: Mul<Output = T>`): the pin is on the bound,
 and the impl that answers it must bind the type as the pin says, read off the
 impl's own `type Output = …`. A pin naming a parameter the target leaves
-unbound (`Members = [..C]`) reads the projection rather than checking it, and a
+unbound (`Members = [..C]`) reads the projection rather than checking it. A
 bound on that parameter (`..C: Arbitrary`) waits for monomorphization
 (WEP 2026-03-14).
 

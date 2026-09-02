@@ -147,6 +147,19 @@ pub enum ArgDefault {
     Opaque,
 }
 
+impl ArgDefault {
+    /// The default at an impl whose target is `target`; `None` for one the
+    /// lowering cannot spell.
+    #[must_use]
+    pub fn at(&self, target: &SolverType) -> Option<SolverType> {
+        match self {
+            Self::SelfType => Some(target.clone()),
+            Self::Type(ty) => Some(ty.clone()),
+            Self::Opaque => None,
+        }
+    }
+}
+
 /// How a reference answers a bound its pointee holds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum RefRule {

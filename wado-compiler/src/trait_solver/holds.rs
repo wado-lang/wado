@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    ArgDefault, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, Program,
-    RefRule, SolverType, TraitDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, Program, RefRule,
+    SolverType, TraitDeclId,
 };
 
 /// A bound that holds, and the bodies its answer owes.
@@ -172,10 +172,8 @@ impl Query<'_> {
                 for element in &elements {
                     let answer = self.holds(element, bound)?;
                     // `T: Mul<Output = T>`: the answering impl must bind the
-                    // pinned type as the pin says. An answer binding nothing
-                    // for it is not refuted, and a pin naming a parameter the
-                    // target left unbound (`Members = [..C]`) reads the
-                    // projection rather than checking it.
+                    // pinned type as the pin says; one binding nothing for it
+                    // is not refuted.
                     for pin in param.pins.iter().filter(|pin| pin.trait_ == bound) {
                         let Some(expected) = bound_to(&pin.ty) else {
                             continue;
@@ -224,9 +222,7 @@ fn restates_defaults(program: &Program, def: &ImplDef) -> bool {
     def.trait_args.iter().enumerate().all(|(i, arg)| {
         match trait_def.arg_defaults.get(i).and_then(Option::as_ref) {
             None => true,
-            Some(ArgDefault::SelfType) => *arg == def.target,
-            Some(ArgDefault::Type(default)) => arg == default,
-            Some(ArgDefault::Opaque) => false,
+            Some(default) => default.at(&def.target).as_ref() == Some(arg),
         }
     })
 }
@@ -306,7 +302,7 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Sol
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{Fact, ParamDef, Pin, TraitDef, TypeDeclId, TypeDef};
+    use super::super::program::{ArgDefault, Fact, ParamDef, Pin, TraitDef, TypeDeclId, TypeDef};
     use super::super::testing::{Builder, decl, ref_to};
     use super::*;
 
