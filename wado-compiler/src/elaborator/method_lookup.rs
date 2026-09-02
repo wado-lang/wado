@@ -2421,9 +2421,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(best) = candidates.first().filter(|m| m.blanket_binder.is_some()) else {
                 continue;
             };
-            // Rank 3 splits local from foreign and no finer: two foreign
-            // blankets are tied, and comparing the modules themselves would
-            // drop one and leave declaration order to choose.
+            // The locality grouping this keeps is the one
+            // `docs/wep-2026-09-01-trait-resolution.md` removes: two blankets
+            // tied at rank 2 report whichever modules wrote them, so this
+            // filter goes with the sort's local-over-foreign comparison.
             let is_local = |m: &super::types::TraitMethodMatch| {
                 m.impl_module_source == self.current_module_source
             };
@@ -2476,10 +2477,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
         });
 
-        // Ranks 1-3, stated in full in
-        // `docs/wep-2026-09-01-trait-resolution.md`: concrete over blanket,
-        // then bound depth, then local over foreign. Sorted BEFORE dedup_by,
-        // which only removes adjacent duplicates.
+        // The order `docs/wep-2026-09-01-trait-resolution.md` states, as it
+        // stands: concrete over blanket, then bound depth, then local over
+        // foreign. That WEP has depth first, over an impl's target as well as a
+        // blanket's bounds, and no locality at all — the two are its open
+        // implementation items. Sorted BEFORE dedup_by, which only removes
+        // adjacent duplicates.
         let current_module = &self.current_module_source;
         found_traits.sort_by(|a, b| {
             let a_concrete = a.blanket_type_param.is_none();

@@ -32,6 +32,8 @@ Its rules were spread across four WEPs, with one recorded in none of them:
 | A `Reflect*` bound needs visible members    | WEP 2026-06-13 |
 | Locality — a local impl beats a foreign one | **nowhere**    |
 
+Locality is the one this WEP removes: see the order below.
+
 Until now the only statement of the order was `select_trait_match`'s `sort_by`.
 Issue #1932 shows what that costs. A rank was missing, so a newtype took its
 base's blanket. Finding the fix meant reading the sort, because no document
@@ -147,9 +149,7 @@ Candidates are ranked:
 
    Depth is the level a candidate is selected _at_, so it covers both shapes: an
    impl whose target is the newtype sits at 0 and one targeting the base at 1,
-   and a blanket sits at the level its bounds hold at. This rank outranks
-   locality, because it asks which type selected the impl rather than where the
-   impl was written.
+   and a blanket sits at the level its bounds hold at.
 
    A blanket's depth is measured over the whole derivation, not just its first
    step. Take `impl<T: Base> Derived for T` answering `T: Derived`. That bound
@@ -163,26 +163,30 @@ Candidates are ranked:
 
 2. **A concrete impl beats a blanket.** Within one level: an impl written for
    the receiver defines the exact function the call names, and a blanket only
-   covers the general case. This rank outranks locality, so a foreign
-   `impl Tr for Point` beats a local `impl<T: B> Tr for T`. It never reaches
-   across levels — rank 1 has already chosen one.
+   covers the general case. A foreign `impl Tr for Point` therefore beats a
+   blanket written here. It never reaches across levels — rank 1 has already
+   chosen one.
 
-3. **A local impl beats a foreign one.** When candidates are otherwise equal, the
-   one in the calling module wins. This is the last tie-break, and it is weaker
-   than the rest. Every rank above asks how the impl relates to the receiver.
-   This one asks only where the reader is standing.
-
-   It separates local from foreign and goes no finer. Two blankets in two foreign
-   modules stay tied and fall to rank 4. Ordering them by which module wrote them
-   would just be declaration order under another name.
-
-4. **Anything left is ambiguous.** Two shapes are reported, described below.
+3. **Anything left is ambiguous.** Two shapes are reported, described below.
    Every other tie is settled by the order the candidates were collected in,
    which is a gap rather than a rule.
 
-Specificity is not a rank. One blanket's bounds implying another's —
+Every rank asks how a candidate relates to the receiver. Where the impl was
+written is not one of them: two candidates that tie at rank 2 are ambiguous
+whether or not one of them is in the calling module. Letting the reader's
+vantage decide a program's meaning is what ranks 1 and 2 exist to avoid, and the
+escape — an impl written for the receiver — is one line and says which body runs
+to every reader.
+
+The pattern this costs is "the library derives it, I override it for my types",
+written as a second blanket rather than as an impl. Under this rule it reports
+for exactly the types that satisfy both bounds. That is the strict side taken on
+purpose, and it is not a permanent refusal: a concrete consumer of the pattern
+is reason to reopen it.
+
+Specificity is not a rank either. One blanket's bounds implying another's —
 `impl<T: A + B>` beside `impl<T: A>`, or `impl<T: Ord>` beside `impl<T: Eq>`
-under `Ord: Eq` — is rank 4, not a reason to prefer the narrower one. Which
+under `Ord: Eq` — is rank 3, not a reason to prefer the narrower one. Which
 associated-type bindings a caller sees when a narrower impl binds them
 differently is the specialization soundness question, and answering it with a
 rank would decide it by accident. The escape is the impl rank 2 puts above both.
@@ -316,9 +320,10 @@ Depth is read off a blanket's bounds alone, so every non-blanket candidate sits
 at 0 and rank 1 separates none of them:
 
 - [ ] A newtype's own `impl Tr for W` and its base's `impl Tr for Inner` tie, and
-      rank 3 decides — written in one module the newtype's wins because the chain
-      is collected nearest-first, but a local impl on the base beats a foreign one
-      on the newtype (`trait_newtype_concrete_impl_outranks_foreign_base.wado`).
+      the removed locality sort decides — written in one module the newtype's
+      wins because the chain is collected nearest-first, but a local impl on the
+      base beats a foreign one on the newtype
+      (`trait_newtype_concrete_impl_outranks_foreign_base.wado`).
 - [ ] A blanket satisfied at the newtype loses to a concrete impl on the base,
       because rank 2 runs first today
       (`trait_newtype_blanket_beats_base_concrete.wado`).
@@ -341,11 +346,12 @@ bound itself.
 ### Two traits' blankets sharing a method name are not reported
 
 `impl<T: Limit> Alpha for T` beside `impl<T: Limit> Beta for T`, both declaring
-`describe`, both applying to the receiver: rank 3 answers when exactly one is
-local, and otherwise collection order does. Blankets are excluded from the
-cross-trait count, which is what makes this tie silent. Scope removes most of
-it — two foreign blankets only compete where both traits are imported — and the
-rest is the count: a blanket must join the collision like any other candidate.
+`describe`, both applying to the receiver: the removed locality sort answers when
+exactly one is local, and otherwise collection order does. Blankets are excluded
+from the cross-trait count, which is what makes this tie silent. Scope removes
+most of it — two foreign blankets only compete where both traits are imported —
+and the rest is the count: a blanket must join the collision like any other
+candidate.
 
 ### An ungrounded bound cycle satisfies its own bounds
 
@@ -372,31 +378,21 @@ order, which is not a guarantee. One selection function serving every path is th
 fix; what stands in the way is that each path holds a different amount of the
 call (a receiver type, an operand class, a bound list).
 
-### Rank 3 decides one shape, and nobody proposed it
+### Locality is still implemented
 
-Locality is recorded here as the behaviour that exists. The rules decided around
-it leave it one shape to decide, and only one: two value blankets of one trait,
-holding at the same level, one written in the calling module and one not.
+The sort still prefers a candidate in the calling module, and the blanket
+ambiguity report still treats local and foreign candidates as separate groups,
+so a tie the order calls ambiguous is answered instead:
 
-```wado
-use { Describe, Limit } from "…";   // the library's blanket: impl<T: Limit>
-trait Mark { fn mark() -> i32; }
-impl<T: Mark> Describe for T { … }  // yours
-impl Limit for Point { … }
-impl Mark for Point { … }           // Point satisfies both
-```
+- [ ] Drop the local-over-foreign comparison from the sort.
+- [ ] Drop the locality grouping from the blanket ambiguity report, so two
+      blankets tied at rank 2 report whichever modules wrote them
+      (`trait_error_local_blanket_ties_foreign.wado`).
 
-Every other tie the earlier design left here is gone: a duplicate pair is
-rejected where it is written, a newtype and its base are separated by rank 1,
-two traits' blankets are the cross-trait ambiguity, and comparable bounds are
-rank 4 by decision. What remains is whether _yours wins_ (today) or the pair is
-ambiguous with `impl Describe for Point` as the escape.
-
-The case for ambiguity is that a reader of the call cannot tell which blanket
-applies without knowing which module they are in, which is what ranks 1 and 2
-avoid. The case for locality is that "the library derives it, I override it for
-my types" is a real pattern, and under ambiguity it breaks for exactly the types
-that satisfy both bounds — the ones the override was written for.
+Only one shape reaches this once the rest lands — two value blankets of one
+trait holding at the same level, one written in the calling module — because a
+duplicate pair is rejected where it is written, a newtype and its base are
+separated by rank 1, and two traits' blankets are the cross-trait ambiguity.
 
 ### `spec.md` overstates coherence
 
