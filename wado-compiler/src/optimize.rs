@@ -17,6 +17,7 @@ mod container_sroa;
 mod copy_prop;
 mod dae;
 pub mod dce;
+mod drop_value;
 mod drve;
 mod elide_box_local;
 mod elide_local;
