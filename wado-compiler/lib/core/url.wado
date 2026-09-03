@@ -119,15 +119,44 @@ fn is_unreserved_char(c: char) -> bool {
     return c == '-' || c == '.' || c == '_' || c == '~';
 }
 
+/// Appends `c` as the `%XX` of each of its UTF-8 bytes.
+fn push_percent_encoded(c: char, out: &mut String) {
+    for let b of c.encode_utf8() {
+        let n = b as i32;
+        out.push_str(&`%${n:02X}`);
+    }
+}
+
 fn percent_encode_char(c: char, out: &mut String) {
     if is_unreserved_char(c) {
         out.push(c);
     } else {
-        for let b of c.encode_utf8() {
-            let n = b as i32;
-            out.push_str(&`%${n:02X}`);
+        push_percent_encoded(c, out);
+    }
+}
+
+/// Whether WHATWG percent-encodes `c` in user info: everything but the
+/// characters below, so every delimiter, control and non-ASCII code point.
+/// `%` is kept, which is what lets an existing `%HH` pass through.
+fn is_userinfo_encoded_char(c: char) -> bool {
+    return match c {
+        'a'..='z' | 'A'..='Z' | '0'..='9' => false,
+        '!' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | '-' | '.' | '_' | '~' => false,
+        _ => true,
+    };
+}
+
+/// One credential, spelled as WHATWG stores it.
+fn percent_encode_userinfo(input: String) -> String {
+    let mut out = String::with_capacity(input.len());
+    for let c of input.chars() {
+        if is_userinfo_encoded_char(c) {
+            push_percent_encoded(c, &mut out);
+        } else {
+            out.push(c);
         }
     }
+    return out;
 }
 
 /// Percent-encodes a string. Encodes all characters except unreserved
@@ -178,10 +207,7 @@ fn percent_encode_query_component(input: &String) -> String {
         } else if is_unreserved_char(c) {
             out.push(c);
         } else {
-            for let b of c.encode_utf8() {
-                let n = b as i32;
-                out.push_str(&`%${n:02X}`);
-            }
+            push_percent_encoded(c, &mut out);
         }
     }
     return out;
@@ -320,16 +346,15 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
     let input = *authority;
     let mut rest = input;
 
-    // User info runs to the last `@`. WHATWG carries an earlier one as `%40`,
-    // which adds no colon, so the password still starts at the first one.
+    // User info runs to the last `@` and its password starts at the first `:`,
+    // so both delimiters are read before either credential is encoded.
     if let Some([userinfo, after_at]) = input.rsplit_once("@") {
         rest = after_at;
-        let escaped = userinfo.replace("@", "%40");
-        if let Some([user, password]) = escaped.split_once(":") {
-            url.username = user;
-            url.password = password;
+        if let Some([user, password]) = userinfo.split_once(":") {
+            url.username = percent_encode_userinfo(user);
+            url.password = percent_encode_userinfo(password);
         } else {
-            url.username = escaped;
+            url.username = percent_encode_userinfo(userinfo);
         }
     }
 

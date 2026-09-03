@@ -86,6 +86,38 @@ test "a @ inside user info does not move the password's colon" {
     }
 }
 
+// A credential is stored in WHATWG's userinfo percent-encode set, so what
+// `authority()` writes parses back to the credential it came from.
+test "user info is stored percent-encoded" {
+    if let Ok(url) = Url::parse("http://u:p:q@example.com/") {
+        assert url.password == "p%3Aq";
+        assert url.authority() == "u:p%3Aq@example.com";
+    } else {
+        panic("parse failed");
+    }
+
+    if let Ok(url) = Url::parse("http://a b@example.com/") {
+        assert url.username == "a%20b";
+    } else {
+        panic("parse failed");
+    }
+
+    // Non-ASCII goes out one `%XX` per UTF-8 byte.
+    if let Ok(url) = Url::parse("http://é@example.com/") {
+        assert url.username == "%C3%A9";
+    } else {
+        panic("parse failed");
+    }
+
+    // `%` is outside the set, so an already-encoded credential is unchanged.
+    if let Ok(url) = Url::parse("http://u:p%3Aq@example.com/") {
+        assert url.password == "p%3Aq";
+        assert url.authority() == "u:p%3Aq@example.com";
+    } else {
+        panic("parse failed");
+    }
+}
+
 test "parse with username only" {
     if let Ok(url) = Url::parse("https://admin@example.com/") {
         assert url.username == "admin";
