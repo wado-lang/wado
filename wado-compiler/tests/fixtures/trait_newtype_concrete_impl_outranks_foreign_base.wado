@@ -1,10 +1,7 @@
-#![TODO]
 // Rank 1 orders the newtype chain, so a newtype's own impl answers before
-// anything written for its base, wherever either is written.
-//
-// Today depth is read off a blanket's bounds alone, so both impls sit at 0 and
-// the locality sort decides: the local impl on the base takes a call on the newtype
-// (WEP 2026-09-01, "Rank 1 does not order the chain").
+// anything written for its base, wherever either is written. The base's impl
+// here is the local one and the newtype's is imported, which no rank reads
+// (WEP 2026-09-01).
 
 use { Describe, Inner, Wrapped } from "./sub/trait_newtype_own_impl_lib.wado";
 

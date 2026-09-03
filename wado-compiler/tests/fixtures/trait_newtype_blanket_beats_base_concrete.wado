@@ -1,12 +1,8 @@
-#![TODO]
 // Rank 1 runs before rank 2: the search stops at the first level of the newtype
 // chain that answers, so a blanket satisfied at the newtype wins over an impl
 // written for the base. A newtype is a type distinct from its base, and nothing
-// written for the base may answer while the newtype itself does.
-//
-// Today depth is read off a blanket's bounds alone and concrete-over-blanket
-// runs first, so the base's impl answers instead
-// (WEP 2026-09-01, "Rank 1 does not order the chain").
+// written for the base may answer while the newtype itself does
+// (WEP 2026-09-01).
 
 trait Limit {
     fn limit() -> i32;
