@@ -2856,25 +2856,21 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
         &dist_codes_table,
     );
 
-    let ltree = build_fixed_ltree();
-    let dtree = build_fixed_dtree();
     let [fixed_lit_lengths, fixed_dist_lengths] = build_fixed_lengths();
     let fixed_bits = 3 + encoded_data_bits(&lit_freq, &dist_freq, &fixed_lit_lengths, &fixed_dist_lengths);
 
     let plan = plan_dynamic_block(&lit_freq, &mut dist_freq);
     let dynamic_bits = plan.bits;
-
-    // Also check stored cost
     let stored_bits = input_len * 8 + (input_len / 65535 + 1) * 40 + 3;
 
-    // Choose best encoding
     let mut bw = BitWriter::new();
 
     if stored_bits <= fixed_bits && stored_bits <= dynamic_bits {
-        // Use stored blocks (only beneficial for incompressible data)
-        let stored = deflate_stored(input);
-        return stored;
+        // Stored only wins on incompressible data.
+        return deflate_stored(input);
     } else if fixed_bits <= dynamic_bits {
+        let ltree = build_fixed_ltree();
+        let dtree = build_fixed_dtree();
         write_fixed_block(
             &mut bw,
             &tokens,
