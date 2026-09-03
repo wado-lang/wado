@@ -2501,8 +2501,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn narrow_to_order(
         found_traits: Vec<super::types::TraitMethodMatch>,
         order: &super::solver_bridge::Ordered,
+        method_name: &str,
     ) -> Vec<super::types::TraitMethodMatch> {
         use super::solver_bridge::Ordered;
+        // A collected match means an impl applied, so the order seeing no
+        // candidate at all means the lowering never stated that impl — a
+        // dropped shape, which would otherwise surface as "no method found".
+        // Every impl out of scope is its own verdict and not this one.
+        debug_assert!(
+            *order != Ordered::Nothing || found_traits.is_empty(),
+            "the lowering lost an impl of `{method_name}`, which lookup found and the order did not: {:?}",
+            found_traits
+                .iter()
+                .map(|m| (&m.impl_module_source, m.impl_def))
+                .collect::<Vec<_>>()
+        );
         let named: &[Option<crate::defs::DefId>] = match order {
             Ordered::One(def) => std::slice::from_ref(def),
             Ordered::AmbiguousTraits(defs)
@@ -2542,7 +2555,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<super::types::TraitMethodMatch> {
         let ordered = order.is_some();
         if let Some(order) = order {
-            found_traits = Self::narrow_to_order(found_traits, &order);
+            found_traits = Self::narrow_to_order(found_traits, &order, method_name);
         } else {
             // Rank 0: a variadic impl yields to a non-variadic one of the same
             // trait (WEP 2026-03-14 §5 Rule 1). Scoped to one trait, so it must

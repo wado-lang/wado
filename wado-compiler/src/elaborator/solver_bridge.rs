@@ -68,6 +68,12 @@ impl Lowering {
         TypeDeclId(intern(&mut self.decls, DeclKey::Builtin(name.to_string())))
     }
 
+    /// The head a function type lowers under. `fn mut` is a shape of its own,
+    /// since a closure that may write its captures is not the other.
+    fn fn_shape(&mut self, is_mut: bool) -> TypeDeclId {
+        self.builtin(if is_mut { "fn mut" } else { "fn" })
+    }
+
     fn trait_decl(&mut self, def: DefId) -> TraitDeclId {
         TraitDeclId(intern(&mut self.decls, DeclKey::Def(def)))
     }
@@ -172,7 +178,21 @@ impl Lowering {
                     .collect::<Option<Vec<_>>>()?;
                 Some(SolverType::Decl(head, args))
             }
-            Type::Function(_) | Type::Infer(_) | Type::Error(_) => None,
+            // A function type is a shape keyed by its spelling, as a builtin
+            // is, and its arguments are its parameters then its return — n + 1
+            // of them, so no two arities collide. Selection reads it for
+            // equality and for matching, and neither needs more.
+            Type::Function(f) => {
+                let mut args = f
+                    .params
+                    .iter()
+                    .chain(std::iter::once(&f.return_type))
+                    .map(|ty| self.ast_type(ty, param, resolutions, self_type))
+                    .collect::<Option<Vec<_>>>()?;
+                args.shrink_to_fit();
+                Some(SolverType::Decl(self.fn_shape(f.is_mut), args))
+            }
+            Type::Infer(_) | Type::Error(_) => None,
         }
     }
 
@@ -220,8 +240,23 @@ impl Lowering {
                 inner: Box::new(self.type_id(table, *inner, param)?),
             }),
             ResolvedType::TypeParam { name, index } => param(name, *index).map(SolverType::Param),
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                ..
+            } => {
+                let args = params
+                    .iter()
+                    .chain(std::iter::once(return_type))
+                    .map(|&a| self.type_id(table, a, param))
+                    .collect::<Option<Vec<_>>>()?;
+                decl(
+                    DeclKey::Builtin((if *is_mut { "fn mut" } else { "fn" }).to_string()),
+                    args,
+                )
+            }
             ResolvedType::Never
-            | ResolvedType::Function { .. }
             | ResolvedType::Reactive(_)
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
