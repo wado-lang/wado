@@ -9,9 +9,9 @@ use crate::module_source::ModuleSource;
 use crate::name::is_builtin_shape_name;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
-    ArgDefault, AssocId, Declaration, Env, Fact, ImplDef, ImplOrigin, MethodId, ModuleId,
-    ModuleScope, ParamDef, Pin, Program, RefRule, SolverType, TraitDeclId, TypeDeclId, TypeDef,
-    derive, holds,
+    ArgDefault, AssocId, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId, ModuleId,
+    ModuleScope, ParamDef, Pin, Program, RefRule, Selection, SolverType, TraitDeclId, TypeDeclId,
+    TypeDef, candidates, derive, holds, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader};
@@ -47,6 +47,10 @@ pub(super) struct Lowering {
     /// Method names, interned across traits: two traits declaring `describe`
     /// share one id, which is what makes their collision one question.
     methods: IndexMap<String, u32>,
+    /// The impl block each lowered impl came from, so a selection the compiler
+    /// made and one the solver made name the same thing. A derived, marker or
+    /// primitive impl is written by no block and is absent.
+    impl_defs: IndexMap<ImplId, DefId>,
 }
 
 /// The id `key` has in `map`, minted at the next index when it has none.
@@ -229,7 +233,7 @@ pub(super) fn lower_impls<'a>(
     resolutions: &crate::resolve::Resolutions,
 ) -> Vec<&'a ImplHeader> {
     let mut sources: Vec<&ImplHeader> = Vec::new();
-    for (_, header) in impl_headers {
+    for (&def, header) in impl_headers {
         let implicit = header.implicit_params(resolutions);
         let declared = header.type_params.len();
         let param = |name: &str| -> Option<ParamKind> {
@@ -305,6 +309,7 @@ pub(super) fn lower_impls<'a>(
                 ImplOrigin::Written
             },
         });
+        lowering.impl_defs.insert(id, def);
         if let Some(implemented) = implemented {
             for binding in &header.associated_types {
                 let Some(ty) = lowering.ast_type(&binding.ty, &param, resolutions, Some(&target))
@@ -828,6 +833,84 @@ impl SolverBridge {
         Some(holds(&self.program, &q.env, &q.ty, q.trait_, q.module).is_some())
     }
 
+    /// What the order selects for a call of `method_name` on `type_id` made in
+    /// `module`; `None` where the question is outside what the lowering states.
+    ///
+    /// A receiver mentioning a type parameter is one of those: the bounds in
+    /// force at the call site reach here as an `Env`, and the selection path
+    /// carries no annotate-time scope to build one from. Such a call is skipped
+    /// rather than answered wrongly.
+    pub(super) fn select(
+        &self,
+        tysys: &TypeSystem,
+        module: &ModuleSource,
+        type_id: TypeId,
+        method_name: &str,
+    ) -> Option<Chosen> {
+        let method = MethodId(*self.lowering.methods.get(method_name)?);
+        let ty = self
+            .lowering
+            .type_id(&tysys.type_table.borrow(), type_id, &|_, _| None)?;
+        let module = self.lowering.known_module(module)?;
+        let found = candidates(&self.program, &Env::default(), &ty, method, module);
+        Some(match rank(&found.in_scope) {
+            Selection::One(index) => self.chosen(found.in_scope[index].impl_),
+            Selection::None => Chosen::Nothing,
+            Selection::AmbiguousTraits(_)
+            | Selection::AmbiguousBlankets(_)
+            | Selection::Duplicated(_) => Chosen::Ambiguous,
+            // One trait at several argument lists is the call's arguments to
+            // settle (WEP 2026-07-31), which the order does not answer.
+            Selection::Overloaded(_) => return None,
+        })
+    }
+
+    /// The impl block a winning candidate names, or that a derived body does.
+    fn chosen(&self, impl_: ImplId) -> Chosen {
+        self.lowering
+            .impl_defs
+            .get(&impl_)
+            .map_or(Chosen::Derived, |&def| Chosen::Impl(def))
+    }
+
+    /// The differential of WEP 2026-09-01: what `select_trait_match` chose
+    /// against what the order chooses. The two are meant to differ — "The order
+    /// has no caller" lists five ways — so this reports rather than asserting,
+    /// and a corpus run under `WADO_TRAIT_SELECTION_DIFF=1` is the list of what
+    /// the flip would change.
+    pub(super) fn report_selection_disagreement(
+        &self,
+        tysys: &TypeSystem,
+        module: &ModuleSource,
+        type_id: TypeId,
+        method_name: &str,
+        compiler: &Chosen,
+    ) {
+        if !reporting() {
+            return;
+        }
+        let Some(order) = self.select(tysys, module, type_id, method_name) else {
+            return;
+        };
+        if order == *compiler {
+            return;
+        }
+        let defs = tysys.resolutions.defs();
+        let name = |chosen: &Chosen| match chosen {
+            Chosen::Impl(def) => format!("the impl in `{}`", defs.module(*def)),
+            Chosen::Derived => "a derived body".to_string(),
+            Chosen::Nothing => "nothing".to_string(),
+            Chosen::Ambiguous => "no one impl, and reports".to_string(),
+        };
+        eprintln!(
+            "trait-selection diff: `{}`.{method_name}() in `{module}`: \
+             the sort takes {}, the order takes {}",
+            tysys.type_table.borrow().type_name(type_id),
+            name(compiler),
+            name(&order),
+        );
+    }
+
     /// What the solver was asked and what it had to answer from, for the
     /// differential's failure message.
     pub(super) fn explain(
@@ -885,6 +968,26 @@ impl SolverBridge {
             q.module,
         )
     }
+}
+
+/// Whether the selection differential reports, read once. Off in a release
+/// build, where the solver is not built at all.
+fn reporting() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("WADO_TRAIT_SELECTION_DIFF").is_some())
+}
+
+/// What a selection names, in terms both paths can state.
+#[derive(PartialEq, Eq, Debug)]
+pub(super) enum Chosen {
+    /// The impl block whose body runs.
+    Impl(DefId),
+    /// No block was written and a derived body answers.
+    Derived,
+    /// Nothing answered.
+    Nothing,
+    /// The order reports rather than answering.
+    Ambiguous,
 }
 
 /// A `type_implements_trait` question as the solver reads it.

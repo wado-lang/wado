@@ -1874,6 +1874,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(m) =
             self.select_trait_match(found_traits, method_name, &receiver_display, span, probe)
         {
+            self.report_selection_disagreement(&m, receiver_type_id, method_name);
             return Some(m);
         }
 
@@ -2286,6 +2287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &scope.tysys.resolutions,
                 ),
                 trait_decl,
+                impl_def: Some(impl_ref.0),
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     method_def: Some(method_sig.def),
@@ -2351,6 +2353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &scope.tysys.resolutions,
                     ),
                     trait_decl,
+                    impl_def: Some(impl_ref.0),
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
                         method_def: Some(default_method.sig.def),
@@ -2447,6 +2450,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// Hand the match `select_trait_match` made to the differential of
+    /// WEP 2026-09-01, which reports where the order would have chosen
+    /// otherwise.
+    fn report_selection_disagreement(
+        &self,
+        chosen: &super::types::TraitMethodMatch,
+        receiver_type_id: Option<TypeId>,
+        method_name: &str,
+    ) {
+        let (Some(bridge), Some(receiver)) = (self.tysys.solver.clone(), receiver_type_id) else {
+            return;
+        };
+        bridge.report_selection_disagreement(
+            &self.tysys,
+            &self.current_module_source,
+            receiver,
+            method_name,
+            &chosen.impl_def.map_or(
+                super::solver_bridge::Chosen::Derived,
+                super::solver_bridge::Chosen::Impl,
+            ),
+        );
     }
 
     /// Choose the winning match: drop a trait's variadic impl when that same

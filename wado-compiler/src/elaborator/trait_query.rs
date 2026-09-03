@@ -2854,6 +2854,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Auto-derived `Eq` / `Ord` take no type arguments.
             trait_name: trait_fq,
             trait_decl,
+            // Auto-derived: `synthesis::traits` emits the body, no block exists.
+            impl_def: None,
             trait_args: vec![],
             method_info,
             impl_module_source,
