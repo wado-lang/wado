@@ -90,7 +90,7 @@ Loop and field:
 - `condition_implication` — eliminate bounds/range checks implied false by a dominating loop guard, `if`, short-circuit, or early-exit; drop a constant-bounded index check; and, in a forward pass, drop a redundant re-check when an earlier access already proved the same index in bounds. Subsumes WIR bounds-check elimination.
 - `loop_version_bce` — split a loop into a checks-deleted fast path and an unchanged slow path when a bound relation holds by per-iteration transitivity; a simple fill loop further collapses to `array.fill`.
 - `tmpl_hoist` — hoist a template string's backing buffer out of a loop and reuse it when the result does not escape the iteration. It recognises an expansion by the label `synthesis::template` stamps on it, which is why `const_branch_prune` leaves that block un-flattened until the fixpoint ends.
-- `field_scalarize` — shadow hot GC fields in scalar locals across a loop, with dataflow-driven write-back and re-read.
+- `field_scalarize` — shadow hot GC fields in scalar locals across a loop, with dataflow-driven write-back and re-read. A nested loop is inside that scope rather than an exit from it: only the candidates a call in its body reaches are committed before it and re-read after, and an unlabeled `break` out of it joins the loop's other exits instead of committing every scalar on the spot. A bit-buffer refill loop reaches nothing and so syncs nothing, which is 6% of `core:zlib`'s inflate.
 
 Whole-program and backend:
 
