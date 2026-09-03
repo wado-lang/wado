@@ -652,7 +652,9 @@ impl TypeSystem {
         trait_: DefId,
         expected: bool,
     ) {
-        if !ctx.trait_check_stack.borrow().is_empty() {
+        // The solver is built in every profile, since selection asks it, but
+        // this check is a differential and stays a debug-build cost.
+        if !cfg!(debug_assertions) || !ctx.trait_check_stack.borrow().is_empty() {
             return;
         }
         let Some(bridge) = self.solver.as_ref() else {
