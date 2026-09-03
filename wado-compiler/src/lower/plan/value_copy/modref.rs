@@ -3,7 +3,7 @@
 //! analysis cannot read through writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{Names, Place, Resolver, ReturnPaths, Selector, could_write_through};
+use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -186,6 +186,29 @@ impl Walker<'_> {
         }
     }
 
+    /// Record what a handle this walk cannot follow reaches: the fields the
+    /// place names, or — where it names none — the whole of what was handed
+    /// over. The whole answer has its own channel, because a caller cannot tell
+    /// a field index standing for "everything" from one naming a real field.
+    fn record_handed(&mut self, names: &Names, handed: TypeId) {
+        match names {
+            Names::Place(place)
+                if place
+                    .selectors
+                    .iter()
+                    .any(|s| matches!(s, Selector::Field { .. })) =>
+            {
+                self.record(names);
+            }
+            Names::Place(_) => {
+                let handed = field_owner(handed, self.type_table);
+                self.writes.whole.insert(handed);
+            }
+            Names::Value => {}
+            Names::Unknown => self.writes.opaque = true,
+        }
+    }
+
     /// Record a writable handle escaping into an aggregate as a write to what
     /// it borrows. Nothing else in this walk sees the write, because the
     /// aggregate carries the handle past the expression that took it.
@@ -194,7 +217,7 @@ impl Walker<'_> {
             return;
         }
         let names = self.resolver.names(value);
-        self.record(&handed_out(&names, value.type_id, self.type_table));
+        self.record_handed(&names, value.type_id);
     }
 
     /// Record only the fields a path names, leaving what a callee does inside
@@ -246,7 +269,7 @@ impl TirRefVisitor for Walker<'_> {
                     if known {
                         self.record_fields(&names);
                     } else {
-                        self.record(&handed_out(&names, arg.expr.type_id, self.type_table));
+                        self.record_handed(&names, arg.expr.type_id);
                     }
                 }
             }
@@ -259,7 +282,7 @@ impl TirRefVisitor for Walker<'_> {
                     .filter(|a| could_write_through(a.type_id, self.type_table))
                 {
                     let names = self.resolver.names(arg);
-                    self.record(&handed_out(&names, arg.type_id, self.type_table));
+                    self.record_handed(&names, arg.type_id);
                 }
             }
             // A handle stored into an aggregate outlives the expression that
@@ -284,27 +307,4 @@ impl TirRefVisitor for Walker<'_> {
         }
         self.walk_expr(expr);
     }
-}
-
-/// What a callee with no body reaches through a handle: the fields the place
-/// names, or — where it names none — the whole of what it was handed.
-fn handed_out(names: &Names, handed: TypeId, type_table: &TypeTable) -> Names {
-    let Names::Place(place) = names else {
-        return names.clone();
-    };
-    if place
-        .selectors
-        .iter()
-        .any(|s| matches!(s, Selector::Field { .. }))
-    {
-        return names.clone();
-    }
-    Names::Place(Place {
-        root: place.root,
-        selectors: vec![Selector::Field {
-            owner: type_table.peel_refs(handed),
-            index: u32::MAX,
-        }],
-        through_borrow: place.through_borrow,
-    })
 }

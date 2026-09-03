@@ -1,0 +1,98 @@
+// What a write reaches, for the read-only share (WEP 2026-05-21). Each case is a
+// shape where a binding aliases storage something later writes, so the binding
+// keeps its copy. `value_copy_share_on_liveness` is the counterpart: the same
+// question answered the other way, where the write reaches nothing live.
+
+struct Inner {
+    a: List<i32>,
+    b: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+struct Held {
+    r: &mut Inner,
+}
+
+struct HeldOuter {
+    r: &mut Outer,
+}
+
+// The handle outlives the call, so what the callee writes through it is the
+// whole of what it was handed rather than any field it names.
+fn stash(i: &mut Inner) -> Held with stores[i] {
+    return Held { r: i };
+}
+
+impl Outer {
+    fn stash_self(&mut self) -> HeldOuter with stores[self] {
+        return HeldOuter { r: self };
+    }
+}
+
+fn through_a_stashed_argument(o: &mut Outer) -> i32 {
+    let snap = o.inner.a;
+    let h = stash(&mut o.inner);
+    h.r.a.push(9);
+    return snap.len();
+}
+
+fn through_a_stashed_receiver(o: &mut Outer) -> i32 {
+    let snap = o.inner.a;
+    let h = o.stash_self();
+    h.r.inner.a.push(9);
+    return snap.len();
+}
+
+struct Counter {
+    n: i32,
+}
+
+struct Pair {
+    c: Counter,
+}
+
+// The write is reached through a `continue`, where what runs next is the loop
+// head — `snap` is read again on the next iteration, not dead as the loop's exit
+// set would say.
+fn across_a_continue(p: &mut Pair) -> i32 {
+    let snap = p.c;
+    let mut acc = 0;
+    let mut i = 0;
+    loop {
+        if i >= 3 {
+            break;
+        }
+        acc = acc + snap.n;
+        i = i + 1;
+        p.c.n = 9;
+        continue;
+    }
+    return acc;
+}
+
+export fn run() {
+    let mut o = Outer { inner: Inner { a: [1], b: 2 } };
+    let stashed_arg = through_a_stashed_argument(&mut o);
+    let after_arg = o.inner.a.len();
+    assert stashed_arg == 1;
+    assert after_arg == 2;
+
+    let mut o2 = Outer { inner: Inner { a: [1], b: 2 } };
+    let stashed_recv = through_a_stashed_receiver(&mut o2);
+    let after_recv = o2.inner.a.len();
+    assert stashed_recv == 1;
+    assert after_recv == 2;
+
+    let mut p = Pair { c: Counter { n: 0 } };
+    let looped = across_a_continue(&mut p);
+    assert looped == 0;
+    assert p.c.n == 9;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

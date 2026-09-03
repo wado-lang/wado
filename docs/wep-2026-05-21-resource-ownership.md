@@ -330,6 +330,11 @@ projection is its root's, so the live set at a write is closed over what each
 live local took its value out of. Reading the local alone calls the storage dead
 while a binding is still looking at it, which shares across the write.
 
+Where control resumes decides which set that is. A `break` resumes at the loop's
+exit and a `continue` at its head, so the two read different sets; answering both
+with the exit set drops every loop-carried reader, and a write reached through a
+`continue` then looks unobserved.
+
 Two kinds of write reach different storage. `p.f = x` points `p.f` elsewhere, so
 a reference already taken out of `p.f` keeps what it has, and only a write
 _inside_ that storage disturbs it. And a place repointed after a binding read it
@@ -358,6 +363,14 @@ another — through the receiver or through any other `&mut` the call is handed,
 both being handles the callee's own answer covers. A callee with no body reaches
 only the `&mut` arguments it is handed; anything this cannot name writes
 everything.
+
+A handle the walk cannot follow — stored into an aggregate, or given to a callee
+with no body — writes the whole of what it was handed, and that is an answer of
+its own rather than a field index standing for every field. A caller comparing
+paths cannot tell such an index from one naming a real field, and reads the two
+as disjoint: the write it was told about is the one it then ignores. One function
+mints the key both sides compare (`place::field_owner`), so what a callee records
+and what a caller looks up cannot drift.
 
 Handing the source root to a new owner costs the binding its share on the same
 terms: that owner may write what the binding aliases, so the read matters where

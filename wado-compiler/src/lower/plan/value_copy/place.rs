@@ -218,7 +218,7 @@ impl<'a> Resolver<'a> {
             if param.is_mut_ref || is_reference(param.type_id, type_table) {
                 resolver
                     .lent
-                    .insert(param.local_index, type_table.peel_refs(param.type_id));
+                    .insert(param.local_index, field_owner(param.type_id, type_table));
             }
         }
         if let Some(body) = &func.body {
@@ -263,7 +263,7 @@ impl<'a> Resolver<'a> {
                 let names = self.project(
                     inner,
                     Selector::Field {
-                        owner: self.type_table.peel_refs(inner.type_id),
+                        owner: field_owner(inner.type_id, self.type_table),
                         index: *field_index,
                     },
                 );
@@ -424,6 +424,17 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
         } => place_root(inner),
         _ => None,
     }
+}
+
+/// The type a [`Selector::Field`] is keyed by: the one carrying the field, as
+/// this walk spells it. Minted here alone, so an interprocedural consumer —
+/// `modref` recording a callee's writes, `last_use` re-rooting them at a
+/// caller's handle — asks the same question and cannot drift from the walk that
+/// wrote the key. A box is not peeled: both sides see the wrapper, and peeling
+/// on one alone is what would make the keys disagree.
+#[must_use]
+pub fn field_owner(base_type: TypeId, type_table: &TypeTable) -> TypeId {
+    type_table.peel_refs(base_type)
 }
 
 /// A name for storage someone else owns, as the type table spells it here —

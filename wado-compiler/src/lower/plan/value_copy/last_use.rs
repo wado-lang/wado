@@ -473,7 +473,7 @@ impl Analyzer<'_> {
         live: &IndexSet<u32>,
     ) {
         let writes = self.mod_ref.writes(&func.module_source, &func.name);
-        let owner = self.type_table.peel_refs(handle.type_id);
+        let owner = super::place::field_owner(handle.type_id, self.type_table);
         let Names::Place(path) = self.resolver.names(handle) else {
             self.record_mutation(handle, live);
             return;
@@ -668,7 +668,11 @@ impl TirRefVisitor for MaxLocal {
 /// continue); labeled blocks carry their label.
 struct Exit {
     label: Option<String>,
+    /// Where a `break` to this target resumes.
     live: IndexSet<u32>,
+    /// Where a `continue` resumes — the loop head, which a labeled block is
+    /// not, so only a loop carries one.
+    continue_live: Option<IndexSet<u32>>,
 }
 
 struct Analyzer<'a> {
@@ -1272,6 +1276,18 @@ impl Analyzer<'_> {
         found.map_or_else(|| self.all_locals.clone(), |e| e.live.clone())
     }
 
+    /// Live set where a `continue` resumes. What runs next is the next
+    /// iteration, so it is the loop head's — reading the loop's *exit* set
+    /// instead drops every loop-carried reader, and a write reached through a
+    /// `continue` would then look unobserved.
+    fn continue_live(&self) -> IndexSet<u32> {
+        self.exits
+            .iter()
+            .rev()
+            .find_map(|e| e.continue_live.clone())
+            .unwrap_or_else(|| self.all_locals.clone())
+    }
+
     fn walk_block(&mut self, block: &TirBlock, live: &mut IndexSet<u32>, record: bool) {
         for stmt in block.stmts.iter().rev() {
             self.walk_stmt(stmt, live, record);
@@ -1342,12 +1358,13 @@ impl Analyzer<'_> {
                 }
             }
             TirStmtKind::Continue => {
-                *live = self.exit_live(&None);
+                *live = self.continue_live();
             }
             TirStmtKind::LabeledBlock { label, block } => {
                 self.exits.push(Exit {
                     label: Some(label.clone()),
                     live: live.clone(),
+                    continue_live: None,
                 });
                 self.walk_block(block, live, record);
                 self.exits.pop();
@@ -1369,6 +1386,7 @@ impl Analyzer<'_> {
             self.exits.push(Exit {
                 label: None,
                 live: exit_live.clone(),
+                continue_live: Some(head.clone()),
             });
             let mut work = head.clone();
             self.walk_block(body, &mut work, false);
@@ -1383,6 +1401,7 @@ impl Analyzer<'_> {
             self.exits.push(Exit {
                 label: None,
                 live: exit_live.clone(),
+                continue_live: Some(head.clone()),
             });
             let mut work = head.clone();
             self.walk_block(body, &mut work, true);
