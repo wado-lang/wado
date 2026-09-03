@@ -49,16 +49,16 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 
 ## NIR passes
 
-`peephole` is not one of them but the session the position-flexible ones share:
-every local rewrite rule interleaved over one engine worklist per function
-rather than a walk apiece. It hosts `aggregate_forward`, `const_branch_prune`,
-the env-free half of `const_folding`, `drop_value`, `elide_box_local`,
-`elide_local`, `if_chain_to_match`, `labeled_block_fusion`, `match_to_switch`,
-`ref_elim`, `slot_temp_sroa`, `string_push`, and `tuple_projection`. It runs
-twice per fixed-point iteration, pre- and post-`inline`, so each rule sees the
-instruction window the other exposes; `match_to_switch` and `if_chain_to_match`
-are pre-inline only, `ref_elim` / `elide_box_local` / `slot_temp_sroa` /
-`drop_value` post-inline only.
+`peephole` is not a pass. It is the one engine session per function that the
+position-flexible rules share, each on the same worklist instead of a walk of
+its own. It hosts `aggregate_forward`, `const_branch_prune`, the env-free half
+of `const_folding`, `drop_value`, `elide_box_local`, `elide_local`,
+`if_chain_to_match`, `labeled_block_fusion`, `match_to_switch`, `ref_elim`,
+`slot_temp_sroa`, `string_push`, and `tuple_projection`. It runs twice per
+fixed-point iteration, before and after `inline`, so each rule sees the
+instruction window the other exposes. `match_to_switch` and `if_chain_to_match`
+run only before; `ref_elim`, `elide_box_local`, `slot_temp_sroa`, and
+`drop_value` run only after.
 
 Allocation and aggregate:
 
@@ -81,7 +81,7 @@ Variant and reference:
 - `labeled_block_fusion` — delete the intermediate an inlined `?` helper leaves at its consumer, threading each producer directly to the value it yields. Recognises the `Option`/`Result` and the `[tag, slots…]` `sroa_variant_return` leaves in its place.
 - `slot_temp_sroa` — decompose the aggregate temp an inlined helper leaves where fusion cannot relocate the consumer into the block, as in the value-producing `let x = f()?` or a two-armed `get_pow10`. Each projected slot gets a local declared ahead of the block, so its definition dominates every read, and the exits assign it instead of building the aggregate. Takes the `[tag, slots…]` tuple `sroa_variant_return` leaves, a struct literal whose reads cover every field, and an exit handing over the aggregate rather than its fields, which it binds and projects.
 - `ref_elim` — drop reference bindings read only via field access, rewriting each read to the source; a shared borrow of a pure aggregate substitutes the aggregate so its projections fold.
-- `aggregate_forward` — deliver a freshly built aggregate to its consumer directly, so the binding `sroa` sees is the literal. `?` leaves two hops in the way: `sroa_variant_return` puts a `Result`-returning call into slots, so an always-succeeding inlined callee builds the `Ok` only for the caller to open it again and re-bind the payload. Neither hop is elidable alone — `elide_local` wants a local nobody reads, `copy_prop` will not propagate into one later written.
+- `aggregate_forward` — deliver a freshly built aggregate to its consumer directly, so the binding `sroa` sees is the literal. `?` leaves two hops in the way. `sroa_variant_return` puts a `Result`-returning call into slots, so an always-succeeding inlined callee builds the `Ok` only for the caller to open it again and re-bind the payload. Neither hop is elidable alone: `elide_local` wants a local nobody reads, and `copy_prop` will not propagate into one later written.
 - `tuple_projection` — `[a, b, c].1` → `b`. A tuple literal has no identity, so a field read of one built in place is that element; the unselected elements are dropped, so each must be deletable.
 
 Scalar and dataflow:
