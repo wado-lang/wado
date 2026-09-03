@@ -2468,6 +2468,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: Option<TypeId>,
         method_name: &str,
     ) {
+        // Once selection has reported, it still returns a winner so that a
+        // second, wrong diagnostic does not stack on the same call. Comparing
+        // the order against that fallback says nothing: both paths reported.
+        if self.logger.has_errors() {
+            return;
+        }
         let (Some(bridge), Some(receiver)) = (self.tysys.solver.as_ref(), receiver_type_id) else {
             return;
         };
