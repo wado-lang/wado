@@ -1,7 +1,7 @@
 //! NIR Value Graph (Layer 2): a hash-consed DAG where structurally-equivalent
 //! values share one [`ValueId`]. CSE is pure hash-consing, with no e-class
-//! merges, so an id is stable once allocated; the `SkelTree` references pure
-//! operands by id and holds none itself. Built lazily per function by
+//! merges, so an id is stable once allocated; the skeleton arena references
+//! pure operands by id and holds none itself. Built lazily per function by
 //! [`crate::nir_engine::Engine::value`]. See WEP 2026-06-05.
 
 pub mod builder;
@@ -261,8 +261,8 @@ impl OpaqueId {
     }
 }
 
-/// Heap-version tag carried by [`ValueKind::FieldAccess`]. The Stage-2
-/// builder bumps the version on every `SkelTree` node that may write the heap;
+/// Heap-version tag carried by [`ValueKind::FieldAccess`]. The builder bumps
+/// the version on every skeleton node that may write the heap;
 /// reads at the same `(receiver, field, heap_ver)` triple share a
 /// `ValueId`, automatically forwarding stored values. Granularity is
 /// per-`(receiver-root, field)`; `version_of` maxes the per-slot,
@@ -289,12 +289,10 @@ impl HeapVersion {
 
 /// A pure-value expression. Hash-consed by structural equality.
 ///
-/// Side-effecting nodes (`Call`, `Assign`-to-heap, …) stay
-/// in the `SkelTree`. Pure operand positions connect to their `ValueId`s
-/// through the per-function side-table `value_of: IndexMap<ExprId,
-/// ValueId>` populated by [`crate::nir_value_graph::builder`]. Stage 7
-/// of the WEP would replace that table with `Operand::Value(ValueId)` on
-/// Skel slots, but is deferred.
+/// Side-effecting nodes (`Call`, `Assign`-to-heap, …) stay in the skeleton
+/// arena, which names a pure operand by
+/// [`crate::nir_arena::Operand::Value`] — there is no `ExprId` → `ValueId`
+/// side-table.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ValueKind {
     // ---- Literals ----
@@ -325,8 +323,8 @@ pub enum ValueKind {
     Const(ConstKey, TypeId),
 
     // ---- Opaque ----
-    /// Anonymous unknown. Used for parameters and loop locals; Stage 6
-    /// may promote recognised inductions to a tagged form.
+    /// Anonymous unknown. Used for parameters and loop locals; a recognised
+    /// induction would be a tagged form of this, which nothing wants yet.
     Opaque(OpaqueId),
 
     // ---- Pure arithmetic ----
@@ -353,17 +351,16 @@ pub enum ValueKind {
 
     // ---- Structural merge / loop recurrence ----
     /// Result of a structural If / Match / Switch endpoint:
-    /// `if cond then then_v else else_v`. The Stage-2 builder constructs
-    /// these at merge points where a local's value differs across arms.
+    /// `if cond then then_v else else_v`. The builder constructs these at
+    /// merge points where a local's value differs across arms.
     Select {
         cond: ValueId,
         then: ValueId,
         else_: ValueId,
     },
     /// Loop-recurrence placeholder. `entry` is the value at loop entry;
-    /// `body_iter` is the value after one iteration of the loop body. MVP
-    /// keeps `body_iter` set to an `Opaque` (no induction recognition); the
-    /// kind exists so Stage 6 can fill it in without an enum change.
+    /// `body_iter` is the value after one iteration of the loop body, kept an
+    /// `Opaque` until a rule wants induction recognition.
     LoopPhi {
         entry: ValueId,
         body_iter: ValueId,
@@ -660,10 +657,10 @@ impl ValuePool {
         self.opaque_sources.get(&opaque).copied()
     }
 
-    /// A stable `Opaque(Local idx)` for `idx`, the same value on every call.
-    /// Models "the value of `idx`" where the local holds one value across the
-    /// reads being re-seeded (a loop-stable local); two reads of the same local
-    /// — or two field copies of the same source — then share an identity.
+    /// A stable `Opaque(Local idx)`, the same value on every call. It is
+    /// version-free, so the caller owes a single-version proof
+    /// ([`crate::nir_engine::Engine::local_has_one_version`]); without one, two
+    /// reads that denote different values share an id.
     pub fn canonical_local(&mut self, idx: u32, ty: TypeId) -> ValueId {
         if let Some(&v) = self.canonical_locals.get(&idx) {
             return v;

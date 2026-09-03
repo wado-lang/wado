@@ -4737,7 +4737,7 @@ pub enum TirExprKind {
     },
     /// `Array<T>` of exactly `elements.len()` slots, the value a `[e0, e1, …]`
     /// literal denotes. Emitted by literal coercion, which then hands it to the
-    /// target type's `From<Array<T>>` impl. Lowers to `NirExprKind::ArrayLiteral`.
+    /// target type's `From<Array<T>>` impl. Lowers to `ExprKind::ArrayLiteral`.
     ArrayLiteral {
         elements: Vec<TirExpr>,
     },
