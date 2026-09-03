@@ -1604,6 +1604,19 @@ fn build_fixed_ltree() -> List<EncCode> {
     return tree;
 }
 
+// Code lengths of the fixed literal/length and distance trees of RFC 1951
+// section 3.2.6, for costing a fixed block without building its codes.
+fn build_fixed_lengths() -> [ByteList, ByteList] {
+    let mut lit = ByteList::filled(286, 8);
+    for let mut sym = 144; sym < 256; sym += 1 {
+        lit[sym] = 9;
+    }
+    for let mut sym = 256; sym < 280; sym += 1 {
+        lit[sym] = 7;
+    }
+    return [lit, ByteList::filled(30, 5)];
+}
+
 // Build fixed distance encoding table (30 codes, all 5 bits)
 fn build_fixed_dtree() -> List<EncCode> {
     let mut tree: List<EncCode> = List::filled(30, EncCode { code: 0, len: 5 });
@@ -2124,20 +2137,16 @@ fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<En
 }
 
 // Write a dynamic Huffman block
-fn write_dynamic_block(
-    bw: &mut BitWriter,
+// Symbol frequencies of a block: `symbols[i]` is a literal, EOB, or a length
+// symbol whose distance is `distances[i]`. Returns [lit_freq, dist_freq] with
+// EOB already counted.
+fn count_block_freqs(
     symbols: &List<i32>,
     distances: &List<i32>,
     sym_count: i32,
-    is_last: bool,
     length_codes_table: &ByteList,
     dist_codes_table: &ByteList,
-) {
-    // 0..=255=literal, 256=EOB, 257+=length
-    // distance for each length symbol (0 for literals)
-
-
-    // Count frequencies
+) -> [List<i32>, List<i32>] {
     let mut lit_freq: List<i32> = List::filled(286, 0);
     let mut dist_freq: List<i32> = List::filled(30, 0);
 
@@ -2148,7 +2157,6 @@ fn write_dynamic_block(
         } else if sym == 256 {
             lit_freq[256] += 1;
         } else {
-            // Length symbol
             let len_val = sym - 257;
             let lcode = length_codes_table[len_val] as i32;
             lit_freq[257 + lcode] += 1;
@@ -2160,30 +2168,75 @@ fn write_dynamic_block(
         }
     }
 
-    // Ensure EOB has frequency
-    lit_freq[256] += 1;
+    lit_freq[256] += 1;  // EOB
+    return [lit_freq, dist_freq];
+}
 
-    // Ensure at least one distance code
-    if dist_freq[0] == 0 {
-        let mut has_dist = false;
-        for let mut i = 0; i < 30; i += 1 {
-            if dist_freq[i] > 0 {
-                has_dist = true;
-            }
+// Bits the symbol stream costs under the given code-length tables, summed over
+// codes rather than over tokens — the frequencies already hold the counts.
+fn encoded_data_bits(
+    lit_freq: &List<i32>,
+    dist_freq: &List<i32>,
+    lit_lengths: &ByteList,
+    dist_lengths: &ByteList,
+) -> i32 {
+    let mut bits = 0;
+    for let mut sym = 0; sym < 286; sym += 1 {
+        bits += lit_freq[sym] * lit_lengths[sym] as i32;
+    }
+    for let mut lcode = 0; lcode < 29; lcode += 1 {
+        bits += lit_freq[257 + lcode] * LENGTH_EXTRA[lcode];
+    }
+    for let mut dcode = 0; dcode < 30; dcode += 1 {
+        bits += dist_freq[dcode] * (dist_lengths[dcode] as i32 + DIST_EXTRA[dcode]);
+    }
+    return bits;
+}
+
+// Everything a dynamic block needs, derived once from the frequencies: the
+// three code trees, the RLE'd code-length header, and the block's exact bit
+// cost. `write_dynamic_block` emits a plan; `deflate_with_level` prices one.
+struct DynamicPlan {
+    lit_tree: List<EncCode>,
+    dist_tree: List<EncCode>,
+    bl_tree: List<EncCode>,
+    bl_lengths: ByteList,
+    rle: ByteList,
+    rle_extra: List<i32>,
+    nlit: i32,
+    ndist: i32,
+    nbl: i32,
+    bits: i32,
+}
+
+global BL_ORDER: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+
+fn plan_dynamic_block(lit_freq: &List<i32>, dist_freq: &mut List<i32>) -> DynamicPlan {
+    // build_huffman_tree needs a distance code even for a stream of pure
+    // literals. The forced code is never emitted, so drop it again before
+    // costing the data.
+    let mut forced_dist = true;
+    for let mut i = 0; i < 30; i += 1 {
+        if dist_freq[i] > 0 {
+            forced_dist = false;
         }
-        if !has_dist {
-            dist_freq[0] = 1;
-        }
+    }
+    if forced_dist {
+        dist_freq[0] = 1;
     }
 
     // Build trees
     let mut lit_bl_count: List<i32> = List::filled(16, 0);
     let mut lit_lengths = ByteList::filled(286, 0);
-    build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
+    build_huffman_tree(lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
 
     let mut dist_bl_count: List<i32> = List::filled(16, 0);
     let mut dist_lengths = ByteList::filled(30, 0);
-    build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
+    build_huffman_tree(dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
+
+    if forced_dist {
+        dist_freq[0] = 0;
+    }
 
     // Generate codes
     let lit_tree = gen_huffman_codes(&lit_lengths, 286, 15);
@@ -2267,11 +2320,59 @@ fn write_dynamic_block(
     build_huffman_tree(&bl_freq, 19, MAX_BL_BITS, &mut bl_bl_count, &mut bl_lengths);
     let bl_tree = gen_huffman_codes(&bl_lengths, 19, MAX_BL_BITS);
 
-    let bl_order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
     let mut nbl = 19;
-    while nbl > 4 && bl_lengths[bl_order[nbl - 1]] == 0 {
+    while nbl > 4 && bl_lengths[BL_ORDER[nbl - 1]] == 0 {
         nbl -= 1;
     }
+
+    // BFINAL(1) + BTYPE(2) + HLIT(5) + HDIST(5) + HCLEN(4) + nbl*3
+    let mut bits = 17 + nbl * 3;
+    for let mut j = 0; j < rle.len(); j += 1 {
+        let sym = rle[j] as i32;
+        bits += bl_tree[sym].len as i32;
+        if sym == 16 {
+            bits += 2;
+        } else if sym == 17 {
+            bits += 3;
+        } else if sym == 18 {
+            bits += 7;
+        }
+    }
+    bits += encoded_data_bits(lit_freq, dist_freq, &lit_lengths, &dist_lengths);
+
+    return DynamicPlan {
+        lit_tree: lit_tree,
+        dist_tree: dist_tree,
+        bl_tree: bl_tree,
+        bl_lengths: bl_lengths,
+        rle: rle,
+        rle_extra: rle_extra,
+        nlit: nlit,
+        ndist: ndist,
+        nbl: nbl,
+        bits: bits,
+    };
+}
+
+fn write_dynamic_block(
+    bw: &mut BitWriter,
+    symbols: &List<i32>,
+    distances: &List<i32>,
+    sym_count: i32,
+    is_last: bool,
+    plan: &DynamicPlan,
+    length_codes_table: &ByteList,
+    dist_codes_table: &ByteList,
+) {
+    let lit_tree = &plan.lit_tree;
+    let dist_tree = &plan.dist_tree;
+    let bl_tree = &plan.bl_tree;
+    let bl_lengths = &plan.bl_lengths;
+    let rle = &plan.rle;
+    let rle_extra = &plan.rle_extra;
+    let nlit = plan.nlit;
+    let ndist = plan.ndist;
+    let nbl = plan.nbl;
 
     // Write block header
     if is_last {
@@ -2288,7 +2389,7 @@ fn write_dynamic_block(
 
     // Send BL code lengths in permuted order
     for let mut j = 0; j < nbl; j += 1 {
-        bw.write_bits(bl_lengths[bl_order[j]] as u32, 3);
+        bw.write_bits(bl_lengths[BL_ORDER[j]] as u32, 3);
     }
 
     // Send RLE-encoded code lengths
@@ -2732,183 +2833,24 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
 
     let sym_count = symbols.len();
 
-    // Decide between dynamic and fixed Huffman encoding
-    // Compute cost of fixed encoding
+    // Price the three encodings against one another. The symbols are walked
+    // once, here; every cost below is a sum over codes, and the dynamic plan
+    // is the one the writer emits.
+    let [lit_freq, mut dist_freq] = count_block_freqs(
+        &symbols,
+        &distances,
+        sym_count,
+        &length_codes_table,
+        &dist_codes_table,
+    );
+
     let ltree = build_fixed_ltree();
     let dtree = build_fixed_dtree();
-    let mut fixed_bits = 3;  // block header
-    for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
-        if sym < 256 {
-            fixed_bits += ltree[sym].len as i32;
-        } else {
-            let len_val = sym - 257;
-            let lcode = length_codes_table[len_val] as i32;
-            fixed_bits += ltree[257 + lcode].len as i32;
-            fixed_bits += LENGTH_EXTRA[lcode];
-            let dist = distances[i];
-            let dd = dist - 1;
-            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            fixed_bits += dtree[dcode].len as i32;
-            fixed_bits += DIST_EXTRA[dcode];
-        }
-    }
-    fixed_bits += ltree[256].len as i32;  // EOB
+    let [fixed_lit_lengths, fixed_dist_lengths] = build_fixed_lengths();
+    let fixed_bits = 3 + encoded_data_bits(&lit_freq, &dist_freq, &fixed_lit_lengths, &fixed_dist_lengths);
 
-    // Compute cost of dynamic encoding (approximate)
-    let mut lit_freq: List<i32> = List::filled(286, 0);
-    let mut dist_freq: List<i32> = List::filled(30, 0);
-    for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
-        if sym < 256 {
-            lit_freq[sym] += 1;
-        } else {
-            let len_val = sym - 257;
-            let lcode = length_codes_table[len_val] as i32;
-            lit_freq[257 + lcode] += 1;
-            let dist = distances[i];
-            let dd = dist - 1;
-            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            dist_freq[dcode] += 1;
-        }
-    }
-    lit_freq[256] += 1;
-    if dist_freq[0] == 0 {
-        let mut has_dist = false;
-        for let mut i = 0; i < 30; i += 1 {
-            if dist_freq[i] > 0 {
-                has_dist = true;
-            }
-        }
-        if !has_dist {
-            dist_freq[0] = 1;
-        }
-    }
-
-    // Build optimal trees to estimate dynamic cost
-    let mut lit_bl_count: List<i32> = List::filled(16, 0);
-    let mut lit_lengths = ByteList::filled(286, 0);
-    build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
-    let mut dist_bl_count: List<i32> = List::filled(16, 0);
-    let mut dist_lengths = ByteList::filled(30, 0);
-    build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
-
-    let mut dynamic_data_bits = 0;
-    for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
-        if sym < 256 {
-            dynamic_data_bits += lit_lengths[sym] as i32;
-        } else {
-            let len_val = sym - 257;
-            let lcode = length_codes_table[len_val] as i32;
-            dynamic_data_bits += lit_lengths[257 + lcode] as i32;
-            dynamic_data_bits += LENGTH_EXTRA[lcode];
-            let dist = distances[i];
-            let dd = dist - 1;
-            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            dynamic_data_bits += dist_lengths[dcode] as i32;
-            dynamic_data_bits += DIST_EXTRA[dcode];
-        }
-    }
-    dynamic_data_bits += lit_lengths[256] as i32;  // EOB
-
-    // Compute accurate tree header cost
-    let mut nlit = 286;
-    while nlit > 257 && lit_lengths[nlit - 1] == 0 {
-        nlit -= 1;
-    }
-    let mut ndist = 30;
-    while ndist > 1 && dist_lengths[ndist - 1] == 0 {
-        ndist -= 1;
-    }
-
-    // RLE-encode the combined code lengths to count header bits
-    let total_codes = nlit + ndist;
-    let mut hdr_combined = ByteList::filled(total_codes, 0);
-    for let mut hi = 0; hi < nlit; hi += 1 {
-        hdr_combined[hi] = lit_lengths[hi];
-    }
-    for let mut hi = 0; hi < ndist; hi += 1 {
-        hdr_combined[nlit + hi] = dist_lengths[hi];
-    }
-
-    let mut hdr_rle: ByteList = [];
-    let mut hdr_rle_extra: List<i32> = [];
-    let mut hci = 0;
-    while hci < total_codes {
-        let hval = hdr_combined[hci];
-        let mut hcount = 1;
-        while hci + hcount < total_codes && hdr_combined[hci + hcount] == hval {
-            hcount += 1;
-        }
-        if hval == 0 {
-            let mut hrem = hcount;
-            while hrem > 0 {
-                if hrem >= 11 {
-                    let hrun = i32::min(hrem, 138);
-                    hdr_rle.push(18);
-                    hdr_rle_extra.push(hrun - 11);
-                    hrem -= hrun;
-                } else if hrem >= 3 {
-                    hdr_rle.push(17);
-                    hdr_rle_extra.push(hrem - 3);
-                    hrem = 0;
-                } else {
-                    hdr_rle.push(0);
-                    hdr_rle_extra.push(0);
-                    hrem -= 1;
-                }
-            }
-        } else {
-            hdr_rle.push(hval);
-            hdr_rle_extra.push(0);
-            let mut hrem = hcount - 1;
-            while hrem > 0 {
-                if hrem >= 3 {
-                    let hrun = i32::min(hrem, 6);
-                    hdr_rle.push(16);
-                    hdr_rle_extra.push(hrun - 3);
-                    hrem -= hrun;
-                } else {
-                    hdr_rle.push(hval);
-                    hdr_rle_extra.push(0);
-                    hrem -= 1;
-                }
-            }
-        }
-        hci += hcount;
-    }
-
-    // Build BL tree for header cost
-    let mut hdr_bl_freq: List<i32> = List::filled(19, 0);
-    for let mut hj = 0; hj < hdr_rle.len(); hj += 1 {
-        hdr_bl_freq[hdr_rle[hj] as i32] += 1;
-    }
-    let mut hdr_bl_bl_count: List<i32> = List::filled(MAX_BL_BITS + 1, 0);
-    let mut hdr_bl_lengths = ByteList::filled(19, 0);
-    build_huffman_tree(&hdr_bl_freq, 19, MAX_BL_BITS, &mut hdr_bl_bl_count, &mut hdr_bl_lengths);
-    let hdr_bl_tree = gen_huffman_codes(&hdr_bl_lengths, 19, MAX_BL_BITS);
-
-    let hdr_bl_order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
-    let mut hdr_nbl = 19;
-    while hdr_nbl > 4 && hdr_bl_lengths[hdr_bl_order[hdr_nbl - 1]] == 0 {
-        hdr_nbl -= 1;
-    }
-
-    let mut header_bits = 14 + hdr_nbl * 3;  // HLIT(5) + HDIST(5) + HCLEN(4) + nbl*3
-    for let mut hj = 0; hj < hdr_rle.len(); hj += 1 {
-        let hsym = hdr_rle[hj] as i32;
-        header_bits += hdr_bl_tree[hsym].len as i32;
-        if hsym == 16 {
-            header_bits += 2;
-        } else if hsym == 17 {
-            header_bits += 3;
-        } else if hsym == 18 {
-            header_bits += 7;
-        }
-    }
-
-    let dynamic_bits = 3 + header_bits + dynamic_data_bits;
+    let plan = plan_dynamic_block(&lit_freq, &mut dist_freq);
+    let dynamic_bits = plan.bits;
 
     // Also check stored cost
     let stored_bits = input_len * 8 + (input_len / 65535 + 1) * 40 + 3;
@@ -2939,6 +2881,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
             &distances,
             sym_count,
             true,
+            &plan,
             &length_codes_table,
             &dist_codes_table,
         );
