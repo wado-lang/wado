@@ -2114,13 +2114,7 @@ fn walk_nested_loop(
     // field a write-back.
     let reached = loop_body_call_reach(body, block, ctx);
     let mut body_accesses: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::default();
-    if states
-        .iter()
-        .enumerate()
-        .any(|(i, s)| *s == CanonState::Both && !reached.contains(&i))
-    {
-        count_field_accesses_in_block(body, block, &mut body_accesses, ctx.type_table);
-    }
+    count_field_accesses_in_block(body, block, &mut body_accesses, ctx.type_table);
     for i in 0..ctx.candidates.len() {
         let c = &ctx.candidates[i];
         match states[i] {
