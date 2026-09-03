@@ -926,10 +926,19 @@ impl SolverBridge {
     /// trait the lowering never interned, which the caller reads as "outside
     /// what the lowering states".
     fn env_at(&self, tysys: &TypeSystem, ctx: &super::scope::Scope) -> Option<(Env, Vec<String>)> {
+        // Every parameter in scope takes a position, bounded or not: an
+        // unbounded `T` still appears in a receiver such as `Array<T>`, and a
+        // receiver the environment cannot place lowers to nothing.
         let mut env = Env::default();
-        for bounds in ctx.trait_ctx.type_param_bounds.values() {
-            let mut ids = Vec::with_capacity(bounds.len());
-            for bound in bounds {
+        for name in ctx.trait_ctx.type_params.keys() {
+            let mut ids = Vec::new();
+            for bound in ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(name)
+                .into_iter()
+                .flatten()
+            {
                 let def = bound
                     .resolved
                     .or_else(|| tysys.resolutions.declared(bound.id))?;
@@ -937,10 +946,7 @@ impl SolverBridge {
             }
             env.param_bounds.push(ids);
         }
-        Some((
-            env,
-            ctx.trait_ctx.type_param_bounds.keys().cloned().collect(),
-        ))
+        Some((env, ctx.trait_ctx.type_params.keys().cloned().collect()))
     }
 
     fn question(

@@ -465,21 +465,16 @@ the order, and keeps the ones it names.
 
 ## Known gaps
 
-### The sort still answers for a type-parameter receiver
+### Selection collects, the order decides
 
-Selection asks `candidates` and `rank` and keeps the matches the order names.
-The compiler still collects them: a `TraitMethodMatch` carries the `MethodInfo`
-the rest of elaboration needs, and rebuilding that from an `ImplId` is a
-different job from deciding which impl runs.
+Selection asks `candidates` and `rank` and keeps the matches the order names;
+it has no rule of its own. The compiler still collects the matches: a
+`TraitMethodMatch` carries the `MethodInfo` the rest of elaboration needs, and
+rebuilding that from an `ImplId` is a different job from deciding which impl
+runs.
 
-One question the order cannot take. A receiver mentioning a type parameter
-holds by the bounds in force where the call was written, which reach the order
-as an `Env`, and the selection path carries no annotate-time scope to build one
-from. `select_trait_match` keeps its own sort — rank 0, then concrete over
-blanket, then bound depth, then local over foreign — for those alone.
-
-- [ ] Give selection the bounds in force at the call, so the order answers for
-      a generic body too and the sort goes. Locality lives only there now.
+- [ ] Materialize a `TraitMethodMatch` from the winning `ImplId`, so lookup
+      stops walking the impl index for candidates the order will discard.
 
 An unused-trait-import warning belongs to
 [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) rather than here,
