@@ -28,6 +28,11 @@ optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 editing one has no effect until the crate is rebuilt. `lib/wasi/` and
 `lib/core/kiln/` are generated from WIT: read `wado-from-idl/AGENTS.md` first.
 
+`src/stdlib.rs` names no `_test.wado`, so the white-box tests beside a stdlib
+module are **not** embedded. `wado test lib/core/prelude/fpfmt_test.wado` reads
+one from disk and runs in seconds, so iterate there and spend the rebuild only
+on the module it tests.
+
 ## E2E Tests
 
 `.wado` files in `tests/fixtures/`, expectations in a trailing `__DATA__` JSON

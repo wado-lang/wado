@@ -980,6 +980,9 @@ fn slot_reads_in_operand(body: &Body, op: Operand, local_idx: u32) -> Option<Vec
 struct SlotReadCollector {
     local_idx: u32,
     slots: IndexMap<u32, TypeId>,
+    /// The name each slot is read under, for the projection a materializing
+    /// exit synthesises. A tuple index reads as its own decimal name.
+    slot_names: IndexMap<u32, String>,
     direct_uses: usize,
     slot_uses: usize,
     lets: usize,
@@ -1025,12 +1028,13 @@ impl NirRefVisitor for SlotReadCollector {
                 if let ExprKind::FieldAccess {
                     expr: inner,
                     field_index,
-                    ..
+                    field_name,
                 } = &body.exprs[e].kind
                     && is_local_operand(body, *inner, self.local_idx)
                 {
                     self.slot_uses += 1;
                     self.slots.insert(*field_index, body.exprs[e].type_id);
+                    self.slot_names.insert(*field_index, field_name.clone());
                 }
             }
             NodeRef::Stmt(s) => {
@@ -1316,12 +1320,8 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
             slots: slots
                 .into_iter()
                 .map(|slot| {
-                    let next = engine.locals().len() as u32;
-                    let local_index = engine.alloc_local(
-                        format!("__fused_slot_{next}"),
-                        slot.type_id,
-                        /* is_mut */ false,
-                    );
+                    let local_index =
+                        alloc_indexed_local(engine, "__fused_slot_", slot.type_id, false);
                     BoundSlot {
                         field_index: slot.field_index,
                         local_index,
@@ -2488,6 +2488,8 @@ struct SlotTempSroa {
     lead: Vec<StmtId>,
     /// Projected slots in field order, each with the local that replaces it.
     slots: Vec<BoundSlot>,
+    /// The name each slot is read under, for a materializing exit's projection.
+    names: IndexMap<u32, String>,
     /// The declaring `let mut slot = <zero>` each one needs ahead of the block.
     zeros: Vec<(u32, TypeId, Operand)>,
     span: Span,
@@ -2594,13 +2596,6 @@ fn plan_slot_temp_sroa(
     let widest = fields
         .last()
         .map_or(0, |(field_index, _)| *field_index as usize);
-    let mut sink = SlotTupleChecker {
-        label: &label,
-        widest,
-    };
-    if !walk_exits(body, lb_block, &label, &mut sink) {
-        return None;
-    }
 
     // Each slot local is declared once, before the block, so its definition
     // dominates every projection the consumer left behind; the exits assign it.
@@ -2612,15 +2607,28 @@ fn plan_slot_temp_sroa(
         .iter()
         .map(|(_, type_id)| zero_pad(*type_id, type_table))
         .collect::<Option<_>>()?;
+
+    // Only a materializing exit reads a field this pass wrote itself, and
+    // `$value_copy$T` insertion is long past. Offer it where every slot is a
+    // scalar, which value semantics copy for free.
+    let materializable = pads.iter().all(|p| !matches!(p, Pad::NoneOf(_)));
+    let mut sink = SlotExitChecker {
+        label: &label,
+        widest,
+        wanted: fields.iter().map(|(field_index, _)| *field_index).collect(),
+        materializable,
+        struct_arity: None,
+        saw_materialize: false,
+    };
+    if !walk_exits(body, lb_block, &label, &mut sink) || !sink.admissible() {
+        return None;
+    }
+
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
         let zero = materialize_pad(engine, pad, span);
-        let next = engine.locals().len() as u32;
-        let local_index = engine.alloc_local(
-            format!("__sroa_slot_{next}"),
-            type_id,
-            /* is_mut */ true,
-        );
+        let local_index =
+            alloc_indexed_local(engine, "__sroa_slot_", type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
             local_index,
@@ -2634,28 +2642,76 @@ fn plan_slot_temp_sroa(
         lb_block,
         lead,
         slots,
+        names: reads.slot_names,
         zeros,
         span,
     })
 }
 
-/// [`ExitSink`] for the slot rule: every exit carries a tuple literal wide
-/// enough for the widest projection and hides no further exit inside it — one
-/// moving with a relocated element would leave the block it belongs to.
-struct SlotTupleChecker<'a> {
+/// [`ExitSink`] for the slot rule. A literal exit hands over its own operands,
+/// anything else the aggregate, which the rewrite binds and projects.
+struct SlotExitChecker<'a> {
     label: &'a str,
     widest: usize,
+    /// The field indices the consumer projects. A struct literal's fields are
+    /// named rather than positional, so width says nothing about which are
+    /// there, and [`SlotExitChecker::admissible`] wants the count.
+    wanted: Vec<u32>,
+    materializable: bool,
+    /// Arity of the struct the exits build, from the first literal that says.
+    struct_arity: Option<usize>,
+    saw_materialize: bool,
 }
 
-impl ExitSink for SlotTupleChecker<'_> {
+impl SlotExitChecker<'_> {
+    /// A named struct is decomposed only when the reads cover every field.
+    ///
+    /// A `[tag, slots…]` tuple is a carrier `sroa_variant_return` made and
+    /// nothing else knows, so an unread element of one is free to drop. Other
+    /// passes recognise a named struct by its shape: `tmpl_hoist` keys on
+    /// `String`, whose `repr` a `s.len()` consumer never reads, and taking half
+    /// of one leaves the object alive with that shape gone.
+    ///
+    /// A materializing exit needs a struct-literal sibling. Alone it is
+    /// pointless, since a block whose every exit calls out allocates on each of
+    /// them anyway. Beside a tuple it would be sound, `widest` having already
+    /// proved every projected slot is carried; that case waits on something to
+    /// measure it against.
+    fn admissible(&self) -> bool {
+        match self.struct_arity {
+            Some(arity) => arity == self.wanted.len(),
+            None => !self.saw_materialize,
+        }
+    }
+}
+
+impl ExitSink for SlotExitChecker<'_> {
     fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool {
         let Some(e) = value.and_then(Operand::as_expr) else {
             return false;
         };
-        let ExprKind::TupleLiteral { elements } = &body.exprs[e].kind else {
+        if has_break_to(body, NodeRef::Expr(e), self.label) {
             return false;
-        };
-        elements.len() > self.widest && !has_break_to(body, NodeRef::Expr(e), self.label)
+        }
+        match &body.exprs[e].kind {
+            ExprKind::TupleLiteral { elements } => elements.len() > self.widest,
+            ExprKind::StructLiteral { fields, .. } => {
+                if self
+                    .struct_arity
+                    .replace(fields.len())
+                    .is_some_and(|a| a != fields.len())
+                {
+                    return false;
+                }
+                self.wanted
+                    .iter()
+                    .all(|w| fields.iter().any(|f| f.field_index == *w))
+            }
+            _ => {
+                self.saw_materialize = true;
+                self.materializable
+            }
+        }
     }
     fn descend_branches(&self) -> bool {
         true
@@ -2795,43 +2851,42 @@ fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut
         }
         StmtKind::Continue => None,
     };
-    let Some(tuple) = exit else {
+    let Some(exit) = exit else {
         out.push(s);
         return;
     };
-    let ExprKind::TupleLiteral { elements } = &engine.body.exprs[tuple].kind else {
-        unreachable!("guarded by SlotTupleChecker")
-    };
-    let elements = elements.clone();
     let span = engine.body.stmts[s].span;
-    for (index, element) in elements.into_iter().enumerate() {
-        let field_index = u32::try_from(index).expect("tuple arity");
-        let kind = match plan.slot_of(field_index) {
-            Some(slot) => {
-                let target = engine.alloc_expr(
-                    ExprKind::Local {
-                        index: slot.local_index,
-                        name: format!("__sroa_slot_{}", slot.local_index),
-                    },
-                    slot.type_id,
-                    span,
-                );
-                StmtKind::Expr(Operand::Expr(engine.alloc_expr(
-                    ExprKind::Assign {
-                        target,
-                        value: element,
-                    },
-                    TypeTable::UNIT,
-                    span,
-                )))
+    // Field-carrying exits hand each operand straight to its slot; the rest bind
+    // the aggregate first and project. `SlotExitChecker` admitted exactly these.
+    let carried: Option<Vec<(u32, Operand)>> = match &engine.body.exprs[exit].kind {
+        ExprKind::TupleLiteral { elements } => Some(
+            elements
+                .iter()
+                .enumerate()
+                .map(|(i, e)| (u32::try_from(i).expect("tuple arity"), *e))
+                .collect(),
+        ),
+        ExprKind::StructLiteral { fields, .. } => {
+            Some(fields.iter().map(|f| (f.field_index, f.value)).collect())
+        }
+        _ => None,
+    };
+    match carried {
+        Some(carried) => {
+            for (field_index, value) in carried {
+                let kind = match plan.slot_of(field_index) {
+                    Some(slot) => slot_assign(engine, slot, value, span),
+                    // Unread: a promoted element is pure and drops with the
+                    // aggregate, a skeleton one stays for its effects and its
+                    // evaluation order.
+                    None if value.as_expr().is_none() => continue,
+                    None => StmtKind::Expr(value),
+                };
+                let stmt = engine.alloc_stmt(kind, span);
+                out.push(stmt);
             }
-            // Unread: a promoted element is pure and drops with the tuple, a
-            // skeleton one stays for its effects and its evaluation order.
-            None if element.as_expr().is_none() => continue,
-            None => StmtKind::Expr(element),
-        };
-        let stmt = engine.alloc_stmt(kind, span);
-        out.push(stmt);
+        }
+        None => scalarize_materialized_exit(engine, exit, plan, span, out),
     }
     let brk = engine.alloc_stmt(
         StmtKind::Break {
@@ -2841,6 +2896,86 @@ fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut
         span,
     );
     out.push(brk);
+}
+
+/// Allocate a local named after the index it lands at, so its declared name and
+/// every later mention rebuilt from `local_index` agree by construction.
+fn alloc_indexed_local(engine: &mut Engine, prefix: &str, type_id: TypeId, is_mut: bool) -> u32 {
+    let index = engine.locals().len() as u32;
+    let allocated = engine.alloc_local(format!("{prefix}{index}"), type_id, is_mut);
+    assert_eq!(
+        allocated, index,
+        "a local lands at the index it was named for"
+    );
+    index
+}
+
+/// `__sroa_slot_N = value`, the statement every exit form ends up emitting.
+fn slot_assign(engine: &mut Engine, slot: &BoundSlot, value: Operand, span: Span) -> StmtKind {
+    let target = engine.alloc_expr(
+        ExprKind::Local {
+            index: slot.local_index,
+            name: format!("__sroa_slot_{}", slot.local_index),
+        },
+        slot.type_id,
+        span,
+    );
+    StmtKind::Expr(Operand::Expr(engine.alloc_expr(
+        ExprKind::Assign { target, value },
+        TypeTable::UNIT,
+        span,
+    )))
+}
+
+/// An exit handing over the aggregate rather than its fields, usually a call.
+/// Binding it and projecting keeps this path's allocation and removes the merge.
+fn scalarize_materialized_exit(
+    engine: &mut Engine,
+    exit: ExprId,
+    plan: &SlotTempSroa,
+    span: Span,
+    out: &mut Vec<StmtId>,
+) {
+    let agg_type = engine.body.exprs[exit].type_id;
+    let index = alloc_indexed_local(engine, "__sroa_agg_", agg_type, /* is_mut */ false);
+    let name = format!("__sroa_agg_{index}");
+    out.push(engine.alloc_stmt(
+        StmtKind::Let {
+            name: name.clone(),
+            local_index: index,
+            is_mut: false,
+            is_reactive: false,
+            type_id: agg_type,
+            value: Operand::Expr(exit),
+            skip_value_copy: true,
+        },
+        span,
+    ));
+    for slot in &plan.slots {
+        let recv = engine.alloc_expr(
+            ExprKind::Local {
+                index,
+                name: name.clone(),
+            },
+            agg_type,
+            span,
+        );
+        let read = engine.alloc_expr(
+            ExprKind::FieldAccess {
+                expr: Operand::Expr(recv),
+                field_index: slot.field_index,
+                field_name: plan
+                    .names
+                    .get(&slot.field_index)
+                    .expect("every slot was found by a read that named it")
+                    .clone(),
+            },
+            slot.type_id,
+            span,
+        );
+        let kind = slot_assign(engine, slot, Operand::Expr(read), span);
+        out.push(engine.alloc_stmt(kind, span));
+    }
 }
 
 fn scalarize_operand(engine: &mut Engine, op: Operand, plan: &SlotTempSroa) {
