@@ -1320,12 +1320,8 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
             slots: slots
                 .into_iter()
                 .map(|slot| {
-                    let (local_index, _) = alloc_indexed_local(
-                        engine,
-                        "__fused_slot_",
-                        slot.type_id,
-                        /* is_mut */ false,
-                    );
+                    let local_index =
+                        alloc_indexed_local(engine, "__fused_slot_", slot.type_id, false);
                     BoundSlot {
                         field_index: slot.field_index,
                         local_index,
@@ -2612,9 +2608,9 @@ fn plan_slot_temp_sroa(
         .map(|(_, type_id)| zero_pad(*type_id, type_table))
         .collect::<Option<_>>()?;
 
-    // A materializing exit is the only one that reads a field this pass wrote
-    // itself, and `$value_copy$T` insertion is long past by here — so it is
-    // offered only where every slot is a scalar the semantics copy for free.
+    // Only a materializing exit reads a field this pass wrote itself, and
+    // `$value_copy$T` insertion is long past. Offer it where every slot is a
+    // scalar, which value semantics copy for free.
     let materializable = pads.iter().all(|p| !matches!(p, Pad::NoneOf(_)));
     let mut sink = SlotExitChecker {
         label: &label,
@@ -2631,7 +2627,7 @@ fn plan_slot_temp_sroa(
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
         let zero = materialize_pad(engine, pad, span);
-        let (local_index, _) =
+        let local_index =
             alloc_indexed_local(engine, "__sroa_slot_", type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
@@ -2652,16 +2648,14 @@ fn plan_slot_temp_sroa(
     })
 }
 
-/// [`ExitSink`] for the slot rule: every exit hands the slots over and hides no
-/// further exit inside it — one moving with a relocated element would leave the
-/// block it belongs to. A literal exit hands over its own operands; anything
-/// else hands over the aggregate, which the rewrite binds and projects.
+/// [`ExitSink`] for the slot rule. A literal exit hands over its own operands,
+/// anything else the aggregate, which the rewrite binds and projects.
 struct SlotExitChecker<'a> {
     label: &'a str,
     widest: usize,
     /// The field indices the consumer projects. A struct literal's fields are
     /// named rather than positional, so width says nothing about which are
-    /// there; and [`SlotExitChecker::admissible`] wants the count.
+    /// there, and [`SlotExitChecker::admissible`] wants the count.
     wanted: Vec<u32>,
     materializable: bool,
     /// Arity of the struct the exits build, from the first literal that says.
@@ -2673,17 +2667,16 @@ impl SlotExitChecker<'_> {
     /// A named struct is decomposed only when the reads cover every field.
     ///
     /// A `[tag, slots…]` tuple is a carrier `sroa_variant_return` made and
-    /// nothing else knows, so dropping an unread element of one is free. A
-    /// named struct is a type other passes recognise — `tmpl_hoist` keys on
-    /// `String`, whose `repr` a `s.len()` consumer never reads — and taking
-    /// half of one leaves the object alive with the shape they look for gone.
+    /// nothing else knows, so an unread element of one is free to drop. Other
+    /// passes recognise a named struct by its shape: `tmpl_hoist` keys on
+    /// `String`, whose `repr` a `s.len()` consumer never reads, and taking half
+    /// of one leaves the object alive with that shape gone.
     ///
-    /// A materializing exit is admitted only beside a struct literal. Beside
-    /// nothing it is pointless — a block whose every exit calls out allocates on
-    /// each of them either way, so there is no merge to remove. Beside a tuple
-    /// it would be sound, since `widest` already proves the tuple carries every
-    /// projected slot; that case is refused for want of one to measure, not for
-    /// want of an argument.
+    /// A materializing exit needs a struct-literal sibling. Alone it is
+    /// pointless, since a block whose every exit calls out allocates on each of
+    /// them anyway. Beside a tuple it would be sound, `widest` having already
+    /// proved every projected slot is carried; that case waits on something to
+    /// measure it against.
     fn admissible(&self) -> bool {
         match self.struct_arity {
             Some(arity) => arity == self.wanted.len(),
@@ -2907,20 +2900,14 @@ fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut
 
 /// Allocate a local named after the index it lands at, so its declared name and
 /// every later mention rebuilt from `local_index` agree by construction.
-fn alloc_indexed_local(
-    engine: &mut Engine,
-    prefix: &str,
-    type_id: TypeId,
-    is_mut: bool,
-) -> (u32, String) {
+fn alloc_indexed_local(engine: &mut Engine, prefix: &str, type_id: TypeId, is_mut: bool) -> u32 {
     let index = engine.locals().len() as u32;
-    let name = format!("{prefix}{index}");
-    let allocated = engine.alloc_local(name.clone(), type_id, is_mut);
+    let allocated = engine.alloc_local(format!("{prefix}{index}"), type_id, is_mut);
     assert_eq!(
         allocated, index,
         "a local lands at the index it was named for"
     );
-    (index, name)
+    index
 }
 
 /// `__sroa_slot_N = value`, the statement every exit form ends up emitting.
@@ -2940,9 +2927,8 @@ fn slot_assign(engine: &mut Engine, slot: &BoundSlot, value: Operand, span: Span
     )))
 }
 
-/// An exit that hands over the aggregate rather than its fields — a call, most
-/// of the time. Bind it once and project each slot out, which leaves this path's
-/// allocation where it was and removes the merge that forced every other path's.
+/// An exit handing over the aggregate rather than its fields, usually a call.
+/// Binding it and projecting keeps this path's allocation and removes the merge.
 fn scalarize_materialized_exit(
     engine: &mut Engine,
     exit: ExprId,
@@ -2951,8 +2937,8 @@ fn scalarize_materialized_exit(
     out: &mut Vec<StmtId>,
 ) {
     let agg_type = engine.body.exprs[exit].type_id;
-    let (index, name) =
-        alloc_indexed_local(engine, "__sroa_agg_", agg_type, /* is_mut */ false);
+    let index = alloc_indexed_local(engine, "__sroa_agg_", agg_type, /* is_mut */ false);
+    let name = format!("__sroa_agg_{index}");
     out.push(engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),

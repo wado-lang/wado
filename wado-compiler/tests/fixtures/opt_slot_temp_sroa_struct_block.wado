@@ -2,14 +2,13 @@
 //
 // Inlining a helper whose arms build the aggregate leaves `let x = <labeled
 // block>`, which `sroa`'s direct-literal matcher cannot see, so the struct was
-// allocated on the heap and read straight back. The `core:prelude/fpfmt.wado`
-// shape: a fast arm that builds the pair inline and a slow arm that calls out
+// allocated on the heap and read straight back. `core:prelude/fpfmt.wado` has
+// the shape: a fast arm that builds the pair inline, a slow arm that calls out
 // for it, paid once per float conversion.
 //
-// The aggregate-valued block itself is what goes, so every expectation names a
-// printed result type rather than any one exit — the two that must survive
-// (`Half`, `Boxed`) as much as the two that must not. Each surviving one is held
-// by a single precondition, so removing that precondition fails this fixture.
+// What goes is the aggregate-valued block, so every expectation names a printed
+// result type. `HiLo` and `Pair` must go, `Half` and `Boxed` must stay. One
+// precondition holds each survivor, so dropping that precondition fails here.
 
 struct HiLo {
     hi: u64,
