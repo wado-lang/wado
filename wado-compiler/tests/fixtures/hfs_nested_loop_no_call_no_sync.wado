@@ -1,0 +1,67 @@
+// A nested loop no call reaches leaves the outer scalars canonical.
+//
+// `walk_nested_loop` used to commit every `ScalarOnly` candidate before any
+// inner loop, sync the back edge, and re-read after — whatever the inner body
+// contained — and an unlabeled `break` out of that inner loop committed them
+// again, though it lands back inside the HFS region. A bit-buffer refill loop
+// holds no call that can reach `state`, so nothing in it observes the field:
+// the scalars stay canonical and every one of those syncs is pure cost.
+// `core:zlib`'s inflate state machine pays them per decoded symbol.
+
+use { println, Stdout } from "core:cli";
+
+struct Reader {
+    hold: u32,
+    bits: i32,
+}
+
+// Keeps `state` off `sroa`'s non-escaping path, as inflate's `&mut self`
+// helpers do. A `&mut local` in call-argument position is not an HFS alias.
+#[inline(never)]
+fn arm(r: &mut Reader) {
+    r.hold = 0;
+}
+
+export fn run() with Stdout {
+    let input: ByteList = [1 as u8, 2 as u8, 3 as u8, 4 as u8, 5 as u8, 6 as u8, 7 as u8, 8 as u8];
+    let mut state = Reader { hold: 0, bits: 0 };
+    arm(&mut state);
+    let mut out = 0;
+    let mut round = 0;
+    while round < builtin::black_box(3) {
+        // Refill: reads and writes only through the outer scalars.
+        for let mut k = 0; k < 2; k += 1 {
+            state.hold = state.hold | input[round * 2 + k] as u32 << state.bits as u32;
+            state.bits += 8;
+        }
+        out += (state.hold & 0xFF) as i32;
+        state.hold = state.hold >> 8;
+        state.bits -= 8;
+        out += (state.hold & 0xFF) as i32;
+        state.hold = state.hold >> 8;
+        state.bits -= 8;
+        round += 1;
+    }
+    println(`${out} ${state.bits}`);
+}
+
+// The outer loop's own exit does commit — the caller reads `state.bits` — and
+// its write-back is the same text as the ones under test, so the patterns are
+// anchored on indentation: the sync that must be gone sits at the outer body's
+// level (12 spaces) or inside the inner loop (20), never at the exit branch's
+// 16. The positive patterns pin the local numbering the negative ones name, so
+// a renumbering fails the test rather than passing it silently.
+
+__DATA__
+{
+    "stdout": "21 0\n",
+    "wir_expect:O2": [
+        "let __hfs_hold_58: u32;",
+        "let __hfs_bits_59: i32;"
+    ],
+    "wir_not_expect:O2": [
+        "\n            state.hold = __hfs_hold_58;",
+        "\n                    state.hold = __hfs_hold_58;",
+        "\n            __hfs_hold_58 = state.hold;"
+    ]
+}
