@@ -861,6 +861,7 @@ impl SolverBridge {
         let found = candidates(&self.program, &Env::default(), &ty, method, module);
         Some(match rank(&found.in_scope) {
             Selection::One(index) => self.chosen(found.in_scope[index].impl_),
+            Selection::None if !found.out_of_scope.is_empty() => Chosen::OutOfScope,
             Selection::None => Chosen::Nothing,
             Selection::AmbiguousTraits(_)
             | Selection::AmbiguousBlankets(_)
@@ -913,7 +914,8 @@ impl SolverBridge {
                     .map_or(String::new(), |s| format!(":{}", s.line))
             ),
             Chosen::Derived => "a derived body".to_string(),
-            Chosen::Nothing => "nothing".to_string(),
+            Chosen::Nothing => "nothing: no impl applied".to_string(),
+            Chosen::OutOfScope => "nothing: every impl was out of scope here".to_string(),
             Chosen::Ambiguous => "no one impl, and reports".to_string(),
         };
         eprintln!(
@@ -998,8 +1000,11 @@ pub(super) enum Chosen {
     Impl(DefId),
     /// No block was written and a derived body answers.
     Derived,
-    /// Nothing answered.
+    /// No impl applied at all.
     Nothing,
+    /// Impls applied and the call site had imported none of their traits. The
+    /// scope gate working, not a candidate lost.
+    OutOfScope,
     /// The order reports rather than answering.
     Ambiguous,
 }
