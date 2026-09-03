@@ -216,9 +216,9 @@ Parse 81 SQL statements (13321 bytes). Two parsers are generated from the same
 
 | Implementation      | Throughput |    ms/iter | vs best |
 | ------------------- | ---------: | ---------: | ------- |
-| Rust (sqlparser-rs) | 11.60 MB/s |   1.148 ms | 1.00x   |
-| **Wado** (Gale)     | 11.08 MB/s |   1.201 ms | 1.05x   |
-| Java (ANTLR4)       |  0.10 MB/s | 136.184 ms | 118.63x |
+| Rust (sqlparser-rs) | 11.97 MB/s |   1.113 ms | 1.00x   |
+| **Wado** (Gale)     | 11.93 MB/s |   1.116 ms | 1.00x   |
+| Java (ANTLR4)       |  0.10 MB/s | 127.805 ms | 114.83x |
 
 Java (ANTLR4) is the head-to-head for Gale's generated parser, on the JVM and
 JIT-warmed to steady state, so the gap is algorithmic rather than a warmup
