@@ -394,6 +394,18 @@ The remaining ways are read off a type, and each goes where it belongs:
 - A reflection kind is a fact stated of a declaration. It depends on the asking
   module's view of the members and on no member's trait, so the fact names the
   modules the members are visible from and answers for every instance.
+- So are the three the compiler reads off a type's shape, each holding from
+  everywhere: a plain `enum`'s `Display`; `Default` for a struct whose every
+  field has a default, which a generic one does not get, since a default is
+  elaborated against the declaration; and `Ref` — whether a reference stands in
+  for the type — with `RefMut` the same minus a variant, whose case a write
+  could change. A reference satisfies `Ref` and `RefMut` of itself, which is the
+  reference flag above rather than a fact.
+
+A fact is keyed by the declaration a type instantiates, and a tuple is an
+instance of the tuple declaration. It lowers to its own shape rather than to a
+declaration, because an impl spells one `[..T]`, so the program names that
+declaration for the lookup to reach it.
 
 A bound says two more things than a trait. It spells no arguments
 (WEP 2026-07-31), so it asks for the trait at its declared defaults, and an impl
@@ -550,13 +562,6 @@ descents to tell a recursive type from an ungrounded cycle. The solver's
 
 - [ ] Route the derived bodies through what `holds` reports instead of
       `record_bound_driven_synth_request_for`, and retire the member walk.
-
-### Three compiler items are outside the differential
-
-The lowering states nothing for a plain `enum`'s `Display`, for `Default`, or
-for the `Ref` / `RefMut` marker traits, so a bound on any of them is answered by
-the compiler's path alone and the differential skips it. Each is one more thing
-the lowering reads off a type, in the shape the section above gives the others.
 
 ## Related WEPs
 
