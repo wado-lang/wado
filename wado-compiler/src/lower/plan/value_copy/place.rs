@@ -465,10 +465,14 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
+                // A reference-typed RHS redirects reads through this local to
+                // its referent; any other local owns its own storage, so it
+                // stays its own place even when the value it starts with came
+                // from elsewhere.
                 let names = if is_reference(value.type_id, self.resolver.type_table) {
                     self.resolver.names(value)
                 } else {
-                    Names::Value
+                    Names::Place(Place::local(*local_index))
                 };
                 self.resolver.bindings.set(*local_index, names);
             }

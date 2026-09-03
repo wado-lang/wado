@@ -212,7 +212,7 @@ pub fn analyze_ownership(
     let place_spans: IndexSet<crate::token::Span> =
         moved_places.iter().map(|(_, _, span)| *span).collect();
 
-    let share_eligible = a.share_eligible(&place_move_bases);
+    let share_eligible = a.share_eligible(func, &place_move_bases);
     Ownership {
         move_eligible: MoveEligible {
             locals: owned,
@@ -356,17 +356,34 @@ impl Analyzer<'_> {
 
     /// The read-only bindings that may alias the storage they were read out of.
     /// Every rule below is stated in WEP 2026-05-21, _Sharing_.
-    fn share_eligible(&self, place_move_bases: &IndexSet<u32>) -> IndexSet<u32> {
+    fn share_eligible(
+        &self,
+        func: &TirFunction,
+        place_move_bases: &IndexSet<u32>,
+    ) -> IndexSet<u32> {
         let parents = self.alias_parents();
         let at_write: Vec<IndexSet<u32>> = self
             .mutations
             .iter()
             .map(|m| readable_storage(&parents, &m.live))
             .collect();
+        let capacity_observed = func
+            .body
+            .as_ref()
+            .map(|body| capacity_observed_locals(body, self.type_table))
+            .unwrap_or_default();
         self.share_sources
             .iter()
             .filter_map(|(&local, path)| {
                 if path.root == local {
+                    return None;
+                }
+                // A `List` / `String` copy right-sizes its backing storage to
+                // the current length (WEP 2026-05-21, capacity is not part of
+                // the value but is still observable): sharing skips that only
+                // where this binding's own capacity is actually read — a copy
+                // this binding never observes need not right-size at all.
+                if capacity_observed.contains(&local) {
                     return None;
                 }
                 // `let r = p; p = x;` leaves `r` holding what `p` gave up.
@@ -1664,8 +1681,36 @@ fn is_borrowed_place(expr: &TirExpr) -> bool {
     }
 }
 
-/// The local whose storage this expression's result shares. A fresh allocation
-/// shares none; an unmodelled projection errs toward `Some` and keeps a copy.
+/// Locals `.capacity()` is called on directly: a `List` / `String` copy
+/// right-sizes its backing storage, so only a binding whose own capacity is
+/// read needs that right-sizing — one that is not can safely alias instead.
+fn capacity_observed_locals(body: &TirBlock, type_table: &TypeTable) -> IndexSet<u32> {
+    struct Scan<'a> {
+        type_table: &'a TypeTable,
+        found: IndexSet<u32>,
+    }
+    impl TirRefVisitor for Scan<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Call { func, args, .. } = &expr.kind
+                && func.name.ends_with("::capacity")
+                && let Some(receiver) = args.first()
+                && (self.type_table.is_list(receiver.expr.type_id)
+                    || self.type_table.is_string(receiver.expr.type_id))
+                && let Some(index) = alias_root(&receiver.expr)
+            {
+                self.found.insert(index);
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut scan = Scan {
+        type_table,
+        found: IndexSet::default(),
+    };
+    scan.visit_block(body);
+    scan.found
+}
+
 pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),

@@ -71,13 +71,25 @@ impl ModRef {
 /// What a path naming no field of its own writes.
 #[derive(Clone, Copy)]
 enum WholeOf {
-    /// Nothing. A callee's writes inside its own parameter arrive through the
-    /// call graph, not through the argument.
-    Nothing,
     /// What this body was lent at the path's root.
     Lent,
     /// The type handed over, for a handle this walk cannot follow.
     Handed(TypeId),
+}
+
+/// A known callee's own writes are still unsettled while its body is being
+/// scanned, so a field this body's argument projects through — `outer.inner`
+/// in `callee(&mut outer.inner)` — is added to this function's own `Writes`
+/// only once the fixpoint shows `callee` writes something inside `handed`
+/// (`Inner` here). Recording it unconditionally would claim a write neither
+/// this function nor its callee makes, and reject a share that is safe.
+struct PendingProjection {
+    /// The `(owner, field)` pairs the argument's path projects through, added
+    /// together once the condition below is met.
+    fields: Vec<(TypeId, u32)>,
+    /// The type handed to `callee`; its writes are asked about this type.
+    handed: TypeId,
+    callee: (ModuleSource, String),
 }
 
 /// Collect each body's own writes, then close over the call graph: a caller
@@ -99,30 +111,48 @@ pub fn compute_mod_ref(
         }
     }
 
-    let mut direct: Vec<(ModuleSource, String, Writes, Vec<(ModuleSource, String)>)> = Vec::new();
+    let mut direct: Vec<(
+        ModuleSource,
+        String,
+        Writes,
+        Vec<(ModuleSource, String)>,
+        Vec<PendingProjection>,
+    )> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        let (writes, callees) = scan(&func, &type_table, &defined, return_paths, returns_owned);
+        let (writes, callees, pending) =
+            scan(&func, &type_table, &defined, return_paths, returns_owned);
         direct.push((
             func.module_source.clone(),
             func.name.clone(),
             writes,
             callees,
+            pending,
         ));
     }
 
     let mut per_func: FuncKeyMap<Writes> = FuncKeyMap::default();
-    for (module, name, writes, _) in &direct {
+    for (module, name, writes, _, _) in &direct {
         per_func.insert(module.clone(), name.clone(), writes.clone());
     }
     let mut changed = true;
     while changed {
         changed = false;
-        for (module, name, _, callees) in &direct {
+        for (module, name, _, callees, pending) in &direct {
             let mut merged = per_func.get(module, name).cloned().unwrap_or_default();
             for (cm, cn) in callees {
                 if let Some(callee) = per_func.get(cm, cn) {
                     merged.absorb(callee);
+                }
+            }
+            for p in pending {
+                let hits = per_func.get(&p.callee.0, &p.callee.1).is_some_and(|w| {
+                    w.is_opaque()
+                        || w.writes_whole(p.handed)
+                        || w.fields_of(p.handed).next().is_some()
+                });
+                if hits {
+                    merged.fields.extend(p.fields.iter().copied());
                 }
             }
             if per_func.get(module, name) != Some(&merged) {
@@ -146,13 +176,14 @@ fn scan(
     defined: &FuncKeySet,
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
-) -> (Writes, Vec<(ModuleSource, String)>) {
+) -> (Writes, Vec<(ModuleSource, String)>, Vec<PendingProjection>) {
     let Some(body) = &func.body else {
         return (
             Writes {
                 opaque: true,
                 ..Writes::default()
             },
+            Vec::new(),
             Vec::new(),
         );
     };
@@ -163,9 +194,10 @@ fn scan(
         resolver: &resolver,
         writes: Writes::default(),
         callees: Vec::new(),
+        pending: Vec::new(),
     };
     walker.visit_block(body);
-    (walker.writes, walker.callees)
+    (walker.writes, walker.callees, walker.pending)
 }
 
 struct Walker<'a> {
@@ -174,6 +206,7 @@ struct Walker<'a> {
     resolver: &'a Resolver<'a>,
     writes: Writes,
     callees: Vec<(ModuleSource, String)>,
+    pending: Vec<PendingProjection>,
 }
 
 impl Walker<'_> {
@@ -194,11 +227,14 @@ impl Walker<'_> {
         if named_a_field {
             return;
         }
-        let whole = match whole {
-            WholeOf::Nothing => None,
-            WholeOf::Lent => self.resolver.lent(place.root),
+        // A binding that names its root with no field selector at all — a
+        // variant payload, typed like the payload rather than the value it
+        // was matched out of — cannot be trusted to carry its own type: the
+        // root's lent type is authoritative whenever this body was lent one.
+        let whole = self.resolver.lent(place.root).or_else(|| match whole {
+            WholeOf::Lent => None,
             WholeOf::Handed(ty) => Some(field_owner(ty, self.type_table)),
-        };
+        });
         if let Some(whole) = whole {
             self.writes.whole.insert(whole);
         }
@@ -210,6 +246,40 @@ impl Walker<'_> {
         if could_write_through(value.type_id, self.type_table) {
             let names = self.resolver.names(value);
             self.record(&names, WholeOf::Handed(value.type_id));
+        }
+    }
+
+    /// A known callee's own writes are unsettled during this scan, so record
+    /// the shape a hit would add rather than adding it now. A bare argument
+    /// (no field selector) needs nothing here: its type already matches what
+    /// the call graph absorbs `callee`'s own writes into — unless it is a
+    /// variant payload typed like the payload rather than the value it was
+    /// matched out of, where trusting that match would misfile the write.
+    fn record_pending(&mut self, names: &Names, handed: TypeId, callee: (ModuleSource, String)) {
+        let Names::Place(place) = names else {
+            self.writes.opaque |= matches!(names, Names::Unknown);
+            return;
+        };
+        let fields: Vec<(TypeId, u32)> = place
+            .selectors
+            .iter()
+            .filter_map(|s| match s {
+                Selector::Field { owner, index } => Some((*owner, *index)),
+                Selector::Variant(_) | Selector::Index => None,
+            })
+            .collect();
+        if !fields.is_empty() {
+            self.pending.push(PendingProjection {
+                fields,
+                handed: field_owner(handed, self.type_table),
+                callee,
+            });
+            return;
+        }
+        if let Some(lent) = self.resolver.lent(place.root)
+            && lent != field_owner(handed, self.type_table)
+        {
+            self.writes.whole.insert(lent);
         }
     }
 }
@@ -231,24 +301,34 @@ impl TirRefVisitor for Walker<'_> {
                 }
             }
             // A callee this scan reads answers for its own parameter through the
-            // call graph; one it does not writes what it was handed.
+            // call graph; one it does not writes what it was handed. An
+            // alias-returning builtin (`array_get_ref_mut`) only hands back a
+            // reference into its argument — it writes nothing itself, so the
+            // write, if any, is charged at whoever uses that reference.
             TirExprKind::Call { func, args, .. } => {
                 let known = self.defined.contains(&func.module_source, &func.name);
                 if known {
                     self.callees
                         .push((func.module_source.clone(), func.name.clone()));
                 }
-                for arg in args
-                    .iter()
-                    .filter(|a| could_write_through(a.expr.type_id, self.type_table))
-                {
-                    let names = self.resolver.names(&arg.expr);
-                    let whole = if known {
-                        WholeOf::Nothing
-                    } else {
-                        WholeOf::Handed(arg.expr.type_id)
-                    };
-                    self.record(&names, whole);
+                let aliases_only = func.module_source.is_core_builtin()
+                    && super::ownership::is_container_alias_read(
+                        &func.name,
+                        func.monomorph_info.as_ref(),
+                    );
+                if !aliases_only {
+                    for arg in args
+                        .iter()
+                        .filter(|a| could_write_through(a.expr.type_id, self.type_table))
+                    {
+                        let names = self.resolver.names(&arg.expr);
+                        if known {
+                            let callee = (func.module_source.clone(), func.name.clone());
+                            self.record_pending(&names, arg.expr.type_id, callee);
+                        } else {
+                            self.record(&names, WholeOf::Handed(arg.expr.type_id));
+                        }
+                    }
                 }
             }
             // A closure reaches a frame only through its captures, which the

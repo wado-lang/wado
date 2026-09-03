@@ -45,6 +45,22 @@ fn through_a_stashed_receiver(o: &mut Outer) -> i32 {
     return snap.len();
 }
 
+fn mutate(i: &mut Inner) {
+    i.a.push(9);
+}
+
+fn writes_inner(o: &mut Outer) {
+    mutate(&mut o.inner);
+}
+
+// The write reaches `inner` through a field of a plain local, not a reference
+// parameter, closing over `writes_inner` to learn that `mutate` writes it.
+fn through_a_call_field(o: &mut Outer) -> i32 {
+    let snap = o.inner.a;
+    writes_inner(o);
+    return snap.len();
+}
+
 struct Counter {
     n: i32,
 }
@@ -85,6 +101,11 @@ export fn run() {
     let looped = across_a_continue(&mut p);
     assert looped == 0;
     assert p.c.n == 9;
+
+    let mut o3 = Outer { inner: Inner { a: [1] } };
+    let field_write = through_a_call_field(&mut o3);
+    assert field_write == 1;
+    assert o3.inner.a.len() == 2;
 }
 
 __DATA__
