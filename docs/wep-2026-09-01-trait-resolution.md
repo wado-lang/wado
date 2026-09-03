@@ -156,11 +156,32 @@ member descent between the two askings is a recursive type
 (`struct Node { next: Option<Node> }`), the well-founded structural case, and
 answers yes.
 
-#### Rank 2: a concrete impl beats a blanket
+#### Rank 2: the least general impl
 
-Within one level, an impl written for the receiver defines the exact function
-the call names, and a blanket only covers the general case. A foreign
-`impl Tr for Point` therefore beats a blanket written here.
+Within one level, the impl that names the most of the receiver answers. A target
+is one of three, least general first:
+
+| Generality | Target                       | Example                                               |
+| ---------- | ---------------------------- | ----------------------------------------------------- |
+| exact      | mentions no type parameter   | `impl Tr for Point`, `impl Tag for Box_<i32>`         |
+| head       | mentions one, but is not one | `impl<T> Tag for Box_<T>`, `impl<T: Bound> Tr for &T` |
+| any        | is a bare type parameter     | `impl<T: Bound> Tr for T`                             |
+
+An impl written for the receiver defines the exact function the call names, so a
+foreign `impl Tr for Point` beats a blanket written here. One written for the
+receiver's head still names the receiver's own type constructor, where a value
+blanket names only a condition the receiver happens to meet.
+
+Both steps carry weight. Exact over head is `spec.md`'s "Specific Impls Win":
+`impl Tag for Box_<i32>` beside `impl<T> Tag for Box_<T>` answers for `Box_<i32>`
+and the head impl answers for the rest. Head over any is what the prelude turns
+on: `RangeExclusive<T>` implements `Iterator`, so
+`impl<I: Iterator> IntoIterator for I` applies to every range beside the
+`impl<T: Step + Ord> IntoIterator for RangeExclusive<T>` written for it, and
+without this step every `for x of 0..n` is the blanket ambiguity below.
+
+Generality reads the target and nothing else. Which bounds an impl carries is
+not part of it — see specificity, below.
 
 #### Rank 3: anything left is ambiguous
 

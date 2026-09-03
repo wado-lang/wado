@@ -2826,12 +2826,16 @@ blanket impls. They are ranked:
    the same trait at the same argument list.
 2. The newtype before its base — the search stops at the first level of the
    receiver's newtype chain that answers.
-3. Within one level, an impl written for the receiver beats a blanket
-   (`impl<T: Bound> Tr for T`).
+3. Within one level, the impl naming the most of the receiver — one written for
+   the receiver (`impl Tag for Box_<i32>`) before one written for its head
+   (`impl<T> Tag for Box_<T>`) before a value blanket
+   (`impl<T: Bound> Tr for T`), which names only a condition the receiver meets.
+   See [Specific Impls Win](#specific-impls-win).
 
 Where an impl was written is read at no rank, so a call means the same thing to
-every reader. Specificity is not a rank either: `impl<T: A + B>` beside
-`impl<T: A>` reports rather than preferring the narrower one.
+every reader. Specificity is not a rank either: generality reads an impl's
+target, never its bounds, so `impl<T: A + B>` beside `impl<T: A>` reports rather
+than preferring the narrower one.
 
 ##### Ambiguity
 
@@ -2840,9 +2844,9 @@ differs:
 
 - Two traits declaring the method name. They share no contract, so the call
   names one: `Alpha::describe(&x)`.
-- Two blankets of one trait. A blanket has no name to call it by, so the fix is
-  an `impl Tr for TheType`, which the concrete-over-blanket rank puts above
-  both.
+- Two impls of one trait, neither written for the receiver. A blanket has no
+  name to call it by, so the fix is an `impl Tr for TheType`, which generality
+  puts above both.
 
 Arguments filter candidates before the ranks run: one trait at several argument
 lists is an overload set the call's arguments choose from (see
@@ -3109,7 +3113,9 @@ impl Tag for [i32, i32] { … }         // specific — wins for [i32, i32]
 ```
 
 The specific impl applies to the instantiation it names; every other
-instantiation takes the general one. Declaration order does not matter.
+instantiation takes the general one. Declaration order does not matter. This is
+the generality rank of [Method Resolution](#the-order) — the same rank that puts
+either of these above a value blanket (`impl<T: Bound> Tag for T`).
 
 This holds only for a **trait** impl, where the trait gives both methods one
 signature. An inherent impl carries no such contract, so the pair is rejected:

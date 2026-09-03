@@ -3,6 +3,23 @@
 
 use super::program::{ImplId, SolverType, TraitDeclId};
 
+/// How much of the general case an impl's target covers, least first. Rank 2
+/// keeps the least general, which is `spec.md`'s "Specific Impls Win" and
+/// "a concrete impl beats a blanket" at once.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum Generality {
+    /// Written for the type itself: `impl Tr for Point`, `impl Tag for
+    /// Box_<i32>`, `impl Tr for &Point`. Names the exact function the call
+    /// wants.
+    Exact,
+    /// Written for the type's head, or for a reference to a bounded parameter:
+    /// `impl<T> Tag for Box_<T>`, `impl<T: Bound> Tr for &T`.
+    Head,
+    /// A value blanket, `impl<T: Bound> Tr for T`: every type the bound holds
+    /// of.
+    Any,
+}
+
 /// One impl that could answer a call, reduced to what the order reads.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Candidate {
@@ -15,10 +32,7 @@ pub struct Candidate {
     /// the receiver itself, 1 for what it dereferences or newtype-unwraps to,
     /// and so on.
     pub depth: u32,
-    /// Whether the impl covers the general case rather than being written for
-    /// the receiver: its target mentions a type parameter, so it answers for
-    /// every type that parameter can take.
-    pub is_blanket: bool,
+    pub generality: Generality,
     /// Whether the impl's target is a bare pack (`impl<..T> Tr for [..T]`).
     pub is_variadic: bool,
 }
@@ -52,7 +66,7 @@ pub fn rank(candidates: &[Candidate]) -> Selection {
     let mut live: Vec<usize> = (0..candidates.len()).collect();
     drop_variadic_where_non_variadic_exists(candidates, &mut live);
     keep_shallowest(candidates, &mut live);
-    drop_blankets_where_concrete_exists(candidates, &mut live);
+    keep_least_general(candidates, &mut live);
     classify(candidates, live)
 }
 
@@ -84,11 +98,12 @@ fn keep_shallowest(candidates: &[Candidate], live: &mut Vec<usize>) {
 }
 
 /// Rank 2. Within one level, an impl written for the receiver defines the exact
-/// function the call names and a blanket only covers the general case.
-fn drop_blankets_where_concrete_exists(candidates: &[Candidate], live: &mut Vec<usize>) {
-    if live.iter().any(|&i| !candidates[i].is_blanket) {
-        live.retain(|&i| !candidates[i].is_blanket);
-    }
+/// function the call names and a more general one only covers the case.
+fn keep_least_general(candidates: &[Candidate], live: &mut Vec<usize>) {
+    let Some(least) = live.iter().map(|&i| candidates[i].generality).min() else {
+        return;
+    };
+    live.retain(|&i| candidates[i].generality == least);
 }
 
 /// Rank 3. What survives is one answer, or one of the shapes the caller
@@ -109,10 +124,13 @@ fn classify(candidates: &[Candidate], live: Vec<usize>) -> Selection {
     {
         return Selection::Overloaded(live);
     }
-    if live.iter().all(|&i| candidates[i].is_blanket) {
-        return Selection::AmbiguousBlankets(live);
+    // Rank 2 left one generality standing, so either every survivor was written
+    // for the receiver — two impls of one pair, which coherence rejects where
+    // they are written — or none was.
+    if first.generality == Generality::Exact {
+        return Selection::Duplicated(live);
     }
-    Selection::Duplicated(live)
+    Selection::AmbiguousBlankets(live)
 }
 
 #[cfg(test)]
@@ -137,7 +155,7 @@ mod tests {
             mut self,
             trait_: TraitDeclId,
             depth: u32,
-            is_blanket: bool,
+            generality: Generality,
             is_variadic: bool,
         ) -> Self {
             let impl_ = ImplId(u32::try_from(self.0.len()).expect("test candidate count"));
@@ -146,22 +164,26 @@ mod tests {
                 trait_,
                 trait_args: vec![],
                 depth,
-                is_blanket,
+                generality,
                 is_variadic,
             });
             self
         }
 
         fn concrete(self, trait_: TraitDeclId, depth: u32) -> Self {
-            self.add(trait_, depth, false, false)
+            self.add(trait_, depth, Generality::Exact, false)
+        }
+
+        fn head(self, trait_: TraitDeclId, depth: u32) -> Self {
+            self.add(trait_, depth, Generality::Head, false)
         }
 
         fn blanket(self, trait_: TraitDeclId, depth: u32) -> Self {
-            self.add(trait_, depth, true, false)
+            self.add(trait_, depth, Generality::Any, false)
         }
 
         fn variadic(self, trait_: TraitDeclId) -> Self {
-            self.add(trait_, 0, false, true)
+            self.add(trait_, 0, Generality::Exact, true)
         }
 
         fn with_args(mut self, args: Vec<SolverType>) -> Self {
@@ -228,6 +250,40 @@ mod tests {
         assert_eq!(
             rank(&Build::new().blanket(TR, 0).concrete(TR, 0).done()),
             Selection::One(1)
+        );
+    }
+
+    /// `spec.md`'s "Specific Impls Win": `impl Tag for Box_<i32>` beside
+    /// `impl<T> Tag for Box_<T>` is the same rank one level finer.
+    #[test]
+    fn rank2_prefers_one_instantiation_over_the_head_impl() {
+        assert_eq!(
+            rank(&Build::new().head(TR, 0).concrete(TR, 0).done()),
+            Selection::One(1)
+        );
+    }
+
+    /// An impl for the head is still written for the receiver's own type, so it
+    /// answers over a blanket that only knows a bound the receiver satisfies.
+    /// The prelude turns on this: `RangeExclusive<T>` implements `Iterator`, so
+    /// `impl<I: Iterator> IntoIterator for I` applies to every range beside the
+    /// `impl<T: Step + Ord> IntoIterator for RangeExclusive<T>` written for it,
+    /// and without this rank every `for x of 0..n` is ambiguous.
+    #[test]
+    fn rank2_prefers_the_head_impl_over_a_value_blanket() {
+        assert_eq!(
+            rank(&Build::new().blanket(TR, 0).head(TR, 0).done()),
+            Selection::One(1)
+        );
+    }
+
+    /// Rank 2 keeps one generality, so what survives is never a mix: two head
+    /// impls of one trait have no impl written for the receiver to settle them.
+    #[test]
+    fn two_head_impls_at_one_level_are_the_blanket_ambiguity() {
+        assert_eq!(
+            rank(&Build::new().head(TR, 0).head(TR, 0).done()),
+            Selection::AmbiguousBlankets(vec![0, 1])
         );
     }
 
