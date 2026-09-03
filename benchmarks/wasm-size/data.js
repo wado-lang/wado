@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788395089383,
+  "lastUpdate": 1788405726679,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52779,6 +52779,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c65ec9b6c7cc6401a36f491b8725c3688248a718",
+          "message": "Merge pull request #1951 from wado-lang/perf-fts\n\nperf: one scaling per fixed-point conversion, and SROA for struct-yielding blocks",
+          "timestamp": "2026-09-03T12:08:43+09:00",
+          "tree_id": "126d25586578a6886daa0b817b15854f5c06e21f",
+          "url": "https://github.com/wado-lang/wado/commit/c65ec9b6c7cc6401a36f491b8725c3688248a718"
+        },
+        "date": 1788405726249,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
             "unit": "bytes"
           },
           {
