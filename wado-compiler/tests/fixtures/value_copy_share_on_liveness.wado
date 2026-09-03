@@ -41,6 +41,17 @@ fn filled_len(slot: &mut Slot) -> i32 {
     return n;
 }
 
+// `let r = p; p = x;` repoints `p`'s own binding rather than writing its old
+// storage in place, so the reassignment never conflicts with `r`'s share —
+// even while `p` stays live and readable up to that point.
+fn rebind_releases_storage() -> i32 {
+    let mut p: List<i32> = [1, 2];
+    let r = p;
+    let before = p[0];
+    p = [3, 4];
+    return before + r[0] + p[0];
+}
+
 export fn run() {
     let mut s = Store { rows: [[1, 2, 3]] };
     let n = s.len_then_mutate();
@@ -51,6 +62,9 @@ export fn run() {
     let mut slot = Slot::Filled([1, 2]);
     let filled = filled_len(&mut slot);
     assert filled == 2;
+
+    let released = rebind_releases_storage();
+    assert released == 5;
 }
 
 __DATA__

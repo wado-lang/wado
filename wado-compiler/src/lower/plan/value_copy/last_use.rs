@@ -386,16 +386,20 @@ impl Analyzer<'_> {
                 if capacity_observed.contains(&local) {
                     return None;
                 }
-                // `let r = p; p = x;` leaves `r` holding what `p` gave up.
-                // Every other mutation of `path`'s root, live where `local`
+                // `let r = p; p = x;` leaves `r` holding what `p` gave up: a
+                // rebind repoints `p`'s slot rather than writing the old
+                // storage in place, so it is never itself a conflict — only
+                // every OTHER mutation of `path`'s root, live where `local`
                 // could read it, must be unreachable from `local`'s path.
                 let mut released = false;
                 let mut share_safe = true;
                 for (m, r) in self.mutations.iter().zip(&at_write) {
-                    if m.rebinds_place && m.path == *path && r.contains(&local) {
+                    let is_release = m.rebinds_place && m.path == *path;
+                    if is_release && r.contains(&local) {
                         released = true;
                     }
-                    if m.path.root == path.root
+                    if !is_release
+                        && m.path.root == path.root
                         && r.contains(&local)
                         && !write_cannot_reach(m, path)
                     {
@@ -524,10 +528,10 @@ impl Analyzer<'_> {
         }
     }
 
-    fn mark_local_mutated(&mut self, index: u32, live: &IndexSet<u32>) {
+    fn mark_local_mutated(&mut self, index: u32, rebinds_place: bool, live: &IndexSet<u32>) {
         self.mutations.push(Mutation {
             path: AccessPath::local(index),
-            rebinds_place: false,
+            rebinds_place,
             live: live.clone(),
         });
     }
@@ -1411,7 +1415,10 @@ impl Analyzer<'_> {
                             .entry(*index)
                             .or_default()
                             .push((**value).clone());
-                        self.mark_local_mutated(*index, live);
+                        // A plain local reassignment repoints the whole
+                        // binding rather than writing its old storage in
+                        // place, so it always rebinds.
+                        self.mark_local_mutated(*index, true, live);
                     }
                     live.swap_remove(index);
                     self.walk_expr(value, live, record);
@@ -1548,7 +1555,7 @@ impl Analyzer<'_> {
                     live.insert(c.outer_index);
                     if record {
                         self.mark_escaped(c.outer_index, None);
-                        self.mark_local_mutated(c.outer_index, live);
+                        self.mark_local_mutated(c.outer_index, false, live);
                         let at = self.consumed.entry(c.outer_index).or_default();
                         at.extend(live.iter().copied());
                     }
