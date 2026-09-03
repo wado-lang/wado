@@ -47,6 +47,46 @@ is already 65% of serde_json's entire 2.43 ms serialize, so the structural cost
 is the standing gap, not the codec. And `short()` at 1.68 ms is ~15 ns per
 conversion, which is ryu-class — there is no algorithmic slack left in it.
 
+## Four ways to keep `short` small and still drop its `uscale` calls (2026-09-04)
+
+Inlining `uscale` into `short` buys json-canada ser +2.4% and costs json-twitter
+ser 2.3% — placement, on a hot path that never calls `short` (see the entry
+below). So: get the win without growing `short`. Four shapes, all worse, and the
+reason is the same each time.
+
+| arm                                            | `short` | canada ser | twitter ser |
+| ---------------------------------------------- | ------- | ---------- | ----------- |
+| base                                            | 87      | 7.59       | 0.821       |
+| inline `uscale` into `short` (what landed)      | 122     | **7.39**   | 0.837       |
+| share the mask, keep the three calls            | 89      | 7.70       | 0.835       |
+| one call returning all three scalings           | 86      | 7.81       | **0.814**   |
+| one call returning the two bounds               | 88      | 7.88       | **0.818**   |
+| pin the rare arm out of line (shrinks the above)| 113     | 7.46       | 0.833       |
+
+Every arm but the first does strictly less work than base — fewer calls, fewer
+mask computations — and every one of them is **slower than base**. So "fewer
+instructions" does not predict the outcome here at all. What separates the arm
+that wins is that it is the only one with *no call left on the hot path*: the
+saving is the call boundary itself (argument setup, the multivalue return, and
+the registers that cannot stay live across it), not the two mask computations,
+which are worth nothing. The three-scaling arm additionally does a third wide
+multiply that `short` does not need — a shortest representation at full width
+has `dmin == dmax`, so canada only ever needs two.
+
+Two traps worth naming. `inline_cost` prices a callee **as written**, so a
+helper that reads as "a mask and three calls" comes in under budget and is
+pulled into `short` together with all three bodies — `#[inline(never)]` is the
+only way to hold such a helper out of line, and it is not a claim against the
+cost model. And a size-matched control does not falsify a placement story:
+padding `short` with a dead branch grew the *wasm* by 196 bytes against the real
+change's 205 and left twitter at exactly 0.820 all three rounds, because a
+compare-and-jump is nothing in machine code next to three inlined `uscale`
+bodies. Wasm bytes are not the unit the effect is measured in.
+
+Generalizes: canada's gain and twitter's loss are one phenomenon, not two. The
+only lever that moves either is whether `short` carries the scaling inline, and
+it moves them in opposite directions.
+
 ## Three ways to get `uscale` inlined (2026-09-04)
 
 `uscale` costs 21 against the -O2 budget of 16, so `short` pays three calls per
