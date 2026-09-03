@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788434286070,
+  "lastUpdate": 1788438784086,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52916,6 +52916,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99bf8511a35c781af21681e05e4ff4abb151579b",
+          "message": "Merge pull request #1953 from wado-lang/perf-zlib\n\nperf(zlib): rewrite core:zlib's hot paths, and stop field_scalarize over-syncing nested loops",
+          "timestamp": "2026-09-03T21:19:17+09:00",
+          "tree_id": "94f4537350216918ec0a7fe0074a6464ec8c7591",
+          "url": "https://github.com/wado-lang/wado/commit/99bf8511a35c781af21681e05e4ff4abb151579b"
+        },
+        "date": 1788438783096,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18908,
             "unit": "bytes"
           },
           {
