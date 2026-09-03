@@ -91,6 +91,34 @@ fn make_repeated(byte: u8, count: i32) -> ByteList {
     return data;
 }
 
+// Text-shaped: a small vocabulary recurring at varying distances, which is what
+// puts a position's best match deep in its hash chain rather than at the head.
+fn make_wordy(size: i32) -> ByteList {
+    let words: List<String> = [
+        "\"name\":", "\"id\":", "\"created_at\":", "\"screen_name\":", "\"text\":", "\"followers_count\":", "\"url\":",
+        "\"description\":", "null,", "true,",
+    ];
+    let mut data = ByteList::with_capacity(size);
+    let mut state: u32 = 0x2468ace;
+    while data.len() < size {
+        state = state ^ state << 13;
+        state = state ^ state >> 17;
+        state = state ^ state << 5;
+        let word = words[(state % 10) as i32];
+        for let mut i = 0; i < word.len(); i += 1 {
+            data.push(word.get_byte_unchecked(i));
+        }
+        let digits = (state >> 8 & 7) as i32;
+        for let mut i = 0; i < digits; i += 1 {
+            state = state ^ state << 13;
+            state = state ^ state >> 17;
+            state = state ^ state << 5;
+            data.push((48 + state % 10) as u8);
+        }
+    }
+    return data;
+}
+
 fn make_incompressible(size: i32) -> ByteList {
     let mut data = ByteList::with_capacity(size);
     let mut state: u32 = 0x12345678;
@@ -358,6 +386,17 @@ test "stored block round-trip empty" {
     assert compressed.len() == 5;
     assert bytes_equal(&data, &inflate_raw(&compressed));
     assert bytes_equal(&data, &inflate_zlib(&zlib_compress(&data, Z_NO_COMPRESSION)).unwrap());
+}
+
+test "a match deep in the hash chain is still found" {
+    // A chain that self-links strands every older candidate behind the link, so
+    // the walk reaches only the newest. That costs ratio, not validity, which
+    // makes the guard a size bound: this input holds ~16.2 KB when the walk runs
+    // to the end of a bucket and ~17.9 KB when it stops at the head.
+    let data = make_wordy(60000);
+    let compressed = deflate_raw(&data, 6);
+    assert compressed.len() < 17000, `hash chain walk degraded: ${compressed.len()} bytes`;
+    assert bytes_equal(&data, &inflate_raw(&compressed));
 }
 
 test "default strategy never loses to fixed or stored" {

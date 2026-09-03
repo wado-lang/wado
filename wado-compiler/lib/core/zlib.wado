@@ -1639,6 +1639,19 @@ fn hash3_roll(h: i32, next: u8) -> i32 {
     return (h << 5 ^ next as i32) & 32767;
 }
 
+// Bucket the `run - 1` positions a match covers after `pos`, rolling `h`, the
+// hash `pos` was bucketed under. Starting at `pos` would set `prev[pos]` to
+// `pos` and strand every older candidate in that bucket behind the self-link.
+fn insert_hash_run(scratch: i32, head_ptr: i32, prev_ptr: i32, pos: i32, h: i32, run: i32, input_len: i32) {
+    let limit = i32::min(run, input_len - pos - 2);
+    let mut mh = h;
+    for let mut i = 1; i < limit; i += 1 {
+        mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 2));
+        builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+        builtin::i32_store(head_ptr + mh * 4, pos + i);
+    }
+}
+
 // Longest common run of `scratch[a..]` and `scratch[b..]`, capped at `max_len`,
 // via 16-byte SIMD compares. The scratch buffer's 16-byte zero pad keeps the
 // trailing `v128.load` past the match end in bounds.
@@ -2669,15 +2682,8 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                     } else {
                         // Previous match was better: emit it
                         tokens.push(token_pack(257 + prev_match_len - 3, prev_match_dist));
-                        // Insert hash entries for the positions the match skips.
                         let skip = prev_match_len - 1;
-                        let limit = i32::min(skip - 1, input_len - pos - 2);
-                        let mut mh = h;
-                        for let mut i = 0; i < limit; i += 1 {
-                            builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
-                            builtin::i32_store(head_ptr + mh * 4, pos + i);
-                            mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 3));
-                        }
+                        insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, skip, input_len);
                         pos += skip;
                         match_available = false;
                         prev_match_len = 0;
@@ -2693,13 +2699,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                     } else {
                         // Match is long enough, emit immediately
                         tokens.push(token_pack(257 + best_len - 3, best_dist));
-                        let limit = i32::min(best_len, input_len - pos - 2);
-                        let mut mh = h;
-                        for let mut i = 1; i < limit; i += 1 {
-                            mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 2));
-                            builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
-                            builtin::i32_store(head_ptr + mh * 4, pos + i);
-                        }
+                        insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, best_len, input_len);
                         pos += best_len;
                         match_available = false;
                         prev_match_len = 0;
@@ -2769,13 +2769,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
 
                 if best_len >= 3 {
                     tokens.push(token_pack(257 + best_len - 3, best_dist));
-                    let limit = i32::min(best_len, input_len - pos - 2);
-                    let mut mh = h;
-                    for let mut i = 1; i < limit; i += 1 {
-                        mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 2));
-                        builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
-                        builtin::i32_store(head_ptr + mh * 4, pos + i);
-                    }
+                    insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, best_len, input_len);
                     pos += best_len;
                 } else {
                     tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
