@@ -399,7 +399,14 @@ impl SolverBridge {
     /// structural traits, `Inspect`, the reflection kinds and the operators.
     fn states(item: CompilerItem) -> bool {
         Self::DERIVED.contains(&item)
-            || item == CompilerItem::Inspect
+            || matches!(
+                item,
+                CompilerItem::Inspect
+                    | CompilerItem::Display
+                    | CompilerItem::Default
+                    | CompilerItem::Ref
+                    | CompilerItem::RefMut
+            )
             || Self::REFLECT
                 .iter()
                 .any(|kind| kind.compiler_item() == item)
@@ -429,6 +436,7 @@ impl SolverBridge {
         Self::state_newtype_bases(tysys, &table, &mut lowering, &mut program);
         Self::derive_all(tysys, &table, &mut lowering, &mut program);
         Self::state_reflect_facts(tysys, &table, &lowering, &mut program);
+        Self::state_type_facts(tysys, &table, &lowering, &mut program);
         Self { program, lowering }
     }
 
@@ -524,7 +532,13 @@ impl SolverBridge {
             let id = lowering.trait_decl(inspect);
             program.traits.entry(id).or_default().holds_for_all = true;
         }
-        let eq = tysys.compiler_trait_def(CompilerItem::Eq);
+        // A reference is itself the thing a `Ref` bound asks for, as it is
+        // its own `Eq`.
+        let holds_of_a_reference: Vec<DefId> =
+            [CompilerItem::Eq, CompilerItem::Ref, CompilerItem::RefMut]
+                .into_iter()
+                .filter_map(|item| tysys.compiler_trait_def(item))
+                .collect();
         for (&trait_, header) in &tysys.trait_env.trait_decl_headers {
             let defaults: Vec<Option<ArgDefault>> = header
                 .type_params
@@ -538,7 +552,7 @@ impl SolverBridge {
                     })
                 })
                 .collect();
-            let on_ref = if Some(trait_) == eq {
+            let on_ref = if holds_of_a_reference.contains(&trait_) {
                 RefRule::Always
             } else if tysys.ref_denies_bound(tysys.on_bound_of(trait_), trait_) {
                 RefRule::Never
@@ -716,6 +730,70 @@ impl SolverBridge {
         for (def, kind) in memberless {
             if eligible(def) {
                 state(def, kind, None);
+            }
+        }
+    }
+
+    /// The three remaining things the compiler reads off a type rather than off
+    /// an impl: a plain `enum`'s `Display`, and the `Ref` / `RefMut` identities.
+    /// Each is a fact stated of a declaration, so it answers for every instance
+    /// and from every module.
+    fn state_type_facts(
+        tysys: &TypeSystem,
+        table: &TypeTable,
+        lowering: &Lowering,
+        program: &mut Program,
+    ) {
+        let trait_of = |item| {
+            tysys
+                .compiler_trait_def(item)
+                .and_then(|def| lowering.known_trait(def))
+        };
+        let (display, ref_, ref_mut) = (
+            trait_of(CompilerItem::Display),
+            trait_of(CompilerItem::Ref),
+            trait_of(CompilerItem::RefMut),
+        );
+        let mut fact = |head: Option<TypeDeclId>, trait_: Option<TraitDeclId>| {
+            if let (Some(head), Some(trait_)) = (head, trait_) {
+                program
+                    .facts
+                    .insert((head, trait_), Fact { visible_from: None });
+            }
+        };
+        let declared = |def: DefId| Some(lowering.declared_type(def));
+
+        // A plain `enum` derives `Display` over the bare case name, so the
+        // bound holds before `synthesize_traits` emits the body.
+        for &def in tysys.all_enum_cases.keys() {
+            fact(declared(def), display);
+        }
+
+        // `Ref` is whether a reference to a type stands in for the type itself.
+        // `RefMut` is the same, minus the shapes a mutable reference cannot
+        // stand in for — a variant, whose case a write could change.
+        for &def in tysys.all_struct_fields.keys() {
+            fact(declared(def), ref_);
+            fact(declared(def), ref_mut);
+        }
+        for &def in tysys.all_variant_cases.keys() {
+            fact(declared(def), ref_);
+        }
+        for name in [TypeTable::ARRAY_TYPE_NAME, "i128", "u128"] {
+            let head = lowering.known_type(&DeclKey::Builtin(name.to_string()));
+            fact(head, ref_);
+            fact(head, ref_mut);
+        }
+        // A newtype takes both from its base. An `enum`, `flags` or `resource`
+        // has neither, so nothing is stated for one.
+        for (def, base) in newtype_decls(tysys, table) {
+            let resolved = table.get(base).clone();
+            if !tysys.is_ref_identity(&resolved) {
+                continue;
+            }
+            fact(declared(def), ref_);
+            if !matches!(resolved, ResolvedType::Variant { .. }) {
+                fact(declared(def), ref_mut);
             }
         }
     }
