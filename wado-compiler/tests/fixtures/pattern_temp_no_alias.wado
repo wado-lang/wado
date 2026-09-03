@@ -194,3 +194,53 @@ test "a take-and-replace binding owns what the place gave up" {
     assert taken.len() == 1;
     assert src.items.len() == 1;
 }
+
+// `boxing::prepare_types` rewrites a `&mut` to a variant or a primitive onto
+// `Box<T>`, so the writability question must be asked of a predicate that reads
+// both spellings. The rows below are the ones a raw `Ref` / `MutRef` test misses:
+// the scrutinee is a box, and its payload is the caller's storage.
+
+fn push_then_len(slot: &mut V) -> i32 {
+    match *slot {
+        V::A(xs) => {
+            if let V::A(ys) = slot {
+                ys.push(9);
+            }
+            return xs.len();
+        }
+        V::B => {}
+    }
+    return -1;
+}
+
+test "a match binding does not alias the payload of a &mut parameter" {
+    let mut v = V::A([1]);
+    assert push_then_len(&mut v) == 1;
+}
+
+fn replace_then_len(slot: &mut V) -> i32 {
+    if let V::A(xs) = *slot {
+        *slot = V::A([9, 9, 9]);
+        return xs.len();
+    }
+    return -1;
+}
+
+test "an if-let binding survives a whole-value write through a &mut parameter" {
+    let mut v = V::A([1]);
+    assert replace_then_len(&mut v) == 1;
+}
+
+test "a match binding does not alias the payload of a &mut local" {
+    let mut v = V::A([1]);
+    let r = &mut v;
+    match *r {
+        V::A(xs) => {
+            if let V::A(ys) = r {
+                ys.push(9);
+            }
+            assert xs.len() == 1;
+        }
+        V::B => {}
+    }
+}
