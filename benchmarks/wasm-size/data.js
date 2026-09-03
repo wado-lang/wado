@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788390529566,
+  "lastUpdate": 1788395089383,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52725,6 +52725,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0c4b1def949d41c2d5e842131e69d3877a2c6b53"
         },
         "date": 1788390529202,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6429,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0e94a4a4a954f0728a97a737f6246abdc9c618b9",
+          "message": "Merge pull request #1948 from wado-lang/claude/jwt-stdlib-feasibility-e3u2y9\n\nfeat(stdlib): core:jwt over HMAC in core:digest and canonical base64url",
+          "timestamp": "2026-09-03T09:11:52+09:00",
+          "tree_id": "fc6f2f4f2497145ae79b699efc55deb16d935305",
+          "url": "https://github.com/wado-lang/wado/commit/0e94a4a4a954f0728a97a737f6246abdc9c618b9"
+        },
+        "date": 1788395088659,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
