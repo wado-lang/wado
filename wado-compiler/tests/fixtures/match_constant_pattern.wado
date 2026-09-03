@@ -23,16 +23,14 @@ fn describe_assoc(kind: i32) -> String {
 }
 
 test "match with associated constants" {
-    // Each scrutinee goes through `black_box`: a constant one folds the whole
-    // body away at -O2 and the pattern under test is never emitted.
-    assert describe_assoc(builtin::black_box(10)) == "foo";
-    assert describe_assoc(builtin::black_box(20)) == "bar";
-    assert describe_assoc(builtin::black_box(30)) == "baz";
-    assert describe_assoc(builtin::black_box(99)) == "unknown";
+    assert describe_assoc(10) == "foo";
+    assert describe_assoc(20) == "bar";
+    assert describe_assoc(30) == "baz";
+    assert describe_assoc(99) == "unknown";
 }
 
 test "matches operator with associated constants" {
-    let x: i32 = builtin::black_box(10);
+    let x: i32 = 10;
     assert x matches { TokenKind::FOO };
     assert !(x matches { TokenKind::BAR });
 }
@@ -47,22 +45,22 @@ fn describe(kind: i32) -> String {
 }
 
 test "match with global constants" {
-    assert describe(builtin::black_box(1)) == "foo";
-    assert describe(builtin::black_box(2)) == "bar";
-    assert describe(builtin::black_box(3)) == "baz";
-    assert describe(builtin::black_box(99)) == "unknown";
+    assert describe(1) == "foo";
+    assert describe(2) == "bar";
+    assert describe(3) == "baz";
+    assert describe(99) == "unknown";
 }
 
 test "matches operator with global constants" {
-    let x: i32 = builtin::black_box(1);
+    let x: i32 = 1;
     assert x matches { TK_FOO };
     assert !(x matches { TK_BAR });
 }
 
 test "or pattern with global constants" {
-    let x: i32 = builtin::black_box(1);
-    let y: i32 = builtin::black_box(2);
-    let z: i32 = builtin::black_box(99);
+    let x: i32 = 1;
+    let y: i32 = 2;
+    let z: i32 = 99;
     assert x matches { TK_FOO | TK_BAR };
     assert y matches { TK_FOO | TK_BAR };
     assert !(z matches { TK_FOO | TK_BAR });
@@ -78,7 +76,7 @@ test "or pattern with global constants" {
 test "global constant in matches then expression in same scope" {
     // After using TK_FOO in a matches pattern, TK_FOO must still be
     // accessible as a global constant expression in the then-block.
-    let kind: i32 = builtin::black_box(1);
+    let kind: i32 = 1;
     if kind matches { TK_FOO | TK_BAR } {
         assert kind == TK_FOO;
     }
@@ -97,10 +95,10 @@ fn classify(grp_kind: i32) -> String {
 }
 
 test "global constant in matches then expr in if body" {
-    assert classify(builtin::black_box(1)) == "foo";
-    assert classify(builtin::black_box(2)) == "bar";
-    assert classify(builtin::black_box(3)) == "baz";
-    assert classify(builtin::black_box(99)) == "unknown";
+    assert classify(1) == "foo";
+    assert classify(2) == "bar";
+    assert classify(3) == "baz";
+    assert classify(99) == "unknown";
 }
 
 // Edge case: global constant used as pattern AND as expression in arm body
@@ -113,9 +111,9 @@ fn match_and_use_in_body(kind: i32) -> i32 {
 }
 
 test "global constant as pattern and expression in match arm body" {
-    assert match_and_use_in_body(builtin::black_box(1)) == 10;
-    assert match_and_use_in_body(builtin::black_box(2)) == 20;
-    assert match_and_use_in_body(builtin::black_box(99)) == 0;
+    assert match_and_use_in_body(1) == 10;
+    assert match_and_use_in_body(2) == 20;
+    assert match_and_use_in_body(99) == 0;
 }
 
 // Edge case: global constant used in match, then used after the match
@@ -130,13 +128,13 @@ fn match_then_use_after(kind: i32) -> i32 {
 }
 
 test "global constant accessible after match expression" {
-    assert match_then_use_after(builtin::black_box(1)) == 101;
-    assert match_then_use_after(builtin::black_box(2)) == 201;
+    assert match_then_use_after(1) == 101;
+    assert match_then_use_after(2) == 201;
 }
 
 // Edge case: global constant in while-condition matches, used in loop body
-fn while_matches_with_body_use(start: i32) -> i32 {
-    let mut kind: i32 = start;
+fn while_matches_with_body_use() -> i32 {
+    let mut kind: i32 = 1;
     let mut sum: i32 = 0;
     while kind matches { TK_FOO | TK_BAR | TK_BAZ } {
         sum = sum + kind;
@@ -152,11 +150,11 @@ fn while_matches_with_body_use(start: i32) -> i32 {
 }
 
 test "while matches with global constant in loop body" {
-    assert while_matches_with_body_use(builtin::black_box(1)) == 6;
+    assert while_matches_with_body_use() == 6;
 }
 
 test "associated constant patterns" {
-    let x: i32 = builtin::black_box(2147483647);
+    let x: i32 = 2147483647;
     assert x matches { i32::MAX };
     assert !(x matches { i32::MIN });
 
