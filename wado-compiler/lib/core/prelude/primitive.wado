@@ -567,7 +567,7 @@ impl i8 {
         return builtin::select(a < b, a, b);
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: i8, low: i8, high: i8) -> i8 {
         assert low <= high;
         return i8::min(i8::max(value, low), high);
@@ -636,7 +636,7 @@ impl u8 {
         return builtin::select(a < b, a, b);
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: u8, low: u8, high: u8) -> u8 {
         assert low <= high;
         return u8::min(u8::max(value, low), high);
@@ -757,7 +757,7 @@ impl i16 {
         return builtin::select(a < b, a, b);
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: i16, low: i16, high: i16) -> i16 {
         assert low <= high;
         return i16::min(i16::max(value, low), high);
@@ -826,7 +826,7 @@ impl u16 {
         return builtin::select(a < b, a, b);
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: u16, low: u16, high: u16) -> u16 {
         assert low <= high;
         return u16::min(u16::max(value, low), high);
@@ -895,7 +895,7 @@ impl i32 {
         return builtin::select(a < b, a, b);
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: i32, low: i32, high: i32) -> i32 {
         assert low <= high;
         return i32::min(i32::max(value, low), high);
@@ -987,7 +987,7 @@ impl u32 {
         return builtin::select(a < b, a, b);
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: u32, low: u32, high: u32) -> u32 {
         assert low <= high;
         return u32::min(u32::max(value, low), high);
@@ -1063,7 +1063,7 @@ impl i64 {
         return builtin::select(a < b, a, b);
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: i64, low: i64, high: i64) -> i64 {
         assert low <= high;
         return i64::min(i64::max(value, low), high);
@@ -1150,7 +1150,7 @@ impl u64 {
         return builtin::select(a < b, a, b);
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: u64, low: u64, high: u64) -> u64 {
         assert low <= high;
         return u64::min(u64::max(value, low), high);
@@ -1386,7 +1386,8 @@ impl f32 {
         return builtin::f32_max(x, y);
     }
 
-    /// `x` confined to `low..=high`. A NaN `x` stays NaN.
+    /// `x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
+    /// as `low > high` does.
     pub fn clamp(x: f32, low: f32, high: f32) -> f32 {
         assert low <= high;
         return f32::min(f32::max(x, low), high);
@@ -1778,7 +1779,8 @@ impl f64 {
         return builtin::f64_max(x, y);
     }
 
-    /// `x` confined to `low..=high`. A NaN `x` stays NaN.
+    /// `x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
+    /// as `low > high` does.
     pub fn clamp(x: f64, low: f64, high: f64) -> f64 {
         assert low <= high;
         return f64::min(f64::max(x, low), high);

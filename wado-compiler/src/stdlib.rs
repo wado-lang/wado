@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn import_paths_are_unique() {
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = crate::hashmap::IndexSet::default();
         for (import, _) in all_core_modules().iter().chain(all_binding_modules()) {
             assert!(seen.insert(*import), "duplicate import path {import}");
         }
@@ -345,10 +345,15 @@ mod tests {
     #[test]
     fn a_dev_build_serves_the_file_its_import_path_names() {
         for (import, _) in all_core_modules().iter().chain(all_binding_modules()) {
-            let mut file = import.replace(':', "/");
-            if !file.ends_with(".wado") {
-                file.push_str(".wado");
-            }
+            // `core:cli` names a package module, `core:kiln/types.wado` a file
+            // within one — the sub-path is the form that already carries its
+            // own file name.
+            let (package, module) = import.split_once(':').expect(import);
+            let file = if module.contains('/') {
+                format!("{package}/{module}")
+            } else {
+                format!("{package}/{module}.wado")
+            };
             let path = std::path::Path::new(STDLIB_ROOT).join(file);
             let on_disk = std::fs::read_to_string(&path).expect(import);
             assert_eq!(

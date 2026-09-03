@@ -34,7 +34,7 @@ use {
     SliceWindows,
     SliceChunks,
 } from "core:prelude/slice.wado";
-use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
+use { panic } from "core:rt";
 
 #[compiler_item("list")]
 pub struct List<T> {
@@ -49,7 +49,7 @@ impl List<T> {
 
     pub fn grow(&mut self) {
         let capacity = self.repr.len();
-        let new_capacity = i32_max(capacity * 2, 4);
+        let new_capacity = i32::max(capacity * 2, 4);
         let mut new_repr: Array<T> = builtin::array_new(new_capacity);
         builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
         self.repr = new_repr;
@@ -60,7 +60,7 @@ impl List<T> {
         if min_capacity <= capacity {
             return;
         }
-        let new_capacity = i32_max(i32_max(capacity * 2, min_capacity), 4);
+        let new_capacity = i32::max(i32::max(capacity * 2, min_capacity), 4);
         let mut new_repr: Array<T> = builtin::array_new(new_capacity);
         builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
         self.repr = new_repr;
@@ -286,7 +286,7 @@ impl List<T> {
         let capacity = self.repr.len();
         if new_used > capacity {
             builtin::cold_path();
-            let new_capacity = i32_max(new_used, capacity * 2);
+            let new_capacity = i32::max(new_used, capacity * 2);
             let mut new_repr: Array<T> = builtin::array_new(new_capacity);
             builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
             self.repr = new_repr;
@@ -385,7 +385,7 @@ impl<T: Eq> Eq for List<T> {
 
 impl<T: Ord> Ord for List<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        let min_len = i32_min(self.used, other.used);
+        let min_len = i32::min(self.used, other.used);
         for let mut i = 0; i < min_len; i += 1 {
             let a = self.repr[i];
             let b = other.repr[i];
@@ -425,7 +425,7 @@ impl List<T> {
             for let mut start = 0; start < n; start += width * 2 {
                 let mid = start + width;
                 if mid < n {
-                    let end = i32_min(start + width * 2, n);
+                    let end = i32::min(start + width * 2, n);
                     let mut i = start;
                     let mut j = mid;
                     for let mut k = start; k < end; k += 1 {

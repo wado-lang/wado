@@ -125,7 +125,7 @@ impl u128 {
         return b;
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: u128, low: u128, high: u128) -> u128 {
         assert low <= high;
         return u128::min(u128::max(value, low), high);
@@ -917,7 +917,7 @@ impl i128 {
         return b;
     }
 
-    /// `value` confined to `low..=high`.
+    /// `value` confined to `low..=high`. Traps when `low > high`.
     pub fn clamp(value: i128, low: i128, high: i128) -> i128 {
         assert low <= high;
         return i128::min(i128::max(value, low), high);

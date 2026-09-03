@@ -11,7 +11,6 @@ use { Slice } from "core:prelude/slice.wado";
 use { Array } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
-use { i32_min, i32_max } from "core:rt";
 
 /// Byte length (1–4) of the UTF-8 sequence led by `b0`, assuming valid UTF-8.
 #[inline]
@@ -488,7 +487,7 @@ impl String {
         if min_capacity <= capacity {
             return;
         }
-        self.realloc_to(i32_max(i32_max(capacity * 2, min_capacity), 8));
+        self.realloc_to(i32::max(i32::max(capacity * 2, min_capacity), 8));
     }
 
     /// Internal: reserve `n` uninitialised bytes at the end and return their offset
@@ -1353,7 +1352,7 @@ impl Ord for String {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let len_a = self.len();
         let len_b = other.len();
-        let min_len = i32_min(len_a, len_b);
+        let min_len = i32::min(len_a, len_b);
 
         let a_repr = &self.repr as &Array<u8>;
         let b_repr = &other.repr as &Array<u8>;

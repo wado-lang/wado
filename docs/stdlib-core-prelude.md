@@ -1219,7 +1219,7 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn clamp(value: i8, low: i8, high: i8) -> i8`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -1307,7 +1307,7 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn clamp(value: u8, low: u8, high: u8) -> u8`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn is_ascii_digit(&self) -> bool`
 
@@ -1433,7 +1433,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn clamp(value: i16, low: i16, high: i16) -> i16`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -1525,7 +1525,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn clamp(value: u16, low: u16, high: u16) -> u16`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -1609,7 +1609,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn clamp(value: i32, low: i32, high: i32) -> i32`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn clz(x: i32) -> i32`
 
@@ -1721,7 +1721,7 @@ Counts the number of set bits (population count).
 
 #### `pub fn clamp(value: u32, low: u32, high: u32) -> u32`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -1817,7 +1817,7 @@ Counts the number of set bits (population count).
 
 #### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn clz(x: i64) -> i64`
 
@@ -1941,7 +1941,7 @@ Counts the number of set bits (population count).
 
 #### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -2102,7 +2102,8 @@ Maximum of two values
 
 #### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
 
-`x` confined to `low..=high`. A NaN `x` stays NaN.
+`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
+as `low > high` does.
 
 #### `pub fn copysign(x: f32, y: f32) -> f32`
 
@@ -2362,7 +2363,8 @@ Maximum of two values
 
 #### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
 
-`x` confined to `low..=high`. A NaN `x` stays NaN.
+`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
+as `low > high` does.
 
 #### `pub fn copysign(x: f64, y: f64) -> f64`
 
@@ -2838,7 +2840,7 @@ The smaller of two values.
 
 #### `pub fn clamp(value: u128, low: u128, high: u128) -> u128`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn low(&self) -> u64`
 
@@ -3043,7 +3045,7 @@ The smaller of two values.
 
 #### `pub fn clamp(value: i128, low: i128, high: i128) -> i128`
 
-`value` confined to `low..=high`.
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn low(&self) -> u64`
 

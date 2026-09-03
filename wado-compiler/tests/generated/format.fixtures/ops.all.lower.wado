@@ -5983,8 +5983,42 @@ pub fn "u16^core:prelude/traits.wado/FromStr::from_str"(s: &String) -> Result<u1
     return "core::prelude/primitive.wado::u16^core:prelude/traits.wado/FromStr::from_str_range"(s, 0, s."core:prelude/string.wado/String::len"());
 }
 
+pub fn i32::max(a: i32, b: i32) -> i32 {
+    return "core::builtin::core/builtin/select<i32>"((a > b), a, b);
+}
+
 pub fn i32::min(a: i32, b: i32) -> i32 {
     return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
+}
+
+pub fn i32::clamp(value: i32, low: i32, high: i32) -> i32 {
+    __assert_0: {
+        let __cond: bool = (low <= high);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(142);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"i32::clamp", used: 10 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/primitive.wado", used: 27 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<i32> { value: 900 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: low <= high\n", used: 24 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"low: ", used: 5 });
+                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<i32> { value: low }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"high: ", used: 6 });
+                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<i32> { value: high }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    return "core::prelude/primitive.wado::i32::min"("core::prelude/primitive.wado::i32::max"(value, low), high);
 }
 
 fn i32::fmt_decimal(self: Box<i32>, f: &mut Formatter) {
@@ -9015,7 +9049,7 @@ pub fn "core:prelude/string.wado/String::grow"(self: &mut String, min_capacity: 
     if (min_capacity <= capacity) {
         return;
     }
-    self."core:prelude/string.wado/String::realloc_to"(core::rt::i32_max(core::rt::i32_max((capacity * 2), min_capacity), 8));
+    self."core:prelude/string.wado/String::realloc_to"("core::prelude/primitive.wado::i32::max"("core::prelude/primitive.wado::i32::max"((capacity * 2), min_capacity), 8));
 }
 
 fn "core:prelude/string.wado/String::internal_reserve_uninit"(self: &mut String, n: i32) -> i32 {
@@ -9215,7 +9249,7 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self: &
 pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Ord::cmp"(self: &String, other: &String) -> Ordering {
     let len_a: i32 = self."core:prelude/string.wado/String::len"();
     let len_b: i32 = other."core:prelude/string.wado/String::len"();
-    let min_len: i32 = core::rt::i32_min(len_a, len_b);
+    let min_len: i32 = "core::prelude/primitive.wado::i32::min"(len_a, len_b);
     let a_repr: &Array<u8> = &self.repr as &Array<u8>;
     let b_repr: &Array<u8> = &other.repr as &Array<u8>;
     let mut i: i32 = 0;
@@ -9932,46 +9966,6 @@ pub fn "core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Display::fmt
             };
         };
     };
-}
-
-fn i32_min(a: i32, b: i32) -> i32 {
-    return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
-}
-
-fn i32_max(a: i32, b: i32) -> i32 {
-    return "core::builtin::core/builtin/select<i32>"((a > b), a, b);
-}
-
-fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
-    __assert_0: {
-        let __cond: bool = (lo <= hi);
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(154);
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"i32_clamp", used: 9 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:rt", used: 7 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 63 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed": ", used: 2 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"i32_clamp: lo must be <= hi", used: 27 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: lo <= hi\n", used: 21 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"lo: ", used: 4 });
-                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: lo }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"hi: ", used: 4 });
-                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: hi }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
-                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    return core::rt::i32_min(core::rt::i32_max(value, lo), hi);
 }
 
 fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
@@ -11970,7 +11964,7 @@ pub fn "core:prelude/slice.wado/Slice<u8>::len"(self: &Slice<u8>) -> i32 {
 
 pub fn "core:prelude/slice.wado/Slice<u8>::to_array"(self: &Slice<u8>) -> Array<u8> {
     let len: i32 = (self.end - self.start);
-    let mut out: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(core::rt::i32_max(len, 0));
+    let mut out: Array<u8> = "core::builtin::core/builtin/array_new<u8>"("core::prelude/primitive.wado::i32::max"(len, 0));
     if (len > 0) {
         "core::builtin::core/builtin/array_copy<u8>"(&mut out, 0, self.repr, self.start, len);
     }
@@ -12343,7 +12337,7 @@ pub fn "core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKin
 
 pub fn "core:prelude/list.wado/List<u8>::grow"(self: &mut List<u8>) {
     let capacity: i32 = self.repr."Array<u8>::len"();
-    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
+    let new_capacity: i32 = "core::prelude/primitive.wado::i32::max"((capacity * 2), 4);
     let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
     "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
