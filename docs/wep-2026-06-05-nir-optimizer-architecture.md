@@ -385,23 +385,42 @@ before aliasing the same receiver. Both now read one verdict. It fires widely �
 buys nothing: the fixture corpus is WIR-identical over 1 921 goldens, and so is
 every benchmark.
 
-It buys nothing because a sibling conservatism in the same match arm subsumes
-it. Every non-builtin call sets the blanket external-writes flag, a receiver
-call included, so any loop holding one bumps the whole `mut_escaped` set's
-generation — and a read rooted at an escaped local takes the max of that. The
-per-local mark and the set-wide flag invalidate the same reads, so suppressing
-the first pays only for a receiver outside `mut_escaped`. What remains
-unmeasured is how many of the suppressed receivers are in it; that count decides
-whether the flag explains the null entirely or only mostly.
+It buys nothing because the set-wide bump subsumes it. Measured at the read: on
+`sqlite_parse` the escaped-set generation is what invalidates 66 % of field
+reads rooted at a local, on `json_twitter` 43 %; the per-local mark the receiver
+verdict suppresses decides 0.4 % and 0 %, and even those roots are escaped, so
+the read falls to the set-wide generation instead of surviving. There was no
+read for the verdict to save.
 
-- [ ] Give the blanket external-writes flag the callee's mod/ref summary. It is
-      the same unjustified conservatism one line below the one just removed, and
-      the binding one: `mod_ref::FnEffect` knows what a callee writes, while the
-      flag bumps every escaped local's generation for every non-builtin call.
-      Narrowing it is what would let the receiver verdict above reach an output,
-      and it is a precondition for the in-loop consumer work below, not an
-      alternative to it. Measure the escaped-receiver count first — it sizes the
-      prize.
+The second conservatism of the same shape is gone too: the loop summary decided
+"external write" by a builtin-only test where the straight-line walk asks the
+purity verdict, so the loop asked a strictly weaker question of the same call.
+Both now read one verdict. Pure calls are common in loop bodies — 22 % on
+`sqlite_parse` — and it still buys nothing, because the summary is a union over
+the whole body and an impure call sits beside them in nearly every loop. That
+union is not a conservatism to remove: the body runs many times, so every write
+in it must be assumed to precede every read. Per-loop summarization is sound
+and necessary, and the ceiling is its granularity.
+
+So the escaped-set bump is where the remaining precision is, and it is
+overwhelmingly a _correct_ invalidation at the wrong granularity: a `&mut self`
+method calling `self.advance()` really does mutate `self`, and the bump kills
+every field of `self` where `advance` writes one. The prize is field-granular.
+
+- [ ] Field-granular receiver write sets. `compute_receiver_mutating` already
+      fixpoints "writes through param 0" as a bool; widen it to the set of
+      direct fields written (`self.f = …` contributes `f`; a deeper projection,
+      `*self = …`, a `&mut` hand-out or a `mut` argument contributes Top), and
+      at a call with a bare-local receiver bump those slots instead of the
+      local. The set-wide bump must then exempt that receiver, which is sound
+      exactly when the receiver is the callee's only path to it — not
+      `untrackable`, and no other argument in its alias class — since only then
+      is the param-0 write set complete. An O(1) exemption per local suffices:
+      record the escaped generation before and after the call, and let a read
+      of that local use the before-value while the after-value is still the
+      current one; the next unrelated impure call advances past it and the
+      exemption expires on its own. Unmeasured: what share of in-loop impure
+      calls carry a bare-local receiver, which is what this reaches.
 
 - [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
       value runs after the fixed-point loop, so the passes inside it still see
