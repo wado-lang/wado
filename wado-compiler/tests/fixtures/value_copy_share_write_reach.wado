@@ -61,6 +61,24 @@ fn through_a_call_field(o: &mut Outer) -> i32 {
     return snap.len();
 }
 
+struct Cell {
+    v: i32,
+}
+
+fn bump_via_index(arr: &mut Array<Cell>) {
+    let r = builtin::array_get_ref_mut(arr, 0);
+    r.v = r.v + 1;
+}
+
+// The write is reached only through an index off the root itself — no field
+// selector marks the array's own type — so the write must still be flagged
+// against the array, not only the element type it drills into.
+fn through_an_indexed_element(arr: &mut Array<Cell>) -> i32 {
+    let snap = builtin::array_get_value(arr, 0);
+    bump_via_index(arr);
+    return snap.v;
+}
+
 struct Counter {
     n: i32,
 }
@@ -106,6 +124,12 @@ export fn run() {
     let field_write = through_a_call_field(&mut o3);
     assert field_write == 1;
     assert o3.inner.a.len() == 2;
+
+    let mut c: Array<Cell> = builtin::array_new(1);
+    builtin::array_set(&mut c, 0, Cell { v: 1 });
+    let via_index = through_an_indexed_element(&mut c);
+    assert via_index == 1;
+    assert builtin::array_get_value(&c, 0).v == 2;
 }
 
 __DATA__

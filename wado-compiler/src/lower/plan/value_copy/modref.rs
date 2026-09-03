@@ -228,10 +228,20 @@ impl Walker<'_> {
             self.writes.opaque |= matches!(names, Names::Unknown);
             return;
         };
-        let named_a_field = place
+        // An `Index` or `Variant` step names no field of its own — the
+        // caller-visible type at that step has no `(owner, index)` key —
+        // so a `Field` past one cannot be trusted as this write's sole key:
+        // `arr[i].v = …` off a lent `Array<Cell>` root must still mark the
+        // array itself written, not only `Cell`'s field.
+        let field_addressable = !place
             .selectors
             .iter()
-            .any(|s| matches!(s, Selector::Field { .. }));
+            .any(|s| matches!(s, Selector::Index | Selector::Variant(_)));
+        let named_a_field = field_addressable
+            && place
+                .selectors
+                .iter()
+                .any(|s| matches!(s, Selector::Field { .. }));
         if named_a_field {
             if self.reachable_from_caller(names) {
                 for selector in &place.selectors {
@@ -275,14 +285,25 @@ impl Walker<'_> {
             self.writes.opaque |= matches!(names, Names::Unknown);
             return;
         };
-        let fields: Vec<(TypeId, u32)> = place
+        // Same rule as `record`: an `Index` or `Variant` step leaves no
+        // caller-visible key of its own, so a `Field` past one cannot stand
+        // in for it — fall through to the whole-root write below.
+        let field_addressable = !place
             .selectors
             .iter()
-            .filter_map(|s| match s {
-                Selector::Field { owner, index } => Some((*owner, *index)),
-                Selector::Variant(_) | Selector::Index => None,
-            })
-            .collect();
+            .any(|s| matches!(s, Selector::Index | Selector::Variant(_)));
+        let fields: Vec<(TypeId, u32)> = if field_addressable {
+            place
+                .selectors
+                .iter()
+                .filter_map(|s| match s {
+                    Selector::Field { owner, index } => Some((*owner, *index)),
+                    Selector::Variant(_) | Selector::Index => None,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         if !fields.is_empty() {
             if self.reachable_from_caller(names) {
                 self.pending.push(PendingProjection {
