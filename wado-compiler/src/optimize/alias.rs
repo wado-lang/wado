@@ -357,6 +357,9 @@ pub(super) struct CallImmutability<'a> {
     /// *proven*, not unknown). A callee that does not resolve here (extern /
     /// builtin / unstamped) stays conservatively mutating.
     has_body: SecondaryMap<FuncId, bool>,
+    /// Callees that write no tracked slot whatever their arguments; the set
+    /// [`NirPackage::pure_builtin_callee_ids`] defines.
+    effect_free: IndexSet<FuncId>,
 }
 
 impl<'a> CallImmutability<'a> {
@@ -389,6 +392,7 @@ impl<'a> CallImmutability<'a> {
             memo: std::cell::RefCell::default(),
             receiver_mutating,
             has_body,
+            effect_free: project.pure_builtin_callee_ids(),
         }
     }
 
@@ -462,21 +466,14 @@ impl<'a> CallImmutability<'a> {
 
 use super::arena_query::storage_root;
 
-/// The per-call verdicts the value-graph builder needs, both read off one walk.
-/// They nest — `pure` implies `receiver_immutable` — so computing them apart
-/// would ask [`method_mutates_receiver`] the same question twice and let the two
-/// answers drift.
+/// The per-call verdicts the value-graph builder reads, from one walk. `pure`
+/// implies `receiver_immutable`.
 pub(super) struct CallVerdicts {
-    /// Calls that mutate no caller local: a free call, or one with a `&self`
-    /// receiver, whose every argument is safe — not `mut`, an immutable borrow,
-    /// or a call-immutable value the callee cannot reach back through. The value
-    /// graph skips the per-call bump for these, so `arr.len()` does not split
-    /// `arr.used`'s version. An unknown callee stays impure for a receiver.
+    /// Calls that mutate no caller local: no `mut` argument, every by-value
+    /// argument call-immutable. An unknown callee stays impure for a receiver.
     pub pure: IndexSet<crate::nir_arena::ExprId>,
-    /// Calls whose callee provably cannot write through the receiver, whatever
-    /// the other arguments do. A loop containing one does not have to treat the
-    /// receiver as borrowed for the whole body, which is what keeps a
-    /// `self.field` read invariant across a `self.helper()`.
+    /// Calls whose callee cannot write through the receiver, whatever the other
+    /// arguments do.
     pub receiver_immutable: IndexSet<crate::nir_arena::ExprId>,
 }
 
@@ -525,6 +522,13 @@ pub(super) fn call_verdicts(
         else {
             return;
         };
+        // An effect-free callee is pure whatever it is handed: it writes no slot
+        // the caller can read afterwards, by construction or by never returning.
+        if call_immutability.effect_free.contains(func_id) {
+            out.receiver_immutable.insert(e);
+            out.pure.insert(e);
+            return;
+        }
         // A receiver is judged by the callee's declared `self` mode, which
         // stays conservative for a callee absent from `first_param_types`;
         // `arg_safe` alone would clear an unknown one.

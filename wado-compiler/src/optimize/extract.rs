@@ -436,9 +436,7 @@ struct FreezeCtx<'a> {
 }
 
 /// Where a freeze sits relative to the passes that relocate operands. There is
-/// no in-loop phase: a freeze between them would have to anchor every
-/// local-naming value in a `let _av` to survive the relocation, which bought
-/// nothing when measured (WEP: NIR Optimizer Architecture).
+/// no in-loop phase; the WEP records why.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum FreezePhase {
     /// Before the loop. Plants context-free values only.

@@ -249,15 +249,11 @@ pub struct Engine<'a> {
     /// passes consuming [`Engine::loop_entry_value`] must call
     /// [`Engine::set_param_locals`] first.
     param_locals: Vec<u32>,
-    /// `ExprId` indices of calls that mutate no caller local
-    /// ([`crate::optimize::alias::call_verdicts`]); the build skips their
-    /// per-call `mut_escaped` bump. Empty (conservative — every call bumps)
-    /// unless a pass supplies it via [`Engine::set_call_verdicts`] before the
-    /// first value query.
+    /// Calls that mutate no caller local; the build skips their per-call
+    /// `mut_escaped` bump. Empty is conservative.
     pure_calls: IndexSet<crate::nir_arena::ExprId>,
-    /// `ExprId` indices of calls whose callee cannot write through the receiver,
-    /// from the same walk as `pure_calls`. A loop containing one does not treat
-    /// the receiver as borrowed for its whole body. Empty is conservative.
+    /// Calls whose callee cannot write through the receiver. Empty is
+    /// conservative.
     receiver_immutable_calls: IndexSet<crate::nir_arena::ExprId>,
     /// Type table for the `ValueGraph` builder's constant folding of pure
     /// arithmetic. `None` (the default) disables folding. Set via
@@ -615,13 +611,8 @@ impl<'a> Engine<'a> {
         self.param_locals = locals;
     }
 
-    /// Record the per-call verdicts the build reads: the calls that mutate no
-    /// caller local (whose per-call `mut_escaped` bump is skipped) and those
-    /// whose callee cannot write through the receiver (which a loop does not
-    /// treat as borrowing it). Taken together because one walk decides both, and
-    /// answering either alone lets the two drift. Supply before the first value
-    /// query (the build is lazy); the persisted config carries them so the
-    /// verify oracle rebuilds consistently.
+    /// Record the per-call verdicts the build reads. Supply before the first
+    /// value query; the build is lazy.
     pub fn set_call_verdicts(
         &mut self,
         pure_calls: IndexSet<crate::nir_arena::ExprId>,

@@ -222,7 +222,8 @@ pub fn build(
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
         b.pure_calls.clone_from(pure_calls);
         b.pure_builtin_callees.clone_from(pure_builtin_callees);
-        b.receiver_immutable_calls.clone_from(receiver_immutable_calls);
+        b.receiver_immutable_calls
+            .clone_from(receiver_immutable_calls);
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.loop_entry_values)
@@ -469,16 +470,12 @@ struct Builder<'a> {
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
     pure_calls: crate::hashmap::IndexSet<ExprId>,
-    /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …): a
-    /// call to one writes no heap, so a loop body that only calls such
-    /// intrinsics does not invalidate forwarded field versions. Empty is
-    /// conservative (every call is a heap write). See [`is_builtin_pure_call`].
+    /// Callees that write no tracked `(root, field)` slot: an intrinsic below
+    /// the field layer, a value-copy helper, or a bodied function that never
+    /// returns. Empty is conservative.
     pure_builtin_callees: crate::hashmap::IndexSet<FuncId>,
-    /// `ExprId` indices of `recv.m(…)` calls whose callee provably cannot write
-    /// through the receiver, so the call does not borrow it for the loop's
-    /// heap-effect summary. Same verdict `build_alias_info` uses to decide
-    /// whether to alias that receiver, so the two analyses agree by
-    /// construction. Empty is conservative (every receiver is borrowed).
+    /// Calls whose callee cannot write through the receiver, so a loop does not
+    /// borrow it. Empty is conservative.
     receiver_immutable_calls: crate::hashmap::IndexSet<ExprId>,
 }
 
@@ -901,8 +898,11 @@ impl<'a> Builder<'a> {
                     // Invalidate only what the rhs writes, not a blanket
                     // `bump_all`: a pure rhs leaves unrelated fields intact.
                     if let Some(re) = right.as_expr() {
-                        let eff =
-                            collect_node_heap_effects(self.body, &self.call_facts(), NodeRef::Expr(re));
+                        let eff = collect_node_heap_effects(
+                            self.body,
+                            &self.call_facts(),
+                            NodeRef::Expr(re),
+                        );
                         self.apply_loop_heap_effects(&eff);
                     }
                     rhs
@@ -1809,8 +1809,7 @@ impl<'a> Builder<'a> {
     /// pre-loop version, so a store before a builtin-only loop still forwards.
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let writes = writes_of_block(self.body, body_block, &mut self.block_writes);
-        let heap_effects =
-            collect_loop_heap_effects(self.body, &self.call_facts(), body_block);
+        let heap_effects = collect_loop_heap_effects(self.body, &self.call_facts(), body_block);
         // Snapshot before the reassigned-local opaques below overwrite the
         // written locals' pre-loop values.
         self.fresh_invalidations.clear();
@@ -1879,10 +1878,8 @@ impl<'a> Builder<'a> {
         if eff.has_external_writes {
             self.heap_state.bump_escaped();
         } else if eff.has_pure_calls {
-            // No set-wide bump: a pure call mutates no caller local. It still
-            // reaches the `untrackable` ones, which are too few to justify the
-            // shared version — [`Self::bump_call_effects`] splits it the same
-            // way for a single call.
+            // A pure call still reaches the `untrackable` locals; bump those
+            // alone, as `bump_call_effects` does for one call.
             for i in 0..self.mut_escaped_sorted.len() {
                 let l = self.mut_escaped_sorted[i];
                 if self.untrackable.contains(&l) {
@@ -1946,12 +1943,8 @@ fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
         .any(|c| block_breaks_to_node(body, c, label))
 }
 
-/// The per-call verdicts the loop summary reads. Bundled because they are one
-/// walk's output ([`crate::optimize::alias::call_verdicts`], plus the builtin
-/// set) and because the summary must ask the same questions
-/// [`Builder::bump_call_effects`] asks of a single call — a loop is that call
-/// repeated, so a weaker predicate here silently costs precision the
-/// straight-line path already has.
+/// The per-call verdicts the loop summary reads, bundled so it asks the same
+/// questions [`Builder::bump_call_effects`] asks of one call.
 struct CallFacts<'a> {
     /// Builtin intrinsics operating below the struct-field layer.
     pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
@@ -1971,15 +1964,11 @@ struct LoopHeapEffects {
     /// `&mut local`, `&mut local.field`, a `&mut` call arg, or a method
     /// receiver — the callee may store through the reference.
     mut_borrowed: crate::hashmap::IndexSet<u32>,
-    /// An impure call, indirect / CM call, or opaque-target store (`(*p).f`,
-    /// `arr[i]`, deep field) that may mutate aliased state from outside the
-    /// straight-line walk.
+    /// An impure call, indirect or CM call, or opaque-target store that may
+    /// mutate aliased state.
     has_external_writes: bool,
-    /// A call that mutates no caller local still reaches an `untrackable` one —
-    /// a local stashed across a `stores` callee, which no argument list names.
-    /// Kept apart from [`Self::has_external_writes`] so a loop of pure calls
-    /// invalidates those locals without the set-wide bump, exactly as
-    /// [`Builder::bump_call_effects`] does for one call.
+    /// A pure call, which still reaches the `untrackable` locals. Kept apart so
+    /// a loop of pure calls skips the set-wide bump.
     has_pure_calls: bool,
 }
 
@@ -2017,11 +2006,7 @@ fn collect_loop_heap_effects(
 /// The heap-write effects of a node's subtree, so a caller can invalidate
 /// exactly what it writes rather than `bump_all`. Used by `walk_loop` (body
 /// block) and the short-circuit arm (conditional rhs).
-fn collect_node_heap_effects(
-    body: &Body,
-    facts: &CallFacts<'_>,
-    node: NodeRef,
-) -> LoopHeapEffects {
+fn collect_node_heap_effects(body: &Body, facts: &CallFacts<'_>, node: NodeRef) -> LoopHeapEffects {
     let mut eff = LoopHeapEffects::default();
     collect_loop_heap_node(body, facts, node, &mut eff);
     eff
@@ -2098,10 +2083,7 @@ fn record_loop_heap_write(
             has_receiver,
             ..
         } => {
-            // A receiver is borrowed for the whole call unless the callee
-            // provably cannot write through it — the same verdict that decides
-            // whether `build_alias_info` aliases the receiver, so a call the
-            // alias analysis leaves unaliased does not get borrowed here.
+            // A receiver is borrowed unless the callee cannot write through it.
             let receiver_borrowed = *has_receiver && !facts.receiver_immutable.contains(&e);
             for (i, arg) in args.iter().enumerate() {
                 let borrowed = arg.is_mut || (receiver_borrowed && i == 0);
@@ -2112,10 +2094,8 @@ fn record_loop_heap_write(
                     eff.mut_borrowed.insert(*index);
                 }
             }
-            // A builtin below the field layer writes no tracked slot at all. A
-            // call proven to mutate no caller local writes no *escaped* slot,
-            // but still reaches the `untrackable` ones — the same split
-            // `bump_call_effects` makes for one call. Anything else is opaque.
+            // A builtin writes no tracked slot; a pure call writes no escaped
+            // slot but reaches the `untrackable` ones; anything else is opaque.
             if !is_builtin_pure_call(facts.pure_builtin, *func_id) {
                 if facts.pure.contains(&e) {
                     eff.has_pure_calls = true;
@@ -2417,11 +2397,8 @@ mod tests {
         (block, call)
     }
 
-    /// A receiver is borrowed for the whole call only when the callee can write
-    /// through it. Marking it unconditionally bumps the receiver's `per_local`
-    /// generation, which kills every `self.field` invariance in a loop that
-    /// calls any method on `self` — while `build_alias_info` has already
-    /// declined to alias that same receiver. The two have to agree.
+    /// A callee that cannot write through the receiver does not borrow it for
+    /// the loop; an unknown callee still does.
     #[test]
     fn receiver_immutable_call_does_not_borrow_its_receiver() {
         let mut body = Body::empty();
@@ -2440,9 +2417,8 @@ mod tests {
         assert!(eff.mut_borrowed.contains(&0));
     }
 
-    /// Receiver-immutability says nothing about the other arguments, so it must
-    /// not clear the blanket fallback that covers the shapes the bare-`Local`
-    /// mark misses. Only a purity verdict over every argument may.
+    /// Receiver immutability says nothing about the other arguments, so it does
+    /// not clear the external-writes fallback; only the purity verdict may.
     #[test]
     fn receiver_immutable_call_still_reports_external_writes() {
         let mut body = Body::empty();
@@ -2453,11 +2429,8 @@ mod tests {
         assert!(eff.has_external_writes);
     }
 
-    /// A loop asks the same question of a call that the straight-line walk
-    /// does. `bump_call_effects` skips the set-wide bump for a call that mutates
-    /// no caller local; the loop summary used a strictly weaker builtin-only
-    /// test, so one ordinary pure call in a loop invalidated every escaped
-    /// local's fields.
+    /// A pure call sets no external write, and still reaches the `untrackable`
+    /// locals.
     #[test]
     fn pure_call_in_a_loop_writes_no_escaped_state() {
         let mut body = Body::empty();

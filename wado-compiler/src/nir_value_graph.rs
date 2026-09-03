@@ -657,16 +657,10 @@ impl ValuePool {
         self.opaque_sources.get(&opaque).copied()
     }
 
-    /// A stable `Opaque(Local idx)` for `idx`, the same value on every call.
-    /// Models "the value of `idx`", so two reads of the same local — or two
-    /// field copies of the same source — share an identity.
-    ///
-    /// The id is version-free: it stands for every assignment of the local at
-    /// once. So the caller owes a proof that there is only one, and the two that
-    /// discharge it are [`crate::nir_engine::Engine::local_has_one_version`] at
-    /// a value query and `extract`'s equivalent at a freeze. Calling this
-    /// without one merges reads that denote different values, which is the
-    /// miscompile recorded under "Measured dead ends" in WEP 2026-06-05.
+    /// A stable `Opaque(Local idx)`, the same value on every call. It is
+    /// version-free, so the caller owes a single-version proof
+    /// ([`crate::nir_engine::Engine::local_has_one_version`]); without one, two
+    /// reads that denote different values share an id.
     pub fn canonical_local(&mut self, idx: u32, ty: TypeId) -> ValueId {
         if let Some(&v) = self.canonical_locals.get(&idx) {
             return v;
