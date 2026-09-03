@@ -392,22 +392,39 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 .chain(func.locals.iter().map(|l| l.type_id))
                 .any(|tid| value_copy::needs_value_copy(tid, &tt))
         };
-        let move_eligible = if needs_copy_analysis {
+        // One resolver for the body, shared by every question about what an
+        // expression names: the ownership walk and the reference-root table.
+        let (ownership, ref_targets) = if needs_copy_analysis {
+            let type_table = base.type_table.borrow();
+            let resolver = value_copy::place::Resolver::new(
+                func,
+                &type_table,
+                &base.value_copy.return_paths,
+                &base.value_copy.returns_owned,
+            );
             let oracle = value_copy::ownership::OwnedCalls::new(
                 &base.value_copy.returns_owned,
                 &base.value_copy.returns_self_projection,
             )
             .with_indirect(&base.value_copy.indirect_owned_returns);
-            value_copy::last_use::compute_move_eligible(
-                func,
-                &oracle,
-                &base.type_table.borrow(),
-                &base.value_copy.stored_params,
-                &base.value_copy.mut_receiver_methods,
+            (
+                value_copy::last_use::analyze_ownership(
+                    func,
+                    &oracle,
+                    &type_table,
+                    &resolver,
+                    base.value_copy,
+                ),
+                value_copy::last_use::compute_ref_targets(func, &resolver),
             )
         } else {
-            value_copy::last_use::MoveEligible::default()
+            (
+                value_copy::last_use::Ownership::default(),
+                value_copy::last_use::RefTargets::default(),
+            )
         };
+        let move_eligible = ownership.move_eligible;
+        let share_eligible_locals = ownership.share_eligible;
         let moved_roots = if needs_copy_analysis {
             value_copy::last_use::compute_moved_roots(func, &move_eligible, func_moved_spans)
         } else {
@@ -415,31 +432,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         };
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
-        let ref_targets = if needs_copy_analysis {
-            value_copy::last_use::compute_ref_targets(
-                func,
-                &base.type_table.borrow(),
-                &base.value_copy.return_paths,
-                &base.value_copy.returns_owned,
-            )
-        } else {
-            value_copy::last_use::RefTargets::default()
-        };
-        let share_eligible_locals = if needs_copy_analysis {
-            value_copy::last_use::compute_share_eligible(
-                func,
-                &move_eligible_locals,
-                &base.value_copy.mut_receiver_methods,
-                &base.value_copy.ref_receiver_methods,
-                &base.value_copy.returns_receiver_alias,
-                &base.value_copy.mod_ref,
-                &base.type_table.borrow(),
-                &base.value_copy.return_paths,
-                &base.value_copy.returns_owned,
-            )
-        } else {
-            IndexSet::default()
-        };
         let alias_components = if needs_copy_analysis {
             value_copy::last_use::AliasComponents::build(func)
         } else {

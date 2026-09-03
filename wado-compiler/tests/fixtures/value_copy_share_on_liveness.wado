@@ -1,0 +1,61 @@
+// Sharing is keyed on liveness (WEP 2026-05-21, "Sharing"): a write conflicts
+// with a read-only binding only where that binding is still live. A binding
+// whose last read precedes the write needs no defensive copy, though a walk that
+// ignores liveness sees the write anywhere in the body and refuses the binding.
+//
+// `value_copy_elide_same_field_mut_kept` is the counterpart: the same write with
+// the binding still live keeps its copy.
+
+struct Store {
+    rows: List<List<i32>>,
+}
+
+impl Store {
+    // `row` is read out before the write to the same element and dead after it.
+    fn len_then_mutate(&mut self) -> i32 {
+        let row = self.rows[0];
+        let n = row.len();
+        self.rows[0].push(99);
+        return n;
+    }
+}
+
+variant Slot {
+    Filled(List<i32>),
+    Empty,
+}
+
+// The scrutinee temp a by-value arm binding needs is dead before the write, so
+// it shares the place it was hoisted out of.
+fn filled_len(slot: &mut Slot) -> i32 {
+    let mut n = 0;
+    match *slot {
+        Filled(v) => {
+            n = v.len();
+        }
+        Empty => {}
+    }
+    if let Filled(w) = slot {
+        w.push(9);
+    }
+    return n;
+}
+
+export fn run() {
+    let mut s = Store { rows: [[1, 2, 3]] };
+    let n = s.len_then_mutate();
+    let after = s.rows[0].len();
+    assert n == 3;
+    assert after == 4;
+
+    let mut slot = Slot::Filled([1, 2]);
+    let filled = filled_len(&mut slot);
+    assert filled == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$"],
+    "wir_not_expect:O2": ["array_clone"]
+}
