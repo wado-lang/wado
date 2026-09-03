@@ -265,6 +265,10 @@ pub struct Program {
     /// What each module may name, which gates the candidates of a call made
     /// there.
     pub scopes: IndexMap<ModuleId, ModuleScope>,
+    /// The declaration a tuple instantiates. An impl spells a tuple `[..T]`, so
+    /// both sides lower to [`SolverType::Tuple`] rather than to a `Decl`, and a
+    /// fact stated of that declaration needs this to reach an instance.
+    pub tuple: Option<TypeDeclId>,
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`

@@ -3,7 +3,7 @@
 
 use super::program::{
     AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, Program, RefRule,
-    SolverType, TraitDeclId,
+    SolverType, TraitDeclId, TypeDeclId,
 };
 
 /// A bound that holds, and the bodies its answer owes.
@@ -72,8 +72,8 @@ impl Query<'_> {
         {
             return Some(Holds::default());
         }
-        if let SolverType::Decl(head, _) = ty
-            && let Some(fact) = program.facts.get(&(*head, trait_))
+        if let Some(head) = fact_head(program, ty)
+            && let Some(fact) = program.facts.get(&(head, trait_))
             && fact
                 .visible_from
                 .as_ref()
@@ -252,6 +252,17 @@ impl Binding {
             Self::One(ty) => ty.clone(),
             Self::Pack(elems) => SolverType::Tuple(elems.clone()),
         }
+    }
+}
+
+/// The declaration a type instantiates, which a fact is stated of. A tuple is
+/// an instance of the tuple declaration and lowers to its own shape rather than
+/// to a `Decl`, because an impl spells one `[..T]`.
+fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
+    match ty {
+        SolverType::Decl(head, _) => Some(*head),
+        SolverType::Tuple(_) => program.tuple,
+        SolverType::Param(_) | SolverType::Pack(_) | SolverType::Ref { .. } => None,
     }
 }
 

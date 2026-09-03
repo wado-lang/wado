@@ -418,6 +418,7 @@ impl SolverBridge {
         let mut program = Program::default();
         let table = tysys.type_table.borrow();
         lowering.tuple = table.compiler_item_def(CompilerItem::Tuple);
+        program.tuple = lowering.tuple.map(|def| lowering.type_decl(def));
         Self::intern_declarations(tysys, &mut lowering);
         let derivation_sources = Self::derivation_sources(tysys);
         lower_impls(
@@ -769,6 +770,20 @@ impl SolverBridge {
             fact(declared(def), display);
         }
 
+        // A struct every one of whose fields has a default derives `Default`
+        // from the defaults alone, so the bound holds with no impl written and
+        // with no member's own `Default` asked for. A generic one does not:
+        // a default is elaborated against the declaration, not an instance.
+        let default = trait_of(CompilerItem::Default);
+        for (&def, info) in tysys.all_struct_fields.iter() {
+            if !info.fields.is_empty()
+                && info.type_param_type_ids.is_empty()
+                && info.field_defaults.iter().all(Option::is_some)
+            {
+                fact(declared(def), default);
+            }
+        }
+
         // `Ref` is whether a reference to a type stands in for the type itself.
         // `RefMut` is the same, minus the shapes a mutable reference cannot
         // stand in for — a variant, whose case a write could change.
@@ -784,6 +799,11 @@ impl SolverBridge {
             fact(head, ref_);
             fact(head, ref_mut);
         }
+        // A tuple is an instance of its own declaration and stands in for
+        // itself through a reference, as the struct it is.
+        let tuple = lowering.tuple.map(|def| lowering.declared_type(def));
+        fact(tuple, ref_);
+        fact(tuple, ref_mut);
         // A newtype takes both from its base. An `enum`, `flags` or `resource`
         // has neither, so nothing is stated for one.
         for (def, base) in newtype_decls(tysys, table) {
