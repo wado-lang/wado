@@ -365,30 +365,30 @@ are field loads and call results — and a field read is keyed on the heap versi
 at its point, which no query-time re-derivation supplies. The builder is the
 only source, through the graph build or a scratch re-walk.
 
-A consumer has to want it. The candidate is hoisting a loop-invariant field
-load, which no pass does: LICM's structural path is deliberately
-value-graph-free and its value path excludes field reads. Surveyed, in-loop
-field reads that are provably invariant are 2.7 % and 7.1 % on the two
-benchmarks — too few to pay for maintaining promoted operands across inlining
-and SROA, which an in-loop freeze would need.
+A consumer has to want it. The candidate was hoisting a loop-invariant field
+load, and no value-graph consumer does it: LICM's value path excludes field
+reads, and its structural path, which does hoist them, is deliberately
+value-graph-free — so the one pass that wants the fact derives it without
+asking. Surveyed, in-loop field reads that are provably invariant are 2.7 % and
+7.1 % on the two benchmarks — too few to pay for maintaining promoted operands
+across inlining and SROA, which an in-loop freeze would need.
 
-Two notes for whoever revives this. The invariance test is free: every slot a
+One note for whoever revives this. The invariance test is free: every slot a
 loop may write is bumped before the body walk and versions are monotonic, so a
-read below the loop-entry watermark is invariant. And what holds that 2.7 % down
-is upstream — a call's receiver is marked mutably borrowed whether or not the
-callee can mutate it, so one `self.helper()` kills every `self.field` invariance
-in a loop.
+read below the loop-entry watermark is invariant.
 
-- [ ] Give the loop heap-effect collection the callee immutability the optimizer
-      already computes elsewhere. It marks a call's receiver mutably borrowed
-      whether or not the callee can mutate it, while the alias and mod/ref
-      analyses know the answer and the builder is handed only the pure builtins.
-      Raises the precision of store-load forwarding, field promotion, and
-      condition implication at once, and touches no part of the anchor rule —
-      measure it before anything else here. One caveat the code carries: the
-      unconditional mark is precise only for a bare local argument, every other
-      shape being covered by the blanket external-writes fallback. That fallback
-      has to stay.
+What used to hold that 2.7 % down was upstream, and is fixed: the loop
+heap-effect collection marked a call's receiver mutably borrowed whether or not
+the callee could mutate it, disagreeing with the alias analysis beside it, which
+asks that very question before aliasing the same receiver. Both now read one
+verdict. It bought no output: the fixture corpus is WIR-identical over 1 921
+goldens, and so is every benchmark. The reason is this section's other half —
+still no consumer. A field read of a reference parameter across an immutable
+call in a loop is already hoisted by LICM's structural path, which never asks
+the value graph, and the value-side consumers do not reach the shape at all,
+because a local struct is scalarized by SROA and a small callee is gone to the
+inliner before either matters. So the precision is real and unclaimed, and the
+consumer, not the precision, is what to build next.
 
 - [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
       value runs after the fixed-point loop, so the passes inside it still see
