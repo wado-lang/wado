@@ -109,8 +109,8 @@ enum CalleeIdentKind<'a> {
     /// parameter currently bound to a concrete type. Holds the fully
     /// resolved `Concrete::suffix` name.
     Rewritten(String),
-    /// A bare case call (`Some(x)`), the walk having answered the site with
-    /// the case. `owner` is the variant declaring it and `spelled` its
+    /// A bare case call (`Some(x)`), the expected type having supplied the
+    /// case. `owner` is the variant declaring it and `spelled` its
     /// `Variant::Case` form, so the qualified constructor path serves it.
     Case {
         owner: crate::defs::DefId,
@@ -280,10 +280,7 @@ impl TypeSystem {
         ident: &'a ast::IdentExpr,
     ) -> CalleeIdentKind<'a> {
         let Some(pos) = ident.name.find("::") else {
-            return match self.bare_case_at(ident.id) {
-                Some((owner, spelled)) => CalleeIdentKind::Case { owner, spelled },
-                None => CalleeIdentKind::AsIs(ident),
-            };
+            return CalleeIdentKind::AsIs(ident);
         };
         let prefix = &ident.name[..pos];
         let suffix = &ident.name[pos + 2..];
@@ -479,7 +476,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
-        let callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
+        let mut callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
+        // A bare case constructs (`Some(x)`) only where the expected type
+        // supplies it, and then ahead of any function of that name.
+        if let CalleeIdentKind::AsIs(bare) = callee_kind
+            && !bare.name.contains("::")
+        {
+            match self.bare_case_in(expected_type, &bare.name) {
+                Some((owner, spelled)) => {
+                    self.record_bare_case(bare.id, owner);
+                    callee_kind = CalleeIdentKind::Case { owner, spelled };
+                }
+                None => {
+                    if self.bare_case_needs_context(bare, expected_type) {
+                        return TypeTable::ERROR;
+                    }
+                }
+            }
+        }
 
         // `Trait::method(recv, args…)` — the trait-qualified (UFCS) call form
         // (WEP 2026-07-31). Routed before the argument walk below because the

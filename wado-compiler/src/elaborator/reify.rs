@@ -441,16 +441,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// A `Type::Case` identifier as the type declaring the case and the case's
-    /// spelling: `Color::Red` at its own segments, a bare `Red` as the walk
-    /// answered it.
+    /// spelling: `Color::Red` at its own segments, a bare `Red` as annotate
+    /// read it off the expected type.
     fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<crate::defs::DefId>, String)> {
-        match self.tysys.bare_case_at(ident.id) {
-            Some((owner, spelled)) => Some((Some(owner), spelled)),
-            None => ident
-                .name
-                .contains("::")
-                .then(|| (None, ident.name.clone())),
+        if let Some(&owner) = self.sem.types.bare_cases.get(&ident.id) {
+            return Some((Some(owner), self.tysys.qualified_case(owner, &ident.name)));
         }
+        ident
+            .name
+            .contains("::")
+            .then(|| (None, ident.name.clone()))
     }
 
     /// The symbol row behind a reference site — see

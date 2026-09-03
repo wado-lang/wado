@@ -342,6 +342,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A bare case (`Red`) where no expected type supplies it: the type name
+    /// may be omitted only where the context says which type is meant.
+    BareCaseNeedsContext {
+        case: String,
+        /// The `Type::Case` spelling the site needs.
+        qualified: String,
+        /// The expected type, when there is one and it has no such case.
+        expected: Option<String>,
+        span: Span,
+    },
+
     /// Invalid assignment target (not a valid l-value)
     CannotAssign {
         message: String,
@@ -1135,6 +1146,23 @@ impl TypeError {
             TypeError::CannotInferType { message, span } => {
                 (Code::TypeMismatch, message.clone(), *span)
             }
+            TypeError::BareCaseNeedsContext {
+                case,
+                qualified,
+                expected,
+                span,
+            } => (
+                Code::TypeMismatch,
+                match expected {
+                    Some(expected) => format!(
+                        "`{case}` is a case, and the expected type `{expected}` has none by that name; write `{qualified}`"
+                    ),
+                    None => format!(
+                        "`{case}` is a case, and nothing here says of which type; write `{qualified}`"
+                    ),
+                },
+                *span,
+            ),
 
             TypeError::CannotAssign { message, span } => (
                 Code::ImmutableAssignment,

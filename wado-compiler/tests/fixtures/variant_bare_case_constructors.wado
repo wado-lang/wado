@@ -1,7 +1,7 @@
-// A case is reachable unqualified wherever its type is in scope, in value
-// position, so a bare case constructs as it matches: `Circle(r)` for a
-// variant declared here, `Leaf` for an imported one, `Red` for an enum, and
-// the prelude's `Some` / `None` / `Ok` / `Err` by the same rule. The payload
+// A case may be written without its type name only where the expected type
+// supplies it: an annotation, a parameter, a return type, a payload. One rule
+// serves a variant declared here (`Circle(r)`), an imported one (`Leaf`), an
+// enum (`Red`), and the prelude's `Some` / `None` / `Ok` / `Err`. The payload
 // is typed from the expected type and literals coerce as through
 // `Option::Some`.
 
@@ -50,10 +50,10 @@ export fn run() {
     } else {
         panic("parse");
     }
-    let inferred = Some("s");
+    let inferred: Option<String> = Some("s");
     assert inferred.unwrap() == "s";
 
-    let circle = Circle(2.0);
+    let circle: Shape = Circle(2.0);
     let dot: Shape = Dot;
     if let Circle(r) = circle {
         assert r == 2.0;
@@ -62,14 +62,14 @@ export fn run() {
     }
     assert dot == Shape::Dot;
 
-    let branch = Branch(3);
+    let branch: FieldKind = Branch(3);
     let leaf: FieldKind = Leaf;
     assert branch matches { Branch(3) };
     assert leaf == FieldKind::Leaf;
 
-    let red = Red;
+    let red: Color = Red;
     assert red == Color::Red;
-    assert Green matches { Green };
+    assert Color::Green matches { Green };
 }
 
 __DATA__

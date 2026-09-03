@@ -170,8 +170,8 @@ impl TypeSystem {
         }
     }
 
-    /// The case a bare identifier site names, as the resolve walk answered it:
-    /// the type declaring it, and its `Type::Case` spelling.
+    /// The case the resolve walk names at a bare identifier site, with its
+    /// `Type::Case` spelling: the hint when no expected type supplies one.
     pub(crate) fn bare_case_at(
         &self,
         site: crate::ast::AstId,
@@ -184,7 +184,12 @@ impl TypeSystem {
         let owner = defs
             .parent(case)
             .expect("a case is a member of the type declaring it");
-        Some((owner, format!("{}::{}", defs.name(owner), defs.name(case))))
+        Some((owner, self.qualified_case(owner, defs.name(case))))
+    }
+
+    /// The `Type::Case` spelling of `case` under `owner`.
+    pub(crate) fn qualified_case(&self, owner: crate::defs::DefId, case: &str) -> String {
+        format!("{}::{case}", self.resolutions.defs().name(owner))
     }
 
     /// The method `name` that `owner` — an `impl` block or a `trait`

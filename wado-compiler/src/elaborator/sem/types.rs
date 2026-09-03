@@ -288,6 +288,9 @@ pub(crate) struct TypeAnnotations {
     /// resolved `target.kind`. An ident resolving to a function, variant, enum,
     /// flags or constant leaves no entry and is not an l-value.
     pub(crate) assign_places: IndexMap<AstId, AssignPlace>,
+    /// The type a bare case (`Red`, `Some(x)`) was read as a case of: the
+    /// expected type at the site, so reify constructs what annotate typed.
+    pub(crate) bare_cases: IndexMap<AstId, crate::defs::DefId>,
 }
 
 /// Assignment-target place classification recorded for an identifier by

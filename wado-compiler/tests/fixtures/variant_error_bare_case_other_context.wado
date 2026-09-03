@@ -1,0 +1,20 @@
+// The expected type supplies a bare case, so a case of another type is an
+// error there even with that type in scope: `Shape` has no `Red`.
+
+enum Color {
+    Red,
+    Green,
+}
+
+variant Shape {
+    Circle(f64),
+    Dot,
+}
+
+export fn run() {
+    let s: Shape = Red;
+    assert s == Shape::Dot;
+}
+
+__DATA__
+{"compile_error": "the expected type `Shape` has none by that name; write `Color::Red`"}

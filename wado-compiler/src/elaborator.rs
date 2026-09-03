@@ -1345,6 +1345,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.assign_places.insert(key, place);
     }
 
+    /// Record that the bare case at `site` is a case of `owner`, the expected
+    /// type there.
+    pub(super) fn record_bare_case(&mut self, site: crate::ast::AstId, owner: crate::defs::DefId) {
+        self.sem.types.bare_cases.insert(site, owner);
+    }
+
     /// Look up the recorded assignment-target place classification for the
     /// identifier at `ast_id`. Returns `None` for idents that did not resolve
     /// to a place (functions, variants, enums, flags, constants).

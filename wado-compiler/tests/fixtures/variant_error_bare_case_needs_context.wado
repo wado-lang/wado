@@ -1,0 +1,16 @@
+// A bare case needs an expected type: `let red = Red;` says of no type which
+// case is meant, however plainly `Color` is in scope, so the spelling must be
+// `Color::Red`.
+
+enum Color {
+    Red,
+    Green,
+}
+
+export fn run() {
+    let red = Red;
+    assert red == Color::Red;
+}
+
+__DATA__
+{"compile_error": "nothing here says of which type; write `Color::Red`"}

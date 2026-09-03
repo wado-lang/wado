@@ -3542,8 +3542,9 @@ enum Color {
 
 // Construction
 let c = Color::Red;
-let d = Red;    // a case is reachable unqualified wherever its type is in
-                // scope, in value position; a type of the same name shadows it
+let d: Color = Red; // the type name may be omitted only where the expected
+                    // type supplies it: an annotation, a parameter, a return
+                    // type, a payload. `let e = Red;` is an error.
 
 // Pattern matching: match, if let, matches
 let name = match c {
