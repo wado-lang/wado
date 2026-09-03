@@ -340,7 +340,7 @@ impl Analyzer<'_> {
         while changed {
             changed = false;
             for local in fresh.iter().copied().collect::<Vec<_>>() {
-                let sources = self.let_sources.get(&local).into_iter().flatten().chain(
+                let mut sources = self.let_sources.get(&local).into_iter().flatten().chain(
                     self.match_sources
                         .iter()
                         .filter_map(|(l, scrut)| (*l == local).then_some(scrut)),
