@@ -60,13 +60,17 @@ Closure `__call` methods and non-trivial global initializers are bodies too.
 - Records that are never independent rewrite targets — match arms, struct
   fields, call args — are not id-bearing. They live inline in their parent and
   are transparent to the parent map.
-- `type_id` and `span` stay per node: `span` feeds diagnostics, optimizer
-  remarks, and DWARF, and is part of skeleton identity. Layer 2 is the span-free
-  layer, not this one.
+- `span` stays per node — it feeds diagnostics, optimizer remarks, and DWARF,
+  and is part of skeleton identity. Layer 2 is the span-free layer, not this
+  one. `type_id` is per expression, there being nothing to type on a statement,
+  a block, or a pattern.
 - Parent edges (nearest id-bearing ancestor) and a per-local use index
-  (`def` / `reads` / `writes`) are maintained incrementally by the edit API,
-  never recomputed. Function-level alias facts (`address_taken_locals`,
-  `stores_aliased_locals`) and the local table travel on `Body` beside the arena.
+  (`def` / `reads` / `writes`) are derived once per session, at `Engine::new`,
+  and maintained incrementally by the edit API from there — never re-derived
+  under a running session. Function-level alias facts (`address_taken_locals`,
+  `stores_aliased_locals`) and the local table travel on `Body` beside the
+  arena, and are mirrored on `NirFunction` for the passes that run outside a
+  session; `sroa` merges its deltas back into the function's copy.
 - Nodes are not freed mid-run. Liveness is reachability from `root`, and the use
   index ignores orphans.
 
@@ -88,6 +92,14 @@ side-table derived from the skeleton.
   the builder threads a per-local current value, constructs `Select` at merge
   points and `LoopPhi` at loops, and bumps heap versions where the skeleton may
   write. A read's `ValueId` is fixed to the value dominant at that point.
+- A skeleton `Local` read the build did not reach resolves at query time
+  instead, to the memoized `Opaque` `ValuePool::canonical_local` mints — one
+  `ValueId` per local index, version-free. That is sound only where the local
+  has a single version, so `Engine::value` gates it on
+  `local_has_one_version`; a multi-version local resolves to `None`. The
+  builder's threaded value and this memo are the pool's two sources of a
+  local-valued leaf, and the anchor rule below is what keeps the second from
+  over-merging.
 - Identity is structural, and a `ValueId` is stable once allocated: interning is
   pure hash-consing, with no e-class merges and so no representative lookup. A
   rewrite that proves `a ≡ b` points the operand slot at `b`; it never merges
@@ -109,10 +121,17 @@ positions carry `Operand::Value`; effectful and control-flow operands stay
 
 Values are **born as operands**: `lower::translate` and the promotion passes
 (`optimize/extract.rs`) freeze a pure position into its `ValueId` directly, so a
-pass reads the value off the operand rather than looking an `ExprId` up. There is
-no `ExprId → ValueId` side-table; an unpromoted skeleton leaf resolves to `None`,
-which is sound because `None` is the finest partition — a consumer skips the
-expression rather than over-merging.
+pass reads the value off the operand rather than looking an `ExprId` up. Lower's
+share is the scalar constants, interned as it translates each literal; a string
+or bytes literal deliberately stays an expression, being an allocation whose site
+`const_object_globalization` decides. Everything non-constant is promoted later,
+by a freeze.
+
+No `ExprId → ValueId` map is persisted. A scoped scratch walk still returns one,
+which is what `FieldAccess` promotion reads, but it dies with the query that
+asked. An unpromoted skeleton leaf therefore resolves to `None`, which is sound
+because `None` is the finest partition — a consumer skips the expression rather
+than over-merging.
 
 Promotion is staged against what the passes need to see: arithmetic freezes
 before the loop (on each function's clean, un-restructured graph, which is what
@@ -163,10 +182,12 @@ keep their own walkers over the arena, and the interprocedural stages (`inline`,
 Each function carries a monotonic revision and each pass a per-function
 watermark; a gated pass visits a function only when `revision > watermark`. A
 pass that changes a function bumps its revision and, conservatively, that of its
-1-hop call-graph neighbours. Interprocedural passes pull their candidate set from
-the dirty set rather than scanning every function, and re-mark affected callers
-when a callee shrinks; `OptConfig::iterations` is the quiescence bound. Terminal
-stages stay explicit.
+1-hop call-graph neighbours in both directions. Interprocedural passes pull their
+candidate set from the dirty set rather than scanning every function, and re-mark
+affected callers when a callee shrinks; `OptConfig::iterations` is the quiescence
+bound. Terminal stages stay explicit, and so does `param_spec`, which scans every
+function because a summary it took before a callee gained a caller does not
+describe the callee it now has.
 
 Gating changes only **which** functions a pass visits, never the result of a
 visit. Every loop pass is an optimization, so an imprecise gate costs
@@ -257,7 +278,7 @@ panic and never produce worse output than the input.
 `Engine::new` rebuilds the parent maps and use index per function — 1.03 s of a
 ~5.8 s loop over 36 000 sessions. Carrying it across passes was built and
 measured: 91 % of sessions reuse it and the derivation drops 68 %, but the loop
-total does not move, and four things argue against it.
+total does not move, and three things argue against it.
 
 - It optimizes the structure the terminal ideal retires (see the `ExprKind`
   item), and does nothing for the census the precision items load.
@@ -265,8 +286,11 @@ total does not move, and four things argue against it.
 - Soundness would rest on 36 `invalidate_engine_index` calls staying correct by
   hand, each omission a silent miscompile.
 
-Closing the arena's mutation surface (226 sites over 57 files) so the type
-system carries the invariant is the prerequisite that would change this verdict.
+Closing the arena's mutation surface so the type system carries the invariant is
+the prerequisite that would change this verdict. That surface is 124 direct
+writes to an arena map over nine `optimize/` files, outside the edit API and
+outside tests — `sroa_variant_return`, `const_object_globalization`, and
+`field_scalarize` are two thirds of it.
 
 ### Not incremental rebuild, and not a richer cache
 
@@ -284,8 +308,6 @@ to cut is the passes and their assertions. At `-O2` the loop costs ~6 s on each
 benchmark, spread over `peephole` (23 %) and `copy_prop` / `const_fold` / `licm`
 (13 % each), with no dominant iteration.
 
-- [ ] Function-level parallelism. The per-function build and walk are
-      independent.
 - [ ] Fold the graph build into `lower` (born-at-`lower`). Buys one body walk
       per function, not earlier availability: the early freeze already walks
       every body before the loop, so the lazy first-query path is eager in
@@ -306,12 +328,15 @@ benchmark, spread over `peephole` (23 %) and `copy_prop` / `const_fold` / `licm`
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).
 
-- [ ] Price `match_to_switch` on something other than the arm count. Twelve is
-      where the `br_table` starts paying on the benchmarks, but the count is a
-      proxy: a 40-arm synthetic of plain `i32` fields prefers the `else if`
-      chain by 11 % where `cbor-twitter`'s 40-arm `User` prefers the table by
-      2 %. Whatever separates those two — arm body size, how well the scrutinee
-      sequence predicts — is what the threshold should be reading.
+- [ ] Price `match_to_switch` on something other than how wide the table is.
+      `SWITCH_MIN_CASES` is twelve values covered — one range arm can reach it
+      alone — which is where the `br_table` starts paying on the benchmarks, but
+      the count is a proxy: a 40-arm synthetic of plain `i32` fields prefers the
+      `else if` chain by 11 % where `cbor-twitter`'s 40-arm `User` prefers the
+      table by 2 %. Whatever separates those two — arm body size, how well the
+      scrutinee sequence predicts — is what the threshold should be reading. Arm
+      body size is already summed, as `SWITCH_MAX_CLONE_COST`, but only as a
+      blow-up guard on the emitted table, never as the pay-off predicate.
 
 Precision. All of it waits on one rule.
 
@@ -354,7 +379,9 @@ field load, which nothing does: its structural path is deliberately
 value-graph-free and its value path excludes `FieldAccess`. Surveyed, in-loop
 field reads that are provably invariant are 2.7 % and 7.1 % on the two
 benchmarks — too few to pay for maintaining promoted operands across `inline`
-and `sroa`, which dropping `must_anchor` would need.
+and `sroa`, which an in-loop freeze would need. `FreezePhase` carries no in-loop
+variant, so there is nothing to enable: reviving this means adding the phase
+back under the rule, not flipping a flag.
 
 Two notes for whoever revives this. The invariance test is free:
 `apply_loop_heap_effects` bumps every slot the loop may write before the body
@@ -377,17 +404,20 @@ invariance in a loop.
 
 - [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
       value runs after the fixed-point loop, so the passes inside it still see
-      none: LICM's value hoist collected zero loop-entry locals in 10,900
-      queries, and `loop_entry_values` still has no working consumer, which is
-      why `inline` discarding a non-empty map 1,469 times costs nothing. An
-      in-loop freeze cannot simply be added — one was, and is recorded under
-      "The anchor rule"; the early freeze is separately bound by the
-      context-free rule under "Measured dead ends". Moving the build to `lower`
-      does not lift that bound: it is the extraction that is point-dependent,
-      not the build. This and the widening above share one prerequisite, the
-      anchor rule below, which also gates nearly all of retiring the pure
-      `ExprKind`s — not only its `Local` half, since the arithmetic above a
-      local read resolves to no value either.
+      none: `licm` reads `loop_entry_values` twice — the CSE availability test
+      and the entry-live leaf gate — and its value hoist collected zero
+      loop-entry locals in 10,900 queries. Which is why the map's upkeep is
+      free: `inline` keeps it only across a splice that preserves the graph
+      (every inlined call pure and loop-free) and clears it otherwise, and
+      nothing notices either way. An in-loop freeze cannot simply be added —
+      one was, and is recorded under "The anchor rule"; the early freeze is
+      separately bound by the context-free rule under "Measured dead ends".
+      Moving the build to `lower` does not lift that bound: it is the
+      extraction that is point-dependent, not the build. This and the widening
+      above share one prerequisite, the anchor rule opening this section, which
+      also gates nearly all of retiring the pure `ExprKind`s — not only its
+      `Local` half, since the arithmetic above a local read resolves to no
+      value either.
 
 - [ ] Copy propagation on `ValueId`. Source-stability is not subsumed by value
       equality — a write-once `x` whose source `y` is later reassigned can read
@@ -464,7 +494,8 @@ Each was built, verified, and reverted. Do not retry as-is.
   a block. Only holding an empty memo across edits pays.
 
 The throughline: a value's identity is sound only when carried by an operand the
-edits maintain, never re-derived from a side-table at query time.
+edits maintain, or by a leaf whose single version the query itself proves — never
+re-derived from a side-table at query time.
 
 ## Consequences
 
@@ -473,8 +504,8 @@ edits maintain, never re-derived from a side-table at query time.
   store-load forwarding out of `(receiver, field, heap_ver)` identity. Their
   walks and bespoke analysis caches went with them.
 - The optimizer gained a hash-cons pool, a builder, and an extractor; it lost
-  the `value_of` side-table, the cache machinery, the engine's per-pass value
-  rebuild, and every per-pass structural key.
+  the persisted `value_of` side-table, the cache machinery, the engine's
+  per-pass value rebuild, and every per-pass structural key.
 - The arena costs one mutation discipline: the edit API is mandatory, and dead
   nodes accumulate until compaction lands.
 - Measured wins along the way: the arena-direct engine cut a heavy module's

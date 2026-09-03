@@ -478,16 +478,15 @@ pub struct Body {
     pub locals: Vec<NirLocal>,
     pub address_taken_locals: IndexSet<u32>,
     pub stores_aliased_locals: IndexSet<u32>,
-    /// The function's pure-value graph — the source of truth for every
-    /// [`Operand::Value`] in the skeleton. Built once
-    /// by `lower::translate` and maintained in place by the optimizer's edits;
-    /// never re-derived from the skeleton. Empty on a body built before operand
-    /// promotion populates it.
+    /// The function's pure-value pool — the source of truth for every
+    /// [`Operand::Value`] in the skeleton. Seeded by `lower::translate` with the
+    /// constants it promotes, filled by the graph build, and maintained in place
+    /// by the optimizer's edits; never re-derived from the skeleton.
     pub values: ValuePool,
-    /// The per-function value graph (`value_of` + `loop_entry_values`), persisted
-    /// here so it survives across optimizer passes instead of living as a
-    /// per-`Engine`-session cache (build-once). `None`
-    /// until the first value query builds it.
+    /// The per-function build product, `loop_entry_values`, persisted here so it
+    /// survives across optimizer passes instead of living as a
+    /// per-`Engine`-session cache (build-once). `None` until the first value
+    /// query builds it.
     pub value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }
 
