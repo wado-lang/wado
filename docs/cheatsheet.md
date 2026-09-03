@@ -1120,6 +1120,7 @@ i32::from_str_radix(&"1010", 2)         // Result<i32, ParseIntError> (radix 2..
 i32::from_str_range(&"xyz42abc", 3, 5)  // parse a byte range without substring alloc
 
 i32::min(a, b)  i32::max(a, b)
+i32::clamp(v, lo, hi)                 // traps when lo > hi
 
 // char classification and conversion
 let code = 'A' as i32;                // 65

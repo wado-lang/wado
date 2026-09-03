@@ -30,6 +30,11 @@ release build embeds them with `include_str!`, as does any `wasm32` build, which
 has no filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT: read
 `wado-from-idl/AGENTS.md` first.
 
+`builtin::select` returns one of its operands rather than a copy of it, so it is
+correct only for a type that needs no value copy. Write the `if` for `i128`,
+`u128` and any composite: `optimize/select_lowering.rs` rewrites the ones that
+qualify and refuses the rest on the same ground.
+
 ## E2E Tests
 
 `.wado` files in `tests/fixtures/`, expectations in a trailing `__DATA__` JSON
