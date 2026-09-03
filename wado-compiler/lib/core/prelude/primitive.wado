@@ -567,6 +567,12 @@ impl i8 {
         return builtin::select(a < b, a, b);
     }
 
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i8, low: i8, high: i8) -> i8 {
+        assert low <= high;
+        return i8::min(i8::max(value, low), high);
+    }
+
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
     }
@@ -628,6 +634,12 @@ impl u8 {
 
     pub fn min(a: u8, b: u8) -> u8 {
         return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u8, low: u8, high: u8) -> u8 {
+        assert low <= high;
+        return u8::min(u8::max(value, low), high);
     }
 
     /// Returns true if the byte is an ASCII digit: 0-9.
@@ -745,6 +757,12 @@ impl i16 {
         return builtin::select(a < b, a, b);
     }
 
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i16, low: i16, high: i16) -> i16 {
+        assert low <= high;
+        return i16::min(i16::max(value, low), high);
+    }
+
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
     }
@@ -808,6 +826,12 @@ impl u16 {
         return builtin::select(a < b, a, b);
     }
 
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u16, low: u16, high: u16) -> u16 {
+        assert low <= high;
+        return u16::min(u16::max(value, low), high);
+    }
+
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
     }
@@ -869,6 +893,12 @@ impl i32 {
 
     pub fn min(a: i32, b: i32) -> i32 {
         return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i32, low: i32, high: i32) -> i32 {
+        assert low <= high;
+        return i32::min(i32::max(value, low), high);
     }
 
     /// Counts the leading zeros in this integer.
@@ -957,6 +987,12 @@ impl u32 {
         return builtin::select(a < b, a, b);
     }
 
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u32, low: u32, high: u32) -> u32 {
+        assert low <= high;
+        return u32::min(u32::max(value, low), high);
+    }
+
     fn fmt_decimal(&self, f: &mut Formatter) {
         let value = *self as u64;
         let digit_count = count_digits_u64(value);
@@ -1025,6 +1061,12 @@ impl i64 {
 
     pub fn min(a: i64, b: i64) -> i64 {
         return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i64, low: i64, high: i64) -> i64 {
+        assert low <= high;
+        return i64::min(i64::max(value, low), high);
     }
 
     /// Counts the leading zeros in this integer.
@@ -1106,6 +1148,12 @@ impl u64 {
 
     pub fn min(a: u64, b: u64) -> u64 {
         return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u64, low: u64, high: u64) -> u64 {
+        assert low <= high;
+        return u64::min(u64::max(value, low), high);
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
@@ -1336,6 +1384,12 @@ impl f32 {
     /// Maximum of two values
     pub fn max(x: f32, y: f32) -> f32 {
         return builtin::f32_max(x, y);
+    }
+
+    /// `x` confined to `low..=high`. A NaN `x` stays NaN.
+    pub fn clamp(x: f32, low: f32, high: f32) -> f32 {
+        assert low <= high;
+        return f32::min(f32::max(x, low), high);
     }
 
     /// Copy sign from y to x
@@ -1722,6 +1776,12 @@ impl f64 {
     /// Maximum of two values
     pub fn max(x: f64, y: f64) -> f64 {
         return builtin::f64_max(x, y);
+    }
+
+    /// `x` confined to `low..=high`. A NaN `x` stays NaN.
+    pub fn clamp(x: f64, low: f64, high: f64) -> f64 {
+        assert low <= high;
+        return f64::min(f64::max(x, low), high);
     }
 
     /// Copy sign from y to x

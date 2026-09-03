@@ -1307,3 +1307,30 @@ test "strip_prefix removes a matching prefix" {
     assert "abc".strip_prefix("x") matches { None };
     assert "abc".strip_prefix("abc") matches { Some(s) && s == "" };
 }
+
+test "split_once cuts at the first separator" {
+    assert "key=value".split_once("=") matches { Some(p) && p.0 == "key" && p.1 == "value" };
+    assert "a=b=c".split_once("=") matches { Some(p) && p.0 == "a" && p.1 == "b=c" };
+    assert "=v".split_once("=") matches { Some(p) && p.0 == "" && p.1 == "v" };
+    assert "k=".split_once("=") matches { Some(p) && p.0 == "k" && p.1 == "" };
+    assert "no separator".split_once("=") matches { None };
+    assert "".split_once("=") matches { None };
+    // A separator longer than one byte, and one that is not ASCII.
+    assert "a::b::c".split_once("::") matches { Some(p) && p.0 == "a" && p.1 == "b::c" };
+    assert "α→β".split_once("→") matches { Some(p) && p.0 == "α" && p.1 == "β" };
+}
+
+test "rsplit_once cuts at the last separator" {
+    assert "a=b=c".rsplit_once("=") matches { Some(p) && p.0 == "a=b" && p.1 == "c" };
+    assert "key=value".rsplit_once("=") matches { Some(p) && p.0 == "key" && p.1 == "value" };
+    assert "=v".rsplit_once("=") matches { Some(p) && p.0 == "" && p.1 == "v" };
+    assert "k=".rsplit_once("=") matches { Some(p) && p.0 == "k" && p.1 == "" };
+    assert "no separator".rsplit_once("=") matches { None };
+    assert "".rsplit_once("=") matches { None };
+    assert "a::b::c".rsplit_once("::") matches { Some(p) && p.0 == "a::b" && p.1 == "c" };
+}
+
+test "an empty separator splits at either end" {
+    assert "abc".split_once("") matches { Some(p) && p.0 == "" && p.1 == "abc" };
+    assert "abc".rsplit_once("") matches { Some(p) && p.0 == "abc" && p.1 == "" };
+}

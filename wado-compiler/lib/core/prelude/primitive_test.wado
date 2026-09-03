@@ -612,3 +612,55 @@ test "i32 and u32 decimal formatting at their extremes" {
     assert `${4294967295 as u32}` == "4294967295";
     assert `${1000000 as u32}` == "1000000";
 }
+
+test "integer clamp confines a value to the range" {
+    assert i32::clamp(5, 1, 10) == 5;
+    assert i32::clamp(0, 1, 10) == 1;
+    assert i32::clamp(11, 1, 10) == 10;
+    assert i32::clamp(-5, -3, 3) == -3;
+
+    // A single-point range is that point, whatever comes in.
+    assert i32::clamp(7, 4, 4) == 4;
+}
+
+test "clamp reaches each integer type's extremes" {
+    assert i8::clamp(-128, -100, 100) == -100;
+    assert i8::clamp(127, -100, 100) == 100;
+    assert u8::clamp(0, 10, 250) == 10;
+    assert u8::clamp(255, 10, 250) == 250;
+    assert i16::clamp(-32768, -1, 1) == -1;
+    assert u16::clamp(65535, 0, 1000) == 1000;
+    assert i32::clamp(i32::MIN, -1, 1) == -1;
+    assert u32::clamp(4294967295, 0, 7) == 7;
+    assert i64::clamp(-9223372036854775808, -1, 1) == -1;
+    assert u64::clamp(18446744073709551615, 0, 7) == 7;
+}
+
+test "float clamp confines a value to the range" {
+    assert f64::clamp(0.5, 0.0, 1.0) == 0.5;
+    assert f64::clamp(-1.0, 0.0, 1.0) == 0.0;
+    assert f64::clamp(2.0, 0.0, 1.0) == 1.0;
+    assert f32::clamp(0.5, 0.0, 1.0) == 0.5;
+    assert f32::clamp(-1.0, 0.0, 1.0) == 0.0;
+    assert f32::clamp(2.0, 0.0, 1.0) == 1.0;
+
+    // NaN is neither below nor above, so it is carried out rather than
+    // snapping to whichever bound the comparison order happens to reach.
+    assert f64::clamp(f64::NAN, 0.0, 1.0).is_nan();
+    assert f32::clamp(f32::NAN, 0.0, 1.0).is_nan();
+}
+
+#[expect_trap]
+test "an empty integer clamp range is refused" {
+    let _ = i32::clamp(0, 10, 1);
+}
+
+#[expect_trap]
+test "an empty float clamp range is refused" {
+    let _ = f64::clamp(0.0, 1.0, 0.0);
+}
+
+#[expect_trap]
+test "a NaN clamp bound is refused" {
+    let _ = f64::clamp(0.0, f64::NAN, 1.0);
+}

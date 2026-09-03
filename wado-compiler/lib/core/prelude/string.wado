@@ -1280,6 +1280,34 @@ impl String {
         };
     }
 
+    /// The parts either side of a separator of `sep_len` bytes found at `at`.
+    fn cut_at(&self, at: i32, sep_len: i32) -> [String, String] {
+        let repr = &self.repr as &Array<u8>;
+        let rest = at + sep_len;
+        return [
+            substring(repr, 0, at),
+            substring(repr, rest, self.used - rest),
+        ];
+    }
+
+    /// Splits at the first `sep` into the parts before and after it, or None
+    /// when `sep` does not occur.
+    pub fn split_once(&self, sep: String) -> Option<[String, String]> {
+        let Some(at) = self.find(sep) else {
+            return null;
+        };
+        return Option::Some(self.cut_at(at, sep.len()));
+    }
+
+    /// Splits at the last `sep` into the parts before and after it, or None
+    /// when `sep` does not occur.
+    pub fn rsplit_once(&self, sep: String) -> Option<[String, String]> {
+        let Some(at) = self.rfind(sep) else {
+            return null;
+        };
+        return Option::Some(self.cut_at(at, sep.len()));
+    }
+
     /// Returns an iterator over whitespace-separated substrings.
     pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
         return StrSplitWhitespaceIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0 };
