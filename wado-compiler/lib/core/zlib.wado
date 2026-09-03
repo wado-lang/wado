@@ -356,16 +356,24 @@ pub fn compress_bound(source_len: i32) -> i32 {
 }
 
 
-struct Code {
-    op: u8,  // operation, extra bits, table bits
-    bits: u8,  // bits in this part of the code
-    val: u16,  // offset in table or code value
+// A decoding table entry, packed into one i32 so the table is a flat GC array
+// rather than an array of references: op (operation, extra bits, table bits) in
+// bits 0-7, code bits in 8-15, val (offset in table or code value) in 16-31.
+// The decode loop reads all three from a single unboxed load.
+fn code_pack(op: i32, bits: i32, val: i32) -> i32 {
+    return op & 0xFF | (bits & 0xFF) << 8 | (val & 0xFFFF) << 16;
 }
 
-impl Code {
-    fn new(op: i32, bits: i32, val: i32) -> Code {
-        return Code { op: op as u8, bits: bits as u8, val: val as u16 };
-    }
+fn code_op(entry: i32) -> i32 {
+    return entry & 0xFF;
+}
+
+fn code_bits(entry: i32) -> i32 {
+    return entry >> 8 & 0xFF;
+}
+
+fn code_val(entry: i32) -> i32 {
+    return entry >> 16 & 0xFFFF;
 }
 
 
@@ -404,7 +412,7 @@ fn inflate_table(
     lens: &List<u16>,
     lens_offset: i32,
     codes_count: i32,
-    table: &mut List<Code>,
+    table: &mut List<i32>,
     table_start: i32,
     bits_in: i32,
     work: &mut List<u16>,
@@ -453,8 +461,8 @@ fn inflate_table(
     }
     if max_len == 0 {
         // no symbols to code at all
-        table[table_start] = Code::new(64, 1, 0);
-        table[table_start + 1] = Code::new(64, 1, 0);
+        table[table_start] = code_pack(64, 1, 0);
+        table[table_start + 1] = code_pack(64, 1, 0);
         return [0, 1, table_start + 2];
     }
 
@@ -540,23 +548,23 @@ fn inflate_table(
     let mut done = false;
     while !done {
         // create table entry
-        let here_bits = (len - drop_val) as u8;
-        let mut here_op: u8 = 0;
-        let mut here_val: u16 = 0;
+        let here_bits = len - drop_val;
+        let mut here_op = 0;
+        let mut here_val = 0;
 
         let work_sym = work[sym] as i32;
         if work_sym + 1 < match_val {
             here_op = 0;
-            here_val = work_sym as u16;
+            here_val = work_sym;
         } else if work_sym >= match_val {
-            here_op = extra_table[work_sym - match_val] as u8;
-            here_val = base_table[work_sym - match_val];
+            here_op = extra_table[work_sym - match_val] as i32;
+            here_val = base_table[work_sym - match_val] as i32;
         } else {
-            here_op = (32 + 64) as u8;  // end of block
+            here_op = 32 + 64;  // end of block
             here_val = 0;
         }
 
-        let here = Code { op: here_op, bits: here_bits, val: here_val };
+        let here = code_pack(here_op, here_bits, here_val);
 
         // replicate for those indices with low len bits equal to huff
         let incr_rep = 1 as u32 << (len - drop_val) as u32;
@@ -565,7 +573,7 @@ fn inflate_table(
         loop {
             fill -= incr_rep;
             let idx = next + ((huff >> drop_val as u32) + fill) as i32;
-            table[idx] = Code { op: here.op, bits: here.bits, val: here.val };
+            table[idx] = here;
             if fill == 0 {
                 break;
             }
@@ -622,21 +630,13 @@ fn inflate_table(
 
             // point entry in root table to sub-table
             low = huff & mask;
-            table[table_start + low as i32] = Code {
-                op: curr as u8,
-                bits: root as u8,
-                val: (next - table_start) as u16,
-            };
+            table[table_start + low as i32] = code_pack(curr, root, next - table_start);
         }
     }
 
     // fill in remaining table entry if code is incomplete
     if huff != 0 {
-        table[next + huff as i32] = Code {
-            op: 64,
-            bits: (len - drop_val) as u8,
-            val: 0,
-        };
+        table[next + huff as i32] = code_pack(64, len - drop_val, 0);
     }
 
     return [0, root, table_start + used];
@@ -682,7 +682,7 @@ struct InflateState {
     extra: i32,
 
     // code tables
-    codes: List<Code>,
+    codes: List<i32>,
     lencode_off: i32,  // offset into codes for len/lit table
     distcode_off: i32,  // offset into codes for dist table
     lenbits: i32,
@@ -717,7 +717,7 @@ impl InflateState {
             length: 0,
             offset: 0,
             extra: 0,
-            codes: List::filled(ENOUGH, Code::new(0, 0, 0)),
+            codes: List::filled(ENOUGH, 0),
             lencode_off: 0,
             distcode_off: 0,
             lenbits: 0,
@@ -975,8 +975,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     // decode using code length code
                     loop {
                         let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                        let here = &state.codes[idx];
-                        if here.bits as i32 <= state.bits {
+                        if code_bits(state.codes[idx]) <= state.bits {
                             break;
                         }
                         if have == 0 {
@@ -993,8 +992,9 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     }
 
                     let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                    let here_val = state.codes[idx].val as i32;
-                    let here_bits = state.codes[idx].bits as i32;
+                    let here = state.codes[idx];
+                    let here_val = code_val(here);
+                    let here_bits = code_bits(here);
 
                     if here_val < 16 {
                         state.hold = state.hold >> here_bits as u32;
@@ -1131,8 +1131,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 // decode literal/length code
                 loop {
                     let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                    let here = &state.codes[idx];
-                    if here.bits as i32 <= state.bits {
+                    if code_bits(state.codes[idx]) <= state.bits {
                         break;
                     }
                     if have == 0 {
@@ -1149,9 +1148,10 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 }
 
                 let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                let mut here_op = state.codes[idx].op;
-                let mut here_bits = state.codes[idx].bits;
-                let mut here_val = state.codes[idx].val;
+                let here = state.codes[idx];
+                let mut here_op = code_op(here);
+                let mut here_bits = code_bits(here);
+                let mut here_val = code_val(here);
 
                 // handle 2nd level length code
                 if here_op != 0 && here_op & 0xF0 == 0 {
@@ -1159,11 +1159,12 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     let last_op = here_op;
                     let last_val = here_val;
                     loop {
-                        let idx2 = state.lencode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                        here_op = state.codes[idx2].op;
-                        here_bits = state.codes[idx2].bits;
-                        here_val = state.codes[idx2].val;
-                        if last_bits as i32 + here_bits as i32 <= state.bits {
+                        let idx2 = state.lencode_off + last_val + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
+                        let here2 = state.codes[idx2];
+                        here_op = code_op(here2);
+                        here_bits = code_bits(here2);
+                        here_val = code_val(here2);
+                        if last_bits + here_bits <= state.bits {
                             break;
                         }
                         if have == 0 {
@@ -1179,14 +1180,14 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                         break;
                     }
                     state.hold = state.hold >> last_bits as u32;
-                    state.bits -= last_bits as i32;
+                    state.bits -= last_bits;
                 }
 
                 state.hold = state.hold >> here_bits as u32;
-                state.bits -= here_bits as i32;
-                state.length = here_val as i32;
+                state.bits -= here_bits;
+                state.length = here_val;
 
-                if here_op as i32 == 0 {
+                if here_op == 0 {
                     // literal
                     state.mode = InflateMode::Lit;
                 } else if here_op & 32 != 0 {
@@ -1196,7 +1197,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 } else if here_op & 64 != 0 {
                     state.mode = InflateMode::Bad;
                 } else {
-                    state.extra = (here_op & 15) as i32;
+                    state.extra = here_op & 15;
                     state.mode = InflateMode::LenExt;
                 }
             },
@@ -1226,8 +1227,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 // decode distance code
                 loop {
                     let idx = state.distcode_off + (state.hold & (1 as u32 << state.distbits as u32) - 1) as i32;
-                    let here = &state.codes[idx];
-                    if here.bits as i32 <= state.bits {
+                    if code_bits(state.codes[idx]) <= state.bits {
                         break;
                     }
                     if have == 0 {
@@ -1244,9 +1244,10 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 }
 
                 let idx = state.distcode_off + (state.hold & (1 as u32 << state.distbits as u32) - 1) as i32;
-                let mut here_op = state.codes[idx].op;
-                let mut here_bits = state.codes[idx].bits;
-                let mut here_val = state.codes[idx].val;
+                let here = state.codes[idx];
+                let mut here_op = code_op(here);
+                let mut here_bits = code_bits(here);
+                let mut here_val = code_val(here);
 
                 // handle 2nd level distance code
                 if here_op & 0xF0 == 0 {
@@ -1254,11 +1255,12 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     let last_op = here_op;
                     let last_val = here_val;
                     loop {
-                        let idx2 = state.distcode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                        here_op = state.codes[idx2].op;
-                        here_bits = state.codes[idx2].bits;
-                        here_val = state.codes[idx2].val;
-                        if last_bits as i32 + here_bits as i32 <= state.bits {
+                        let idx2 = state.distcode_off + last_val + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
+                        let here2 = state.codes[idx2];
+                        here_op = code_op(here2);
+                        here_bits = code_bits(here2);
+                        here_val = code_val(here2);
+                        if last_bits + here_bits <= state.bits {
                             break;
                         }
                         if have == 0 {
@@ -1274,17 +1276,17 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                         break;
                     }
                     state.hold = state.hold >> last_bits as u32;
-                    state.bits -= last_bits as i32;
+                    state.bits -= last_bits;
                 }
 
                 state.hold = state.hold >> here_bits as u32;
-                state.bits -= here_bits as i32;
+                state.bits -= here_bits;
 
                 if here_op & 64 != 0 {
                     state.mode = InflateMode::Bad;
                 } else {
-                    state.offset = here_val as i32;
-                    state.extra = (here_op & 15) as i32;
+                    state.offset = here_val;
+                    state.extra = here_op & 15;
                     state.mode = InflateMode::DistExt;
                 }
             },
