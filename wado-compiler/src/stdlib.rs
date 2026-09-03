@@ -13,9 +13,10 @@ fn read_stdlib_module(file: &str) -> &'static str {
     String::leak(source)
 }
 
-/// Declares a stdlib table from one list of `(import path, file)` pairs. A dev
-/// build reads the files, so editing a module needs no rebuild. A release build
-/// embeds them, as does `wasm32`, which has no filesystem.
+/// Declares a stdlib table, and the paths alone, from one list of
+/// `(import path, file)` pairs. A dev build reads the files, so editing a
+/// module needs no rebuild. A release build embeds them, as does `wasm32`,
+/// which has no filesystem.
 macro_rules! stdlib_table {
     (
         $(#[$meta:meta])* $vis:vis fn $name:ident;
@@ -44,11 +45,10 @@ macro_rules! stdlib_table {
 }
 
 stdlib_table! {
-    /// Every core stdlib module — the one set that the loader,
-    /// [`get_stdlib_module`] and `ModuleSourceInterner` all derive from.
+    /// Every core stdlib module — the one set the loader and
+    /// [`get_stdlib_module`] both derive from.
     pub fn all_core_modules;
-    /// The import path of every core module, for a caller that wants the names
-    /// rather than the sources.
+    /// The same set, named without its sources.
     const CORE_MODULE_PATHS;
     "core:allocator" => "core/allocator.wado",
     "core:builtin" => "core/builtin.wado",
@@ -99,8 +99,7 @@ stdlib_table! {
     /// sub-interfaces. Appearing here reserves the namespace — see
     /// `docs/wep-2026-06-17-package-module-syntax.md`.
     pub fn all_binding_modules;
-    /// The import path of every binding module, for a caller that wants the
-    /// names rather than the sources.
+    /// The same set, named without its sources.
     const BINDING_MODULE_PATHS;
     "wasi:cli" => "wasi/cli.wado",
     "wasi:filesystem" => "wasi/filesystem.wado",

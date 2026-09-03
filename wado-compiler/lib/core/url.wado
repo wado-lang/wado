@@ -82,9 +82,8 @@ fn default_port_for_scheme(scheme: &String) -> u16 {
     return 443;
 }
 
-/// Peels `#fragment` off the end and then `?query`, as `[rest, query,
-/// fragment]`. The fragment goes first: a `?` inside it is part of the
-/// fragment, not a query.
+/// Peels `#fragment` then `?query` off `input`, as `[rest, query, fragment]`.
+/// The fragment goes first, so a `?` inside it stays part of the fragment.
 fn split_off_query_and_fragment(input: String) -> [String, Option<String>, Option<String>] {
     let mut rest = input;
 
