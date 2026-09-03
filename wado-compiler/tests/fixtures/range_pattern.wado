@@ -1,0 +1,106 @@
+// Range patterns and the range operator: `match` arms, the `matches` operator,
+// char and escaped-char bounds, associated-constant bounds, exhaustiveness,
+// and where `..<` / `..=` sit in the precedence table.
+
+fn classify_score(score: i32) -> String {
+    let grade = match score {
+        0..<60 => "F",
+        60..<70 => "D",
+        70..<80 => "C",
+        80..<90 => "B",
+        90..=100 => "A",
+        _ => "invalid",
+    };
+    return grade;
+}
+
+fn classify_char(c: char) -> String {
+    return match c {
+        'a'..='z' => "lowercase",
+        'A'..='Z' => "uppercase",
+        '0'..='9' => "digit",
+        _ => "other",
+    };
+}
+
+test "range patterns in a match" {
+    assert classify_score(55) == "F";
+    assert classify_score(65) == "D";
+    assert classify_score(75) == "C";
+    assert classify_score(85) == "B";
+    assert classify_score(95) == "A";
+    assert classify_score(100) == "A";
+    assert classify_score(101) == "invalid";
+}
+
+test "char range patterns" {
+    assert classify_char('h') == "lowercase";
+    assert classify_char('Z') == "uppercase";
+    assert classify_char('5') == "digit";
+    assert classify_char('!') == "other";
+}
+
+test "a u8 range match is exhaustive without a wildcard" {
+    let b: u8 = 42;
+    let name = match b {
+        0 => "zero",
+        1..=255 => "nonzero",
+    };
+    assert name == "nonzero";
+}
+
+test "an associated constant is a range bound" {
+    let n: i32 = -5;
+    let sign = match n {
+        i32::MIN..<0 => "negative",
+        0 => "zero",
+        1..=i32::MAX => "positive",
+    };
+    assert sign == "negative";
+}
+
+test "range with the matches operator" {
+    let code = 65;
+    assert code matches { 0..<128 };
+    assert !(code matches { 128..=255 });
+    let c = 'f';
+    assert c matches { 'a'..='z' };
+    assert !(c matches { 'A'..='Z' });
+}
+
+test "an escaped char literal decodes to its codepoint as a bound" {
+    // 'a' (97) is within ['A' (65), '\u{7e}' (126)].
+    assert 'a' matches { 'A'..='\u{7e}' };
+    // The full ASCII range.
+    assert 'a' matches { '\u{0}'..='\u{7f}' };
+    assert '{' matches { '\u{0}'..='\u{7f}' };
+    // An escaped single-char pattern.
+    assert '\u{7f}' matches { '\u{7f}' };
+    // 'a' (97) is past the upper bound '\u{4a}' (74).
+    assert !'a' matches { 'A'..='\u{4a}' };
+}
+
+test "the range operator binds tighter than assignment" {
+    let mut sum = 0;
+    for let i of 0..<3 {
+        sum += i;
+    }
+    assert sum == 3;
+}
+
+test "the range operator binds looser than arithmetic" {
+    // `1 + 1..<3 + 2` is `(1 + 1)..<(3 + 2)`, so 2 + 3 + 4.
+    let mut sum = 0;
+    for let i of 1 + 1..<3 + 2 {
+        sum += i;
+    }
+    assert sum == 9;
+}
+
+test "a parenthesised range" {
+    let mut sum = 0;
+    for let i of (0..<4) {
+        sum += i;
+    }
+    assert sum == 6;
+}
