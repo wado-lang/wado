@@ -475,10 +475,42 @@ five.
       (`trait_error_local_blanket_ties_foreign.wado`). `rank` reads no module at
       all.
 
-Closing them is the differential for `candidates` and `rank` over the fixture
-corpus, as `verify_arg_synthesis` uses it for argument synthesis
-(WEP 2026-07-31), then the flip. A `pub use` re-export putting the trait in
-scope wants pinning as part of it; an aliased import already is
+The differential is written and runs: `WADO_TRAIT_SELECTION_DIFF=1` over the
+corpus reports each call where the two answer differently, naming the impl block
+each took. It reports rather than asserting, because the five differences above
+are the point. It stays quiet where selection has already reported, as
+`verify_arg_synthesis` does, and declines two questions it cannot ask faithfully
+— a trait-qualified call, whose candidates are filtered before selection runs,
+and a receiver mentioning a type parameter, whose bounds reach the order as an
+`Env` the selection path has no annotate-time scope to build.
+
+What the corpus reports beyond the five, each its own gap:
+
+- [ ] `impl Tag for Box_<i32>` beside `impl<T> Tag for Box_<T>`: the sort takes
+      the head impl and monomorphization substitutes the specific body later,
+      where rank 2 takes the specific impl at selection
+      (`impl_concrete_instantiation_wins.wado`). The order is the one `spec.md`
+      states; the flip moves the decision one layer up.
+- [ ] A reference to a newtype. The compiler peels the newtype and then adopts
+      the base's `&T` impl, so `for let b of &bag` over a `ByteBag` reaches
+      `impl<T> IntoIterator for &List<T>`. The chain peels the reference first
+      and never forms `&List<u8>`, so it takes `impl<T> IntoIterator for List<T>`
+      instead (`newtype_for_of_iteration.wado`). Which of `&Newtype` and
+      `&Base` a chain visits, and in what order, is undecided.
+- [ ] Calls the sort answers and the order finds no candidate for, in fixtures
+      whose traits are declared in another module
+      (`cross_module_concrete_generic_impl.wado`,
+      `cross_module_same_name_trait_direct.wado`, `ns_qualified_trait_head.wado`).
+      The report does not yet separate "no impl applied" from "every impl was
+      out of scope", which is what would say whether this is the scope gate
+      working or a lowering that lost a candidate.
+- [ ] A user's `impl Add for i32` beside the operator impls the lowering states
+      for every primitive: the pair duplicates and the order reports
+      (`user_trait_method_survives_relowering.wado`). The lowering states an
+      impl the source also writes.
+
+Then the flip. A `pub use` re-export putting the trait in scope wants pinning as
+part of it; an aliased import already is
 (`trait_alias_import_in_scope.wado`).
 
 An unused-trait-import warning belongs to
