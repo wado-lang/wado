@@ -1871,16 +1871,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_display = type_key
             .display_name(self.tysys.resolutions.defs())
             .to_string();
-        if let Some(m) =
-            self.select_trait_match(found_traits, method_name, &receiver_display, span, probe)
-        {
-            // A trait-qualified call named its trait, and `found_traits` was
-            // filtered to it above. The order's cross-trait question does not
-            // arise, so asking it here would report an ambiguity the call site
-            // has already answered.
-            if required_trait.is_none() {
-                self.report_selection_disagreement(&m, type_key, receiver_type_id, method_name);
-            }
+        // A trait-qualified call named its trait, and `found_traits` was
+        // filtered to it above. The order's cross-trait question does not
+        // arise, so asking it would report an ambiguity the call site answered.
+        let order = required_trait
+            .is_none()
+            .then(|| self.order_for_call(type_key, receiver_type_id, method_name))
+            .flatten();
+        if let Some(m) = self.select_trait_match(
+            found_traits,
+            order,
+            method_name,
+            &receiver_display,
+            span,
+            probe,
+        ) {
             return Some(m);
         }
 
@@ -2458,25 +2463,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Hand the match `select_trait_match` made to the differential of
-    /// WEP 2026-09-01, which reports where the order would have chosen
-    /// otherwise.
-    fn report_selection_disagreement(
+    /// What the order says about this call (`docs/wep-2026-09-01-trait-resolution.md`).
+    /// `None` where the question is outside what the lowering states — a
+    /// receiver mentioning a type parameter, above all, whose bounds reach the
+    /// order as an `Env` this path carries no annotate-time scope to build —
+    /// and the sort below answers for those.
+    fn order_for_call(
         &self,
-        chosen: &super::types::TraitMethodMatch,
         type_key: &ImplTargetKey,
         receiver_type_id: Option<TypeId>,
         method_name: &str,
-    ) {
-        // Once selection has reported, it still returns a winner so that a
-        // second, wrong diagnostic does not stack on the same call. Comparing
-        // the order against that fallback says nothing: both paths reported.
-        if self.logger.has_errors() {
-            return;
-        }
-        let (Some(bridge), Some(receiver)) = (self.tysys.solver.as_ref(), receiver_type_id) else {
-            return;
-        };
+    ) -> Option<super::solver_bridge::Ordered> {
+        let bridge = self.tysys.solver.as_ref()?;
         // A reference receiver arrives peeled, its `&` carried by `type_key`.
         // The order reads the reference as a level of the receiver's chain, so
         // it has to be put back.
@@ -2487,88 +2485,125 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ImplTargetKey::TypeParam(..)
             | ImplTargetKey::Builtin(_) => None,
         };
-        bridge.report_selection_disagreement(
+        bridge.select(
             &self.tysys,
             &self.current_module_source,
-            receiver,
+            receiver_type_id?,
             through_ref,
             method_name,
-            &chosen.impl_def.map_or(
-                super::solver_bridge::Chosen::Derived,
-                super::solver_bridge::Chosen::Impl,
-            ),
-        );
+        )
     }
 
-    /// Choose the winning match: drop a trait's variadic impl when that same
-    /// trait also has a non-variadic one (coherence Rule 1, WEP 2026-03-14 §5),
-    /// prefer a trait impl in the current module, dedup `(trait, module)`
-    /// pairs, take the first remaining.
+    /// The matches the order left standing, in the order it named them. A
+    /// verdict naming impls keeps exactly those; one naming none empties the
+    /// list, which is how the scope gate and "no impl applied" reach the
+    /// caller.
+    fn narrow_to_order(
+        found_traits: Vec<super::types::TraitMethodMatch>,
+        order: &super::solver_bridge::Ordered,
+    ) -> Vec<super::types::TraitMethodMatch> {
+        use super::solver_bridge::Ordered;
+        let named: &[Option<crate::defs::DefId>] = match order {
+            Ordered::One(def) => std::slice::from_ref(def),
+            Ordered::AmbiguousTraits(defs)
+            | Ordered::AmbiguousBlankets(defs)
+            | Ordered::Overloaded(defs)
+            | Ordered::Duplicated(defs) => defs,
+            Ordered::Nothing | Ordered::OutOfScope => &[],
+        };
+        // Each match is moved out at most once, so two candidates of one impl
+        // block cannot both answer for it.
+        let mut left: Vec<Option<super::types::TraitMethodMatch>> =
+            found_traits.into_iter().map(Some).collect();
+        named
+            .iter()
+            .filter_map(|def| {
+                let at = left
+                    .iter()
+                    .position(|m| m.as_ref().is_some_and(|m| m.impl_def == *def))?;
+                left[at].take()
+            })
+            .collect()
+    }
+
+    /// Choose the winning match. The order decides
+    /// (`docs/wep-2026-09-01-trait-resolution.md`) wherever it can answer;
+    /// `order` is `None` only for a receiver it cannot lower, and the sort
+    /// below — rank 0, then concrete over blanket, then bound depth, then local
+    /// over foreign — answers for those alone.
     fn select_trait_match(
         &mut self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
+        order: Option<super::solver_bridge::Ordered>,
         method_name: &str,
         receiver_display: &str,
         span: Span,
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
-        // Rank 0: a variadic impl yields to a non-variadic one of the same
-        // trait (WEP 2026-03-14 §5 Rule 1). Scoped to one trait, so it must not
-        // outrank locality between traits — a foreign blanket `impl<T> A for T`
-        // would otherwise beat a local `impl<..T> B for [..T]`.
-        let traits_with_non_variadic: IndexSet<(crate::defs::DefId, Vec<TypeId>)> = found_traits
-            .iter()
-            .filter(|m| !m.is_variadic_impl)
-            .map(|m| (m.trait_decl, m.trait_args.clone()))
-            .collect();
-        found_traits.retain(|m| {
-            !m.is_variadic_impl
-                || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
-        });
-
-        // Concrete over blanket, then bound depth, then local over foreign.
-        // WEP 2026-09-01 states depth first and no locality; both are its
-        // known gaps. Sorted BEFORE dedup_by, which only removes adjacent
-        // duplicates.
-        let current_module = &self.current_module_source;
-        found_traits.sort_by(|a, b| {
-            let a_concrete = a.blanket_type_param.is_none();
-            let b_concrete = b.blanket_type_param.is_none();
-            let a_local = &a.impl_module_source == current_module;
-            let b_local = &b.impl_module_source == current_module;
-            b_concrete
-                .cmp(&a_concrete)
-                .then(a.bound_depth.cmp(&b.bound_depth))
-                .then(b_local.cmp(&a_local))
-        });
-        self.report_ambiguous_value_blankets(&found_traits, receiver_display, span);
-        found_traits.dedup_by(|a, b| {
-            a.trait_decl == b.trait_decl
-                && a.trait_args == b.trait_args
-                && a.impl_module_source == b.impl_module_source
-        });
-
-        // The only place scope is consulted until WEP 2026-09-01's scope gate
-        // lands. Distinct same-name declarations tie-break on scope: a same-named
-        // foreign trait the calling module never imported is not a competitor
-        // (`cross_module_same_name_foreign_impl.wado` — each module's
-        // `s.shout()` dispatches to the `Loud` in scope there). Only when
-        // several colliding declarations are in scope does the cross-trait
-        // ambiguity below stand.
-        let distinct: IndexSet<crate::defs::DefId> = found_traits
-            .iter()
-            .filter(|m| m.blanket_type_param.is_none())
-            .map(|m| m.trait_decl)
-            .collect();
-        if distinct.len() > 1 {
-            let visible: IndexSet<crate::defs::DefId> = distinct
-                .iter()
-                .filter(|d| self.trait_decl_in_scope(**d))
-                .copied()
-                .collect();
-            if visible.len() == 1 {
+        let ordered = order.is_some();
+        if let Some(order) = order {
+            found_traits = Self::narrow_to_order(found_traits, &order);
+        } else {
+            // Rank 0: a variadic impl yields to a non-variadic one of the same
+            // trait (WEP 2026-03-14 §5 Rule 1). Scoped to one trait, so it must
+            // not outrank locality between traits — a foreign blanket
+            // `impl<T> A for T` would otherwise beat a local
+            // `impl<..T> B for [..T]`.
+            let traits_with_non_variadic: IndexSet<(crate::defs::DefId, Vec<TypeId>)> =
                 found_traits
-                    .retain(|m| m.blanket_type_param.is_some() || visible.contains(&m.trait_decl));
+                    .iter()
+                    .filter(|m| !m.is_variadic_impl)
+                    .map(|m| (m.trait_decl, m.trait_args.clone()))
+                    .collect();
+            found_traits.retain(|m| {
+                !m.is_variadic_impl
+                    || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
+            });
+            // Sorted BEFORE dedup_by, which only removes adjacent duplicates.
+            let current_module = &self.current_module_source;
+            found_traits.sort_by(|a, b| {
+                let a_concrete = a.blanket_type_param.is_none();
+                let b_concrete = b.blanket_type_param.is_none();
+                let a_local = &a.impl_module_source == current_module;
+                let b_local = &b.impl_module_source == current_module;
+                b_concrete
+                    .cmp(&a_concrete)
+                    .then(a.bound_depth.cmp(&b.bound_depth))
+                    .then(b_local.cmp(&a_local))
+            });
+        }
+        self.report_ambiguous_value_blankets(&found_traits, receiver_display, span);
+        // Both of these clean up after the sort. The order named exactly the
+        // impls it kept, having already gated them on scope, so neither runs
+        // over its answer — the scope tie-break especially, which would narrow
+        // a cross-trait ambiguity the order means to report.
+        if !ordered {
+            found_traits.dedup_by(|a, b| {
+                a.trait_decl == b.trait_decl
+                    && a.trait_args == b.trait_args
+                    && a.impl_module_source == b.impl_module_source
+            });
+
+            // Distinct same-name declarations tie-break on scope: a same-named
+            // foreign trait the calling module never imported is not a
+            // competitor (`cross_module_same_name_foreign_impl.wado` — each
+            // module's `s.shout()` dispatches to the `Loud` in scope there).
+            let distinct: IndexSet<crate::defs::DefId> = found_traits
+                .iter()
+                .filter(|m| m.blanket_type_param.is_none())
+                .map(|m| m.trait_decl)
+                .collect();
+            if distinct.len() > 1 {
+                let visible: IndexSet<crate::defs::DefId> = distinct
+                    .iter()
+                    .filter(|d| self.trait_decl_in_scope(**d))
+                    .copied()
+                    .collect();
+                if visible.len() == 1 {
+                    found_traits.retain(|m| {
+                        m.blanket_type_param.is_some() || visible.contains(&m.trait_decl)
+                    });
+                }
             }
         }
         // WEP 2026-07-31: one trait declaration at several argument lists —

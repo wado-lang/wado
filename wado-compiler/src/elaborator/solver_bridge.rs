@@ -955,7 +955,7 @@ impl SolverBridge {
         type_id: TypeId,
         through_ref: Option<bool>,
         method_name: &str,
-    ) -> Option<Chosen> {
+    ) -> Option<Ordered> {
         let method = MethodId(*self.lowering.methods.get(method_name)?);
         let ty = self
             .lowering
@@ -966,72 +966,30 @@ impl SolverBridge {
         });
         let module = self.lowering.known_module(module)?;
         let found = candidates(&self.program, &Env::default(), &ty, method, module);
+        let named = |live: &[usize]| {
+            live.iter()
+                .map(|&i| self.impl_def_of(found.in_scope[i].impl_))
+                .collect()
+        };
         Some(match rank(&found.in_scope) {
-            Selection::One(index) => self.chosen(found.in_scope[index].impl_),
-            Selection::None if !found.out_of_scope.is_empty() => Chosen::OutOfScope,
-            Selection::None => Chosen::Nothing,
-            Selection::AmbiguousTraits(_)
-            | Selection::AmbiguousBlankets(_)
-            | Selection::Duplicated(_) => Chosen::Ambiguous,
+            Selection::One(index) => Ordered::One(self.impl_def_of(found.in_scope[index].impl_)),
+            Selection::None if !found.out_of_scope.is_empty() => Ordered::OutOfScope,
+            Selection::None => Ordered::Nothing,
+            Selection::AmbiguousTraits(live) => Ordered::AmbiguousTraits(named(&live)),
+            Selection::AmbiguousBlankets(live) => Ordered::AmbiguousBlankets(named(&live)),
+            // Coherence rejects these where they are written, so the order has
+            // nothing to add and the caller keeps whichever it collected.
+            Selection::Duplicated(live) => Ordered::Duplicated(named(&live)),
             // One trait at several argument lists is the call's arguments to
             // settle (WEP 2026-07-31), which the order does not answer.
-            Selection::Overloaded(_) => return None,
+            Selection::Overloaded(live) => Ordered::Overloaded(named(&live)),
         })
     }
 
-    /// The impl block a winning candidate names, or that a derived body does.
-    fn chosen(&self, impl_: ImplId) -> Chosen {
-        self.lowering
-            .impl_defs
-            .get(&impl_)
-            .map_or(Chosen::Derived, |&def| Chosen::Impl(def))
-    }
-
-    /// The differential of WEP 2026-09-01: what `select_trait_match` chose
-    /// against what the order chooses. The two are meant to differ — "The order
-    /// has no caller" lists five ways — so this reports rather than asserting,
-    /// and a corpus run under `WADO_TRAIT_SELECTION_DIFF=1` is the list of what
-    /// the flip would change.
-    pub(super) fn report_selection_disagreement(
-        &self,
-        tysys: &TypeSystem,
-        module: &ModuleSource,
-        type_id: TypeId,
-        through_ref: Option<bool>,
-        method_name: &str,
-        compiler: &Chosen,
-    ) {
-        if !reporting() {
-            return;
-        }
-        let Some(order) = self.select(tysys, module, type_id, through_ref, method_name) else {
-            return;
-        };
-        if order == *compiler {
-            return;
-        }
-        let defs = tysys.resolutions.defs();
-        // Two impls of one trait often sit in one module, so the module alone
-        // does not say which block ran. The span does.
-        let name = |chosen: &Chosen| match chosen {
-            Chosen::Impl(def) => format!(
-                "the impl at `{}`{}",
-                defs.module(*def),
-                defs.span(*def)
-                    .map_or(String::new(), |s| format!(":{}", s.line))
-            ),
-            Chosen::Derived => "a derived body".to_string(),
-            Chosen::Nothing => "nothing: no impl applied".to_string(),
-            Chosen::OutOfScope => "nothing: every impl was out of scope here".to_string(),
-            Chosen::Ambiguous => "no one impl, and reports".to_string(),
-        };
-        eprintln!(
-            "trait-selection diff: `{}`.{method_name}() in `{module}`: \
-             the sort takes {}, the order takes {}",
-            tysys.type_table.borrow().type_name(type_id),
-            name(compiler),
-            name(&order),
-        );
+    /// The impl block a candidate names; `None` where a derived body answers
+    /// and no block was written, which is how a `TraitMethodMatch` says it too.
+    fn impl_def_of(&self, impl_: ImplId) -> Option<DefId> {
+        self.lowering.impl_defs.get(&impl_).copied()
     }
 
     /// What the solver was asked and what it had to answer from, for the
@@ -1093,27 +1051,27 @@ impl SolverBridge {
     }
 }
 
-/// Whether the selection differential reports, read once. Off in a release
-/// build, where the solver is not built at all.
-fn reporting() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("WADO_TRAIT_SELECTION_DIFF").is_some())
-}
-
-/// What a selection names, in terms both paths can state.
-#[derive(PartialEq, Eq, Debug)]
-pub(super) enum Chosen {
-    /// The impl block whose body runs.
-    Impl(DefId),
-    /// No block was written and a derived body answers.
-    Derived,
+/// What the order answers, naming each candidate by the impl block it came
+/// from — `None` where a derived body answers and no block was written, which
+/// is how a [`TraitMethodMatch`](super::types::TraitMethodMatch) says it too.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(super) enum Ordered {
+    /// Exactly one impl answers.
+    One(Option<DefId>),
     /// No impl applied at all.
     Nothing,
     /// Impls applied and the call site had imported none of their traits. The
     /// scope gate working, not a candidate lost.
     OutOfScope,
-    /// The order reports rather than answering.
-    Ambiguous,
+    /// Several trait declarations declare the method; the call must name one.
+    AmbiguousTraits(Vec<Option<DefId>>),
+    /// Several impls of one trait, none written for the receiver.
+    AmbiguousBlankets(Vec<Option<DefId>>),
+    /// One trait at several argument lists — the call's arguments choose.
+    Overloaded(Vec<Option<DefId>>),
+    /// Several impls of one pair, which coherence rejects where they are
+    /// written.
+    Duplicated(Vec<Option<DefId>>),
 }
 
 /// A `type_implements_trait` question as the solver reads it.
