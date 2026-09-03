@@ -395,7 +395,9 @@ impl Analyzer<'_> {
                     if m.rebinds_place && m.path == *path && r.contains(&local) {
                         released = true;
                     }
-                    if m.path.root == path.root && r.contains(&local) && !write_cannot_reach(m, path)
+                    if m.path.root == path.root
+                        && r.contains(&local)
+                        && !write_cannot_reach(m, path)
                     {
                         share_safe = false;
                     }
