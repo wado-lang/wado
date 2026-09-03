@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788405726679,
+  "lastUpdate": 1788412225466,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52813,6 +52813,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c65ec9b6c7cc6401a36f491b8725c3688248a718"
         },
         "date": 1788405726249,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6fe3290010a61e40bb09f5afb163032a393a634e",
+          "message": "Merge pull request #1949 from wado-lang/claude/traits-resolution-wep-review-qjv67l\n\nfeat(elaborator): trait resolution as functions of a self-contained program",
+          "timestamp": "2026-09-03T13:58:59+09:00",
+          "tree_id": "fb4f6792fdc729c2471c6de2b2f30c65b83979a1",
+          "url": "https://github.com/wado-lang/wado/commit/6fe3290010a61e40bb09f5afb163032a393a634e"
+        },
+        "date": 1788412224807,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
