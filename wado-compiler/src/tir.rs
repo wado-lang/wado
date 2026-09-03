@@ -1233,6 +1233,13 @@ impl TypeTable {
         }
     }
 
+    /// Whether the shape is one the compiler minted under a name: no literal
+    /// wrote it and no field walk reads it.
+    #[must_use]
+    pub fn anon_struct_is_synthetic(&self, id: AnonStructId) -> bool {
+        matches!(self.anon_structs[id.0 as usize].1, AnonShape::Synthetic(_))
+    }
+
     /// The module the shape was written in.
     #[must_use]
     pub fn anon_struct_module(&self, id: AnonStructId) -> &ModuleSource {

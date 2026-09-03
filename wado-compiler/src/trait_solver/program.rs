@@ -65,6 +65,17 @@ impl SolverType {
         }
     }
 
+    /// Whether `self` or a type within it is an instance of `head`.
+    #[must_use]
+    pub fn mentions_head(&self, head: TypeDeclId) -> bool {
+        match self {
+            Self::Param(_) | Self::Pack(_) => false,
+            Self::Decl(id, inner) => *id == head || inner.iter().any(|t| t.mentions_head(head)),
+            Self::Tuple(inner) => inner.iter().any(|t| t.mentions_head(head)),
+            Self::Ref { inner, .. } => inner.mentions_head(head),
+        }
+    }
+
     /// Whether `self` mentions the parameter or pack at `index`.
     #[must_use]
     pub fn mentions_param(&self, index: u32) -> bool {
@@ -262,6 +273,10 @@ pub struct Program {
     /// Each impl's `type X = …;` bindings, spelled with the impl's own
     /// parameters. What a [`Pin`] is checked against.
     pub assoc_bindings: IndexMap<ImplId, Vec<(AssocId, SolverType)>>,
+    /// The methods each impl block's body declares. One its trait does not
+    /// declare — a helper the bodies call on `self` — is a candidate through
+    /// that impl alone.
+    pub impl_methods: IndexMap<ImplId, Vec<MethodId>>,
     /// What each module may name, which gates the candidates of a call made
     /// there.
     pub scopes: IndexMap<ModuleId, ModuleScope>,

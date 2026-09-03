@@ -40,11 +40,15 @@ pub fn candidates(
             let Some(trait_) = def.trait_ else {
                 continue;
             };
-            if !program
+            let declared = program
                 .traits
                 .get(&trait_)
                 .is_some_and(|decl| decl.methods.contains(&method))
-            {
+                || program
+                    .impl_methods
+                    .get(&impl_)
+                    .is_some_and(|own| own.contains(&method));
+            if !declared {
                 continue;
             }
             let Some(trait_args) = impl_applies(program, env, scope, impl_, def, ty) else {
@@ -225,6 +229,21 @@ mod tests {
         let mut p = program(Builder::default().concrete(TR, decl(POINT)));
         p.traits.entry(TR).or_default().methods = vec![OTHER_M];
         assert_eq!(ask(&p, &decl(POINT)), Candidates::default());
+    }
+
+    /// A method the impl block declares beyond its trait's is a candidate
+    /// through that impl alone: another impl of the trait never answers for it.
+    #[test]
+    fn an_impl_only_method_is_a_candidate_through_its_impl_alone() {
+        let mut p = program(
+            Builder::default()
+                .concrete(TR, decl(POINT))
+                .concrete(TR, decl(BOX)),
+        );
+        p.traits.entry(TR).or_default().methods = vec![OTHER_M];
+        p.impl_methods.insert(ImplId(0), vec![M]);
+        assert_eq!(selected(&ask(&p, &decl(POINT))), Some(ImplId(0)));
+        assert_eq!(ask(&p, &decl(BOX)), Candidates::default());
     }
 
     /// A value blanket is a candidate for every receiver its bound holds of,

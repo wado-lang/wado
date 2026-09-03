@@ -2555,7 +2555,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // method found".
         let lost = |what: &str| {
             format!(
-                "the lowering {what} `{method_name}`, which lookup found: {:?}",
+                "the lowering {what} `{receiver_display}`.{method_name}(), which lookup found: {:?}",
                 found_traits
                     .iter()
                     .map(|m| (&m.impl_module_source, m.impl_def))

@@ -19,11 +19,17 @@ use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
 
 /// What a [`TypeDeclId`] stands for: a declaration, or a shape no module
-/// declares — a primitive, which the compiler answers for by name.
+/// declares — a primitive, which the compiler answers for by name, or an
+/// anonymous struct.
 #[derive(PartialEq, Eq, Hash)]
 enum DeclKey {
     Def(DefId),
     Builtin(String),
+    /// One head for every anonymous struct, its field types as the arguments.
+    /// A literal mints its shape after the program is built, and no impl can
+    /// name one, so what reaches it — a blanket over its `Reflect*` facts —
+    /// reads the same of every shape.
+    AnonymousStruct,
 }
 
 /// How an impl's parameter is spelled where a type mentions it.
@@ -66,6 +72,16 @@ impl Lowering {
 
     fn builtin(&mut self, name: &str) -> TypeDeclId {
         TypeDeclId(intern(&mut self.decls, DeclKey::Builtin(name.to_string())))
+    }
+
+    fn anonymous_struct(&mut self) -> TypeDeclId {
+        TypeDeclId(intern(&mut self.decls, DeclKey::AnonymousStruct))
+    }
+
+    /// The head every anonymous struct lowers under, interned by `build`.
+    fn anonymous_head(&self) -> TypeDeclId {
+        self.known_type(&DeclKey::AnonymousStruct)
+            .expect("the anonymous head is interned before the program is read")
     }
 
     /// The head a function type lowers under. `fn mut` is a shape of its own,
@@ -227,7 +243,28 @@ impl Lowering {
             // `()` is the unit declaration, not the empty tuple
             // (WEP 2026-09-01, "The candidates").
             ResolvedType::Unit => decl(DeclKey::Builtin(TypeTable::UNIT_TYPE_NAME.into()), vec![]),
-            ResolvedType::Struct { def, type_args } => instance(def.decl()?, type_args),
+            ResolvedType::Struct {
+                def: crate::tir::StructDef::Decl(def),
+                type_args,
+            } => instance(*def, type_args),
+            // A literal's shape lowers under the one anonymous head, its field
+            // types as the arguments. A synthetic shape — a closure
+            // environment — declares no fields the compiler reflects, so it
+            // stays unsaid.
+            ResolvedType::Struct {
+                def: crate::tir::StructDef::Anon(shape),
+                ..
+            } => {
+                if table.anon_struct_is_synthetic(*shape) {
+                    return None;
+                }
+                let fields = table
+                    .anon_struct_fields(*shape)
+                    .iter()
+                    .map(|(_, ty)| self.type_id(table, *ty, param))
+                    .collect::<Option<Vec<_>>>()?;
+                decl(DeclKey::AnonymousStruct, fields)
+            }
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
@@ -357,6 +394,12 @@ pub(super) fn lower_impls<'a>(
         });
         lowering.impl_defs.insert(id, def);
         if let Some(implemented) = implemented {
+            let own = header
+                .methods
+                .iter()
+                .map(|m| lowering.method(&m.name))
+                .collect();
+            program.impl_methods.insert(id, own);
             for binding in &header.associated_types {
                 let Some(ty) = lowering.ast_type(&binding.ty, &param, resolutions, Some(&target))
                 else {
@@ -522,6 +565,7 @@ impl SolverBridge {
         {
             lowering.type_decl(*def);
         }
+        lowering.anonymous_struct();
         for module in tysys.module_visible_types.keys() {
             lowering.module(module);
         }
@@ -714,19 +758,19 @@ impl SolverBridge {
             .collect();
         let defs = tysys.resolutions.defs();
         let eligible = |def: DefId| !table.is_sealed_reflect_member(defs.ast_id(def));
-        let mut state = |def: DefId, kind: OnBoundTrait, visible_from: Option<Vec<ModuleId>>| {
-            let head = lowering.declared_type(def);
-            for &(trait_, stated) in &kinds {
-                let visible_from = if stated == OnBoundTrait::Reflect {
-                    None
-                } else if stated == kind {
-                    visible_from.clone()
-                } else {
-                    continue;
-                };
-                program.facts.insert((head, trait_), Fact { visible_from });
-            }
-        };
+        let mut state =
+            |head: TypeDeclId, kind: OnBoundTrait, visible_from: Option<Vec<ModuleId>>| {
+                for &(trait_, stated) in &kinds {
+                    let visible_from = if stated == OnBoundTrait::Reflect {
+                        None
+                    } else if stated == kind {
+                        visible_from.clone()
+                    } else {
+                        continue;
+                    };
+                    program.facts.insert((head, trait_), Fact { visible_from });
+                }
+            };
         for (&def, info) in tysys.all_struct_fields.iter() {
             if !eligible(def) {
                 continue;
@@ -739,8 +783,14 @@ impl SolverBridge {
                     .map(|(_, &id)| ModuleId(id))
                     .collect()
             });
-            state(def, OnBoundTrait::ReflectStruct, visible_from);
+            state(
+                lowering.declared_type(def),
+                OnBoundTrait::ReflectStruct,
+                visible_from,
+            );
         }
+        // A literal's fields are all visible, from every module.
+        state(lowering.anonymous_head(), OnBoundTrait::ReflectStruct, None);
         let of = |kind| move |def: &DefId| (*def, kind);
         let memberless = tysys
             .all_variant_cases
@@ -767,7 +817,7 @@ impl SolverBridge {
             );
         for (def, kind) in memberless {
             if eligible(def) {
-                state(def, kind, None);
+                state(lowering.declared_type(def), kind, None);
             }
         }
     }
@@ -968,6 +1018,24 @@ impl SolverBridge {
         let ty =
             self.lowering
                 .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
+        // Two receivers the compiler still derives for and the solver does not,
+        // until derivation is answered by impls
+        // (`docs/wep-2026-09-01-trait-resolution.md`, "Derivation is still a
+        // query in the compiler"). The compiler's structural derivation asks a
+        // declaration's members under `Pi: Tr` for the declaration's own
+        // parameters, an assumption written in no bound list; a question
+        // reaching here carries only the bounds in scope, so a receiver
+        // mentioning a parameter with none reads differently on the two
+        // paths. And an anonymous struct's shape is minted after the program
+        // was built, so `derive` never saw it.
+        let unbounded = |p: &SolverType| match p {
+            SolverType::Param(i) => env.param_bounds[*i as usize].is_empty(),
+            SolverType::Pack(_) => true,
+            SolverType::Decl(..) | SolverType::Ref { .. } | SolverType::Tuple(_) => false,
+        };
+        if ty.mentions(&unbounded) || ty.mentions_head(self.lowering.anonymous_head()) {
+            return None;
+        }
         let module = self.lowering.known_module(scope.current_module_source)?;
         Some(Question {
             env,
@@ -1077,12 +1145,14 @@ impl SolverBridge {
                     |(key, _)| match key {
                         DeclKey::Def(def) => tysys.resolutions.defs().name(*def).to_string(),
                         DeclKey::Builtin(name) => name.clone(),
+                        DeclKey::AnonymousStruct => "{..}".to_string(),
                     },
                 )
         };
+        // Positions are `env_at`'s: every parameter in scope, in order.
         let env: Vec<(&String, Vec<String>)> = ctx
             .trait_ctx
-            .type_param_bounds
+            .type_params
             .keys()
             .zip(&q.env.param_bounds)
             .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.0)).collect()))

@@ -79,9 +79,18 @@ and above any impl on the base type.
 
 All three lists are then gated on scope, below.
 
+An impl answers for the methods its trait declares, and for the ones its own
+body declares beyond them — a helper the bodies call on `self`. Such a method
+reaches a call through that impl alone; another impl of the trait never
+answers for it (`trait_impl_only_method.wado`).
+
 `()` is the unit type, not the empty tuple `[]`, so an impl for `[..T]` is
 never a candidate for it. Its traits are implemented for `()` directly
 (`trait_unit_eq_ord.wado`).
+
+An anonymous struct is a shape no impl can name, so only a value blanket over
+its `Reflect*` facts reaches it, and every shape reads the same to the order
+(`reflect_anon_struct.wado`).
 
 Two impls of one `(Trait, Type)` pair are rejected where the second is written,
 in one module or in two modules of one package. No rank distinguishes them, and
@@ -299,6 +308,7 @@ Program {
   types:  TypeDeclId  -> { newtype_base }
   facts:  (TypeDeclId, TraitDeclId) -> { visible_from }
   assoc_bindings: (ImplId, AssocId) -> SolverType
+  impl_methods:   ImplId -> [MethodId]
   scopes: ModuleId    -> { traits_in_scope }
 }
 
@@ -512,10 +522,16 @@ asks the full question of each, and the recursion guard counts the member
 descents to tell a recursive type from an ungrounded cycle. The solver's
 `derive` runs beside it: every declaration is lowered and derived when the
 `Program` is built, and `holds` answers under the differential against
-`type_implements_trait` over every fixture. What is left is the flip:
+`type_implements_trait` over every fixture. Two receivers the differential
+skips, since only the compiler derives for them: one mentioning a type
+parameter with no bound, which the compiler's walk assumes `Pi: Tr` of, and an
+anonymous struct, whose shape a literal mints after the `Program` is built.
+What is left is the flip:
 
 - [ ] Route the derived bodies through what `holds` reports instead of
       `record_bound_driven_synth_request_for`, and retire the member walk.
+- [ ] Derive for an anonymous struct's shape when it is minted, or lower the
+      literal's fields as the declaration `derive` reads.
 
 ## Related WEPs
 
